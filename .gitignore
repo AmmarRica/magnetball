@@ -1,0 +1,13 @@
+# Magnetball is a dependency-free static site — nothing to build.
+# Keep the repo clean of the usual local cruft.
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+.vscode/
+.idea/
+# scratch / local test output
+/tmp/
+*.local
+# Claude Code session config
+.claude/
