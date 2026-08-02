@@ -209,6 +209,16 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 11. **Training mode** (M) — free practice, shooting drills, magnet/kick sandbox.
 
 ## 🎯 Tier 3 — Online & rooms (L–XL)
+
+> **Note (Azure path):** real online play needs a hosted real-time server — this **breaks the
+> current "no hosted backend" rule** and is only on the table if Azure is used. Decided approach if
+> pursued: an **authoritative Node WebSocket server on Azure Container Apps** (scales to zero when
+> idle) that runs the physics `step()` server-side; clients send inputs and render an interpolated
+> copy. Keep the game itself on GitHub Pages; only the socket server lives on Azure. Alternative:
+> WebRTC P2P (host-authoritative) with Azure Web PubSub signaling + a coturn TURN VM — cheaper but
+> host-advantage + NAT/host-migration pain. Effort: ~1 day Azure setup; **1–2 weeks netcode** for a
+> smooth 1v1 (input/sim split, interpolation, reconciliation), longer for 2v2+. Start 1v1-only.
+
 12. **Phone-as-controller (local WebRTC)** (L) — shared screen + phones as pads via room code/QR.
     *Answers "permanent room links" + mobile multiplayer.* (Design already scoped.)
 13. **Online 1v1/2v2 rooms by code** (XL) — WebRTC peer play with a lightweight signaling broker.
