@@ -39,6 +39,8 @@
       --yellow:  #ffe23d;
       --accent:  #21e6ff;   /* primary = neon cyan */
       --go:      #35ff87;   /* action green */
+      --field:   #0a0e1c;   /* input / slider-track fill — flips light on the Paper theme */
+      --on-accent:#04121a;  /* text/icon colour that sits ON an accent-coloured fill */
       --display: 'KenneyDisplay', 'Kenney', system-ui, sans-serif;   /* chunky display face — logo */
       /* UI face: Kenney Future (CC0, in repo), with a system-sans fallback. */
       --pix: 'Kenney', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -113,7 +115,7 @@
     input[type=range].slider {
       -webkit-appearance: none; appearance: none;
       width: 100%; height: 6px; border-radius: 999px; outline: none;
-      background: #0c1122; border: 1px solid var(--edge); margin: 8px 0 2px; cursor: pointer;
+      background: var(--field); border: 1px solid var(--edge); margin: 8px 0 2px; cursor: pointer;
     }
     input[type=range].slider::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none; width: 22px; height: 22px;
@@ -126,7 +128,7 @@
     }
 
     input[type=text] {
-      width: 100%; background: #0a0e1c; color: var(--text);
+      width: 100%; background: var(--field); color: var(--text);
       border: 1px solid var(--edge); border-radius: 8px;
       padding: 13px 13px; font-family: var(--pix); font-size: 13px; outline: none;
     }
@@ -154,7 +156,7 @@
       background: rgba(33,230,255,0.07);
       box-shadow: 0 0 0 1px var(--cyan), 0 0 16px rgba(33,230,255,.28);
     }
-    .opt.sel small { color: #9fe9ff; }
+    .opt.sel small { color: var(--cyan); }
     .opt .emoji { font-size: 18px; }
 
     /* Compact destination grid at the top of the main menu */
@@ -423,14 +425,14 @@
     }
     #ovAwards .awrow.you { background: rgba(33,230,255,.13); border-color: rgba(33,230,255,.5); }
     #ovAwards .awrow .aic { font-size:20px; width:26px; text-align:center; flex:none; }
-    #ovAwards .awrow .alab { font-family: var(--pix); font-size:12px; color:#fff; }
+    #ovAwards .awrow .alab { font-family: var(--pix); font-size:12px; color:var(--text); }
     #ovAwards .awrow .anote { color: var(--muted); font-size:12px; }
     #ovAwards .awrow canvas { width:26px; height:26px; flex:none; image-rendering: pixelated; }
     #ovAwards .awrow .awho { margin-left:auto; font-family: var(--pix); font-size:12px; color:var(--muted); text-align:right; }
     #ovAwards .awrow.you .awho { color: var(--cyan); }
     #ovAwards .awfoot { display:flex; gap:8px; justify-content:center; margin-top:4px; }
     #ovAwards .awfoot button {
-      font-family: var(--pix); font-size:12px; color:#fff; background:rgba(255,255,255,.08);
+      font-family: var(--pix); font-size:12px; color:var(--text); background:rgba(127,127,127,.14);
       border:1px solid rgba(255,255,255,.14); border-radius:9px; padding:7px 12px; cursor:pointer;
     }
     #ovAwards .awfoot button:active { transform: translateY(1px); }
@@ -438,7 +440,7 @@
 
     /* Shop */
     .shopnote { color: var(--muted); font-size: 12px; line-height: 1.6; }
-    .shopnote b { color: #fff; }
+    .shopnote b { color: var(--text); }
     .walletbar { display:flex; align-items:center; justify-content:space-between; margin-top:12px;
       padding:9px 12px; border-radius:10px; background: rgba(255,255,255,.05);
       border:1px solid rgba(255,255,255,.08); font-family: var(--pix); font-size:13px; }
@@ -447,7 +449,7 @@
     .shopcard { display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 6px;
       border-radius:12px; background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
     .shopcard canvas { width:48px; height:48px; image-rendering: pixelated; }
-    .shopcard .sname { font-family: var(--pix); font-size:12px; color:#fff; text-align:center; }
+    .shopcard .sname { font-family: var(--pix); font-size:12px; color:var(--text); text-align:center; }
     .shopcard .sprice { font-family: var(--pix); font-size:12px; color: var(--accent); }
     .shopcard.owned .sprice { color: var(--good, #46d17a); }
 
@@ -460,12 +462,12 @@
       font-family: var(--pix); font-size:12px; color: var(--muted); background: rgba(255,255,255,.05);
       border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:6px 12px; cursor:pointer;
     }
-    .socfilters button.sel { color:#04121a; background: var(--accent); border-color: var(--accent); }
+    .socfilters button.sel { color:var(--on-accent); background: var(--accent); border-color: var(--accent); }
     #feed { display:flex; flex-direction:column; gap:18px; width:100%; }
     .post { background: rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.09); border-radius:16px; overflow:hidden; }
     .post .phead { display:flex; align-items:center; gap:9px; padding:10px 12px; }
     .post .phead canvas { width:34px; height:34px; border-radius:50%; flex:none; }
-    .post .phead .pwho { font-family: var(--pix); font-size:12px; color:#fff; line-height:1.35; }
+    .post .phead .pwho { font-family: var(--pix); font-size:12px; color:var(--text); line-height:1.35; }
     .post .phead .psub { color: var(--muted); font-size:12px; }
     .post .phead .pbadge { margin-left:auto; font-family: var(--pix); font-size:12px; color: var(--accent);
       border:1px solid rgba(33,230,255,.4); border-radius:999px; padding:3px 8px; }
@@ -482,32 +484,32 @@
     .post .media .replaytag { position:absolute; right:10px; top:10px; font-family:var(--pix); font-size:12px; color:var(--muted);
       background:rgba(4,7,13,.6); border-radius:6px; padding:3px 7px; }
     .post .pacts { display:flex; align-items:center; gap:16px; padding:9px 12px 2px; font-size:20px; }
-    .post .pacts button { background:none; border:none; cursor:pointer; font-size:20px; line-height:1; padding:0; color:#fff; }
+    .post .pacts button { background:none; border:none; cursor:pointer; font-size:20px; line-height:1; padding:0; color:var(--text); }
     .post .pacts .liked { color:#ff3b6b; }
     .post .pacts .save { margin-left:auto; }
-    .post .plikes { font-family: var(--pix); font-size:12px; color:#fff; padding:4px 12px 0; }
-    .post .pcap { font-size:13px; color:#e8ecf4; padding:4px 12px; line-height:1.45; }
-    .post .pcap b { color:#fff; }
+    .post .plikes { font-family: var(--pix); font-size:12px; color:var(--text); padding:4px 12px 0; }
+    .post .pcap { font-size:13px; color:var(--text); padding:4px 12px; line-height:1.45; }
+    .post .pcap b { color:var(--text); }
     .post .pcomments { padding:0 12px 6px; }
     .post .pcomments .cmt { font-size:12px; color:var(--text); line-height:1.5; }
-    .post .pcomments .cmt b { color:#fff; }
+    .post .pcomments .cmt b { color:var(--text); }
     .post .pcomments .cmore { color: var(--muted); font-size:12px; cursor:pointer; }
     .post .paddc { display:flex; gap:8px; padding:6px 12px 12px; }
     .post .paddc input { flex:1; background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
-      border-radius:999px; color:#fff; font-size:12px; padding:7px 12px; outline:none; }
+      border-radius:999px; color:var(--text); font-size:12px; padding:7px 12px; outline:none; }
     .post .paddc button { font-family: var(--pix); font-size:12px; color: var(--accent); background:none; border:none; cursor:pointer; }
     .post .ptime { font-size:12px; color: var(--muted); padding:0 12px 10px; text-transform:uppercase; letter-spacing:.5px; }
     .feedempty { color: var(--muted); text-align:center; padding:30px 10px; font-size:13px; }
 
     /* Cocktail side-config rows */
     .ckrow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,.06); }
-    .ckrow .cklab { font-family: var(--pix); font-size:12px; color:#fff; min-width:78px; }
+    .ckrow .cklab { font-family: var(--pix); font-size:12px; color:var(--text); min-width:78px; }
     .ckrow .cksides { display:flex; gap:6px; margin-left:auto; }
     .ckrow .cksides button {
       font-family: var(--pix); font-size:13px; width:34px; height:34px; border-radius:9px; cursor:pointer;
-      background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:#fff;
+      background: rgba(127,127,127,.14); border:1px solid var(--edge); color:var(--text);
     }
-    .ckrow .cksides button.sel { background: var(--accent); color:#04121a; border-color: var(--accent); }
+    .ckrow .cksides button.sel { background: var(--accent); color:var(--on-accent); border-color: var(--accent); }
     /* Cocktail viewport: bump on-screen text a touch for people reading from a distance. */
     body.cocktail #banner { font-size: clamp(30px, 12vw, 74px); }
 
@@ -1361,7 +1363,7 @@ const THEMES = {
       grad:'radial-gradient(120% 90% at 50% -12%, #0c1236 0%, #05060f 52%, #000000 100%)',
       bg:'#04040a', panel:'rgba(12,14,26,0.82)', edge:'#1c2444', text:'#eaf2ff', muted:'#9aa6c6',
       red:'#ff3b6b', blue:'#4d7bff', cyan:'#21e6ff', magenta:'#ff35c8', green:'#35ff87', yellow:'#ffe23d',
-      accent:'#21e6ff', go:'#35ff87' },
+      accent:'#21e6ff', go:'#35ff87', field:'#0a0e1c', onAccent:'#04121a' },
     pitch: { glow:true, fieldBg:'#0a0d14', court:'#0a1622', stripeA:'#0c2016', stripeB:'#0a1a12',
       netPocket:'rgba(255,255,255,0.05)', line:'rgba(120,240,255,0.7)', centerDot:'rgba(255,255,255,.6)',
       netMesh:'rgba(255,255,255,0.18)', post:'#ffffff', teamRed:'#ff3b6b', teamBlue:'#21e6ff',
@@ -1376,8 +1378,8 @@ const THEMES = {
     ui: { scan:false,
       grad:'linear-gradient(180deg, #223243 0%, #17222e 100%)',
       bg:'#17222e', panel:'rgba(40,56,73,0.92)', edge:'#3a5068', text:'#eef3f8', muted:'#a6bacf',
-      red:'#ef5350', blue:'#42a5f5', cyan:'#26c6da', magenta:'#ec407a', green:'#66bb6a', yellow:'#ffca28',
-      accent:'#42a5f5', go:'#66bb6a' },
+      red:'#ef5350', blue:'#42a5f5', cyan:'#26c6da', magenta:'#ec407a', green:'#72c97b', yellow:'#ffca28',
+      accent:'#42a5f5', go:'#72c97b', field:'#12212e', onAccent:'#08161f' },
     pitch: { glow:false, fieldBg:'#1b2b25', court:'#25463a', stripeA:'#2f9e78', stripeB:'#2b9370',
       netPocket:'rgba(255,255,255,0.08)', line:'rgba(255,255,255,0.9)', centerDot:'rgba(255,255,255,.8)',
       netMesh:'rgba(255,255,255,0.22)', post:'#ffffff', teamRed:'#ef5350', teamBlue:'#42a5f5',
@@ -1393,7 +1395,7 @@ const THEMES = {
       grad:'linear-gradient(180deg, #1e3a2a 0%, #12241b 100%)',
       bg:'#12241b', panel:'rgba(22,44,30,0.92)', edge:'#2f5a3f', text:'#eefaf0', muted:'#a8cdb4',
       red:'#e23c3c', blue:'#2b6fdb', cyan:'#28c0c0', magenta:'#d94fa0', green:'#3ec06a', yellow:'#f2c53d',
-      accent:'#3ec06a', go:'#3ec06a' },
+      accent:'#3ec06a', go:'#3ec06a', field:'#0f2417', onAccent:'#08160e' },
     pitch: { glow:false, fieldBg:'#12281b', court:'#1c3a26', stripeA:'#2f9e52', stripeB:'#2a8f49',
       netPocket:'rgba(255,255,255,0.08)', line:'rgba(255,255,255,0.95)', centerDot:'rgba(255,255,255,.85)',
       netMesh:'rgba(255,255,255,0.24)', post:'#ffffff', teamRed:'#e23c3c', teamBlue:'#2b6fdb',
@@ -1409,7 +1411,7 @@ const THEMES = {
       grad:'linear-gradient(180deg, #17181a 0%, #0b0c0d 100%)',
       bg:'#0b0c0d', panel:'rgba(30,32,34,0.92)', edge:'#3a3d40', text:'#f2f4f6', muted:'#b4bac0',
       red:'#f2f4f6', blue:'#9aa0a6', cyan:'#ffffff', magenta:'#cccccc', green:'#d0d0d0', yellow:'#f2f4f6',
-      accent:'#f2f4f6', go:'#d0d0d0' },
+      accent:'#f2f4f6', go:'#d0d0d0', field:'#0c0d0e', onAccent:'#111111' },
     pitch: { glow:false, fieldBg:'#0c0d0e', court:'#1c1f22', stripeA:'#232629', stripeB:'#1b1e21',
       netPocket:'rgba(255,255,255,0.07)', line:'rgba(255,255,255,0.85)', centerDot:'rgba(255,255,255,.8)',
       netMesh:'rgba(255,255,255,0.2)', post:'#ffffff', teamRed:'#f5f5f5', teamBlue:'#565b60',
@@ -1425,7 +1427,7 @@ const THEMES = {
       grad:'linear-gradient(180deg, #0e3b3a 0%, #0a2c2b 100%)',
       bg:'#0a2c2b', panel:'rgba(14,59,58,0.94)', edge:'#1f6b69', text:'#eafcfb', muted:'#9dcecc',
       red:'#ff7a1a', blue:'#2f7fff', cyan:'#19c3c0', magenta:'#ff4da6', green:'#3ddc84', yellow:'#ffd23d',
-      accent:'#ff7a1a', go:'#3ddc84' },
+      accent:'#ff7a1a', go:'#3ddc84', field:'#062018', onAccent:'#062018' },
     // Videoball look: one flat vivid field (identical stripe colours = solid), bold
     // orange-vs-blue teams, crisp white geometry, no glow, no scanlines.
     pitch: { glow:false, fieldBg:'#0a2c2b', court:'#0f8a8a', stripeA:'#12908f', stripeB:'#12908f',
@@ -1442,12 +1444,12 @@ const THEMES = {
     ui: { scan:false,
       grad:'linear-gradient(180deg, #eef2f6 0%, #dbe3ec 100%)',
       bg:'#eef2f6', panel:'rgba(255,255,255,0.9)', edge:'#c2ccd6', text:'#1a2430', muted:'#44586a',
-      red:'#c0392b', blue:'#245bb3', cyan:'#0c7180', magenta:'#a52d78', green:'#1f8a49', yellow:'#9a6a0a',
-      accent:'#245bb3', go:'#1f8a49' },
+      red:'#c0392b', blue:'#245bb3', cyan:'#0c7180', magenta:'#a52d78', green:'#177a3e', yellow:'#9a6a0a',
+      accent:'#245bb3', go:'#177a3e', field:'#ffffff', onAccent:'#ffffff' },
     pitch: { glow:false, fieldBg:'#dbe3ec', court:'#cfe6d6', stripeA:'#cfe6d6', stripeB:'#c4ddcc',
       netPocket:'rgba(0,0,0,0.05)', line:'rgba(28,52,40,0.55)', centerDot:'rgba(28,52,40,.6)',
       netMesh:'rgba(0,0,0,0.16)', post:'#33404d', teamRed:'#d64545', teamBlue:'#2f6fd0',
-      discRim:'#12305a', kickRing:'#c98a12', kickText:'#ffffff', cbRing:'#1a2430',
+      discRim:'#12305a', kickRing:'#e0a92a', kickText:'#241800', cbRing:'#1a2430',
       eyeWhite:'#ffffff', eyePupil:'#1a2430', nameBg:'#1a2430', nameText:'#ffffff',
       shadow:'rgba(0,0,0,0.18)', ballRim:'#12212e', ball:'#ffffff', ballSpot:'#33404d', trailRGB:'40,60,50',
       obstacle:'#c23c8f', good:'#2fa35a', warn:'#c98a12', dim:'#9fb0bf', cone:'#e07a1e',
@@ -1463,6 +1465,10 @@ function applyTheme(key){
   r.setProperty('--bg-grad', u.grad);
   for (const k of ['bg','panel','edge','text','muted','red','blue','cyan','magenta','green','yellow','accent','go'])
     r.setProperty('--'+k, u[k]);
+  // Contrast-critical extras: a themed input/track fill and an on-accent text colour
+  // so light themes (Paper) don't inherit the dark-theme defaults. Fall back if absent.
+  r.setProperty('--field', u.field || u.bg);
+  r.setProperty('--on-accent', u.onAccent || '#04121a');
   document.body.classList.toggle('scan', !!u.scan);
 }
 // Turn a #hex colour into an rgba() string at the given alpha (for fills/tints).
@@ -2480,7 +2486,7 @@ function buildRogueHome(){
     b.append(info,go,quit);
   } else {
     const info=document.createElement('div'); info.style.cssText='font-family:var(--pix);font-size:12px;line-height:1.9;color:var(--muted)';
-    info.innerHTML=`Win to descend &amp; pick an upgrade. Lose to spend a life. <b style="color:#fff">3 lives.</b><br>Bots get tougher every round. How deep can you go?`;
+    info.innerHTML=`Win to descend &amp; pick an upgrade. Lose to spend a life. <b style="color:var(--text)">3 lives.</b><br>Bots get tougher every round. How deep can you go?`;
     const go=document.createElement('button'); go.className='primary'; go.style.marginTop='12px'; go.textContent='Start run ▶';
     go.onclick=()=>{ rogue.active=true; rogue.depth=0; rogue.lives=3; rogue.perks=[]; saveRogue(); rogueNextRound(); };
     b.append(info,go);
@@ -4827,7 +4833,9 @@ const KICK_R = 46;  // kick pad radius
 
 function zoneForTouch(x, y){
   // returns {pad:'p1'|'p2', kind:'move'|'kick'}
-  const twoP = world && world.mode.twoP;
+  // Drills/tutorials build a lightweight world with no `mode` block, so guard it —
+  // otherwise the first touch throws and the player can't move (single-player pads).
+  const twoP = !!(world && world.mode && world.mode.twoP);
   const midY = ch*0.5;
   const bottom = y > midY;
   const rightHalf = x > cw*0.5;
@@ -5116,7 +5124,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.4';
+const VERSION = '20260802.5';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5142,6 +5150,7 @@ if (window.__MAGNETDEBUG) {
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
+    startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
   };
 }
 })();

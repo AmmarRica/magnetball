@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.4** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260802.5** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -17,6 +17,13 @@ _Current build: **v20260802.4** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Theme contrast pass (all AA)** — Paper (light) theme was inheriting dark-theme hardcodes
+  (`#fff` text on light panels, `var(--text)` on a hardcoded dark input, white-on-gold kick pad).
+  Added themed `--field` / `--on-accent` vars, routed inputs/chips/labels through `var(--text)`,
+  and bumped the two low-contrast greens. Every text/bg pair now clears WCAG AA on all 6 themes
+  (verified numerically); team red/blue stay distinguishable under protan/deutan/tritan.
+- [x] **Drills use the standard controls** — `zoneForTouch` read `world.mode.twoP`, but drills build
+  a world with no `mode` block, so the first touch threw and the player couldn't move. Guarded it.
 - [x] Legibility overhaul — Kenney fonts, removed CRT glow/scanlines, contrast fixes (all UI text ≥4.5:1 AA).
 - [x] Dockable menus + hash routing (Back/Forward + deep links).
 - [x] Status toasts — reusable `toast()`; "Score saved · ±RP" each match.
