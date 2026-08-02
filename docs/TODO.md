@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.5** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,9 @@ _Current build: **v20260802.5** (shown under the title; bump `VERSION` in `index
   (verified numerically); team red/blue stay distinguishable under protan/deutan/tritan.
 - [x] **Drills use the standard controls** — `zoneForTouch` read `world.mode.twoP`, but drills build
   a world with no `mode` block, so the first touch threw and the player couldn't move. Guarded it.
+  Also hardened `startDrill` to `closeDailyModal()` — a lingering full-screen modal (z-index 40)
+  would otherwise sit over the pitch and silently swallow every touch. Verified end-to-end with
+  real dispatched touch events (player moves in both the normal flow and the modal-open edge case).
 - [x] Legibility overhaul — Kenney fonts, removed CRT glow/scanlines, contrast fixes (all UI text ≥4.5:1 AA).
 - [x] Dockable menus + hash routing (Back/Forward + deep links).
 - [x] Status toasts — reusable `toast()`; "Score saved · ±RP" each match.

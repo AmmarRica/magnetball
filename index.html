@@ -4345,6 +4345,7 @@ function startDrill(key){
   world.drill.total = world.gates.length + world.zones.length;
 
   hideScreens();
+  closeDailyModal();          // never let a full-screen modal (z-index 40) linger over the pitch — it eats touches
   $('hud').classList.remove('hidden');
   $('scorebug').style.display='none';
   $('resetBtn').style.display='';
@@ -5124,7 +5125,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.5';
+const VERSION = '20260802.6';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
