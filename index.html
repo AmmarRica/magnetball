@@ -178,6 +178,13 @@
       text-shadow: 0 0 10px rgba(53,255,135,.6); letter-spacing: 1px;
     }
     button.primary:active { transform: translateY(1px); box-shadow: 0 0 10px rgba(53,255,135,.2); }
+    /* Sticky "KICKOFF" bar: the hero KICK OFF pins to the top of the scroll once you
+       leave the top section, staying above the current section's sticky header.
+       Opaque bg (green tint over the page colour) so scrolled content passes under it. */
+    #playBtn {
+      position: sticky; top: 0; z-index: 6;
+      background: linear-gradient(rgba(53,255,135,.15), rgba(53,255,135,.15)), var(--bg);
+    }
     button.ghost {
       background: rgba(255,255,255,0.03); color: var(--text);
       border: 1px solid var(--edge); border-radius: 9px;
@@ -260,6 +267,13 @@
     .card.collapsible > h2 { margin-bottom: 14px; }
     .card.collapsible.collapsed > h2 { margin-bottom: 0; }
     .card.collapsible.collapsed > *:not(h2) { display: none !important; }
+    /* Sticky section header: each card's title pins just below the KICKOFF bar
+       (--sticky-top = its height) while you scroll through that section. */
+    .card.collapsible > h2 {
+      position: sticky; top: var(--sticky-top, 58px); z-index: 4;
+      padding: 8px 0; border-radius: 6px;
+      background: linear-gradient(var(--panel), var(--panel)), var(--bg);
+    }
 
     /* Desktop: dock ANY menu page as a live left sidebar while the pitch keeps
        playing on the right. (Generalised from Settings to every .screen.) */
@@ -1886,6 +1900,12 @@ window.addEventListener('gamepaddisconnected', updatePadInfo);
 
 function openHow(){ dockOrFull('how'); }
 $('playBtn').onclick = startMatch;
+// Keep the section headers pinned right below the sticky KICKOFF bar by feeding
+// its live height into --sticky-top (recomputed on resize + once fonts settle).
+function syncSticky(){ const pb=$('playBtn'), su=$('setup'); if(pb&&su) su.style.setProperty('--sticky-top', pb.offsetHeight+'px'); }
+syncSticky();
+window.addEventListener('resize', syncSticky);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncSticky);
 $('howBtn').onclick = openHow;
 $('howBack').onclick = toMenu;
 $('drillsBtn').onclick = openDrills;
@@ -5006,7 +5026,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260801.8';
+const VERSION = '20260802.1';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
