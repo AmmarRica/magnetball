@@ -9,5 +9,6 @@ node_modules/
 # scratch / local test output
 /tmp/
 *.local
-# Claude Code session config
-.claude/
+# Claude Code session config (but keep shareable skills in the repo)
+.claude/*
+!.claude/skills/
