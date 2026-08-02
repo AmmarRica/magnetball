@@ -288,7 +288,28 @@
       body.panel-open #banner,
       body.panel-open #replayBar { padding-left: 372px; }
       body.panel-open #overlay { padding-left: 372px; }
+
+      /* Collapse the dock: slide it off-screen and give the pitch the full width. */
+      .screen.docked { transition: transform .2s ease; }
+      body.dock-collapsed .screen.docked { transform: translateX(-100%); }
+      body.dock-collapsed.panel-open #hud,
+      body.dock-collapsed.panel-open #banner,
+      body.dock-collapsed.panel-open #replayBar,
+      body.dock-collapsed.panel-open #overlay { padding-left: 0; }
+
+      /* A small tab on the dock edge to collapse (‹) / expand (›) it. */
+      body.panel-open #dockToggle {
+        display: flex; align-items: center; justify-content: center;
+        position: fixed; top: 50%; left: 372px; transform: translate(-50%, -50%);
+        width: 26px; height: 56px; z-index: 32; cursor: pointer;
+        background: var(--bg); color: var(--text);
+        border: 1px solid var(--edge); border-radius: 9px;
+        font-family: var(--pix); font-size: 18px; line-height: 1;
+        box-shadow: 4px 0 14px rgba(0,0,0,.4); transition: left .2s ease;
+      }
+      body.dock-collapsed.panel-open #dockToggle { left: 13px; }
     }
+    #dockToggle { display: none; }
 
     /* ---------- In-game HUD ---------- */
     #hud {
@@ -502,6 +523,7 @@
 
   <div id="banner"></div>
   <div id="toasts" aria-live="polite"></div>
+  <button id="dockToggle" aria-label="Collapse menu panel">‹</button>
   <div id="tutTip" class="hidden"></div>
 
   <!-- ===================== SETUP SCREEN ===================== -->
@@ -1261,7 +1283,7 @@ let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1,
+            theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -1923,7 +1945,10 @@ function dockOrFull(id, build){
   if (isDesktop()){
     el.classList.add('docked');
     document.body.classList.add('panel-open');
-    uiPadLeft = DOCK_W; deskDockId = id;
+    deskDockId = id;
+    uiPadLeft = sel.dockCollapsed ? 0 : DOCK_W;   // collapsed → pitch uses full width
+    document.body.classList.toggle('dock-collapsed', !!sel.dockCollapsed);
+    updateDockToggle();
     settingsDocked = (id === 'settings');   // keep the legacy flag meaningful
     ensureDemo();                           // there is always a live match on the right
     if (paneLive()) $('hud').classList.remove('hidden');
@@ -1935,6 +1960,22 @@ function dockOrFull(id, build){
   resize();
   if (typeof _syncHash === 'function') _syncHash(ROUTE_OF[id] || 'home');
 }
+
+// Desktop dock collapse/expand — hides the left menu so the pitch gets the full
+// width. Persisted in sel.dockCollapsed; the ‹ / › tab on the dock edge toggles it.
+function updateDockToggle(){
+  const b = $('dockToggle'); if(!b) return;
+  b.textContent = sel.dockCollapsed ? '›' : '‹';
+  b.setAttribute('aria-label', sel.dockCollapsed ? 'Open menu panel' : 'Collapse menu panel');
+}
+function setDockCollapsed(v){
+  sel.dockCollapsed = !!v; saveSel();
+  document.body.classList.toggle('dock-collapsed', sel.dockCollapsed);
+  uiPadLeft = (sel.dockCollapsed || !deskDockId || !isDesktop()) ? 0 : DOCK_W;
+  updateDockToggle();
+  resize();
+}
+$('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
 
 // ---- Settings (sound + game feel), openable from the menu and mid-game
 let settingsFromGame = false;
@@ -1968,6 +2009,7 @@ function openLook(section){
   const target = section || 'theme';
   buildSettings();
   if (isDesktop()) sel.deskDock = true, saveSel();
+  if (sel.dockCollapsed) sel.dockCollapsed = false, saveSel();   // opening settings expands the dock
   dockOrFull('setup');
   const card = document.querySelector('.card.collapsible[data-sec="'+target+'"]');
   if (card){
@@ -4964,7 +5006,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260801.7';
+const VERSION = '20260801.8';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
