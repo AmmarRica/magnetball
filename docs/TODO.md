@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260801.2** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260802.4** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,8 +24,9 @@ _Current build: **v20260801.2** (shown under the title; bump `VERSION` in `index
   (`magnetball.sel` / `magnetball.profile`) and restore on load. **Verified working.**
 
 ## 📋 Next — near-term, self-contained
-- [ ] **Reset scope option** — decide whether "Reset settings" should optionally also reset the
-  player name/appearance (currently kept). Low effort if wanted.
+- [x] **Reset scope option** — "Reset settings" now offers an opt-in second confirm to also reset
+  the player name/appearance (colour, flag/animal, eyes, cap). Default still keeps your look;
+  `resetSettings(alsoAppearance)` + `defaultProfile()`.
 - [ ] **Shop "buying"** — the `💛 Coming soon` support button (`#shopSupport`) is a stub; either wire
   a real (non-purchase) action or keep as honest placeholder.
 - [ ] **Skins are experimental** — sprite ball/player skins only render once image files land under

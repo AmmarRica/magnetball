@@ -1590,15 +1590,19 @@ let rafId = 0;
 // ============================================================
 //  SETUP UI
 // ============================================================
+// Factory defaults for the player's look/name — the single source of truth for
+// both a first-time profile and the optional "reset appearance" path.
+function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'none', eyes:'googly' }; }
 function loadProfile() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem('magnetball.profile')||'{}'); } catch(e){}
+  const def = defaultProfile();
   return {
-    name: (d.name||'').slice(0,12) || 'You',
-    color: d.color || '#46d17a',
-    cap: d.cap || 'star',
-    flag: d.flag || 'none',
-    eyes: d.eyes || 'googly',
+    name: (d.name||'').slice(0,12) || def.name,
+    color: d.color || def.color,
+    cap: d.cap || def.cap,
+    flag: d.flag || def.flag,
+    eyes: d.eyes || def.eyes,
   };
 }
 function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} }
@@ -1606,14 +1610,26 @@ function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('ma
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} }
 // Restore all in-app settings (theme, display, skins, sound, feel, controls, party
 // mods) to defaults. Mutates `sel` in place so the debug hook's reference stays live.
-// Keeps progression untouched — stats/RP/unlocks and player name/skins are separate.
-function resetSettings(){
+// Keeps progression untouched — stats/RP/unlocks stay. Player name/appearance are
+// kept by default; pass alsoAppearance=true to also reset name, colour, flag, eyes
+// and cap (opt-in scope, since a look is more personal than a settings tweak).
+function resetSettings(alsoAppearance){
   Object.assign(sel, defaultSel());   // resets known settings; leaves flags like tutDone/deskDock
   saveSel();
+  if (alsoAppearance){
+    Object.assign(profile, defaultProfile());   // mutate in place — keeps live references valid
+    saveProfile();
+  }
   applyTheme(sel.theme); applyDisplayMode(); applyFeel();
   if (typeof Aud!=='undefined' && Aud.setVol) Aud.setVol(sel.snd.vol);
   buildSettings();
-  toast('Settings reset to defaults', 'ok', '↺');
+  if (alsoAppearance){
+    // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
+    const nm=$('pname'); if (nm) nm.value = profile.name;
+    if (typeof buildSwatches==='function') buildSwatches();
+    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
+  }
+  toast(alsoAppearance ? 'Settings & appearance reset' : 'Settings reset to defaults', 'ok', '↺');
 }
 
 // ---------- Stats & rank (ELO-ish ladder vs bots)
@@ -2073,7 +2089,13 @@ $('gearBtn').onclick = () => openLook('theme');
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
 $('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
-$('settingsReset').onclick = () => { if (confirm('Reset all settings (theme, display, skins, sound, game feel, controls) to defaults?\n\nYour player name, cosmetics and progress are kept.')) resetSettings(); };
+$('settingsReset').onclick = () => {
+  if (!confirm('Reset all settings (theme, display, skins, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
+  // Optional wider scope: appearance is more personal than a setting, so it's a
+  // separate opt-in. Cancel here keeps the current default (look preserved).
+  const alsoAppearance = confirm('Also reset your player name & appearance (colour, flag/animal, eyes, cap) to defaults?\n\nOK = also reset my look · Cancel = keep my look');
+  resetSettings(alsoAppearance);
+};
 
 const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
 const FEEL_SLIDERS = [
@@ -5094,7 +5116,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.3';
+const VERSION = '20260802.4';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5107,7 +5129,7 @@ if (window.__MAGNETDEBUG) {
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
     get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal,
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
-    get profile(){ return profile; }, get stats(){ return stats; }, FLAGS, EYES, CAPS,
+    get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
     addShake, goalBurst, scoreGoal,
