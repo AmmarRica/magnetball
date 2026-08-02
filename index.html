@@ -605,7 +605,7 @@
     </div>
 
     <div class="card collapsible collapsed" data-sec="player">
-      <h2>Your Player</h2>
+      <h2><span style="display:inline-flex;align-items:center;gap:9px"><span>Your Player</span><canvas id="pvMini" width="52" height="52" style="width:26px;height:26px;image-rendering:auto"></canvas></span></h2>
       <label class="field" for="pname">Name</label>
       <input id="pname" type="text" maxlength="12" placeholder="Enter a name" autocomplete="off" />
       <div style="height:14px"></div>
@@ -618,7 +618,10 @@
       <label class="field">Countryball <small id="unlockCount" style="color:var(--muted);font-weight:400"></small></label>
       <div class="opts tilewrap" id="flagPick"></div>
       <div style="height:14px"></div>
-      <label class="field">Eyes</label>
+      <label class="field">Animal</label>
+      <div class="opts tilewrap" id="animalPick"></div>
+      <div style="height:14px"></div>
+      <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
       <div class="opts tilewrap" id="eyesPick"></div>
       <div class="preview">
         <canvas class="pvBall" id="pvCanvas" width="120" height="120"></canvas>
@@ -1087,6 +1090,23 @@ const EYES = {
 };
 const EYE_KEYS = Object.keys(EYES);
 
+// Animal faceplates (Kenney animal pack, round). Each is a face image drawn over
+// the player's colour and clipped to the disc — it IS the face, so no eyes on top.
+const ANIMALS = {
+  panda:    { name:'Panda',    img:'assets/Kenney/kenney_animal-pack/PNG/Round/panda.png' },
+  pig:      { name:'Pig',      img:'assets/Kenney/kenney_animal-pack/PNG/Round/pig.png' },
+  rabbit:   { name:'Rabbit',   img:'assets/Kenney/kenney_animal-pack/PNG/Round/rabbit.png' },
+  monkey:   { name:'Monkey',   img:'assets/Kenney/kenney_animal-pack/PNG/Round/monkey.png' },
+  penguin:  { name:'Penguin',  img:'assets/Kenney/kenney_animal-pack/PNG/Round/penguin.png' },
+  elephant: { name:'Elephant', img:'assets/Kenney/kenney_animal-pack/PNG/Round/elephant.png' },
+  giraffe:  { name:'Giraffe',  img:'assets/Kenney/kenney_animal-pack/PNG/Round/giraffe.png' },
+  hippo:    { name:'Hippo',    img:'assets/Kenney/kenney_animal-pack/PNG/Round/hippo.png' },
+  parrot:   { name:'Parrot',   img:'assets/Kenney/kenney_animal-pack/PNG/Round/parrot.png' },
+  snake:    { name:'Snake',    img:'assets/Kenney/kenney_animal-pack/PNG/Round/snake.png' },
+};
+const ANIMAL_KEYS = Object.keys(ANIMALS);
+const _imgCache = {};   // sprite cache (declared here so animal pickers can build at init)
+
 // Unlock requirements for eyes and flags (caps carry their own `req`).
 const EYE_REQ = { none:null, googly:null, ball:null, dot:{wins:2}, wide:{goals:15}, angry:{wins:8}, happy:{played:10}, sleepy:{points:1150}, star:{streak:5}, cyclops:{points:1400}, visor:{drills:6},
   wink:null, hearts:{wins:3}, dizzy:null, money:{points:2500}, robot:{played:15}, drowsy:{streak:2}, shocked:{goals:15}, sus:{drills:5}, sparkle:{wins:6}, glasses:{points:1800}, eshades:{wins:10}, monocle:{points:4000}, thirdeye:{goals:60}, kawaii:null, crying:{played:30}, laser:{streak:5}, pixel:{drills:12}, anime:{goals:40}, focus:{wins:15}, deadx:null };
@@ -1144,6 +1164,7 @@ function isUnlocked(cat, key){ return grantedHas(cat,key) || reqMet(itemReq(cat,
 function unlockCounts(){
   let have=0, total=0;
   for(const k of FLAG_KEYS){ total++; if(isUnlocked('flag',k)) have++; }
+  for(const k of ANIMAL_KEYS){ total++; if(isUnlocked('animal',k)) have++; }
   for(const k of EYE_KEYS){ total++; if(isUnlocked('eyes',k)) have++; }
   for(const k of Object.keys(CAPS)){ total++; if(isUnlocked('cap',k)) have++; }
   return { have, total };
@@ -1191,7 +1212,7 @@ function checkDailyLogin(){
   login.claimed = idx+1; login.last = today; saveLogin();
   // refresh UI so the new unlock shows immediately
   if (typeof renderStats==='function') renderStats();
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
   showDailyModal(idx);
   return true;
 }
@@ -1674,17 +1695,27 @@ function buildOpts(containerId, obj, key, extra){
 }
 // Draw one player disc (colour/flag/eyes/cap) onto a canvas context — shared by
 // the big live preview and every mini tile in the flag/eye pickers.
+// Shared face painter: the player-colour core, then a faceplate — a country flag
+// or an animal image (both clipped to the disc) — OR, for a plain face, selectable
+// eyes. A faceplate IS the face, so it replaces the googly eyes (no eyes on
+// countryballs or animals). Animal images fall back to eyes until they load.
+function paintFace(c, x, y, r, o){
+  const key = o.flag, has = key && key!=='none';
+  c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
+  if (has && ANIMALS[key]){
+    const im = spriteImg(ANIMALS[key].img);
+    if (im){ c.save(); c.beginPath(); c.arc(x,y,r*0.84,0,7); c.clip();
+      const d=r*1.78; c.drawImage(im, x-d/2, y-d/2+r*0.04, d, d); c.restore(); return; }
+  } else if (has && FLAGS[key] && FLAGS[key].draw){
+    const fr=r*0.84; c.save(); c.beginPath(); c.arc(x,y,fr,0,7); c.clip();
+    FLAGS[key].draw(c,x,y,fr); c.restore(); return;
+  }
+  if (o.eyes!==false) (EYES[o.eyes] || EYES.googly).draw(c,x,y,r);
+}
 function drawDisc(c, cx, cy, r, o){
   c.beginPath(); c.arc(cx,cy,r+Math.max(2,r*0.16),0,7); c.fillStyle='#0a0d16'; c.fill();
   c.beginPath(); c.arc(cx,cy,r,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
-  const flag = o.flag && o.flag!=='none' && FLAGS[o.flag] && FLAGS[o.flag].draw;
-  if (flag){
-    const fr=r*0.84; c.save(); c.beginPath(); c.arc(cx,cy,fr,0,7); c.clip();
-    FLAGS[o.flag].draw(c,cx,cy,fr); c.restore();
-  } else {
-    c.beginPath(); c.arc(cx,cy,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
-  }
-  if (o.eyes!==false) (EYES[o.eyes] || EYES.googly).draw(c,cx,cy,r);
+  paintFace(c, cx, cy, r, o);
   const cap = o.cap && CAPS[o.cap] && CAPS[o.cap].emoji;
   if (cap){ c.font=`${Math.round(r*0.72)}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
     c.fillStyle=pickTextColor(o.color||'#46d17a'); c.fillText(cap, cx, cy - r*0.5); }
@@ -1740,6 +1771,9 @@ function updatePreview(){
   const cvs = $('pvCanvas');
   if (cvs){ const c=cvs.getContext('2d'); c.clearRect(0,0,cvs.width,cvs.height);
     drawDisc(c, cvs.width/2, cvs.height/2, cvs.width*0.36, profile); }
+  const mini = $('pvMini');   // live disc in the sticky "Your Player" header
+  if (mini){ const mc=mini.getContext('2d'); mc.clearRect(0,0,mini.width,mini.height);
+    drawDisc(mc, mini.width/2, mini.height/2, mini.width*0.40, profile); }
   $('pvName').style.color = profile.color;
   const uc = unlockCounts(); const el=$('unlockCount'); if(el) el.textContent = `· ${uc.have}/${uc.total} unlocked`;
 }
@@ -1751,19 +1785,24 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     const el=document.createElement('div');
     el.className='opt'+(curGet()===k?' sel':'')+(unlocked?'':' locked');
     const cvs=document.createElement('canvas'); cvs.width=cvs.height=64;
-    const o = cat==='flag' ? { color:profile.color, flag:k, eyes:'googly' }
-                           : { color:profile.color, flag:profile.flag, eyes:k };
+    // Faceplate tiles (flag/animal) preview the plate itself (no eyes); the eyes
+    // tiles preview each eye style on a plain face.
+    const o = cat==='eyes' ? { color:profile.color, flag:'none', eyes:k }
+                           : { color:profile.color, flag:k };
     drawDisc(cvs.getContext('2d'), 32, 32, 22, o);
     el.appendChild(cvs);
-    const nm=document.createElement('span'); nm.textContent = cat==='flag'?FLAGS[k].name:EYES[k].name; el.appendChild(nm);
+    const nm=document.createElement('span');
+    nm.textContent = cat==='flag'?FLAGS[k].name : cat==='animal'?ANIMALS[k].name : EYES[k].name;
+    el.appendChild(nm);
     if(!unlocked){ const s=document.createElement('small'); s.textContent='🔒 '+reqText(itemReq(cat,k)); el.appendChild(s); }
     el.onclick=()=>{ if(!isUnlocked(cat,k)) return;
-      if(cat==='flag') profile.flag=k; else profile.eyes=k;
-      saveProfile(); buildFlagPicker(); buildEyesPicker(); updatePreview(); };
+      if(cat==='eyes') profile.eyes=k; else profile.flag=k;   // flag & animal share the faceplate slot
+      saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); };
     wrap.appendChild(el);
   });
 }
 function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
+function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
 // Caps: lock-aware emoji tiles.
 function buildCaps(){
@@ -1790,6 +1829,7 @@ $('pname').onblur  = () => { if(!profile.name.trim()){ profile.name='You'; $('pn
 buildSwatches();
 buildCaps();
 buildFlagPicker();
+buildAnimalPicker();
 buildEyesPicker();
 buildOpts('modes', MODES, 'mode', o=>o.desc);
 buildOpts('fields', FIELDS, 'field');
@@ -1865,7 +1905,7 @@ function renderStats(){
     + `goals ${stats.gf}-${stats.ga} (${gd>=0?'+':''}${gd}) · streak ${streakTxt} · best W${Math.max(0,stats.best)}<br>`
     + `<span style="color:var(--accent)">MMR ${stats.mmr||1000}</span> · peak ${stats.mmrPeak||stats.mmr||1000}`;
   // Refresh customization pickers so anything newly unlocked shows up.
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
 }
 renderStats();
 
@@ -4537,10 +4577,20 @@ function drawGoal(w, sign){
 // Image-sprite loader with graceful fallback: returns the loaded <img> once
 // ready, or null while loading / on error (so the drawn version is used). Files
 // live under assets/ (see that folder's README for the contract).
-const _imgCache = {};
+// (_imgCache is declared up near ANIMALS so the animal pickers can build at init.)
 function spriteImg(path){
   let im = _imgCache[path];
-  if (im === undefined){ im = new Image(); im.onerror = ()=>{ _imgCache[path] = null; }; im.src = path; _imgCache[path] = im; }
+  if (im === undefined){
+    im = new Image();
+    im.onerror = ()=>{ _imgCache[path] = null; };
+    // Animal faceplates fill in async — refresh the static picker + preview once
+    // each arrives (the live match already redraws every frame).
+    im.onload = ()=>{ if (path.indexOf('animal-pack')>=0){
+      try{ buildAnimalPicker(); }catch(_){}
+      try{ updatePreview(); }catch(_){}
+    } };
+    im.src = path; _imgCache[path] = im;
+  }
   if (!im) return null;
   return (im.complete && im.naturalWidth > 0) ? im : null;
 }
@@ -4567,21 +4617,10 @@ function drawDiscs(w){
     ctx.fillStyle = TH.discRim; ctx.fill();
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI);
     ctx.fillStyle = teamCol; ctx.fill();
-    // Face: a countryball flag skin (clipped to the disc, leaving a thin team ring),
-    // or the classic solid custom-colour core when no flag is chosen.
-    const flag = p.flag && p.flag!=='none' && FLAGS[p.flag] && FLAGS[p.flag].draw;
-    if (flag){
-      const fr = r*0.84;
-      ctx.save();
-      ctx.beginPath(); ctx.arc(x, y, fr, 0, 2*Math.PI); ctx.clip();
-      FLAGS[p.flag].draw(ctx, x, y, fr);
-      ctx.restore();
-    } else {
-      // Player colour fills most of the disc; team colour is only a thin rim.
-      ctx.beginPath(); ctx.arc(x, y, r*0.84, 0, 2*Math.PI);
-      ctx.fillStyle = p.color; ctx.fill();
-    }
-    // Fixed face — cap marking pinned at the top of the head.
+    // Face: player-colour core (thin team rim) + faceplate (flag / animal) or
+    // eyes — shared with the menu preview via paintFace().
+    paintFace(ctx, x, y, r, p);
+    // Cap marking pinned at the top of the head.
     const cap = CAPS[p.cap] && CAPS[p.cap].emoji;
     if (cap && r>7){
       ctx.font = `${Math.round(r*0.78)}px sans-serif`;
@@ -4589,8 +4628,6 @@ function drawDiscs(w){
       ctx.globalAlpha = 0.92; ctx.fillStyle = pickTextColor(p.color);
       ctx.fillText(cap, x, y - r*0.48); ctx.globalAlpha = 1;
     }
-    // The countryball "face" — a selectable eye style, always upright.
-    if (r > 5) (EYES[p.eyes] || EYES.googly).draw(ctx, x, y, r);
     }
     // Colour-blind aid: distinguish teams by shape — team 0 solid white ring,
     // team 1 dashed white ring (readable regardless of hue).
@@ -5026,7 +5063,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.1';
+const VERSION = '20260802.2';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
