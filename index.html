@@ -538,7 +538,7 @@
       <div class="opts" id="modes"></div>
       <div style="height:14px"></div>
       <label class="field">Field</label>
-      <div class="opts" id="fields"></div>
+      <div class="opts tilewrap" id="fields"></div>
       <div style="height:14px"></div>
       <label class="field">Difficulty <small style="color:var(--muted)">(bots)</small></label>
       <div class="opts" id="diffs"></div>
@@ -1252,7 +1252,7 @@ let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // 
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', spectate:'play', cb:'on',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -1486,6 +1486,7 @@ function applyFeel(){ if(!world || world.drillMode) return; const v=feelVals();
 const HANDED = { right:{ name:'Right', emoji:'👉' }, left:{ name:'Left', emoji:'👈' } };
 // Charge-kick: holding KICK winds up extra power (fires stronger the moment you touch the ball).
 const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
+const KICK_SLOW = 0.45;                   // accel multiplier while holding kick (Circle) — no free cruising
 // Fraction of the striker's velocity a one-shot kick carries into the ball, so a
 // running shot is more powerful and directional than a standing one (HaxBall-like).
 const KICK_CARRY = 0.5;
@@ -1607,7 +1608,16 @@ function buildOpts(containerId, obj, key, extra){
     const el = document.createElement('div');
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
     let sub = extra ? extra(o) : '';
-    el.innerHTML = `<span class="emoji">${o.emoji||'—'}</span><span>${o.name}</span>${sub?`<small>${sub}</small>`:''}`;
+    if (key==='field'){
+      // Draw a mini top-down court instead of an emoji.
+      const cv=document.createElement('canvas'); cv.width=cv.height=64;
+      drawFieldPreview(cv.getContext('2d'), o, 64, 64);
+      el.appendChild(cv);
+      const nm=document.createElement('span'); nm.textContent=o.name; el.appendChild(nm);
+      if(sub){ const sm=document.createElement('small'); sm.innerHTML=sub; el.appendChild(sm); }
+    } else {
+      el.innerHTML = `<span class="emoji">${o.emoji||'—'}</span><span>${o.name}</span>${sub?`<small>${sub}</small>`:''}`;
+    }
     el.onclick = () => {
       if (key==='cap'){ profile.cap = k; saveProfile(); }
       else { sel[key] = k; saveSel(); }
@@ -1628,12 +1638,58 @@ function drawDisc(c, cx, cy, r, o){
     const fr=r*0.84; c.save(); c.beginPath(); c.arc(cx,cy,fr,0,7); c.clip();
     FLAGS[o.flag].draw(c,cx,cy,fr); c.restore();
   } else {
-    c.beginPath(); c.arc(cx,cy,r*0.64,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
+    c.beginPath(); c.arc(cx,cy,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
   }
   if (o.eyes!==false) (EYES[o.eyes] || EYES.googly).draw(c,cx,cy,r);
   const cap = o.cap && CAPS[o.cap] && CAPS[o.cap].emoji;
   if (cap){ c.font=`${Math.round(r*0.72)}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
     c.fillStyle=pickTextColor(o.color||'#46d17a'); c.fillText(cap, cx, cy - r*0.5); }
+}
+// Mini top-down pitch preview for the field picker (replaces the emoji). Self-
+// contained (no camera globals): draws the boundary with the field's rounded /
+// chamfered corners, halfway line, centre circle, and both coloured goals,
+// scaled to fit the tile. Uses the live TH palette with safe fallbacks.
+function drawFieldPreview(c, F, cw, ch){
+  const T = (typeof TH!=='undefined' && TH) ? TH : {};
+  const line=T.line||'#bcd3ff', sA=T.stripeA||'#12351f', sB=T.stripeB||'#0e2a19',
+        red=T.teamRed||'#ff3b6b', blue=T.teamBlue||'#4d7bff', dot=T.centerDot||'#bcd3ff',
+        pocket=T.netPocket||'rgba(255,255,255,.05)';
+  c.clearRect(0,0,cw,ch);
+  const net=F.net||60, gh=(F.goal||150)/2, corner=F.corner||0, cut=!!F.cut, pad=5;
+  const s = Math.min((cw-pad*2)/F.W, (ch-pad*2)/(F.L + net*2));
+  const cx=cw/2, cy=ch/2, hw=F.W/2, hl=F.L/2;
+  const X=x=>cx+x*s, Y=y=>cy+y*s;
+  const L=X(-hw), R=X(hw), Tp=Y(-hl), B=Y(hl), cc=corner*s;
+  const path=()=>{ c.beginPath();
+    if(corner>0 && cut){
+      c.moveTo(L+cc,Tp); c.lineTo(R-cc,Tp); c.lineTo(R,Tp+cc); c.lineTo(R,B-cc);
+      c.lineTo(R-cc,B); c.lineTo(L+cc,B); c.lineTo(L,B-cc); c.lineTo(L,Tp+cc); c.closePath();
+    } else if(corner>0){
+      c.moveTo(L+cc,Tp); c.arcTo(R,Tp,R,B,cc); c.arcTo(R,B,L,B,cc); c.arcTo(L,B,L,Tp,cc); c.arcTo(L,Tp,R,Tp,cc); c.closePath();
+    } else { c.rect(L,Tp,R-L,B-Tp); }
+  };
+  // pitch fill + a couple of mowing stripes, clipped to the boundary shape
+  c.save(); path(); c.clip();
+  c.fillStyle=sB; c.fillRect(L,Tp,R-L,B-Tp);
+  c.fillStyle=sA; const bands=6;
+  for(let i=0;i<bands;i+=2){ const y0=Tp+(i/bands)*(B-Tp), y1=Tp+((i+1)/bands)*(B-Tp); c.fillRect(L,y0,R-L,y1-y0); }
+  c.restore();
+  // net pockets behind each goal
+  c.fillStyle=pocket;
+  c.fillRect(X(-gh), Tp-net*s, gh*2*s, net*s);
+  c.fillRect(X(-gh), B,        gh*2*s, net*s);
+  // boundary, halfway line, centre circle + dot
+  c.lineJoin='miter'; c.lineCap='butt';
+  c.strokeStyle=line; c.lineWidth=2; path(); c.stroke();
+  c.lineWidth=1.5;
+  c.beginPath(); c.moveTo(L,cy); c.lineTo(R,cy); c.stroke();
+  c.beginPath(); c.arc(cx,cy, Math.max(4,45*s), 0, 7); c.stroke();
+  c.beginPath(); c.arc(cx,cy, 1.8, 0, 7); c.fillStyle=dot; c.fill();
+  // goals — top defends blue, bottom red (matches drawGoal)
+  const goal=(sign,col)=>{ const y=Y(sign*hl), ny=y+sign*net*s;
+    c.strokeStyle=col; c.lineWidth=2;
+    c.beginPath(); c.moveTo(X(-gh),y); c.lineTo(X(-gh),ny); c.lineTo(X(gh),ny); c.lineTo(X(gh),y); c.stroke(); };
+  goal(-1, blue); goal(1, red);
 }
 function updatePreview(){
   $('pvName').textContent = profile.name || 'Player';
@@ -3339,11 +3395,14 @@ function integrate(w, ballFrozen, playersFrozen){
     // live so it carries on into the net.
     for (const p of discs){ p.vx = 0; p.vy = 0; }
   } else {
-    // Apply player acceleration (pitch surface scales grip)
+    // Apply player acceleration (pitch surface scales grip). Holding kick/charge
+    // (Circle) drags you down to KICK_SLOW of your accel, so you can't just cruise
+    // around with kick permanently held — you commit to a slower, deliberate approach.
     const accel = w.pAccel || PLAYER.accel, pdamp = w.pDamp || PLAYER.damp;
     for (const p of discs){
-      p.vx += p.inX * accel;
-      p.vy += p.inY * accel;
+      const a = p.kick ? accel * KICK_SLOW : accel;
+      p.vx += p.inX * a;
+      p.vy += p.inY * a;
     }
     // Kicking + magnet
     for (const p of discs){
@@ -4438,7 +4497,8 @@ function drawDiscs(w){
       FLAGS[p.flag].draw(ctx, x, y, fr);
       ctx.restore();
     } else {
-      ctx.beginPath(); ctx.arc(x, y, r*0.64, 0, 2*Math.PI);
+      // Player colour fills most of the disc; team colour is only a thin rim.
+      ctx.beginPath(); ctx.arc(x, y, r*0.84, 0, 2*Math.PI);
       ctx.fillStyle = p.color; ctx.fill();
     }
     // Fixed face — cap marking pinned at the top of the head.
@@ -4456,9 +4516,9 @@ function drawDiscs(w){
     // team 1 dashed white ring (readable regardless of hue).
     if (w.cb){
       ctx.save();
-      ctx.strokeStyle = TH.cbRing; ctx.lineWidth = Math.max(2, r*0.16);
-      if (p.team===1) ctx.setLineDash([r*0.55, r*0.42]);
-      ctx.beginPath(); ctx.arc(x, y, r*1.28, 0, 2*Math.PI); ctx.stroke();
+      ctx.strokeStyle = TH.cbRing; ctx.lineWidth = Math.max(1.5, r*0.11);
+      if (p.team===1) ctx.setLineDash([r*0.5, r*0.4]);
+      ctx.beginPath(); ctx.arc(x, y, r*1.12, 0, 2*Math.PI); ctx.stroke();
       ctx.restore();
     }
     // kick indicator ring (charged/ready) — neon yellow
@@ -4886,7 +4946,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260801.3';
+const VERSION = '20260801.6';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
