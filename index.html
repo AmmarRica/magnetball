@@ -1049,6 +1049,25 @@ const FLAGS = {
   australia:{name:'Australia', draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#00008b'); c.fillStyle='#fff'; c.fillRect(x-r,y-r,r,r); c.strokeStyle='#e4002b'; c.lineWidth=r*0.1; c.beginPath(); c.moveTo(x-r,y-r); c.lineTo(x,y); c.moveTo(x-r,y); c.lineTo(x,y-r); c.stroke(); _cd(c,x-r*0.3,y+r*0.5,r,'#fff',r*0.12); _cd(c,x+r*0.4,y-r*0.3,r,'#fff',r*0.1); } },
 };
 const FLAG_KEYS = Object.keys(FLAGS);
+// Real flag art (Kenney flag pack — 64×64 SVGs by ISO code). paintFace draws the
+// SVG for a country and falls back to the hand-drawn FLAGS[key].draw until it loads.
+const FLAG_DIR = 'assets/Kenney/kenney_flag-pack/Vector/';
+const FLAG_ISO = {
+  poland:'PL', indo:'ID', austria:'AT', germany:'DE', netherl:'NL', ukraine:'UA', japan:'JP',
+  bangla:'BD', spain:'ES', india:'IN', france:'FR', italy:'IT', ireland:'IE', belgium:'BE',
+  romania:'RO', nigeria:'NG', mexico:'MX', portugal:'PT', canada:'CA', argentina:'AR',
+  sweden:'SE', finland:'FI', denmark:'DK', norway:'NO', brazil:'BR', usa:'US', uk:'GB',
+  korea:'KR', greece:'GR', turkey:'TR', egypt:'EG', kenya:'KE', ghana:'GH', morocco:'MA',
+  algeria:'DZ', senegal:'SN', cameroon:'CM', southafr:'ZA', ethiopia:'ET', russia:'RU',
+  hungary:'HU', czechia:'CZ', slovakia:'SK', croatia:'HR', serbia:'RS', slovenia:'SI',
+  switzerl:'CH', iceland:'IS', estonia:'EE', latvia:'LV', lithuan:'LT', belarus:'BY',
+  bulgaria:'BG', chile:'CL', peru:'PE', colombia:'CO', venezuela:'VE', uruguay:'UY',
+  ecuador:'EC', bolivia:'BO', paraguay:'PY', panama:'PA', costarica:'CR', cuba:'CU',
+  jamaica:'JM', china:'CN', vietnam:'VN', thailand:'TH', philipp:'PH', malaysia:'MY',
+  singapore:'SG', pakistan:'PK', srilanka:'LK', nepal:'NP', iran:'IR', iraq:'IQ',
+  israel:'IL', saudi:'SA', uae:'AE', qatar:'QA', kuwait:'KW', jordan:'JO', lebanon:'LB',
+  australia:'AU',
+};
 
 // ============================================================
 //  EYE STYLES — the countryball "face". draw(c,x,y,r) renders the eyes.
@@ -1707,8 +1726,12 @@ function paintFace(c, x, y, r, o){
     if (im){ c.save(); c.beginPath(); c.arc(x,y,r*0.84,0,7); c.clip();
       const d=r*1.78; c.drawImage(im, x-d/2, y-d/2+r*0.04, d, d); c.restore(); return; }
   } else if (has && FLAGS[key] && FLAGS[key].draw){
-    const fr=r*0.84; c.save(); c.beginPath(); c.arc(x,y,fr,0,7); c.clip();
-    FLAGS[key].draw(c,x,y,fr); c.restore(); return;
+    const fr=r*0.84, iso=FLAG_ISO[key];
+    const im = iso ? spriteImg(FLAG_DIR+iso+'.svg') : null;
+    c.save(); c.beginPath(); c.arc(x,y,fr,0,7); c.clip();
+    if (im) c.drawImage(im, x-fr, y-fr, fr*2, fr*2);   // real flag SVG (64×64, square)
+    else FLAGS[key].draw(c,x,y,fr);                    // hand-drawn fallback until it loads
+    c.restore(); return;
   }
   if (o.eyes!==false) (EYES[o.eyes] || EYES.googly).draw(c,x,y,r);
 }
@@ -4578,17 +4601,25 @@ function drawGoal(w, sign){
 // ready, or null while loading / on error (so the drawn version is used). Files
 // live under assets/ (see that folder's README for the contract).
 // (_imgCache is declared up near ANIMALS so the animal pickers can build at init.)
+// Debounced rebuild of the faceplate pickers + preview once async art loads.
+var _faceRefreshT = 0;
+function _refreshFaces(){
+  clearTimeout(_faceRefreshT);
+  _faceRefreshT = setTimeout(()=>{
+    try{ buildFlagPicker(); }catch(_){}
+    try{ buildAnimalPicker(); }catch(_){}
+    try{ updatePreview(); }catch(_){}
+  }, 90);
+}
 function spriteImg(path){
   let im = _imgCache[path];
   if (im === undefined){
     im = new Image();
     im.onerror = ()=>{ _imgCache[path] = null; };
-    // Animal faceplates fill in async — refresh the static picker + preview once
-    // each arrives (the live match already redraws every frame).
-    im.onload = ()=>{ if (path.indexOf('animal-pack')>=0){
-      try{ buildAnimalPicker(); }catch(_){}
-      try{ updatePreview(); }catch(_){}
-    } };
+    // Faceplate art (flags + animals) fills in async — refresh the static pickers +
+    // preview once it arrives (the live match already redraws every frame). Debounced
+    // so 80+ flag SVGs loading don't trigger 80 full picker rebuilds.
+    im.onload = ()=>{ if (path.indexOf('animal-pack')>=0 || path.indexOf('flag-pack')>=0) _refreshFaces(); };
     im.src = path; _imgCache[path] = im;
   }
   if (!im) return null;
@@ -5063,7 +5094,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.2';
+const VERSION = '20260802.3';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
