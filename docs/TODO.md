@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -17,6 +17,40 @@ _Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **3D-looking rolling ball** — the ball is now a shaded sphere with rotating black pentagons
+  (soccer pattern) instead of a flat disc; it visibly rolls (`b.rot` already advanced with speed,
+  now also for multi-ball extras). Theme-aware via `TH.ball`/`TH.ballSpot` + translucent shading.
+- [x] **Grass-cut patterns** — "Grass cut" row in the Match card: Stripes · Vertical · Check ·
+  Diagonal · Rings · Solid (`sel.grass`, `drawGrass()`). Cosmetic only; updates live.
+- [x] **Idle demo muted + move after goal** — the desktop background demo is silent (`world.demo`
+  gate in `playSfx`); players are no longer frozen during the goal celebration.
+- [x] **Multi-ball reworked to continuous scoring** — a potted ball now disappears and counts as one
+  goal, and the match keeps playing (no kickoff freeze). "First to 3" = pot 3 balls; when all balls
+  on the pitch are used up without a winner (e.g. 2-1), a fresh ball serves at centre. Reaching the
+  target still freezes into the result. `scoreMultiBall` + `creditScorer`; verified end-to-end.
+- [x] **Post-match overlay contrast** — the result screen used a semi-transparent scrim, so the frozen
+  pitch bled through and (worse) a fixed dark scrim broke the Paper theme's dark award/button text.
+  It now uses the opaque themed backdrop (`var(--bg-grad)`), same as the menus — legible on every theme.
+- [x] **Career Stats screen** — 📈 nav tile / `#/stats`: an 18-tile grid of lifetime numbers (goals
+  scored/conceded, GD, matches, W/L/D, win rate, per-game averages, streaks, biggest win, most in a
+  match, clean sheets, drills, MMR, coins, rank). New tallies `bestWin`/`cleanSheets`/`goalsBest`.
+- [x] **Field picker ordered by size** — tiles now sort by total pitch area (W×L), smallest → largest.
+- [x] **Bots mirror your customization** — every bot (both teams) now takes your colour, cap, flag
+  and eyes instead of random ones, so the whole pitch reflects your look. Applies in all modes incl.
+  1v1 (the opponent matches you). Teams stay readable via the existing team-colour ring (red vs blue,
+  keyed off `p.team`, not colour) and each disc keeps its own name label so you can spot yourself.
+  `teamTint`/`randCap`/`randFlag`/`randEyes` are now unused but kept for a future "bot variety" toggle.
+- [x] **Light-theme card definition** — 36 `rgba(255,255,255,…)` borders/fills (awards, shop, wallet,
+  social posts, cocktail rows, leaderboard "you" row) were invisible on Paper's light panels. Card
+  borders now use `var(--edge)`; subtle fills use a neutral `rgba(128,128,128,…)` that reads on both
+  light and dark. Verified visually in shop + social.
+- [x] **Overlay-eats-touch guard generalized** — the full-screen daily modal (z-index 40) is now
+  closed on every real gameplay start (`startMatch` guarded by `!_startQuiet`, plus `startDrill`),
+  so no modal can linger over the pitch and swallow input. The load-time idle demo is excluded so
+  the day-1 reward still shows.
+- [x] **Ball containment swept on all 30 fields** — hammered each field with repeated 40–100 speed
+  blasts in random directions; the ball never escapes the side walls, only dips into the goal-net
+  depth, never NaNs. (Re-run after any physics change.)
 - [x] **Theme contrast pass (all AA)** — Paper (light) theme was inheriting dark-theme hardcodes
   (`#fff` text on light panels, `var(--text)` on a hardcoded dark input, white-on-gold kick pad).
   Added themed `--field` / `--on-accent` vars, routed inputs/chips/labels through `var(--text)`,
@@ -50,7 +84,11 @@ _Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index
 - [ ] **Online rooms (host / join by code)** — the Settings → Online card is a "coming soon" stub
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
-## 🧪 Testing reminders (from CLAUDE.md)
+## 🧪 Testing / infra
+- [ ] **No committed test suite or CI** — the drill-touch crash and the white-on-white Paper theme
+  both shipped because nothing catches regressions. Commit a small Playwright suite (drill touch via
+  dispatched events, render every theme/flag/eye, 30-field ball containment, console-error check) and
+  a GitHub Action to run it on push. Highest-leverage item — it's the root reason the P0 bugs happened.
 - [ ] After physics changes: re-verify **ball containment on every field**.
 - [ ] After adding any flag/eye/cap: **render it once** to catch throwing draw fns.
 - [ ] Watch for **duplicate element IDs** (breaks `$()` / `getElementById`) — e.g. the `id="clock"`

@@ -159,6 +159,18 @@
     .opt.sel small { color: var(--cyan); }
     .opt .emoji { font-size: 18px; }
 
+    /* Career stats — tile grid of lifetime numbers */
+    .statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px,1fr)); gap: 10px; }
+    .stat {
+      background: rgba(128,128,128,.10); border: 1px solid var(--edge); border-radius: 10px;
+      padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat .sv { font-family: var(--pix); font-size: 20px; line-height: 1.1; color: var(--text); }
+    .stat .sv small { font-size: 12px; color: var(--muted); }
+    .stat .sk { font-family: var(--pix); font-size: 12px; color: var(--muted); letter-spacing:.3px; }
+    .stat.hl { border-color: var(--accent); background: rgba(33,230,255,.06); }
+    .stat.hl .sv { color: var(--accent); }
+
     /* Compact destination grid at the top of the main menu */
     .navgrid { width: 100%; max-width: 460px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 4px 0 2px; }
     .navtile {
@@ -228,7 +240,7 @@
     .lbrow canvas.cv { width:24px; height:24px; flex:0 0 auto; }
     .lbrow .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lbrow .rp { color:var(--accent); font-weight:700; }
-    .lbrow.you { background:rgba(255,255,255,.07); border-color:var(--accent); }
+    .lbrow.you { background:rgba(128,128,128,.12); border-color:var(--accent); }
 
     /* Daily reward modal */
     #dailyModal {
@@ -403,7 +415,11 @@
     #overlay {
       position: fixed; inset: 0; z-index: 15; display: none;
       align-items: center; justify-content: center; flex-direction: column; gap: 18px;
-      background: rgba(2,3,8,.9); padding: 24px;
+      /* Opaque themed backdrop (same as the menu screens) so the frozen pitch behind
+         doesn't bleed through and fight the result text/cards. Also keeps themed text
+         (var(--text) award rows) legible on the Paper theme, which a fixed dark scrim
+         would break. A faint pitch peek isn't worth the lost contrast. */
+      background: var(--bg-grad) fixed; padding: 24px;
     }
     #overlay.show { display: flex; }
     #overlay h2 {
@@ -420,7 +436,7 @@
     #ovAwards:empty { display:none; }
     #ovAwards .awrow {
       display:flex; align-items:center; gap:10px; padding:7px 11px; border-radius:10px;
-      background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08);
+      background: rgba(128,128,128,.10); border:1px solid var(--edge);
       animation: awin .32s ease both;
     }
     #ovAwards .awrow.you { background: rgba(33,230,255,.13); border-color: rgba(33,230,255,.5); }
@@ -433,7 +449,7 @@
     #ovAwards .awfoot { display:flex; gap:8px; justify-content:center; margin-top:4px; }
     #ovAwards .awfoot button {
       font-family: var(--pix); font-size:12px; color:var(--text); background:rgba(127,127,127,.14);
-      border:1px solid rgba(255,255,255,.14); border-radius:9px; padding:7px 12px; cursor:pointer;
+      border:1px solid var(--edge); border-radius:9px; padding:7px 12px; cursor:pointer;
     }
     #ovAwards .awfoot button:active { transform: translateY(1px); }
     @keyframes awin { from{ opacity:0; transform: translateY(7px); } to{ opacity:1; transform:none; } }
@@ -442,12 +458,12 @@
     .shopnote { color: var(--muted); font-size: 12px; line-height: 1.6; }
     .shopnote b { color: var(--text); }
     .walletbar { display:flex; align-items:center; justify-content:space-between; margin-top:12px;
-      padding:9px 12px; border-radius:10px; background: rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.08); font-family: var(--pix); font-size:13px; }
+      padding:9px 12px; border-radius:10px; background: rgba(128,128,128,.10);
+      border:1px solid var(--edge); font-family: var(--pix); font-size:13px; }
     .walletbar b { color: var(--accent); }
     .shopgrid { display:grid; grid-template-columns: repeat(auto-fill, minmax(96px,1fr)); gap:10px; }
     .shopcard { display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 6px;
-      border-radius:12px; background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
+      border-radius:12px; background: rgba(128,128,128,.10); border:1px solid var(--edge); }
     .shopcard canvas { width:48px; height:48px; image-rendering: pixelated; }
     .shopcard .sname { font-family: var(--pix); font-size:12px; color:var(--text); text-align:center; }
     .shopcard .sprice { font-family: var(--pix); font-size:12px; color: var(--accent); }
@@ -459,12 +475,12 @@
     .sochead h1 { font-family: var(--pix); font-size:26px; color: var(--accent); text-shadow: 0 0 12px rgba(33,230,255,.5); }
     .socfilters { display:flex; gap:6px; margin-left:auto; }
     .socfilters button {
-      font-family: var(--pix); font-size:12px; color: var(--muted); background: rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:6px 12px; cursor:pointer;
+      font-family: var(--pix); font-size:12px; color: var(--muted); background: rgba(128,128,128,.10);
+      border:1px solid var(--edge); border-radius:999px; padding:6px 12px; cursor:pointer;
     }
     .socfilters button.sel { color:var(--on-accent); background: var(--accent); border-color: var(--accent); }
     #feed { display:flex; flex-direction:column; gap:18px; width:100%; }
-    .post { background: rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.09); border-radius:16px; overflow:hidden; }
+    .post { background: rgba(128,128,128,.08); border:1px solid var(--edge); border-radius:16px; overflow:hidden; }
     .post .phead { display:flex; align-items:center; gap:9px; padding:10px 12px; }
     .post .phead canvas { width:34px; height:34px; border-radius:50%; flex:none; }
     .post .phead .pwho { font-family: var(--pix); font-size:12px; color:var(--text); line-height:1.35; }
@@ -495,14 +511,14 @@
     .post .pcomments .cmt b { color:var(--text); }
     .post .pcomments .cmore { color: var(--muted); font-size:12px; cursor:pointer; }
     .post .paddc { display:flex; gap:8px; padding:6px 12px 12px; }
-    .post .paddc input { flex:1; background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
+    .post .paddc input { flex:1; background: rgba(128,128,128,.10); border:1px solid var(--edge);
       border-radius:999px; color:var(--text); font-size:12px; padding:7px 12px; outline:none; }
     .post .paddc button { font-family: var(--pix); font-size:12px; color: var(--accent); background:none; border:none; cursor:pointer; }
     .post .ptime { font-size:12px; color: var(--muted); padding:0 12px 10px; text-transform:uppercase; letter-spacing:.5px; }
     .feedempty { color: var(--muted); text-align:center; padding:30px 10px; font-size:13px; }
 
     /* Cocktail side-config rows */
-    .ckrow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .ckrow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid var(--edge); }
     .ckrow .cklab { font-family: var(--pix); font-size:12px; color:var(--text); min-width:78px; }
     .ckrow .cksides { display:flex; gap:6px; margin-left:auto; }
     .ckrow .cksides button {
@@ -568,6 +584,7 @@
       <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
       <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
       <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
+      <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
       <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
       <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
       <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
@@ -601,6 +618,9 @@
       <div style="height:14px"></div>
       <label class="field">Pitch surface</label>
       <div class="opts" id="pitches"></div>
+      <div style="height:14px"></div>
+      <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
+      <div class="opts" id="grass"></div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -742,6 +762,16 @@
       <div class="opts" id="drillList"></div>
     </div>
     <button class="ghost" id="drillsBack">← Back</button>
+  </div>
+
+  <!-- ===================== CAREER STATS ===================== -->
+  <div id="stats" class="screen hidden">
+    <div class="logo"><h1 style="font-size:30px">CAREER STATS</h1><p>Everything you've done, all-time</p></div>
+    <div class="card">
+      <h2>Lifetime <small id="statsRank" style="color:var(--muted);font-weight:400"></small></h2>
+      <div class="statgrid" id="statGrid"></div>
+    </div>
+    <button class="ghost" id="statsBack" style="margin-top:8px">← Back</button>
   </div>
 
   <!-- ===================== SEASON / CUP ===================== -->
@@ -1338,7 +1368,7 @@ let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // 
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', spectate:'play', cb:'off',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -1546,7 +1576,8 @@ const SFX = {
   ],
 };
 const SFX_LABELS = { whistle:['Pea','Airy','Rising'], crowd:['Roar','Applause','Swell'], kick:['Thock','Punch','Pluck'], wall:['Tick','Click','Bonk'], net:['Swish','Thud','Rustle'] };
-function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
+function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
+  const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
 // falling "aww" on a near miss / post.
 function sfxSwell(){ try{ Aud.noise(0.55,{bp:720,Q:0.7,vol:0.34,swell:true}); Aud.tone(200,0.5,'sawtooth',{to:360,vol:0.05}); }catch(e){} }
@@ -1649,7 +1680,8 @@ const RANKS = [
   { min:1850, name:'Legend',   emoji:'👑' },
 ];
 function rankFor(points){ let r=RANKS[0]; for (const t of RANKS){ if (points>=t.min) r=t; } return r; }
-function defaultStats(){ return { points:1000, played:0, wins:0, losses:0, draws:0, gf:0, ga:0, streak:0, best:0, mmr:1000, mmrPeak:1000 }; }
+function defaultStats(){ return { points:1000, played:0, wins:0, losses:0, draws:0, gf:0, ga:0, streak:0, best:0, mmr:1000, mmrPeak:1000,
+  bestWin:0, cleanSheets:0, goalsBest:0 }; }   // bestWin = biggest winning margin; goalsBest = most goals in one match
 // Elo-style skill rating updated per match against the bot tier's implied strength.
 const DIFF_RATING = { rookie:700, easy:900, normal:1100, hard:1300, pro:1500, elite:1700, insane:1900 };
 function updateMMR(w){
@@ -1681,6 +1713,10 @@ function recordResult(w){
   else { stats.draws++; stats.streak = 0; }
   stats.best = Math.max(stats.best, stats.streak);
   stats.gf += my; stats.ga += opp;
+  // Lifetime highs / tallies (backfilled to 0 for older saves; accumulate from here).
+  if (my > opp) stats.bestWin = Math.max(stats.bestWin||0, my - opp);
+  if (opp === 0) stats.cleanSheets = (stats.cleanSheets||0) + 1;
+  stats.goalsBest = Math.max(stats.goalsBest||0, my);
   updateMMR(w);
   saveStats(stats);
   renderStats();
@@ -1709,7 +1745,11 @@ function buildSwatches(){
 }
 function buildOpts(containerId, obj, key, extra){
   const wrap = $(containerId); wrap.innerHTML = '';
-  Object.keys(obj).forEach(k => {
+  let keys = Object.keys(obj);
+  // Fields are ordered by total pitch size (area = W×L), smallest → largest, so the
+  // picker reads as a size ramp instead of definition order.
+  if (key==='field') keys = keys.sort((a,b)=> (obj[a].W*obj[a].L) - (obj[b].W*obj[b].L));
+  keys.forEach(k => {
     const o = obj[k];
     const el = document.createElement('div');
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
@@ -1877,7 +1917,12 @@ buildFlagPicker();
 buildAnimalPicker();
 buildEyesPicker();
 buildOpts('modes', MODES, 'mode', o=>o.desc);
+// Grass mow patterns (cosmetic) — labels for the picker; drawGrass() reads the key.
+const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical',emoji:'🎋'},
+  check:{name:'Check',emoji:'🏁'}, diagonal:{name:'Diagonal',emoji:'📐'},
+  rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 buildOpts('fields', FIELDS, 'field');
+buildOpts('grass', GRASS, 'grass');
 buildOpts('diffs', DIFF, 'diff');
 buildOpts('lengths', LENGTHS, 'length');
 buildOpts('controllers', CONTROLLERS, 'controllers');
@@ -1954,6 +1999,43 @@ function renderStats(){
 }
 renderStats();
 
+// Career stats screen — a tile grid of lifetime numbers. Derives rate/average/GD
+// from the raw counters, so older saves show sensible values immediately; the newer
+// tallies (biggest win, clean sheets, most-in-a-match) accumulate going forward.
+function buildStats(){
+  const g = $('statGrid'); if(!g) return;
+  const p = stats.played||0;
+  const gd = (stats.gf||0) - (stats.ga||0);
+  const winPct = p ? Math.round((stats.wins||0)/p*100) : 0;
+  const avgGf = p ? ((stats.gf||0)/p).toFixed(1) : '0.0';
+  const avgGa = p ? ((stats.ga||0)/p).toFixed(1) : '0.0';
+  const streakTxt = stats.streak>0 ? ('W'+stats.streak) : stats.streak<0 ? ('L'+(-stats.streak)) : '—';
+  const r = rankFor(stats.points);
+  const rk = $('statsRank'); if (rk) rk.textContent = `${r.emoji} ${r.name} · ${stats.points} RP`;
+  const tiles = [
+    {k:'Goals scored',     v: stats.gf||0, hl:true},
+    {k:'Goals conceded',   v: stats.ga||0},
+    {k:'Goal difference',  v:(gd>=0?'+':'')+gd},
+    {k:'Matches',          v: p},
+    {k:'Wins',             v: stats.wins||0},
+    {k:'Losses',           v: stats.losses||0},
+    {k:'Draws',            v: stats.draws||0},
+    {k:'Win rate',         v: winPct+'<small>%</small>'},
+    {k:'Goals / game',     v: avgGf},
+    {k:'Conceded / game',  v: avgGa},
+    {k:'Current streak',   v: streakTxt},
+    {k:'Best streak',      v:'W'+Math.max(0, stats.best||0)},
+    {k:'Biggest win',      v:'+'+(stats.bestWin||0)},
+    {k:'Most in a match',  v: stats.goalsBest||0},
+    {k:'Clean sheets',     v: stats.cleanSheets||0},
+    {k:'Drills done',      v: (typeof drillsDone==='function'?drillsDone():0)},
+    {k:'MMR',              v:(stats.mmr||1000)+`<small> · pk ${stats.mmrPeak||stats.mmr||1000}</small>`},
+    {k:'Coins',            v: (typeof shopCoins==='function'?shopCoins():0)},
+  ];
+  g.innerHTML = tiles.map(t=>`<div class="stat${t.hl?' hl':''}"><div class="sv">${t.v}</div><div class="sk">${t.k}</div></div>`).join('');
+}
+function openStats(){ dockOrFull('stats', buildStats); }
+
 // Ball-magnet slider (0..100). Applies live if a match is already running.
 const magEl = $('magnet'), magValEl = $('magVal');
 magEl.value = sel.magnet; magValEl.textContent = sel.magnet;
@@ -1999,12 +2081,14 @@ $('tutBtn').onclick = startTutorial;
 $('seasonBtn').onclick = openSeason;
 $('seasonBack').onclick = toMenu;
 $('lbBtn').onclick = openLeaderboard;
+$('statsBtn').onclick = openStats;
 $('shopBtn').onclick = openShop;
 $('socialBtn').onclick = openSocial;
 $('rogueBtn').onclick = openRogue;
 $('dailyBtn').onclick = openDailyView;
 $('dmCollect').onclick = closeDailyModal;
 $('lbBack').onclick = toMenu;
+$('statsBack').onclick = toMenu;
 $('lbRefresh').onclick = () => buildLeaderboard(true);
 $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
@@ -2026,7 +2110,7 @@ $('ovResume').onclick = () => togglePause(false);
 $('ovMenu').onclick = toMenu;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -3031,14 +3115,17 @@ function startMatch(){
     // Local 2-player couch: two humans on one screen, split touch controls.
     players.push(you, mkPlayer(1, 'P2', '#5a7de0', 'stripe', 'human2', 'none', 'ball'));
   } else {
-    // Build both teams as bots, with you leading team 0. Bots get random
-    // countryball flags + eyes for personality (unlock rules don't apply to NPCs).
+    // Build both teams as bots, with you leading team 0. Every bot mirrors YOUR
+    // customization (colour, cap, flag, eyes) so the whole pitch reflects your look.
+    // Teams stay readable because drawDiscs draws a team-colour ring (red vs blue,
+    // plus the optional colour-blind ring) keyed off p.team, not p.color; and each
+    // disc keeps its own name label, so you can still spot yourself by name.
     const t0 = [you];
     const t0names = pickNames(per-1, used);
-    for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], teamTint(0,i+1), randCap(i), 'bot', randFlag(i), randEyes(i)));
+    for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
     const t1 = [];
     const t1names = pickNames(per, used);
-    for(let i=0;i<per;i++) t1.push(mkPlayer(1, t1names[i], teamTint(1,i), randCap(i+3), 'bot', randFlag(i+3), randEyes(i+2)));
+    for(let i=0;i<per;i++) t1.push(mkPlayer(1, t1names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
 
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
@@ -3079,7 +3166,8 @@ function startMatch(){
     field, mode, len, diff: DIFF[sel.diff],
     magnet: sel.magnet,
     train: !!mode.train,
-    watch, cb: sel.cb==='on',
+    watch, demo: _startQuiet,   // idle background demo (desktop menu) — muted, not recorded
+    cb: sel.cb==='on',
     pAccel: usePitchGrip ? pt.accel : fv.accel,
     pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
@@ -3127,6 +3215,7 @@ function startMatch(){
   // pitch to life on the right. A real match takes over the screen normally.
   if (!_startQuiet){
     hideScreens();
+    closeDailyModal();     // no full-screen modal (z-index 40) may linger over the pitch — it eats touches
     $('hud').classList.remove('hidden');
     $('scorebug').style.display='';
     $('resetBtn').style.display='none';
@@ -3468,9 +3557,11 @@ function step(w){
     if (w._trainGoalCd <= 0){ const b=w.ball; b.x=0; b.y=0; b.vx=0; b.vy=0; b.spin=0; b.sqT=0; }
   }
 
-  const active = (w.state==='play' || w.state==='kickoff');
+  // Players stay controllable during the goal celebration too, so you're never
+  // locked in place after a goal (the ball is already in the net; play resumes at kickoff).
+  const active = (w.state==='play' || w.state==='kickoff' || w.state==='goal');
 
-  // --- Gather controller inputs (only while the ball is live or during kickoff)
+  // --- Gather controller inputs (ball live, kickoff, or goal celebration)
   if (active){
     for (const p of w.players){
       if (p.ctrl==='human1') applyHumanInput(p, pads.p1);
@@ -3494,13 +3585,15 @@ function step(w){
 
   if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
-  else if (w.state==='goal') integrate(w, false, true);      // ball flies on into the net; players hold
+  else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
-  { const bl=w.ball, sp=Math.hypot(bl.vx,bl.vy);
+  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
+    const sp=Math.hypot(bl.vx,bl.vy);
     bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
-    bl.spin = (bl.spin||0) * 0.90; }
+    bl.spin = (bl.spin||0) * 0.90;
+  }
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
 
@@ -3909,22 +4002,25 @@ function checkGoal(w){
       updateScoreUI();
       return;
     }
+    if (w.party && w.party.multi){ scoreMultiBall(w, ball, inTop ? 0 : 1); return; }
     scoreGoal(w, inTop ? 0 : 1);
     return;
   }
 }
-function scoreGoal(w, team){
-  w.score[team]++;
-  w.lastScorer = team;
-  // Awards: credit the scorer (last attacker to touch) and any recent teammate
-  // assist. An own goal (last touch by the conceding side) credits no scorer.
-  const b = w.ball;
+// Awards: credit the scorer (last attacker to touch a given ball) and any recent
+// teammate assist. An own goal (last touch by the conceding side) credits no scorer.
+function creditScorer(w, b, team){
   if (b.lastKicker && b.lastKicker.team===team && b.lastKicker.ms){
     b.lastKicker.ms.goals++;
     if (b.prevKicker && b.prevKicker!==b.lastKicker && b.prevKicker.team===team &&
         (w.matchT - (b.prevKickT||0)) < 6 && b.prevKicker.ms) b.prevKicker.ms.assists++;
   }
   b.lastKicker = null; b.prevKicker = null;   // reset chain for the next kickoff
+}
+function scoreGoal(w, team){
+  w.score[team]++;
+  w.lastScorer = team;
+  creditScorer(w, w.ball, team);
   // Track the biggest deficit each side clawed back from (Comeback King).
   const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
   if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
@@ -3942,6 +4038,46 @@ function scoreGoal(w, team){
   else if (w.goalsTarget && w.score[team] >= w.goalsTarget){ setTimeout(()=>endMatch(w), 1200); }
 }
 function ball_x(w){ return w.ball.x; } function ball_y(w){ return w.ball.y; }
+
+// Multiball scoring: a potted ball is removed and counts as one goal, and the
+// match keeps playing (no kickoff freeze). Each ball a team pots is a goal, so
+// "first to 3" means potting 3 balls. When the last ball on the pitch is potted
+// without reaching the target, a fresh ball is served at centre to continue.
+function scoreMultiBall(w, ball, team){
+  w.score[team]++;
+  w.lastScorer = team;
+  creditScorer(w, ball, team);
+  const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
+  if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
+  if (d1 > w.maxDeficit[1]) w.maxDeficit[1] = d1;
+  updateScoreUI();
+  playSfx('crowd');
+  showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
+  for (let i=0;i<(sel.juice?24:14);i++) spawnConfetti(ball.x, ball.y);
+  if (sel.juice){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }  // light burst, no hit-stop so play flows
+
+  // Winning goal → freeze into the result, same as a normal match end.
+  if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
+    w.kickTeam = team===0 ? 1 : 0;
+    w.state='goal'; w.stateT=0;
+    repOnGoal(w);
+    setTimeout(()=>endMatch(w), 1200);
+    return;
+  }
+  // Otherwise remove the potted ball and keep the match live.
+  if (ball === w.ball){
+    if (w.extraBalls && w.extraBalls.length){
+      w.ball = w.extraBalls.pop();     // promote a remaining ball to primary (keeps its position)
+    } else {
+      // that was the last ball in play → serve a fresh one at centre
+      ball.x=0; ball.y=0; ball.vx=0; ball.vy=0; ball.sqT=0; ball.spin=0;
+      ball.lastKicker=null; ball.prevKicker=null;
+    }
+  } else if (w.extraBalls){
+    const i = w.extraBalls.indexOf(ball);
+    if (i>=0) w.extraBalls.splice(i,1);
+  }
+}
 
 function endMatch(w){
   if (w.state==='over') return;
@@ -4332,11 +4468,18 @@ const DRILL_KEYS = Object.keys(DRILLS);
 
 function startDrill(key){
   drillKey = key; const def = DRILLS[key];
+  // Use the SAME movement as a real match — your Game Feel sliders, pitch grip,
+  // ball cap/kick power and magnet — so a drill controls exactly like you play.
+  const fv = feelVals();
+  const pt = PITCH[sel.pitch] || PITCH.normal;
+  const usePitchGrip = sel.pitch !== 'normal';
   world = {
-    field: FIELDS.classic, drillMode:true, magnet:0,
-    pAccel: PITCH.normal.accel, pDamp: PITCH.normal.damp,
+    field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
+    pAccel: usePitchGrip ? pt.accel : fv.accel,
+    pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
+    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
-    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:BALL.damp, isBall:true },
+    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
     state:'drill', stateT:0,
     drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0 },
@@ -4552,14 +4695,7 @@ function drawPitch(w){
   const f = w.field, s = cam.s;
   const b = w.bounds;
   const L = wx(-b.halfW), R = wx(b.halfW), T = wy(-b.halfL), B = wy(b.halfL);
-  // Grass with stripes
-  const stripes = 12;
-  for (let i=0;i<stripes;i++){
-    const y0 = -b.halfL + (i/stripes)*(b.halfL*2);
-    const y1 = -b.halfL + ((i+1)/stripes)*(b.halfL*2);
-    ctx.fillStyle = i%2 ? TH.stripeA : TH.stripeB;
-    ctx.fillRect(L, wy(y0), R-L, wy(y1)-wy(y0)+1);
-  }
+  drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
   // Net pockets background
   ctx.fillStyle = TH.netPocket;
   const gh = f.goal/2;
@@ -4590,6 +4726,40 @@ function drawPitch(w){
 
   // Goal nets (crosshatch) + goal line coloring
   drawGoal(w, -1); drawGoal(w, 1);
+}
+// Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
+// in the selected style. Purely cosmetic; clipped to the pitch rectangle.
+function drawGrass(w, L, R, T, B){
+  const A = TH.stripeA, Bc = TH.stripeB, style = sel.grass || 'stripes';
+  const W = R-L, H = B-T;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(L, T, W, H); ctx.clip();
+  ctx.fillStyle = Bc; ctx.fillRect(L, T, W, H);   // base tone
+  ctx.fillStyle = A;
+  if (style === 'solid'){
+    // court colour only — one flat tone
+    ctx.fillStyle = TH.court || Bc; ctx.fillRect(L, T, W, H);
+  } else if (style === 'stripes'){
+    const N=12; for (let i=1;i<N;i+=2){ const y0=T+(i/N)*H; ctx.fillRect(L, y0, W, H/N + 1); }
+  } else if (style === 'vertical'){
+    const N=8; for (let i=1;i<N;i+=2){ const x0=L+(i/N)*W; ctx.fillRect(x0, T, W/N + 1, H); }
+  } else if (style === 'check'){
+    const cols=8, rows=12, cw=W/cols, ch=H/rows;
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) if ((r+c)&1) ctx.fillRect(L+c*cw, T+r*ch, cw+1, ch+1);
+  } else if (style === 'diagonal'){
+    const band = H/12 * 1.3;
+    for (let d=-H; d < W + H; d += band*2){
+      ctx.beginPath();
+      ctx.moveTo(L+d, T); ctx.lineTo(L+d+band, T); ctx.lineTo(L+d+band-H, B); ctx.lineTo(L+d-H, B);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (style === 'rings'){
+    const cx=(L+R)/2, cy=(T+B)/2, maxR=Math.hypot(W,H)/2, step=Math.max(12, H/12);
+    for (let rad=maxR; rad>0; rad-=step*2){
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 2*Math.PI); ctx.arc(cx, cy, Math.max(0,rad-step), 0, 2*Math.PI, true); ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 function roundRectPath(x,y,ww,hh,r){
   ctx.moveTo(x+r,y);
@@ -4756,14 +4926,34 @@ function drawBall(w){
     ctx.save(); ctx.translate(x,y); ctx.rotate(b.sqAng||0);
     ctx.scale(1 + 0.38*sq, 1 - 0.26*sq); ctx.translate(-x,-y);
   }
-  // hard rim + flat ball with a solid spot (chunky sprite)
+  const rot = b.rot || 0;
+  // Chunky rim, then a shaded sphere with a rotating soccer pattern so the ball
+  // reads as a 3D ball rolling (rot advances with speed in step()).
   ctx.beginPath(); ctx.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); ctx.fillStyle=TH.ballRim; ctx.fill();
   ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=TH.ball; ctx.fill();
-  // Spot + an offset pip that orbits with rotation, so spin/roll reads visually.
-  const rot = b.rot || 0;
-  ctx.beginPath(); ctx.arc(x, y, r*0.30, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
-  ctx.beginPath(); ctx.arc(x + Math.cos(rot)*r*0.46, y + Math.sin(rot)*r*0.46, r*0.15, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
+  // Rotating black pentagons (centre + five around), clipped to the ball edge.
+  if (r >= 5){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.clip();
+    ctx.translate(x, y); ctx.rotate(rot);
+    ctx.fillStyle = TH.ballSpot;
+    ballPentagon(0, 0, r*0.36, -Math.PI/2); ctx.fill();
+    for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5); ballPentagon(Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); ctx.fill(); }
+    ctx.restore();
+  } else {
+    ctx.beginPath(); ctx.arc(x, y, r*0.34, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
+  }
+  // 3D shading: highlight toward top-left, soft shadow toward bottom-right.
+  const g = ctx.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
+  g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.30)');
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
   if (warped) ctx.restore();
+}
+// A pentagon path centred at (cx,cy), circumradius rad, rotated by `rot`.
+function ballPentagon(cx, cy, rad, rot){
+  ctx.beginPath();
+  for (let i=0;i<5;i++){ const a=rot + i*(2*Math.PI/5); const px=cx+Math.cos(a)*rad, py=cy+Math.sin(a)*rad; i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+  ctx.closePath();
 }
 function drawKickoffHint(w){
   const s=cam.s;
@@ -5095,7 +5285,7 @@ if ('serviceWorker' in navigator) {
 //  only swaps the left dock — the match on the right is never disturbed.
 // ---------------------------------------------------------------------------
 const ROUTE_OF = { setup:'home', how:'how', drills:'drills',
-  season:'season', leaderboard:'leaderboard', shop:'shop', social:'social',
+  season:'season', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
   rogue:'rogue', cocktailCfg:'cocktail', padConfig:'controller' };
 const ROUTES = {
   home:        toMenu,
@@ -5104,6 +5294,7 @@ const ROUTES = {
   drills:      openDrills,
   season:      openSeason,
   leaderboard: openLeaderboard,
+  stats:       openStats,
   shop:        openShop,
   social:      openSocial,
   rogue:       openRogue,
@@ -5125,7 +5316,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.6';
+const VERSION = '20260803.5';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5141,13 +5332,13 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
-    addShake, goalBurst, scoreGoal,
+    addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
-    openShop, buildShop, shopFeatured, shopCoins,
+    openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
