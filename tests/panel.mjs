@@ -50,6 +50,16 @@ o.panelHidesCanvas = await panel.evaluate(()=>{
 o.panelRunsNoGame = await panel.evaluate(()=>window.__magnet.world === null);
 o.panelHidesPlay  = await panel.evaluate(()=>getComputedStyle(document.getElementById('playBtn')).display === 'none');
 
+// --- Nothing covers the panel. The daily-reward modal (z-index 40) used to open
+// here and eat every click: the game clears it when a match starts, and the panel
+// never starts one. Hit-test the middle of the page rather than trusting a class.
+o.dailyModalClosed = await panel.evaluate(()=>{
+  const dm=document.getElementById('dailyModal');
+  return !dm || dm.classList.contains('hidden'); });
+o.panelIsClickable = await panel.evaluate(()=>{
+  const el=document.elementFromPoint(innerWidth/2, innerHeight/2);
+  return !!el && !!el.closest('#setup'); });
+
 // --- Snapshot on open: the panel adopted the game's in-memory theme
 o.snapshotAdopted = await panel.evaluate(()=>window.__magnet.sel.theme === 'gba');
 o.snapshotNotFromStorage = await panel.evaluate(()=>
@@ -188,6 +198,47 @@ o.matchSurvivedItAll = await game.evaluate(()=>{ const M=window.__magnet, w=M.wo
   for(let i=0;i<60;i++) M.step(w);
   return isFinite(w.ball.x) && isFinite(w.ball.y) && w.players.every(q=>isFinite(q.x)); });
 
+// --- Liveness: nothing travels while you aren't changing things, so without a
+// heartbeat the panel goes quiet and claims the game tab is gone. Idle past the
+// 4s liveness window and check it's still honest.
+const telAt = () => panel.evaluate(()=>document.getElementById('panelTel').textContent);
+const before = await telAt();
+await wait(7000);
+o.stillConnectedIdle = await panel.evaluate(()=>
+  document.getElementById('panelState').textContent === 'connected');
+o.readoutStillLive = (await telAt()) !== before || /ball/.test(await telAt());
+// and the game is still hearing from it
+o.heartbeatReaches = await game.evaluate(()=>window.__magnet.syncPeerLive() === true);
+
+// --- Window-local state must NOT cross: whether THIS window's dock is collapsed
+// says nothing about the other one.
+await game.evaluate(()=>{ const M=window.__magnet; M.sel.dockCollapsed=false; M.saveSel(); });
+await panel.evaluate(()=>{ const M=window.__magnet; M.sel.dockCollapsed=true; M.saveSel(); });
+await wait(500);
+o.dockStateStaysLocal = await game.evaluate(()=>window.__magnet.sel.dockCollapsed === false);
+
+// --- Back out of any sub-page the cocktail step opened (picking Cocktail for the
+// first time jumps to the sides config — the same as it does inline).
+o.subPageHasWayBack = await panel.evaluate(async ()=>{
+  const cfg=document.getElementById('cocktailCfg');
+  if (!cfg || cfg.classList.contains('hidden')) return true;      // never left settings
+  document.getElementById('cocktailBack').click();
+  await new Promise(r=>setTimeout(r,200));
+  return !document.getElementById('setup').classList.contains('hidden'); });
+
+// --- Deck layout docks the menu beside the pitch; the panel has no pitch, so it
+// must stay full width instead of shrinking to a 372px strip.
+await panel.evaluate(()=>{
+  [...document.querySelectorAll('#displayPick .opt')].find(t=>/deck/i.test(t.textContent)).click(); });
+await wait(600);
+// Assert the rendered result, not the class: some route paths legitimately add
+// `docked`, and panel mode's job is to neutralise it, not to prevent it.
+o.panelDeckWidth = await panel.evaluate(()=>document.getElementById('setup').getBoundingClientRect().width);
+o.panelNotDockedOnDeck = o.panelDeckWidth > 700;
+await panel.evaluate(()=>{
+  [...document.querySelectorAll('#displayPick .opt')].find(t=>/auto/i.test(t.textContent)).click(); });
+await wait(400);
+
 // --- With no game tab at all the panel still opens on the saved settings, and
 // says so rather than pretending it's connected.
 await game.close();
@@ -211,6 +262,9 @@ const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCan
   o.panelToGameThemed && o.loneOpens && o.loneNotBlank && o.loneSaysWaiting &&
   o.tabSeesMatch && o.crossTabBotLooks && o.panelDrivesLiveMatch && o.panelSetsCocktail &&
   o.cocktailKeysDeadCrossTab && o.backToAuto && o.matchSurvivedItAll &&
+  o.stillConnectedIdle && o.readoutStillLive && o.heartbeatReaches &&
+  o.dailyModalClosed && o.panelIsClickable && o.subPageHasWayBack &&
+  o.dockStateStaysLocal && o.panelNotDockedOnDeck &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

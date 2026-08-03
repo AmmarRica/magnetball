@@ -5,9 +5,47 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.0808PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.1148PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🐞 From the full review (2026-08-03) — bugs found
+
+All five below were **found and fixed** in the same pass; they're recorded because
+each was shipped at some point and each is a class of mistake worth watching for.
+
+- [x] **Bots wore your face** — `startMatch` built every bot from `profile.color/cap/flag/eyes`,
+  so all eight discs had the same face and cap and the only thing separating you from an
+  opponent was the team ring. `randCap`/`randFlag`/`randEyes`/`teamTint` already existed and
+  simply weren't called. Reported from a screenshot; now covered by `tests/botlook.mjs`.
+- [x] **The daily-reward modal made `/settings` unusable** — `#dailyModal` (z-index 40) opens on
+  load and is only ever cleared when a match starts. The panel never starts a match, so the modal
+  sat over the settings page and swallowed **every click**. The reward belongs to the game window:
+  `checkDailyLogin()` is now skipped in panel mode, and the panel closes the modal on boot.
+  Caught by a hit test (`elementFromPoint`), not by a class check — a class check would have passed.
+- [x] **Window-local UI state was syncing across windows** — `dockCollapsed`/`deskDock` travelled
+  in the state snapshot, so whichever value the panel loaded with would collapse or expand the
+  *game's* menu. Now excluded via `SYNC_SKIP`.
+- [x] **The panel went stale and lied about it** — nothing travels while you aren't changing
+  things, so after the 4s liveness window the panel said "waiting for the game…" and froze its
+  readout with the game tab still open. Added a 2s heartbeat; the game answers with the readout
+  and sends a full snapshot only on first contact.
+- [x] **The panel docked itself into a 372px strip on the Deck layout** — that layout docks the
+  menu beside the pitch, and there is no pitch on `/settings`. Panel mode no longer auto-docks,
+  and any `docked` class is neutralised by CSS.
+- [x] **Dead code** — `roundRectFill` and `initClockDisplay` were defined and never called; removed.
+  (`teamTint`/`randCap`/`randFlag`/`randEyes` are no longer dead — the bot-look fix uses all four.)
+
+## 🔍 From the full review — open
+
+- [ ] **Pitch surface is invisible** — Grass / Ice / Mud genuinely change grip
+  (`pAccel` 0.40 / 0.26 / 0.34, verified) but the court is **pixel-identical** on all three, so a
+  player has no way to tell which surface they're on until they move. Either tint the court per
+  surface or say so in the picker. *(This is the one audited feature that affects the game but
+  not its visuals — left as a design call rather than changing the look unasked.)*
+- [ ] **Three ids exist in markup that nothing reads** — `rankLine` (a layout wrapper, fine),
+  `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
+  latter two are the known dead-UI stubs below; nothing else is orphaned.
 
 ## 🔜 Now — highest value next
 - [ ] **Delete ~31 MB of unreferenced art** — `assets/` is 36 MB / 7,170 files, but
@@ -148,11 +186,10 @@ _Current build: **v20260803.0808PM** (shown under the title; bump `VERSION` in `
   scored/conceded, GD, matches, W/L/D, win rate, per-game averages, streaks, biggest win, most in a
   match, clean sheets, drills, MMR, coins, rank). New tallies `bestWin`/`cleanSheets`/`goalsBest`.
 - [x] **Field picker ordered by size** — tiles now sort by total pitch area (W×L), smallest → largest.
-- [x] **Bots mirror your customization** — every bot (both teams) now takes your colour, cap, flag
-  and eyes instead of random ones, so the whole pitch reflects your look. Applies in all modes incl.
-  1v1 (the opponent matches you). Teams stay readable via the existing team-colour ring (red vs blue,
-  keyed off `p.team`, not colour) and each disc keeps its own name label so you can spot yourself.
-  `teamTint`/`randCap`/`randFlag`/`randEyes` are now unused but kept for a future "bot variety" toggle.
+- [-] **Bots mirror your customization** — **reverted.** Dressing every bot in your look made all
+  eight discs identical; the team ring alone was not enough to tell you from an opponent at a
+  glance. Bots now get their own face/cap/eyes and a team-family colour, seeded off seat index so
+  a match still looks the same frame to frame. Your disc is unchanged.
 - [x] **Light-theme card definition** — 36 `rgba(255,255,255,…)` borders/fills (awards, shop, wallet,
   social posts, cocktail rows, leaderboard "you" row) were invisible on Paper's light panels. Card
   borders now use `var(--edge)`; subtle fills use a neutral `rgba(128,128,128,…)` that reads on both
@@ -196,9 +233,8 @@ _Current build: **v20260803.0808PM** (shown under the title; bump `VERSION` in `
   literally nothing (assigned two unused locals, returned undefined). Gone, with its call site.
 - [x] **Tab no longer hijacked** — deck view bound Escape *and* Tab to the menu toggle, which broke
   keyboard navigation. Escape only now.
-- [ ] **Four dead functions** — `teamTint`, `randCap`, `randFlag`, `randEyes` are defined and never
-  called (kept deliberately for a future "bot variety" toggle). Either build that toggle or delete
-  them; right now they're ~40 lines of decoration.
+- [x] **Four dead functions** — `teamTint`, `randCap`, `randFlag`, `randEyes` are all called now:
+  the bot-look fix uses them to give every bot its own face, cap, eyes and team-family colour.
 - [ ] **`index.html` is 5,793 lines / 340 KB with ~300 functions.** The single-file rule is a
   deliberate constraint (see `CLAUDE.md`), not an accident — but navigating it is the main tax on
   every change. If it keeps growing, consider a documented section index at the top.
@@ -214,7 +250,14 @@ _Current build: **v20260803.0808PM** (shown under the title; bump `VERSION` in `
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 20 headless Playwright suites driving the real page
+- [x] **Full-feature audit suite** (`tests/audit.mjs`) — asks two questions of every setting:
+  is it **reachable** (a live control in the DOM, no console required) and is it **effective**
+  (changing it moves world state or canvas pixels). Also walks every nav tile, every drill, every
+  mode, and every Game Feel slider. Anything in `defaultSel()` with no entry in its control map is
+  reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
+  0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
+
+- [x] **Committed test suite** — `tests/` holds 27 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
