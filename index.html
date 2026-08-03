@@ -217,6 +217,24 @@
     .tilewrap .opt canvas { width: 40px; height: 40px; }
     .tilewrap .opt span { font-size: 12px; }
     .tilewrap .opt small { font-size: 12px; line-height: 1.3; color: var(--muted); }
+    /* /settings is the SAME document with the game switched off, so the settings
+       cards can't drift from the inline ones — they ARE the inline ones. All this
+       does is hide the game around them. */
+    body.panel #game, body.panel #hud, body.panel #scorebug, body.panel #overlay,
+    body.panel #dockToggle, body.panel #deckHint, body.panel #tutTip,
+    body.panel #resetBtn { display: none !important; }
+    body.panel #setup { position: static; min-height: 100vh; }
+    body.panel #setup .navgrid, body.panel #setup #recordCard,
+    body.panel #setup #playBtn, body.panel #setup .footlink { display: none; }
+    /* Detached: the game page keeps the game and hands the settings to the other tab. */
+    body.detached:not(.panel) #setup .card.collapsible { display: none; }
+    #panelCard, #detachedCard { display: none; }
+    body.panel #panelCard { display: block; }
+    body.detached:not(.panel) #detachedCard { display: block; }
+    #panelTel { font-family: var(--pix); font-size: 12px; line-height: 1.9;
+      color: var(--muted); white-space: pre; overflow-x: auto; }
+    #panelLink { color: var(--accent); }
+
     /* Mow patterns are fine bands — they need more pixels than a flag tile to read. */
     #grass { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
     #grass .opt canvas { width: 66px; height: 66px; }
@@ -669,6 +687,19 @@
       <p>Right thumb moves · Left thumb kicks</p>
     </div>
 
+    <div class="card" id="panelCard">
+      <h2>Live <small id="panelState" style="color:var(--muted);font-weight:400">waiting for the game…</small></h2>
+      <div id="panelTel">no game page connected</div>
+      <div class="hint" style="text-align:left;margin-top:8px">Changes here reach the game instantly, and its changes come back. Open the game at <a id="panelLink" href="./">the main page</a>.</div>
+    </div>
+
+    <div class="card" id="detachedCard">
+      <h2>Settings</h2>
+      <div class="hint" style="text-align:left">Settings live in their own tab. This page keeps the game.</div>
+      <button class="ghost" id="openPanelBtn" style="margin-top:10px">⚙ Open settings tab</button>
+      <button class="ghost" id="inlinePanelBtn" style="margin-top:8px">↩ Bring settings back inline</button>
+    </div>
+
     <div class="card" id="recordCard">
       <h2>Record</h2>
       <div id="rankLine" style="display:flex;align-items:center;gap:10px;font-family:var(--pix);font-size:16px">
@@ -808,6 +839,10 @@
       <label class="field">Pitch direction</label>
       <div class="opts" id="orientPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Sideways = goals left and right. Auto only goes sideways on Steam Deck.</div>
+      <div style="height:14px"></div>
+      <label class="field">Settings location</label>
+      <div class="opts" id="panelPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Separate tab puts these cards on <code>/settings</code> and leaves this page all game. Both stay in sync live.</div>
       <div style="height:14px"></div>
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
@@ -1522,9 +1557,28 @@ const POST   = { r:8,  invMass:0.0, bCoef:0.55 };
 let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // controller-remap capture state
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
+// ============================================================
+//  PANEL MODE + CROSS-WINDOW SYNC
+//  /settings loads THIS file with __MAGNETPANEL set (see settings/index.html), so
+//  the settings screen on that route is the same DOM, CSS and code as the inline
+//  one — there is no second copy that could drift. Panel mode only switches the
+//  game off around it. Both windows then mirror sel/profile over a
+//  BroadcastChannel, and the panel asks for a snapshot on open so it never starts
+//  from a stale localStorage read while a game page is live.
+// ============================================================
+function detectPanel(){
+  if (window.__MAGNETPANEL === 'settings') return true;
+  try {
+    if (/[?&]panel=settings(&|$)/.test(location.search)) return true;
+    if (/\/settings\/?$/.test(location.pathname)) return true;
+  } catch(_){}
+  return false;
+}
+const PANEL = detectPanel();
+
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, oneHand:false, juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -1839,9 +1893,73 @@ function loadProfile() {
     eyes: d.eyes || def.eyes,
   };
 }
-function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} }
+function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} syncPush(); }
 function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} }
-function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} }
+function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
+
+// ---------- Cross-window sync -----------------------------------------------
+// Every settings write already funnels through saveSel/saveProfile, so hooking
+// the broadcast in there covers the whole UI without touching a single picker.
+const SYNC_NAME = 'magnetball.sync';
+const SYNC_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+let bc = null;
+try { bc = ('BroadcastChannel' in window) ? new BroadcastChannel(SYNC_NAME) : null; } catch(_){ bc = null; }
+let syncing = false;          // true while adopting — stops an adopt echoing back
+let syncPeer = 0;             // timestamp of the last message from the other side
+let syncDirty = false, syncRaf = 0;
+function syncPost(msg){ if (!bc) return; try { msg.id = SYNC_ID; msg.panel = PANEL; bc.postMessage(msg); } catch(_){} }
+function syncPush(){ if (syncing) return; syncPost({ t:'state', sel, profile }); }
+function syncPeerLive(){ return syncPeer && (Date.now() - syncPeer) < 4000; }
+// Applying is synchronous — a background tab gets its rAF throttled to about 1Hz,
+// so anything deferred to a frame is NOT instant over there. Only the expensive DOM
+// rebuild is coalesced, and it catches up the moment the tab is looked at again.
+function syncApply(){
+  applyTheme(sel.theme); applyFeel(); applyDisplayMode(); applyPanelMode();
+  if (typeof Aud!=='undefined' && Aud.setVol) Aud.setVol(sel.snd.vol);
+}
+function syncRefresh(){
+  syncDirty = true;
+  if (syncRaf) return;
+  syncRaf = requestAnimationFrame(()=>{
+    syncRaf = 0;
+    if (!syncDirty) return;
+    if (sliderDragging){ syncRefresh(); return; }   // never yank a control out from under a thumb
+    syncDirty = false;
+    buildSettings(); refreshPitchTiles();
+    const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = profile.name;
+    if (typeof buildSwatches==='function') buildSwatches();
+    buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); buildCaps(); updatePreview();
+    buildMatchOpts(); buildPartyMods();
+  });
+}
+function syncAdopt(msg){
+  syncing = true;
+  try {
+    if (msg.sel) Object.assign(sel, msg.sel);
+    if (msg.profile) Object.assign(profile, msg.profile);
+    saveSel(); saveProfile();      // persist locally; syncing suppresses the echo
+  } finally { syncing = false; }
+  syncApply();                     // now
+  syncRefresh();                   // and repaint the pickers when there's a frame
+}
+if (bc){
+  bc.onmessage = (e) => {
+    const m = e.data;
+    if (!m || m.id === SYNC_ID) return;
+    syncPeer = Date.now();
+    if (m.t === 'hello'){ if (!PANEL) syncPush(); return; }   // the game answers with a snapshot
+    if (m.t === 'state'){ syncAdopt(m); return; }
+    if (m.t === 'tel'){ if (PANEL) renderTelemetry(m); return; }
+  };
+}
+// A drag guard so an incoming update can't rebuild the slider you're holding.
+let sliderDragging = false;
+['pointerdown','pointerup','pointercancel'].forEach(ev=>{
+  window.addEventListener(ev, e=>{
+    if (ev === 'pointerdown') sliderDragging = !!(e.target && e.target.tagName === 'INPUT' && e.target.type === 'range');
+    else sliderDragging = false;
+  }, true);
+});
 // Mutates `sel` in place so the debug hook's reference stays live. Progression is
 // never touched. Your look is opt-in via alsoAppearance — it's more personal than
 // a settings tweak.
@@ -2195,29 +2313,34 @@ buildCaps();
 buildFlagPicker();
 buildAnimalPicker();
 buildEyesPicker();
-buildOpts('modes', MODES, 'mode', o=>o.desc);
 // Grass mow patterns (cosmetic) — labels for the picker; drawGrass() reads the key.
 const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical',emoji:'🎋'},
   check:{name:'Check',emoji:'🏁'}, diagonal:{name:'Diagonal',emoji:'📐'},
   rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
-buildOpts('fields', FIELDS, 'field');
-buildOpts('grass', GRASS, 'grass');
 // Both tile sets paint with the live TH palette, so a theme switch has to redraw
 // them or the pitches keep the old colours.
 function refreshPitchTiles(){
   if ($('fields')) buildOpts('fields', FIELDS, 'field');
   if ($('grass'))  buildOpts('grass', GRASS, 'grass');
 }
-buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
-buildOpts('diffs', DIFF, 'diff');
-buildOpts('lengths', LENGTHS, 'length');
-buildOpts('controllers', CONTROLLERS, 'controllers');
-buildOpts('coop', COOP, 'coop');
-buildOpts('balls', BALLS, 'ball');
-buildOpts('pitches', PITCH, 'pitch');
-buildOpts('handed', HANDED, 'handed');
-buildOpts('spectate', SPECT, 'spectate');
-buildOpts('cb', CB, 'cb');
+// One place that builds every Match/Controls picker, so the other window can be
+// brought fully up to date after a sync without listing them all again.
+function buildMatchOpts(){
+  buildOpts('modes', MODES, 'mode', o=>o.desc);
+  buildOpts('fields', FIELDS, 'field');
+  buildOpts('grass', GRASS, 'grass');
+  buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
+  buildOpts('diffs', DIFF, 'diff');
+  buildOpts('lengths', LENGTHS, 'length');
+  buildOpts('controllers', CONTROLLERS, 'controllers');
+  buildOpts('coop', COOP, 'coop');
+  buildOpts('balls', BALLS, 'ball');
+  buildOpts('pitches', PITCH, 'pitch');
+  buildOpts('handed', HANDED, 'handed');
+  buildOpts('spectate', SPECT, 'spectate');
+  buildOpts('cb', CB, 'cb');
+}
+buildMatchOpts();
 
 // Party modifiers — multi-select toggle chips (fun match variety).
 const PARTY_MODS = [['big','🪩','Big Ball'],['lowg','🧊','Low Gravity'],['sudden','⚡','Sudden Death'],['multi','🔴','Multi-Ball']];
@@ -2425,8 +2548,8 @@ function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','
 var deskDockId = null;                     // id of the page currently docked (desktop), else null
 var _forceWatch = false, _startQuiet = false;   // flags read by startMatch() for the idle demo
 function paneLive(){ return !!(world && running); }
-function ensureDemo(){ if(dockCapable() && !paneLive()) startDemo(); }      // keep a match on the right
-function startDemo(){ _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
+function ensureDemo(){ if(PANEL) return; if(dockCapable() && !paneLive()) startDemo(); }   // keep a match on the right
+function startDemo(){ if (PANEL) return; _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
 // auto = the shell re-docking itself (resize, match start), NOT the player asking
 // for a page. Get this wrong on deck and the gear opens a panel that's still slid
 // off-screen, so it looks dead.
@@ -2659,7 +2782,15 @@ const DOCK_W = 372;                      // must match #settings.docked width in
 function isDesktop(){ return !!(window.matchMedia && window.matchMedia('(min-width:900px)').matches); }
 // Settings live inline on the main menu now — the ⚙ tile and the in-game gear
 // both jump to the Theme section of the menu (docked on the right-hand pitch on desktop).
-$('settingsBtn').onclick = () => openLook('theme');
+// Detached: the tile hands you the other tab instead of expanding cards that
+// aren't there. Named window, so it focuses the existing panel instead of piling up.
+$('settingsBtn').onclick = () => {
+  if (!PANEL && sel.settingsPanel === 'detached'){ window.open(settingsUrl(), 'magnetball-settings'); return; }
+  openLook('theme');
+};
+{ const ob=$('openPanelBtn'); if (ob) ob.onclick = () => window.open(settingsUrl(), 'magnetball-settings'); }
+{ const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
+    sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('gearBtn').onclick = () => openLook('theme');
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
@@ -2734,6 +2865,52 @@ function applySeatRotation(players){
 }
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
 function rotVec(x,y,q){ q=((q%4)+4)%4; if(q===0)return [x,y]; if(q===1)return [-y,x]; if(q===2)return [-x,-y]; return [y,-x]; }
+// Panel mode + the detached/inline split. Called on boot and after every sync, so
+// flipping the setting in either window rearranges both.
+function applyPanelMode(){
+  const detached = sel.settingsPanel === 'detached';
+  document.body.classList.toggle('panel', PANEL);
+  document.body.classList.toggle('detached', detached);
+  if (PANEL){
+    const h1 = document.querySelector('#setup .logo h1'); if (h1) h1.textContent = 'SETTINGS';
+    const tag = document.querySelector('#setup .logo p:last-child');
+    if (tag) tag.textContent = 'Live-linked to the game tab';
+    document.title = 'Magnetball — Settings';
+    const st = $('panelState');
+    if (st) st.textContent = syncPeerLive() ? 'connected' : 'waiting for the game…';
+  }
+}
+function settingsUrl(){ try { return new URL('settings/', location.href).href; } catch(_){ return './settings/'; } }
+// The panel's debug readout. Fed by the game tab; there is no world here to read.
+function renderTelemetry(m){
+  const el = $('panelTel'); if (!el) return;
+  const st = $('panelState'); if (st) st.textContent = 'connected';
+  el.textContent = m.rows ? m.rows.join('\n') : 'no match running';
+}
+function telemetryRows(){
+  const w = world;
+  if (!w) return ['no match running'];
+  const you = (w.players||[]).find(q=>q.ctrl==='human1') || (w.players||[])[0];
+  const f = sel.feel||{};
+  return [
+    `ball  ${Math.hypot(w.ball?w.ball.vx:0, w.ball?w.ball.vy:0).toFixed(2)} / ${w.ballCap!=null?w.ballCap:32}`,
+    `you   ${you?Math.hypot(you.vx,you.vy).toFixed(2):'—'}`,
+    `accel ${f.accel!=null?f.accel:40}   pdamp ${f.pdamp!=null?f.pdamp:905}`,
+    `kick  ${f.kick!=null?f.kick:55}   bcap ${f.ballcap!=null?f.ballcap:32}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
+    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':'trap '+((w.trapMax||TRAP.max).toFixed(2)+'s')}${sel.oneHand?'   1-hand':''}`,
+    `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
+  ];
+}
+// Only the game tab sends, only while a panel is actually listening, at 10Hz —
+// a settings window shouldn't cost the match a frame.
+let telT = 0;
+function pumpTelemetry(){
+  if (PANEL || !bc || !syncPeerLive()) return;
+  const now = Date.now();
+  if (now - telT < 100) return;
+  telT = now;
+  syncPost({ t:'tel', rows: telemetryRows() });
+}
 function applyDisplayMode(){
   document.body.classList.toggle('cocktail', sel.display==='cocktail');
   document.body.classList.toggle('deck', isDeck());
@@ -2855,6 +3032,16 @@ function buildSettings(){
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{ sel.debug=(k==='on'); saveSel(); buildSettings(); };
       dbp.appendChild(el);
+    });
+  }
+  const pnp=$('panelPick');
+  if (pnp){ pnp.innerHTML='';
+    [['inline','Inline'],['detached','⧉ Separate tab']].forEach(([k,lab])=>{
+      const on=(sel.settingsPanel||'inline')===k;
+      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+      el.onclick=()=>{ sel.settingsPanel=k; saveSel(); applyPanelMode(); buildSettings();
+        if (k==='detached' && !PANEL) window.open(settingsUrl(), 'magnetball-settings'); };
+      pnp.appendChild(el);
     });
   }
   const ohp=$('oneHandPick');
@@ -3681,21 +3868,27 @@ function startMatch(){
     // Local 2-player couch: two humans on one screen, split touch controls.
     players.push(you, mkPlayer(1, 'P2', '#5a7de0', 'stripe', 'human2', 'none', 'ball'));
   } else {
-    // Bots wear YOUR look. Still readable because the team ring is keyed off
-    // p.team, not p.color, and every disc keeps its own name.
+    // Every bot gets its OWN look. Dressing them in profile.* made all eight discs
+    // the same face and cap, so the only thing telling you apart from an opponent
+    // was the team ring. Seeded off the seat index, so a match still looks the same
+    // frame to frame — varied, not random per tick.
     const t0 = [you];
     const t0names = pickNames(per-1, used);
-    for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
+    for(let i=0;i<per-1;i++)
+      t0.push(mkPlayer(0, t0names[i], teamTint(0, i+1), randCap(i), 'bot', randFlag(i), randEyes(i)));
     const t1 = [];
     const t1names = pickNames(per, used);
-    for(let i=0;i<per;i++) t1.push(mkPlayer(1, t1names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
+    for(let i=0;i<per;i++)
+      t1.push(mkPlayer(1, t1names[i], teamTint(1, i), randCap(i+per), 'bot', randFlag(i+per), randEyes(i+per)));
 
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
 
     // Versus interleaves you → opponent → teammate. Co-op fills your side first,
     // giving N pads = N humans vs N AI. Padless seats stay bots.
-    if (sel.controllers==='on'){
+    // Cocktail hands seats to pads whether or not you flipped the toggle — with the
+    // keyboard out, a padless seat 1 would have nothing to play with.
+    if (sel.controllers==='on' || sel.display==='cocktail'){
       const gpads = connectedGamepadIndices();
       const order = [];
       if (sel.coop==='on'){
@@ -3960,6 +4153,7 @@ function goalBurst(w, team){
 }
 
 function loop(t){
+  pumpTelemetry();
   if (!running){ return; }
   rafId = requestAnimationFrame(loop);
   if (replay.active){ lastT = 0; return; }   // a replay owns the canvas; freeze the live game
@@ -6045,12 +6239,16 @@ cv.addEventListener('mousedown', e => onDown(mouseDownId, e.clientX, e.clientY))
 window.addEventListener('mousemove', e => onMove(mouseDownId, e.clientX, e.clientY));
 window.addEventListener('mouseup', () => onUp(mouseDownId));
 
-// Keyboard (desktop testing) — arrows/WASD move p1, space kicks
+// Keyboard (desktop testing) — arrows/WASD move p1, space kicks.
+// Not in cocktail: that's a screen flat on a table with people stood around it, so
+// there is no "in front of the keyboard" seat to give it to. Everyone uses a pad.
+// Menu keys (Escape, replay skip) still work — this only gates the game seat.
+function keyboardDrivesGame(){ return sel.display !== 'cocktail'; }
 const keys = {};
 window.addEventListener('keydown', e => {
   if (replay.active){ skipReplay(); return; }   // any key skips a playing replay
   keys[e.key.toLowerCase()] = true;
-  if (e.key === ' ') { pads.p1.kick = true; e.preventDefault(); }
+  if (e.key === ' ' && keyboardDrivesGame()) { pads.p1.kick = true; e.preventDefault(); }
   if (e.key === 'Escape'){   // close any open sub-page back to the main menu (settings is inline there now)
     const sub = [...document.querySelectorAll('.screen')].find(s=>s.id!=='setup' && !s.classList.contains('hidden'));
     if (sub){ toMenu(); e.preventDefault(); }
@@ -6058,9 +6256,10 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys[e.key.toLowerCase()] = false;
-  if (e.key === ' ') pads.p1.kick = false;
+  if (e.key === ' ') pads.p1.kick = false;         // always release, even if the press was ignored
 });
 function pollKeys(){
+  if (!keyboardDrivesGame()) return;    // cocktail: pads only
   if (pads.p1.move.id !== null) return; // touch wins
   let dx=0,dy=0;
   if (keys['arrowleft']||keys['a']) dx-=1;
@@ -6265,10 +6464,28 @@ function applyRoute(){
   _navLock = true; try { fn(); } finally { _navLock = false; }
 }
 window.addEventListener('hashchange', applyRoute);
-applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
+applyPanelMode();
+if (PANEL){
+  // No game here: show the settings screen and ask the game tab for the current
+  // state. localStorage already seeded us, so the panel is never blank — the
+  // snapshot just replaces a possibly stale read with what the game is really on.
+  hideScreens();
+  $('setup').classList.remove('hidden');
+  buildSettings(); buildMatchOpts(); refreshPitchTiles(); updatePreview();
+  syncPost({ t:'hello' });
+  setInterval(()=>{ const st=$('panelState');
+    if (st) st.textContent = syncPeerLive() ? 'connected' : 'waiting for the game…';
+    if (!syncPeerLive()){ const tl=$('panelTel'); if (tl) tl.textContent='no game page connected'; }
+  }, 1000);
+} else {
+  applyRoute();                               // honour a deep-linked hash on load (starts the desktop idle demo)
+  // A panel opened before this tab existed gets answered by its next hello, but a
+  // panel already waiting needs telling that a game is here now.
+  syncPush();
+}
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.0938PM';
+const VERSION = '20260803.1112PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6306,6 +6523,9 @@ if (window.__MAGNETDEBUG) {
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
+    PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
+    teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer,
+    buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
 }
