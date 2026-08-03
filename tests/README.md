@@ -50,6 +50,9 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `grasstiles` | Grass cut tiles draw the selected court with each mow pattern, and field/grass/theme picks redraw each other |
 | `trapwindow` | Trap window slider changes how long the ball actually sticks, applies live, survives reset/presets/drills, and one-touch ignores it |
 | `onehand` | One-handed mode: releasing the stick shoots (never traps), holding doesn't, jitter doesn't, cooldown caps the rate, KICK still works |
+| `panel` | `/settings` route: same cards as inline, no game, snapshot on open, two-way live sync, telemetry, detached/inline, cross-tab match control |
+| `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
+| `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; menu keys and other layouts unaffected |
 | `tells` | Motion tells by **canvas pixel sampling**: moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
 
 ## Writing a suite
@@ -70,6 +73,20 @@ Two traps that have produced false passes here before — both real, both cost a
 - **Don't encode current behaviour.** A deck suite asserted the menu stays open during a
   match, which was the bug being reported. When a test fails after an intentional change,
   check which side is actually right.
+
+`panel` needs a real origin, so it serves the repo over http via `_serve.mjs` — two
+`file://` pages are separate opaque origins and a BroadcastChannel between them
+silently never delivers.
+
+Two more traps, both of which produced false results here:
+
+- **Poll, don't sleep.** A backgrounded tab has its `requestAnimationFrame`
+  throttled to about 1Hz, so a fixed `wait(400)` after a cross-tab change is a coin
+  flip. `until(page, fn)` polls instead.
+- **Drive the real call site.** `pollKeys()` runs from `drawControls()`, not
+  `step()`, so a loop of bare `step()` calls never reads the keyboard — the first
+  version of `cocktailkeys` passed only because the render loop happened to tick
+  between two `evaluate` calls.
 
 Also: with a gamepad connected a seat's `ctrl` becomes `'gamepad'`, so `pads.p1` no longer
 drives it — feed the fake pad instead. And in a sideways pitch `rotQuarter=1`, so stick-up

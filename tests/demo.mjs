@@ -57,10 +57,13 @@ const r = await p.evaluate(async ()=>{
   o.realMatchTagPixels = whiteCount();
   o.realMatchIsNotDemo = !M.world.demo;
 
-  // ...and a real match still mirrors YOUR customization (unchanged behaviour).
+  // In a real match only YOUR disc wears your look — bots have their own
+  // (see botlook.mjs). This used to assert the opposite, which was the bug.
   M.profile.flag = 'poland';
   M.startMatch(); await wait(120);
-  o.realMatchCopiesYou = M.world.players.every(q => q.flag === 'poland');
+  const ps = M.world.players, me = ps.find(q=>q.ctrl==='human1');
+  o.realMatchKeepsYours = !!me && me.flag === 'poland';
+  o.realMatchBotsDiffer = ps.filter(q=>q!==me).every(q => q.flag !== 'poland');
 
   return o;
 });
@@ -70,7 +73,7 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.teamsUniform && r.sidesDiffer && r.realCountries && r.varietyAcrossRuns &&
   r.isDemoWorld && r.notPlayerFlag &&
   r.demoTagPixels > 30 && r.realMatchTagPixels === 0 && r.realMatchIsNotDemo &&
-  r.realMatchCopiesYou && errors.length === 0;
+  r.realMatchKeepsYours && r.realMatchBotsDiffer && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

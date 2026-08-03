@@ -1,6 +1,8 @@
 // Magnetball service worker — offline + installable.
-const CACHE = 'magnetball-v2';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'magnetball-v3';
+// './settings/' is the panel route — a stub that fetches index.html, so both need
+// to be cached for the settings window to open offline.
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './settings/', './settings/index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
