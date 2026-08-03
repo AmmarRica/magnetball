@@ -716,7 +716,7 @@
       <div style="height:14px"></div>
       <label class="field">Ball magnet <small id="magVal" style="color:var(--accent); font-weight:700">0</small></label>
       <input id="magnet" class="slider" type="range" min="0" max="100" step="5" value="0" />
-      <div class="hint" style="text-align:left; margin-top:4px">Hold KICK to trap the ball, release to shoot. Magnet 0 = off; higher = passive stick while dribbling.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Magnet sticks the ball to you while you dribble. 0 is off. Most people leave it there.</div>
       <div style="height:14px"></div>
       <label class="field">Ball</label>
       <div class="opts" id="balls"></div>
@@ -729,7 +729,7 @@
       <div style="height:14px"></div>
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Like real soccer: both teams hold their own half while the ball sits at centre. The moment it's played, everyone is free for the rest of the match.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played. After that it's a free-for-all.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -742,7 +742,7 @@
         <div class="unlBar"><i id="unlFill"></i></div>
         <div class="unlChips" id="unlChips"></div>
         <div class="unlStrip" id="unlStrip"></div>
-        <div class="hint" style="text-align:left;margin-top:2px">Everything you've earned so far — tap any to wear it.</div>
+        <div class="hint" style="text-align:left;margin-top:2px">Tap anything here to wear it.</div>
       </div>
       <div style="height:14px"></div>
       <label class="field" for="pname">Name</label>
@@ -798,17 +798,17 @@
       <label class="field">Layout <small id="displayDetected" style="color:var(--muted);font-weight:400"></small></label>
       <div class="opts" id="displayPick"></div>
       <div id="cocktailBox" style="margin-top:10px; display:none">
-        <div class="hint" style="text-align:left">Cocktail = a flat screen laid on its back with players standing around it. Each player sets which side they're on, so their controller's "up" always points into the table.</div>
+        <div class="hint" style="text-align:left">For a screen lying flat on a table with people stood around it. Tell it where each player is sitting and their "up" will point into the table instead of off the top of the screen.</div>
         <button class="ghost" id="cocktailCfgBtn" style="margin-top:8px">🎛 Configure player sides</button>
       </div>
       <div style="height:14px"></div>
       <label class="field">Pitch direction</label>
       <div class="opts" id="orientPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Which way the pitch runs. Sideways puts the goals left and right; Upright puts them top and bottom. Auto follows your layout (sideways on Steam Deck).</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Sideways = goals left and right. Auto only goes sideways on Steam Deck.</div>
       <div style="height:14px"></div>
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
-      <div class="hint" style="text-align:left; margin-top:4px">Hides the browser chrome. You can also press <b>F</b>, or use the ⛶ button in the top bar during a match.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Or press <b>F</b>. There's a ⛶ in the top bar mid-match too.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="skins">
@@ -818,7 +818,7 @@
       <div style="height:10px"></div>
       <label class="field">Players</label>
       <div class="opts" id="playerSkinPick"></div>
-      <div class="hint" style="text-align:left">Sprite skins render once the image files are added under <code>assets/</code> (see that folder's README). Controls and collisions are unchanged — only the look.</div>
+      <div class="hint" style="text-align:left">Needs two PNGs that aren't in the repo yet — see <code>assets/README.md</code>. Purely cosmetic either way.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="sound">
@@ -844,7 +844,7 @@
       <div style="height:10px"></div>
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Trap: hold KICK next to the ball to stick it to your feet, release to shoot. One-touch: no grabbing — contact kicks it straight away.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving.</div>
       <div style="height:10px"></div>
       <label class="field">Preset</label>
       <div class="opts" id="feelPresets"></div>
@@ -855,7 +855,7 @@
 
     <div class="card collapsible collapsed" data-sec="online">
       <h2>Online</h2>
-      <div class="hint" style="text-align:left">Local &amp; vs-bot play now. Online rooms (host / join by code) are coming soon.</div>
+      <div class="hint" style="text-align:left">Local and vs-bot only for now. Online is not built.</div>
       <div style="height:10px"></div>
       <label class="field">Room code</label>
       <input id="roomCode" type="text" maxlength="6" placeholder="Coming soon" autocomplete="off" disabled />
@@ -1451,12 +1451,8 @@ const MODES = {
   'train':{ name:'Training',emoji:'🎯', per:0, twoP:false, train:true, desc:'Free practice' },
 };
 
-// Killer Queen's snail: a second, very heavy ball that ends the match outright if
-// it's pushed home. invMass is tiny so bodies barely shift it, damping is harsh so
-// it stops almost immediately, and it never resets position — where you leave it is
-// where the next fight starts. It is NOT kickable: integrate() only runs
-// handleBallControl on the primary ball, so the snail can only ever be shouldered
-// along, which is exactly the tug-of-war Killer Queen is built around.
+// Only integrate()'s primary ball gets handleBallControl, so the snail can't be
+// kicked — only shoved. That's the whole mode.
 const SNAIL = { rMul:1.5, invMass:0.11, bCoef:0.25, damp:0.90 };
 
 // Ball presets — objective physics changes (radius / mass via invMass / bounce / damping).
@@ -1695,9 +1691,7 @@ const Aud = (function(){
   return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; } };
 })();
 
-// Are all human seats on controllers? Deck view is controller-only by definition;
-// otherwise ask the actual seats. Used to word prompts for the device in hand
-// instead of always saying "tap", which is wrong for a pad and for a desktop.
+// So prompts can say "press a button" instead of "tap" at a desk.
 function padOnly(){
   if (isDeck()) return true;
   if (!world || !world.players) return false;
@@ -1820,11 +1814,9 @@ function loadProfile() {
 function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} }
 function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} }
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} }
-// Restore all in-app settings (theme, display, skins, sound, feel, controls, party
-// mods) to defaults. Mutates `sel` in place so the debug hook's reference stays live.
-// Keeps progression untouched — stats/RP/unlocks stay. Player name/appearance are
-// kept by default; pass alsoAppearance=true to also reset name, colour, flag, eyes
-// and cap (opt-in scope, since a look is more personal than a settings tweak).
+// Mutates `sel` in place so the debug hook's reference stays live. Progression is
+// never touched. Your look is opt-in via alsoAppearance — it's more personal than
+// a settings tweak.
 function resetSettings(alsoAppearance){
   Object.assign(sel, defaultSel());   // resets known settings; leaves flags like tutDone/deskDock
   saveSel();
@@ -1934,7 +1926,6 @@ function buildOpts(containerId, obj, key, extra){
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
     let sub = extra ? extra(o) : '';
     if (key==='field'){
-      // Draw a mini top-down court instead of an emoji.
       const cv=document.createElement('canvas'); cv.width=cv.height=64;
       drawFieldPreview(cv.getContext('2d'), o, 64, 64);
       el.appendChild(cv);
@@ -1953,12 +1944,9 @@ function buildOpts(containerId, obj, key, extra){
     wrap.appendChild(el);
   });
 }
-// Draw one player disc (colour/flag/eyes/cap) onto a canvas context — shared by
-// the big live preview and every mini tile in the flag/eye pickers.
-// Shared face painter: the player-colour core, then a faceplate — a country flag
-// or an animal image (both clipped to the disc) — OR, for a plain face, selectable
-// eyes. A faceplate IS the face, so it replaces the googly eyes (no eyes on
-// countryballs or animals). Animal images fall back to eyes until they load.
+// Colour core, then a faceplate (flag or animal, clipped) or plain eyes. A
+// faceplate IS the face, so it replaces the eyes. Animals fall back to eyes
+// until the image loads. Shared by the live preview and every picker tile.
 function paintFace(c, x, y, r, o){
   const key = o.flag, has = key && key!=='none';
   c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
@@ -2013,11 +2001,9 @@ function drawFieldPreview(c, F, cw, ch){
   c.fillStyle=sA; const bands=6;
   for(let i=0;i<bands;i+=2){ const y0=Tp+(i/bands)*(B-Tp), y1=Tp+((i+1)/bands)*(B-Tp); c.fillRect(L,y0,R-L,y1-y0); }
   c.restore();
-  // net pockets behind each goal
   c.fillStyle=pocket;
   c.fillRect(X(-gh), Tp-net*s, gh*2*s, net*s);
   c.fillRect(X(-gh), B,        gh*2*s, net*s);
-  // boundary, halfway line, centre circle + dot
   c.lineJoin='miter'; c.lineCap='butt';
   c.strokeStyle=line; c.lineWidth=2; path(); c.stroke();
   c.lineWidth=1.5;
@@ -2066,11 +2052,8 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     wrap.appendChild(el);
   });
 }
-// ---- Unlocked summary, pinned to the top of Your Player.
-// The pickers below list everything including locks, which makes "what do I
-// actually own?" a scrolling exercise. This shows only what's earned: overall
-// progress, a per-category count, and a strip of the items themselves — tap one
-// to wear it. Categories share the model the pickers use, so nothing drifts.
+// The pickers below show locks too, so "what do I own?" means scrolling four
+// sections. Same isUnlocked() model, so the counts can't drift apart.
 const UNL_CATS = [
   { cat:'cap',    label:'Caps',         keys:()=>Object.keys(CAPS) },
   { cat:'flag',   label:'Countryballs', keys:()=>FLAG_KEYS },
@@ -2129,7 +2112,6 @@ function buildUnlocked(){
 function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
 function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
-// Caps: lock-aware emoji tiles.
 function buildCaps(){
   const wrap=$('caps'); if(!wrap) return; wrap.innerHTML='';
   Object.keys(CAPS).forEach(k=>{
@@ -2225,7 +2207,6 @@ if (mspeedEl){
   mspeedEl.oninput = () => { sel.matchSpeed = +mspeedEl.value/100; saveSel(); showMSpeed(); };
 }
 
-// Record / rank panel
 function renderStats(){
   const r = rankFor(stats.points);
   $('rankEmoji').textContent = r.emoji;
@@ -2361,7 +2342,6 @@ $('padRebindAll').onclick = startRebindAll;
 $('seasonPlay').onclick = startSeasonRound;
 $('seasonReset').onclick = () => { season.cleared=0; saveSeasonState(); buildSeasonList(); };
 
-// Overlay buttons
 $('pauseBtn').onclick = () => togglePause(true);
 $('resetBtn').onclick = () => { if (world && world.drillMode) resetDrill(); };
 $('ovResume').onclick = () => togglePause(false);
@@ -2384,11 +2364,9 @@ var _forceWatch = false, _startQuiet = false;   // flags read by startMatch() fo
 function paneLive(){ return !!(world && running); }
 function ensureDemo(){ if(dockCapable() && !paneLive()) startDemo(); }      // keep a match on the right
 function startDemo(){ _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
-// `auto` = the shell re-docking itself (resize, match start, layout switch) rather
-// than the player asking for a page. On deck that distinction matters: asking for a
-// page must expand the dock, or the gear/nav tiles open a panel that's still slid
-// off-screen and look dead — while the automatic re-docks must leave it collapsed
-// so the pad stays with the game.
+// auto = the shell re-docking itself (resize, match start), NOT the player asking
+// for a page. Get this wrong on deck and the gear opens a panel that's still slid
+// off-screen, so it looks dead.
 function dockOrFull(id, build, auto){
   hideOverlay();
   hideScreens();
@@ -2431,9 +2409,8 @@ function setDockCollapsed(v){
   document.body.classList.toggle('dock-collapsed', sel.dockCollapsed);
   uiPadLeft = (sel.dockCollapsed || !deskDockId || !dockCapable()) ? 0 : DOCK_W;
   updateDockToggle();
-  // Deck: the menu is a system menu — opening it over a live match freezes play so
-  // you can't concede while navigating. Never touch the idle background demo, and
-  // never un-pause a match the player paused themselves.
+  // Freeze play while the menu is up, or you concede while navigating. Leaves the
+  // idle demo alone, and won't un-pause a match the player paused themselves.
   if (isDeck() && world && running && !world.demo && world.state !== 'over'){
     if (!sel.dockCollapsed && !paused){ paused = true; deckPausedByMenu = true; }
     else if (sel.dockCollapsed && deckPausedByMenu){ paused = false; deckPausedByMenu = false; lastT = 0; acc = 0; }
@@ -2510,9 +2487,8 @@ function deckFocusables(){
   });
 }
 function deckFocusReset(){ deckUI.idx = 0; deckUI.repeat = 0; deckPaint(); }
-// The one entry point for Select / B. Opening when nothing is docked (a drill, the
-// tutorial, any odd state) brings the main menu in first, so Select ALWAYS opens
-// and closes the side menu instead of silently doing nothing.
+// Docks the menu first if nothing is docked, so Select never silently no-ops
+// (drills and the tutorial dock nothing).
 function deckSetMenuOpen(open){
   if (open && !deskDockId) dockOrFull('setup', null, true);
   setDockCollapsed(!open);
@@ -2674,18 +2650,13 @@ function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? '
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
 // Deck docks its menu at any window size; otherwise docking is a desktop-width thing.
 function dockCapable(){ return isDeck() || isDesktop(); }
-// Pitch direction is its own setting: 'auto' follows the layout (sideways only on
-// Steam Deck), 'h' forces goals left/right, 'v' forces goals top/bottom. Cocktail
-// stays upright — its whole point is players seated around a flat screen.
+// Cocktail never turns: people are sat around the screen.
 function pitchHorizontal(){
   if (sel.display === 'cocktail') return false;
   const o = sel.orient || 'auto';
   return o === 'h' || (o === 'auto' && isDeck());
 }
-// Give each human seat (in play order P1, P2, …) its control rotation: cocktail
-// rotates per side, a sideways pitch rotates everyone a quarter-turn so the stick
-// stays screen-aligned. Re-run whenever the layout or pitch direction changes, or
-// a live match keeps steering 90° off.
+// Re-run on any layout/direction change or a live match steers 90° off.
 function applySeatRotation(players){
   if (!players) return;
   let slot = 0;
@@ -2771,11 +2742,8 @@ function buildSettings(){
   const fb=$('fsBtn'); if (fb) fb.onclick = () => toggleFullscreen(true);
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
-  // Skins: swap the drawn ball / players for image sprites (visual only).
-  // Sprite skins need art under assets/ that isn't shipped, so selecting one used
-  // to silently do nothing. Probe on demand (never on open — that would 404 on every
-  // settings build) and remember the result: once we know art is missing the option
-  // shows as unavailable instead of pretending to work.
+  // The art isn't in the repo, so these used to be switches that did nothing.
+  // Probe on demand, never on open — that 404s on every settings rebuild.
   const buildSkinPick = (id, key, dflt, items, sprite) => {
     const wrap=$(id); if(!wrap) return;
     const known = SKIN_ART[sprite];              // undefined = not probed yet
@@ -2815,10 +2783,8 @@ function buildSettings(){
       jp.appendChild(el);
     });
   }
-  // Auto-replay-goals toggle.
-  // Ball control (trap vs one-touch). This mechanic used to be reachable ONLY as a
-  // side effect of the Casual/Pro presets, so switching to Pro silently removed
-  // hold-to-grab with no control to put it back.
+  // Was only reachable as a side effect of the Casual/Pro presets — picking Pro
+  // silently deleted hold-to-grab with nothing to turn it back on.
   const trp=$('trapPick');
   if (trp){ trp.innerHTML='';
     [['trap','🧤 Trap'],['off','⚡ One-touch']].forEach(([k,lab])=>{
@@ -3485,7 +3451,6 @@ function buildFeed(){
 }
 function buildPostCard(post){
   const el=document.createElement('div'); el.className='post';
-  // header
   const head=document.createElement('div'); head.className='phead';
   const av=document.createElement('canvas'); av.width=av.height=34;
   drawDisc(av.getContext('2d'),17,17,13,{color:post.color,flag:post.flag,eyes:post.eyes||'googly'});
@@ -3499,7 +3464,6 @@ function buildPostCard(post){
     del.onclick=()=>{ feed=feed.filter(x=>x!==post); saveFeed(); buildFeed(); };
     head.appendChild(del);
   }
-  // media (playable clip)
   const media=document.createElement('div'); media.className='media';
   const cv=document.createElement('canvas'); cv.width=340; cv.height=340; cv.__clip=post.clip;
   drawClip(cv,post.clip,0);
@@ -3510,7 +3474,6 @@ function buildPostCard(post){
   const doLike=(fromDbl)=>{ if(!post.liked){ post.liked=true; post.likes++; } else if(!fromDbl){ post.liked=false; post.likes--; } saveFeed(); refresh(); };
   let lastTap=0;
   media.onclick=()=>{ const t=Date.now(); if(t-lastTap<300){ if(!post.liked) doLike(true); heart.classList.remove('go'); void heart.offsetWidth; heart.classList.add('go'); } lastTap=t; };
-  // actions
   const acts=document.createElement('div'); acts.className='pacts';
   const like=document.createElement('button'); like.className=post.liked?'liked':''; like.textContent=post.liked?'❤':'🤍';
   like.onclick=()=>doLike(false);
@@ -3520,10 +3483,8 @@ function buildPostCard(post){
   const save=document.createElement('button'); save.className='save'; save.textContent=post.saved?'🔖':'🏷';
   save.onclick=()=>{ post.saved=!post.saved; saveFeed(); refresh(); };
   acts.append(like,cbtn,share,save);
-  // likes + caption
   const likes=document.createElement('div'); likes.className='plikes'; likes.textContent=post.likes.toLocaleString()+' likes';
   const cap=document.createElement('div'); cap.className='pcap'; cap.innerHTML=`<b>${post.n}</b> ${post.cap}`;
-  // comments
   const cwrap=document.createElement('div'); cwrap.className='pcomments';
   const renderComments=()=>{ cwrap.innerHTML='';
     const list=post.comments||[];
@@ -3533,7 +3494,6 @@ function buildPostCard(post){
     for(const cm of show){ const d=document.createElement('div'); d.className='cmt'; d.innerHTML=`<b>${cm.n}</b> ${cm.t}`; cwrap.appendChild(d); }
   };
   renderComments();
-  // add comment
   const addc=document.createElement('div'); addc.className='paddc';
   const inp=document.createElement('input'); inp.placeholder='Add a comment…'; inp.maxLength=80;
   const post2=document.createElement('button'); post2.textContent='Post';
@@ -3544,7 +3504,6 @@ function buildPostCard(post){
   const time=document.createElement('div'); time.className='ptime'; time.textContent=timeAgo(post.when);
   function refresh(){ like.className=post.liked?'liked':''; like.textContent=post.liked?'❤':'🤍'; save.textContent=post.saved?'🔖':'🏷'; likes.textContent=post.likes.toLocaleString()+' likes'; }
   el.append(head,media,acts,likes,cap,cwrap,addc,time);
-  // observe for autoplay
   requestAnimationFrame(()=>{ if(socIO) socIO.observe(cv); });
   return el;
 }
@@ -3637,11 +3596,8 @@ function startMatch(){
     // Local 2-player couch: two humans on one screen, split touch controls.
     players.push(you, mkPlayer(1, 'P2', '#5a7de0', 'stripe', 'human2', 'none', 'ball'));
   } else {
-    // Build both teams as bots, with you leading team 0. Every bot mirrors YOUR
-    // customization (colour, cap, flag, eyes) so the whole pitch reflects your look.
-    // Teams stay readable because drawDiscs draws a team-colour ring (red vs blue,
-    // plus the optional colour-blind ring) keyed off p.team, not p.color; and each
-    // disc keeps its own name label, so you can still spot yourself by name.
+    // Bots wear YOUR look. Still readable because the team ring is keyed off
+    // p.team, not p.color, and every disc keeps its own name.
     const t0 = [you];
     const t0names = pickNames(per-1, used);
     for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
@@ -3652,12 +3608,8 @@ function startMatch(){
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
 
-    // Hand connected controllers to seats. Two orders:
-    //  • versus (default): interleave you → opponent → teammate → … so each extra
-    //    controller fills the next most useful slot.
-    //  • co-op (sel.coop==='on'): fill YOUR team first, so N controllers = N humans
-    //    vs N AI (2v2 with 1 extra pad, 3v3 with 2, …). Overflow goes to team 1.
-    // Any seat without a controller stays a bot. (You keep touch if you have no pad.)
+    // Versus interleaves you → opponent → teammate. Co-op fills your side first,
+    // giving N pads = N humans vs N AI. Padless seats stay bots.
     if (sel.controllers==='on'){
       const gpads = connectedGamepadIndices();
       const order = [];
@@ -3755,7 +3707,6 @@ function startMatch(){
   buildGeometry(world);
   resetKickoff(world, true);
 
-  // UI
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
   resetTrails();       // no motion tails streaking in from the previous match
@@ -3838,11 +3789,8 @@ function buildGeometry(w){
   // Top & bottom walls with goal gap (from ±halfW+corner to ±gh)
   for (const sign of [-1, 1]){ // sign -1 = top, +1 = bottom
     const y = sign*halfL;
-    // left segment: from -halfW(+corner) to -gh
     w.walls.push({a:{x:-halfW+c,y}, b:{x:-gh,y}, bCoef:cB, ballOnly:true});
-    // right segment: from gh to halfW(-corner)
     w.walls.push({a:{x: gh,y}, b:{x: halfW-c,y}, bCoef:cB, ballOnly:true});
-    // Goal posts at gap ends
     w.posts.push({x:-gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
     w.posts.push({x: gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
     // Net: box behind goal (walls). Depth = net
@@ -4074,7 +4022,6 @@ function step(w){
   if (w.drillMode){ stepDrill(w); return; }
   w.stateT += STEP;
 
-  // Timing / state machine
   if (w.state === 'goal'){
     if (w.stateT > 1.8){
       const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
@@ -4097,7 +4044,6 @@ function step(w){
       if (go || w.stateT > (anyHuman ? 6 : 1.6)){ w.state='play'; w.stateT=0; }
     }
   } else if (w.state === 'over'){
-    // frozen
   }
 
   // Clock (only during play, and not in training). At 0: if level, go to
@@ -4233,11 +4179,9 @@ function integrate(w, ballFrozen, playersFrozen){
       p.vx += p.inX * a;
       p.vy += p.inY * a;
     }
-    // Kicking + magnet
     for (const p of discs){
       handleBallControl(w, p, ball, ballFrozen);
     }
-    // Integrate player velocities (with pitch damping)
     for (const p of discs){
       p.vx *= pdamp; p.vy *= pdamp;
       p.x += p.vx; p.y += p.vy;
@@ -4285,7 +4229,6 @@ function integrate(w, ballFrozen, playersFrozen){
     }
   }
 
-  // Goal detection
   if (!ballFrozen && w.state==='play') checkGoal(w);
 }
 
@@ -4321,13 +4264,10 @@ function clampBallInside(w, ball){
   if (b.y > bot){ b.y = bot; if (b.vy > 0) b.vy = -b.vy*0.3; }
 }
 
-// ---------- Kickoff line rule (soccer's kickoff formality)
-// Both teams hold their own half while the ball sits at centre; the instant the
-// ball is played the restriction lifts for the rest of the match. The kickoff
-// state itself ends on that first touch (see the state machine), so gating on
-// state==='kickoff' is exactly "until the ball is played".
-// Team 0 owns +y, team 1 owns -y, so "own half" is own*y >= r. resetKickoff already
-// lays both sides out legally, so a plain clamp at the line never yanks anyone.
+// ---------- Kickoff line rule
+// The kickoff state already ends on the first touch, so gating on it IS "until the
+// ball is played". Team 0 owns +y. resetKickoff lays everyone out legally first, so
+// a plain clamp never yanks anybody.
 function kickoffLineOn(w){
   return !!(w && w.kickoffRule && !w.drillMode && !w.train && w.state === 'kickoff');
 }
@@ -4446,14 +4386,10 @@ function handleBallControl(w, p, ball, ballFrozen){
     }
   }
 
-  // Ball magnet: an optional pull that holds the ball to your feet. Strength is
-  // the match's 0..100 setting (0 = free puck, no pull). While not kicking and
-  // the ball is near, spring it toward a point just ahead of the player and ease
-  // its velocity toward the player's so it travels along as you dribble. A kick
-  // is a big one-shot impulse that easily overpowers the pull, so shooting still
-  // sends the ball flying even at full magnet.
-  // Same magnet for everyone — bots get no free stick a human wouldn't have.
-  // (Parity: at magnet 0 the ball is a free puck for bots too.)
+  // Springs the ball toward a point just ahead of you and eases its velocity
+  // toward yours, so it travels along as you dribble. A kick is a one-shot impulse
+  // big enough to overpower it even at full strength. Bots get the same pull — no
+  // free stick a human wouldn't have.
   let mag = (w.magnet||0) / 100;
   if (mag > 0 && !ballFrozen && !p.kick && dist < sum + 18){
     let fx=p.faceX, fy=p.faceY; const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
@@ -4503,12 +4439,10 @@ function collideDiscs(a, b){
   const im = a.invMass + b.invMass;
   if (im === 0) return;
   const pen = min - dist;
-  // positional correction
   a.x -= nx * pen * (a.invMass/im);
   a.y -= ny * pen * (a.invMass/im);
   b.x += nx * pen * (b.invMass/im);
   b.y += ny * pen * (b.invMass/im);
-  // relative velocity along normal
   const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
   const relN = rvx*nx + rvy*ny;
   if (relN > 0) return; // separating
@@ -4518,7 +4452,6 @@ function collideDiscs(a, b){
   b.vx += jImp * nx * b.invMass; b.vy += jImp * ny * b.invMass;
 }
 
-// Disc vs line segment
 function collideWall(d, seg){
   if (d.invMass === 0) return;
   const ax=seg.a.x, ay=seg.a.y, bx=seg.b.x, by=seg.b.y;
@@ -4559,7 +4492,6 @@ function collideArc(d, arc){
   if (dist < 1e-6) return;
   let ang = Math.atan2(dy,dx); if (ang<0) ang += 2*Math.PI;
   let a0=arc.a0, a1=arc.a1;
-  // normalize into [0,2pi]
   const inArc = (ang >= a0-0.001 && ang <= a1+0.001) || (ang+2*Math.PI >= a0 && ang+2*Math.PI <= a1);
   if (!inArc) return;
   // wall is at radius arc.r; keep disc inside (dist should be < arc.r - d.r)
@@ -4671,9 +4603,8 @@ function scoreMultiBall(w, ball, team){
   }
 }
 
-// Killer Queen — the snail is home. Whoever pushed it in wins outright, whatever
-// the goal tally says, so the result has to override the scoreline rather than
-// fake it (see recordResult / endMatch honouring w.forceWin).
+// Wins outright however the goals stand, so it overrides the result rather than
+// faking a scoreline — recordResult/endMatch honour w.forceWin.
 function snailHome(w, ball, team){
   ball._goalCd = 99;                       // never scores twice
   ball.vx = 0; ball.vy = 0;
@@ -4690,10 +4621,8 @@ function snailHome(w, ball, team){
   setTimeout(()=>endMatch(w), 1400);
 }
 
-// A regular Killer Queen goal: counts, but nothing resets — no kickoff, no
-// re-serve at centre, players keep their positions and the snail keeps its ground.
-// The ball is nudged back out of the mouth (with a brief cooldown) so it re-enters
-// play from where it went in instead of scoring on every frame it sits in the net.
+// Scores, resets nothing. The ball gets spat back out of the mouth (plus a
+// cooldown) or it'd score on every frame it sits in the net.
 function kqGoal(w, ball, team){
   w.score[team]++;
   w.lastScorer = team;
@@ -4841,14 +4770,11 @@ function runBot(w, p){
     return;
   }
 
-  // reaction throttle
   p.aiT -= STEP;
   const recompute = p.aiT <= 0;
   if (recompute){ p.aiT = (1.05 - diff.react)*0.28 + 0.02; }
 
-  // teammates on same team
   const mates = w.players.filter(q=>q.team===p.team);
-  // who is closest to ball
   let closest=null, cd=1e9;
   for (const q of mates){ const d=dist2(q,ball); if(d<cd){cd=d; closest=q;} }
   const iAmChaser = closest===p;
@@ -4921,7 +4847,6 @@ function runBot(w, p){
     p.aiKick = wantKick;
   }
 
-  // Move toward stored target
   let dx = p.aiTarget.x - p.x, dy = p.aiTarget.y - p.y;
   const dl = Math.hypot(dx,dy);
   if (dl > 4){ p.inX = dx/dl; p.inY = dy/dl; p.faceX = dx/dl; p.faceY = dy/dl; }
@@ -4934,15 +4859,9 @@ function runBot(w, p){
     if (dd>0 && dd<64){ const f=(64-dd)/64; sx += ddx/dd*f; sy += ddy/dd*f; } }
   if (sx||sy){ p.inX += sx*0.55; p.inY += sy*0.55; const il=Math.hypot(p.inX,p.inY); if (il>1){ p.inX/=il; p.inY/=il; } }
 
-  // Kick decision is evaluated every frame from live geometry (not throttled) so
-  // it actually connects now that the ball no longer sticks. Kick when we're in
-  // range AND positioned behind the ball relative to the goal — the kick pushes
-  // the ball along the player->ball line, so that sends it goalward. Also clear
-  // when the ball is deep in our own half.
-  // Kick ONLY when near-touching AND genuinely behind the ball relative to the
-  // opponent goal, so the player->ball kick always sends it goalward. (Kicking
-  // from far or the wrong side used to knock it into our own net now that the
-  // ball no longer sticks to the bot's feet.)
+  // Every frame, not throttled, or it doesn't connect. Kick ONLY when near-touching
+  // AND behind the ball relative to their goal: the impulse runs along the
+  // player->ball line, so any other angle used to score own goals.
   const dBall = Math.sqrt(dist2(p, ball));
   const inRange = dBall < p.r + ball.r + 9;
   // Aim: a chosen pass target (led ahead of the runner) or the opponent goal.
@@ -5196,10 +5115,8 @@ function stepDrill(w){
   if (d.complete || d.failed) return;                 // frozen — waiting for reset/next
   d.elapsed += STEP;
   if (d.moving) {} // handled below in mg
-  // moving gate
   if (w.drill.mg){ const m=w.drill.mg; m.t+=STEP; const nx=Math.sin(m.t*m.spd)*m.amp; const g=m.g;
     const ddx=nx-g.x; g.x=nx; g.p0.x+=ddx; g.p1.x+=ddx; g.po0.x+=ddx; g.po1.x+=ddx; }
-  // input + charge
   const p = w.players[0];
   applyHumanInput(p, pads.p1);
   if (p.kick) p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); else p.chargeT = 0;
@@ -5320,7 +5237,6 @@ function renderDrill(){
   const w = world;
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
   const b=w.bounds, s=cam.s;
-  // court
   ctx.fillStyle=TH.court;
   ctx.fillRect(wx(-b.halfW),wy(-b.halfL),(b.halfW*2)*s,(b.halfL*2)*s);
   ctx.strokeStyle=TH.line; ctx.lineWidth=Math.max(2,3*s);
@@ -5332,13 +5248,11 @@ function renderDrill(){
   ctx.lineCap='butt';
   drawCoach(w);                 // coaching ghost demonstrates the route
   drawFx(); drawBallTrail(w);
-  // zones
   for (const z of w.zones){
     ctx.beginPath(); ctx.arc(wx(z.x),wy(z.y),z.r*s,0,2*Math.PI);
     ctx.strokeStyle = z.done ? TH.good : TH.warn; ctx.lineWidth=Math.max(2,3*s); ctx.setLineDash(z.done?[]:[8,7]); ctx.stroke(); ctx.setLineDash([]);
     if (z.done){ ctx.fillStyle=rgba(TH.good,0.14); ctx.fill(); }
   }
-  // gates
   const active = w.drill.def.seq ? w.gates.findIndex(g=>!g.done) : -1;
   w.gates.forEach((g,i)=>{
     const col = g.done ? TH.good : (w.drill.def.seq && i!==active ? TH.dim : TH.warn);
@@ -5346,10 +5260,8 @@ function renderDrill(){
     ctx.strokeStyle=col; ctx.lineWidth=Math.max(3,5*s); ctx.stroke();
     for(const po of [g.po0,g.po1]){ ctx.beginPath(); ctx.arc(wx(po.x),wy(po.y),po.r*s,0,2*Math.PI); ctx.fillStyle=TH.post; ctx.fill(); ctx.lineWidth=Math.max(1,2*s); ctx.strokeStyle=col; ctx.stroke(); }
   });
-  // cones
   for (const ccn of w.cones){ ctx.beginPath(); ctx.arc(wx(ccn.x),wy(ccn.y),9*s,0,2*Math.PI); ctx.fillStyle=TH.cone; ctx.fill(); ctx.strokeStyle=TH.discRim; ctx.lineWidth=Math.max(1,2*s); ctx.stroke(); }
   drawDiscs(w); drawBall(w);
-  // drill HUD text
   const d=w.drill; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=TH.hudText;
   ctx.font=`12px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.fillText(d.def.name.toUpperCase(), cw/2, 54);
@@ -5400,13 +5312,11 @@ function drawPitch(w){
   const b = w.bounds;
   const L = wx(-b.halfW), R = wx(b.halfW), T = wy(-b.halfL), B = wy(b.halfL);
   drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
-  // Net pockets background
   ctx.fillStyle = TH.netPocket;
   const gh = f.goal/2;
   ctx.fillRect(wx(-gh), wy(-b.halfL-b.net), (gh*2)*s, b.net*s);
   ctx.fillRect(wx(-gh), wy(b.halfL), (gh*2)*s, b.net*s);
 
-  // Field lines
   ctx.strokeStyle = TH.line;
   ctx.lineWidth = Math.max(2, 3*s);
   ctx.lineJoin='miter'; ctx.lineCap='butt';
@@ -5515,11 +5425,8 @@ function drawGoal(w, sign){
   }
 }
 
-// Image-sprite loader with graceful fallback: returns the loaded <img> once
-// ready, or null while loading / on error (so the drawn version is used). Files
-// live under assets/ (see that folder's README for the contract).
-// (_imgCache is declared up near ANIMALS so the animal pickers can build at init.)
-// Debounced rebuild of the faceplate pickers + preview once async art loads.
+// Debounced rebuild of the faceplate pickers once async art lands — 80+ flag SVGs
+// arriving would otherwise trigger 80 full rebuilds.
 var _faceRefreshT = 0;
 function _refreshFaces(){
   clearTimeout(_faceRefreshT);
@@ -5543,9 +5450,8 @@ function spriteImg(path){
   if (!im) return null;
   return (im.complete && im.naturalWidth > 0) ? im : null;
 }
-// Skin-art probe cache: path -> true/false once we've actually tried to load it.
-// Deliberately lazy — nothing is fetched until a player picks a sprite skin, so
-// opening Settings never 404s for art that isn't shipped.
+// Lazy on purpose: probing eagerly 404s on every settings rebuild for art that
+// isn't in the repo.
 const SKIN_ART = {};
 function probeSkinArt(path, done){
   if (SKIN_ART[path] !== undefined) return done(SKIN_ART[path]);
@@ -5560,18 +5466,16 @@ const PLAYER_SPRITE = 'assets/player/player.png';
 // Name plates duck out of the way when they'd cover a disc or the ball: 5% while
 // blocked, back to full once clear, eased so it reads as a fade rather than a blink.
 const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
-// Keyed by player index rather than stored on the player: the replay rebuilds its
-// player objects every frame from the live match, so a per-object value would be
-// re-seeded each frame and the fade would never actually progress.
+// By index, NOT on the player — the replay rebuilds its player objects every frame,
+// which re-seeds anything stored there and the fade never converges.
 let labelA = [];
 function drawDiscs(w){
   const s = cam.s;
   if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
-    // Position rotates with the pitch, but the disc itself is drawn upright so faces,
-    // caps and name plates never lie on their side in deck view. (The callback's
-    // x/y shadow the outer ones and are already local to the upright frame.)
+    // Position turns with the pitch, the disc doesn't — otherwise faces and name
+    // plates lie on their side in deck view. Callback x/y are the upright frame.
     uprightAt(wx(p.x), wy(p.y), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
   }
 }
@@ -5627,11 +5531,8 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
       }
     }
-    // name label — pixel font in a solid high-contrast plate (readability).
-    // A plate sitting over another disc or the ball is pure noise, so it fades
-    // down to LABEL_DIM while it overlaps and comes back once it's clear. The
-    // draw uses local coords, but the hit test runs in true screen space (the
-    // local frame here is already screen-aligned, so they describe one rect).
+    // Fades out while the plate covers a disc or the ball. Draw is in local coords,
+    // hit test in true screen space — same rect, the local frame is screen-aligned.
     if (s>0.28){
       ctx.font = `9px 'Kenney', system-ui, -apple-system, sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='alphabetic';
@@ -5673,12 +5574,8 @@ function roundRectFill(x,y,ww,hh,r){
   ctx.arcTo(x,y+hh,x,y,r); ctx.arcTo(x,y,x+ww,y,r); ctx.fill();
 }
 
-// ---------- Motion tells ----------------------------------------------------
-// Modelled on VIDEOBALL: two deliberately different shapes so a frozen frame reads
-// at a glance. Players leave a line of small, evenly SPACED DOTS. The ball leaves a
-// single thick LINE whose length says how hard it was struck, in the colour of the
-// team that struck it. Dots are spaced by distance travelled (not by frame), so the
-// count reflects speed, and they fade out so a player who stops loses their trail.
+// ---------- Motion tells (VIDEOBALL) ----------------------------------------
+// Two different shapes on purpose: dots for players, one line for the ball.
 let ballTrail = [];
 let discTrails = [];                      // per-player dot history, index-aligned to w.players
 function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; }
@@ -5690,9 +5587,7 @@ const BALL_PATH    = 40;   // ball path samples retained (enough for a long stre
 const BALL_LEN_MAX = 320;  // world units of streak at full speed (~40% of a classic pitch)
 const BALL_MIN_SPD = 0.8;  // below this the ball is coasting — no streak
 
-// Small spaced dots behind each moving player, drawn under the discs.
-// Keyed by index rather than stored on the player so the replay's rebuilt player
-// objects can't inherit or corrupt a live trail.
+// By index, not on the player — see labelA above for why.
 function drawDiscTrails(w){
   const s = cam.s;
   if (discTrails.length !== w.players.length) discTrails = w.players.map(()=>[]);
@@ -5720,10 +5615,8 @@ function drawDiscTrails(w){
   }
 }
 
-// One thick line behind the ball. It follows the recorded path rather than the
-// current heading, so a bounce bends the streak instead of cutting through a wall,
-// and it is trimmed to a length proportional to speed — a tap leaves a stub, a
-// full-power strike leaves a long stripe.
+// Follows the recorded path, not the current heading, so a bounce bends the streak
+// instead of drawing through a wall. Length tracks speed.
 function drawBallTrail(w){
   const b = w.ball;
   ballTrail.push({x:b.x, y:b.y});
@@ -6200,7 +6093,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.20';
+const VERSION = '20260803.21';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
