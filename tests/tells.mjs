@@ -115,6 +115,31 @@ const r = await p.evaluate(async ()=>{
   M.startMatch();                       // synchronous: check before a frame can regrow it
   o.historyAfterStart = M.discTrails.reduce((n,h)=>n+(h?h.length:0), 0);
   o.trailsClearedOnStart = o.longHistoryBefore >= 10 && o.historyAfterStart === 0;
+  // 7) Both tells must read on EVERY theme, not just the one we eyeballed.
+  //    (CLAUDE.md: verify across themes.) Probe travels THROUGH the sample point.
+  const perTheme = {};
+  for (const th of Object.keys(M.THEMES)){
+    M.applyTheme(th); await wait(40);
+    M.resetTrails();
+    me.vx=0; me.vy=-3.6; me.x=0; me.y=160 - me.vy*14;
+    w.ball.x=-520; w.ball.y=-520; w.ball.vx=0; w.ball.vy=0;
+    M.drawPitch(w);
+    const probes=[]; for(let j=-3;j<=3;j++) probes.push([0, 160+me.r*2.2+j*2]);
+    const ref=probes.map(([x,y])=>px(M.wx(x),M.wy(y)));
+    for(let i=0;i<14;i++){ M.drawDiscTrails(w); me.x+=me.vx; me.y+=me.vy; }
+    M.drawPitch(w); M.drawDiscTrails(w);
+    let dots=0; probes.forEach(([x,y],j)=>{ dots=Math.max(dots, diff(ref[j], px(M.wx(x),M.wy(y)))); });
+    M.resetTrails();
+    w.ball.vx=0; w.ball.vy=-20; w.ball.x=0; w.ball.y=100+20*12; w.ball.lastKickTeam=0;
+    M.drawPitch(w);
+    const bref=px(M.wx(0), M.wy(100+w.ball.r*3));
+    for(let i=0;i<12;i++){ M.drawBallTrail(w); w.ball.y+=w.ball.vy; }
+    M.drawPitch(w); M.drawBallTrail(w);
+    perTheme[th] = { dots, line: diff(bref, px(M.wx(0), M.wy(100+w.ball.r*3))) };
+  }
+  M.applyTheme(M.sel.theme);
+  o.perTheme = perTheme;
+  o.allThemesRead = Object.values(perTheme).every(v => v.dots > 25 && v.line > 40);
   return o;
 });
 
@@ -125,11 +150,12 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.chargeVisible > 20 &&              // wind-up reads on the disc
-           r.trailsClearedOnStart &&
+           r.trailsClearedOnStart && r.allThemesRead &&
            errors.length===0;
 if(!ok) console.log('checks:', {
   movingTail:r.movingTail>12, parked:r.parkedTail<=2, speedScales:r.movingTail>r.slowTail,
   fastBall:r.fastBall>12, ballScales:r.slowBall<r.fastBall, charge:r.chargeVisible>20,
-  reset:r.trailsClearedOnStart });
+  reset:r.trailsClearedOnStart, themes:r.allThemesRead });
+if(!ok && !r.allThemesRead) console.log('per-theme:', JSON.stringify(r.perTheme));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);
