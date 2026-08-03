@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.12** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.13** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,10 @@ _Current build: **v20260803.12** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Name plates duck out of the way** — a label overlapping another disc or the ball fades to
+  5% and returns once clear, cutting pitch noise without losing who's who. Rect-vs-circle test in
+  **true screen space** (`screenPt` applies the deck quarter-turn), eased via `p._lblA` so it reads
+  as a fade, self excluded. Covered by `tests/labels.mjs` in both pitch orientations.
 - [x] **Deck pad ownership** — the menu could keep the controller during play three different ways:
   explicit navigation (gear/nav/`toMenu`) opened a panel that was still collapsed off-screen and
   looked dead, `startDrill` never handed the pad over at all, and Select silently did nothing when
@@ -143,7 +147,7 @@ _Current build: **v20260803.12** (shown under the title; bump `VERSION` in `inde
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 13 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 14 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
