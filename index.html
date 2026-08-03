@@ -217,6 +217,9 @@
     .tilewrap .opt canvas { width: 40px; height: 40px; }
     .tilewrap .opt span { font-size: 12px; }
     .tilewrap .opt small { font-size: 12px; line-height: 1.3; color: var(--muted); }
+    /* Mow patterns are fine bands — they need more pixels than a flag tile to read. */
+    #grass { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+    #grass .opt canvas { width: 66px; height: 66px; }
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
@@ -725,7 +728,7 @@
       <div class="opts" id="pitches"></div>
       <div style="height:14px"></div>
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
-      <div class="opts" id="grass"></div>
+      <div class="opts tilewrap" id="grass"></div>
       <div style="height:14px"></div>
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
@@ -1945,9 +1948,13 @@ function buildOpts(containerId, obj, key, extra){
     const el = document.createElement('div');
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
     let sub = extra ? extra(o) : '';
-    if (key==='field'){
-      const cv=document.createElement('canvas'); cv.width=cv.height=64;
-      drawFieldPreview(cv.getContext('2d'), o, 64, 64);
+    if (key==='field' || key==='grass'){
+      // Both draw a mini pitch: the field tiles vary the shape at your mow style,
+      // the grass tiles vary the mow on the court you picked.
+      const N=128;                                  // drawn at 2× the display size so the bands stay crisp
+      const cv=document.createElement('canvas'); cv.width=cv.height=N;
+      drawFieldPreview(cv.getContext('2d'), key==='grass' ? (FIELDS[sel.field]||FIELDS.classic) : o, N, N,
+                       key==='grass' ? k : sel.grass, key==='grass');
       el.appendChild(cv);
       const nm=document.createElement('span'); nm.textContent=o.name; el.appendChild(nm);
       if(sub){ const sm=document.createElement('small'); sm.innerHTML=sub; el.appendChild(sm); }
@@ -1958,6 +1965,10 @@ function buildOpts(containerId, obj, key, extra){
       if (key==='cap'){ profile.cap = k; saveProfile(); }
       else { sel[key] = k; saveSel(); }
       buildOpts(containerId, obj, key, extra);
+      // Field and grass tiles each draw the other's choice, so a pick in one
+      // has to restyle the other or the previews go stale.
+      if (key==='field') buildOpts('grass', GRASS, 'grass');
+      if (key==='grass') buildOpts('fields', FIELDS, 'field');
       updatePreview();
       if (key==='controllers' || key==='mode' || key==='coop') updatePadInfo();
     };
@@ -1992,18 +2003,35 @@ function drawDisc(c, cx, cy, r, o){
   if (cap){ c.font=`${Math.round(r*0.72)}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
     c.fillStyle=pickTextColor(o.color||'#46d17a'); c.fillText(cap, cx, cy - r*0.5); }
 }
+// On the pitch the two mow tones sit a few percent apart on purpose — at tile size
+// that reads as no pattern at all. Picker tiles push the lighter tone further from
+// the darker one so the cut is legible; the court colour itself is untouched.
+function boostStripe(a, b){
+  const rgb = h => { let c=(h||'').trim(); if(c[0]!=='#') return null;
+    if(c.length===4) c='#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+    const n=parseInt(c.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+  const A=rgb(a), B=rgb(b); if(!A||!B) return a;
+  const lum=v=>0.299*v[0]+0.587*v[1]+0.114*v[2];
+  const tgt = lum(A) >= lum(B) ? 255 : 0, t = 0.34;
+  const m = A.map(v=>Math.round(v + (tgt-v)*t));
+  return `rgb(${m[0]},${m[1]},${m[2]})`;
+}
 // Mini top-down pitch preview for the field picker (replaces the emoji). Self-
 // contained (no camera globals): draws the boundary with the field's rounded /
 // chamfered corners, halfway line, centre circle, and both coloured goals,
 // scaled to fit the tile. Uses the live TH palette with safe fallbacks.
-function drawFieldPreview(c, F, cw, ch){
+// `grass` overrides the mow pattern and `bare` drops the net headroom (goal mouths
+// become bars on the goal line) — that's how the Grass cut tiles show each pattern
+// on the court you actually picked, big enough for the bands to read.
+function drawFieldPreview(c, F, cw, ch, grass, bare){
   const T = (typeof TH!=='undefined' && TH) ? TH : {};
-  const line=T.line||'#bcd3ff', sA=T.stripeA||'#12351f', sB=T.stripeB||'#0e2a19',
+  const line=T.line||'#bcd3ff',
         red=T.teamRed||'#ff3b6b', blue=T.teamBlue||'#4d7bff', dot=T.centerDot||'#bcd3ff',
         pocket=T.netPocket||'rgba(255,255,255,.05)';
   c.clearRect(0,0,cw,ch);
-  const net=F.net||60, gh=(F.goal||150)/2, corner=F.corner||0, cut=!!F.cut, pad=5;
-  const s = Math.min((cw-pad*2)/F.W, (ch-pad*2)/(F.L + net*2));
+  const k = cw/64;                       // tiles are drawn oversized; keep the trim proportional
+  const net=F.net||60, gh=(F.goal||150)/2, corner=F.corner||0, cut=!!F.cut, pad=5*k;
+  const s = Math.min((cw-pad*2)/F.W, (ch-pad*2)/(bare ? F.L : F.L + net*2));
   const cx=cw/2, cy=ch/2, hw=F.W/2, hl=F.L/2;
   const X=x=>cx+x*s, Y=y=>cy+y*s;
   const L=X(-hw), R=X(hw), Tp=Y(-hl), B=Y(hl), cc=corner*s;
@@ -2015,25 +2043,29 @@ function drawFieldPreview(c, F, cw, ch){
       c.moveTo(L+cc,Tp); c.arcTo(R,Tp,R,B,cc); c.arcTo(R,B,L,B,cc); c.arcTo(L,B,L,Tp,cc); c.arcTo(L,Tp,R,Tp,cc); c.closePath();
     } else { c.rect(L,Tp,R-L,B-Tp); }
   };
-  // pitch fill + a couple of mowing stripes, clipped to the boundary shape
+  // pitch fill + the real mow pattern, clipped to the boundary shape. Rings need a
+  // smaller floor than the pitch uses, or a tile this size fits barely one band.
   c.save(); path(); c.clip();
-  c.fillStyle=sB; c.fillRect(L,Tp,R-L,B-Tp);
-  c.fillStyle=sA; const bands=6;
-  for(let i=0;i<bands;i+=2){ const y0=Tp+(i/bands)*(B-Tp), y1=Tp+((i+1)/bands)*(B-Tp); c.fillRect(L,y0,R-L,y1-y0); }
+  paintGrass(c, grass || sel.grass || 'stripes', L, Tp, R-L, B-Tp, 2*k, boostStripe(T.stripeA, T.stripeB));
   c.restore();
-  c.fillStyle=pocket;
-  c.fillRect(X(-gh), Tp-net*s, gh*2*s, net*s);
-  c.fillRect(X(-gh), B,        gh*2*s, net*s);
+  if (!bare){
+    c.fillStyle=pocket;
+    c.fillRect(X(-gh), Tp-net*s, gh*2*s, net*s);
+    c.fillRect(X(-gh), B,        gh*2*s, net*s);
+  }
   c.lineJoin='miter'; c.lineCap='butt';
-  c.strokeStyle=line; c.lineWidth=2; path(); c.stroke();
-  c.lineWidth=1.5;
+  c.strokeStyle=line; c.lineWidth=2*k; path(); c.stroke();
+  c.lineWidth=1.5*k;
   c.beginPath(); c.moveTo(L,cy); c.lineTo(R,cy); c.stroke();
-  c.beginPath(); c.arc(cx,cy, Math.max(4,45*s), 0, 7); c.stroke();
-  c.beginPath(); c.arc(cx,cy, 1.8, 0, 7); c.fillStyle=dot; c.fill();
+  c.beginPath(); c.arc(cx,cy, Math.max(4*k,45*s), 0, 7); c.stroke();
+  c.beginPath(); c.arc(cx,cy, 1.8*k, 0, 7); c.fillStyle=dot; c.fill();
   // goals — top defends blue, bottom red (matches drawGoal)
   const goal=(sign,col)=>{ const y=Y(sign*hl), ny=y+sign*net*s;
-    c.strokeStyle=col; c.lineWidth=2;
-    c.beginPath(); c.moveTo(X(-gh),y); c.lineTo(X(-gh),ny); c.lineTo(X(gh),ny); c.lineTo(X(gh),y); c.stroke(); };
+    c.strokeStyle=col; c.lineWidth=bare?3*k:2*k;
+    c.beginPath();
+    if (bare){ c.moveTo(X(-gh),y); c.lineTo(X(gh),y); }     // just the mouth, on the line
+    else { c.moveTo(X(-gh),y); c.lineTo(X(-gh),ny); c.lineTo(X(gh),ny); c.lineTo(X(gh),y); }
+    c.stroke(); };
   goal(-1, blue); goal(1, red);
 }
 function updatePreview(){
@@ -2165,6 +2197,12 @@ const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical'
   rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 buildOpts('fields', FIELDS, 'field');
 buildOpts('grass', GRASS, 'grass');
+// Both tile sets paint with the live TH palette, so a theme switch has to redraw
+// them or the pitches keep the old colours.
+function refreshPitchTiles(){
+  if ($('fields')) buildOpts('fields', FIELDS, 'field');
+  if ($('grass'))  buildOpts('grass', GRASS, 'grass');
+}
 buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
 buildOpts('diffs', DIFF, 'diff');
 buildOpts('lengths', LENGTHS, 'length');
@@ -2727,7 +2765,7 @@ function buildSettings(){
     const t=THEMES[key];
     const el=document.createElement('div'); el.className='opt'+(sel.theme===key?' sel':'');
     el.innerHTML=`<span class="emoji">${t.emoji}</span><span>${t.name}</span>`;
-    el.onclick=()=>{ sel.theme=key; saveSel(); applyTheme(key); buildSettings(); };
+    el.onclick=()=>{ sel.theme=key; saveSel(); applyTheme(key); buildSettings(); refreshPitchTiles(); };
     tp.appendChild(el);
   }
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
@@ -5450,37 +5488,42 @@ function drawPitch(w){
   drawGoal(w, -1); drawGoal(w, 1);
 }
 // Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
-// in the selected style. Purely cosmetic; clipped to the pitch rectangle.
-function drawGrass(w, L, R, T, B){
-  const A = TH.stripeA, Bc = TH.stripeB, style = sel.grass || 'stripes';
-  const W = R-L, H = B-T;
-  ctx.save();
-  ctx.beginPath(); ctx.rect(L, T, W, H); ctx.clip();
-  ctx.fillStyle = Bc; ctx.fillRect(L, T, W, H);   // base tone
-  ctx.fillStyle = A;
+// in the selected style. Purely cosmetic.
+// Takes its own context and clips nothing, so the picker tiles can paint the same
+// pattern inside the field outline and show you the real thing rather than an emoji.
+// Band counts are fractions of the rect, so a 64px tile is a true miniature.
+function paintGrass(c, style, L, T, W, H, minRing, aCol){
+  const A = aCol || TH.stripeA, Bc = TH.stripeB, B = T+H, R = L+W;
+  c.fillStyle = Bc; c.fillRect(L, T, W, H);   // base tone
+  c.fillStyle = A;
   if (style === 'solid'){
     // court colour only — one flat tone
-    ctx.fillStyle = TH.court || Bc; ctx.fillRect(L, T, W, H);
-  } else if (style === 'stripes'){
-    const N=12; for (let i=1;i<N;i+=2){ const y0=T+(i/N)*H; ctx.fillRect(L, y0, W, H/N + 1); }
+    c.fillStyle = TH.court || Bc; c.fillRect(L, T, W, H);
   } else if (style === 'vertical'){
-    const N=8; for (let i=1;i<N;i+=2){ const x0=L+(i/N)*W; ctx.fillRect(x0, T, W/N + 1, H); }
+    const N=8; for (let i=1;i<N;i+=2){ const x0=L+(i/N)*W; c.fillRect(x0, T, W/N + 1, H); }
   } else if (style === 'check'){
     const cols=8, rows=12, cw=W/cols, ch=H/rows;
-    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) if ((r+c)&1) ctx.fillRect(L+c*cw, T+r*ch, cw+1, ch+1);
+    for (let r=0;r<rows;r++) for (let cc=0;cc<cols;cc++) if ((r+cc)&1) c.fillRect(L+cc*cw, T+r*ch, cw+1, ch+1);
   } else if (style === 'diagonal'){
     const band = H/12 * 1.3;
     for (let d=-H; d < W + H; d += band*2){
-      ctx.beginPath();
-      ctx.moveTo(L+d, T); ctx.lineTo(L+d+band, T); ctx.lineTo(L+d+band-H, B); ctx.lineTo(L+d-H, B);
-      ctx.closePath(); ctx.fill();
+      c.beginPath();
+      c.moveTo(L+d, T); c.lineTo(L+d+band, T); c.lineTo(L+d+band-H, B); c.lineTo(L+d-H, B);
+      c.closePath(); c.fill();
     }
   } else if (style === 'rings'){
-    const cx=(L+R)/2, cy=(T+B)/2, maxR=Math.hypot(W,H)/2, step=Math.max(12, H/12);
+    const cx=(L+R)/2, cy=(T+B)/2, maxR=Math.hypot(W,H)/2, step=Math.max(minRing||12, H/12);
     for (let rad=maxR; rad>0; rad-=step*2){
-      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 2*Math.PI); ctx.arc(cx, cy, Math.max(0,rad-step), 0, 2*Math.PI, true); ctx.fill();
+      c.beginPath(); c.arc(cx, cy, rad, 0, 2*Math.PI); c.arc(cx, cy, Math.max(0,rad-step), 0, 2*Math.PI, true); c.fill();
     }
+  } else {                                     // stripes, and anything unknown
+    const N=12; for (let i=1;i<N;i+=2){ const y0=T+(i/N)*H; c.fillRect(L, y0, W, H/N + 1); }
   }
+}
+function drawGrass(w, L, R, T, B){
+  ctx.save();
+  ctx.beginPath(); ctx.rect(L, T, R-L, B-T); ctx.clip();
+  paintGrass(ctx, sel.grass || 'stripes', L, T, R-L, B-T);
   ctx.restore();
 }
 function roundRectPath(x,y,ww,hh,r){
@@ -6192,7 +6235,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.0808PM';
+const VERSION = '20260803.0839PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6229,6 +6272,7 @@ if (window.__MAGNETDEBUG) {
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
+    GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
   };
 }
 })();

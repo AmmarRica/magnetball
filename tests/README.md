@@ -47,6 +47,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `debug` | Debug readout gated by its toggle, numbers track the live sim and feel values, build stamp |
 | `demo2` | Demo picks a random court and never replays; controller wording; six crowd cheers, new ones longer |
 | `killerqueen` | Killer Queen: two balls, heavy non-resetting snail, goals that don't reset play, snail = instant win |
+| `grasstiles` | Grass cut tiles draw the selected court with each mow pattern, and field/grass/theme picks redraw each other |
 | `tells` | Motion tells by **canvas pixel sampling**: moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
 
 ## Writing a suite
