@@ -1691,6 +1691,18 @@ const Aud = (function(){
   return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; } };
 })();
 
+// Are all human seats on controllers? Deck view is controller-only by definition;
+// otherwise ask the actual seats. Used to word prompts for the device in hand
+// instead of always saying "tap", which is wrong for a pad and for a desktop.
+function padOnly(){
+  if (isDeck()) return true;
+  if (!world || !world.players) return false;
+  const humans = world.players.filter(p => p.ctrl !== 'bot');
+  return humans.length > 0 && humans.every(p => p.ctrl === 'gamepad');
+}
+function skipWord(){ return padOnly() ? 'press any button to skip'
+                   : isTouchLayout() ? 'tap to skip' : 'click or press a key to skip'; }
+
 // 3 variants per category — designed to be previewed and picked.
 const SFX = {
   whistle: [
@@ -1702,6 +1714,21 @@ const SFX = {
     ()=>{ Aud.noise(0.9,{bp:800,Q:0.7,vol:0.5,swell:true}); },
     ()=>{ for(let i=0;i<9;i++) Aud.noise(0.05,{hp:1600,vol:0.22,delay:i*0.055}); Aud.noise(0.7,{bp:720,Q:0.6,vol:0.32,swell:true}); },
     ()=>{ Aud.noise(1.1,{bp:600,Q:0.5,vol:0.45,swell:true}); Aud.tone(300,0.8,'sawtooth',{to:520,vol:0.07}); },
+    // Stadium — a big room that takes a moment to fill and a while to die away.
+    // Stacked bands at slight offsets read as a crowd rather than one hiss.
+    ()=>{ Aud.noise(2.2,{bp:520,Q:0.4,vol:0.42,swell:true});
+          Aud.noise(1.9,{bp:1100,Q:0.8,vol:0.24,swell:true,delay:0.10});
+          Aud.noise(1.4,{hp:2200,vol:0.13,swell:true,delay:0.28});
+          Aud.tone(190,1.7,'sawtooth',{to:300,vol:0.05,delay:0.05}); },
+    // Chant — rhythmic pulses over a sustained bed, like a terrace picking it up.
+    ()=>{ Aud.noise(2.4,{bp:640,Q:0.5,vol:0.30,swell:true});
+          for(let i=0;i<7;i++){ Aud.noise(0.16,{bp:900,Q:1.2,vol:0.30,delay:0.18+i*0.30});
+                                Aud.tone(150,0.15,'square',{to:110,vol:0.10,delay:0.18+i*0.30}); } },
+    // Ovation — scattered claps thickening into a long roar that outlasts them.
+    ()=>{ Aud.noise(2.6,{bp:700,Q:0.45,vol:0.40,swell:true});
+          for(let i=0;i<26;i++) Aud.noise(0.035,{hp:1900,vol:0.10+Math.random()*0.13,
+                                                 delay:0.05+i*0.062+Math.random()*0.03});
+          Aud.tone(240,2.0,'sawtooth',{to:420,vol:0.06,delay:0.15}); },
   ],
   kick: [
     ()=>{ Aud.tone(320,0.09,'square',{to:120,vol:0.5}); },
@@ -1719,7 +1746,7 @@ const SFX = {
     ()=>{ Aud.noise(0.13,{bp:520,Q:1.6,vol:0.28}); },
   ],
 };
-const SFX_LABELS = { whistle:['Pea','Airy','Rising'], crowd:['Roar','Applause','Swell'], kick:['Thock','Punch','Pluck'], wall:['Tick','Click','Bonk'], net:['Swish','Thud','Rustle'] };
+const SFX_LABELS = { whistle:['Pea','Airy','Rising'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation'], kick:['Thock','Punch','Pluck'], wall:['Tick','Click','Bonk'], net:['Swish','Thud','Rustle'] };
 function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
   const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
@@ -3573,7 +3600,11 @@ function pickNames(n, used){
 // ============================================================
 function startMatch(){
   const mode = MODES[sel.mode];
-  const field = FIELDS[sel.field];
+  // The idle demo cycles a random court each time it restarts, so the menu isn't
+  // the same picture every visit.
+  const fieldKeys = Object.keys(FIELDS);
+  const field = _startQuiet ? FIELDS[fieldKeys[(Math.random()*fieldKeys.length)|0]]
+                            : FIELDS[sel.field];
   const len = LENGTHS[sel.length];
   const per = mode.per;
   const used = new Set([profile.name]);
@@ -3939,7 +3970,7 @@ function drawReplayFrame(f){
   ctx.fillText('▶ REPLAY', cx, cy);
   ctx.font = `12px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('tap to skip', cx, cy + Math.min(cw,ch)*0.075*0.72 + 6);
+  ctx.fillText(skipWord(), cx, cy + Math.min(cw,ch)*0.075*0.72 + 6);
   ctx.restore();
   ctx.textBaseline='alphabetic';
 }
@@ -4032,7 +4063,7 @@ function step(w){
     if (w.stateT > 1.8){
       const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
       if (w.overtime) endMatch(w);                 // golden goal — first goal in OT wins
-      else if (sel.autoReplay && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
+      else if (sel.autoReplay && !w.demo && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
                && lastReplay.players === w.players.length && !w._autoReplayed){
         w._autoReplayed = true;                    // slow-mo instant replay, then kick off
         playReplay(0.5).then(()=>{ if (world===w){ resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; } });
@@ -6153,7 +6184,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.18';
+const VERSION = '20260803.19';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6186,7 +6217,7 @@ if (window.__MAGNETDEBUG) {
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, LABEL_DIM, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
+    screenPt, circleHitsRect, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },

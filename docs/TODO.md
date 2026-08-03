@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.18** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.19** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,12 @@ _Current build: **v20260803.18** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Demo polish + controller wording + longer cheers** — the idle demo now picks a **random
+  court** each restart and **never plays goal replays** (your Auto-replay setting is untouched).
+  Prompts follow the device: with every human seat on a pad (or in deck view) the replay hint reads
+  **"press any button to skip"** instead of "tap" — pad-skip already worked, only the wording lied.
+  Three **new crowd cheers** (Stadium · Chant · Ovation) at 2.2–2.6s against the originals'
+  0.7–1.1s. Covered by `tests/demo2.mjs`.
 - [x] **Demo reads as a demo** — the idle menu match is bot vs bot, but "bots mirror your
   customization" dressed both sides in *your* look, so it read as your own team playing itself.
   Each side now gets its own **random country**, and a white **"Demo"** tag sits bottom-right.
@@ -180,7 +186,7 @@ _Current build: **v20260803.18** (shown under the title; bump `VERSION` in `inde
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 18 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 19 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
