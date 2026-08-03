@@ -25,13 +25,14 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
   jump card-to-card, left/right nudges sliders. Human input is rotated with the view
   (`rotQuarter=1`) so the stick stays screen-aligned. Discs/ball/name plates draw upright via
   `uprightAt()`.
-- [x] **Half-line rule** — a team without the ball is locked in its own half; win a touch and the
-  whole side is released. New sticky possession model (`updatePossession`, proximity-based touch →
-  `w.possTeam`, seeded to the kicking team each kickoff) + `applyHalfLine`. Crossing the line is a
-  hard stop, but a player caught upfield when possession flips is *recalled* (steady pull home,
-  can't drive deeper) rather than teleported. Bots are bound by the same rule via their AI target
-  clamp. The halfway line renders as a red dashed gate with the locked-out half tinted.
-  Toggle: Match card → **Half-line rule** (default On).
+- [x] **Kickoff rule** — soccer's kickoff formality: both teams hold their own half while the ball
+  sits at centre, and the moment it's played everyone is free for the rest of the match. Gated on
+  `state==='kickoff'` (that state ends on the first touch, so it *is* "until the ball is played").
+  `applyKickoffLine` clamps at the halfway line; `resetKickoff` already lays both sides out legally
+  so nobody is ever yanked. Bots obey it through their AI target clamp. The halfway line renders as
+  a dashed gate with the far half tinted while the hold is on.
+  Toggle: Match card → **Kickoff rule** (default On).
+  _(Superseded an always-on possession-gated version + its `possTeam` model, both removed.)_
 - [x] **N humans vs N AI on controllers** — new **Extra controllers** row (Versus · Co-op). In Co-op
   extra gamepads fill *your* team first, so 2v2 + 1 pad = 2 humans vs 2 AI, 3v3 + 2 pads = 3 v 3.
   Overflow spills to the opponent; seats without a pad stay bots. Versus keeps the old interleave.
