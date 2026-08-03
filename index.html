@@ -688,9 +688,9 @@
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
       <div class="opts" id="grass"></div>
       <div style="height:14px"></div>
-      <label class="field">Half-line rule</label>
-      <div class="opts" id="halfRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">No ball, no crossing: a team without possession must stay in its own half. Win a touch and your whole side is released.</div>
+      <label class="field">Kickoff rule</label>
+      <div class="opts" id="kickoffRule"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Like real soccer: both teams hold their own half while the ball sits at centre. The moment it's played, everyone is free for the rest of the match.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -1421,8 +1421,8 @@ const COOP = {
   off: { name:'Versus',  emoji:'⚔️' },
   on:  { name:'Co-op',   emoji:'🤝' },
 };
-// Half-line rule: without the ball your team is locked in its own half.
-const HALFRULE = {
+// Kickoff rule: both sides hold their own half until the ball is played.
+const KICKOFFRULE = {
   on:  { name:'On',  emoji:'🚧' },
   off: { name:'Off', emoji:'🏃' },
 };
@@ -1448,7 +1448,7 @@ let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // 
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', halfRule:'on', spectate:'play', cb:'off',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -2003,7 +2003,7 @@ const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical'
   rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 buildOpts('fields', FIELDS, 'field');
 buildOpts('grass', GRASS, 'grass');
-buildOpts('halfRule', HALFRULE, 'halfRule');
+buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
 buildOpts('diffs', DIFF, 'diff');
 buildOpts('lengths', LENGTHS, 'length');
 buildOpts('controllers', CONTROLLERS, 'controllers');
@@ -3423,8 +3423,7 @@ function startMatch(){
     trapOff: !!sel.trapOff,   // Pro mode: instant one-shot kick instead of trap
     matchT: 0,                // seconds of play elapsed (for assist/pass windows)
     maxDeficit: [0,0],        // biggest debt each team clawed back from (Comeback King)
-    halfRule: sel.halfRule!=='off' && !mode.train,   // no ball → stay in your own half
-    possTeam: 1,              // team currently deemed to hold the ball (kickoff team)
+    kickoffRule: sel.kickoffRule!=='off' && !mode.train,   // hold your half until the ball is played
   };
   // Party modifiers (fun match variety; layered on top of the base setup).
   const party = sel.party || {};
@@ -3564,12 +3563,9 @@ function resetKickoff(w, initial){
   layTeam(t0, +1, halfL);   // team0 attacks up, starts on bottom half (+y)
   layTeam(t1, -1, halfL);   // team1 on top half (-y)
 
-  for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; p._offside=false; }
+  for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
   w.state = 'kickoff'; w.stateT = 0;
   w.kickedOff = false;
-  // Half-line rule: the side kicking off starts with the ball, so the other team
-  // must hold its own half until it wins a touch.
-  w.possTeam = (w.kickTeam===0 || w.kickTeam===1) ? w.kickTeam : 0;
   playSfx('whistle');            // referee whistle at match start / after a reset to centre
 }
 function layTeam(list, side, halfL){
@@ -3825,7 +3821,6 @@ function step(w){
   if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
   else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
-  updatePossession(w);   // who "has" the ball → gates the half-line rule
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
@@ -3946,7 +3941,7 @@ function integrate(w, ballFrozen, playersFrozen){
         else if (p.y > halfL+M){ p.y=halfL+M; if(p.vy>0)p.vy=0; }
       }
     }
-    applyHalfLine(w, discs);
+    applyKickoffLine(w, discs);
   }
 
   // Ball movement (sub-stepped so a fast ball can't tunnel walls). Runs for the
@@ -3996,56 +3991,27 @@ function clampBallInside(w, ball){
   if (b.y > bot){ b.y = bot; if (b.vy > 0) b.vy = -b.vy*0.3; }
 }
 
-// ---------- Half-line rule
-// Without the ball, a team must stay in its own half; win a touch and the whole
-// side is released. Team 0 owns +y, team 1 owns -y, so "own half" is sign*y >= r.
-// Crossing the line is a hard stop, but a player caught upfield when possession
-// flips is NOT teleported home — they get a steady recall pull and lose the
-// ability to drive deeper, so control never snaps away mid-run.
-const HALF_RECALL = 0.6;         // per-step pull back toward your own half
-// Which team is currently locked out of the far half (-1 = nobody / rule inactive).
-function halfLockedTeam(w){
-  if (!w || !w.halfRule || w.drillMode || w.train) return -1;
-  if (w.state !== 'play' && w.state !== 'kickoff') return -1;
-  return w.possTeam === 0 ? 1 : 0;
+// ---------- Kickoff line rule (soccer's kickoff formality)
+// Both teams hold their own half while the ball sits at centre; the instant the
+// ball is played the restriction lifts for the rest of the match. The kickoff
+// state itself ends on that first touch (see the state machine), so gating on
+// state==='kickoff' is exactly "until the ball is played".
+// Team 0 owns +y, team 1 owns -y, so "own half" is own*y >= r. resetKickoff already
+// lays both sides out legally, so a plain clamp at the line never yanks anyone.
+function kickoffLineOn(w){
+  return !!(w && w.kickoffRule && !w.drillMode && !w.train && w.state === 'kickoff');
 }
-function applyHalfLine(w, discs){
-  if (!w.halfRule || w.drillMode || w.train) return;
-  if (w.state !== 'play' && w.state !== 'kickoff') return;
+function applyKickoffLine(w, discs){
+  if (!kickoffLineOn(w)) return;
   for (const p of discs){
     if (p.team !== 0 && p.team !== 1) continue;
-    if (p.team === w.possTeam){ p._offside = false; continue; }   // your side has it
-    const own = p.team === 0 ? 1 : -1;                            // own half sits at own*y > 0
+    const own = p.team === 0 ? 1 : -1;          // own half sits at own*y > 0
     const line = own > 0 ? p.r : -p.r;
-    const depth = own > 0 ? (line - p.y) : (p.y - line);          // >0 = inside enemy half
-    if (depth <= 0){ p._offside = false; continue; }
-    if (depth < 3){
-      p.y = line;                                                 // pinned at the line
+    if (own > 0 ? p.y < line : p.y > line){
+      p.y = line;                               // pinned at the halfway line
       if (own > 0 ? p.vy < 0 : p.vy > 0) p.vy = 0;
-      p._offside = false;
-    } else {
-      p._offside = true;                                          // caught upfield — walk home
-      if (own > 0 ? p.vy < 0 : p.vy > 0) p.vy *= 0.5;             // can't push deeper
-      p.vy += own * HALF_RECALL;
     }
   }
-}
-
-// ---------- Possession (drives the half-line rule)
-// Sticky "last team to touch the ball": whoever is close enough to be in contact
-// takes possession and keeps it until the other side gets a touch. Proximity-based
-// so it covers kicks, traps, magnet carries and plain bumps without threading state
-// through the collision code.
-const POSS_TOUCH = 5;            // px of slack past body contact that still counts
-function updatePossession(w){
-  if (!w.players || w.players.length < 2) return;
-  const b = w.ball;
-  let best = null, bestGap = 1e9;
-  for (const p of w.players){
-    const gap = Math.hypot(p.x - b.x, p.y - b.y) - (p.r + b.r);
-    if (gap < bestGap){ bestGap = gap; best = p; }
-  }
-  if (best && bestGap <= POSS_TOUCH) w.possTeam = best.team;
 }
 
 // Record a kick for the awards system: maintains the "who touched it last / before
@@ -4557,9 +4523,9 @@ function runBot(w, p){
   if (recompute){
     p.aiTarget.x = clamp(target.x + (rand()-0.5)*diff.err*1.4, -mW, mW);
     p.aiTarget.y = clamp(target.y + (rand()-0.5)*diff.err*1.4, -mL, mL);
-    // Half-line rule binds bots exactly like humans: with no possession, never
-    // aim past the halfway line (otherwise they'd grind against the invisible wall).
-    if (w.halfRule && !w.drillMode && !w.train && p.team !== w.possTeam){
+    // The kickoff line binds bots exactly like humans, so they don't spend the
+    // countdown grinding against the invisible wall.
+    if (kickoffLineOn(w)){
       if (p.team === 0) p.aiTarget.y = clamp(p.aiTarget.y, p.r + 6, mL);
       else              p.aiTarget.y = clamp(p.aiTarget.y, -mL, -(p.r + 6));
     }
@@ -5034,12 +5000,13 @@ function drawPitch(w){
   ctx.stroke();
   // halfway line — under the half-line rule it doubles as a live gate: solid while
   // your side may cross, hatched + tinted over the half you're locked out of.
-  const lockTeam = halfLockedTeam(w);
-  if (lockTeam >= 0){
-    const yMid = wy(0), far = lockTeam===0 ? T : B;   // the half that team can't enter
+  if (kickoffLineOn(w)){
+    // Held for kickoff: dash the line so it reads as "not yet", and tint the half
+    // you can't enter (yours is +y, so the far side is the locked one).
+    const yMid = wy(0);
     ctx.save();
-    ctx.fillStyle = TH.lineLock || 'rgba(255,80,80,0.10)';
-    ctx.fillRect(L, Math.min(yMid, far), R-L, Math.abs(far - yMid));
+    ctx.fillStyle = TH.lineLock || 'rgba(255,80,80,0.09)';
+    ctx.fillRect(L, Math.min(yMid, T), R-L, Math.abs(T - yMid));
     ctx.strokeStyle = TH.lineLock2 || 'rgba(255,120,120,0.85)';
     ctx.lineWidth = Math.max(2.5, 4*s);
     ctx.setLineDash([10*s, 8*s]);
@@ -5656,7 +5623,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.7';
+const VERSION = '20260803.8';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5683,7 +5650,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, updatePossession, applyHalfLine, halfLockedTeam, drawGrass,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
