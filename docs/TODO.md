@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.20** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.21** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,12 @@ _Current build: **v20260803.20** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Prose + comment cleanup** (roast items 5 and 7). Rewrote the UI hints — they were all one
+  balanced sentence in the same register, which is the most obvious LLM tell in the shipped text.
+  Cut 107 lines of comment (13% → 11% of the JS): pure restatements (`// court`, `// zones`,
+  `// Goal detection`), over-long preambles compressed to the one line that carries the *why*, and
+  **four stale duplicates** left stacked by earlier edits — including an "Auto-replay-goals toggle."
+  header sitting above the ball-control picker.
 - [x] **Ball control is a real setting now** (Settings → Game Feel → **Ball control**: 🧤 Trap /
   ⚡ One-touch). Hold-to-grab was only ever reachable as a *side effect* of the Casual/Pro presets —
   picking Pro silently removed it with no control to put it back short of re-applying Casual, which
