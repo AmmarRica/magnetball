@@ -417,7 +417,7 @@
     .scorebug .rd { color: var(--red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
     .scorebug .bl { color: var(--cyan); text-shadow: 0 0 10px rgba(33,230,255,.6); }
     .scorebug .tm { font-size: 12px; color: var(--yellow); min-width: 46px; text-align:center; }
-    #pauseBtn, #resetBtn, #gearBtn {
+    #pauseBtn, #resetBtn, #gearBtn, #fsHudBtn {
       pointer-events: auto; background: rgba(6,8,16,.7); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
       color: var(--text); width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
@@ -601,6 +601,7 @@
   <div id="hud" class="hidden">
     <button id="pauseBtn" aria-label="Pause">⏸</button>
     <button id="gearBtn" aria-label="Settings">⚙</button>
+    <button id="fsHudBtn" aria-label="Full screen">⛶</button>
     <button id="resetBtn" aria-label="Reset" style="display:none">↺</button>
     <div class="scorebug" id="scorebug">
       <span class="sc rd" id="scoreR">0</span>
@@ -754,6 +755,14 @@
         <div class="hint" style="text-align:left">Cocktail = a flat screen laid on its back with players standing around it. Each player sets which side they're on, so their controller's "up" always points into the table.</div>
         <button class="ghost" id="cocktailCfgBtn" style="margin-top:8px">🎛 Configure player sides</button>
       </div>
+      <div style="height:14px"></div>
+      <label class="field">Pitch direction</label>
+      <div class="opts" id="orientPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Which way the pitch runs. Sideways puts the goals left and right; Upright puts them top and bottom. Auto follows your layout (sideways on Steam Deck).</div>
+      <div style="height:14px"></div>
+      <label class="field">Screen</label>
+      <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
+      <div class="hint" style="text-align:left; margin-top:4px">Hides the browser chrome. You can also press <b>F</b>, or use the ⛶ button in the top bar during a match.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="skins">
@@ -1448,7 +1457,7 @@ let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // 
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', spectate:'play', cb:'off',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -2272,6 +2281,41 @@ function setDockCollapsed(v){
 }
 $('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
 
+// ---- Full screen ----------------------------------------------------------
+// Browsers only grant fullscreen from a real user gesture, so this is wired to
+// clicks and the F key. A controller press can't satisfy that (the gamepad poll
+// isn't a gesture), so the deck path explains itself instead of failing silently.
+function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen(fromGesture){
+  try {
+    if (!isFullscreen()){
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req){ toast('Full screen not supported here'); return; }
+      const r = req.call(el);
+      if (r && r.catch) r.catch(()=>{ if(!fromGesture) toast('Press F or tap ⛶ to go full screen'); });
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) exit.call(document);
+    }
+  } catch(e){ toast('Full screen unavailable'); }
+}
+function updateFsUI(){
+  const on = isFullscreen();
+  const b = $('fsBtn'); if (b) b.textContent = on ? '⛶ Exit full screen' : '⛶ Enter full screen';
+  const h = $('fsHudBtn'); if (h) h.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+}
+$('fsHudBtn').onclick = () => toggleFullscreen(true);
+document.addEventListener('fullscreenchange', ()=>{ updateFsUI(); resize(); });
+document.addEventListener('webkitfullscreenchange', ()=>{ updateFsUI(); resize(); });
+window.addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F'){
+    const t = e.target; if (t && /input|textarea/i.test(t.tagName)) return;   // don't hijack typing
+    e.preventDefault(); toggleFullscreen(true);
+  }
+});
+updateFsUI();
+
 // ============================================================
 //  DECK UI — drive the whole menu from a controller.
 //  Select toggles the left dock; the stick/d-pad moves a focus ring through the
@@ -2457,11 +2501,34 @@ function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? '
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
 // Deck docks its menu at any window size; otherwise docking is a desktop-width thing.
 function dockCapable(){ return isDeck() || isDesktop(); }
+// Pitch direction is its own setting: 'auto' follows the layout (sideways only on
+// Steam Deck), 'h' forces goals left/right, 'v' forces goals top/bottom. Cocktail
+// stays upright — its whole point is players seated around a flat screen.
+function pitchHorizontal(){
+  if (sel.display === 'cocktail') return false;
+  const o = sel.orient || 'auto';
+  return o === 'h' || (o === 'auto' && isDeck());
+}
+// Give each human seat (in play order P1, P2, …) its control rotation: cocktail
+// rotates per side, a sideways pitch rotates everyone a quarter-turn so the stick
+// stays screen-aligned. Re-run whenever the layout or pitch direction changes, or
+// a live match keeps steering 90° off.
+function applySeatRotation(players){
+  if (!players) return;
+  let slot = 0;
+  for (const p of players){
+    if (p.ctrl !== 'bot'){
+      slot++;
+      p.rotQuarter = (sel.display === 'cocktail') ? sideQuarter(seatSide(slot)) : pitchHorizontal() ? 1 : 0;
+    } else p.rotQuarter = 0;
+  }
+}
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
 function rotVec(x,y,q){ q=((q%4)+4)%4; if(q===0)return [x,y]; if(q===1)return [-y,x]; if(q===2)return [-x,-y]; return [y,-x]; }
 function applyDisplayMode(){
   document.body.classList.toggle('cocktail', sel.display==='cocktail');
   document.body.classList.toggle('deck', isDeck());
+  if (world) applySeatRotation(world.players);   // keep live controls aligned to the new view
   // Entering deck: bring the menu in on the left so Select has something to toggle.
   // Deferred — this also runs during boot, before the dock machinery is wired up.
   if (isDeck()) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup'); else if (world) resize(); deckFocusReset(); }, 0);
@@ -2518,6 +2585,18 @@ function buildSettings(){
     : isDeck() ? '· landscape pitch · Select opens the menu'
     : (isDesktop()?'· desktop detected':'· mobile detected');
   const cbx=$('cocktailBox'); if (cbx) cbx.style.display = sel.display==='cocktail' ? '' : 'none';
+  // Pitch direction — which way goal-to-goal runs. Independent of the layout.
+  const op=$('orientPick');
+  if (op){ op.innerHTML='';
+    [['auto','🔄 Auto'],['v','↕ Upright'],['h','↔ Sideways']].forEach(([k,lab])=>{
+      const on=(sel.orient||'auto')===k;
+      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+      el.onclick=()=>{ sel.orient=k; saveSel(); applyDisplayMode(); buildSettings(); };
+      op.appendChild(el);
+    });
+  }
+  const fb=$('fsBtn'); if (fb) fb.onclick = () => toggleFullscreen(true);
+  updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   // Skins: swap the drawn ball / players for image sprites (visual only).
   const bsp=$('ballSkinPick');
@@ -3398,14 +3477,7 @@ function startMatch(){
   const watch = _forceWatch || (sel.spectate==='watch' && !mode.twoP && !mode.train);
   if (watch) you.ctrl = 'bot';
 
-  // Cocktail: give each human seat (in play order P1, P2, …) a control rotation
-  // for the side they stand on. Non-cocktail seats have no rotation.
-  { let slot=0; for (const p of players){
-      // Deck turns the pitch a quarter-turn on screen, so human input has to turn
-      // with it (stick right = screen right = world +y) or the controls feel 90° off.
-      if (p.ctrl!=='bot'){ slot++; p.rotQuarter = (sel.display==='cocktail') ? sideQuarter(seatSide(slot)) : isDeck() ? 1 : 0; }
-      else p.rotQuarter = 0;
-  } }
+  applySeatRotation(players);
 
   const bp = BALLS[sel.ball] || BALLS.normal;
   const pt = PITCH[sel.pitch] || PITCH.normal;
@@ -4644,7 +4716,7 @@ function computeCam(){
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
   // wide screen is actually used. render() applies the matching canvas rotation, so
   // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
-  if (isDeck()){
+  if (pitchHorizontal()){
     cam.rot = -Math.PI/2;
     cam.s = Math.min(availW/worldH, availH/worldW);
   } else {
@@ -5650,7 +5722,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.9';
+const VERSION = '20260803.10';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5679,6 +5751,7 @@ if (window.__MAGNETDEBUG) {
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
     deckMenuOwnsPad, pollDeckUI, get paused(){ return paused; }, get running(){ return running; },
+    pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
