@@ -5,18 +5,32 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.12** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
-## 🔜 Now — uncommitted, ready to ship
-- [~] **Build version label** under the title (`v20260801.2`, static, replaces the earlier live clock).
-- [~] **Settings reset button** — "↺ Reset all settings to default" at the foot of the settings cards.
-  Resets `sel` (theme, display, skins, sound, game feel, controls, party mods); keeps player
-  name/cosmetics and progression.
-- [ ] **Commit & push** the above batch (version label + reset button).
+## 🔜 Now — highest value next
+- [ ] **Delete ~31 MB of unreferenced art** — `assets/` is 36 MB / 7,170 files, but
+  `kenney_input-prompts_1.5` (21 MB), `mobile-controls-1` (7.1 MB) and `kenney_sports-pack`
+  (2.7 MB) have **zero references** in `index.html`, `sw.js` or `manifest.json`. Only the fonts,
+  10 animal PNGs and the flag vectors are used. Nothing ships them to the player, but they bloat
+  every clone of a repo whose whole pitch is "dependency-free single file". *(Left in place —
+  deleting 31 MB is the owner's call, not a drive-by.)*
+- [ ] **Ship sprite-skin art, or drop the feature** — `assets/ball/soccer.png` and
+  `assets/player/player.png` don't exist, so both Skins options were switches that did nothing.
+  They now probe on demand and show **needs art** instead of lying, but the honest end state is
+  either shipping two PNGs or removing the card.
+- [ ] **CI** — `tests/` is committed and green; wire a GitHub Action to run `node tests/run.mjs`
+  on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Deck pad ownership** — the menu could keep the controller during play three different ways:
+  explicit navigation (gear/nav/`toMenu`) opened a panel that was still collapsed off-screen and
+  looked dead, `startDrill` never handed the pad over at all, and Select silently did nothing when
+  nothing was docked. `dockOrFull(id, build, auto)` now separates the shell re-docking itself from
+  the player asking for a page; `deckSetMenuOpen()` is the single Select/B entry point;
+  `deckMenuOwnsPad()` verifies the panel is really on screen. Earlier in the same area: A (KICK) used
+  to reopen the menu on every shot, and opening the menu now pauses a live match.
 - [x] **Pitch direction setting** (Settings → Display → **Pitch direction**) — Auto · ↕ Upright ·
   ↔ Sideways. Decouples the landscape pitch from the Steam Deck layout, so goals can be left/right
   on any device (and upright even on Deck). `pitchHorizontal()` drives both the camera quarter-turn
@@ -101,8 +115,24 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
   `resetSettings(alsoAppearance)` + `defaultProfile()`.
 - [ ] **Shop "buying"** — the `💛 Coming soon` support button (`#shopSupport`) is a stub; either wire
   a real (non-purchase) action or keep as honest placeholder.
-- [ ] **Skins are experimental** — sprite ball/player skins only render once image files land under
-  `assets/` (see that folder's README). Ship art or hide the section.
+- [x] **Skins no longer lie** — the sprite options pointed at files that don't exist and silently
+  did nothing. They now probe on demand (never on settings open, which would 404 every build) and
+  render as disabled "needs art" once known missing, reverting any stale selection. *Shipping the
+  art itself is still open — see "Now".*
+
+## 🧹 Code health (from the review)
+- [x] **Dead per-frame call removed** — `drawKickoffHint()` ran every rendered frame and did
+  literally nothing (assigned two unused locals, returned undefined). Gone, with its call site.
+- [x] **Tab no longer hijacked** — deck view bound Escape *and* Tab to the menu toggle, which broke
+  keyboard navigation. Escape only now.
+- [ ] **Four dead functions** — `teamTint`, `randCap`, `randFlag`, `randEyes` are defined and never
+  called (kept deliberately for a future "bot variety" toggle). Either build that toggle or delete
+  them; right now they're ~40 lines of decoration.
+- [ ] **`index.html` is 5,793 lines / 340 KB with ~300 functions.** The single-file rule is a
+  deliberate constraint (see `CLAUDE.md`), not an accident — but navigating it is the main tax on
+  every change. If it keeps growing, consider a documented section index at the top.
+- [ ] **Two shipped "Coming soon" stubs** — `#shopSupport` and the Online-rooms card (`#roomCode`,
+  disabled). Honest, but they're dead UI in a shipped build; decide keep-or-cut.
 
 ## 🚧 Parked — needs a decision or is blocked
 - [-] **Leaderboard writes** — closed by design. No hosted backend (Google Sheet only, read via
@@ -113,10 +143,15 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [ ] **No committed test suite or CI** — the drill-touch crash and the white-on-white Paper theme
-  both shipped because nothing catches regressions. Commit a small Playwright suite (drill touch via
-  dispatched events, render every theme/flag/eye, 30-field ball containment, console-error check) and
-  a GitHub Action to run it on push. Highest-leverage item — it's the root reason the P0 bugs happened.
+- [x] **Committed test suite** — `tests/` holds 13 headless Playwright suites driving the real page
+  through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
+  Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
+  all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
+  full screen. Playwright is dev-only — the page stays dependency-free.
+  `tests/README.md` documents the two false-pass traps this project has actually hit.
+- [ ] **CI** — run the suite on push (see "Now" above). The suite exists; nothing runs it automatically.
+- [ ] **Console-error budget is strict** — suites fail on *any* console error, which already caught a
+  self-inflicted 404 (eagerly probing missing skin art on every settings build). Keep it strict.
 - [ ] After physics changes: re-verify **ball containment on every field**.
 - [ ] After adding any flag/eye/cap: **render it once** to catch throwing draw fns.
 - [ ] Watch for **duplicate element IDs** (breaks `$()` / `getElementById`) — e.g. the `id="clock"`
