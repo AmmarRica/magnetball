@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.16** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.17** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,16 @@ _Current build: **v20260803.16** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Killer Queen mode** (🐌, Match → Mode) — 3v3 with **two balls at once**. The regular ball
+  scores normally but **nothing resets between goals**: no kickoff, no re-serve at centre, players
+  hold position; the ball is spat back out of the mouth (with a short `_goalCd`) so it re-enters
+  play from where it went in instead of scoring every frame. The second ball is the **snail** —
+  ~4× more sluggish (`SNAIL.invMass` 0.11, `damp` 0.90), 1.5× radius, drawn as an amber spiral
+  shell so it can't be confused with the ball. It **never resets position**, including at kickoff.
+  Push it home and the match **ends instantly**, regardless of the scoreline: `w.forceWin` overrides
+  both `endMatch`'s title and `recordResult`'s W/L (goals for/against stay the true tally).
+  Only the primary ball is kickable, so the snail can only be shouldered — the Killer Queen
+  tug-of-war. Covered by `tests/killerqueen.mjs` (22 assertions).
 - [x] **Motion tells, VIDEOBALL-style** — two deliberately different shapes so a frozen frame reads:
   players leave a line of small, evenly **spaced dots**; the ball leaves a single thick **line**
   whose **length scales with how hard it was struck**, tinted with the striking team's colour
@@ -163,7 +173,7 @@ _Current build: **v20260803.16** (shown under the title; bump `VERSION` in `inde
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 16 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 17 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
