@@ -43,7 +43,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `fs` | Full screen genuinely enters on click and exits on F, label tracks state |
 | `labels` | Name plates fade to 5% over a disc or the ball and return when clear, both orientations |
 | `unlocked` | Unlocked summary: counts match the unlock model, strip shows only earned items, tap equips |
-| `tells` | Motion tells by **canvas pixel sampling**: moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc |
+| `tells` | Motion tells by **canvas pixel sampling**: moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
 
 ## Writing a suite
 
