@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.17** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.18** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,13 @@ _Current build: **v20260803.17** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Demo reads as a demo** — the idle menu match is bot vs bot, but "bots mirror your
+  customization" dressed both sides in *your* look, so it read as your own team playing itself.
+  Each side now gets its own **random country**, and a white **"Demo"** tag sits bottom-right.
+- [x] **Name plates fade during replays too** — the fade was stored on the player object, and the
+  replay rebuilds its player objects every frame (`{...pl}`), so the value was re-seeded each frame
+  and never converged. Alpha now lives in an index-keyed array (`labelA`), like the trails.
+  Covered by `tests/demo.mjs` and a replay case in `tests/labels.mjs`.
 - [x] **Killer Queen mode** (🐌, Match → Mode) — 3v3 with **two balls at once**. The regular ball
   scores normally but **nothing resets between goals**: no kickoff, no re-serve at centre, players
   hold position; the ball is spat back out of the mouth (with a short `_goalCd`) so it re-enters
@@ -173,7 +180,7 @@ _Current build: **v20260803.17** (shown under the title; bump `VERSION` in `inde
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 17 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 18 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

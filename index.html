@@ -3634,6 +3634,20 @@ function startMatch(){
   const watch = _forceWatch || (sel.spectate==='watch' && !mode.twoP && !mode.train);
   if (watch) you.ctrl = 'bot';
 
+  // The idle demo is bot vs bot, so dressing both sides in YOUR colours makes the
+  // menu look like your own team playing itself. Give each side its own country.
+  if (_startQuiet){
+    const countries = FLAG_KEYS.filter(k => k !== 'none');
+    const a = countries[(Math.random()*countries.length)|0];
+    let b = a, guard = 0;
+    while (b === a && guard++ < 30) b = countries[(Math.random()*countries.length)|0];
+    for (const pl of players){
+      pl.flag = pl.team === 0 ? a : b;
+      pl.cap = 'none';
+      pl.eyes = 'googly';
+    }
+  }
+
   applySeatRotation(players);
 
   const bp = BALLS[sel.ball] || BALLS.normal;
@@ -5321,8 +5335,19 @@ function render(){
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); flash*=0.88; } else flash=0;
   drawControls();
+  if (world.demo) drawDemoTag();      // idle background match — say so
 }
 
+// The menu's background match is a bot-vs-bot demo, not something you're playing.
+// Labelled so a glance at the screen never suggests otherwise.
+function drawDemoTag(){
+  ctx.save();
+  ctx.font = `13px 'Kenney', system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.85;
+  ctx.fillText('Demo', cw - 16, ch - 14);
+  ctx.restore();
+}
 function drawPitch(w){
   const f = w.field, s = cam.s;
   const b = w.bounds;
@@ -5488,16 +5513,22 @@ const PLAYER_SPRITE = 'assets/player/player.png';
 // Name plates duck out of the way when they'd cover a disc or the ball: 5% while
 // blocked, back to full once clear, eased so it reads as a fade rather than a blink.
 const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
+// Keyed by player index rather than stored on the player: the replay rebuilds its
+// player objects every frame from the live match, so a per-object value would be
+// re-seeded each frame and the fade would never actually progress.
+let labelA = [];
 function drawDiscs(w){
   const s = cam.s;
-  for (const p of w.players){
+  if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i];
     // Position rotates with the pitch, but the disc itself is drawn upright so faces,
     // caps and name plates never lie on their side in deck view. (The callback's
     // x/y shadow the outer ones and are already local to the upright frame.)
-    uprightAt(wx(p.x), wy(p.y), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s));
+    uprightAt(wx(p.x), wy(p.y), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
   }
 }
-function drawOneDisc(w, p, x, y, r, s){
+function drawOneDisc(w, p, x, y, r, s, idx){
   {
     // shadow
     ctx.beginPath(); ctx.arc(x, y+r*0.28, r*0.95, 0, 2*Math.PI);
@@ -5575,8 +5606,9 @@ function drawOneDisc(w, p, x, y, r, s){
         }
       }
       const target = blocked ? LABEL_DIM : 1;
-      p._lblA = (p._lblA == null) ? target : p._lblA + (target - p._lblA) * LABEL_FADE;
-      const a = p._lblA;
+      const prev = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
+      const a = prev + (target - prev) * LABEL_FADE;
+      if (idx != null) labelA[idx] = a;
       if (a > 0.004){
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
@@ -5602,7 +5634,7 @@ function roundRectFill(x,y,ww,hh,r){
 // count reflects speed, and they fade out so a player who stops loses their trail.
 let ballTrail = [];
 let discTrails = [];                      // per-player dot history, index-aligned to w.players
-function resetTrails(){ ballTrail = []; discTrails = []; }
+function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; }
 
 const DOT_GAP      = 9;    // world units between player dots
 const DOT_MAX      = 12;   // dots kept per player
@@ -6121,7 +6153,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.17';
+const VERSION = '20260803.18';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6154,7 +6186,7 @@ if (window.__MAGNETDEBUG) {
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, LABEL_DIM, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
+    screenPt, circleHitsRect, LABEL_DIM, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
