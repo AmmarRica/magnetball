@@ -339,6 +339,66 @@
     }
     #dockToggle { display: none; }
 
+    /* ---------- Steam Deck view ----------
+       Same left dock as desktop, but at ANY window size (a Deck in gaming mode is
+       1280x800, yet the browser may be windowed) and tuned for a controller:
+       bigger hit targets, a visible focus ring, no touch thumbsticks. */
+    body.deck .screen.docked {
+      inset: 0 auto 0 0; width: 372px; height: 100%;
+      align-items: stretch; justify-content: flex-start;
+      border-right: 1px solid var(--edge);
+      background: var(--bg-grad) fixed;
+      box-shadow: 10px 0 34px rgba(0,0,0,.5); z-index: 30;
+      padding: 12px 14px max(16px, env(safe-area-inset-bottom));
+      transition: transform .2s ease;
+    }
+    body.deck .screen.docked .logo { margin-bottom: 6px; }
+    body.deck .screen.docked .logo h1 { font-size: 19px; }
+    body.deck .screen.docked .logo p { font-size: 11px; }
+    body.deck .screen.docked .card { width: 100%; max-width: none; }
+    body.deck .screen.docked .opt, body.deck .screen.docked .row { max-width: none; }
+    body.deck .screen.docked > button.ghost {
+      position: sticky; bottom: 0; margin-top: 8px;
+      background: var(--bg); border: 1px solid var(--edge);
+    }
+    body.deck.panel-open #hud,
+    body.deck.panel-open #banner,
+    body.deck.panel-open #replayBar,
+    body.deck.panel-open #overlay { padding-left: 372px; }
+    body.deck.dock-collapsed .screen.docked { transform: translateX(-100%); }
+    body.deck.dock-collapsed.panel-open #hud,
+    body.deck.dock-collapsed.panel-open #banner,
+    body.deck.dock-collapsed.panel-open #replayBar,
+    body.deck.dock-collapsed.panel-open #overlay { padding-left: 0; }
+    /* The ‹ tab is still clickable, but Select is the documented way in/out. */
+    body.deck.panel-open #dockToggle {
+      display: flex; align-items: center; justify-content: center;
+      position: fixed; top: 50%; left: 372px; transform: translate(-50%, -50%);
+      width: 26px; height: 56px; z-index: 32; cursor: pointer;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--edge); border-radius: 9px;
+      font-family: var(--pix); font-size: 18px; line-height: 1;
+      box-shadow: 4px 0 14px rgba(0,0,0,.4); transition: left .2s ease;
+    }
+    body.deck.dock-collapsed.panel-open #dockToggle { left: 13px; }
+    /* Focus ring for controller navigation — must read at arm's length. */
+    .deckfocus {
+      outline: 3px solid var(--accent) !important;
+      outline-offset: 2px;
+      border-radius: 10px;
+      box-shadow: 0 0 0 3px rgba(0,0,0,.45), 0 0 16px var(--accent) !important;
+      position: relative; z-index: 1;
+    }
+    /* A quiet hint strip pinned to the dock foot, so the mapping is discoverable. */
+    #deckHint {
+      display: none; position: fixed; left: 0; bottom: 0; width: 372px; z-index: 33;
+      padding: 6px 10px; box-sizing: border-box;
+      font-family: var(--pix); font-size: 9px; line-height: 1.5;
+      color: var(--muted); background: var(--bg); border-top: 1px solid var(--edge);
+      text-align: center; pointer-events: none;
+    }
+    body.deck.panel-open:not(.dock-collapsed) #deckHint { display: block; }
+
     /* ---------- In-game HUD ---------- */
     #hud {
       position: fixed; top: 0; left: 0; right: 0; z-index: 10;
@@ -556,6 +616,7 @@
   <div id="banner"></div>
   <div id="toasts" aria-live="polite"></div>
   <button id="dockToggle" aria-label="Collapse menu panel">‹</button>
+  <div id="deckHint">✚ move · Ⓐ select · Ⓑ close · LB/RB section · SELECT menu</div>
   <div id="tutTip" class="hidden"></div>
 
   <!-- ===================== SETUP SCREEN ===================== -->
@@ -2161,14 +2222,14 @@ function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','
 var deskDockId = null;                     // id of the page currently docked (desktop), else null
 var _forceWatch = false, _startQuiet = false;   // flags read by startMatch() for the idle demo
 function paneLive(){ return !!(world && running); }
-function ensureDemo(){ if(isDesktop() && !paneLive()) startDemo(); }      // keep a match on the right
+function ensureDemo(){ if(dockCapable() && !paneLive()) startDemo(); }      // keep a match on the right
 function startDemo(){ _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
 function dockOrFull(id, build){
   hideOverlay();
   hideScreens();
   const el = $(id); if(!el) return;
   el.classList.remove('hidden');
-  if (isDesktop()){
+  if (dockCapable()){
     el.classList.add('docked');
     document.body.classList.add('panel-open');
     deskDockId = id;
@@ -2197,11 +2258,127 @@ function updateDockToggle(){
 function setDockCollapsed(v){
   sel.dockCollapsed = !!v; saveSel();
   document.body.classList.toggle('dock-collapsed', sel.dockCollapsed);
-  uiPadLeft = (sel.dockCollapsed || !deskDockId || !isDesktop()) ? 0 : DOCK_W;
+  uiPadLeft = (sel.dockCollapsed || !deskDockId || !dockCapable()) ? 0 : DOCK_W;
   updateDockToggle();
   resize();
 }
 $('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
+
+// ============================================================
+//  DECK UI — drive the whole menu from a controller.
+//  Select toggles the left dock; the stick/d-pad moves a focus ring through the
+//  docked page; A activates, B backs out, LB/RB jump section to section, and
+//  left/right nudges a slider. Runs on its own rAF so it works whether or not a
+//  match is live, and stays completely dormant outside deck view.
+// ============================================================
+const DECK_BTN = { A:0, B:1, LB:4, RB:5, SELECT:8, START:9, UP:12, DOWN:13, LEFT:14, RIGHT:15 };
+let deckUI = { idx:0, prev:{}, repeat:0, on:false };
+function deckFocusables(){
+  if (!deskDockId) return [];
+  const root = $(deskDockId); if (!root || root.classList.contains('hidden')) return [];
+  // Collapsed cards hide their contents, so their h2 (the expand toggle) has to be
+  // reachable too — otherwise a pad could never open a section.
+  const sel_ = '.card.collapsible > h2, .opt, .navtile, button, input[type=range], .ckrow button, .padrow button';
+  return Array.from(root.querySelectorAll(sel_)).filter(el => {
+    if (el.disabled) return false;
+    if (el.closest('.hidden')) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;      // skip anything collapsed or off-layout
+  });
+}
+function deckFocusReset(){ deckUI.idx = 0; deckPaint(); }
+function deckPaint(){
+  document.querySelectorAll('.deckfocus').forEach(el => el.classList.remove('deckfocus'));
+  if (!isDeck() || sel.dockCollapsed) return;
+  const list = deckFocusables(); if (!list.length) return;
+  deckUI.idx = Math.max(0, Math.min(deckUI.idx, list.length-1));
+  const el = list[deckUI.idx];
+  el.classList.add('deckfocus');
+  const r = el.getBoundingClientRect();
+  if (r.top < 60 || r.bottom > window.innerHeight - 20) el.scrollIntoView({block:'center'});
+}
+function deckMove(step){
+  const list = deckFocusables(); if (!list.length) return;
+  deckUI.idx = (deckUI.idx + step + list.length) % list.length;
+  deckPaint();
+}
+// Jump by card so long pages don't need dozens of taps.
+function deckSection(dir){
+  const list = deckFocusables(); if (!list.length) return;
+  const cardOf = el => el.closest('.card, .screen');
+  const here = cardOf(list[deckUI.idx]);
+  let i = deckUI.idx;
+  for (let n=0; n<list.length; n++){
+    i = (i + dir + list.length) % list.length;
+    if (cardOf(list[i]) !== here){ deckUI.idx = i; break; }
+  }
+  deckPaint();
+}
+function deckActivate(){
+  const list = deckFocusables(); const el = list[deckUI.idx]; if (!el) return;
+  if (el.tagName === 'INPUT' && el.type === 'range') return;   // sliders use left/right
+  el.click();
+  // The click usually rebuilds the page, so re-resolve the ring next frame.
+  setTimeout(deckPaint, 0);
+}
+function deckSlide(dir){
+  const list = deckFocusables(); const el = list[deckUI.idx]; if (!el) return false;
+  if (!(el.tagName === 'INPUT' && el.type === 'range')) return false;
+  const stepv = parseFloat(el.step) || 1;
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  let v = parseFloat(el.value) + dir*stepv;
+  el.value = Math.max(min, Math.min(max, v));
+  el.dispatchEvent(new Event('input', {bubbles:true}));
+  el.dispatchEvent(new Event('change', {bubbles:true}));
+  return true;
+}
+function deckEdge(g, code){                    // true on the frame a button goes down
+  const now = btn(g, code), was = !!deckUI.prev[code];
+  deckUI.prev[code] = now;
+  return now && !was;
+}
+function pollDeckUI(){
+  if (isDeck()){
+    const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+    let g = null;
+    for (const c of gps) if (c && c.connected){ g = c; break; }   // any pad drives the UI
+    if (g){
+      if (deckEdge(g, DECK_BTN.SELECT)) setDockCollapsed(!sel.dockCollapsed), deckFocusReset();
+      if (!sel.dockCollapsed){
+        const ax = g.axes[0]||0, ay = g.axes[1]||0;
+        const up    = btn(g, DECK_BTN.UP)    || ay < -0.55;
+        const down  = btn(g, DECK_BTN.DOWN)  || ay >  0.55;
+        const left  = btn(g, DECK_BTN.LEFT)  || ax < -0.55;
+        const right = btn(g, DECK_BTN.RIGHT) || ax >  0.55;
+        const held = up||down||left||right;
+        // First press moves at once, then auto-repeats while held.
+        deckUI.repeat = held ? deckUI.repeat + 1 : 0;
+        const fire = held && (deckUI.repeat === 1 || (deckUI.repeat > 22 && deckUI.repeat % 5 === 0));
+        if (fire){
+          if (up) deckMove(-1);
+          else if (down) deckMove(1);
+          else if (left  && !deckSlide(-1)) deckMove(-1);
+          else if (right && !deckSlide(1))  deckMove(1);
+        }
+        if (deckEdge(g, DECK_BTN.A)) deckActivate();
+        if (deckEdge(g, DECK_BTN.B)) setDockCollapsed(true);
+        if (deckEdge(g, DECK_BTN.LB)) deckSection(-1);
+        if (deckEdge(g, DECK_BTN.RB)) deckSection(1);
+      } else {
+        // Collapsed: A or Start brings the menu straight back.
+        if (deckEdge(g, DECK_BTN.A) || deckEdge(g, DECK_BTN.START)){ setDockCollapsed(false); deckFocusReset(); }
+        deckEdge(g, DECK_BTN.B); deckEdge(g, DECK_BTN.LB); deckEdge(g, DECK_BTN.RB);
+      }
+    }
+  }
+  requestAnimationFrame(pollDeckUI);
+}
+requestAnimationFrame(pollDeckUI);
+// Keyboard mirrors the pad so the layout is testable (and usable) without one.
+window.addEventListener('keydown', e => {
+  if (!isDeck()) return;
+  if (e.key === 'Escape' || e.key === 'Tab'){ e.preventDefault(); setDockCollapsed(!sel.dockCollapsed); deckFocusReset(); }
+});
 
 // ---- Settings (sound + game feel), openable from the menu and mid-game
 let settingsFromGame = false;
@@ -2252,20 +2429,28 @@ function openLook(section){
 }
 // Back-compat shims (settings is no longer a separate screen).
 function openSettings(){ openLook('theme'); }
-function closeSettings(){ if (isDesktop()) dockOrFull('setup'); else toMenu(); }
+function closeSettings(){ if (dockCapable()) dockOrFull('setup'); else toMenu(); }
 // ---- Display modes: 'auto' picks mobile vs desktop by screen width; 'cocktail'
 // is a flat screen with players standing around it, each controller rotated to
 // the side they stand on so "up" always points into the table.
 const SIDES = [['bottom','⬇'],['top','⬆'],['left','⬅'],['right','➡']];
 function sideQuarter(side){ return {bottom:0, left:1, top:2, right:3}[side] || 0; }
 function seatSide(n){ return (sel.cocktailSides && sel.cocktailSides[n]) || ['bottom','top','left','right'][(n-1)%4]; }
-function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : (isDesktop() ? 'desktop' : 'mobile'); }
+// Steam Deck view: landscape pitch, menu docked left, driven entirely by a pad.
+function isDeck(){ return sel.display==='deck'; }
+function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
+// Deck docks its menu at any window size; otherwise docking is a desktop-width thing.
+function dockCapable(){ return isDeck() || isDesktop(); }
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
 function rotVec(x,y,q){ q=((q%4)+4)%4; if(q===0)return [x,y]; if(q===1)return [-y,x]; if(q===2)return [-x,-y]; return [y,-x]; }
 function applyDisplayMode(){
   document.body.classList.toggle('cocktail', sel.display==='cocktail');
-  if (world) resize();
+  document.body.classList.toggle('deck', isDeck());
+  // Entering deck: bring the menu in on the left so Select has something to toggle.
+  // Deferred — this also runs during boot, before the dock machinery is wired up.
+  if (isDeck()) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup'); else if (world) resize(); deckFocusReset(); }, 0);
+  else { if (world) resize(); setTimeout(deckFocusReset, 0); }
 }
 function openCocktailCfg(){ dockOrFull('cocktailCfg', buildCocktailRows); }
 function buildCocktailRows(){
@@ -2302,7 +2487,7 @@ function buildSettings(){
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
   const dp=$('displayPick');
   if (dp){ dp.innerHTML='';
-    [['auto','🖥 Auto'],['cocktail','🍸 Cocktail']].forEach(([k,lab])=>{
+    [['auto','🖥 Auto'],['deck','🎮 Steam Deck'],['cocktail','🍸 Cocktail']].forEach(([k,lab])=>{
       const on=(sel.display||'auto')===k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{
@@ -2314,7 +2499,9 @@ function buildSettings(){
     });
   }
   const dd=$('displayDetected');
-  if (dd) dd.textContent = sel.display==='cocktail' ? '· cocktail' : (isDesktop()?'· desktop detected':'· mobile detected');
+  if (dd) dd.textContent = sel.display==='cocktail' ? '· cocktail'
+    : isDeck() ? '· landscape pitch · Select opens the menu'
+    : (isDesktop()?'· desktop detected':'· mobile detected');
   const cbx=$('cocktailBox'); if (cbx) cbx.style.display = sel.display==='cocktail' ? '' : 'none';
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   // Skins: swap the drawn ball / players for image sprites (visual only).
@@ -3199,7 +3386,9 @@ function startMatch(){
   // Cocktail: give each human seat (in play order P1, P2, …) a control rotation
   // for the side they stand on. Non-cocktail seats have no rotation.
   { let slot=0; for (const p of players){
-      if (p.ctrl!=='bot'){ slot++; p.rotQuarter = (sel.display==='cocktail') ? sideQuarter(seatSide(slot)) : 0; }
+      // Deck turns the pitch a quarter-turn on screen, so human input has to turn
+      // with it (stick right = screen right = world +y) or the controls feel 90° off.
+      if (p.ctrl!=='bot'){ slot++; p.rotQuarter = (sel.display==='cocktail') ? sideQuarter(seatSide(slot)) : isDeck() ? 1 : 0; }
       else p.rotQuarter = 0;
   } }
 
@@ -4428,7 +4617,7 @@ let cam = { s:1, ox:0, oy:0 };
 function resize(){
   // Shrank below desktop while a page was docked — collapse the dock to a plain
   // fullscreen page (mobile layout). deskDockId set → dockOrFull re-docks on widen.
-  if (deskDockId && !isDesktop()){
+  if (deskDockId && !dockCapable()){
     const el=$(deskDockId); if(el) el.classList.remove('docked');
     document.body.classList.remove('panel-open');
     settingsDocked=false; settingsFromGame=false; uiPadLeft=0; deskDockId=null;
@@ -4443,7 +4632,7 @@ function resize(){
   // Widened to desktop during a live match with nothing docked yet — bring the
   // main menu in on the left. (deskDockId is set inside dockOrFull, so the guard
   // below prevents re-entry when dockOrFull calls resize again.)
-  if (running && world && !world.drillMode && !world.tutorial && isDesktop()
+  if (running && world && !world.drillMode && !world.tutorial && dockCapable()
       && !deskDockId && !$('hud').classList.contains('hidden')){
     dockOrFull('setup');
   }
@@ -4454,18 +4643,32 @@ function computeCam(){
   // Reserve headroom at the top for the HUD (scorebug, pause/gear, replay bar) so
   // the top goal + net never render underneath it — otherwise a ball driven into
   // the top net looks like it vanishes behind the buttons.
-  const padTop = 96;
+  const padTop = isDeck() ? 64 : 96;
   const availW = Math.max(80, cw - padL);
   const availH = Math.max(80, ch - padTop);
   const worldW = f.W + 60;
   const worldH = f.L + f.net*2 + 60;
-  const s = Math.min(availW/worldW, availH/worldH);
-  cam.s = s;
+  // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
+  // wide screen is actually used. render() applies the matching canvas rotation, so
+  // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
+  if (isDeck()){
+    cam.rot = -Math.PI/2;
+    cam.s = Math.min(availW/worldH, availH/worldW);
+  } else {
+    cam.rot = 0;
+    cam.s = Math.min(availW/worldW, availH/worldH);
+  }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
 }
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
+// Draw screen-upright content at a point inside the rotated pitch (name plates,
+// cap glyphs) — without this they'd lie on their side in deck view.
+function uprightAt(x, y, fn){
+  if (!cam.rot){ fn(x, y); return; }
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-cam.rot); fn(0, 0); ctx.restore();
+}
 
 // ============================================================
 //  PRACTICE DRILLS  (challenge mode)
@@ -4788,6 +4991,7 @@ function render(){
   let sx=0, sy=0;
   if (shake > 0.3){ sx=(Math.random()*2-1)*shake; sy=(Math.random()*2-1)*shake; shake*=0.85; } else shake=0;
   ctx.save(); ctx.translate(sx, sy);
+  if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
   drawPitch(world);
   drawFx();
   drawBallTrail(world);
@@ -4954,7 +5158,14 @@ const PLAYER_SPRITE = 'assets/player/player.png';
 function drawDiscs(w){
   const s = cam.s;
   for (const p of w.players){
-    const x=wx(p.x), y=wy(p.y), r=p.r*s;
+    // Position rotates with the pitch, but the disc itself is drawn upright so faces,
+    // caps and name plates never lie on their side in deck view. (The callback's
+    // x/y shadow the outer ones and are already local to the upright frame.)
+    uprightAt(wx(p.x), wy(p.y), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s));
+  }
+}
+function drawOneDisc(w, p, x, y, r, s){
+  {
     // shadow
     ctx.beginPath(); ctx.arc(x, y+r*0.28, r*0.95, 0, 2*Math.PI);
     ctx.fillStyle=TH.shadow; ctx.fill();
@@ -5027,7 +5238,12 @@ function drawBallTrail(w){
   }
 }
 function drawBall(w){
-  const s=cam.s, b=w.ball, x=wx(b.x), y=wy(b.y), r=b.r*s;
+  const s=cam.s, b=w.ball, r=b.r*s;
+  // Upright like the discs, so the drop shadow and 3D highlight keep falling the
+  // same way on screen no matter which way the pitch is turned.
+  uprightAt(wx(b.x), wy(b.y), (x, y) => drawOneBall(b, x, y, r, s));
+}
+function drawOneBall(b, x, y, r, s){
   ctx.beginPath(); ctx.arc(x, y+r*0.3, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
   // Squash & stretch: warp the ball along its impact axis for a frame or two.
   const sq = b.sqT || 0;
@@ -5440,7 +5656,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.6';
+const VERSION = '20260803.7';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5468,6 +5684,9 @@ if (window.__MAGNETDEBUG) {
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, updatePossession, applyHalfLine, halfLockedTeam, drawGrass,
+    isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
+    deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
+    setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
   };
 }
 })();
