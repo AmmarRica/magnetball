@@ -616,7 +616,7 @@
   <div id="banner"></div>
   <div id="toasts" aria-live="polite"></div>
   <button id="dockToggle" aria-label="Collapse menu panel">‹</button>
-  <div id="deckHint">✚ move · Ⓐ select · Ⓑ close · LB/RB section · SELECT menu</div>
+  <div id="deckHint">✚ move · Ⓐ select · Ⓑ close · LB/RB section · SELECT closes &amp; resumes</div>
   <div id="tutTip" class="hidden"></div>
 
   <!-- ===================== SETUP SCREEN ===================== -->
@@ -2255,11 +2255,19 @@ function updateDockToggle(){
   b.textContent = sel.dockCollapsed ? '›' : '‹';
   b.setAttribute('aria-label', sel.dockCollapsed ? 'Open menu panel' : 'Collapse menu panel');
 }
+let deckPausedByMenu = false;    // we paused for the deck menu → ours to un-pause
 function setDockCollapsed(v){
   sel.dockCollapsed = !!v; saveSel();
   document.body.classList.toggle('dock-collapsed', sel.dockCollapsed);
   uiPadLeft = (sel.dockCollapsed || !deskDockId || !dockCapable()) ? 0 : DOCK_W;
   updateDockToggle();
+  // Deck: the menu is a system menu — opening it over a live match freezes play so
+  // you can't concede while navigating. Never touch the idle background demo, and
+  // never un-pause a match the player paused themselves.
+  if (isDeck() && world && running && !world.demo && world.state !== 'over'){
+    if (!sel.dockCollapsed && !paused){ paused = true; deckPausedByMenu = true; }
+    else if (sel.dockCollapsed && deckPausedByMenu){ paused = false; deckPausedByMenu = false; lastT = 0; acc = 0; }
+  }
   resize();
 }
 $('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
@@ -2273,6 +2281,12 @@ $('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
 // ============================================================
 const DECK_BTN = { A:0, B:1, LB:4, RB:5, SELECT:8, START:9, UP:12, DOWN:13, LEFT:14, RIGHT:15 };
 let deckUI = { idx:0, prev:{}, repeat:0, on:false };
+// True while the open deck menu is holding the controller — the match must ignore
+// pad/keyboard input for that whole time, or navigating also drives your player.
+function deckMenuOwnsPad(){
+  return !!(isDeck() && deskDockId && !sel.dockCollapsed
+            && document.body.classList.contains('panel-open'));
+}
 function deckFocusables(){
   if (!deskDockId) return [];
   const root = $(deskDockId); if (!root || root.classList.contains('hidden')) return [];
@@ -2365,9 +2379,10 @@ function pollDeckUI(){
         if (deckEdge(g, DECK_BTN.LB)) deckSection(-1);
         if (deckEdge(g, DECK_BTN.RB)) deckSection(1);
       } else {
-        // Collapsed: A or Start brings the menu straight back.
-        if (deckEdge(g, DECK_BTN.A) || deckEdge(g, DECK_BTN.START)){ setDockCollapsed(false); deckFocusReset(); }
-        deckEdge(g, DECK_BTN.B); deckEdge(g, DECK_BTN.LB); deckEdge(g, DECK_BTN.RB);
+        // Collapsed = the game owns the pad. Only Select comes back, because A is
+        // KICK — reopening on A would pop the menu on every shot.
+        deckEdge(g, DECK_BTN.A); deckEdge(g, DECK_BTN.B);
+        deckEdge(g, DECK_BTN.LB); deckEdge(g, DECK_BTN.RB); deckEdge(g, DECK_BTN.START);
       }
     }
   }
@@ -3456,6 +3471,15 @@ function startMatch(){
     $('resetBtn').style.display='none';
     hideOverlay();
     $('ovRematch').style.display='none';
+    // Deck: resize() re-docks the menu for the desktop "menu left / pitch right"
+    // shell, so collapse it first — kicking off should hand the pad to the game
+    // and give the pitch the whole screen. Select brings the menu back.
+    if (isDeck()){
+      sel.dockCollapsed = true; saveSel();
+      document.body.classList.add('dock-collapsed');
+      deckPausedByMenu = false;
+      updateDockToggle();
+    }
   }
   running = true; paused = false;
   resize();
@@ -3799,9 +3823,12 @@ function step(w){
   // --- Gather controller inputs (ball live, kickoff, or goal celebration)
   if (active){
     for (const p of w.players){
-      if (p.ctrl==='human1') applyHumanInput(p, pads.p1);
-      else if (p.ctrl==='human2') applyHumanInput(p, pads.p2);
-      else if (p.ctrl==='gamepad') applyHumanInput(p, gamepadPad(p.padIndex));
+      // While the deck menu is open it owns the pad, so the same stick press can't
+      // steer a player and the focus ring at once. Passing null parks the seat.
+      const menu = deckMenuOwnsPad();
+      if (p.ctrl==='human1') applyHumanInput(p, menu ? null : pads.p1);
+      else if (p.ctrl==='human2') applyHumanInput(p, menu ? null : pads.p2);
+      else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null : gamepadPad(p.padIndex));
       else if (p.ctrl==='bot') runBot(w, p);
     }
     // Kick charge: holding KICK winds up power; released or idle resets.
@@ -5623,7 +5650,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.8';
+const VERSION = '20260803.9';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5651,6 +5678,7 @@ if (window.__MAGNETDEBUG) {
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
+    deckMenuOwnsPad, pollDeckUI, get paused(){ return paused; }, get running(){ return running; },
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
