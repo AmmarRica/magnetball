@@ -608,6 +608,11 @@
       <div style="height:14px"></div>
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
+      <div id="coopRow" class="hidden">
+        <div style="height:14px"></div>
+        <label class="field">Extra controllers <small id="coopInfo" style="color:var(--muted)"></small></label>
+        <div class="opts" id="coop"></div>
+      </div>
       <div style="height:14px"></div>
       <label class="field">Ball magnet <small id="magVal" style="color:var(--accent); font-weight:700">0</small></label>
       <input id="magnet" class="slider" type="range" min="0" max="100" step="5" value="0" />
@@ -621,6 +626,10 @@
       <div style="height:14px"></div>
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
       <div class="opts" id="grass"></div>
+      <div style="height:14px"></div>
+      <label class="field">Half-line rule</label>
+      <div class="opts" id="halfRule"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">No ball, no crossing: a team without possession must stay in its own half. Win a touch and your whole side is released.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -1346,6 +1355,16 @@ const CONTROLLERS = {
   off: { name:'Touch',       emoji:'📱' },
   on:  { name:'Controllers', emoji:'🎮' },
 };
+// Where extra controllers sit: against you, or alongside you (N humans vs N AI).
+const COOP = {
+  off: { name:'Versus',  emoji:'⚔️' },
+  on:  { name:'Co-op',   emoji:'🤝' },
+};
+// Half-line rule: without the ball your team is locked in its own half.
+const HALFRULE = {
+  on:  { name:'On',  emoji:'🚧' },
+  off: { name:'Off', emoji:'🏃' },
+};
 
 const LENGTHS = {
   '3':  { name:'Quick', emoji:'⚡', secs:180, goals:0 },
@@ -1367,8 +1386,8 @@ const POST   = { r:8,  invMass:0.0, bCoef:0.55 };
 let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // controller-remap capture state
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', spectate:'play', cb:'off',
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', halfRule:'on', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -1769,7 +1788,7 @@ function buildOpts(containerId, obj, key, extra){
       else { sel[key] = k; saveSel(); }
       buildOpts(containerId, obj, key, extra);
       updatePreview();
-      if (key==='controllers') updatePadInfo();
+      if (key==='controllers' || key==='mode' || key==='coop') updatePadInfo();
     };
     wrap.appendChild(el);
   });
@@ -1923,9 +1942,11 @@ const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical'
   rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 buildOpts('fields', FIELDS, 'field');
 buildOpts('grass', GRASS, 'grass');
+buildOpts('halfRule', HALFRULE, 'halfRule');
 buildOpts('diffs', DIFF, 'diff');
 buildOpts('lengths', LENGTHS, 'length');
 buildOpts('controllers', CONTROLLERS, 'controllers');
+buildOpts('coop', COOP, 'coop');
 buildOpts('balls', BALLS, 'ball');
 buildOpts('pitches', PITCH, 'pitch');
 buildOpts('handed', HANDED, 'handed');
@@ -2057,10 +2078,26 @@ function connectedGamepadIndices(){
   return out;
 }
 function updatePadInfo(){
-  const el = $('padInfo'); if (!el) return;
-  if (sel.controllers!=='on'){ el.textContent = '(tap to steer)'; return; }
+  const el = $('padInfo');
   const n = connectedGamepadIndices().length;
-  el.textContent = n ? `(${n} controller${n>1?'s':''} detected)` : '(no controllers — connect & press a button)';
+  if (el){
+    if (sel.controllers!=='on') el.textContent = '(tap to steer)';
+    else el.textContent = n ? `(${n} controller${n>1?'s':''} detected)` : '(no controllers — connect & press a button)';
+  }
+  // The co-op row only matters with controllers on and a team bigger than one.
+  const row = $('coopRow'), info = $('coopInfo');
+  if (row){
+    const per = (MODES[sel.mode]||{}).per || 1;
+    const relevant = sel.controllers==='on' && per > 1 && !(MODES[sel.mode]||{}).twoP && !(MODES[sel.mode]||{}).train;
+    row.classList.toggle('hidden', !relevant);
+    if (info && relevant){
+      // Seats filled on your side = you + extra pads, capped by team size.
+      const humans = Math.min(per, Math.max(1, n));
+      info.textContent = sel.coop==='on'
+        ? `(${humans} human${humans>1?'s':''} vs ${per} AI)`
+        : '(fills the opponent first)';
+    }
+  }
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 window.addEventListener('gamepaddisconnected', updatePadInfo);
@@ -3130,13 +3167,21 @@ function startMatch(){
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
 
-    // Hand connected controllers to seats in an interleaved order so each extra
-    // controller fills the next most useful slot: you → opponent → teammate → …
+    // Hand connected controllers to seats. Two orders:
+    //  • versus (default): interleave you → opponent → teammate → … so each extra
+    //    controller fills the next most useful slot.
+    //  • co-op (sel.coop==='on'): fill YOUR team first, so N controllers = N humans
+    //    vs N AI (2v2 with 1 extra pad, 3v3 with 2, …). Overflow goes to team 1.
     // Any seat without a controller stays a bot. (You keep touch if you have no pad.)
     if (sel.controllers==='on'){
       const gpads = connectedGamepadIndices();
       const order = [];
-      for (let i=0;i<Math.max(t0.length,t1.length);i++){ if (t0[i]) order.push(t0[i]); if (t1[i]) order.push(t1[i]); }
+      if (sel.coop==='on'){
+        for (const pl of t0) order.push(pl);          // you + your teammates
+        for (const pl of t1) order.push(pl);          // only once your side is full
+      } else {
+        for (let i=0;i<Math.max(t0.length,t1.length);i++){ if (t0[i]) order.push(t0[i]); if (t1[i]) order.push(t1[i]); }
+      }
       let gi=0, pn=2;
       for (const pl of order){
         if (gi >= gpads.length) break;
@@ -3189,6 +3234,8 @@ function startMatch(){
     trapOff: !!sel.trapOff,   // Pro mode: instant one-shot kick instead of trap
     matchT: 0,                // seconds of play elapsed (for assist/pass windows)
     maxDeficit: [0,0],        // biggest debt each team clawed back from (Comeback King)
+    halfRule: sel.halfRule!=='off' && !mode.train,   // no ball → stay in your own half
+    possTeam: 1,              // team currently deemed to hold the ball (kickoff team)
   };
   // Party modifiers (fun match variety; layered on top of the base setup).
   const party = sel.party || {};
@@ -3328,9 +3375,12 @@ function resetKickoff(w, initial){
   layTeam(t0, +1, halfL);   // team0 attacks up, starts on bottom half (+y)
   layTeam(t1, -1, halfL);   // team1 on top half (-y)
 
-  for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
+  for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; p._offside=false; }
   w.state = 'kickoff'; w.stateT = 0;
   w.kickedOff = false;
+  // Half-line rule: the side kicking off starts with the ball, so the other team
+  // must hold its own half until it wins a touch.
+  w.possTeam = (w.kickTeam===0 || w.kickTeam===1) ? w.kickTeam : 0;
   playSfx('whistle');            // referee whistle at match start / after a reset to centre
 }
 function layTeam(list, side, halfL){
@@ -3586,6 +3636,7 @@ function step(w){
   if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
   else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
+  updatePossession(w);   // who "has" the ball → gates the half-line rule
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
@@ -3706,6 +3757,7 @@ function integrate(w, ballFrozen, playersFrozen){
         else if (p.y > halfL+M){ p.y=halfL+M; if(p.vy>0)p.vy=0; }
       }
     }
+    applyHalfLine(w, discs);
   }
 
   // Ball movement (sub-stepped so a fast ball can't tunnel walls). Runs for the
@@ -3753,6 +3805,58 @@ function clampBallInside(w, ball){
   const bot = inGoalX ?  (halfL + net - r) :  (halfL - r);
   if (b.y < top){ b.y = top; if (b.vy < 0) b.vy = -b.vy*0.3; }
   if (b.y > bot){ b.y = bot; if (b.vy > 0) b.vy = -b.vy*0.3; }
+}
+
+// ---------- Half-line rule
+// Without the ball, a team must stay in its own half; win a touch and the whole
+// side is released. Team 0 owns +y, team 1 owns -y, so "own half" is sign*y >= r.
+// Crossing the line is a hard stop, but a player caught upfield when possession
+// flips is NOT teleported home — they get a steady recall pull and lose the
+// ability to drive deeper, so control never snaps away mid-run.
+const HALF_RECALL = 0.6;         // per-step pull back toward your own half
+// Which team is currently locked out of the far half (-1 = nobody / rule inactive).
+function halfLockedTeam(w){
+  if (!w || !w.halfRule || w.drillMode || w.train) return -1;
+  if (w.state !== 'play' && w.state !== 'kickoff') return -1;
+  return w.possTeam === 0 ? 1 : 0;
+}
+function applyHalfLine(w, discs){
+  if (!w.halfRule || w.drillMode || w.train) return;
+  if (w.state !== 'play' && w.state !== 'kickoff') return;
+  for (const p of discs){
+    if (p.team !== 0 && p.team !== 1) continue;
+    if (p.team === w.possTeam){ p._offside = false; continue; }   // your side has it
+    const own = p.team === 0 ? 1 : -1;                            // own half sits at own*y > 0
+    const line = own > 0 ? p.r : -p.r;
+    const depth = own > 0 ? (line - p.y) : (p.y - line);          // >0 = inside enemy half
+    if (depth <= 0){ p._offside = false; continue; }
+    if (depth < 3){
+      p.y = line;                                                 // pinned at the line
+      if (own > 0 ? p.vy < 0 : p.vy > 0) p.vy = 0;
+      p._offside = false;
+    } else {
+      p._offside = true;                                          // caught upfield — walk home
+      if (own > 0 ? p.vy < 0 : p.vy > 0) p.vy *= 0.5;             // can't push deeper
+      p.vy += own * HALF_RECALL;
+    }
+  }
+}
+
+// ---------- Possession (drives the half-line rule)
+// Sticky "last team to touch the ball": whoever is close enough to be in contact
+// takes possession and keeps it until the other side gets a touch. Proximity-based
+// so it covers kicks, traps, magnet carries and plain bumps without threading state
+// through the collision code.
+const POSS_TOUCH = 5;            // px of slack past body contact that still counts
+function updatePossession(w){
+  if (!w.players || w.players.length < 2) return;
+  const b = w.ball;
+  let best = null, bestGap = 1e9;
+  for (const p of w.players){
+    const gap = Math.hypot(p.x - b.x, p.y - b.y) - (p.r + b.r);
+    if (gap < bestGap){ bestGap = gap; best = p; }
+  }
+  if (best && bestGap <= POSS_TOUCH) w.possTeam = best.team;
 }
 
 // Record a kick for the awards system: maintains the "who touched it last / before
@@ -4264,6 +4368,12 @@ function runBot(w, p){
   if (recompute){
     p.aiTarget.x = clamp(target.x + (rand()-0.5)*diff.err*1.4, -mW, mW);
     p.aiTarget.y = clamp(target.y + (rand()-0.5)*diff.err*1.4, -mL, mL);
+    // Half-line rule binds bots exactly like humans: with no possession, never
+    // aim past the halfway line (otherwise they'd grind against the invisible wall).
+    if (w.halfRule && !w.drillMode && !w.train && p.team !== w.possTeam){
+      if (p.team === 0) p.aiTarget.y = clamp(p.aiTarget.y, p.r + 6, mL);
+      else              p.aiTarget.y = clamp(p.aiTarget.y, -mL, -(p.r + 6));
+    }
     p.aiKick = wantKick;
   }
 
@@ -4718,8 +4828,22 @@ function drawPitch(w){
     ctx.rect(L, T, R-L, B-T);
   }
   ctx.stroke();
-  // halfway line
-  ctx.beginPath(); ctx.moveTo(L, wy(0)); ctx.lineTo(R, wy(0)); ctx.stroke();
+  // halfway line — under the half-line rule it doubles as a live gate: solid while
+  // your side may cross, hatched + tinted over the half you're locked out of.
+  const lockTeam = halfLockedTeam(w);
+  if (lockTeam >= 0){
+    const yMid = wy(0), far = lockTeam===0 ? T : B;   // the half that team can't enter
+    ctx.save();
+    ctx.fillStyle = TH.lineLock || 'rgba(255,80,80,0.10)';
+    ctx.fillRect(L, Math.min(yMid, far), R-L, Math.abs(far - yMid));
+    ctx.strokeStyle = TH.lineLock2 || 'rgba(255,120,120,0.85)';
+    ctx.lineWidth = Math.max(2.5, 4*s);
+    ctx.setLineDash([10*s, 8*s]);
+    ctx.beginPath(); ctx.moveTo(L, yMid); ctx.lineTo(R, yMid); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.beginPath(); ctx.moveTo(L, wy(0)); ctx.lineTo(R, wy(0)); ctx.stroke();
+  }
   // center circle
   ctx.beginPath(); ctx.arc(wx(0), wy(0), 75*s*0.6, 0, 2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.arc(wx(0), wy(0), 3, 0, 2*Math.PI); ctx.fillStyle=TH.centerDot; ctx.fill();
@@ -5316,7 +5440,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.5';
+const VERSION = '20260803.6';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5343,6 +5467,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
+    updatePadInfo, updatePossession, applyHalfLine, halfLockedTeam, drawGrass,
   };
 }
 })();
