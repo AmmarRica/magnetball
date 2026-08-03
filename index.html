@@ -159,6 +159,18 @@
     .opt.sel small { color: var(--cyan); }
     .opt .emoji { font-size: 18px; }
 
+    /* Career stats — tile grid of lifetime numbers */
+    .statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px,1fr)); gap: 10px; }
+    .stat {
+      background: rgba(128,128,128,.10); border: 1px solid var(--edge); border-radius: 10px;
+      padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat .sv { font-family: var(--pix); font-size: 20px; line-height: 1.1; color: var(--text); }
+    .stat .sv small { font-size: 12px; color: var(--muted); }
+    .stat .sk { font-family: var(--pix); font-size: 12px; color: var(--muted); letter-spacing:.3px; }
+    .stat.hl { border-color: var(--accent); background: rgba(33,230,255,.06); }
+    .stat.hl .sv { color: var(--accent); }
+
     /* Compact destination grid at the top of the main menu */
     .navgrid { width: 100%; max-width: 460px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 4px 0 2px; }
     .navtile {
@@ -568,6 +580,7 @@
       <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
       <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
       <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
+      <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
       <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
       <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
       <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
@@ -742,6 +755,16 @@
       <div class="opts" id="drillList"></div>
     </div>
     <button class="ghost" id="drillsBack">← Back</button>
+  </div>
+
+  <!-- ===================== CAREER STATS ===================== -->
+  <div id="stats" class="screen hidden">
+    <div class="logo"><h1 style="font-size:30px">CAREER STATS</h1><p>Everything you've done, all-time</p></div>
+    <div class="card">
+      <h2>Lifetime <small id="statsRank" style="color:var(--muted);font-weight:400"></small></h2>
+      <div class="statgrid" id="statGrid"></div>
+    </div>
+    <button class="ghost" id="statsBack" style="margin-top:8px">← Back</button>
   </div>
 
   <!-- ===================== SEASON / CUP ===================== -->
@@ -1649,7 +1672,8 @@ const RANKS = [
   { min:1850, name:'Legend',   emoji:'👑' },
 ];
 function rankFor(points){ let r=RANKS[0]; for (const t of RANKS){ if (points>=t.min) r=t; } return r; }
-function defaultStats(){ return { points:1000, played:0, wins:0, losses:0, draws:0, gf:0, ga:0, streak:0, best:0, mmr:1000, mmrPeak:1000 }; }
+function defaultStats(){ return { points:1000, played:0, wins:0, losses:0, draws:0, gf:0, ga:0, streak:0, best:0, mmr:1000, mmrPeak:1000,
+  bestWin:0, cleanSheets:0, goalsBest:0 }; }   // bestWin = biggest winning margin; goalsBest = most goals in one match
 // Elo-style skill rating updated per match against the bot tier's implied strength.
 const DIFF_RATING = { rookie:700, easy:900, normal:1100, hard:1300, pro:1500, elite:1700, insane:1900 };
 function updateMMR(w){
@@ -1681,6 +1705,10 @@ function recordResult(w){
   else { stats.draws++; stats.streak = 0; }
   stats.best = Math.max(stats.best, stats.streak);
   stats.gf += my; stats.ga += opp;
+  // Lifetime highs / tallies (backfilled to 0 for older saves; accumulate from here).
+  if (my > opp) stats.bestWin = Math.max(stats.bestWin||0, my - opp);
+  if (opp === 0) stats.cleanSheets = (stats.cleanSheets||0) + 1;
+  stats.goalsBest = Math.max(stats.goalsBest||0, my);
   updateMMR(w);
   saveStats(stats);
   renderStats();
@@ -1709,7 +1737,11 @@ function buildSwatches(){
 }
 function buildOpts(containerId, obj, key, extra){
   const wrap = $(containerId); wrap.innerHTML = '';
-  Object.keys(obj).forEach(k => {
+  let keys = Object.keys(obj);
+  // Fields are ordered by total pitch size (area = W×L), smallest → largest, so the
+  // picker reads as a size ramp instead of definition order.
+  if (key==='field') keys = keys.sort((a,b)=> (obj[a].W*obj[a].L) - (obj[b].W*obj[b].L));
+  keys.forEach(k => {
     const o = obj[k];
     const el = document.createElement('div');
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
@@ -1954,6 +1986,43 @@ function renderStats(){
 }
 renderStats();
 
+// Career stats screen — a tile grid of lifetime numbers. Derives rate/average/GD
+// from the raw counters, so older saves show sensible values immediately; the newer
+// tallies (biggest win, clean sheets, most-in-a-match) accumulate going forward.
+function buildStats(){
+  const g = $('statGrid'); if(!g) return;
+  const p = stats.played||0;
+  const gd = (stats.gf||0) - (stats.ga||0);
+  const winPct = p ? Math.round((stats.wins||0)/p*100) : 0;
+  const avgGf = p ? ((stats.gf||0)/p).toFixed(1) : '0.0';
+  const avgGa = p ? ((stats.ga||0)/p).toFixed(1) : '0.0';
+  const streakTxt = stats.streak>0 ? ('W'+stats.streak) : stats.streak<0 ? ('L'+(-stats.streak)) : '—';
+  const r = rankFor(stats.points);
+  const rk = $('statsRank'); if (rk) rk.textContent = `${r.emoji} ${r.name} · ${stats.points} RP`;
+  const tiles = [
+    {k:'Goals scored',     v: stats.gf||0, hl:true},
+    {k:'Goals conceded',   v: stats.ga||0},
+    {k:'Goal difference',  v:(gd>=0?'+':'')+gd},
+    {k:'Matches',          v: p},
+    {k:'Wins',             v: stats.wins||0},
+    {k:'Losses',           v: stats.losses||0},
+    {k:'Draws',            v: stats.draws||0},
+    {k:'Win rate',         v: winPct+'<small>%</small>'},
+    {k:'Goals / game',     v: avgGf},
+    {k:'Conceded / game',  v: avgGa},
+    {k:'Current streak',   v: streakTxt},
+    {k:'Best streak',      v:'W'+Math.max(0, stats.best||0)},
+    {k:'Biggest win',      v:'+'+(stats.bestWin||0)},
+    {k:'Most in a match',  v: stats.goalsBest||0},
+    {k:'Clean sheets',     v: stats.cleanSheets||0},
+    {k:'Drills done',      v: (typeof drillsDone==='function'?drillsDone():0)},
+    {k:'MMR',              v:(stats.mmr||1000)+`<small> · pk ${stats.mmrPeak||stats.mmr||1000}</small>`},
+    {k:'Coins',            v: (typeof shopCoins==='function'?shopCoins():0)},
+  ];
+  g.innerHTML = tiles.map(t=>`<div class="stat${t.hl?' hl':''}"><div class="sv">${t.v}</div><div class="sk">${t.k}</div></div>`).join('');
+}
+function openStats(){ dockOrFull('stats', buildStats); }
+
 // Ball-magnet slider (0..100). Applies live if a match is already running.
 const magEl = $('magnet'), magValEl = $('magVal');
 magEl.value = sel.magnet; magValEl.textContent = sel.magnet;
@@ -1999,12 +2068,14 @@ $('tutBtn').onclick = startTutorial;
 $('seasonBtn').onclick = openSeason;
 $('seasonBack').onclick = toMenu;
 $('lbBtn').onclick = openLeaderboard;
+$('statsBtn').onclick = openStats;
 $('shopBtn').onclick = openShop;
 $('socialBtn').onclick = openSocial;
 $('rogueBtn').onclick = openRogue;
 $('dailyBtn').onclick = openDailyView;
 $('dmCollect').onclick = closeDailyModal;
 $('lbBack').onclick = toMenu;
+$('statsBack').onclick = toMenu;
 $('lbRefresh').onclick = () => buildLeaderboard(true);
 $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
@@ -2026,7 +2097,7 @@ $('ovResume').onclick = () => togglePause(false);
 $('ovMenu').onclick = toMenu;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -5099,7 +5170,7 @@ if ('serviceWorker' in navigator) {
 //  only swaps the left dock — the match on the right is never disturbed.
 // ---------------------------------------------------------------------------
 const ROUTE_OF = { setup:'home', how:'how', drills:'drills',
-  season:'season', leaderboard:'leaderboard', shop:'shop', social:'social',
+  season:'season', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
   rogue:'rogue', cocktailCfg:'cocktail', padConfig:'controller' };
 const ROUTES = {
   home:        toMenu,
@@ -5108,6 +5179,7 @@ const ROUTES = {
   drills:      openDrills,
   season:      openSeason,
   leaderboard: openLeaderboard,
+  stats:       openStats,
   shop:        openShop,
   social:      openSocial,
   rogue:       openRogue,
@@ -5129,7 +5201,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.8';
+const VERSION = '20260803.1';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5151,7 +5223,7 @@ if (window.__MAGNETDEBUG) {
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
-    openShop, buildShop, shopFeatured, shopCoins,
+    openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
