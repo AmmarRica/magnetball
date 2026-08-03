@@ -8,4 +8,10 @@
 const mod = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const pkg = await import(mod);
 export const chromium = (pkg.default ?? pkg).chromium;
-export const LAUNCH = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {};
+// --allow-file-access-from-files: suites load the page over file:// and several
+// sample canvas pixels. Country-flag SVGs drawn from assets/ would otherwise taint
+// the canvas and make getImageData throw a SecurityError.
+export const LAUNCH = {
+  args: ['--allow-file-access-from-files'],
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
+};
