@@ -415,7 +415,11 @@
     #overlay {
       position: fixed; inset: 0; z-index: 15; display: none;
       align-items: center; justify-content: center; flex-direction: column; gap: 18px;
-      background: rgba(2,3,8,.9); padding: 24px;
+      /* Opaque themed backdrop (same as the menu screens) so the frozen pitch behind
+         doesn't bleed through and fight the result text/cards. Also keeps themed text
+         (var(--text) award rows) legible on the Paper theme, which a fixed dark scrim
+         would break. A faint pitch peek isn't worth the lost contrast. */
+      background: var(--bg-grad) fixed; padding: 24px;
     }
     #overlay.show { display: flex; }
     #overlay h2 {
@@ -3984,22 +3988,25 @@ function checkGoal(w){
       updateScoreUI();
       return;
     }
+    if (w.party && w.party.multi){ scoreMultiBall(w, ball, inTop ? 0 : 1); return; }
     scoreGoal(w, inTop ? 0 : 1);
     return;
   }
 }
-function scoreGoal(w, team){
-  w.score[team]++;
-  w.lastScorer = team;
-  // Awards: credit the scorer (last attacker to touch) and any recent teammate
-  // assist. An own goal (last touch by the conceding side) credits no scorer.
-  const b = w.ball;
+// Awards: credit the scorer (last attacker to touch a given ball) and any recent
+// teammate assist. An own goal (last touch by the conceding side) credits no scorer.
+function creditScorer(w, b, team){
   if (b.lastKicker && b.lastKicker.team===team && b.lastKicker.ms){
     b.lastKicker.ms.goals++;
     if (b.prevKicker && b.prevKicker!==b.lastKicker && b.prevKicker.team===team &&
         (w.matchT - (b.prevKickT||0)) < 6 && b.prevKicker.ms) b.prevKicker.ms.assists++;
   }
   b.lastKicker = null; b.prevKicker = null;   // reset chain for the next kickoff
+}
+function scoreGoal(w, team){
+  w.score[team]++;
+  w.lastScorer = team;
+  creditScorer(w, w.ball, team);
   // Track the biggest deficit each side clawed back from (Comeback King).
   const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
   if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
@@ -4017,6 +4024,46 @@ function scoreGoal(w, team){
   else if (w.goalsTarget && w.score[team] >= w.goalsTarget){ setTimeout(()=>endMatch(w), 1200); }
 }
 function ball_x(w){ return w.ball.x; } function ball_y(w){ return w.ball.y; }
+
+// Multiball scoring: a potted ball is removed and counts as one goal, and the
+// match keeps playing (no kickoff freeze). Each ball a team pots is a goal, so
+// "first to 3" means potting 3 balls. When the last ball on the pitch is potted
+// without reaching the target, a fresh ball is served at centre to continue.
+function scoreMultiBall(w, ball, team){
+  w.score[team]++;
+  w.lastScorer = team;
+  creditScorer(w, ball, team);
+  const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
+  if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
+  if (d1 > w.maxDeficit[1]) w.maxDeficit[1] = d1;
+  updateScoreUI();
+  playSfx('crowd');
+  showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
+  for (let i=0;i<(sel.juice?24:14);i++) spawnConfetti(ball.x, ball.y);
+  if (sel.juice){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }  // light burst, no hit-stop so play flows
+
+  // Winning goal → freeze into the result, same as a normal match end.
+  if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
+    w.kickTeam = team===0 ? 1 : 0;
+    w.state='goal'; w.stateT=0;
+    repOnGoal(w);
+    setTimeout(()=>endMatch(w), 1200);
+    return;
+  }
+  // Otherwise remove the potted ball and keep the match live.
+  if (ball === w.ball){
+    if (w.extraBalls && w.extraBalls.length){
+      w.ball = w.extraBalls.pop();     // promote a remaining ball to primary (keeps its position)
+    } else {
+      // that was the last ball in play → serve a fresh one at centre
+      ball.x=0; ball.y=0; ball.vx=0; ball.vy=0; ball.sqT=0; ball.spin=0;
+      ball.lastKicker=null; ball.prevKicker=null;
+    }
+  } else if (w.extraBalls){
+    const i = w.extraBalls.indexOf(ball);
+    if (i>=0) w.extraBalls.splice(i,1);
+  }
+}
 
 function endMatch(w){
   if (w.state==='over') return;
@@ -5201,7 +5248,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.1';
+const VERSION = '20260803.2';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5217,7 +5264,7 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
-    addShake, goalBurst, scoreGoal,
+    addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,

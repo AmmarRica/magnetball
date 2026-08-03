@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.8** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -17,6 +17,17 @@ _Current build: **v20260802.8** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Multi-ball reworked to continuous scoring** — a potted ball now disappears and counts as one
+  goal, and the match keeps playing (no kickoff freeze). "First to 3" = pot 3 balls; when all balls
+  on the pitch are used up without a winner (e.g. 2-1), a fresh ball serves at centre. Reaching the
+  target still freezes into the result. `scoreMultiBall` + `creditScorer`; verified end-to-end.
+- [x] **Post-match overlay contrast** — the result screen used a semi-transparent scrim, so the frozen
+  pitch bled through and (worse) a fixed dark scrim broke the Paper theme's dark award/button text.
+  It now uses the opaque themed backdrop (`var(--bg-grad)`), same as the menus — legible on every theme.
+- [x] **Career Stats screen** — 📈 nav tile / `#/stats`: an 18-tile grid of lifetime numbers (goals
+  scored/conceded, GD, matches, W/L/D, win rate, per-game averages, streaks, biggest win, most in a
+  match, clean sheets, drills, MMR, coins, rank). New tallies `bestWin`/`cleanSheets`/`goalsBest`.
+- [x] **Field picker ordered by size** — tiles now sort by total pitch area (W×L), smallest → largest.
 - [x] **Bots mirror your customization** — every bot (both teams) now takes your colour, cap, flag
   and eyes instead of random ones, so the whole pitch reflects your look. Applies in all modes incl.
   1v1 (the opponent matches you). Teams stay readable via the existing team-colour ring (red vs blue,
