@@ -224,6 +224,8 @@
     body.panel #dockToggle, body.panel #deckHint, body.panel #tutTip,
     body.panel #resetBtn { display: none !important; }
     body.panel #setup { position: static; min-height: 100vh; }
+    /* Deck/cocktail dock the menu beside the pitch. There is no pitch here. */
+    body.panel #setup.docked { position: static; width: auto; max-width: none; left: auto; }
     body.panel #setup .navgrid, body.panel #setup #recordCard,
     body.panel #setup #playBtn, body.panel #setup .footlink { display: none; }
     /* Detached: the game page keeps the game and hands the settings to the other tab. */
@@ -1769,7 +1771,8 @@ const Aud = (function(){
     if(bt){ const f=AC.createBiquadFilter(); f.type=bt; f.frequency.value=o.bp||o.hp||o.lp; if(o.Q)f.Q.value=o.Q; src.connect(f); last=f; }
     last.connect(g); g.connect(master); src.start(t); src.stop(t+dur+0.03);
   }
-  return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; } };
+  return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; },
+           gain:()=>master?master.gain.value:null };
 })();
 
 // So prompts can say "press a button" instead of "tap" at a desk.
@@ -1908,7 +1911,12 @@ let syncing = false;          // true while adopting — stops an adopt echoing 
 let syncPeer = 0;             // timestamp of the last message from the other side
 let syncDirty = false, syncRaf = 0;
 function syncPost(msg){ if (!bc) return; try { msg.id = SYNC_ID; msg.panel = PANEL; bc.postMessage(msg); } catch(_){} }
-function syncPush(){ if (syncing) return; syncPost({ t:'state', sel, profile }); }
+// Window-local, deliberately NOT shared: whether THIS window's dock is collapsed
+// says nothing about the other one, and syncing it collapsed the game's menu
+// whenever the panel loaded with a different value.
+const SYNC_SKIP = ['dockCollapsed', 'deskDock'];
+function syncState(){ const o = {}; for (const k in sel) if (!SYNC_SKIP.includes(k)) o[k] = sel[k]; return o; }
+function syncPush(){ if (syncing) return; syncPost({ t:'state', sel: syncState(), profile }); }
 function syncPeerLive(){ return syncPeer && (Date.now() - syncPeer) < 4000; }
 // Applying is synchronous — a background tab gets its rAF throttled to about 1Hz,
 // so anything deferred to a frame is NOT instant over there. Only the expensive DOM
@@ -1946,8 +1954,16 @@ if (bc){
   bc.onmessage = (e) => {
     const m = e.data;
     if (!m || m.id === SYNC_ID) return;
+    const wasLive = syncPeerLive();
     syncPeer = Date.now();
-    if (m.t === 'hello'){ if (!PANEL) syncPush(); return; }   // the game answers with a snapshot
+    if (m.t === 'hello'){
+      if (!PANEL){
+        if (!wasLive) syncPush();                 // first contact: full state
+        syncPost({ t:'tel', rows: telemetryRows() });   // every time: proof of life + readout
+      }
+      return;
+    }
+    if (m.t === 'pong') return;                   // liveness only
     if (m.t === 'state'){ syncAdopt(m); return; }
     if (m.t === 'tel'){ if (PANEL) renderTelemetry(m); return; }
   };
@@ -2456,7 +2472,10 @@ magEl.oninput = () => {
 
 updatePreview();
 updatePadInfo();
-checkDailyLogin();   // grant + show today's reward on the first visit each day
+// The daily reward belongs to the game window. On /settings its full-screen modal
+// (z-index 40) covered the page and ate every click, and nothing ever closed it —
+// the game only clears it when a match starts, and the panel never starts one.
+if (!PANEL) checkDailyLogin();   // grant + show today's reward on the first visit each day
 
 // Reflect connected gamepads on the setup screen.
 function connectedGamepadIndices(){
@@ -2917,7 +2936,7 @@ function applyDisplayMode(){
   if (world) applySeatRotation(world.players);   // keep live controls aligned to the new view
   // Entering deck: bring the menu in on the left so Select has something to toggle.
   // Deferred — this also runs during boot, before the dock machinery is wired up.
-  if (isDeck()) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
+  if (isDeck() && !PANEL) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
   else { if (world) resize(); setTimeout(deckFocusReset, 0); }
 }
 function openCocktailCfg(){ dockOrFull('cocktailCfg', buildCocktailRows); }
@@ -5931,12 +5950,6 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     }
   }
 }
-function roundRectFill(x,y,ww,hh,r){
-  ctx.beginPath(); ctx.moveTo(x+r,y);
-  ctx.arcTo(x+ww,y,x+ww,y+hh,r); ctx.arcTo(x+ww,y+hh,x,y+hh,r);
-  ctx.arcTo(x,y+hh,x,y,r); ctx.arcTo(x,y,x+ww,y,r); ctx.fill();
-}
-
 // ---------- Motion tells (VIDEOBALL) ----------------------------------------
 // Two different shapes on purpose: dots for players, one line for the ball.
 let ballTrail = [];
@@ -6417,7 +6430,6 @@ function toMenu(){
 }
 
 // Also set clock initial
-function initClockDisplay(){ if(world) updateClock(world); }
 
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize,120));
@@ -6470,9 +6482,13 @@ if (PANEL){
   // state. localStorage already seeded us, so the panel is never blank — the
   // snapshot just replaces a possibly stale read with what the game is really on.
   hideScreens();
+  closeDailyModal();                       // belt and braces: nothing may cover the panel
   $('setup').classList.remove('hidden');
   buildSettings(); buildMatchOpts(); refreshPitchTiles(); updatePreview();
   syncPost({ t:'hello' });
+  // Heartbeat: without it the panel goes quiet after a few seconds and claims the
+  // game tab is gone, because nothing else travels while you're not changing things.
+  setInterval(()=>syncPost({ t:'hello' }), 2000);
   setInterval(()=>{ const st=$('panelState');
     if (st) st.textContent = syncPeerLive() ? 'connected' : 'waiting for the game…';
     if (!syncPeerLive()){ const tl=$('panelTel'); if (tl) tl.textContent='no game page connected'; }
@@ -6485,7 +6501,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.1112PM';
+const VERSION = '20260803.1148PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6524,7 +6540,8 @@ if (window.__MAGNETDEBUG) {
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
-    teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer,
+    teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
+    Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
