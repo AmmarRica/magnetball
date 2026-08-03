@@ -51,6 +51,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `trapwindow` | Trap window slider changes how long the ball actually sticks, applies live, survives reset/presets/drills, and one-touch ignores it |
 | `onehand` | One-handed mode: releasing the stick shoots (never traps), holding doesn't, jitter doesn't, cooldown caps the rate, KICK still works |
 | `audit` | Every setting is **reachable** (a real control writes it) and **effective** (it moves world state or pixels); every nav tile, drill and mode runs |
+| `surfaces` | Ice and mud are visibly distinct and textured (not a flat tint), mud wears where the traffic is, deterministic, cache invalidates, tiles differ, grip unchanged, every field safe |
 | `panel` | `/settings` route: same cards as inline, no game, snapshot on open, two-way live sync, telemetry, detached/inline, cross-tab match control |
 | `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
 | `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; menu keys and other layouts unaffected |

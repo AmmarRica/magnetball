@@ -72,15 +72,14 @@ const r = await p.evaluate(async ()=>{
   for (const [key, a, bb] of [['theme','neon','light'], ['grass','stripes','rings'],
                               ['field','classic','huge'], ['ball','normal','big'],
                               ['pitch','normal','ice']]){
-    // 'pitch' is expected to fail the visual check — reported separately below.
     M.sel[key]=a; if(key==='theme') M.applyTheme(a); if(key==='field'||key==='ball'||key==='pitch') freshMatch();
     const p1=paint();
     M.sel[key]=bb; if(key==='theme') M.applyTheme(bb); if(key==='field'||key==='ball'||key==='pitch') freshMatch();
     const p2=paint();
-    if (key==='pitch'){ out.pitchLooksIdentical = (p1===p2); } else note('visual: '+key, p1!==p2);
+    note('visual: '+key, p1!==p2);
   }
-  // Pitch surface is grip-only by design; check it moves the physics instead, and
-  // record that it is invisible rather than calling it broken.
+  // Pitch surface has to move BOTH: grip and look. It used to be grip only, so all
+  // three surfaces were pixel-identical and you couldn't tell what you were on.
   M.sel.pitch='normal'; const gN=freshMatch().pAccel;
   M.sel.pitch='ice';    const gI=freshMatch().pAccel;
   M.sel.pitch='mud';    const gM=freshMatch().pAccel;

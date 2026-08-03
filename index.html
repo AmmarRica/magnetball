@@ -238,8 +238,8 @@
     #panelLink { color: var(--accent); }
 
     /* Mow patterns are fine bands — they need more pixels than a flag tile to read. */
-    #grass { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
-    #grass .opt canvas { width: 66px; height: 66px; }
+    #grass, #pitches { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+    #grass .opt canvas, #pitches .opt canvas { width: 66px; height: 66px; }
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
@@ -758,7 +758,8 @@
       <div class="opts" id="balls"></div>
       <div style="height:14px"></div>
       <label class="field">Pitch surface</label>
-      <div class="opts" id="pitches"></div>
+      <div class="opts tilewrap" id="pitches"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Ice slides and takes a long time to stop. Mud grips badly and kills the roll.</div>
       <div style="height:14px"></div>
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
       <div class="opts tilewrap" id="grass"></div>
@@ -2087,13 +2088,16 @@ function buildOpts(containerId, obj, key, extra){
     const el = document.createElement('div');
     el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
     let sub = extra ? extra(o) : '';
-    if (key==='field' || key==='grass'){
-      // Both draw a mini pitch: the field tiles vary the shape at your mow style,
-      // the grass tiles vary the mow on the court you picked.
+    if (key==='field' || key==='grass' || key==='pitch'){
+      // All three draw a mini pitch: field tiles vary the shape, grass tiles vary
+      // the mow, surface tiles vary what you're playing ON. Ice and mud used to be
+      // emoji next to a pitch that looked identical on all three.
       const N=128;                                  // drawn at 2× the display size so the bands stay crisp
       const cv=document.createElement('canvas'); cv.width=cv.height=N;
-      drawFieldPreview(cv.getContext('2d'), key==='grass' ? (FIELDS[sel.field]||FIELDS.classic) : o, N, N,
-                       key==='grass' ? k : sel.grass, key==='grass');
+      const F = key==='field' ? o : (FIELDS[sel.field]||FIELDS.classic);
+      drawFieldPreview(cv.getContext('2d'), F, N, N,
+                       key==='grass' ? k : sel.grass, key!=='field',
+                       key==='pitch' ? k : sel.pitch);
       el.appendChild(cv);
       const nm=document.createElement('span'); nm.textContent=o.name; el.appendChild(nm);
       if(sub){ const sm=document.createElement('small'); sm.innerHTML=sub; el.appendChild(sm); }
@@ -2106,8 +2110,7 @@ function buildOpts(containerId, obj, key, extra){
       buildOpts(containerId, obj, key, extra);
       // Field and grass tiles each draw the other's choice, so a pick in one
       // has to restyle the other or the previews go stale.
-      if (key==='field') buildOpts('grass', GRASS, 'grass');
-      if (key==='grass') buildOpts('fields', FIELDS, 'field');
+      if (key==='field' || key==='grass' || key==='pitch') refreshPitchTiles();
       updatePreview();
       if (key==='controllers' || key==='mode' || key==='coop') updatePadInfo();
     };
@@ -2162,7 +2165,7 @@ function boostStripe(a, b){
 // `grass` overrides the mow pattern and `bare` drops the net headroom (goal mouths
 // become bars on the goal line) — that's how the Grass cut tiles show each pattern
 // on the court you actually picked, big enough for the bands to read.
-function drawFieldPreview(c, F, cw, ch, grass, bare){
+function drawFieldPreview(c, F, cw, ch, grass, bare, surface){
   const T = (typeof TH!=='undefined' && TH) ? TH : {};
   const line=T.line||'#bcd3ff',
         red=T.teamRed||'#ff3b6b', blue=T.teamBlue||'#4d7bff', dot=T.centerDot||'#bcd3ff',
@@ -2185,7 +2188,9 @@ function drawFieldPreview(c, F, cw, ch, grass, bare){
   // pitch fill + the real mow pattern, clipped to the boundary shape. Rings need a
   // smaller floor than the pitch uses, or a tile this size fits barely one band.
   c.save(); path(); c.clip();
-  paintGrass(c, grass || sel.grass || 'stripes', L, Tp, R-L, B-Tp, 2*k, boostStripe(T.stripeA, T.stripeB));
+  const surf = surface || sel.pitch || 'normal';
+  if (surf === 'normal') paintGrass(c, grass || sel.grass || 'stripes', L, Tp, R-L, B-Tp, 2*k, boostStripe(T.stripeA, T.stripeB));
+  else paintSurface(c, surf, grass || sel.grass, L, Tp, R-L, B-Tp, 20260803);
   c.restore();
   if (!bare){
     c.fillStyle=pocket;
@@ -2336,8 +2341,9 @@ const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical'
 // Both tile sets paint with the live TH palette, so a theme switch has to redraw
 // them or the pitches keep the old colours.
 function refreshPitchTiles(){
-  if ($('fields')) buildOpts('fields', FIELDS, 'field');
-  if ($('grass'))  buildOpts('grass', GRASS, 'grass');
+  if ($('fields'))   buildOpts('fields', FIELDS, 'field');
+  if ($('grass'))    buildOpts('grass', GRASS, 'grass');
+  if ($('pitches'))  buildOpts('pitches', PITCH, 'pitch');
 }
 // One place that builds every Match/Controls picker, so the other window can be
 // brought fully up to date after a sync without listing them all again.
@@ -5766,10 +5772,221 @@ function paintGrass(c, style, L, T, W, H, minRing, aCol){
     const N=12; for (let i=1;i<N;i+=2){ const y0=T+(i/N)*H; c.fillRect(L, y0, W, H/N + 1); }
   }
 }
+
+// ---------- Pitch surfaces ---------------------------------------------------
+// Grass gets mown. Ice gets resurfaced and then cut up by skates. Mud gets churned
+// by the people running on it — worst down the middle and in front of the goals,
+// with grass surviving out near the touchlines where nobody goes.
+//
+// All of it is deterministic (a seeded LCG, never Math.random) and baked once into
+// an offscreen canvas, so the per-frame cost is one drawImage and the pitch doesn't
+// re-scuff itself sixty times a second.
+function hexRgb(h){ let c=(h||'').trim(); if(c[0]!=='#') return null;
+  if(c.length===4) c='#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+  const n=parseInt(c.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function mixCol(a, b, t){
+  const A=hexRgb(a)||[40,60,50], B=hexRgb(b)||[40,60,50];
+  return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')})`;
+}
+function shade(col, t){ const c=hexRgb(col)||[40,60,50];
+  const to = t>0?255:0, k=Math.abs(t);
+  return `rgb(${c.map(v=>Math.round(v+(to-v)*k)).join(',')})`; }
+function lcg(seed){ let s=(seed>>>0)||1; return ()=> (s=(s*1664525+1013904223)>>>0)/4294967296; }
+
+// Ice: a rink. Resurfacer passes, a broad sheen, and skate cuts that bunch up
+// where the play is — the centre and both goal mouths.
+function paintIce(c, L, T, W, H, seed){
+  const rnd = lcg(seed);
+  const base = mixCol(TH.court || '#1c3a26', '#8fd0ef', 0.72);
+  const deep = mixCol(TH.court || '#1c3a26', '#4f93bb', 0.72);
+  const g = c.createLinearGradient(L, T, L, T+H);
+  g.addColorStop(0, deep); g.addColorStop(0.45, base); g.addColorStop(1, deep);
+  c.fillStyle = g; c.fillRect(L, T, W, H);
+
+  // Resurfacer passes: long shallow arcs across the rink, alternating tone.
+  c.save(); c.beginPath(); c.rect(L,T,W,H); c.clip();
+  const passes = 9, ph = H/passes;
+  for (let i=0;i<passes;i++){
+    c.beginPath();
+    const y = T + i*ph;
+    c.moveTo(L, y);
+    c.bezierCurveTo(L+W*0.33, y+ph*0.55, L+W*0.66, y-ph*0.35, L+W, y+ph*0.15);
+    c.lineTo(L+W, y+ph); c.lineTo(L, y+ph); c.closePath();
+    c.fillStyle = i%2 ? 'rgba(255,255,255,0.05)' : 'rgba(10,60,90,0.05)';
+    c.fill();
+  }
+  // Sheen: one broad diagonal highlight, the wet look off overhead lights.
+  const sg = c.createLinearGradient(L, T, L+W, T+H);
+  sg.addColorStop(0, 'rgba(255,255,255,0)');
+  sg.addColorStop(0.42, 'rgba(255,255,255,0.11)');
+  sg.addColorStop(0.58, 'rgba(255,255,255,0.11)');
+  sg.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = sg; c.fillRect(L, T, W, H);
+
+  // Rink markings, kept faint so the pitch's own lines stay the ones you read:
+  // two blue lines at the thirds and a crease at each goal mouth.
+  c.strokeStyle = 'rgba(70,150,220,0.30)'; c.lineWidth = Math.max(1.5, H*0.006);
+  for (const f of [1/3, 2/3]){
+    c.beginPath(); c.moveTo(L, T+H*f); c.lineTo(L+W, T+H*f); c.stroke();
+  }
+  for (const end of [0, 1]){
+    const y = T + H*end, dir = end ? -1 : 1, cr = W*0.17;
+    c.beginPath(); c.moveTo(L+W/2 - cr, y);
+    c.arc(L+W/2, y, cr, end ? Math.PI : 0, end ? 2*Math.PI : Math.PI);
+    c.closePath();
+    c.fillStyle = 'rgba(90,175,235,0.16)'; c.fill();
+    c.strokeStyle = 'rgba(120,200,245,0.34)'; c.lineWidth = Math.max(1.2, H*0.004); c.stroke();
+  }
+
+  // Skate cuts: short curved scratches, denser where the traffic is.
+  const cx = L+W/2, cy = T+H/2;
+  c.lineCap = 'round';
+  for (let i=0;i<260;i++){
+    const hit = pickWorn(rnd, W, H, 6); if (!hit) continue;
+    const x = L + hit.x, y = T + hit.y;
+    const len = 6 + rnd()*26, a = rnd()*Math.PI, bow = (rnd()-0.5)*0.9;
+    c.beginPath();
+    c.moveTo(x, y);
+    c.quadraticCurveTo(x + Math.cos(a)*len*0.5 - Math.sin(a)*len*bow*0.5,
+                       y + Math.sin(a)*len*0.5 + Math.cos(a)*len*bow*0.5,
+                       x + Math.cos(a)*len, y + Math.sin(a)*len);
+    c.strokeStyle = rnd() < 0.72 ? 'rgba(255,255,255,0.20)' : 'rgba(200,235,250,0.34)';
+    c.lineWidth = 0.7 + rnd()*1.5;
+    c.stroke();
+  }
+  c.restore();
+}
+
+// How beaten-up a spot should be, 0..1, from normalised pitch coords (-1..1).
+// Peaks at the centre spot and in both goal mouths — where everyone runs.
+function traffic(nx, ny){
+  const mid  = Math.exp(-(nx*nx*2.6 + ny*ny*1.5));          // centre circle
+  const band = Math.exp(-(ny*ny*7.0)) * 0.45;               // halfway band
+  const goal = Math.exp(-(nx*nx*3.4 + (Math.abs(ny)-0.90)**2*30)) * 1.15;  // both mouths
+  return Math.min(1, 0.04 + mid*0.85 + band + goal);        // corners stay green
+}
+// Rejection sampling that actually rejects: the obvious `while (tries++ < N && …)`
+// keeps its last attempt when every try fails, which spreads wear evenly over the
+// whole pitch — exactly the thing the weighting exists to prevent.
+function pickWorn(rnd, w, h, tries){
+  for (let i=0;i<(tries||14);i++){
+    const x = rnd()*w, y = rnd()*h;
+    const t = traffic((x/w)*2-1, (y/h)*2-1);
+    if (rnd() <= t) return { x, y, t };
+  }
+  return null;
+}
+
+// Mud: winter pitch, second half. Grass survives at the edges, the middle is bare
+// churned earth, and there are studs, drag marks and standing water.
+//
+// The bare ground is built as a MASK first — blobs drawn at full alpha merge into
+// one continuous region with a ragged edge. Stacking translucent ellipses straight
+// onto the pitch (the obvious way) reads as soap bubbles, because you see every
+// blob's own edge falloff.
+function paintMud(c, L, T, W, H, seed, mow){
+  const rnd = lcg(seed);
+  const w2 = Math.max(2, Math.round(W)), h2 = Math.max(2, Math.round(H));
+  const mk = (op) => { const cv=document.createElement('canvas'); cv.width=w2; cv.height=h2;
+    const x=cv.getContext('2d'); if(op) op(x); return cv; };
+
+  // Grass underneath, so what survives at the edges is the real mow pattern.
+  paintGrass(c, mow || 'stripes', L, T, W, H);
+
+  // 1. Coverage mask: where has the turf actually gone?
+  const mask = mk(x => {
+    x.fillStyle = '#fff';
+    for (let i=0;i<300;i++){
+      const hit = pickWorn(rnd, w2, h2); if (!hit) continue;
+      const px = hit.x, py = hit.y, t = hit.t;
+      const r = (w2*0.015 + rnd()*w2*0.055) * (0.5 + t);
+      x.beginPath();
+      x.ellipse(px, py, r, r*(0.5+rnd()*0.6), rnd()*Math.PI, 0, 2*Math.PI);
+      x.fill();
+    }
+  });
+
+  // 2. The earth itself, painted flat and then cut to the mask.
+  const earth = mk(x => {
+    const g = x.createLinearGradient(0,0,0,h2);
+    g.addColorStop(0,'#4a3726'); g.addColorStop(0.5,'#5f4830'); g.addColorStop(1,'#43331f');
+    x.fillStyle = g; x.fillRect(0,0,w2,h2);
+    // Depth: broad tonal variation, clipped to the mud so it can't read as bubbles.
+    for (let i=0;i<26;i++){
+      const px=rnd()*w2, py=rnd()*h2, r=w2*(0.06+rnd()*0.22);
+      const rg = x.createRadialGradient(px,py,0,px,py,r);
+      const dark = rnd()<0.5;
+      rg.addColorStop(0, dark?'rgba(34,24,15,0.55)':'rgba(132,105,74,0.45)');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = rg; x.beginPath(); x.arc(px,py,r,0,7); x.fill();
+    }
+    // Drag marks — where a boot slid and took the turf with it.
+    x.lineCap='round';
+    for (let i=0;i<140;i++){
+      const hit = pickWorn(rnd, w2, h2, 4); if (!hit) continue;
+      const px = hit.x, py = hit.y;
+      const a=rnd()*Math.PI*2, len=w2*(0.02+rnd()*0.07);
+      x.beginPath(); x.moveTo(px,py);
+      x.quadraticCurveTo(px+Math.cos(a)*len*0.6+(rnd()-0.5)*len*0.5,
+                         py+Math.sin(a)*len*0.6+(rnd()-0.5)*len*0.5,
+                         px+Math.cos(a)*len, py+Math.sin(a)*len);
+      x.strokeStyle = rnd()<0.5 ? 'rgba(28,19,11,0.5)' : 'rgba(150,124,90,0.35)';
+      x.lineWidth = Math.max(1, w2*0.002 + rnd()*w2*0.006); x.stroke();
+    }
+    // Studs and thrown clods.
+    for (let i=0;i<800;i++){
+      const hit = pickWorn(rnd, w2, h2, 3); if (!hit) continue;
+      const px = hit.x, py = hit.y;
+      x.beginPath(); x.arc(px, py, Math.max(0.5, w2*0.0009 + rnd()*w2*0.003), 0, 7);
+      x.fillStyle = rnd()<0.55 ? 'rgba(26,17,10,0.5)' : 'rgba(168,141,102,0.4)';
+      x.fill();
+    }
+    // Standing water: darkest, with a lit rim so it reads as a surface, not a hole.
+    for (let i=0;i<6;i++){
+      const px=w2/2+(rnd()-0.5)*w2*0.7, py=h2/2+(rnd()-0.5)*h2*0.85;
+      const rx=w2*(0.03+rnd()*0.07), ry=rx*(0.4+rnd()*0.4), a=rnd()*Math.PI;
+      x.beginPath(); x.ellipse(px,py,rx,ry,a,0,2*Math.PI);
+      x.fillStyle='rgba(22,26,28,0.55)'; x.fill();
+      x.beginPath(); x.ellipse(px,py,rx,ry,a,Math.PI*0.95,Math.PI*1.95);
+      x.strokeStyle='rgba(198,214,220,0.28)'; x.lineWidth=Math.max(1,w2*0.0025); x.stroke();
+    }
+    x.globalCompositeOperation = 'destination-in';       // cut the earth to the mask
+    x.drawImage(mask, 0, 0);
+  });
+
+  c.save(); c.beginPath(); c.rect(L,T,W,H); c.clip();
+  c.drawImage(earth, L, T, W, H);
+  // Everything is damp, but the turf less so than the bare ground.
+  c.fillStyle = 'rgba(46,38,26,0.18)'; c.fillRect(L, T, W, H);
+  c.restore();
+}
+
+// Paint whichever surface is selected into an arbitrary rect (pitch or picker tile).
+function paintSurface(c, surface, mow, L, T, W, H, seed){
+  if (surface === 'ice') paintIce(c, L, T, W, H, seed||1);
+  else if (surface === 'mud') paintMud(c, L, T, W, H, seed||1, mow);
+  else paintGrass(c, mow || 'stripes', L, T, W, H);
+}
+
+// Bake at a fixed resolution in field proportions, so zooming the camera doesn't
+// invalidate the cache — only a change of surface, mow, theme or field shape does.
+let surfCache = { key:'', cv:null };
+function surfaceTexture(w){
+  const F = w.field;
+  const key = [sel.pitch, sel.grass, sel.theme, F.W, F.L].join('|');
+  if (surfCache.key === key && surfCache.cv) return surfCache.cv;
+  const long = 700, px = Math.max(F.W, F.L);
+  const cw2 = Math.max(64, Math.round(long * F.W / px)), ch2 = Math.max(64, Math.round(long * F.L / px));
+  const cv2 = document.createElement('canvas'); cv2.width = cw2; cv2.height = ch2;
+  paintSurface(cv2.getContext('2d'), sel.pitch, sel.grass, 0, 0, cw2, ch2, 20260803);
+  surfCache = { key, cv: cv2 };
+  return cv2;
+}
 function drawGrass(w, L, R, T, B){
   ctx.save();
   ctx.beginPath(); ctx.rect(L, T, R-L, B-T); ctx.clip();
-  paintGrass(ctx, sel.grass || 'stripes', L, T, R-L, B-T);
+  if (sel.pitch === 'ice' || sel.pitch === 'mud') ctx.drawImage(surfaceTexture(w), L, T, R-L, B-T);
+  else paintGrass(ctx, sel.grass || 'stripes', L, T, R-L, B-T);
   ctx.restore();
 }
 function roundRectPath(x,y,ww,hh,r){
@@ -6501,7 +6718,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.1148PM';
+const VERSION = '20260804.1236AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {

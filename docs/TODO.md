@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.1148PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.1236AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -38,11 +38,18 @@ each was shipped at some point and each is a class of mistake worth watching for
 
 ## 🔍 From the full review — open
 
-- [ ] **Pitch surface is invisible** — Grass / Ice / Mud genuinely change grip
-  (`pAccel` 0.40 / 0.26 / 0.34, verified) but the court is **pixel-identical** on all three, so a
-  player has no way to tell which surface they're on until they move. Either tint the court per
-  surface or say so in the picker. *(This is the one audited feature that affects the game but
-  not its visuals — left as a design call rather than changing the look unasked.)*
+- [x] **Pitch surface is invisible** — fixed. Grass / Ice / Mud changed grip
+  (`pAccel` 0.40 / 0.26 / 0.34) but the court was **pixel-identical** on all three. Each surface
+  is now drawn properly, not tinted:
+  **Ice** is a rink — resurfacer passes, a broad overhead sheen, faint blue lines at the thirds,
+  a crease at each goal mouth, and skate cuts that bunch up in the traffic.
+  **Mud** is a winter pitch at full time — bare churned earth down the middle and in both goal
+  mouths, turf surviving out by the touchlines (still showing your mow), drag marks, stud marks
+  and standing water with a lit rim.
+  Both are deterministic (a seeded LCG, never `Math.random`) and baked once into an offscreen
+  canvas keyed on surface/mow/theme/field, so the per-frame cost is one `drawImage` and the pitch
+  doesn't re-scuff itself sixty times a second. The **Pitch surface picker now draws tiles** like
+  Field and Grass cut. Covered by `tests/surfaces.mjs`.
 - [ ] **Three ids exist in markup that nothing reads** — `rankLine` (a layout wrapper, fine),
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
