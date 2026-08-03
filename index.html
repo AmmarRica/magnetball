@@ -339,6 +339,39 @@
     }
     #dockToggle { display: none; }
 
+    /* ---------- Unlocked customizations summary (top of Your Player) ---------- */
+    #unlockedBox { margin: 2px 0 0; }
+    .unlHead { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+    .unlHead small { font-family: var(--pix); font-size: 10px; color: var(--muted); }
+    .unlBar {
+      height: 6px; border-radius: 999px; margin: 6px 0 8px;
+      background: rgba(128,128,128,.22); overflow: hidden;
+    }
+    .unlBar > i { display:block; height:100%; width:0;
+      background: var(--accent); border-radius: 999px; transition: width .35s ease; }
+    .unlChips { display:flex; flex-wrap:wrap; gap:6px; }
+    .unlChip {
+      font-family: var(--pix); font-size: 9px; line-height:1;
+      padding: 5px 8px; border-radius: 999px;
+      border: 1px solid var(--edge); background: rgba(128,128,128,.10); color: var(--text);
+    }
+    .unlChip b { color: var(--accent); font-weight: 700; }
+    /* One horizontally-scrolling row so a big collection never pushes the rest of
+       the card off screen. */
+    .unlStrip {
+      display:flex; gap:6px; margin-top:8px; padding-bottom:4px;
+      overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+    }
+    .unlStrip:empty { display:none; }
+    .unlItem {
+      flex: 0 0 auto; width:44px; height:44px; border-radius:10px; cursor:pointer;
+      border:1px solid var(--edge); background: rgba(128,128,128,.10);
+      display:flex; align-items:center; justify-content:center; position:relative;
+    }
+    .unlItem canvas { width:34px; height:34px; image-rendering:auto; }
+    .unlItem .capGlyph { font-size:17px; line-height:1; }
+    .unlItem.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+
     /* A picker option whose backing art isn't shipped — visibly unavailable
        rather than a switch that silently does nothing. */
     .opt.disabled { opacity: .45; cursor: not-allowed; }
@@ -704,6 +737,14 @@
 
     <div class="card collapsible collapsed" data-sec="player">
       <h2><span style="display:inline-flex;align-items:center;gap:9px"><span>Your Player</span><canvas id="pvMini" width="52" height="52" style="width:26px;height:26px;image-rendering:auto"></canvas></span></h2>
+      <div id="unlockedBox">
+        <div class="unlHead"><span class="field" style="margin:0">Unlocked</span><small id="unlTotal"></small></div>
+        <div class="unlBar"><i id="unlFill"></i></div>
+        <div class="unlChips" id="unlChips"></div>
+        <div class="unlStrip" id="unlStrip"></div>
+        <div class="hint" style="text-align:left;margin-top:2px">Everything you've earned so far — tap any to wear it.</div>
+      </div>
+      <div style="height:14px"></div>
       <label class="field" for="pname">Name</label>
       <input id="pname" type="text" maxlength="12" placeholder="Enter a name" autocomplete="off" />
       <div style="height:14px"></div>
@@ -1946,6 +1987,7 @@ function drawFieldPreview(c, F, cw, ch){
   goal(-1, blue); goal(1, red);
 }
 function updatePreview(){
+  buildUnlocked();          // keep the top summary in step with what's worn/earned
   $('pvName').textContent = profile.name || 'Player';
   const cvs = $('pvCanvas');
   if (cvs){ const c=cvs.getContext('2d'); c.clearRect(0,0,cvs.width,cvs.height);
@@ -1979,6 +2021,66 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
       saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); };
     wrap.appendChild(el);
   });
+}
+// ---- Unlocked summary, pinned to the top of Your Player.
+// The pickers below list everything including locks, which makes "what do I
+// actually own?" a scrolling exercise. This shows only what's earned: overall
+// progress, a per-category count, and a strip of the items themselves — tap one
+// to wear it. Categories share the model the pickers use, so nothing drifts.
+const UNL_CATS = [
+  { cat:'cap',    label:'Caps',         keys:()=>Object.keys(CAPS) },
+  { cat:'flag',   label:'Countryballs', keys:()=>FLAG_KEYS },
+  { cat:'animal', label:'Animals',      keys:()=>ANIMAL_KEYS },
+  { cat:'eyes',   label:'Eyes',         keys:()=>EYE_KEYS },
+];
+function buildUnlocked(){
+  const chips=$('unlChips'), strip=$('unlStrip'), tot=$('unlTotal'), fill=$('unlFill');
+  if (!chips || !strip) return;
+  chips.innerHTML=''; strip.innerHTML='';
+  let have=0, total=0;
+  for (const c of UNL_CATS){
+    const keys = c.keys();
+    const mine = keys.filter(k => isUnlocked(c.cat, k));
+    have += mine.length; total += keys.length;
+    const chip=document.createElement('span');
+    chip.className='unlChip';
+    chip.innerHTML=`${c.label} <b>${mine.length}</b>/${keys.length}`;
+    chips.appendChild(chip);
+
+    for (const k of mine){
+      // 'none' is the empty default in three of the four categories — it's not a
+      // thing you earned, so it would only pad the strip.
+      if (k === 'none') continue;
+      const worn = (c.cat==='cap') ? profile.cap===k
+                 : (c.cat==='eyes') ? profile.eyes===k
+                 : profile.flag===k;                 // flag & animal share the faceplate slot
+      const el=document.createElement('div');
+      el.className='unlItem'+(worn?' sel':'');
+      el.title = (c.cat==='cap') ? CAPS[k].name
+               : (c.cat==='flag') ? FLAGS[k].name
+               : (c.cat==='animal') ? ANIMALS[k].name : EYES[k].name;
+      if (c.cat==='cap'){
+        const g=document.createElement('span'); g.className='capGlyph';
+        g.textContent = CAPS[k].emoji || '—'; el.appendChild(g);
+      } else {
+        const cvs=document.createElement('canvas'); cvs.width=cvs.height=64;
+        const o = c.cat==='eyes' ? { color:profile.color, flag:'none', eyes:k }
+                                 : { color:profile.color, flag:k };
+        drawDisc(cvs.getContext('2d'), 32, 32, 24, o);
+        el.appendChild(cvs);
+      }
+      el.onclick=()=>{
+        if (c.cat==='cap') profile.cap=k;
+        else if (c.cat==='eyes') profile.eyes=k;
+        else profile.flag=k;
+        saveProfile();
+        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview();
+      };
+      strip.appendChild(el);
+    }
+  }
+  if (tot) tot.textContent = `${have} / ${total}`;
+  if (fill) fill.style.width = total ? Math.round(have/total*100)+'%' : '0%';
 }
 function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
 function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
@@ -2355,7 +2457,7 @@ function deckFocusables(){
   const root = $(deskDockId); if (!root || root.classList.contains('hidden')) return [];
   // Collapsed cards hide their contents, so their h2 (the expand toggle) has to be
   // reachable too — otherwise a pad could never open a section.
-  const sel_ = '.card.collapsible > h2, .opt, .navtile, button, input[type=range], .ckrow button, .padrow button';
+  const sel_ = '.card.collapsible > h2, .opt, .unlItem, .navtile, button, input[type=range], .ckrow button, .padrow button';
   return Array.from(root.querySelectorAll(sel_)).filter(el => {
     if (el.disabled) return false;
     if (el.closest('.hidden')) return false;
@@ -5824,7 +5926,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.13';
+const VERSION = '20260803.14';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5838,11 +5940,12 @@ if (window.__MAGNETDEBUG) {
     get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal,
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
-    isUnlocked, unlockCounts, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    isUnlocked, unlockCounts, buildUnlocked, UNL_CATS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
     addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
+    ANIMALS, updatePreview,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
