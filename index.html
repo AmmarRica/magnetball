@@ -228,7 +228,7 @@
     .lbrow canvas.cv { width:24px; height:24px; flex:0 0 auto; }
     .lbrow .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .lbrow .rp { color:var(--accent); font-weight:700; }
-    .lbrow.you { background:rgba(255,255,255,.07); border-color:var(--accent); }
+    .lbrow.you { background:rgba(128,128,128,.12); border-color:var(--accent); }
 
     /* Daily reward modal */
     #dailyModal {
@@ -420,7 +420,7 @@
     #ovAwards:empty { display:none; }
     #ovAwards .awrow {
       display:flex; align-items:center; gap:10px; padding:7px 11px; border-radius:10px;
-      background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08);
+      background: rgba(128,128,128,.10); border:1px solid var(--edge);
       animation: awin .32s ease both;
     }
     #ovAwards .awrow.you { background: rgba(33,230,255,.13); border-color: rgba(33,230,255,.5); }
@@ -433,7 +433,7 @@
     #ovAwards .awfoot { display:flex; gap:8px; justify-content:center; margin-top:4px; }
     #ovAwards .awfoot button {
       font-family: var(--pix); font-size:12px; color:var(--text); background:rgba(127,127,127,.14);
-      border:1px solid rgba(255,255,255,.14); border-radius:9px; padding:7px 12px; cursor:pointer;
+      border:1px solid var(--edge); border-radius:9px; padding:7px 12px; cursor:pointer;
     }
     #ovAwards .awfoot button:active { transform: translateY(1px); }
     @keyframes awin { from{ opacity:0; transform: translateY(7px); } to{ opacity:1; transform:none; } }
@@ -442,12 +442,12 @@
     .shopnote { color: var(--muted); font-size: 12px; line-height: 1.6; }
     .shopnote b { color: var(--text); }
     .walletbar { display:flex; align-items:center; justify-content:space-between; margin-top:12px;
-      padding:9px 12px; border-radius:10px; background: rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.08); font-family: var(--pix); font-size:13px; }
+      padding:9px 12px; border-radius:10px; background: rgba(128,128,128,.10);
+      border:1px solid var(--edge); font-family: var(--pix); font-size:13px; }
     .walletbar b { color: var(--accent); }
     .shopgrid { display:grid; grid-template-columns: repeat(auto-fill, minmax(96px,1fr)); gap:10px; }
     .shopcard { display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 6px;
-      border-radius:12px; background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
+      border-radius:12px; background: rgba(128,128,128,.10); border:1px solid var(--edge); }
     .shopcard canvas { width:48px; height:48px; image-rendering: pixelated; }
     .shopcard .sname { font-family: var(--pix); font-size:12px; color:var(--text); text-align:center; }
     .shopcard .sprice { font-family: var(--pix); font-size:12px; color: var(--accent); }
@@ -459,12 +459,12 @@
     .sochead h1 { font-family: var(--pix); font-size:26px; color: var(--accent); text-shadow: 0 0 12px rgba(33,230,255,.5); }
     .socfilters { display:flex; gap:6px; margin-left:auto; }
     .socfilters button {
-      font-family: var(--pix); font-size:12px; color: var(--muted); background: rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:6px 12px; cursor:pointer;
+      font-family: var(--pix); font-size:12px; color: var(--muted); background: rgba(128,128,128,.10);
+      border:1px solid var(--edge); border-radius:999px; padding:6px 12px; cursor:pointer;
     }
     .socfilters button.sel { color:var(--on-accent); background: var(--accent); border-color: var(--accent); }
     #feed { display:flex; flex-direction:column; gap:18px; width:100%; }
-    .post { background: rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.09); border-radius:16px; overflow:hidden; }
+    .post { background: rgba(128,128,128,.08); border:1px solid var(--edge); border-radius:16px; overflow:hidden; }
     .post .phead { display:flex; align-items:center; gap:9px; padding:10px 12px; }
     .post .phead canvas { width:34px; height:34px; border-radius:50%; flex:none; }
     .post .phead .pwho { font-family: var(--pix); font-size:12px; color:var(--text); line-height:1.35; }
@@ -495,14 +495,14 @@
     .post .pcomments .cmt b { color:var(--text); }
     .post .pcomments .cmore { color: var(--muted); font-size:12px; cursor:pointer; }
     .post .paddc { display:flex; gap:8px; padding:6px 12px 12px; }
-    .post .paddc input { flex:1; background: rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
+    .post .paddc input { flex:1; background: rgba(128,128,128,.10); border:1px solid var(--edge);
       border-radius:999px; color:var(--text); font-size:12px; padding:7px 12px; outline:none; }
     .post .paddc button { font-family: var(--pix); font-size:12px; color: var(--accent); background:none; border:none; cursor:pointer; }
     .post .ptime { font-size:12px; color: var(--muted); padding:0 12px 10px; text-transform:uppercase; letter-spacing:.5px; }
     .feedempty { color: var(--muted); text-align:center; padding:30px 10px; font-size:13px; }
 
     /* Cocktail side-config rows */
-    .ckrow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .ckrow { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid var(--edge); }
     .ckrow .cklab { font-family: var(--pix); font-size:12px; color:var(--text); min-width:78px; }
     .ckrow .cksides { display:flex; gap:6px; margin-left:auto; }
     .ckrow .cksides button {
@@ -3127,6 +3127,7 @@ function startMatch(){
   // pitch to life on the right. A real match takes over the screen normally.
   if (!_startQuiet){
     hideScreens();
+    closeDailyModal();     // no full-screen modal (z-index 40) may linger over the pitch — it eats touches
     $('hud').classList.remove('hidden');
     $('scorebug').style.display='';
     $('resetBtn').style.display='none';
@@ -5125,7 +5126,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.6';
+const VERSION = '20260802.7';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {

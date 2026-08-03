@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260802.7** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -17,6 +17,17 @@ _Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Light-theme card definition** — 36 `rgba(255,255,255,…)` borders/fills (awards, shop, wallet,
+  social posts, cocktail rows, leaderboard "you" row) were invisible on Paper's light panels. Card
+  borders now use `var(--edge)`; subtle fills use a neutral `rgba(128,128,128,…)` that reads on both
+  light and dark. Verified visually in shop + social.
+- [x] **Overlay-eats-touch guard generalized** — the full-screen daily modal (z-index 40) is now
+  closed on every real gameplay start (`startMatch` guarded by `!_startQuiet`, plus `startDrill`),
+  so no modal can linger over the pitch and swallow input. The load-time idle demo is excluded so
+  the day-1 reward still shows.
+- [x] **Ball containment swept on all 30 fields** — hammered each field with repeated 40–100 speed
+  blasts in random directions; the ball never escapes the side walls, only dips into the goal-net
+  depth, never NaNs. (Re-run after any physics change.)
 - [x] **Theme contrast pass (all AA)** — Paper (light) theme was inheriting dark-theme hardcodes
   (`#fff` text on light panels, `var(--text)` on a hardcoded dark input, white-on-gold kick pad).
   Added themed `--field` / `--on-accent` vars, routed inputs/chips/labels through `var(--text)`,
@@ -50,7 +61,11 @@ _Current build: **v20260802.6** (shown under the title; bump `VERSION` in `index
 - [ ] **Online rooms (host / join by code)** — the Settings → Online card is a "coming soon" stub
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
-## 🧪 Testing reminders (from CLAUDE.md)
+## 🧪 Testing / infra
+- [ ] **No committed test suite or CI** — the drill-touch crash and the white-on-white Paper theme
+  both shipped because nothing catches regressions. Commit a small Playwright suite (drill touch via
+  dispatched events, render every theme/flag/eye, 30-field ball containment, console-error check) and
+  a GitHub Action to run it on push. Highest-leverage item — it's the root reason the P0 bugs happened.
 - [ ] After physics changes: re-verify **ball containment on every field**.
 - [ ] After adding any flag/eye/cap: **render it once** to catch throwing draw fns.
 - [ ] Watch for **duplicate element IDs** (breaks `$()` / `getElementById`) — e.g. the `id="clock"`
