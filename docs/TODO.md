@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.21** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.0738PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,15 @@ _Current build: **v20260803.21** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Debug readout + build stamp** (Settings → Game Feel → **Debug readout**). Bottom-left while
+  you play: ball speed vs cap, your speed, every Game Feel number in slider units, magnet/trap/sens,
+  and mode·field·state. Version always shows below it. On touch it lifts above the KICK pad instead
+  of printing over a control. Covered by `tests/debug.mjs` — the numbers are asserted to *track* the
+  sim and the settings, not just to be present.
+- [x] **Version is now time-stamped** — `20260803.0738PM` instead of a hand-bumped `.21` counter.
+- [x] **GBA theme** (🎮) from the Denki Blocks palette: cyan checkerboard court, white lines, royal
+  blue surround, saturated red-vs-green teams, yellow accents, hard dark outlines, no gradients.
+  Pairs with the **Check** grass cut.
 - [x] **Prose + comment cleanup** (roast items 5 and 7). Rewrote the UI hints — they were all one
   balanced sentence in the same register, which is the most obvious LLM tell in the shipped text.
   Cut 107 lines of comment (13% → 11% of the JS): pure restatements (`// court`, `// zones`,
@@ -197,7 +206,7 @@ _Current build: **v20260803.21** (shown under the title; bump `VERSION` in `inde
   (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
-- [x] **Committed test suite** — `tests/` holds 19 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 20 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

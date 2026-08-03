@@ -842,6 +842,10 @@
       <label class="field">Match speed <small id="mspeedVal" style="color:var(--accent)"></small></label>
       <input id="mspeed" class="slider" type="range" min="50" max="200" step="5" />
       <div style="height:10px"></div>
+      <label class="field">Debug readout</label>
+      <div class="opts" id="debugPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Ball and player speed plus your current feel numbers, bottom-left while you play.</div>
+      <div style="height:10px"></div>
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving.</div>
@@ -1513,7 +1517,7 @@ let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
+            theme:'neon', trapOff:false, juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -1531,6 +1535,22 @@ let sel = defaultSel();
 //  pitch→ every colour the canvas draws with, so a theme fully reskins the game
 // ============================================================
 const THEMES = {
+  gba: {
+    name: 'GBA', emoji: '🎮',
+    ui: { scan:false,
+      grad:'linear-gradient(180deg, #1436c8 0%, #0a1f7a 100%)',
+      bg:'#0a1f7a', panel:'rgba(20,54,200,0.92)', edge:'#5b8cff', text:'#ffffff', muted:'#a8c4ff',
+      red:'#e82020', blue:'#2f7ce8', cyan:'#29c8f8', magenta:'#e838a8', green:'#22c81e', yellow:'#f8e018',
+      accent:'#f8e018', go:'#22c81e', field:'#1436c8', onAccent:'#101010' },
+    pitch: { glow:false, fieldBg:'#0a1f7a', court:'#29abe2', stripeA:'#29c8f8', stripeB:'#1c9be0',
+      netPocket:'rgba(255,255,255,0.22)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.55)', post:'#ffffff', teamRed:'#e82020', teamBlue:'#22c81e',
+      discRim:'#101820', kickRing:'#f8e018', kickText:'#101010', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#101820', nameBg:'#101820', nameText:'#ffffff',
+      shadow:'rgba(16,24,32,0.28)', ballRim:'#101820', ball:'#ffffff', ballSpot:'#101820', trailRGB:'255,255,255',
+      obstacle:'#e838a8', good:'#22c81e', warn:'#f8e018', dim:'#5b8cff', cone:'#f88018',
+      hudText:'#ffffff', hudSub:'#f8e018', accent:'#f8e018', padRing:'rgba(255,255,255,0.7)' },
+  },
   neon: {
     name: 'Neon', emoji: '🌃',
     ui: { scan:false,
@@ -2781,6 +2801,15 @@ function buildSettings(){
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{ sel.juice=(k==='on'); saveSel(); buildSettings(); if(sel.juice) addShake(6); };
       jp.appendChild(el);
+    });
+  }
+  const dbp=$('debugPick');
+  if (dbp){ dbp.innerHTML='';
+    [['off','Off'],['on','🐞 On']].forEach(([k,lab])=>{
+      const on=(k==='on')===!!sel.debug;
+      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+      el.onclick=()=>{ sel.debug=(k==='on'); saveSel(); buildSettings(); };
+      dbp.appendChild(el);
     });
   }
   // Was only reachable as a side effect of the Casual/Pro presets — picking Pro
@@ -5295,6 +5324,8 @@ function render(){
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); flash*=0.88; } else flash=0;
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
+  drawBuildTag();
+  if (sel.debug) drawDebug(world);
 }
 
 // The menu's background match is a bot-vs-bot demo, not something you're playing.
@@ -5305,6 +5336,48 @@ function drawDemoTag(){
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
   ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.85;
   ctx.fillText('Demo', cw - 16, ch - 14);
+  ctx.restore();
+}
+// On touch the KICK pad owns the bottom-left corner, so lift the readout above it
+// rather than printing numbers across a control.
+function debugFloor(){ return isTouchLayout() ? Math.round(Math.min(cw,ch)*0.34) + 16 : 12; }
+// Build stamp, bottom-left. Useful when reporting what you were playing.
+function drawBuildTag(){
+  ctx.save();
+  ctx.font = `10px 'Kenney', system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.38;
+  ctx.fillText('v' + VERSION, 12, ch - debugFloor());
+  ctx.restore();
+}
+
+// Live numbers while playtesting: speeds as they actually are this frame, and the
+// feel values in the same units the sliders show, so a reading maps straight back
+// to a control. Sits above the build stamp.
+function drawDebug(w){
+  const f = sel.feel || {};
+  const b = w.ball;
+  const bspd = Math.hypot(b.vx||0, b.vy||0);
+  const me = w.players && (w.players.find(p => p.ctrl !== 'bot') || w.players[0]);
+  const pspd = me ? Math.hypot(me.vx, me.vy) : 0;
+  const cap = w.ballCap || 32;
+  const rows = [
+    `ball  ${bspd.toFixed(2)} / ${cap}`,
+    `you   ${pspd.toFixed(2)}`,
+    `accel ${f.accel!=null?f.accel:40}   pdamp ${f.pdamp!=null?f.pdamp:905}`,
+    `bcap  ${f.ballcap!=null?f.ballcap:32}   kick ${f.kick!=null?f.kick:55}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
+    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':'trap'}   sens ${(sel.sens||1).toFixed(2)}`,
+    `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
+  ];
+  ctx.save();
+  ctx.font = `10px 'Kenney', system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  const lh = 13, top = ch - debugFloor() - 16 - rows.length*lh;
+  const wid = Math.max(...rows.map(r => ctx.measureText(r).width)) + 14;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(8, top - 4, wid, rows.length*lh + 10);
+  ctx.fillStyle = '#8affc8';
+  rows.forEach((r, i) => ctx.fillText(r, 15, top + (i+1)*lh));
   ctx.restore();
 }
 function drawPitch(w){
@@ -6093,7 +6166,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.21';
+const VERSION = '20260803.0738PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6121,7 +6194,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
