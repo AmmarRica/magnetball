@@ -17,6 +17,13 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **3D-looking rolling ball** — the ball is now a shaded sphere with rotating black pentagons
+  (soccer pattern) instead of a flat disc; it visibly rolls (`b.rot` already advanced with speed,
+  now also for multi-ball extras). Theme-aware via `TH.ball`/`TH.ballSpot` + translucent shading.
+- [x] **Grass-cut patterns** — "Grass cut" row in the Match card: Stripes · Vertical · Check ·
+  Diagonal · Rings · Solid (`sel.grass`, `drawGrass()`). Cosmetic only; updates live.
+- [x] **Idle demo muted + move after goal** — the desktop background demo is silent (`world.demo`
+  gate in `playSfx`); players are no longer frozen during the goal celebration.
 - [x] **Multi-ball reworked to continuous scoring** — a potted ball now disappears and counts as one
   goal, and the match keeps playing (no kickoff freeze). "First to 3" = pot 3 balls; when all balls
   on the pitch are used up without a winner (e.g. 2-1), a fresh ball serves at centre. Reaching the

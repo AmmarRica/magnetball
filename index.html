@@ -619,6 +619,9 @@
       <label class="field">Pitch surface</label>
       <div class="opts" id="pitches"></div>
       <div style="height:14px"></div>
+      <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
+      <div class="opts" id="grass"></div>
+      <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
     </div>
@@ -1365,7 +1368,7 @@ let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // 
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', spectate:'play', cb:'off',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, juice:true, autoReplay:true, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
@@ -1914,7 +1917,12 @@ buildFlagPicker();
 buildAnimalPicker();
 buildEyesPicker();
 buildOpts('modes', MODES, 'mode', o=>o.desc);
+// Grass mow patterns (cosmetic) — labels for the picker; drawGrass() reads the key.
+const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical',emoji:'🎋'},
+  check:{name:'Check',emoji:'🏁'}, diagonal:{name:'Diagonal',emoji:'📐'},
+  rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 buildOpts('fields', FIELDS, 'field');
+buildOpts('grass', GRASS, 'grass');
 buildOpts('diffs', DIFF, 'diff');
 buildOpts('lengths', LENGTHS, 'length');
 buildOpts('controllers', CONTROLLERS, 'controllers');
@@ -3581,9 +3589,11 @@ function step(w){
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
-  { const bl=w.ball, sp=Math.hypot(bl.vx,bl.vy);
+  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
+    const sp=Math.hypot(bl.vx,bl.vy);
     bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
-    bl.spin = (bl.spin||0) * 0.90; }
+    bl.spin = (bl.spin||0) * 0.90;
+  }
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
 
@@ -4678,14 +4688,7 @@ function drawPitch(w){
   const f = w.field, s = cam.s;
   const b = w.bounds;
   const L = wx(-b.halfW), R = wx(b.halfW), T = wy(-b.halfL), B = wy(b.halfL);
-  // Grass with stripes
-  const stripes = 12;
-  for (let i=0;i<stripes;i++){
-    const y0 = -b.halfL + (i/stripes)*(b.halfL*2);
-    const y1 = -b.halfL + ((i+1)/stripes)*(b.halfL*2);
-    ctx.fillStyle = i%2 ? TH.stripeA : TH.stripeB;
-    ctx.fillRect(L, wy(y0), R-L, wy(y1)-wy(y0)+1);
-  }
+  drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
   // Net pockets background
   ctx.fillStyle = TH.netPocket;
   const gh = f.goal/2;
@@ -4716,6 +4719,40 @@ function drawPitch(w){
 
   // Goal nets (crosshatch) + goal line coloring
   drawGoal(w, -1); drawGoal(w, 1);
+}
+// Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
+// in the selected style. Purely cosmetic; clipped to the pitch rectangle.
+function drawGrass(w, L, R, T, B){
+  const A = TH.stripeA, Bc = TH.stripeB, style = sel.grass || 'stripes';
+  const W = R-L, H = B-T;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(L, T, W, H); ctx.clip();
+  ctx.fillStyle = Bc; ctx.fillRect(L, T, W, H);   // base tone
+  ctx.fillStyle = A;
+  if (style === 'solid'){
+    // court colour only — one flat tone
+    ctx.fillStyle = TH.court || Bc; ctx.fillRect(L, T, W, H);
+  } else if (style === 'stripes'){
+    const N=12; for (let i=1;i<N;i+=2){ const y0=T+(i/N)*H; ctx.fillRect(L, y0, W, H/N + 1); }
+  } else if (style === 'vertical'){
+    const N=8; for (let i=1;i<N;i+=2){ const x0=L+(i/N)*W; ctx.fillRect(x0, T, W/N + 1, H); }
+  } else if (style === 'check'){
+    const cols=8, rows=12, cw=W/cols, ch=H/rows;
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) if ((r+c)&1) ctx.fillRect(L+c*cw, T+r*ch, cw+1, ch+1);
+  } else if (style === 'diagonal'){
+    const band = H/12 * 1.3;
+    for (let d=-H; d < W + H; d += band*2){
+      ctx.beginPath();
+      ctx.moveTo(L+d, T); ctx.lineTo(L+d+band, T); ctx.lineTo(L+d+band-H, B); ctx.lineTo(L+d-H, B);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (style === 'rings'){
+    const cx=(L+R)/2, cy=(T+B)/2, maxR=Math.hypot(W,H)/2, step=Math.max(12, H/12);
+    for (let rad=maxR; rad>0; rad-=step*2){
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 2*Math.PI); ctx.arc(cx, cy, Math.max(0,rad-step), 0, 2*Math.PI, true); ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 function roundRectPath(x,y,ww,hh,r){
   ctx.moveTo(x+r,y);
@@ -4882,14 +4919,34 @@ function drawBall(w){
     ctx.save(); ctx.translate(x,y); ctx.rotate(b.sqAng||0);
     ctx.scale(1 + 0.38*sq, 1 - 0.26*sq); ctx.translate(-x,-y);
   }
-  // hard rim + flat ball with a solid spot (chunky sprite)
+  const rot = b.rot || 0;
+  // Chunky rim, then a shaded sphere with a rotating soccer pattern so the ball
+  // reads as a 3D ball rolling (rot advances with speed in step()).
   ctx.beginPath(); ctx.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); ctx.fillStyle=TH.ballRim; ctx.fill();
   ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=TH.ball; ctx.fill();
-  // Spot + an offset pip that orbits with rotation, so spin/roll reads visually.
-  const rot = b.rot || 0;
-  ctx.beginPath(); ctx.arc(x, y, r*0.30, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
-  ctx.beginPath(); ctx.arc(x + Math.cos(rot)*r*0.46, y + Math.sin(rot)*r*0.46, r*0.15, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
+  // Rotating black pentagons (centre + five around), clipped to the ball edge.
+  if (r >= 5){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.clip();
+    ctx.translate(x, y); ctx.rotate(rot);
+    ctx.fillStyle = TH.ballSpot;
+    ballPentagon(0, 0, r*0.36, -Math.PI/2); ctx.fill();
+    for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5); ballPentagon(Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); ctx.fill(); }
+    ctx.restore();
+  } else {
+    ctx.beginPath(); ctx.arc(x, y, r*0.34, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
+  }
+  // 3D shading: highlight toward top-left, soft shadow toward bottom-right.
+  const g = ctx.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
+  g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.30)');
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
   if (warped) ctx.restore();
+}
+// A pentagon path centred at (cx,cy), circumradius rad, rotated by `rot`.
+function ballPentagon(cx, cy, rad, rot){
+  ctx.beginPath();
+  for (let i=0;i<5;i++){ const a=rot + i*(2*Math.PI/5); const px=cx+Math.cos(a)*rad, py=cy+Math.sin(a)*rad; i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+  ctx.closePath();
 }
 function drawKickoffHint(w){
   const s=cam.s;
@@ -5252,7 +5309,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.3';
+const VERSION = '20260803.4';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
