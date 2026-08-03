@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.0738PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.0808PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,14 @@ _Current build: **v20260803.0738PM** (shown under the title; bump `VERSION` in `
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Kickoff hold bulges around the centre circle** — carrying the ball inside the circle lets
+  you cross the line, so you can turn and pass **backwards** instead of being pinned with every
+  option in front of you. `kickoffFreePass()` gates on touching the ball *and* being inside the
+  circle; off the ball or outside it you're still held. The gate renders it: the dashed line breaks
+  at the circle, arcs over it, and the tint is punched out so the open pocket is visible.
+- [x] **KICK pad is neutral grey** like the movement stick opposite it. A coloured pad read as a
+  live indicator rather than a control; both are now the same translucent white, brightening on
+  press. Label switched to white — the old `kickText` was near-black, sized for a solid accent pad.
 - [x] **Debug readout + build stamp** (Settings → Game Feel → **Debug readout**). Bottom-left while
   you play: ball speed vs cap, your speed, every Game Feel number in slider units, magnet/trap/sens,
   and mode·field·state. Version always shows below it. On touch it lifts above the KICK pad instead

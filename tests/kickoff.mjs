@@ -55,6 +55,28 @@ const r = await p.evaluate(()=>{
   M.pads.p1.dy=0;
   o.roamsBothHalves = sawOwn && sawFar;
 
+  // 4b) Carrying the ball inside the centre circle lets you cross — that's the
+  //     pocket that makes a backwards pass possible instead of being pinned.
+  M.sel.kickoffRule='on'; M.startMatch();
+  const wc=M.world; wc.state='kickoff'; wc.stateT=0.1;
+  const mec=wc.players.find(x=>x.ctrl==='human1');
+  const foec=wc.players.find(x=>x.team===1); foec.x=300; foec.y=300;
+  // On the ball, inside the circle -> exempt, and can sit past the line.
+  wc.ball.x=0; wc.ball.y=0; wc.ball.vx=0; wc.ball.vy=0;
+  mec.x=0; mec.y=-14; mec.vx=0; mec.vy=0;
+  o.onBallInCircleExempt = M.kickoffFreePass(wc, mec) === true;
+  for(let i=0;i<20;i++) M.step(wc);
+  o.onBallCanCross = mec.y < 0.5;
+  // Same spot, but the ball is elsewhere -> no exemption, pinned back.
+  wc.ball.x=200; wc.ball.y=200;
+  mec.x=0; mec.y=-14; mec.vx=0; mec.vy=0;
+  o.offBallNoExempt = M.kickoffFreePass(wc, mec) === false;
+  for(let i=0;i<20;i++) M.step(wc);
+  o.offBallPinned = mec.y >= -0.5;
+  // On the ball but OUTSIDE the circle -> still no exemption.
+  wc.ball.x=200; wc.ball.y=-14; mec.x=200; mec.y=-14; mec.vx=0; mec.vy=0;
+  o.outsideCircleNoExempt = M.kickoffFreePass(wc, mec) === false;
+
   // 5) rule OFF: free even during kickoff
   M.sel.kickoffRule='off'; M.startMatch();
   const w2=M.world; w2.state='kickoff'; w2.stateT=0.1;
@@ -65,6 +87,7 @@ const r = await p.evaluate(()=>{
   for(let i=0;i<100;i++){ M.step(w2); if(w2.state!=='kickoff') break; if(me2.y<minY3) minY3=me2.y; }
   M.pads.p1.dy=0;
   o.freeWhenRuleOff = minY3 < -20;
+  void 0;
 
   // 6) after a goal the hold comes back for the next kickoff, then clears again
   M.sel.kickoffRule='on'; M.startMatch();
@@ -77,6 +100,7 @@ const r = await p.evaluate(()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.defaultOn&&r.startsInKickoff&&r.blockedDuringKickoff&&r.foeHeldInOwnHalf&&
+  r.onBallInCircleExempt&&r.onBallCanCross&&r.offBallNoExempt&&r.offBallPinned&&r.outsideCircleNoExempt&&
   r.freeAfterKickoff&&r.noPossessionState&&r.roamsBothHalves&&r.freeWhenRuleOff&&
   r.resetHoldsAgain&&r.clearsInPlay&&errors.length===0;
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
