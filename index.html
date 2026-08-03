@@ -851,7 +851,7 @@
       <div style="height:10px"></div>
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
       <div style="height:10px"></div>
       <label class="field">Preset</label>
       <div class="opts" id="feelPresets"></div>
@@ -1528,7 +1528,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             pad: { up:12, down:13, left:14, right:15, kick:0 },
             snd: { muted:false, vol:40, whistle:0, crowd:0, kick:0, wall:0, net:0 },
             // "Game feel" — adjustable physics (defaults mirror the current tuning).
-            feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990 } }; }
+            feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 } }; }
 let sel = defaultSel();
 
 // ============================================================
@@ -1791,11 +1791,12 @@ function crowdReact(w){
 // ---- Game feel: adjustable physics from the sliders. Stored as ints (slider-friendly).
 function feelVals(){ const f=sel.feel||{}; return {
   accel: (f.accel!=null?f.accel:40)/100, pdamp: (f.pdamp!=null?f.pdamp:905)/1000,
-  ballcap: +(f.ballcap!=null?f.ballcap:32), kick: (f.kick!=null?f.kick:55)/10, bdamp: (f.bdamp!=null?f.bdamp:990)/1000 }; }
+  ballcap: +(f.ballcap!=null?f.ballcap:32), kick: (f.kick!=null?f.kick:55)/10, bdamp: (f.bdamp!=null?f.bdamp:990)/1000,
+  trap: (f.trap!=null?f.trap:TRAP.max*100)/100 }; }
 function applyFeel(){ if(!world || world.drillMode) return; const v=feelVals();
   if (sel.pitch==='normal'){ world.pAccel=v.accel; world.pDamp=v.pdamp; }
   world.ballCap=v.ballcap; world.kickPower=v.kick; if(world.ball) world.ball.damp=v.bdamp; world.magnet=sel.magnet;
-  world.trapOff=!!sel.trapOff; }
+  world.trapOff=!!sel.trapOff; world.trapMax=v.trap; }
 const HANDED = { right:{ name:'Right', emoji:'👉' }, left:{ name:'Left', emoji:'👈' } };
 // Charge-kick: holding KICK winds up extra power (fires stronger the moment you touch the ball).
 const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
@@ -2658,7 +2659,7 @@ $('settingsBtn').onclick = () => openLook('theme');
 $('gearBtn').onclick = () => openLook('theme');
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
-$('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
+$('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
   if (!confirm('Reset all settings (theme, display, skins, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
   // Optional wider scope: appearance is more personal than a setting, so it's a
@@ -2675,6 +2676,8 @@ const FEEL_SLIDERS = [
   {label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
   {label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
   {label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:v=>''+v},
+  {label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
+   min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
   {label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
 ];
 // Reveal a settings section (theme/display/skins/sound/feel) inline on the main
@@ -2898,18 +2901,20 @@ function buildSettings(){
 // "Pro" = HaxBall-authentic — no magnet, no trap (instant one-shot kick), floatier
 // acceleration and a higher ball speed cap for a raw, high-skill feel.
 const FEEL_PRESETS = {
-  casual: { label:'Casual', emoji:'😊', magnet:0,  trapOff:false, accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, sens:1.0 },
-  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, sens:1.0 },
+  casual: { label:'Casual', emoji:'😊', magnet:0,  trapOff:false, accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, sens:1.0, trap:50 },
+  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, sens:1.0, trap:50 },
 };
 function presetMatches(p){
   const f=sel.feel||{};
   return !!sel.trapOff===p.trapOff && +sel.magnet===p.magnet && f.accel===p.accel &&
-         f.pdamp===p.pdamp && f.ballcap===p.ballcap && f.kick===p.kick && f.bdamp===p.bdamp;
+         f.pdamp===p.pdamp && f.ballcap===p.ballcap && f.kick===p.kick && f.bdamp===p.bdamp &&
+         // One-touch never traps, so the window can't knock Pro out of match.
+         (p.trapOff || (f.trap!=null?f.trap:50)===p.trap);
 }
 function applyPreset(key){
   const p=FEEL_PRESETS[key]; if(!p) return;
   sel.magnet=p.magnet; sel.trapOff=p.trapOff; sel.sens=p.sens;
-  sel.feel={ accel:p.accel, pdamp:p.pdamp, ballcap:p.ballcap, kick:p.kick, bdamp:p.bdamp };
+  sel.feel={ accel:p.accel, pdamp:p.pdamp, ballcap:p.ballcap, kick:p.kick, bdamp:p.bdamp, trap:p.trap };
   saveSel(); applyFeel(); buildSettings();
 }
 function buildFeelPresets(){
@@ -2971,7 +2976,7 @@ function startTutorial(){
     players: [you],
     ball: { x:0, y:110, vx:0, vy:0, r:BALLS.normal.r, invMass:BALLS.normal.invMass, bCoef:BALLS.normal.bCoef, damp:fv.bdamp, isBall:true },
     posts:[], walls:[], arcs:[], score:[0,0], timeLeft:0, goalsTarget:0, overtime:false,
-    practiceGoals:0, state:'play', stateT:0, kickTeam:1, lastScorer:-1, trapOff:!!sel.trapOff,
+    practiceGoals:0, state:'play', stateT:0, kickTeam:1, lastScorer:-1, trapOff:!!sel.trapOff, trapMax: fv.trap,
     tutorial: { step:0, moved:0, done:false },
   };
   buildGeometry(world);
@@ -3745,6 +3750,7 @@ function startMatch(){
     kickTeam: 1,         // which team kicks off (loser)
     lastScorer: -1,
     trapOff: !!sel.trapOff,   // Pro mode: instant one-shot kick instead of trap
+    trapMax: fv.trap,         // how long the ball stays stuck before it auto-fires
     matchT: 0,                // seconds of play elapsed (for assist/pass windows)
     maxDeficit: [0,0],        // biggest debt each team clawed back from (Comeback King)
     kickoffRule: sel.kickoffRule!=='off' && !mode.train,   // hold your half until the ball is played
@@ -4455,7 +4461,7 @@ function handleBallControl(w, p, ball, ballFrozen){
         const hold = sum + 2;                              // just outside the body — never clips through
         ball.x = p.x + fx*hold; ball.y = p.y + fy*hold;
         ball.vx = p.vx; ball.vy = p.vy;                    // travels with you
-        if (p.trapT >= TRAP.max) releaseTrap(w, p, ball);  // can't hold longer than 0.5s
+        if (p.trapT >= (w.trapMax || TRAP.max)) releaseTrap(w, p, ball);   // your Trap window, then it fires
       }
     } else {
       if (p.trap){ releaseTrap(w, p, ball); }              // let go while carrying → shoot
@@ -5158,7 +5164,7 @@ function startDrill(key){
     field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
     pAccel: usePitchGrip ? pt.accel : fv.accel,
     pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
-    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
+    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange, trapMax: fv.trap,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
     ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
@@ -5415,7 +5421,7 @@ function drawDebug(w){
     `you   ${pspd.toFixed(2)}`,
     `accel ${f.accel!=null?f.accel:40}   pdamp ${f.pdamp!=null?f.pdamp:905}`,
     `bcap  ${f.ballcap!=null?f.ballcap:32}   kick ${f.kick!=null?f.kick:55}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
-    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':'trap'}   sens ${(sel.sens||1).toFixed(2)}`,
+    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':`trap ${(w.trapMax||TRAP.max).toFixed(2)}s`}   sens ${(sel.sens||1).toFixed(2)}`,
     `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
   ];
   ctx.save();
@@ -6235,7 +6241,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.0839PM';
+const VERSION = '20260803.0912PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
