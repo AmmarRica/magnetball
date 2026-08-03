@@ -1443,8 +1443,17 @@ const MODES = {
   '4v4':  { name:'4 v 4',   emoji:'🏟️', per:4, twoP:false, desc:'You + 3 bots' },
   'duo':  { name:'Duo',     emoji:'👯', per:2, twoP:false, duo:true, desc:'Steer 2 at once' },
   'local':{ name:'2-Player',emoji:'🎮', per:1, twoP:true,  desc:'Same phone' },
+  'kq':   { name:'Killer Queen', emoji:'🐌', per:3, twoP:false, kq:true, desc:'Snail wins it' },
   'train':{ name:'Training',emoji:'🎯', per:0, twoP:false, train:true, desc:'Free practice' },
 };
+
+// Killer Queen's snail: a second, very heavy ball that ends the match outright if
+// it's pushed home. invMass is tiny so bodies barely shift it, damping is harsh so
+// it stops almost immediately, and it never resets position — where you leave it is
+// where the next fight starts. It is NOT kickable: integrate() only runs
+// handleBallControl on the primary ball, so the snail can only ever be shouldered
+// along, which is exactly the tug-of-war Killer Queen is built around.
+const SNAIL = { rMul:1.5, invMass:0.11, bCoef:0.25, damp:0.90 };
 
 // Ball presets — objective physics changes (radius / mass via invMass / bounce / damping).
 const BALLS = {
@@ -1837,19 +1846,23 @@ let stats = loadStats();
 function recordResult(w){
   const diffIdx = Object.keys(DIFF).indexOf(sel.diff);          // 0..N (rookie..insane)
   const my = w.score[0], opp = w.score[1];
+  // Killer Queen: a snail home decides the match outright, so the result is taken
+  // from forceWin rather than the scoreline. Goals for/against stay the real tally.
+  const won  = w.forceWin != null ? w.forceWin === 0 : my > opp;
+  const lost = w.forceWin != null ? w.forceWin === 1 : my < opp;
   let delta;
-  if (my > opp)      delta = 10 + diffIdx*7;                    // beat harder bots for more
-  else if (my < opp) delta = -Math.max(3, 22 - diffIdx*3);     // losing to easy bots hurts more (never positive)
-  else               delta = (diffIdx - 2) * 3;                 // draws: small, sign by difficulty
+  if (won)       delta = 10 + diffIdx*7;                        // beat harder bots for more
+  else if (lost) delta = -Math.max(3, 22 - diffIdx*3);          // losing to easy bots hurts more (never positive)
+  else           delta = (diffIdx - 2) * 3;                     // draws: small, sign by difficulty
   stats.points = Math.max(0, stats.points + delta);
   stats.played++;
-  if (my > opp){ stats.wins++; stats.streak = Math.max(1, stats.streak+1); }
-  else if (my < opp){ stats.losses++; stats.streak = Math.min(-1, stats.streak-1); }
+  if (won){ stats.wins++; stats.streak = Math.max(1, stats.streak+1); }
+  else if (lost){ stats.losses++; stats.streak = Math.min(-1, stats.streak-1); }
   else { stats.draws++; stats.streak = 0; }
   stats.best = Math.max(stats.best, stats.streak);
   stats.gf += my; stats.ga += opp;
   // Lifetime highs / tallies (backfilled to 0 for older saves; accumulate from here).
-  if (my > opp) stats.bestWin = Math.max(stats.bestWin||0, my - opp);
+  if (won && my > opp) stats.bestWin = Math.max(stats.bestWin||0, my - opp);
   if (opp === 0) stats.cleanSheets = (stats.cleanSheets||0) + 1;
   stats.goalsBest = Math.max(stats.goalsBest||0, my);
   updateMMR(w);
@@ -3667,7 +3680,14 @@ function startMatch(){
     world.pDamp = Math.min(0.986, (world.pDamp||PLAYER.damp) + 0.05);
   }
   world.extraBalls = [];
-  if (party.multi && !mode.train){          // two extra free balls (3 total), fully physical + scorable
+  if (mode.kq){
+    // The snail starts at centre and is never repositioned again.
+    const sr = Math.round(world.ball.r * SNAIL.rMul);
+    world.extraBalls.push({ x:0, y:0, vx:0, vy:0, r:sr,
+      invMass:SNAIL.invMass, bCoef:SNAIL.bCoef, damp:SNAIL.damp,
+      isBall:true, extra:true, isSnail:true });
+  }
+  if (party.multi && !mode.train && !mode.kq){          // two extra free balls (3 total), fully physical + scorable
     for (let i=0;i<2;i++) world.extraBalls.push({ x:0, y:0, vx:0, vy:0, r:world.ball.r,
       invMass:bp.invMass, bCoef:bp.bCoef, damp:world.ball.damp, isBall:true, extra:true });
   }
@@ -3795,7 +3815,11 @@ function resetKickoff(w, initial){
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0; w.ball.sqT = 0;
   if (w.extraBalls && w.extraBalls.length){   // multiball: park the extra balls out to the sides
     const spread = Math.min(f.W*0.28, 150);
-    w.extraBalls.forEach((eb,i)=>{ eb.x = (i%2?-1:1)*spread; eb.y = 0; eb.vx=0; eb.vy=0; eb.sqT=0; });
+    let n = 0;
+    w.extraBalls.forEach(eb=>{
+      if (eb.isSnail){ eb.vx=0; eb.vy=0; eb.sqT=0; return; }   // the snail holds its ground
+      eb.x = (n++%2?-1:1)*spread; eb.y = 0; eb.vx=0; eb.vy=0; eb.sqT=0;
+    });
   }
 
   // Arrange players by team on their own half.
@@ -4490,6 +4514,7 @@ function checkGoal(w){
   const halfL = w.field.L/2, gh = w.field.goal/2;
   const balls = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
   for (const ball of balls){
+    if (ball._goalCd > 0){ ball._goalCd -= STEP; continue; }   // just scored; don't re-trigger
     const inTop = ball.y < -halfL + ball.r*0.4 && Math.abs(ball.x) < gh;
     const inBot = ball.y > halfL - ball.r*0.4 && Math.abs(ball.x) < gh;
     if (!inTop && !inBot) continue;
@@ -4506,6 +4531,8 @@ function checkGoal(w){
       updateScoreUI();
       return;
     }
+    if (ball.isSnail){ snailHome(w, ball, inTop ? 0 : 1); return; }   // snail = instant win
+    if (w.mode && w.mode.kq){ kqGoal(w, ball, inTop ? 0 : 1); return; }
     if (w.party && w.party.multi){ scoreMultiBall(w, ball, inTop ? 0 : 1); return; }
     scoreGoal(w, inTop ? 0 : 1);
     return;
@@ -4583,16 +4610,72 @@ function scoreMultiBall(w, ball, team){
   }
 }
 
+// Killer Queen — the snail is home. Whoever pushed it in wins outright, whatever
+// the goal tally says, so the result has to override the scoreline rather than
+// fake it (see recordResult / endMatch honouring w.forceWin).
+function snailHome(w, ball, team){
+  ball._goalCd = 99;                       // never scores twice
+  ball.vx = 0; ball.vy = 0;
+  w.forceWin = team;
+  w.lastScorer = team;
+  creditScorer(w, ball, team);
+  updateScoreUI();
+  playSfx('crowd');
+  showBanner('🐌 SNAIL HOME!', team===0?'var(--red)':'var(--cyan)');
+  for (let i=0;i<(sel.juice?34:16);i++) spawnConfetti(ball.x, ball.y);
+  if (sel.juice){ addShake(14); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.95; }
+  w.state='goal'; w.stateT=0;
+  repOnGoal(w);
+  setTimeout(()=>endMatch(w), 1400);
+}
+
+// A regular Killer Queen goal: counts, but nothing resets — no kickoff, no
+// re-serve at centre, players keep their positions and the snail keeps its ground.
+// The ball is nudged back out of the mouth (with a brief cooldown) so it re-enters
+// play from where it went in instead of scoring on every frame it sits in the net.
+function kqGoal(w, ball, team){
+  w.score[team]++;
+  w.lastScorer = team;
+  creditScorer(w, ball, team);
+  const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
+  if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
+  if (d1 > w.maxDeficit[1]) w.maxDeficit[1] = d1;
+  updateScoreUI();
+  playSfx('crowd');
+  showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
+  for (let i=0;i<(sel.juice?24:14);i++) spawnConfetti(ball.x, ball.y);
+  if (sel.juice){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }
+
+  if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
+    w.state='goal'; w.stateT=0;
+    repOnGoal(w);
+    setTimeout(()=>endMatch(w), 1200);
+    return;
+  }
+  // Spit it back into the field of play, moving away from the goal it just entered.
+  const halfL = w.field.L/2, dir = team===0 ? 1 : -1;   // team 0 scored in the top goal
+  ball.y = dir * (halfL - ball.r*1.5);
+  ball.vy = dir * Math.max(3, Math.abs(ball.vy) * 0.5);
+  ball.vx *= 0.5;
+  ball._goalCd = 0.6;
+}
+
 function endMatch(w){
   if (w.state==='over') return;
   w.state='over';
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
-  if (w.score[0]===w.score[1]){ title='DRAW'; sub=`${w.score[0]} – ${w.score[1]}`; }
+  if (w.forceWin != null){
+    // Killer Queen: the snail decides it outright, so say so instead of quoting a
+    // scoreline that may well favour the loser.
+    title = w.forceWin===0 ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
+    sub = `${w.score[0]} – ${w.score[1]}   ·   snail win`;
+  }
+  else if (w.score[0]===w.score[1]){ title='DRAW'; sub=`${w.score[0]} – ${w.score[1]}`; }
   else if (w.score[0]>w.score[1]){ title='YOU WIN! 🏆'; sub=`${w.score[0]} – ${w.score[1]}`; }
   else { title = w.mode.twoP ? 'PLAYER 2 WINS' : 'YOU LOSE'; sub=`${w.score[0]} – ${w.score[1]}`; }
-  if (w.mode.twoP){
+  if (w.mode.twoP && w.forceWin == null){
     if (w.score[0]>w.score[1]) title='PLAYER 1 WINS 🏆';
     else if (w.score[1]>w.score[0]) title='PLAYER 2 WINS 🏆';
   }
@@ -5607,6 +5690,30 @@ function drawBall(w){
 }
 function drawOneBall(b, x, y, r, s){
   ctx.beginPath(); ctx.arc(x, y+r*0.3, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  // The snail must never be mistaken for the scoring ball — it's the sudden-death
+  // objective. Amber shell with a spiral, deliberately unlike the white ball.
+  if (b.isSnail){
+    ctx.beginPath(); ctx.arc(x, y, r + Math.max(2, r*0.14), 0, 2*Math.PI);
+    ctx.fillStyle = '#2a1c06'; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI);
+    ctx.fillStyle = '#e8a13a'; ctx.fill();
+    const rot = b.rot || 0;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    ctx.beginPath();                                   // shell spiral, ~2.5 turns
+    for (let i=0; i<=90; i++){
+      const t = i/90, a = t * Math.PI*5, rad = r*0.86 * (1 - t*0.92);
+      const px2 = Math.cos(a)*rad, py2 = Math.sin(a)*rad;
+      i ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
+    }
+    ctx.strokeStyle = '#7a4a10'; ctx.lineWidth = Math.max(1.5, r*0.15);
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+    ctx.restore();
+    const g = ctx.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
+    g.addColorStop(0, 'rgba(255,255,255,0.40)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.32)');
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
+    return;
+  }
   // Squash & stretch: warp the ball along its impact axis for a frame or two.
   const sq = b.sqT || 0;
   const warped = sq > 0.01;
@@ -6014,7 +6121,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.16';
+const VERSION = '20260803.17';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6042,7 +6149,8 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass, snailHome, kqGoal, SNAIL, checkGoal,
+    resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
