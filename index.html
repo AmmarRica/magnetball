@@ -3031,14 +3031,17 @@ function startMatch(){
     // Local 2-player couch: two humans on one screen, split touch controls.
     players.push(you, mkPlayer(1, 'P2', '#5a7de0', 'stripe', 'human2', 'none', 'ball'));
   } else {
-    // Build both teams as bots, with you leading team 0. Bots get random
-    // countryball flags + eyes for personality (unlock rules don't apply to NPCs).
+    // Build both teams as bots, with you leading team 0. Every bot mirrors YOUR
+    // customization (colour, cap, flag, eyes) so the whole pitch reflects your look.
+    // Teams stay readable because drawDiscs draws a team-colour ring (red vs blue,
+    // plus the optional colour-blind ring) keyed off p.team, not p.color; and each
+    // disc keeps its own name label, so you can still spot yourself by name.
     const t0 = [you];
     const t0names = pickNames(per-1, used);
-    for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], teamTint(0,i+1), randCap(i), 'bot', randFlag(i), randEyes(i)));
+    for(let i=0;i<per-1;i++) t0.push(mkPlayer(0, t0names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
     const t1 = [];
     const t1names = pickNames(per, used);
-    for(let i=0;i<per;i++) t1.push(mkPlayer(1, t1names[i], teamTint(1,i), randCap(i+3), 'bot', randFlag(i+3), randEyes(i+2)));
+    for(let i=0;i<per;i++) t1.push(mkPlayer(1, t1names[i], profile.color, profile.cap, 'bot', profile.flag, profile.eyes));
 
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
@@ -5126,7 +5129,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260802.7';
+const VERSION = '20260802.8';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {

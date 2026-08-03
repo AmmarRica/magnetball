@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260802.7** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260802.8** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -17,6 +17,11 @@ _Current build: **v20260802.7** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Bots mirror your customization** — every bot (both teams) now takes your colour, cap, flag
+  and eyes instead of random ones, so the whole pitch reflects your look. Applies in all modes incl.
+  1v1 (the opponent matches you). Teams stay readable via the existing team-colour ring (red vs blue,
+  keyed off `p.team`, not colour) and each disc keeps its own name label so you can spot yourself.
+  `teamTint`/`randCap`/`randFlag`/`randEyes` are now unused but kept for a future "bot variety" toggle.
 - [x] **Light-theme card definition** — 36 `rgba(255,255,255,…)` borders/fills (awards, shop, wallet,
   social posts, cocktail rows, leaderboard "you" row) were invisible on Paper's light panels. Card
   borders now use `var(--edge)`; subtle fills use a neutral `rgba(128,128,128,…)` that reads on both
