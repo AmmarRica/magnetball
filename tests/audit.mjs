@@ -30,7 +30,7 @@ const r = await p.evaluate(async ()=>{
     ballSkin:'#ballSkinPick .opt', playerSkin:'#playerSkinPick .opt',
     magnet:'#feelSliders input', sens:'#feelSliders input', matchSpeed:'#mspeed',
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
-    snd:'#sndMaster .opt', feel:'#feelSliders input',
+    snd:'#sndMaster .opt', feel:'#feelSliders input', names:'#seatNames',
   };
   for (const [key, sel] of Object.entries(CONTROLS)){
     const n = document.querySelectorAll(sel).length;
@@ -51,6 +51,14 @@ const r = await p.evaluate(async ()=>{
     if (!el || el.classList.contains('hidden')) out.navBroken.push(btn+'→'+screen);
   }
   M.toMenu(); await wait(120);
+
+  // No setting may have two controls: a second copy drifts out of step with the
+  // first and you can't tell which one you last used.
+  out.duplicateControls = [];
+  if (document.getElementById('magnet')) out.duplicateControls.push('magnet (Match card copy)');
+  if (document.querySelectorAll('#feelSliders label').length !==
+      new Set([...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent)).size)
+    out.duplicateControls.push('repeated feel slider label');
 
   // Every Game Feel slider must be present and write its key.
   const feelLabels=[...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent.toLowerCase());
@@ -216,6 +224,7 @@ const r = await p.evaluate(async ()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,8):'none');
 const clean = r.unreachable.length===0 && r.noEffect.length===0 && r.navBroken.length===0 &&
+  r.duplicateControls.length===0 &&
   r.drillsRun.length===0 && r.modesRun.length===0 && r.cosmeticThrows.length===0 && errors.length===0;
 console.log('RESULT:', clean?'ALL PASS':'FINDINGS');
 process.exit(clean?0:1);
