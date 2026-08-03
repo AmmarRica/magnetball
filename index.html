@@ -4300,10 +4300,21 @@ function clampBallInside(w, ball){
 function kickoffLineOn(w){
   return !!(w && w.kickoffRule && !w.drillMode && !w.train && w.state === 'kickoff');
 }
+// The hold bulges around the centre circle: carrying the ball in there lets you
+// step over the line, so you can turn and pass backwards instead of being pinned
+// with your only options in front of you.
+const KICKOFF_CIRCLE_R = 45;                    // matches the drawn centre circle
+function kickoffFreePass(w, p){
+  const b = w.ball; if (!b) return false;
+  const onBall = Math.hypot(p.x - b.x, p.y - b.y) <= p.r + b.r + 6;
+  const inCircle = Math.hypot(p.x, p.y) <= KICKOFF_CIRCLE_R + p.r;
+  return onBall && inCircle;
+}
 function applyKickoffLine(w, discs){
   if (!kickoffLineOn(w)) return;
   for (const p of discs){
     if (p.team !== 0 && p.team !== 1) continue;
+    if (kickoffFreePass(w, p)) continue;
     const own = p.team === 0 ? 1 : -1;          // own half sits at own*y > 0
     const line = own > 0 ? p.r : -p.r;
     if (own > 0 ? p.y < line : p.y > line){
@@ -5408,16 +5419,25 @@ function drawPitch(w){
   // halfway line — under the half-line rule it doubles as a live gate: solid while
   // your side may cross, hatched + tinted over the half you're locked out of.
   if (kickoffLineOn(w)){
-    // Held for kickoff: dash the line so it reads as "not yet", and tint the half
-    // you can't enter (yours is +y, so the far side is the locked one).
-    const yMid = wy(0);
+    // Dash the line so it reads as "not yet", tint the half you can't enter, and
+    // bulge both around the centre circle — that pocket is open if you're on the ball.
+    const yMid = wy(0), cx = wx(0), cr = KICKOFF_CIRCLE_R*s;
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(L, Math.min(yMid, T), R-L, Math.abs(T - yMid));
+    ctx.arc(cx, yMid, cr, 0, 2*Math.PI);
     ctx.fillStyle = TH.lineLock || 'rgba(255,80,80,0.09)';
-    ctx.fillRect(L, Math.min(yMid, T), R-L, Math.abs(T - yMid));
+    ctx.fill('evenodd');                        // punch the circle out of the tint
     ctx.strokeStyle = TH.lineLock2 || 'rgba(255,120,120,0.85)';
     ctx.lineWidth = Math.max(2.5, 4*s);
     ctx.setLineDash([10*s, 8*s]);
-    ctx.beginPath(); ctx.moveTo(L, yMid); ctx.lineTo(R, yMid); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(L, yMid); ctx.lineTo(cx - cr, yMid);            // line up to the circle
+    ctx.moveTo(cx + cr, yMid); ctx.lineTo(R, yMid);            // and on from it
+    ctx.stroke();
+    ctx.beginPath();                                            // the dome itself
+    ctx.arc(cx, yMid, cr, Math.PI, 2*Math.PI);
+    ctx.stroke();
     ctx.restore();
   } else {
     ctx.beginPath(); ctx.moveTo(L, wy(0)); ctx.lineTo(R, wy(0)); ctx.stroke();
@@ -6021,8 +6041,12 @@ function drawKickMarker(pad, isP2){
   if (isP2){ kx = cw - m; ky = m; }                     // p2 top-right
   else if (sel.handed==='left'){ kx = cw - m; ky = ch - m; }  // p1 left-handed → kick bottom-right
   else { kx = m; ky = ch - m; }                         // p1 bottom-left
-  ctx.globalAlpha = pad.kick ? 0.6 : 0.3;
-  dot(kx,ky,KICK_R,TH.accent);
+  // Same neutral treatment as the resting joystick opposite it — a coloured pad
+  // read as a live indicator rather than a control you rest a thumb on.
+  ctx.globalAlpha = pad.kick ? 0.26 : 0.10;
+  dot(kx, ky, KICK_R, '#ffffff');
+  ctx.globalAlpha = pad.kick ? 0.42 : 0.16;
+  ring(kx, ky, KICK_R, '#ffffff', 2);
   ctx.globalAlpha = 1;
   // Charge ring: grows as the human holds KICK before contact.
   const owner = world && world.players.find(p => p.ctrl === (isP2 ? 'human2' : 'human1'));
@@ -6031,12 +6055,14 @@ function drawKickMarker(pad, isP2){
     ctx.beginPath(); ctx.arc(kx, ky, KICK_R*0.78, -Math.PI/2, -Math.PI/2 + frac*2*Math.PI);
     ctx.strokeStyle = TH.kickRing; ctx.lineWidth = 5; ctx.stroke();
   }
-  ctx.fillStyle = TH.kickText;
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = pad.kick ? 0.85 : 0.55;
   ctx.font=`10px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.save();
   if (isP2){ ctx.translate(kx,ky); ctx.rotate(Math.PI); ctx.fillText('KICK',0,0); ctx.restore(); }
   else { ctx.fillText('KICK',kx,ky); ctx.restore(); }
+  ctx.globalAlpha = 1;
 }
 function ring(x,y,r,c,lw){ ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.strokeStyle=c; ctx.lineWidth=lw; ctx.stroke(); }
 function dot(x,y,r,c){ ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.fillStyle=c; ctx.fill(); }
@@ -6166,7 +6192,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.0738PM';
+const VERSION = '20260803.0808PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6194,7 +6220,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
