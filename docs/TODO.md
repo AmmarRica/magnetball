@@ -17,6 +17,15 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Pitch direction setting** (Settings → Display → **Pitch direction**) — Auto · ↕ Upright ·
+  ↔ Sideways. Decouples the landscape pitch from the Steam Deck layout, so goals can be left/right
+  on any device (and upright even on Deck). `pitchHorizontal()` drives both the camera quarter-turn
+  and the control rotation; `applySeatRotation()` re-aligns live seats when it changes mid-match.
+  Cocktail stays upright by design.
+- [x] **Full-screen button** — ⛶ in the in-game top bar, a matching button in Settings → Display,
+  and the **F** key. Label flips between Enter/Exit and the canvas re-fits on change. Browsers only
+  grant full screen from a real gesture, so the controller path can't trigger it (documented in the
+  hint text rather than failing silently).
 - [x] **Steam Deck view** (Settings → Look → Layout → 🎮 Steam Deck) — landscape pitch (camera
   quarter-turn via `cam.rot`, applied as a canvas transform in `render()`, so physics and hit
   testing are untouched), menu docked on the left at any window size (`dockCapable()`), and the
