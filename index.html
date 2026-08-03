@@ -1573,7 +1573,8 @@ const SFX = {
   ],
 };
 const SFX_LABELS = { whistle:['Pea','Airy','Rising'], crowd:['Roar','Applause','Swell'], kick:['Thock','Punch','Pluck'], wall:['Tick','Click','Bonk'], net:['Swish','Thud','Rustle'] };
-function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
+function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
+  const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
 // falling "aww" on a near miss / post.
 function sfxSwell(){ try{ Aud.noise(0.55,{bp:720,Q:0.7,vol:0.34,swell:true}); Aud.tone(200,0.5,'sawtooth',{to:360,vol:0.05}); }catch(e){} }
@@ -3157,7 +3158,8 @@ function startMatch(){
     field, mode, len, diff: DIFF[sel.diff],
     magnet: sel.magnet,
     train: !!mode.train,
-    watch, cb: sel.cb==='on',
+    watch, demo: _startQuiet,   // idle background demo (desktop menu) — muted, not recorded
+    cb: sel.cb==='on',
     pAccel: usePitchGrip ? pt.accel : fv.accel,
     pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
@@ -3547,9 +3549,11 @@ function step(w){
     if (w._trainGoalCd <= 0){ const b=w.ball; b.x=0; b.y=0; b.vx=0; b.vy=0; b.spin=0; b.sqT=0; }
   }
 
-  const active = (w.state==='play' || w.state==='kickoff');
+  // Players stay controllable during the goal celebration too, so you're never
+  // locked in place after a goal (the ball is already in the net; play resumes at kickoff).
+  const active = (w.state==='play' || w.state==='kickoff' || w.state==='goal');
 
-  // --- Gather controller inputs (only while the ball is live or during kickoff)
+  // --- Gather controller inputs (ball live, kickoff, or goal celebration)
   if (active){
     for (const p of w.players){
       if (p.ctrl==='human1') applyHumanInput(p, pads.p1);
@@ -3573,7 +3577,7 @@ function step(w){
 
   if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
-  else if (w.state==='goal') integrate(w, false, true);      // ball flies on into the net; players hold
+  else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
@@ -5248,7 +5252,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.2';
+const VERSION = '20260803.3';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5264,7 +5268,7 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
-    addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer,
+    addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
