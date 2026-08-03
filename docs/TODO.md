@@ -17,6 +17,14 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Steam Deck view** (Settings → Look → Layout → 🎮 Steam Deck) — landscape pitch (camera
+  quarter-turn via `cam.rot`, applied as a canvas transform in `render()`, so physics and hit
+  testing are untouched), menu docked on the left at any window size (`dockCapable()`), and the
+  pitch auto-resizes to the free space (`uiPadLeft`). Fully controller-driven: **Select** toggles
+  the menu, stick/d-pad moves a focus ring (`.deckfocus`), **A** activates, **B** closes, **LB/RB**
+  jump card-to-card, left/right nudges sliders. Human input is rotated with the view
+  (`rotQuarter=1`) so the stick stays screen-aligned. Discs/ball/name plates draw upright via
+  `uprightAt()`.
 - [x] **Half-line rule** — a team without the ball is locked in its own half; win a touch and the
   whole side is released. New sticky possession model (`updatePossession`, proximity-based touch →
   `w.possTeam`, seeded to the kicking team each kickoff) + `applyHalfLine`. Crossing the line is a
