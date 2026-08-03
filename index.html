@@ -4468,11 +4468,18 @@ const DRILL_KEYS = Object.keys(DRILLS);
 
 function startDrill(key){
   drillKey = key; const def = DRILLS[key];
+  // Use the SAME movement as a real match — your Game Feel sliders, pitch grip,
+  // ball cap/kick power and magnet — so a drill controls exactly like you play.
+  const fv = feelVals();
+  const pt = PITCH[sel.pitch] || PITCH.normal;
+  const usePitchGrip = sel.pitch !== 'normal';
   world = {
-    field: FIELDS.classic, drillMode:true, magnet:0,
-    pAccel: PITCH.normal.accel, pDamp: PITCH.normal.damp,
+    field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
+    pAccel: usePitchGrip ? pt.accel : fv.accel,
+    pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
+    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
-    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:BALL.damp, isBall:true },
+    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
     state:'drill', stateT:0,
     drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0 },
@@ -5309,7 +5316,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.4';
+const VERSION = '20260803.5';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
