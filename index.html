@@ -2233,7 +2233,12 @@ var _forceWatch = false, _startQuiet = false;   // flags read by startMatch() fo
 function paneLive(){ return !!(world && running); }
 function ensureDemo(){ if(dockCapable() && !paneLive()) startDemo(); }      // keep a match on the right
 function startDemo(){ _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
-function dockOrFull(id, build){
+// `auto` = the shell re-docking itself (resize, match start, layout switch) rather
+// than the player asking for a page. On deck that distinction matters: asking for a
+// page must expand the dock, or the gear/nav tiles open a panel that's still slid
+// off-screen and look dead — while the automatic re-docks must leave it collapsed
+// so the pad stays with the game.
+function dockOrFull(id, build, auto){
   hideOverlay();
   hideScreens();
   const el = $(id); if(!el) return;
@@ -2242,6 +2247,11 @@ function dockOrFull(id, build){
     el.classList.add('docked');
     document.body.classList.add('panel-open');
     deskDockId = id;
+    if (isDeck() && !auto && sel.dockCollapsed){
+      sel.dockCollapsed = false; saveSel();
+      // Opening a page over a live match pauses it, same rule as Select.
+      if (world && running && !world.demo && world.state !== 'over' && !paused){ paused = true; deckPausedByMenu = true; }
+    }
     uiPadLeft = sel.dockCollapsed ? 0 : DOCK_W;   // collapsed → pitch uses full width
     document.body.classList.toggle('dock-collapsed', !!sel.dockCollapsed);
     updateDockToggle();
@@ -2328,8 +2338,12 @@ let deckUI = { idx:0, prev:{}, repeat:0, on:false };
 // True while the open deck menu is holding the controller — the match must ignore
 // pad/keyboard input for that whole time, or navigating also drives your player.
 function deckMenuOwnsPad(){
-  return !!(isDeck() && deskDockId && !sel.dockCollapsed
-            && document.body.classList.contains('panel-open'));
+  if (!isDeck() || !deskDockId || sel.dockCollapsed) return false;
+  if (!document.body.classList.contains('panel-open')) return false;
+  // Trust the DOM, not just the flag: if the panel isn't actually on screen the
+  // game keeps the pad. Belt-and-braces so no state mismatch can steal input.
+  const el = $(deskDockId);
+  return !!(el && !el.classList.contains('hidden') && el.classList.contains('docked'));
 }
 function deckFocusables(){
   if (!deskDockId) return [];
@@ -2344,7 +2358,15 @@ function deckFocusables(){
     return r.width > 0 && r.height > 0;      // skip anything collapsed or off-layout
   });
 }
-function deckFocusReset(){ deckUI.idx = 0; deckPaint(); }
+function deckFocusReset(){ deckUI.idx = 0; deckUI.repeat = 0; deckPaint(); }
+// The one entry point for Select / B. Opening when nothing is docked (a drill, the
+// tutorial, any odd state) brings the main menu in first, so Select ALWAYS opens
+// and closes the side menu instead of silently doing nothing.
+function deckSetMenuOpen(open){
+  if (open && !deskDockId) dockOrFull('setup', null, true);
+  setDockCollapsed(!open);
+  deckFocusReset();
+}
 function deckPaint(){
   document.querySelectorAll('.deckfocus').forEach(el => el.classList.remove('deckfocus'));
   if (!isDeck() || sel.dockCollapsed) return;
@@ -2401,7 +2423,7 @@ function pollDeckUI(){
     let g = null;
     for (const c of gps) if (c && c.connected){ g = c; break; }   // any pad drives the UI
     if (g){
-      if (deckEdge(g, DECK_BTN.SELECT)) setDockCollapsed(!sel.dockCollapsed), deckFocusReset();
+      if (deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(!!sel.dockCollapsed);
       if (!sel.dockCollapsed){
         const ax = g.axes[0]||0, ay = g.axes[1]||0;
         const up    = btn(g, DECK_BTN.UP)    || ay < -0.55;
@@ -2419,7 +2441,7 @@ function pollDeckUI(){
           else if (right && !deckSlide(1))  deckMove(1);
         }
         if (deckEdge(g, DECK_BTN.A)) deckActivate();
-        if (deckEdge(g, DECK_BTN.B)) setDockCollapsed(true);
+        if (deckEdge(g, DECK_BTN.B)) deckSetMenuOpen(false);
         if (deckEdge(g, DECK_BTN.LB)) deckSection(-1);
         if (deckEdge(g, DECK_BTN.RB)) deckSection(1);
       } else {
@@ -2436,7 +2458,7 @@ requestAnimationFrame(pollDeckUI);
 // Keyboard mirrors the pad so the layout is testable (and usable) without one.
 window.addEventListener('keydown', e => {
   if (!isDeck()) return;
-  if (e.key === 'Escape' || e.key === 'Tab'){ e.preventDefault(); setDockCollapsed(!sel.dockCollapsed); deckFocusReset(); }
+  if (e.key === 'Escape' || e.key === 'Tab'){ e.preventDefault(); deckSetMenuOpen(!!sel.dockCollapsed); }
 });
 
 // ---- Settings (sound + game feel), openable from the menu and mid-game
@@ -2531,7 +2553,7 @@ function applyDisplayMode(){
   if (world) applySeatRotation(world.players);   // keep live controls aligned to the new view
   // Entering deck: bring the menu in on the left so Select has something to toggle.
   // Deferred — this also runs during boot, before the dock machinery is wired up.
-  if (isDeck()) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup'); else if (world) resize(); deckFocusReset(); }, 0);
+  if (isDeck()) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
   else { if (world) resize(); setTimeout(deckFocusReset, 0); }
 }
 function openCocktailCfg(){ dockOrFull('cocktailCfg', buildCocktailRows); }
@@ -3563,7 +3585,7 @@ function startMatch(){
   rafId = requestAnimationFrame(loop);
   // Desktop: keep the main menu docked on the left with the pitch on the right.
   // (For the idle demo, the caller already manages the dock — don't override it.)
-  if (!_startQuiet && isDesktop()) dockOrFull('setup');
+  if (!_startQuiet && dockCapable()) dockOrFull('setup', null, true);
 }
 
 function teamTint(team, idx){
@@ -4699,7 +4721,7 @@ function resize(){
   // below prevents re-entry when dockOrFull calls resize again.)
   if (running && world && !world.drillMode && !world.tutorial && dockCapable()
       && !deskDockId && !$('hud').classList.contains('hidden')){
-    dockOrFull('setup');
+    dockOrFull('setup', null, true);   // automatic: keep the collapse state as-is
   }
 }
 function computeCam(){
@@ -4871,6 +4893,14 @@ function startDrill(key){
   $('scorebug').style.display='none';
   $('resetBtn').style.display='';
   hideOverlay();
+  // Deck: same handover as kicking off — starting a drill gives the pad to the
+  // drill, not the menu. Select brings the menu back.
+  if (isDeck()){
+    sel.dockCollapsed = true; saveSel();
+    document.body.classList.add('dock-collapsed');
+    deckPausedByMenu = false;
+    updateDockToggle();
+  }
   running = true; paused = false; resize(); lastT=0; acc=0;
   cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop);
 }
@@ -5652,7 +5682,7 @@ function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
   // Desktop shell: the main menu is just the left dock — the match on the right
   // keeps playing. If nothing is live (or it just ended) fall back to the idle demo.
-  if (isDesktop()){
+  if (dockCapable()){
     $('resetBtn').style.display='none';
     if (!(world && running && world.state!=='over')){ world=null; running=false; startDemo(); }
     dockOrFull('setup');
@@ -5722,7 +5752,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.10';
+const VERSION = '20260803.11';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5750,7 +5780,7 @@ if (window.__MAGNETDEBUG) {
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
-    deckMenuOwnsPad, pollDeckUI, get paused(){ return paused; }, get running(){ return running; },
+    deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
