@@ -3677,6 +3677,7 @@ function startMatch(){
   // UI
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
+  resetTrails();       // no motion tails streaking in from the previous match
   // Idle demo (quiet): don't disturb whatever menu page is docked — just bring the
   // pitch to life on the right. A real match takes over the screen normally.
   if (!_startQuiet){
@@ -3806,6 +3807,7 @@ function resetKickoff(w, initial){
   for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
   w.state = 'kickoff'; w.stateT = 0;
   w.kickedOff = false;
+  resetTrails();       // players teleport to their marks — don't smear a tail across the pitch
   playSfx('whistle');            // referee whistle at match start / after a reset to centre
 }
 function layTeam(list, side, halfL){
@@ -5228,6 +5230,7 @@ function render(){
   drawPitch(world);
   drawFx();
   drawBallTrail(world);
+  drawDiscTrails(world);      // under the discs: motion reads, clutter doesn't
   drawDiscs(world);
   drawBall(world);
   if (world.extraBalls) for (const eb of world.extraBalls) drawBall({ ball: eb });   // multiball extras
@@ -5450,10 +5453,38 @@ function drawOneDisc(w, p, x, y, r, s){
       ctx.beginPath(); ctx.arc(x, y, r*1.12, 0, 2*Math.PI); ctx.stroke();
       ctx.restore();
     }
-    // kick indicator ring (charged/ready) — neon yellow
-    if (p.kick){
-      ctx.beginPath(); ctx.arc(x, y, r*1.42, 0, 2*Math.PI);
-      ctx.strokeStyle=TH.kickRing; ctx.lineWidth=Math.max(2,r*0.16); ctx.stroke();
+    // Aim notch — a wedge on the rim showing where this player will strike, so a
+    // frozen frame reads intent, not just position. faceX/faceY are world-space,
+    // so turn them by cam.rot to land correctly on a sideways pitch.
+    if (r > 6){
+      const fl = Math.hypot(p.faceX, p.faceY);
+      if (fl > 0.001){
+        const rot = cam.rot || 0, cr = Math.cos(rot), sr = Math.sin(rot);
+        const fx = p.faceX/fl, fy = p.faceY/fl;
+        const ax = fx*cr - fy*sr, ay = fx*sr + fy*cr;     // facing, in screen space
+        const px = -ay, py = ax;                           // perpendicular
+        const tip = r*1.46, baseR = r*0.80, halfW = r*0.42;
+        ctx.beginPath();
+        ctx.moveTo(x + ax*tip, y + ay*tip);
+        ctx.lineTo(x + ax*baseR + px*halfW, y + ay*baseR + py*halfW);
+        ctx.lineTo(x + ax*baseR - px*halfW, y + ay*baseR - py*halfW);
+        ctx.closePath();
+        ctx.fillStyle = rgba(p.team === 0 ? TH.teamRed : TH.teamBlue, 0.95);
+        ctx.fill();
+      }
+    }
+    // Wind-up tell — the ring FILLS as the kick charges, so a still frame shows
+    // both who is holding kick and how big the shot is going to be.
+    if (p.kick || (p.chargeT||0) > 0.01){
+      const rr = r*1.42, lw = Math.max(2, r*0.16);
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 2*Math.PI);
+      ctx.strokeStyle = rgba(TH.kickRing, 0.20); ctx.lineWidth = lw; ctx.stroke();
+      const f = Math.min(1, (p.chargeT||0) / CHARGE.max);
+      if (f > 0.001){
+        ctx.beginPath(); ctx.arc(x, y, rr, -Math.PI/2, -Math.PI/2 + f*2*Math.PI);
+        ctx.strokeStyle = TH.kickRing; ctx.lineWidth = lw;
+        ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
+      }
     }
     // name label — pixel font in a solid high-contrast plate (readability).
     // A plate sitting over another disc or the ball is pure noise, so it fades
@@ -5500,15 +5531,61 @@ function roundRectFill(x,y,ww,hh,r){
   ctx.arcTo(x,y+hh,x,y,r); ctx.arcTo(x,y,x+ww,y,r); ctx.fill();
 }
 
+// ---------- Motion tells ----------------------------------------------------
+// Readability goal (VIDEOBALL's): a single frozen frame should say who is moving,
+// which way, how fast, and who is winding up a shot. Speed is the thing a still
+// image normally loses, so both trails scale their LENGTH and OPACITY with speed
+// rather than being decorative constants — a rolling ball leaves a stub, a rocket
+// leaves a streak, and a parked player leaves nothing at all.
 let ballTrail = [];
+let discTrails = [];                      // per-player dot history, index-aligned to w.players
+function resetTrails(){ ballTrail = []; discTrails = []; }
+const BALL_TRAIL_LEN = 16, DISC_TRAIL_LEN = 14;
+const DISC_SPD_MAX = 4.2;                 // ≈ terminal player speed at default feel
+const DISC_SPD_MIN = 0.35;                // below this a player reads as standing still
+
 function drawBallTrail(w){
   ballTrail.push({x:w.ball.x, y:w.ball.y});
-  if (ballTrail.length>10) ballTrail.shift();
-  const s=cam.s;
-  for (let i=0;i<ballTrail.length;i++){
-    const t=ballTrail[i]; const a=i/ballTrail.length;
-    ctx.beginPath(); ctx.arc(wx(t.x), wy(t.y), w.ball.r*s*a*0.8, 0, 2*Math.PI);
-    ctx.fillStyle=`rgba(${TH.trailRGB},${a*0.12})`; ctx.fill();
+  if (ballTrail.length > BALL_TRAIL_LEN) ballTrail.shift();
+  const s = cam.s;
+  const cap = (w.ballCap || 32) * 0.55;   // full streak well before the hard cap
+  const drive = Math.min(1, Math.hypot(w.ball.vx||0, w.ball.vy||0) / cap);
+  if (drive < 0.06) return;               // a resting ball has no streak to draw
+  // Clamp to what we actually have: right after resetTrails() the history is a
+  // single sample, and asking for 2 would index off the front of the array.
+  const shown = Math.min(ballTrail.length, Math.max(2, Math.round(ballTrail.length * drive)));
+  const base = Math.max(0, ballTrail.length - shown);
+  for (let k = base; k < ballTrail.length; k++){
+    const t = ballTrail[k], f = (k - base) / shown;      // 0 oldest … 1 newest
+    ctx.beginPath();
+    ctx.arc(wx(t.x), wy(t.y), w.ball.r*s*(0.25 + 0.75*f), 0, 2*Math.PI);
+    ctx.fillStyle = `rgba(${TH.trailRGB},${(0.05 + 0.38*f) * drive})`;
+    ctx.fill();
+  }
+}
+
+// Team-coloured dot tails behind moving players. Drawn under the discs so they
+// read as motion rather than clutter, and keyed by index (not stored on the
+// player) so the replay's rebuilt player objects can't inherit a live trail.
+function drawDiscTrails(w){
+  const s = cam.s;
+  if (discTrails.length !== w.players.length) discTrails = w.players.map(()=>[]);
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i], hist = discTrails[i];
+    hist.push({x:p.x, y:p.y});
+    if (hist.length > DISC_TRAIL_LEN) hist.shift();
+    const drive = Math.min(1, (Math.hypot(p.vx, p.vy) - DISC_SPD_MIN) / (DISC_SPD_MAX - DISC_SPD_MIN));
+    if (drive <= 0) continue;             // parked: no tail at all
+    const shown = Math.min(hist.length, Math.max(2, Math.round(hist.length * drive)));
+    const base = Math.max(0, hist.length - shown);
+    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    for (let k = base; k < hist.length; k++){
+      const t = hist[k], f = (k - base) / shown;
+      ctx.beginPath();
+      ctx.arc(wx(t.x), wy(t.y), p.r*s*(0.22 + 0.58*f), 0, 2*Math.PI);
+      ctx.fillStyle = rgba(col, (0.07 + 0.45*f) * drive);
+      ctx.fill();
+    }
   }
 }
 function drawBall(w){
@@ -5926,7 +6003,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.14';
+const VERSION = '20260803.15';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5958,7 +6035,8 @@ if (window.__MAGNETDEBUG) {
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, LABEL_DIM,
+    screenPt, circleHitsRect, LABEL_DIM, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
+    get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
   };
