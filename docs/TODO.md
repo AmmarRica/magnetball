@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.19** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.20** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,6 +24,11 @@ _Current build: **v20260803.19** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
+- [x] **Ball control is a real setting now** (Settings → Game Feel → **Ball control**: 🧤 Trap /
+  ⚡ One-touch). Hold-to-grab was only ever reachable as a *side effect* of the Casual/Pro presets —
+  picking Pro silently removed it with no control to put it back short of re-applying Casual, which
+  also rewrites five other physics values. Verified trapping itself was never broken: in Casual the
+  ball sticks and is carried 77px, in Pro it isn't (by design).
 - [x] **Demo polish + controller wording + longer cheers** — the idle demo now picks a **random
   court** each restart and **never plays goal replays** (your Auto-replay setting is untouched).
   Prompts follow the device: with every human seat on a pad (or in deck view) the replay hint reads
