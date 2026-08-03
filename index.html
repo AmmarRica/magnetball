@@ -133,6 +133,13 @@
       padding: 13px 13px; font-family: var(--pix); font-size: 13px; outline: none;
     }
     input[type=text]:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 16px rgba(33,230,255,.35); }
+    textarea {
+      width: 100%; background: var(--field); color: var(--text);
+      border: 1px solid var(--edge); border-radius: 8px; resize: vertical;
+      padding: 11px 13px; font-family: var(--pix); font-size: 13px; line-height: 1.9;
+      outline: none; -webkit-user-select: text; user-select: text;
+    }
+    textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 16px rgba(33,230,255,.35); }
 
     .row { display: flex; gap: 10px; flex-wrap: wrap; }
     .swatches { display: flex; gap: 11px; flex-wrap: wrap; margin-top: 4px; }
@@ -750,10 +757,6 @@
         <div class="opts" id="coop"></div>
       </div>
       <div style="height:14px"></div>
-      <label class="field">Ball magnet <small id="magVal" style="color:var(--accent); font-weight:700">0</small></label>
-      <input id="magnet" class="slider" type="range" min="0" max="100" step="5" value="0" />
-      <div class="hint" style="text-align:left; margin-top:4px">Magnet sticks the ball to you while you dribble. 0 is off. Most people leave it there.</div>
-      <div style="height:14px"></div>
       <label class="field">Ball</label>
       <div class="opts" id="balls"></div>
       <div style="height:14px"></div>
@@ -767,6 +770,12 @@
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played. After that it's a free-for-all.</div>
+      <div style="height:14px"></div>
+      <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
+      <textarea id="seatNames" rows="4" spellcheck="false" autocomplete="off"
+                placeholder="One name per line, in seat order"></textarea>
+      <div class="hint" style="text-align:left; margin-top:4px">Your side first (you, then your team-mates), then the opposition. Blank lines keep the default name. Applies to the next match.</div>
+      <button class="ghost" id="namesClear" style="margin-top:8px">Clear names</button>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -1552,6 +1561,9 @@ const STEP = 1/60;
 // Movement feel: snappier than before — reach a (lower) top speed in ~0.4s and
 // stop quickly when you let go (little float), while still carrying some weight.
 // terminal ≈ accel/(1-damp) ≈ 4.2 u/frame; ~0.38s to 90%; glide half-life ~0.12s.
+// Centre-circle radius. Drives the drawn circle, the picker previews AND the
+// kickoff gate, so those three can never drift apart.
+const CENTER_R = 58;
 const PLAYER = { r:15, invMass:0.5, bCoef:0.45, damp:0.905, accel:0.40, kick:5.5, kickRange:14 };
 const BALL   = { r:10, invMass:1.0, bCoef:0.55, damp:0.990 };
 const POST   = { r:8,  invMass:0.0, bCoef:0.55 };
@@ -1581,7 +1593,7 @@ const PANEL = detectPanel();
 
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -2201,7 +2213,7 @@ function drawFieldPreview(c, F, cw, ch, grass, bare, surface){
   c.strokeStyle=line; c.lineWidth=2*k; path(); c.stroke();
   c.lineWidth=1.5*k;
   c.beginPath(); c.moveTo(L,cy); c.lineTo(R,cy); c.stroke();
-  c.beginPath(); c.arc(cx,cy, Math.max(4*k,45*s), 0, 7); c.stroke();
+  c.beginPath(); c.arc(cx,cy, Math.max(4*k, CENTER_R*s), 0, 7); c.stroke();
   c.beginPath(); c.arc(cx,cy, 1.8*k, 0, 7); c.fillStyle=dot; c.fill();
   // goals — top defends blue, bottom red (matches drawGoal)
   const goal=(sign,col)=>{ const y=Y(sign*hl), ny=y+sign*net*s;
@@ -2467,14 +2479,23 @@ function buildStats(){
 }
 function openStats(){ dockOrFull('stats', buildStats); }
 
-// Ball-magnet slider (0..100). Applies live if a match is already running.
-const magEl = $('magnet'), magValEl = $('magVal');
-magEl.value = sel.magnet; magValEl.textContent = sel.magnet;
-magEl.oninput = () => {
-  sel.magnet = +magEl.value; saveSel();
-  magValEl.textContent = sel.magnet;
-  if (world) world.magnet = sel.magnet;
-};
+// Ball magnet lives in Game Feel with the other physics sliders (FEEL_SLIDERS) —
+// it used to have a second copy of itself in the Match card.
+
+// Seat names. Free text, applied in order on the next kickoff.
+const namesEl = $('seatNames');
+if (namesEl){
+  namesEl.value = sel.names || '';
+  const showSeats = () => { const el=$('namesInfo'); if(!el) return;
+    const per = (MODES[sel.mode]||{}).per || 1;
+    const seats = (MODES[sel.mode]||{}).twoP ? 2 : per*2;
+    const used = seatNameList().filter(Boolean).length;
+    el.textContent = `(${used}/${seats} set for ${sel.mode})`; };
+  showSeats();
+  namesEl.oninput = () => { sel.names = namesEl.value; saveSel(); showSeats(); };
+  const clr = $('namesClear');
+  if (clr) clr.onclick = () => { sel.names=''; namesEl.value=''; saveSel(); showSeats(); };
+}
 
 updatePreview();
 updatePadInfo();
@@ -3930,6 +3951,7 @@ function startMatch(){
       }
     }
     players = t0.concat(t1);
+    if (!_startQuiet) applySeatNames(players);   // the idle demo stays generic
   }
 
   // Spectator: hand your seat to the AI and just watch the match.
@@ -4014,6 +4036,7 @@ function startMatch(){
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
   resetTrails();       // no motion tails streaking in from the previous match
+  resetWear();         // ...and a fresh pitch: last match's churn isn't this match's
   // Idle demo (quiet): don't disturb whatever menu page is docked — just bring the
   // pitch to life on the right. A real match takes over the screen normally.
   if (!_startQuiet){
@@ -4053,6 +4076,17 @@ function teamTint(team, idx){
   return base[idx % base.length];
 }
 function randCap(i){ const k = Object.keys(CAPS); return k[(i+1)%k.length]; }
+// Names typed in settings, one per line, applied in seat order: your side first
+// (you, then team-mates), then the opposition. A blank line keeps whatever the
+// seat already had, so you can rename just the third bot if that's all you want.
+function seatNameList(){
+  return String(sel.names || '').split('\n').map(t => t.trim().slice(0, 12));
+}
+function applySeatNames(players){
+  const list = seatNameList();
+  if (!list.some(Boolean)) return;
+  players.forEach((p, i) => { if (list[i]) p.name = list[i]; });
+}
 // Deterministic-ish pick so bots vary but a match is reproducible frame-to-frame.
 function randFlag(i){ return FLAG_KEYS[(i*5+3) % FLAG_KEYS.length]; }
 function randEyes(i){ const k=EYE_KEYS.filter(e=>e!=='none'); return k[(i*3+1) % k.length]; }
@@ -4535,6 +4569,8 @@ function integrate(w, ballFrozen, playersFrozen){
       }
     }
     applyKickoffLine(w, discs);
+    // After the final positions for this step: ice and mud remember where you went.
+    if (w.state === 'play') for (const p of discs) noteWear(w, p);
   }
 
   // Ball movement (sub-stepped so a fast ball can't tunnel walls). Runs for the
@@ -4590,27 +4626,38 @@ function clampBallInside(w, ball){
 function kickoffLineOn(w){
   return !!(w && w.kickoffRule && !w.drillMode && !w.train && w.state === 'kickoff');
 }
-// The hold bulges around the centre circle: carrying the ball in there lets you
-// step over the line, so you can turn and pass backwards instead of being pinned
-// with your only options in front of you.
-const KICKOFF_CIRCLE_R = 45;                    // matches the drawn centre circle
+// The centre circle is a gate in the kickoff line: stand in it and you may cross,
+// so you can turn and pass backwards instead of being pinned with every option in
+// front of you. Same radius drives the drawn circle and the rule, so they can't drift.
+const KICKOFF_CIRCLE_R = CENTER_R;              // the gate IS the drawn circle
 function kickoffFreePass(w, p){
-  const b = w.ball; if (!b) return false;
-  const onBall = Math.hypot(p.x - b.x, p.y - b.y) <= p.r + b.r + 6;
-  const inCircle = Math.hypot(p.x, p.y) <= KICKOFF_CIRCLE_R + p.r;
-  return onBall && inCircle;
+  return Math.hypot(p.x, p.y) <= KICKOFF_CIRCLE_R + p.r;
 }
+// Step out of the circle on the wrong side and you get shoved home rather than
+// stopped dead: a hard clamp reads as an invisible wall you're grinding against,
+// a push reads as a rule pushing back. The clamp stays as a backstop so the shove
+// can never be out-run.
+const KICKOFF_PUSH = 0.7;                       // accel back toward your own half
+const KICKOFF_HARD = 30;                        // furthest you can get past the line
 function applyKickoffLine(w, discs){
   if (!kickoffLineOn(w)) return;
   for (const p of discs){
     if (p.team !== 0 && p.team !== 1) continue;
     if (kickoffFreePass(w, p)) continue;
     const own = p.team === 0 ? 1 : -1;          // own half sits at own*y > 0
-    const line = own > 0 ? p.r : -p.r;
-    if (own > 0 ? p.y < line : p.y > line){
-      p.y = line;                               // pinned at the halfway line
-      if (own > 0 ? p.vy < 0 : p.vy > 0) p.vy = 0;
+    const past = p.r - own * p.y;               // >0 once any part of you is over
+    if (past <= 0) continue;
+    p.vy += own * KICKOFF_PUSH;                 // shoved back toward your half
+    if (own * p.vy < 0) p.vy *= 0.86;           // and the momentum carrying you in bleeds off
+    if (past > KICKOFF_HARD){                   // backstop — the shove is never a bypass
+      p.y = own * (p.r - KICKOFF_HARD);
+      if (own * p.vy < 0) p.vy = 0;
     }
+    // Show it: a puff on the line where you're being turned back, so the rule reads
+    // as something acting on you rather than the controls going vague.
+    p._koFx = (p._koFx || 0) - STEP;
+    if (p._koFx <= 0){ p._koFx = 0.3;
+      spawnTouchFx(p.x, own * p.r, TH.lineLock2 || '#ff8080', 10); }
   }
 }
 
@@ -5248,8 +5295,14 @@ function computeCam(){
   // the top goal + net never render underneath it — otherwise a ball driven into
   // the top net looks like it vanishes behind the buttons.
   const padTop = isDeck() ? 64 : 96;
+  // Phones: keep the bottom of the pitch clear of the thumbsticks. The joystick
+  // sits 70px up from the bottom with radius JOY_R, so that band is under a thumb
+  // whenever the player is actually playing. Reserving it doesn't shrink the pitch
+  // on a tall screen — width is what binds there — it lifts it out of the dead
+  // space under the HUD and away from your hands.
+  const padBot = isTouchLayout() ? Math.round(70 + JOY_R*0.9) : 0;
   const availW = Math.max(80, cw - padL);
-  const availH = Math.max(80, ch - padTop);
+  const availH = Math.max(80, ch - padTop - padBot);
   const worldW = f.W + 60;
   const worldH = f.L + f.net*2 + 60;
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
@@ -5710,7 +5763,7 @@ function drawPitch(w){
   // your side may cross, hatched + tinted over the half you're locked out of.
   if (kickoffLineOn(w)){
     // Dash the line so it reads as "not yet", tint the half you can't enter, and
-    // bulge both around the centre circle — that pocket is open if you're on the ball.
+    // break both around the centre circle — standing in there is what lets you cross.
     const yMid = wy(0), cx = wx(0), cr = KICKOFF_CIRCLE_R*s;
     ctx.save();
     ctx.beginPath();
@@ -5725,15 +5778,19 @@ function drawPitch(w){
     ctx.moveTo(L, yMid); ctx.lineTo(cx - cr, yMid);            // line up to the circle
     ctx.moveTo(cx + cr, yMid); ctx.lineTo(R, yMid);            // and on from it
     ctx.stroke();
-    ctx.beginPath();                                            // the dome itself
-    ctx.arc(cx, yMid, cr, Math.PI, 2*Math.PI);
-    ctx.stroke();
+    // The whole ring is the gate now, not a dome over the line: you may stand in it
+    // from either side. Draw it solid so it reads as the way through rather than
+    // more of the same barrier.
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(cx, yMid, cr, 0, 2*Math.PI); ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.restore();
   } else {
     ctx.beginPath(); ctx.moveTo(L, wy(0)); ctx.lineTo(R, wy(0)); ctx.stroke();
   }
   // center circle
-  ctx.beginPath(); ctx.arc(wx(0), wy(0), 75*s*0.6, 0, 2*Math.PI); ctx.stroke();
+  ctx.beginPath(); ctx.arc(wx(0), wy(0), CENTER_R*s, 0, 2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.arc(wx(0), wy(0), 3, 0, 2*Math.PI); ctx.fillStyle=TH.centerDot; ctx.fill();
 
   // Goal nets (crosshatch) + goal line coloring
@@ -5838,8 +5895,10 @@ function paintIce(c, L, T, W, H, seed){
     c.strokeStyle = 'rgba(120,200,245,0.34)'; c.lineWidth = Math.max(1.2, H*0.004); c.stroke();
   }
 
-  // Skate cuts: short curved scratches, denser where the traffic is.
-  const cx = L+W/2, cy = T+H/2;
+  // The rink starts imperfect: it has been skated on before this match. Fine cuts
+  // scattered everywhere, a little denser where the play is. What THIS match adds
+  // is the wear layer, and that stays much fainter than this so it blends in
+  // rather than drawing tram lines over the top.
   c.lineCap = 'round';
   for (let i=0;i<260;i++){
     const hit = pickWorn(rnd, W, H, 6); if (!hit) continue;
@@ -5895,11 +5954,14 @@ function paintMud(c, L, T, W, H, seed, mow){
 
   // 1. Coverage mask: where has the turf actually gone?
   const mask = mk(x => {
+    // Light: the pitch starts GREEN, with only the worst spots showing before
+    // anyone has played. The rest arrives from where the players actually run.
     x.fillStyle = '#fff';
-    for (let i=0;i<300;i++){
+    for (let i=0;i<70;i++){
       const hit = pickWorn(rnd, w2, h2); if (!hit) continue;
+      if (hit.t < 0.5) continue;                 // only the goal mouths and centre
       const px = hit.x, py = hit.y, t = hit.t;
-      const r = (w2*0.015 + rnd()*w2*0.055) * (0.5 + t);
+      const r = (w2*0.010 + rnd()*w2*0.028) * (0.5 + t);
       x.beginPath();
       x.ellipse(px, py, r, r*(0.5+rnd()*0.6), rnd()*Math.PI, 0, 2*Math.PI);
       x.fill();
@@ -5956,8 +6018,8 @@ function paintMud(c, L, T, W, H, seed, mow){
 
   c.save(); c.beginPath(); c.rect(L,T,W,H); c.clip();
   c.drawImage(earth, L, T, W, H);
-  // Everything is damp, but the turf less so than the bare ground.
-  c.fillStyle = 'rgba(46,38,26,0.18)'; c.fillRect(L, T, W, H);
+  // Damp, but lightly — the pitch should still read as green until it's been played on.
+  c.fillStyle = 'rgba(46,38,26,0.10)'; c.fillRect(L, T, W, H);
   c.restore();
 }
 
@@ -5966,6 +6028,64 @@ function paintSurface(c, surface, mow, L, T, W, H, seed){
   if (surface === 'ice') paintIce(c, L, T, W, H, seed||1);
   else if (surface === 'mud') paintMud(c, L, T, W, H, seed||1, mow);
   else paintGrass(c, mow || 'stripes', L, T, W, H);
+}
+
+// ---------- Wear that accumulates while you play ----------------------------
+// The baked texture is the pitch before kickoff. This layer is what the match does
+// to it: mud churns where feet actually go, ice picks up skate cuts along the lines
+// players travel. Deliberately faint and rate-limited by DISTANCE, not by frames —
+// stamping every tick would black the pitch out in a minute and cost a draw per
+// player per frame. A disc has to cover real ground to leave anything behind.
+const WEAR = { px:512, step:22, mudA:0.16, iceA:0.045 };
+let wearCv = null, wearKey = '';
+function wearLayer(w){
+  const F = w.field;
+  const key = [sel.pitch, F.W, F.L].join('|');
+  if (wearCv && wearKey === key) return wearCv;
+  const px = Math.max(F.W, F.L);
+  const cv2 = document.createElement('canvas');
+  cv2.width  = Math.max(64, Math.round(WEAR.px * F.W / px));
+  cv2.height = Math.max(64, Math.round(WEAR.px * F.L / px));
+  wearCv = cv2; wearKey = key;
+  return cv2;
+}
+function resetWear(){ wearCv = null; wearKey = ''; }
+// Called per player per step. Cheap when nothing has moved far enough.
+function noteWear(w, p){
+  if (sel.pitch !== 'mud' && sel.pitch !== 'ice') return;
+  if (!w || !w.bounds) return;
+  const lx = p._wx, ly = p._wy;
+  if (lx == null){ p._wx = p.x; p._wy = p.y; return; }
+  const d = Math.hypot(p.x - lx, p.y - ly);
+  if (d < WEAR.step) return;                       // hasn't covered enough ground
+  p._wx = p.x; p._wy = p.y;
+  const cv2 = wearLayer(w), c = cv2.getContext('2d');
+  const b = w.bounds;
+  const sx = (p.x + b.halfW) / (b.halfW*2) * cv2.width;
+  const sy = (p.y + b.halfL) / (b.halfL*2) * cv2.height;
+  const scale = cv2.width / (b.halfW*2);
+  const r = p.r * scale;
+  if (sel.pitch === 'ice'){
+    // A single faint cut along the line you travelled, bowed a little so it reads
+    // as a blade mark rather than a ruled line. Twin bright rails looked painted on.
+    const ang = Math.atan2(p.y - ly, p.x - lx);
+    const len = Math.min(d, WEAR.step*1.4) * scale;
+    const off = ((p.x*7 + p.y*13) % 1 + 1) % 1 - 0.5;      // stable per position, no RNG
+    const ox = -Math.sin(ang)*off*r*0.7, oy = Math.cos(ang)*off*r*0.7;
+    c.strokeStyle = `rgba(255,255,255,${WEAR.iceA})`;
+    c.lineWidth = Math.max(0.8, r*0.28); c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(sx - Math.cos(ang)*len + ox, sy - Math.sin(ang)*len + oy);
+    c.quadraticCurveTo(sx - Math.cos(ang)*len*0.5 + ox*1.8, sy - Math.sin(ang)*len*0.5 + oy*1.8,
+                       sx + ox, sy + oy);
+    c.stroke();
+  } else {
+    const g = c.createRadialGradient(sx, sy, 0, sx, sy, r*1.5);
+    g.addColorStop(0, `rgba(74,55,38,${WEAR.mudA})`);
+    g.addColorStop(1, 'rgba(74,55,38,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(sx, sy, r*1.5, 0, 7); c.fill();
+  }
 }
 
 // Bake at a fixed resolution in field proportions, so zooming the camera doesn't
@@ -5985,7 +6105,10 @@ function surfaceTexture(w){
 function drawGrass(w, L, R, T, B){
   ctx.save();
   ctx.beginPath(); ctx.rect(L, T, R-L, B-T); ctx.clip();
-  if (sel.pitch === 'ice' || sel.pitch === 'mud') ctx.drawImage(surfaceTexture(w), L, T, R-L, B-T);
+  if (sel.pitch === 'ice' || sel.pitch === 'mud'){
+    ctx.drawImage(surfaceTexture(w), L, T, R-L, B-T);
+    if (wearCv) ctx.drawImage(wearCv, L, T, R-L, B-T);   // what this match has done to it
+  }
   else paintGrass(ctx, sel.grass || 'stripes', L, T, R-L, B-T);
   ctx.restore();
 }
@@ -6718,7 +6841,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.1236AM';
+const VERSION = '20260804.0146AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6746,7 +6869,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
@@ -6759,6 +6882,8 @@ if (window.__MAGNETDEBUG) {
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
     teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
+    noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
+    seatNameList, applySeatNames,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };

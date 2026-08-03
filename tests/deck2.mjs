@@ -31,7 +31,11 @@ const r = await p.evaluate(async ()=>{
   M.deckSection(1);
   const c = document.querySelector('.deckfocus');
   o.sectionJumps = a !== c && !!c;
-  // slider adjust via left/right
+  // Slider adjust via left/right. Expand every card first: this is testing that the
+  // controller CAN drive a range input, not which card happens to hold one — the
+  // magnet slider used to live in Match and now lives in Game Feel.
+  document.querySelectorAll('.card.collapsible').forEach(c=>c.classList.remove('collapsed'));
+  M.deckPaint();
   const l2 = M.deckFocusables();
   const si = l2.findIndex(el => el.tagName==='INPUT' && el.type==='range');
   o.foundSlider = si>=0;
@@ -53,5 +57,6 @@ console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.foundCollapsedHeader && r.cardExpanded && r.expandRevealsMore &&
   r.sectionJumps && r.foundSlider && r.sliderHandled && r.sliderChanged && errors.length===0;
+if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

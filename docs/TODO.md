@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.1236AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0122AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -50,9 +50,40 @@ each was shipped at some point and each is a class of mistake worth watching for
   canvas keyed on surface/mow/theme/field, so the per-frame cost is one `drawImage` and the pitch
   doesn't re-scuff itself sixty times a second. The **Pitch surface picker now draws tiles** like
   Field and Grass cut. Covered by `tests/surfaces.mjs`.
+- [x] **Pitches wear in as you play** — the baked texture is now the pitch *before* kickoff: mud
+  starts as a green field with only the goal mouths and centre worn, ice starts freshly
+  resurfaced. A second layer records what the match does to it — mud churns and ice picks up
+  skate cuts along the lines players actually travel. Rate-limited by **distance covered**, not by
+  frames, so a disc has to cover real ground to leave anything and the cost is nothing when
+  nobody's moving. One crossing marks the pitch at alpha 10/255; six crossings reach 48. Cleared
+  on a new match, kept across a kickoff, never applied to grass.
 - [ ] **Three ids exist in markup that nothing reads** — `rankLine` (a layout wrapper, fine),
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
+
+## ✨ Latest batch
+- [x] **Ball magnet moved to Game Feel** — it had a second copy of itself in the Match card.
+  Two controls for one setting drift apart and you can't tell which you last used; the audit
+  suite now fails on any duplicate.
+- [x] **Bigger centre circle** (`CENTER_R = 58`, was 45) on every court — one constant drives the
+  drawn circle, the picker previews and the kickoff gate, so they can't drift.
+- [x] **The centre circle is the kickoff gate** — stand in it and you may cross the halfway line,
+  with or without the ball (it used to require touching the ball too). Step over the line from
+  outside the circle and you're **shoved back** toward your own half rather than pinned: a hard
+  clamp read as an invisible wall, a push reads as a rule pushing back. The clamp survives as a
+  backstop 30 units past the line so the shove can never be out-run, and a puff marks the spot.
+- [x] **Ice and mud start subtle and wear in** — mud is a **green** pitch at kickoff with only the
+  goal mouths and centre bare; ice starts already-skated with fine cuts all over. What each match
+  adds is a wear layer: mud churns and ice picks up blade marks **where the players actually ran**,
+  rate-limited by distance travelled (not by frames) and faint enough that one crossing barely
+  marks it. Resets per match, survives a mid-match kickoff, never touches grass.
+- [x] **Player names** (Match → **Player names**) — a free-text box, one name per line, applied to
+  seats in order: your side first, then the opposition. Blank lines keep that seat's default, so
+  you can rename just the one bot. The idle demo stays generic.
+- [x] **Phone framing** — the pitch sat under the thumbsticks with a slab of dead space beneath the
+  HUD. `computeCam` now reserves the thumb band at the bottom on touch layouts; since width is what
+  binds on a tall screen this doesn't shrink the pitch, it lifts it out of the dead space and away
+  from your hands. Desktop and Deck are untouched. Covered by `tests/mobilefit.mjs`.
 
 ## 🔜 Now — highest value next
 - [ ] **Delete ~31 MB of unreferenced art** — `assets/` is 36 MB / 7,170 files, but
@@ -264,7 +295,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 27 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 30 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

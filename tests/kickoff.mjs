@@ -61,21 +61,33 @@ const r = await p.evaluate(()=>{
   const wc=M.world; wc.state='kickoff'; wc.stateT=0.1;
   const mec=wc.players.find(x=>x.ctrl==='human1');
   const foec=wc.players.find(x=>x.team===1); foec.x=300; foec.y=300;
-  // On the ball, inside the circle -> exempt, and can sit past the line.
+  // The circle is the gate: standing in it is enough, with or without the ball.
+  // (It used to also require touching the ball — the rule changed on purpose, so
+  // these assertions were rewritten rather than the code bent back to fit them.)
   wc.ball.x=0; wc.ball.y=0; wc.ball.vx=0; wc.ball.vy=0;
   mec.x=0; mec.y=-14; mec.vx=0; mec.vy=0;
   o.onBallInCircleExempt = M.kickoffFreePass(wc, mec) === true;
   for(let i=0;i<20;i++) M.step(wc);
   o.onBallCanCross = mec.y < 0.5;
-  // Same spot, but the ball is elsewhere -> no exemption, pinned back.
+  // Same spot, ball far away -> still exempt, because you're in the circle.
   wc.ball.x=200; wc.ball.y=200;
   mec.x=0; mec.y=-14; mec.vx=0; mec.vy=0;
-  o.offBallNoExempt = M.kickoffFreePass(wc, mec) === false;
+  o.offBallInCircleExempt = M.kickoffFreePass(wc, mec) === true;
   for(let i=0;i<20;i++) M.step(wc);
-  o.offBallPinned = mec.y >= -0.5;
-  // On the ball but OUTSIDE the circle -> still no exemption.
+  o.offBallCanCross = mec.y < 0.5;
+  // Outside the circle -> no exemption, ball or not.
   wc.ball.x=200; wc.ball.y=-14; mec.x=200; mec.y=-14; mec.vx=0; mec.vy=0;
   o.outsideCircleNoExempt = M.kickoffFreePass(wc, mec) === false;
+  // ...and you get SHOVED back rather than stopped dead: drive hard into the far
+  // half from outside the circle and you end up heading home again, never further
+  // than the backstop.
+  mec.x=260; mec.y=-2; mec.vx=0; mec.vy=-6;
+  let worst=0;
+  for(let i=0;i<40;i++){ M.step(wc); worst=Math.min(worst, mec.y); }
+  o.pushedBackDeepest = Math.round(worst*10)/10;
+  o.neverPastBackstop = worst > -(M.KICKOFF_HARD || 30);
+  o.turnedAround = mec.vy > 0;                       // moving back toward own half
+  o.endsInOwnHalf = mec.y > worst;
 
   // 5) rule OFF: free even during kickoff
   M.sel.kickoffRule='off'; M.startMatch();
@@ -100,8 +112,10 @@ const r = await p.evaluate(()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.defaultOn&&r.startsInKickoff&&r.blockedDuringKickoff&&r.foeHeldInOwnHalf&&
-  r.onBallInCircleExempt&&r.onBallCanCross&&r.offBallNoExempt&&r.offBallPinned&&r.outsideCircleNoExempt&&
+  r.onBallInCircleExempt&&r.onBallCanCross&&r.offBallInCircleExempt&&r.offBallCanCross&&
+  r.outsideCircleNoExempt&&r.neverPastBackstop&&r.turnedAround&&r.endsInOwnHalf&&
   r.freeAfterKickoff&&r.noPossessionState&&r.roamsBothHalves&&r.freeWhenRuleOff&&
   r.resetHoldsAgain&&r.clearsInPlay&&errors.length===0;
+if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);
