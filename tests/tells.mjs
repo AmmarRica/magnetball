@@ -30,21 +30,27 @@ const r = await p.evaluate(async ()=>{
 
   // Build a trail for `q` by replaying `n` frames of motion, then measure the ink
   // left behind it, `back` player-radii along -velocity.
-  const tailInk = (q, others, n, back) => {
+  // dirx/diry = which way "behind" is, given explicitly because a parked player has
+  // no velocity to derive it from. Dots are spaced by distance travelled, so the
+  // sample sweeps a short span and takes the strongest hit rather than trusting one
+  // pixel to land on a dot.
+  const tailInk = (q, n, back, dirx, diry) => {
     M.resetTrails();
     const sx=q.x, sy=q.y;
     q.x -= q.vx*n; q.y -= q.vy*n;
-    // Reference: same pitch, nothing drawn on top.
     M.drawPitch(w);
-    const sp=Math.hypot(q.vx,q.vy)||1;
-    const bx=sx - (q.vx/sp)*q.r*back, by=sy - (q.vy/sp)*q.r*back;
-    const ref = px(M.wx(bx), M.wy(by));
+    let ref=[], probes=[];
+    for (let j=-3;j<=3;j++){
+      const d = q.r*back + j*2;
+      probes.push([sx + dirx*d, sy + diry*d]);
+    }
+    ref = probes.map(([bx,by]) => px(M.wx(bx), M.wy(by)));
     for(let i=0;i<n;i++){ M.drawDiscTrails(w); q.x+=q.vx; q.y+=q.vy; }
-    // Redraw pitch then the final trail so only the tail is on top of clean pitch.
     M.drawPitch(w); M.drawDiscTrails(w);
-    const got = px(M.wx(bx), M.wy(by));
+    let best=0;
+    probes.forEach(([bx,by],j)=>{ best = Math.max(best, diff(ref[j], px(M.wx(bx), M.wy(by)))); });
     q.x=sx; q.y=sy;
-    return diff(ref,got);
+    return best;
   };
 
   const [me, mate] = w.players.filter(x=>x.team===0);
@@ -56,15 +62,15 @@ const r = await p.evaluate(async ()=>{
 
   // 1) A sprinting player leaves ink behind them.
   me.x=0; me.y=120; me.vx=0; me.vy=-3.6;
-  o.movingTail = tailInk(me, [], 12, 2.2);
+  o.movingTail = tailInk(me, 14, 2.2, 0, 1);        // behind = +y (it's heading -y)
 
   // 2) A parked player leaves none.
   me.x=0; me.y=120; me.vx=0; me.vy=0;
-  o.parkedTail = tailInk(me, [], 12, 2.2);
+  o.parkedTail = tailInk(me, 14, 2.2, 0, 1);        // never moved -> nothing behind it
 
   // 3) A faster player leaves MORE ink than a crawler.
-  me.x=0; me.y=120; me.vx=0; me.vy=-1.0;
-  o.slowTail = tailInk(me, [], 12, 2.2);
+  me.x=0; me.y=120; me.vx=0; me.vy=-0.25;           // a crawl: barely covers a dot gap
+  o.slowTail = tailInk(me, 14, 2.2, 0, 1);
 
   // 4) Ball streak scales with speed the same way.
   const ballInk = (vx,vy,n,back) => {
@@ -103,7 +109,8 @@ const r = await p.evaluate(async ()=>{
   //    render loop repopulates immediately, so assert the LONG history is gone
   //    rather than expecting an empty array we'd never catch.
   M.resetTrails();
-  for(let i=0;i<14;i++) M.drawDiscTrails(w);
+  me.vx=0; me.vy=-3.6;
+  for(let i=0;i<40;i++){ M.drawDiscTrails(w); me.x+=me.vx; me.y+=me.vy; }   // dots need travel
   o.longHistoryBefore = Math.max(...M.discTrails.map(h=>h.length));
   M.startMatch();                       // synchronous: check before a frame can regrow it
   o.historyAfterStart = M.discTrails.reduce((n,h)=>n+(h?h.length:0), 0);

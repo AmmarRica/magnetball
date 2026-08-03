@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260803.15** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260803.16** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -24,14 +24,16 @@ _Current build: **v20260803.15** (shown under the title; bump `VERSION` in `inde
   on push so regressions fail the build instead of the player.
 
 ## ✅ Recently done (committed)
-- [x] **Motion tells — a still frame reads the game** (VIDEOBALL-style). Speed is what a screenshot
-  normally loses, so both trails scale **length and opacity with speed**: a rolling ball leaves a
-  stub, a rocket leaves a streak, a parked player leaves nothing. Adds team-coloured **dot tails**
-  behind moving players (`drawDiscTrails`, drawn under the discs, keyed by index so the replay's
-  rebuilt players can't inherit a live trail), an **aim notch** on the rim showing where each player
-  will strike (world facing turned by `cam.rot`, so it's right on a sideways pitch), and a **charge
-  arc** that fills with `chargeT` — the wind-up was previously only visible on the touch HUD.
-  Trails clear on match start and kickoff. Covered by `tests/tells.mjs` (pixel sampling).
+- [x] **Motion tells, VIDEOBALL-style** — two deliberately different shapes so a frozen frame reads:
+  players leave a line of small, evenly **spaced dots**; the ball leaves a single thick **line**
+  whose **length scales with how hard it was struck**, tinted with the striking team's colour
+  (`ball.lastKickTeam`). Dots are spaced by distance travelled rather than per frame, so the count
+  reflects speed and a player who stops loses their tail. The ball streak follows the recorded path,
+  so a bounce bends it instead of cutting through a wall. Also a **charge arc** that fills with
+  `chargeT` — the wind-up used to be visible only on the touch HUD, so a controller player had no
+  warning of a big shot. Trails clear on match start and kickoff.
+  _(An earlier version added aim-direction arrows on each disc; removed — too noisy, and Videoball
+  conveys facing through the player shape itself.)_ Covered by `tests/tells.mjs` (pixel sampling).
 - [x] **Unlocked customizations shown up top** — a summary pinned to the head of *Your Player*:
   overall progress bar + `have / total`, a per-category chip row (Caps · Countryballs · Animals ·
   Eyes) and a horizontally-scrolling strip of the items you've actually earned, with the worn one
