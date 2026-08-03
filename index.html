@@ -339,6 +339,11 @@
     }
     #dockToggle { display: none; }
 
+    /* A picker option whose backing art isn't shipped — visibly unavailable
+       rather than a switch that silently does nothing. */
+    .opt.disabled { opacity: .45; cursor: not-allowed; }
+    .opt.disabled small { display: block; font-size: 9px; color: var(--muted); }
+
     /* ---------- Steam Deck view ----------
        Same left dock as desktop, but at ANY window size (a Deck in gaming mode is
        1280x800, yet the browser may be windowed) and tuned for a controller:
@@ -2458,7 +2463,7 @@ requestAnimationFrame(pollDeckUI);
 // Keyboard mirrors the pad so the layout is testable (and usable) without one.
 window.addEventListener('keydown', e => {
   if (!isDeck()) return;
-  if (e.key === 'Escape' || e.key === 'Tab'){ e.preventDefault(); deckSetMenuOpen(!!sel.dockCollapsed); }
+  if (e.key === 'Escape'){ e.preventDefault(); deckSetMenuOpen(!!sel.dockCollapsed); }   // not Tab: that's keyboard nav
 });
 
 // ---- Settings (sound + game feel), openable from the menu and mid-game
@@ -2621,24 +2626,39 @@ function buildSettings(){
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   // Skins: swap the drawn ball / players for image sprites (visual only).
-  const bsp=$('ballSkinPick');
-  if (bsp){ bsp.innerHTML='';
-    [['classic','● Classic'],['soccer','⚽ Soccer']].forEach(([k,lab])=>{
-      const on=(sel.ballSkin||'classic')===k;
-      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
-      el.onclick=()=>{ sel.ballSkin=k; saveSel(); buildSettings(); };
-      bsp.appendChild(el);
+  // Sprite skins need art under assets/ that isn't shipped, so selecting one used
+  // to silently do nothing. Probe on demand (never on open — that would 404 on every
+  // settings build) and remember the result: once we know art is missing the option
+  // shows as unavailable instead of pretending to work.
+  const buildSkinPick = (id, key, dflt, items, sprite) => {
+    const wrap=$(id); if(!wrap) return;
+    const known = SKIN_ART[sprite];              // undefined = not probed yet
+    wrap.innerHTML='';
+    items.forEach(([k,lab])=>{
+      const needsArt = (k !== dflt) && known === false;
+      const on=(sel[key]||dflt)===k && !needsArt;
+      const el=document.createElement('div');
+      el.className='opt'+(on?' sel':'')+(needsArt?' disabled':'');
+      el.innerHTML=`<span>${lab}</span>`+(needsArt?'<small>needs art</small>':'');
+      if (needsArt){
+        el.title='Add the image under assets/ to enable this skin';
+        el.onclick=()=>toast('That skin needs art in assets/ — see assets/README.md');
+      } else if (k !== dflt){
+        el.onclick=()=>probeSkinArt(sprite, ok => {
+          if (!ok){ sel[key]=dflt; saveSel(); toast('That skin needs art in assets/ — see assets/README.md'); }
+          else { sel[key]=k; saveSel(); }
+          buildSettings();
+        });
+      } else {
+        el.onclick=()=>{ sel[key]=k; saveSel(); buildSettings(); };
+      }
+      wrap.appendChild(el);
     });
-  }
-  const psp=$('playerSkinPick');
-  if (psp){ psp.innerHTML='';
-    [['disc','⬤ Disc'],['sprite','🐾 Sprite']].forEach(([k,lab])=>{
-      const on=(sel.playerSkin||'disc')===k;
-      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
-      el.onclick=()=>{ sel.playerSkin=k; saveSel(); buildSettings(); };
-      psp.appendChild(el);
-    });
-  }
+    // Never leave a selection pointing at art we know isn't there.
+    if (known === false && sel[key] && sel[key] !== dflt){ sel[key]=dflt; saveSel(); }
+  };
+  buildSkinPick('ballSkinPick','ballSkin','classic',[['classic','● Classic'],['soccer','⚽ Soccer']], BALL_SPRITE);
+  buildSkinPick('playerSkinPick','playerSkin','disc',[['disc','⬤ Disc'],['sprite','🐾 Sprite']], PLAYER_SPRITE);
   // Juice / screen-shake toggle (accessibility: some players want it off).
   const jp=$('juicePick');
   if (jp){ jp.innerHTML='';
@@ -5093,7 +5113,6 @@ function render(){
   drawDiscs(world);
   drawBall(world);
   if (world.extraBalls) for (const eb of world.extraBalls) drawBall({ ball: eb });   // multiball extras
-  if (world.state==='kickoff') drawKickoffHint(world);
   ctx.restore();
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); flash*=0.88; } else flash=0;
@@ -5248,6 +5267,17 @@ function spriteImg(path){
   if (!im) return null;
   return (im.complete && im.naturalWidth > 0) ? im : null;
 }
+// Skin-art probe cache: path -> true/false once we've actually tried to load it.
+// Deliberately lazy — nothing is fetched until a player picks a sprite skin, so
+// opening Settings never 404s for art that isn't shipped.
+const SKIN_ART = {};
+function probeSkinArt(path, done){
+  if (SKIN_ART[path] !== undefined) return done(SKIN_ART[path]);
+  const im = new Image();
+  im.onload  = () => { SKIN_ART[path] = true;  done(true); };
+  im.onerror = () => { SKIN_ART[path] = false; done(false); };
+  im.src = path;
+}
 const BALL_SPRITE = 'assets/ball/soccer.png';
 const PLAYER_SPRITE = 'assets/player/player.png';
 
@@ -5390,10 +5420,6 @@ function ballPentagon(cx, cy, rad, rot){
   ctx.beginPath();
   for (let i=0;i<5;i++){ const a=rot + i*(2*Math.PI/5); const px=cx+Math.cos(a)*rad, py=cy+Math.sin(a)*rad; i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
   ctx.closePath();
-}
-function drawKickoffHint(w){
-  const s=cam.s;
-  const txt = w.state==='kickoff' ? (w.stateT<0.9? '' : '') : '';
 }
 
 // ---------- Ball squash & stretch (game-feel): stretch along the impact axis,
@@ -5752,7 +5778,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.11';
+const VERSION = '20260803.12';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
