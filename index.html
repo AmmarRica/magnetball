@@ -4776,6 +4776,22 @@ function uprightAt(x, y, fn){
   if (!cam.rot){ fn(x, y); return; }
   ctx.save(); ctx.translate(x, y); ctx.rotate(-cam.rot); fn(0, 0); ctx.restore();
 }
+// True on-screen point for a camera-space point — applies the same quarter-turn
+// render() does, so overlap tests measure what the player actually sees.
+function screenPt(px, py){
+  if (!cam.rot) return [px, py];
+  const dx = px - cam.ox, dy = py - cam.oy;
+  const c = Math.cos(cam.rot), sn = Math.sin(cam.rot);
+  return [cam.ox + dx*c - dy*sn, cam.oy + dx*sn + dy*c];
+}
+// Circle vs axis-aligned rect (screen space): nearest point on the rect to the
+// centre, then a plain radius check.
+function circleHitsRect(cx, cy, rad, rx, ry, rw, rh){
+  const nx = Math.max(rx, Math.min(cx, rx + rw));
+  const ny = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nx, dy = cy - ny;
+  return dx*dx + dy*dy <= rad*rad;
+}
 
 // ============================================================
 //  PRACTICE DRILLS  (challenge mode)
@@ -5281,6 +5297,9 @@ function probeSkinArt(path, done){
 const BALL_SPRITE = 'assets/ball/soccer.png';
 const PLAYER_SPRITE = 'assets/player/player.png';
 
+// Name plates duck out of the way when they'd cover a disc or the ball: 5% while
+// blocked, back to full once clear, eased so it reads as a fade rather than a blink.
+const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
 function drawDiscs(w){
   const s = cam.s;
   for (const p of w.players){
@@ -5334,15 +5353,42 @@ function drawOneDisc(w, p, x, y, r, s){
       ctx.beginPath(); ctx.arc(x, y, r*1.42, 0, 2*Math.PI);
       ctx.strokeStyle=TH.kickRing; ctx.lineWidth=Math.max(2,r*0.16); ctx.stroke();
     }
-    // name label — pixel font in a solid high-contrast plate (readability)
+    // name label — pixel font in a solid high-contrast plate (readability).
+    // A plate sitting over another disc or the ball is pure noise, so it fades
+    // down to LABEL_DIM while it overlaps and comes back once it's clear. The
+    // draw uses local coords, but the hit test runs in true screen space (the
+    // local frame here is already screen-aligned, so they describe one rect).
     if (s>0.28){
       ctx.font = `9px 'Kenney', system-ui, -apple-system, sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='alphabetic';
       const label = p.name;
       const tw = ctx.measureText(label).width;
-      ctx.fillStyle=TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
-      ctx.fillStyle = TH.nameText;
-      ctx.fillText(label, x, y-r-11);
+      const [psx, psy] = screenPt(wx(p.x), wy(p.y));
+      const lx = psx - tw/2 - 5, ly = psy - r - 23, lw = tw + 10, lh = 16;
+      let blocked = false;
+      for (const q of w.players){
+        if (q === p) continue;
+        const [qx, qy] = screenPt(wx(q.x), wy(q.y));
+        if (circleHitsRect(qx, qy, q.r*s, lx, ly, lw, lh)){ blocked = true; break; }
+      }
+      if (!blocked && w.ball){
+        const balls = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
+        for (const bl of balls){
+          const [bx, by] = screenPt(wx(bl.x), wy(bl.y));
+          if (circleHitsRect(bx, by, bl.r*s, lx, ly, lw, lh)){ blocked = true; break; }
+        }
+      }
+      const target = blocked ? LABEL_DIM : 1;
+      p._lblA = (p._lblA == null) ? target : p._lblA + (target - p._lblA) * LABEL_FADE;
+      const a = p._lblA;
+      if (a > 0.004){
+        const prevA = ctx.globalAlpha;
+        ctx.globalAlpha = prevA * a;
+        ctx.fillStyle=TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
+        ctx.fillStyle = TH.nameText;
+        ctx.fillText(label, x, y-r-11);
+        ctx.globalAlpha = prevA;
+      }
     }
   }
 }
@@ -5778,7 +5824,7 @@ window.addEventListener('hashchange', applyRoute);
 applyRoute();                                 // honour a deep-linked hash on load (starts the desktop idle demo)
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260803.12';
+const VERSION = '20260803.13';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -5803,12 +5849,13 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
-    spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall,
+    spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, drawGrass,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
+    screenPt, circleHitsRect, LABEL_DIM,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
   };

@@ -41,6 +41,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `deckmenu` | Menu only takes the pad while actually open; Select always toggles; drills hand over too |
 | `orient` | Pitch-direction setting drives camera **and** controls together; cocktail stays upright |
 | `fs` | Full screen genuinely enters on click and exits on F, label tracks state |
+| `labels` | Name plates fade to 5% over a disc or the ball and return when clear, both orientations |
 
 ## Writing a suite
 
