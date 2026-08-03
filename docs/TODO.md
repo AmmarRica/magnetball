@@ -17,6 +17,16 @@ _Current build: **v20260803.2** (shown under the title; bump `VERSION` in `index
 - [ ] **Commit & push** the above batch (version label + reset button).
 
 ## ✅ Recently done (committed)
+- [x] **Half-line rule** — a team without the ball is locked in its own half; win a touch and the
+  whole side is released. New sticky possession model (`updatePossession`, proximity-based touch →
+  `w.possTeam`, seeded to the kicking team each kickoff) + `applyHalfLine`. Crossing the line is a
+  hard stop, but a player caught upfield when possession flips is *recalled* (steady pull home,
+  can't drive deeper) rather than teleported. Bots are bound by the same rule via their AI target
+  clamp. The halfway line renders as a red dashed gate with the locked-out half tinted.
+  Toggle: Match card → **Half-line rule** (default On).
+- [x] **N humans vs N AI on controllers** — new **Extra controllers** row (Versus · Co-op). In Co-op
+  extra gamepads fill *your* team first, so 2v2 + 1 pad = 2 humans vs 2 AI, 3v3 + 2 pads = 3 v 3.
+  Overflow spills to the opponent; seats without a pad stay bots. Versus keeps the old interleave.
 - [x] **3D-looking rolling ball** — the ball is now a shaded sphere with rotating black pentagons
   (soccer pattern) instead of a flat disc; it visibly rolls (`b.rot` already advanced with speed,
   now also for multi-ball extras). Theme-aware via `TH.ball`/`TH.ballSpot` + translucent shading.
