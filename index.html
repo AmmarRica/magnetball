@@ -2629,7 +2629,12 @@ if (!PANEL) checkDailyLogin();   // grant + show today's reward on the first vis
 function connectedGamepadIndices(){
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const out = [];
-  for (let i=0;i<gps.length;i++){ if (gps[i] && gps[i].connected) out.push(i); }
+  for (let i=0;i<gps.length;i++){
+    const g = gps[i];
+    // `connected` alone isn't quite enough: some mobile browsers expose a stub
+    // entry with no buttons at all. Nothing you can play with is nothing to show.
+    if (g && g.connected && g.buttons && g.buttons.length) out.push(i);
+  }
   return out;
 }
 function updatePadInfo(){
@@ -7065,7 +7070,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0731AM';
+const VERSION = '20260804.0802AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
