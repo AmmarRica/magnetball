@@ -251,6 +251,8 @@
     .tilewrap .opt canvas { width: 40px; height: 40px; }
     .tilewrap .opt span { font-size: 12px; }
     .tilewrap .opt small { font-size: 12px; line-height: 1.3; color: var(--muted); }
+    /* Text plates are named by their own glyph, which can be wider than a word. */
+    #textPick .opt span { font-size: 11px; word-break: break-all; }
     /* /settings is the SAME document with the game switched off, so the settings
        cards can't drift from the inline ones — they ARE the inline ones. All this
        does is hide the game around them. */
@@ -855,6 +857,9 @@
       <label class="field">Animal</label>
       <div class="opts tilewrap" id="animalPick"></div>
       <div style="height:14px"></div>
+      <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
+      <div class="opts tilewrap" id="textPick"></div>
+      <div style="height:14px"></div>
       <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
       <div class="opts tilewrap" id="eyesPick"></div>
       <div class="preview">
@@ -1400,6 +1405,43 @@ const ANIMALS = {
   snake:    { name:'Snake',    img:'assets/Kenney/kenney_animal-pack/PNG/Round/snake.png' },
 };
 const ANIMAL_KEYS = Object.keys(ANIMALS);
+
+// Text faceplates — the HaxBall avatar tradition: a glyph or two instead of a
+// picture. They share the faceplate slot with flags and animals, and they are drawn
+// as TEXT over the plate, so they scale cleanly at any disc size.
+// Two complete 0-9 runs are usable as shirt numbers; the Indic and Braille rows are
+// as posted and stop short of 9, so they're offered as glyphs rather than pretending
+// to be a full set. Everything below is exactly the characters from the list.
+const TEXT_SETS = {
+  num:  { label:'Number',  chars:'０１２３４５６７８９'.split('') },
+  circ: { label:'Circled', chars:'⓪①②③④⑤⑥⑦⑧⑨'.split('') },
+};
+const TEXTS = {};
+for (const [pfx, set] of Object.entries(TEXT_SETS))
+  set.chars.forEach((ch, i) => { TEXTS[pfx+i] = { name: set.label+' '+i, g: ch, grp: set.label }; });
+// The rest of the list, verbatim. `_` in "_௵" keeps the glyph centred; ⠀ is a
+// braille blank (a real, non-collapsing space) — that IS the blank avatar.
+[
+  ['ind0','੦'], ['ind1','।'], ['ind2','੨'], ['ind3','૩'],
+  ['ind4','੫'], ['ind5','ડ'], ['ind6','੪'], ['ind7','੧'],
+  ['brl0','⣿'], ['brl1','⡇'], ['brl1b','⢸'], ['brl2','⣝'],
+  ['brl3','⣫'], ['brl4','⣯'], ['brl5','⢹'], ['brl6','⣻'],
+].forEach(([k,g]) => { TEXTS[k] = { name:g, g, grp:'Glyph' }; });
+[
+  ['blank','⠀',     'Blank'],
+  ['tamil','_௵',    '_௵'],
+  ['nine6','௸௸',    '96'],
+  ['pta','₧',       '₧'],
+  ['quads','⁇⁇',    '⁇⁇'],
+  ['there','∴∵',    '∴∵'],
+  ['yinyang','〄',   '〄'],
+  ['bulls','ⓞ',     'Bullseye'],
+  ['numero','№',    '№'],
+  ['tsu','ツ',       'ツ'],
+  ['shade','░░',    '░░'],
+  ['spark','⠀*',    'Sparkle'],
+].forEach(([k,g,name]) => { TEXTS[k] = { name, g, grp:'Symbol' }; });
+const TEXT_KEYS = Object.keys(TEXTS);
 const _imgCache = {};   // sprite cache (declared here so animal pickers can build at init)
 
 // Unlock requirements for eyes and flags (caps carry their own `req`).
@@ -1450,6 +1492,7 @@ function reqText(req){
 }
 function drillsDone(){ try { return Object.keys(drillBest||{}).length; } catch(e){ return 0; } }
 function itemReq(cat, key){
+  if(cat==='text') return null;                    // typography, not a reward
   if(cat==='flag') return FLAG_REQ[key];
   if(cat==='eyes') return EYE_REQ[key];
   if(cat==='cap')  return (CAPS[key]||{}).req;
@@ -1460,6 +1503,7 @@ function unlockCounts(){
   let have=0, total=0;
   for(const k of FLAG_KEYS){ total++; if(isUnlocked('flag',k)) have++; }
   for(const k of ANIMAL_KEYS){ total++; if(isUnlocked('animal',k)) have++; }
+  for(const k of TEXT_KEYS){ total++; if(isUnlocked('text',k)) have++; }
   for(const k of EYE_KEYS){ total++; if(isUnlocked('eyes',k)) have++; }
   for(const k of Object.keys(CAPS)){ total++; if(isUnlocked('cap',k)) have++; }
   return { have, total };
@@ -1507,7 +1551,7 @@ function checkDailyLogin(){
   login.claimed = idx+1; login.last = today; saveLogin();
   // refresh UI so the new unlock shows immediately
   if (typeof renderStats==='function') renderStats();
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
   showDailyModal(idx);
   return true;
 }
@@ -2070,7 +2114,8 @@ let rafId = 0;
 // ============================================================
 // Factory defaults for the player's look/name — the single source of truth for
 // both a first-time profile and the optional "reset appearance" path.
-function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'none', eyes:'googly' }; }
+// Players wear a NUMBER by default, like a shirt — countryballs are opt-in.
+function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly' }; }
 function loadProfile() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem('magnetball.profile')||'{}'); } catch(e){}
@@ -2141,7 +2186,7 @@ function syncRefresh(){
     buildSettings(); refreshPitchTiles();
     const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = profile.name;
     if (typeof buildSwatches==='function') buildSwatches();
-    buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); buildCaps(); updatePreview();
+    buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildCaps(); updatePreview();
     buildMatchOpts(); buildPartyMods();
   });
 }
@@ -2198,7 +2243,7 @@ function resetSettings(alsoAppearance){
     // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
     const nm=$('pname'); if (nm) nm.value = profile.name;
     if (typeof buildSwatches==='function') buildSwatches();
-    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
+    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
   }
   toast(alsoAppearance ? 'Settings & appearance reset' : 'Settings reset to defaults', 'ok', '↺');
 }
@@ -2324,9 +2369,30 @@ function buildOpts(containerId, obj, key, extra){
 // Colour core, then a faceplate (flag or animal, clipped) or plain eyes. A
 // faceplate IS the face, so it replaces the eyes. Animals fall back to eyes
 // until the image loads. Shared by the live preview and every picker tile.
+// Kenney first, so digits match the game's look; symbol fonts behind it, because
+// braille and the rarer glyphs below only exist in those. A glyph the OS can't draw
+// falls back rather than breaking — "⁇⁇" rendering as four question marks is the
+// look the original list describes anyway.
+const TEXT_FONT = "'Kenney', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'DejaVu Sans', system-ui, sans-serif";
 function paintFace(c, x, y, r, o){
   const key = o.flag, has = key && key!=='none';
   c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
+  if (has && TEXTS[key]){
+    // Fit the glyph to the plate: measure once and scale, so a two-character avatar
+    // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
+    const t = TEXTS[key].g;
+    const fit = r*1.34;
+    c.save();
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillStyle = pickTextColor(o.color||'#46d17a');
+    let px = Math.round(r*1.15);
+    c.font = px+'px '+TEXT_FONT;
+    const wid = c.measureText(t).width;
+    if (wid > fit) { px = Math.max(4, Math.round(px * fit / wid)); c.font = px+'px '+TEXT_FONT; }
+    c.fillText(t, x, y + r*0.04);
+    c.restore();
+    return;
+  }
   if (has && ANIMALS[key]){
     const im = spriteImg(ANIMALS[key].img);
     if (im){ c.save(); c.beginPath(); c.arc(x,y,r*0.84,0,7); c.clip();
@@ -2459,6 +2525,16 @@ function updatePreview(){
   const uc = unlockCounts(); const el=$('unlockCount'); if(el) el.textContent = `· ${uc.have}/${uc.total} unlocked`;
 }
 // Lock-aware tile pickers for flags and eyes (each tile is a mini disc).
+// What an item is CALLED, in one place. This chain used to be written out in the
+// picker, in the unlocked strip and again inside a test — adding a category broke
+// the copy nobody was looking at.
+function itemName(cat, key){
+  return cat==='cap'    ? (CAPS[key]||{}).name
+       : cat==='flag'   ? (FLAGS[key]||{}).name
+       : cat==='animal' ? (ANIMALS[key]||{}).name
+       : cat==='text'   ? (TEXTS[key]||{}).name
+       :                  (EYES[key]||{}).name;
+}
 function buildTilePicker(containerId, cat, keys, curGet, onPick){
   const wrap=$(containerId); if(!wrap) return; wrap.innerHTML='';
   keys.forEach(k=>{
@@ -2473,12 +2549,12 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     drawDisc(cvs.getContext('2d'), 32, 32, 22, o);
     el.appendChild(cvs);
     const nm=document.createElement('span');
-    nm.textContent = cat==='flag'?FLAGS[k].name : cat==='animal'?ANIMALS[k].name : EYES[k].name;
+    nm.textContent = itemName(cat, k);
     el.appendChild(nm);
     if(!unlocked){ const s=document.createElement('small'); s.textContent='🔒 '+reqText(itemReq(cat,k)); el.appendChild(s); }
     el.onclick=()=>{ if(!isUnlocked(cat,k)) return;
       if(cat==='eyes') profile.eyes=k; else profile.flag=k;   // flag & animal share the faceplate slot
-      saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); };
+      saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); };
     wrap.appendChild(el);
   });
 }
@@ -2488,6 +2564,7 @@ const UNL_CATS = [
   { cat:'cap',    label:'Caps',         keys:()=>Object.keys(CAPS) },
   { cat:'flag',   label:'Countryballs', keys:()=>FLAG_KEYS },
   { cat:'animal', label:'Animals',      keys:()=>ANIMAL_KEYS },
+  { cat:'text',   label:'Text',         keys:()=>TEXT_KEYS },
   { cat:'eyes',   label:'Eyes',         keys:()=>EYE_KEYS },
 ];
 function buildUnlocked(){
@@ -2513,9 +2590,7 @@ function buildUnlocked(){
                  : profile.flag===k;                 // flag & animal share the faceplate slot
       const el=document.createElement('div');
       el.className='unlItem'+(worn?' sel':'');
-      el.title = (c.cat==='cap') ? CAPS[k].name
-               : (c.cat==='flag') ? FLAGS[k].name
-               : (c.cat==='animal') ? ANIMALS[k].name : EYES[k].name;
+      el.title = itemName(c.cat, k);
       if (c.cat==='cap'){
         const g=document.createElement('span'); g.className='capGlyph';
         g.textContent = CAPS[k].emoji || '—'; el.appendChild(g);
@@ -2531,7 +2606,7 @@ function buildUnlocked(){
         else if (c.cat==='eyes') profile.eyes=k;
         else profile.flag=k;
         saveProfile();
-        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview();
+        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview();
       };
       strip.appendChild(el);
     }
@@ -2541,6 +2616,7 @@ function buildUnlocked(){
 }
 function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
 function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
+function buildTextPicker(){ buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
 function buildCaps(){
   const wrap=$('caps'); if(!wrap) return; wrap.innerHTML='';
@@ -2691,7 +2767,7 @@ function renderStats(){
     + `goals ${stats.gf}-${stats.ga} (${gd>=0?'+':''}${gd}) · streak ${streakTxt} · best W${Math.max(0,stats.best)}<br>`
     + `<span style="color:var(--accent)">MMR ${stats.mmr||1000}</span> · peak ${stats.mmrPeak||stats.mmr||1000}`;
   // Refresh customization pickers so anything newly unlocked shows up.
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
 }
 renderStats();
 
@@ -4198,11 +4274,11 @@ function startMatch(){
     const t0 = [you];
     const t0names = pickNames(per-1, used);
     for(let i=0;i<per-1;i++)
-      t0.push(mkPlayer(0, t0names[i], teamTint(0, i+1), randCap(i), 'bot', randFlag(i), randEyes(i)));
+      t0.push(mkPlayer(0, t0names[i], teamTint(0, i+1), randCap(i), 'bot', shirtNo(i+2), randEyes(i)));
     const t1 = [];
     const t1names = pickNames(per, used);
     for(let i=0;i<per;i++)
-      t1.push(mkPlayer(1, t1names[i], teamTint(1, i), randCap(i+per), 'bot', randFlag(i+per), randEyes(i+per)));
+      t1.push(mkPlayer(1, t1names[i], teamTint(1, i), randCap(i+per), 'bot', shirtNo(i+1), randEyes(i+per)));
 
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
@@ -4371,7 +4447,11 @@ function applySeatNames(players){
   players.forEach((p, i) => { if (list[i]) p.name = list[i]; });
 }
 // Deterministic-ish pick so bots vary but a match is reproducible frame-to-frame.
-function randFlag(i){ return FLAG_KEYS[(i*5+3) % FLAG_KEYS.length]; }
+// Bots wear shirt numbers too, so a pitch reads like a team sheet rather than a UN
+// summit. Numbering runs per TEAM, the way it does in a real match: you are 1 and
+// your bots take 2 upward, while the opposition starts again at 1.
+function shirtNo(n){ return 'num' + (((n % 10) + 10) % 10); }
+function randFlag(i){ return shirtNo(i + 1); }
 function randEyes(i){ const k=EYE_KEYS.filter(e=>e!=='none'); return k[(i*3+1) % k.length]; }
 
 // Fresh per-match stat sheet used for the end-of-match awards.
@@ -7843,7 +7923,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0620PM';
+const VERSION = '20260804.0745PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7862,7 +7942,8 @@ if (window.__MAGNETDEBUG) {
     addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
-    ANIMALS, updatePreview,
+    ANIMALS, TEXTS, TEXT_KEYS, buildTextPicker, itemName, shirtNo, defaultProfile, saveProfile,
+    unlockCounts, UNL_CATS, isUnlocked, drawDisc, updatePreview,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
