@@ -63,6 +63,9 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
 | `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; picking it keeps you on the menu able to kick off; pitch direction is locked and says why |
 | `tells` | Motion tells by **canvas pixel sampling** (incl. the charge ring flashing as a full circle rather than sweeping): moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
+| `themetiles` | Theme picker shows each theme's palette as a painted canvas (no emoji): one tile per theme, all distinct, every band sampled back to that theme's own colours, picking one still switches the theme |
+| `contrast` | No label sits on a colour too close to it: every visible text element on every screen under every theme is held to WCAG AA against its **composited** background, plus the goal banner's outline; includes a known-bad probe so a clean run can't be vacuous |
+| `awards` | End-of-match awards state the figure that won them ("Most Saves · 5 saves"), the number matches the tally that picked the winner, singulars stay singular, and it reaches the DOM |
 
 ## Writing a suite
 
@@ -96,6 +99,16 @@ Two more traps, both of which produced false results here:
   `step()`, so a loop of bare `step()` calls never reads the keyboard — the first
   version of `cocktailkeys` passed only because the render loop happened to tick
   between two `evaluate` calls.
+
+Two traps specific to measuring colour, both of which produced wrong verdicts here:
+
+- **Composite the background.** The page paints with a gradient and every panel and
+  pill is `rgba()`, so `getComputedStyle(el).backgroundColor` is `transparent` almost
+  everywhere. Walking up to a white default reported ~90 phantom failures per theme
+  while missing the real ones — flatten the stack onto `--bg` instead.
+- **Wait out the transition.** `body` eases `color` over .2s, so a sample 60ms after a
+  theme switch reads the *previous* theme's ink. That looked exactly like a stale
+  inline colour and sent me hunting a bug that wasn't there.
 
 Also: with a gamepad connected a seat's `ctrl` becomes `'gamepad'`, so `pads.p1` no longer
 drives it — feed the fake pad instead. And in a sideways pitch `rotQuarter=1`, so stick-up

@@ -5,9 +5,45 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0122AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🎨 Theme picker shows the palette
+- [x] **Emoji swapped for painted swatches.** Each theme tile is a canvas showing the six
+  colours that make it — court, mow, line, both team colours, accent — banded on that theme's
+  own page colour, so the picker reads like the court tiles right above it. `🌃` said nothing
+  about what Neon looks like. `themeSwatchColors()` / `drawThemeSwatch()`; `tests/themetiles.mjs`
+  samples the bands back off the canvas rather than trusting the draw call.
+
+## 🔤 No text on a colour too close to it
+- [x] **Every themed ink is now measured, not eyeballed.** `applyTheme()` derives the text
+  colours from the surface they actually land on and nudges each just far enough to clear
+  WCAG AA — same hue, so a theme still looks like itself. The reference surface is the worst
+  case a panel ink meets, not the bare panel: selected tiles wash it with 7% cyan and the
+  primary button with 10% green, each enough on its own to drop a 4.5:1 ink below AA.
+- [x] **The HUD pills were near-black with themed ink on top.** `.scorebug`, the round HUD
+  buttons, the replay bar and the toasts all hardcoded `rgba(6,8,16,.7)`, so Paper printed its
+  dark text on a dark pill at **1.89:1**. They now use `--overlay` (the theme's page colour over
+  the court) with `--overlay-ink` / `--overlay-red` / `--overlay-blue` / `--overlay-yellow`.
+- [x] **`.shopcard.owned .sprice` used `var(--good, …)`.** `--good` is a *pitch-palette* key and
+  was never a CSS variable, so it always fell through to a literal green — invisible on Paper.
+  Now `var(--go)`.
+- [x] **Your own disc colour could vanish under your name** in the player preview (a mid green
+  on Paper measured 1.95:1); it goes through `readableInk` against the live panel now, and a
+  theme switch re-runs `updatePreview()` so it's re-measured.
+- [x] **The GOAL! banner prints straight onto the court** — red on GBA's light blue was
+  **1.72:1**, and ice/mud repaint the court mid-match so no colour picked from the theme alone
+  would hold. It's outlined in the opposite ink (`paint-order: stroke fill`) instead.
+- [x] **`tests/contrast.mjs`** walks every visible label on every screen under every theme,
+  composites what's behind it, and holds the pair to AA — with a deliberately-unreadable probe
+  so a clean run can't pass vacuously.
+
+## 🏅 Awards say the number
+- [x] **"Most Saves" now says how many.** Every end-of-match award carries the figure that won
+  it — `5 saves`, `4 clearances`, `2 key passes`, `9.4 power`, `20.0 rating` — formatted from the
+  same value that picked the winner, so the note can't drift from the tally. Singulars stay
+  singular. `tests/awards.mjs`.
 
 ## 🐞 From the full review (2026-08-03) — bugs found
 

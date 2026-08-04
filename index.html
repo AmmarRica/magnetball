@@ -251,8 +251,10 @@
     #panelLink { color: var(--accent); }
 
     /* Mow patterns are fine bands — they need more pixels than a flag tile to read. */
-    #grass, #pitches { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+    #grass, #pitches, #themePick { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
     #grass .opt canvas, #pitches .opt canvas { width: 66px; height: 66px; }
+    /* Palette bands read better wide than square. */
+    #themePick .opt canvas { width: 72px; height: 46px; }
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
@@ -263,7 +265,7 @@
     }
     #tutTip::before {
       content: attr(data-tip); display: inline-block; max-width: 84%;
-      background: rgba(6,8,16,.82); border: 1px solid var(--accent); color: var(--text);
+      background: var(--overlay); border: 1px solid var(--accent); color: var(--overlay-ink);
       padding: 9px 14px; border-radius: 14px; box-shadow: 0 0 14px rgba(0,0,0,.4);
     }
     #tutTip.hidden { display: none; }
@@ -481,20 +483,23 @@
       pointer-events: none;
     }
     #hud.hidden { display: none; }
+    /* The floating pills sit over the PITCH, not the page, so they carry their own
+       surface (--overlay) and their own inks (--overlay-*), both derived per theme
+       by applyTheme. Hardcoding a near-black pill left Paper with dark ink on it. */
     .scorebug {
       display: flex; align-items: center; gap: 14px;
-      background: rgba(6,8,16,.7); border: 1px solid var(--edge); border-radius: 999px;
-      backdrop-filter: blur(6px);
+      background: var(--overlay); border: 1px solid var(--edge); border-radius: 999px;
+      backdrop-filter: blur(6px); color: var(--overlay-ink);
       padding: 9px 18px; font-family: var(--pix); font-size: 16px; pointer-events: auto;
     }
     .scorebug .sc { min-width: 20px; text-align: center; }
-    .scorebug .rd { color: var(--red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
-    .scorebug .bl { color: var(--cyan); text-shadow: 0 0 10px rgba(33,230,255,.6); }
-    .scorebug .tm { font-size: 12px; color: var(--yellow); min-width: 46px; text-align:center; }
+    .scorebug .rd { color: var(--overlay-red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
+    .scorebug .bl { color: var(--overlay-blue); text-shadow: 0 0 10px rgba(33,230,255,.6); }
+    .scorebug .tm { font-size: 12px; color: var(--overlay-yellow); min-width: 46px; text-align:center; }
     #pauseBtn, #resetBtn, #gearBtn, #fsHudBtn {
-      pointer-events: auto; background: rgba(6,8,16,.7); border: 1px solid var(--edge);
+      pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
-      color: var(--text); width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
+      color: var(--overlay-ink); width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
     }
 
     /* Goal replay / clip-share buttons — appear under the scorebug after a goal */
@@ -504,8 +509,8 @@
     }
     #replayBar.hidden { display: none; }
     #replayBar button {
-      pointer-events: auto; background: rgba(6,8,16,.72); border: 1px solid var(--edge);
-      backdrop-filter: blur(6px); color: var(--text); font-family: var(--pix);
+      pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
+      backdrop-filter: blur(6px); color: var(--overlay-ink); font-family: var(--pix);
       font-size: 12px; padding: 8px 12px; border-radius: 14px; cursor: pointer;
     }
     #replayBar button:active { transform: translateY(1px); }
@@ -516,6 +521,9 @@
       font-family: var(--pix); font-size: clamp(28px, 11vw, 66px); letter-spacing: 1px;
       pointer-events: none; opacity: 0; transform: scale(.6);
       text-shadow: 0 0 14px currentColor, 0 0 40px currentColor;
+      /* stroke behind fill, so the outline showBanner sets rims the letters
+         instead of eating into them. */
+      paint-order: stroke fill;
     }
     #banner.show { animation: pop 1.6s ease forwards; }
     @keyframes pop {
@@ -532,8 +540,8 @@
       pointer-events: none;
     }
     #toasts .toast {
-      font-family: var(--pix); font-size: 13px; color: var(--text);
-      background: rgba(12,14,22,.92); border: 1px solid var(--edge);
+      font-family: var(--pix); font-size: 13px; color: var(--overlay-ink);
+      background: var(--overlay); border: 1px solid var(--edge);
       border-radius: 11px; padding: 9px 14px; max-width: min(88vw, 360px);
       box-shadow: 0 8px 26px rgba(0,0,0,.45); display: flex; align-items: center; gap: 9px;
       animation: toastin .22s ease both;
@@ -601,7 +609,9 @@
     .shopcard canvas { width:48px; height:48px; image-rendering: pixelated; }
     .shopcard .sname { font-family: var(--pix); font-size:12px; color:var(--text); text-align:center; }
     .shopcard .sprice { font-family: var(--pix); font-size:12px; color: var(--accent); }
-    .shopcard.owned .sprice { color: var(--good, #46d17a); }
+    /* --good is a pitch-palette key, never a CSS var, so this always fell back to a
+       literal green — unreadable on Paper. --go is the themed, contrast-checked one. */
+    .shopcard.owned .sprice { color: var(--go); }
 
     /* Social / Watch — Instagram-style feed */
     #social { max-width: 560px; }
@@ -631,7 +641,9 @@
     @keyframes heartpop { 0%{opacity:0; transform:scale(.3)} 15%{opacity:.95; transform:scale(1.1)} 40%{transform:scale(.95)} 70%{opacity:.95} 100%{opacity:0; transform:scale(1)} }
     .post .media .scorepill { position:absolute; left:10px; top:10px; font-family:var(--pix); font-size:12px; color:#fff;
       background:rgba(4,7,13,.66); border:1px solid rgba(255,255,255,.16); border-radius:8px; padding:4px 9px; }
-    .post .media .replaytag { position:absolute; right:10px; top:10px; font-family:var(--pix); font-size:12px; color:var(--muted);
+    /* Sits on a clip thumbnail, not on a themed surface — a fixed light ink, since
+       --muted goes dark in light themes and would vanish into the chip. */
+    .post .media .replaytag { position:absolute; right:10px; top:10px; font-family:var(--pix); font-size:12px; color:rgba(255,255,255,.86);
       background:rgba(4,7,13,.6); border-radius:6px; padding:3px 7px; }
     .post .pacts { display:flex; align-items:center; gap:16px; padding:9px 12px 2px; font-size:20px; }
     .post .pacts button { background:none; border:none; cursor:pointer; font-size:20px; line-height:1; padding:0; color:var(--text); }
@@ -842,7 +854,7 @@
     <div class="card collapsible collapsed" data-sec="theme">
       <h2>Theme</h2>
       <label class="field">Visual style</label>
-      <div class="opts" id="themePick"></div>
+      <div class="opts tilewrap" id="themePick"></div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="display">
@@ -1765,20 +1777,108 @@ const THEMES = {
       hudText:'#1a2430', hudSub:'#3a566b', accent:'#2f6fd0', padRing:'rgba(30,50,40,0.45)' },
   },
 };
+// ---- Contrast maths (declared above applyTheme, which runs at module init) ----
+// Pick whichever of the two ink colours actually contrasts more with the given
+// background — measured by WCAG ratio, not by a brightness threshold. The old
+// `luma > 150` test chose WHITE on GBA's mid-green (2.25:1) where black gives
+// 9.35:1, and did the same wherever a colour sits near the threshold.
+// Pure black, not the theme's near-black: on a 9px name plate the extra contrast
+// is the difference between clearing AA and missing it (grass measured 4.37 with
+// #10131c, 4.95 with #000000).
+const INK_DARK = '#000000', INK_LIGHT = '#ffffff';
+function relLum(hex){
+  const c = (hex||'').replace('#','');
+  const v = [0,2,4].map(i => parseInt(c.substr(i,2),16)/255)
+    .map(x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4));
+  return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
+}
+function contrastRatio(a, b){
+  const L1 = relLum(a), L2 = relLum(b);
+  return (Math.max(L1,L2) + 0.05) / (Math.min(L1,L2) + 0.05);
+}
+function pickTextColor(hex){
+  if (!/^#[0-9a-f]{6}$/i.test(hex||'')) return INK_LIGHT;
+  return contrastRatio(INK_DARK, hex) >= contrastRatio(INK_LIGHT, hex) ? INK_DARK : INK_LIGHT;
+}
+// Keep a colour's hue but push it toward whichever ink the background wants, only
+// as far as it takes to clear AA. Raw team colours on the dark name plate measured
+// as low as 3.06:1 (mono blue) — this keeps them recognisably red/blue and legible.
+function readableInk(col, bg, target){
+  if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
+  const want = target || 4.5;
+  const toward = pickTextColor(bg);          // dark bg -> lighten, light bg -> darken
+  let out = col;
+  for (let t = 0; t <= 1.0001; t += 0.05){
+    out = t === 0 ? col : mixCol(col, toward, t);
+    if (contrastRatio(rgbToHex(out), bg) >= want) break;
+  }
+  return out;
+}
+// mixCol returns an rgb() string; contrast maths wants hex.
+function rgbToHex(c){
+  if (c[0] === '#') return c;
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c);
+  if (!m) return '#ffffff';
+  return '#' + [1,2,3].map(i => (+m[i]).toString(16).padStart(2,'0')).join('');
+}
+// Flatten a possibly-translucent CSS colour onto what sits behind it, so contrast
+// can be measured against a real surface instead of a guess. Panels are rgba over
+// the page; the HUD pills are rgba over the pitch.
+function flatten(col, under){
+  const c = (col||'').trim();
+  const m = /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(c);
+  if (!m) return rgbToHex(c);
+  return rgbToHex(mixCol(rgbToHex(under), '#'+[1,2,3].map(i=>(+m[i]).toString(16).padStart(2,'0')).join(''), +m[4]));
+}
+
 // Live canvas palette — always points at the active theme's `pitch` block.
 let TH = THEMES.neon.pitch;
+// The HUD pills float over the pitch, so their surface is the theme's page colour
+// laid over the court. High enough alpha that the composite is predictable.
+const OVERLAY_A = 0.86;
 function applyTheme(key){
   const t = THEMES[key] || THEMES.neon;
   TH = t.pitch;
   const r = document.documentElement.style, u = t.ui;
   r.setProperty('--bg-grad', u.grad);
-  for (const k of ['bg','panel','edge','text','muted','red','blue','cyan','magenta','green','yellow','accent','go'])
+  for (const k of ['bg','panel','edge'])
     r.setProperty('--'+k, u[k]);
   // Contrast-critical extras: a themed input/track fill and an on-accent text colour
   // so light themes (Paper) don't inherit the dark-theme defaults. Fall back if absent.
   r.setProperty('--field', u.field || u.bg);
-  r.setProperty('--on-accent', u.onAccent || '#04121a');
   document.body.classList.toggle('scan', !!u.scan);
+
+  // Every themed colour that ends up as TEXT is nudged just far enough to clear
+  // WCAG AA against the surface it actually sits on. Same hue, so a theme still
+  // looks like itself — but no theme can ship a label you can't read. Paper's HUD
+  // was dark ink on a dark pill (1.89:1) and GBA's score was 4.16:1 before this.
+  const panel = flatten(u.panel, u.bg);
+  r.setProperty('--panel-solid', panel);
+  // Panel text doesn't always land on the bare panel: selected tiles wash it with
+  // 7% cyan and the primary button with 10% green, each enough to drop a 4.5:1 ink
+  // below AA. Every ink clears the bar on ALL of them, not just the easiest.
+  // 4.6, not 4.5: borders and rounding leave the measured surface a shade off the
+  // computed one, and landing on 4.49 fails just as hard as 2.2.
+  const surfaces = [panel, flatten('rgba(33,230,255,0.07)', panel),
+                           flatten('rgba(53,255,135,0.10)', panel)];
+  const inkOn = col => surfaces.reduce((c, s) => rgbToHex(readableInk(c, s, 4.6)), col);
+  for (const k of ['text','muted','cyan','green','yellow','accent','go'])
+    r.setProperty('--'+k, inkOn(u[k]));
+  // red/blue/magenta stay raw: they colour the goal banner and its glow over the
+  // pitch, never panel text, and lightening them there would only wash the theme out.
+  for (const k of ['red','blue','magenta']) r.setProperty('--'+k, u[k]);
+  // --accent doubles as a BACKGROUND for a few chips, so its ink follows it.
+  r.setProperty('--on-accent', pickTextColor(inkOn(u.accent)));
+
+  // The floating pills (scorebug, HUD buttons, replay bar, toasts) get their own
+  // surface and their own inks, because what's behind them is the court, not the page.
+  const pill = flatten(rgba(u.bg, OVERLAY_A), t.pitch.court || u.bg);
+  r.setProperty('--overlay', rgba(u.bg, OVERLAY_A));
+  r.setProperty('--overlay-solid', pill);
+  r.setProperty('--overlay-ink', rgbToHex(readableInk(u.text, pill)));
+  r.setProperty('--overlay-red', rgbToHex(readableInk(u.red, pill)));
+  r.setProperty('--overlay-blue', rgbToHex(readableInk(u.cyan, pill)));
+  r.setProperty('--overlay-yellow', rgbToHex(readableInk(u.yellow, pill)));
 }
 // Turn a #hex colour into an rgba() string at the given alpha (for fills/tints).
 function rgba(col, a){
@@ -2227,6 +2327,33 @@ function boostStripe(a, b){
   const m = A.map(v=>Math.round(v + (tgt-v)*t));
   return `rgb(${m[0]},${m[1]},${m[2]})`;
 }
+// The colours that MAKE a theme, as bands — the court and its mow, the line, both
+// team colours, the accent. Drawn like the court tiles so the pickers read as one
+// family; an emoji said nothing about what a theme actually looks like.
+function themeSwatchColors(t){
+  const P = t.pitch, U = t.ui;
+  return [P.court, P.stripeA, P.line, P.teamRed, P.teamBlue, U.accent];
+}
+function drawThemeSwatch(c, t, cw, ch){
+  const k = cw/64, pad = 4*k, r = 5*k;
+  c.clearRect(0,0,cw,ch);
+  c.fillStyle = t.ui.bg || '#000'; c.fillRect(0,0,cw,ch);   // the page backdrop
+  const cols = themeSwatchColors(t);
+  const x0 = pad, y0 = pad, w = cw - pad*2, h = ch - pad*2;
+  c.save();
+  c.beginPath(); roundRectOn(c, x0, y0, w, h, r); c.clip();
+  const bw = w / cols.length;
+  cols.forEach((col, i) => { c.fillStyle = col || '#000'; c.fillRect(x0 + i*bw, y0, bw + 1, h); });
+  c.restore();
+  c.beginPath(); roundRectOn(c, x0, y0, w, h, r);
+  c.strokeStyle = t.ui.edge || 'rgba(255,255,255,.25)'; c.lineWidth = Math.max(1, k); c.stroke();
+}
+// roundRectPath draws on the module ctx; the pickers paint onto their own contexts.
+function roundRectOn(c, x, y, ww, hh, r){
+  c.moveTo(x+r, y);
+  c.arcTo(x+ww, y, x+ww, y+hh, r); c.arcTo(x+ww, y+hh, x, y+hh, r);
+  c.arcTo(x, y+hh, x, y, r);       c.arcTo(x, y, x+ww, y, r);
+}
 // Mini top-down pitch preview for the field picker (replaces the emoji). Self-
 // contained (no camera globals): draws the boundary with the field's rounded /
 // chamfered corners, halfway line, centre circle, and both coloured goals,
@@ -2290,7 +2417,10 @@ function updatePreview(){
   const mini = $('pvMini');   // live disc in the sticky "Your Player" header
   if (mini){ const mc=mini.getContext('2d'); mc.clearRect(0,0,mini.width,mini.height);
     drawDisc(mc, mini.width/2, mini.height/2, mini.width*0.40, profile); }
-  $('pvName').style.color = profile.color;
+  // Your disc colour is yours to pick, including ones that vanish into the panel
+  // (a mid green on Paper measured 1.95:1) — keep the hue, clear AA against it.
+  $('pvName').style.color = readableInk(profile.color,
+    getComputedStyle(document.documentElement).getPropertyValue('--panel-solid').trim() || '#101010');
   const uc = unlockCounts(); const el=$('unlockCount'); if(el) el.textContent = `· ${uc.have}/${uc.total} unlocked`;
 }
 // Lock-aware tile pickers for flags and eyes (each tile is a mini disc).
@@ -2389,50 +2519,6 @@ function buildCaps(){
     wrap.appendChild(el);
   });
 }
-// Pick whichever of the two ink colours actually contrasts more with the given
-// background — measured by WCAG ratio, not by a brightness threshold. The old
-// `luma > 150` test chose WHITE on GBA's mid-green (2.25:1) where black gives
-// 9.35:1, and did the same wherever a colour sits near the threshold.
-// Pure black, not the theme's near-black: on a 9px name plate the extra contrast
-// is the difference between clearing AA and missing it (grass measured 4.37 with
-// #10131c, 4.95 with #000000).
-const INK_DARK = '#000000', INK_LIGHT = '#ffffff';
-function relLum(hex){
-  const c = (hex||'').replace('#','');
-  const v = [0,2,4].map(i => parseInt(c.substr(i,2),16)/255)
-    .map(x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4));
-  return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
-}
-function contrastRatio(a, b){
-  const L1 = relLum(a), L2 = relLum(b);
-  return (Math.max(L1,L2) + 0.05) / (Math.min(L1,L2) + 0.05);
-}
-function pickTextColor(hex){
-  if (!/^#[0-9a-f]{6}$/i.test(hex||'')) return INK_LIGHT;
-  return contrastRatio(INK_DARK, hex) >= contrastRatio(INK_LIGHT, hex) ? INK_DARK : INK_LIGHT;
-}
-// Keep a colour's hue but push it toward whichever ink the background wants, only
-// as far as it takes to clear AA. Raw team colours on the dark name plate measured
-// as low as 3.06:1 (mono blue) — this keeps them recognisably red/blue and legible.
-function readableInk(col, bg, target){
-  if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
-  const want = target || 4.5;
-  const toward = pickTextColor(bg);          // dark bg -> lighten, light bg -> darken
-  let out = col;
-  for (let t = 0; t <= 1.0001; t += 0.05){
-    out = t === 0 ? col : mixCol(col, toward, t);
-    if (contrastRatio(rgbToHex(out), bg) >= want) break;
-  }
-  return out;
-}
-// mixCol returns an rgb() string; contrast maths wants hex.
-function rgbToHex(c){
-  if (c[0] === '#') return c;
-  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c);
-  if (!m) return '#ffffff';
-  return '#' + [1,2,3].map(i => (+m[i]).toString(16).padStart(2,'0')).join('');
-}
-
 $('pname').value = profile.name;
 $('pname').oninput = e => { profile.name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
 $('pname').onblur  = () => { if(!profile.name.trim()){ profile.name='You'; $('pname').value='You'; saveProfile(); updatePreview(); } };
@@ -3117,8 +3203,13 @@ function buildSettings(){
   for(const key of Object.keys(THEMES)){
     const t=THEMES[key];
     const el=document.createElement('div'); el.className='opt'+(sel.theme===key?' sel':'');
-    el.innerHTML=`<span class="emoji">${t.emoji}</span><span>${t.name}</span>`;
-    el.onclick=()=>{ sel.theme=key; saveSel(); applyTheme(key); buildSettings(); refreshPitchTiles(); };
+    const cvs=document.createElement('canvas'); cvs.width=cvs.height=128;
+    drawThemeSwatch(cvs.getContext('2d'), t, 128, 128);
+    el.appendChild(cvs);
+    const nm=document.createElement('span'); nm.textContent=t.name; el.appendChild(nm);
+    // updatePreview too: your name is drawn in your own disc colour, which has to be
+    // re-measured against the new theme's panel or it can land unreadable on it.
+    el.onclick=()=>{ sel.theme=key; saveSel(); applyTheme(key); buildSettings(); refreshPitchTiles(); updatePreview(); };
     tp.appendChild(el);
   }
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
@@ -5217,26 +5308,36 @@ function topBy(ps, val, minv){
   if (!win.length) return null;
   return { p: win.find(p=>p._hero) || win[0], v: bv };
 }
+// "Most Saves" without the number is just a name — say how many. Every award's note
+// carries the figure that won it, so the board reads as a scoreline, not a rosette.
+function plural(n, one, many){ return n + ' ' + (n === 1 ? one : (many || one + 's')); }
 function computeAwards(w){
   const ps = w.players; ps.forEach(p=>{ p._hero = isHero(w,p); });
   const out = [];
-  const add = (res, icon, label, note)=>{ if (res) out.push({ p:res.p, icon, label, note: note||'' }); };
-  add(topBy(ps, p=>mvpScore(p.ms), 0),        '🏆', 'Golden Boot', 'MVP');
-  add(topBy(ps, p=>p.ms.goals, 0),            '⚽', 'Most Goals');
+  // `note` is a function of the winning value, so the count comes from the same
+  // number that picked the winner and can't drift from it.
+  const add = (res, icon, label, note)=>{
+    if (res) out.push({ p:res.p, icon, label, value:res.v,
+                        note: typeof note === 'function' ? note(res.v) : (note||'') });
+  };
+  add(topBy(ps, p=>mvpScore(p.ms), 0),        '🏆', 'Golden Boot',
+      (v)=>`MVP · ${v.toFixed(1)} rating`);
+  add(topBy(ps, p=>p.ms.goals, 0),            '⚽', 'Most Goals', (v)=>plural(v,'goal'));
   const hat = topBy(ps, p=>p.ms.goals, 2);    // 3+ goals
-  if (hat) add(hat, '🎩', 'Hat Trick', hat.v+' goals');
-  add(topBy(ps, p=>p.ms.saves, 0),            '🧤', 'Most Saves');
-  add(topBy(ps, p=>p.ms.assists, 0),          '🎯', 'Most Assists');
-  add(topBy(ps, p=>p.ms.clears, 0),           '🧱', 'The Wall', 'clearances');
-  add(topBy(ps, p=>p.ms.passKey, 0),          '🪄', 'Playmaker', 'passes into shots');
-  add(topBy(ps, p=>p.ms.hardest, 5),          '🥾', 'Iron Boot', 'hardest shot');
+  if (hat) add(hat, '🎩', 'Hat Trick', (v)=>plural(v,'goal'));
+  add(topBy(ps, p=>p.ms.saves, 0),            '🧤', 'Most Saves', (v)=>plural(v,'save'));
+  add(topBy(ps, p=>p.ms.assists, 0),          '🎯', 'Most Assists', (v)=>plural(v,'assist'));
+  add(topBy(ps, p=>p.ms.clears, 0),           '🧱', 'The Wall', (v)=>plural(v,'clearance'));
+  add(topBy(ps, p=>p.ms.passKey, 0),          '🪄', 'Playmaker', (v)=>plural(v,'key pass','key passes'));
+  add(topBy(ps, p=>p.ms.hardest, 5),          '🥾', 'Iron Boot',
+      (v)=>`hardest shot · ${v.toFixed(1)} power`);
   // Comeback King: the winner came back from 2+ down.
   const win = w.score[0]===w.score[1] ? -1 : (w.score[0]>w.score[1] ? 0 : 1);
   if (win>=0 && w.maxDeficit[win] >= 2){
     const cb = topBy(ps.filter(p=>p.team===win), p=>mvpScore(p.ms), -1);
-    add(cb, '🔥', 'Comeback King', 'from '+w.maxDeficit[win]+' down');
+    add(cb, '🔥', 'Comeback King', 'from '+plural(w.maxDeficit[win],'goal')+' down');
   }
-  add(topBy(ps, p=>p.ms.posts, 0),            '🪵', 'Woodwork', 'most posts hit');
+  add(topBy(ps, p=>p.ms.posts, 0),            '🪵', 'Woodwork', (v)=>plural(v,'post')+' hit');
   // Dedupe by (label), keep priority order, cap at 8, and make sure any award the
   // human earned is shown even if it falls past the cap.
   const seen = new Set(), ranked = [];
@@ -6949,6 +7050,12 @@ function updateClock(w){
 let bannerTimer=0;
 function showBanner(text, color){
   const b=$('banner'); b.textContent=text; b.style.color=color;
+  // GOAL! prints in the team's colour straight onto the court, and on GBA that's
+  // red on light blue at 1.72:1. A hard outline in the opposite ink keeps 66px
+  // letters legible on any surface — including ice and mud, which repaint the
+  // court mid-match and would defeat a colour picked from the theme alone.
+  const lit = getComputedStyle(b).color;
+  b.style.webkitTextStroke = '3px ' + pickTextColor(rgbToHex(lit));
   b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
 }
 function togglePause(p){
@@ -7070,7 +7177,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0802AM';
+const VERSION = '20260804.1120AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7100,7 +7207,8 @@ if (window.__MAGNETDEBUG) {
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
-    deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, get paused(){ return paused; }, get running(){ return running; },
+    deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
+    get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
@@ -7114,8 +7222,8 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
-    openSection, collapseAllSections, initCollapsibles, openLook,
-    readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
+    openSection, collapseAllSections, initCollapsibles, openLook, drawThemeSwatch, themeSwatchColors,
+    readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
