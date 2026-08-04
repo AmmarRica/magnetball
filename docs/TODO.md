@@ -61,6 +61,19 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🎽 Name plates read as teams
+- [x] **Plates are tinted by team.** They had been white on every disc since the very first
+  commit — nothing about a plate told you which side someone was on, which got worse once bots
+  stopped copying your look. Plate takes `TH.teamRed` / `TH.teamBlue`; ink is picked from the
+  plate's luminance. Measured first: colouring the **text** and leaving the plate dark scored as
+  low as **3.06:1** (mono, blue) and failed AA on four of seven themes, while the tinted plate
+  clears 4.5:1 on all seven (worst 4.66, GBA).
+- [x] **`pickTextColor()` was choosing the wrong ink.** It used a fixed `luma > 150` threshold, so
+  on GBA's mid-green it picked white at **2.25:1** where black gives 9.35:1. It now compares
+  actual WCAG contrast ratios and takes the better one, with pure black rather than the theme's
+  near-black (`#10131c` measured 4.37 on grass — under AA — vs 4.95 for `#000000`). This also
+  fixes the cap glyphs drawn on discs, which used the same function.
+
 ## 🐞 Cocktail mode — three bugs, fixed
 - [x] **Picking Cocktail stranded you on the sides-config screen.** The tile jumped
   straight to `openCocktailCfg()`, which hides `#setup` — and the KICK OFF button with it, so
