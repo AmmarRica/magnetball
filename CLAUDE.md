@@ -25,6 +25,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   match showed a 69-unit ball streak instead of 190. Draw functions only draw. Equally,
   anything anchored to a moving body must use `ix`/`iy`, not the raw position — mid-step
   they differ by up to a full step of travel. `tests/smooth.mjs` holds both lines.
+- **Hit stop:** its own dial (`sel.hitStop`, `hitStopFrames()`), deliberately *not* under the
+  Screen shake toggle. Fires on a goal, and on a **first touch** whose shot `predictsGoal()` has
+  walked forward and seen go in — never on `releaseTrap` (a carried shot isn't a first touch).
+  ⚠️ `predictsGoal` re-uses the real `moveBall`/`collide*` so it can't disagree with the physics,
+  and `collideDiscs` writes to **both** bodies — so it runs on reused scratch copies and must stay
+  provably inert. `tests/hitstop.mjs` diffs the whole world across 25 predictions.
 - **State machine:** `world.state` ∈ `kickoff | play | goal | over`; `step()` advances it.
 - **Physics:** `integrate(w, ballFrozen, playersFrozen)` moves players then balls. `moveBall(w,ball,discs)`
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
@@ -97,7 +103,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 46 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 47 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

@@ -987,6 +987,10 @@
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
+      <label class="field">Hit stop <small id="hitStopVal" style="color:var(--accent)"></small></label>
+      <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
+      <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
+      <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
       <div style="height:10px"></div>
@@ -1136,6 +1140,7 @@
       <p><b>🎯 Goal.</b> Push the ball into the opponent's net. Most goals before the clock runs out wins.</p>
       <p style="margin-top:12px"><b>🕹️ Move.</b> Touch and drag anywhere on the <b>right</b> half — a joystick appears under your thumb. Drag to steer; further = faster.</p>
       <p style="margin-top:12px"><b>👟 Trap &amp; shoot.</b> Hold <b>KICK</b> and run into the ball. It sticks to your feet while you line up, then <b>let go to shoot</b> the way you're facing — hold longer for a harder strike (the ring round your disc fills as it charges). A quick tap instead of a hold is an instant pass. How long you can carry is the <b>Trap window</b> slider in Game Feel; set <b>Ball control</b> to One-touch there and the ball fires the moment you touch it, which is faster and far less forgiving.</p>
+      <p style="margin-top:12px"><b>🧊 Hit stop.</b> First-touch a shot that's genuinely going in and the game freezes for a beat on the strike — it checks the ball's path before it gives you one, so a shot that goes wide, hits a body or dies short gets nothing. A trapped-and-carried shot doesn't count; this is for the first touch. Length is the <b>Hit stop</b> slider in Game Feel, and it's separate from Screen shake.</p>
       <p style="margin-top:12px"><b>🧲 Magnet.</b> Off by default — the ball is a free puck. <b>Ball magnet</b> (Game Feel, 0–100) adds a passive stick that carries the ball at your feet without holding KICK. Most people leave it at 0.</p>
       <p style="margin-top:12px"><b>⏱ Kickoff.</b> Both teams hold their own half until the ball is played. The <b>centre circle is a gate</b>: stand in it and you may cross the line early, so you can turn and pass backwards instead of only forwards. Stray over the line anywhere else and you're pushed back. Turn the whole rule off in the Match card.</p>
       <p style="margin-top:12px"><b>🏆 Ranked.</b> Matches against bots earn <b>RP</b> and climb the ladder (Wood → Legend); harder bots are worth more. <b>Training</b> is free practice with no clock. A timed game that's level at the whistle goes to <b>sudden-death overtime</b> — first goal wins.</p>
@@ -1781,7 +1786,7 @@ const PANEL = detectPanel();
 
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballLook:'classic',                      // ball pattern (cosmetic only; physics is BALLS)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -2830,6 +2835,15 @@ if (mspeedEl){
   mspeedEl.value = Math.round((sel.matchSpeed||1)*100); showMSpeed();
   mspeedEl.oninput = () => { sel.matchSpeed = +mspeedEl.value/100; saveSel(); showMSpeed(); };
 }
+// Hit stop has its own control, not the Screen shake toggle: a freeze-frame is a
+// different thing from a camera wobble, and people who turn shake off for motion
+// reasons don't necessarily want to lose the strike either.
+const hsEl = $('hitStop'), hsValEl = $('hitStopVal');
+if (hsEl){
+  const showHS = () => { if (hsValEl) hsValEl.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; };
+  hsEl.value = hitStopFrames(); showHS();
+  hsEl.oninput = () => { sel.hitStop = +hsEl.value; saveSel(); showHS(); };
+}
 
 function renderStats(){
   const r = rankFor(stats.points);
@@ -3481,6 +3495,11 @@ function buildSettings(){
       jp.appendChild(el);
     });
   }
+  // Wired at init like the other plain sliders, but re-read here so a rebuild —
+  // a preset, a reset, a cross-tab sync from /settings — shows the live value.
+  { const hs=$('hitStop'), hv=$('hitStopVal');
+    if (hs){ hs.value = hitStopFrames();
+      if (hv) hv.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; } }
   const dbp=$('debugPick');
   if (dbp){ dbp.innerHTML='';
     [['off','Off'],['on','🐞 On']].forEach(([k,lab])=>{
@@ -4633,10 +4652,13 @@ let shake = 0, flash = 0, flashCol = '#ffffff', hitStop = 0;
 const SHAKE_SCALE = 0.5;
 function addShake(a){ if (!sel.juice) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
 function goalBurst(w, team){
+  hitStop = Math.max(hitStop, hitStopFrames());   // its own dial — see hitStopFrames
   if (!sel.juice) return;
-  addShake(13); hitStop = 5;
+  addShake(13);
   flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9;
 }
+// Hit stop is the player's own dial, not part of the Screen shake toggle. 0 = off.
+function hitStopFrames(){ const v = sel.hitStop; return v == null ? 5 : Math.max(0, Math.min(12, v|0)); }
 // Both used to decay inside render(), which made a goal flash and a shake last a
 // third as long on a 144Hz screen as on a 60Hz one. Same rates, now per step.
 function decayJuice(){
@@ -5417,6 +5439,7 @@ function handleBallControl(w, p, ball, ballFrozen){
       ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
       p.kickUsed = true;
       noteKick(w, p, power, nx, ny);
+      maybeHitStop(w, p, ball);          // one-touch by definition in this mode
       spawnKickFx(ball.x, ball.y, nx, ny, power); playSfx('kick');
     }
     if (!p.kick) p.kickUsed = false;
@@ -5479,6 +5502,7 @@ function oneShotKick(w, p, ball, dx, dy, dist, charged){
   ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
   p.kickUsed = true;
   noteKick(w, p, power, nx, ny);
+  maybeHitStop(w, p, ball);            // quick tap / instant strike — a first touch
   spawnKickFx(ball.x, ball.y, nx, ny, power); playSfx('kick');
 }
 
@@ -5643,6 +5667,79 @@ function collideArc(d, arc){
   d.x += nx*pen; d.y += ny*pen;
   const vn = d.vx*nx + d.vy*ny;
   if (vn < 0){ const e = arc.bCoef; d.vx -= (1+e)*vn*nx; d.vy -= (1+e)*vn*ny; }
+}
+
+// ---------- Predicted-goal hit stop -----------------------------------------
+// A freeze-frame on the strike, but only for the shot that earns it: a FIRST
+// TOUCH (no trap, no carry) struck at the opponent's goal, whose path we've
+// actually walked forward and seen go in. A shot that drifts wide, hits a post,
+// or is blocked by a body gets nothing — that's the whole point, the freeze is
+// the game telling you it's in before the net does.
+//
+// The prediction re-uses the real moveBall/collide* so it can't disagree with the
+// physics, which means it must run on COPIES: collideDiscs writes to both bodies,
+// so predicting on the live players would shove them. Scratch objects are reused
+// between calls — this runs inside step() and shouldn't make garbage.
+// Sized from the real numbers, not by feel: the pitch is 760 long and the ball
+// damps 0.99/step, so a default-power strike (5.5) covers at most 550 units and
+// takes ~120 steps to run 380 of them. 150 steps (2.5s) therefore reaches the goal
+// from anywhere a shot can actually get there from, and no further.
+const HITSTOP = {
+  lookahead: 150,    // steps to walk the shot forward before giving up
+  minSpeed: 3.0,     // below this a "shot" is a pass; no freeze
+  stall: 0.8,        // BALL_MIN_SPD — the speed the game itself calls coasting
+};
+const hsBall = { isBall:true, x:0, y:0, vx:0, vy:0, r:0, damp:1, invMass:1, bCoef:0.5 };
+let hsDiscs = [];
+function hsBody(i){
+  let b = hsDiscs[i];
+  if (!b) b = hsDiscs[i] = { x:0, y:0, vx:0, vy:0, r:0, invMass:0, bCoef:0.5 };
+  return b;
+}
+// Would this ball, left alone from here, end up in the goal `team` is attacking?
+function predictsGoal(w, ball, team){
+  const b = hsBall;
+  b.x=ball.x; b.y=ball.y; b.vx=ball.vx; b.vy=ball.vy;
+  b.r=ball.r; b.damp=ball.damp; b.invMass=ball.invMass; b.bCoef=ball.bCoef;
+  const sp0 = Math.hypot(b.vx, b.vy);
+  if (sp0 < HITSTOP.minSpeed) return false;
+  const attackDir = team === 0 ? -1 : 1;          // opponent goal sits at y = attackDir*halfL
+  if (b.vy * attackDir <= 0) return false;        // not even travelling that way
+  // Cheap rejection before the expensive walk: a ball damping by `damp` each step
+  // can cover at most this much ground total, and the path can't be shorter than
+  // the straight line to the line. Kills most touches for the price of a pow().
+  const halfL0 = w.field.L/2;
+  const reach = b.damp < 1
+    ? sp0 * (1 - Math.pow(b.damp, HITSTOP.lookahead)) / (1 - b.damp)
+    : sp0 * HITSTOP.lookahead;
+  if (reach < Math.abs(attackDir*halfL0 - b.y)) return false;
+  // Everyone except the striker's own ball; the strikers themselves are copied so
+  // a defender's body can still block the shot in the prediction.
+  const n = w.players.length;
+  for (let i = 0; i < n; i++){
+    const p = w.players[i], c = hsBody(i);
+    c.x=p.x; c.y=p.y; c.vx=p.vx; c.vy=p.vy; c.r=p.r; c.invMass=p.invMass; c.bCoef=p.bCoef;
+  }
+  hsDiscs.length = n;                             // reused, not sliced — no garbage per kick
+  const halfL = w.field.L/2, gh = w.field.goal/2;
+  for (let s = 0; s < HITSTOP.lookahead; s++){
+    moveBall(w, b, hsDiscs);
+    if (b.y * attackDir > halfL - b.r*0.4 && Math.abs(b.x) < gh) return true;
+    const sp = Math.hypot(b.vx, b.vy);
+    if (sp < HITSTOP.stall) return false;         // died on the way
+    if (b.vy * attackDir <= 0 && sp < HITSTOP.minSpeed) return false;   // turned back and slow
+  }
+  return false;
+}
+// Called from the two FIRST-TOUCH kick paths only (never releaseTrap — a carried
+// shot isn't a first touch).
+function maybeHitStop(w, p, ball){
+  const f = hitStopFrames();
+  if (!f) return;
+  if (w.state !== 'play') return;                 // never at kickoff or after the whistle
+  if (w.drillMode || w.demo) return;
+  if (!predictsGoal(w, ball, p.team)) return;
+  hitStop = Math.max(hitStop, f);
 }
 
 function checkGoal(w){
@@ -8647,7 +8744,9 @@ if (window.__MAGNETDEBUG) {
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, buildUnlocked, UNL_CATS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
-    get shake(){ return shake; }, get hitStop(){ return hitStop; }, get flash(){ return flash; },
+    get shake(){ return shake; }, set shake(v){ shake=v; },
+    get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },
+    get flash(){ return flash; }, set flash(v){ flash=v; },
     addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
@@ -8678,7 +8777,7 @@ if (window.__MAGNETDEBUG) {
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
-    get shake(){ return shake; }, set shake(v){ shake=v; }, get flash(){ return flash; }, set flash(v){ flash=v; },
+    hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
