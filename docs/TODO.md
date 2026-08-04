@@ -61,6 +61,21 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🔴 Live look + the phantom OVERTIME
+- [x] **Customising your player now shows up mid-match.** Your look was copied onto the disc at
+  kickoff and never read again, so a colour/cap/flag/eyes/name change only landed on the *next*
+  match. `saveProfile()` — the choke point every profile write already goes through — now pushes
+  it onto your live seat(s). A typed seat name still wins over the profile name, opponents are
+  untouched, and the idle demo is skipped.
+- [x] **The idle demo announced OVERTIME across the menu.** It ran a real 5-minute clock, and
+  bot-vs-bot wallpaper is usually level at full time — so it went to sudden death, popped the
+  banner and switched the clock to "OT". If it *wasn't* level it was worse: a full result overlay
+  over the main menu. The demo now has no clock at all, and `endMatch` restarts it rather than
+  taking over the screen. A real timed match still goes to overtime exactly as before.
+- [x] **The demo still wore your colour.** It overrode flag, cap and eyes but not `color`, so seat
+  one kept `profile.color` — the same "menu looks like your own team" problem the random-country
+  change was meant to fix. It now takes the team tint like every other demo disc.
+
 ## 🎽 Name plates read as teams
 - [x] **Full-screen F shortcut removed** — F11 is the browser's own, and swallowing a bare letter
   key fought every text field on the page (the seat-names box especially). The ⛶ buttons remain.
@@ -329,7 +344,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 31 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 32 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

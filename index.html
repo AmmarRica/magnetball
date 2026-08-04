@@ -1909,7 +1909,25 @@ function loadProfile() {
     eyes: d.eyes || def.eyes,
   };
 }
-function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} syncPush(); }
+function saveProfile(){
+  try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){}
+  syncProfileToWorld();
+  syncPush();
+}
+// Push your colour/cap/flag/eyes/name onto the live match, so customising mid-game
+// shows up straight away instead of at the next kickoff. Only your own seat(s) —
+// duo drives several, and the idle demo deliberately wears its own countries.
+function syncProfileToWorld(){
+  const w = (typeof world !== 'undefined') ? world : null;
+  if (!w || !w.players || w.demo) return;
+  const custom = seatNameList();
+  w.players.forEach((p, i) => {
+    if (p.ctrl !== 'human1') return;
+    p.color = profile.color; p.cap = profile.cap;
+    p.flag  = profile.flag;  p.eyes = profile.eyes;
+    if (!custom[i]) p.name = profile.name || 'You';   // a typed seat name still wins
+  });
+}
 function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} }
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
 
@@ -3940,7 +3958,9 @@ function startMatch(){
   const fieldKeys = Object.keys(FIELDS);
   const field = _startQuiet ? FIELDS[fieldKeys[(Math.random()*fieldKeys.length)|0]]
                             : FIELDS[sel.field];
-  const len = LENGTHS[sel.length];
+  // The idle demo is wallpaper, not a match: no clock, so it never hits full time,
+  // never announces OVERTIME across the menu and never throws up a result overlay.
+  const len = _startQuiet ? { secs:0, goals:0 } : LENGTHS[sel.length];
   const per = mode.per;
   const used = new Set([profile.name]);
 
@@ -4007,11 +4027,12 @@ function startMatch(){
     const a = countries[(Math.random()*countries.length)|0];
     let b = a, guard = 0;
     while (b === a && guard++ < 30) b = countries[(Math.random()*countries.length)|0];
-    for (const pl of players){
+    players.forEach((pl, i) => {
       pl.flag = pl.team === 0 ? a : b;
       pl.cap = 'none';
       pl.eyes = 'googly';
-    }
+      pl.color = teamTint(pl.team, i);   // your colour was still on seat 1 otherwise
+    });
   }
 
   applySeatRotation(players);
@@ -5072,6 +5093,7 @@ function kqGoal(w, ball, team){
 function endMatch(w){
   if (w.state==='over') return;
   w.state='over';
+  if (w.demo){ startDemo(); return; }       // wallpaper: just start another one
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
@@ -6892,7 +6914,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0338AM';
+const VERSION = '20260804.0412AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6935,7 +6957,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
-    readableInk, contrastRatio, rgbToHex, mixCol,
+    readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
