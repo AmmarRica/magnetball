@@ -5,9 +5,44 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.1120PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0110AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🧍 Warm-up lobby, team sides, and cocktail calibration
+A new `warmup` world state that runs before `kickoff` whenever pads are in play (or
+cocktail is on). Keyboard-only matches skip it entirely.
+
+- [x] **Waiting bots stand off the touchline.** In a 2v2 with two pads, the other two
+  seats wait at the side — no AI, no drifting, and the ball is parked — so you can
+  check your stick and your KICK before the whistle. They bench at `halfW + 20`
+  because that's the step-out margin `integrate()` already enforces; parking them
+  further out just had the physics drag them back every frame.
+- [x] **Team configuration by standing.** With two or more players, whichever half
+  you're standing in is the side you'll play. Live head counts under each half come
+  from the same test the Start button uses, so the preview can't lie.
+- [x] **Sides always come out equal.** 2v1 becomes 2v2 by giving the short side a bot
+  (the "5v4 → add one" rule); everyone crowding one side gets split rather than
+  refused; a lone player is auto-assigned as before. The **mode sets the floor**, so
+  two people in a 2v2 get a bot team-mate each instead of silently dropping to 1v1 —
+  picking a side chooses your team, not the match size.
+- [x] **Host presses Start.** A guest's Start only toggles their READY tick; nobody is
+  ever blocked by someone idling.
+- [x] **Cocktail direction calibration.** Start (when you haven't calibrated) shows one
+  arrow at a time — UP, then RIGHT — and you hold the stick that way for a second.
+  Two samples, not one, so a pad plugged in upside-down is caught rather than
+  mirrored. The result is stored as the seat's **side**, which is the value the
+  cocktail settings card already writes, so there's no second source of truth.
+  Joystick and dpad only; face buttons can't advance it.
+- [x] `PRESS START TO CONTINUE` on screen throughout, with a per-player line saying
+  what *their* Start will do.
+- [x] Skippable from Match → Warm-up lobby.
+
+## 📊 Match stats on the result screen
+- [x] **A full scoresheet under the awards** — goals, assists, shots, saves,
+  clearances, key passes, posts, touches, per player, both teams, sorted by the same
+  MVP score the awards use so the two panels can't disagree. Awards say who was best
+  at one thing; this says what everyone actually did.
 
 ## 🐞 Two reported bugs
 - [x] **The KICK pad still swept like a loading bar.** The charge tell was changed to a flash on
