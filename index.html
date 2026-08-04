@@ -858,7 +858,7 @@
       <div style="height:14px"></div>
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
-      <div class="hint" style="text-align:left; margin-top:4px">Or press <b>F</b>. There's a ⛶ in the top bar mid-match too.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">There's a ⛶ in the top bar mid-match too. <b>F11</b> works as usual.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="skins">
@@ -2354,6 +2354,27 @@ function pickTextColor(hex){
   if (!/^#[0-9a-f]{6}$/i.test(hex||'')) return INK_LIGHT;
   return contrastRatio(INK_DARK, hex) >= contrastRatio(INK_LIGHT, hex) ? INK_DARK : INK_LIGHT;
 }
+// Keep a colour's hue but push it toward whichever ink the background wants, only
+// as far as it takes to clear AA. Raw team colours on the dark name plate measured
+// as low as 3.06:1 (mono blue) — this keeps them recognisably red/blue and legible.
+function readableInk(col, bg, target){
+  if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
+  const want = target || 4.5;
+  const toward = pickTextColor(bg);          // dark bg -> lighten, light bg -> darken
+  let out = col;
+  for (let t = 0; t <= 1.0001; t += 0.05){
+    out = t === 0 ? col : mixCol(col, toward, t);
+    if (contrastRatio(rgbToHex(out), bg) >= want) break;
+  }
+  return out;
+}
+// mixCol returns an rgb() string; contrast maths wants hex.
+function rgbToHex(c){
+  if (c[0] === '#') return c;
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c);
+  if (!m) return '#ffffff';
+  return '#' + [1,2,3].map(i => (+m[i]).toString(16).padStart(2,'0')).join('');
+}
 
 $('pname').value = profile.name;
 $('pname').oninput = e => { profile.name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
@@ -2696,12 +2717,8 @@ function updateFsUI(){
 $('fsHudBtn').onclick = () => toggleFullscreen(true);
 document.addEventListener('fullscreenchange', ()=>{ updateFsUI(); resize(); });
 document.addEventListener('webkitfullscreenchange', ()=>{ updateFsUI(); resize(); });
-window.addEventListener('keydown', e => {
-  if (e.key === 'f' || e.key === 'F'){
-    const t = e.target; if (t && /input|textarea/i.test(t.tagName)) return;   // don't hijack typing
-    e.preventDefault(); toggleFullscreen(true);
-  }
-});
+// No F shortcut: F11 is the browser's own, and a bare letter key is a bad thing to
+// swallow — it fought the seat-names box and anything else you type into.
 updateFsUI();
 
 // ============================================================
@@ -6305,16 +6322,14 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       const a = prev + (target - prev) * LABEL_FADE;
       if (idx != null) labelA[idx] = a;
       if (a > 0.004){
-        // Plate is tinted by TEAM, not by the player's own colour — every plate on a
-        // side reads as that side at a glance. Text colour is picked from the plate's
-        // luminance: colouring the TEXT instead and leaving the plate dark measured
-        // as low as 3.06:1 (mono, blue) and failed AA on four of the seven themes,
-        // while this clears 4.5:1 on all seven.
-        const plate = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : TH.nameBg;
+        // The NAME carries the team colour; the box stays the neutral plate. Raw
+        // team colours on that plate drop to 3.06:1 on some themes, so the tint is
+        // lightened toward the plate's preferred ink only as far as AA needs.
+        const team = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : null;
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
-        ctx.fillStyle = plate; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
-        ctx.fillStyle = (p.team === 0 || p.team === 1) ? pickTextColor(plate) : TH.nameText;
+        ctx.fillStyle = TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
+        ctx.fillStyle = team ? readableInk(team, TH.nameBg) : TH.nameText;
         ctx.fillText(label, x, y-r-11);
         ctx.globalAlpha = prevA;
       }
@@ -6877,7 +6892,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0304AM';
+const VERSION = '20260804.0338AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6920,6 +6935,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
+    readableInk, contrastRatio, rgbToHex, mixCol,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };

@@ -62,12 +62,14 @@ each was shipped at some point and each is a class of mistake worth watching for
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
 ## 🎽 Name plates read as teams
-- [x] **Plates are tinted by team.** They had been white on every disc since the very first
-  commit — nothing about a plate told you which side someone was on, which got worse once bots
-  stopped copying your look. Plate takes `TH.teamRed` / `TH.teamBlue`; ink is picked from the
-  plate's luminance. Measured first: colouring the **text** and leaving the plate dark scored as
-  low as **3.06:1** (mono, blue) and failed AA on four of seven themes, while the tinted plate
-  clears 4.5:1 on all seven (worst 4.66, GBA).
+- [x] **Full-screen F shortcut removed** — F11 is the browser's own, and swallowing a bare letter
+  key fought every text field on the page (the seat-names box especially). The ⛶ buttons remain.
+- [x] **The NAME is team-coloured; the box stays neutral.** Plates had been white on every disc
+  since the very first commit — nothing told you which side someone was on, which got worse once
+  bots stopped copying your look. Raw team colours on the dark plate measured as low as **3.06:1**
+  (mono, blue), so `readableInk()` keeps the hue and lightens it toward the plate's preferred ink
+  only as far as AA needs: 4 of the 14 team tints are used untouched, the rest shift slightly
+  (e.g. grass red `#e23c3c` → `#e65959`). Worst contrast across all seven themes is now 4.56.
 - [x] **`pickTextColor()` was choosing the wrong ink.** It used a fixed `luma > 150` threshold, so
   on GBA's mid-green it picked white at **2.25:1** where black gives 9.35:1. It now compares
   actual WCAG contrast ratios and takes the better one, with pure black rather than the theme's
