@@ -96,14 +96,38 @@ const r = await p.evaluate(async ()=>{
   me.x=0; me.y=0; me.vx=0; me.vy=0; me.kick=false; me.chargeT=0;
   M.resetTrails();
   const ringAt = () => { const rr=me.r*M.cam.s*1.42;
-    return px(M.wx(me.x), M.wy(me.y) - rr); };      // top of the ring = arc start
+    return px(M.wx(me.x), M.wy(me.y) - rr); };      // top of the ring
   M.drawPitch(w); M.drawDiscs(w);
   const idle = ringAt();
-  me.kick=true; me.chargeT=M.CHARGE.max;
+  me.kick=true; me.chargeT=M.CHARGE.max; me.holdT=0;
   M.drawPitch(w); M.drawDiscs(w);
   const charged = ringAt();
   o.chargeVisible = diff(idle, charged);
-  me.kick=false; me.chargeT=0;
+
+  // 5b) It FLASHES rather than sweeping round. Two things to prove: the whole
+  //     circle is drawn (left and right sides equally inked, not an arc filling
+  //     clockwise from the top), and its brightness varies frame to frame.
+  const ringInk = () => { const [sx,sy]=M.screenPt(M.wx(me.x), M.wy(me.y));
+    const R=Math.round(me.r*1.42*M.cam.s)+3;
+    const d2=c2.getImageData(Math.round(sx*DPR)-R, Math.round(sy*DPR)-R, R*2, R*2).data;
+    let n=0; for(let i=0;i<d2.length;i+=4) if(d2[i]+d2[i+1]+d2[i+2]>330) n++;
+    return n; };
+  const halves = () => { const [sx,sy]=M.screenPt(M.wx(me.x), M.wy(me.y));
+    const R=Math.round(me.r*1.42*M.cam.s)+3;
+    const g=(x0)=>{ const d2=c2.getImageData(x0, Math.round(sy*DPR)-R, R, R*2).data;
+      let n=0; for(let i=0;i<d2.length;i+=4) if(d2[i]+d2[i+1]+d2[i+2]>330) n++; return n; };
+    return [ g(Math.round(sx*DPR)-R), g(Math.round(sx*DPR)) ]; };
+  const series=[];
+  for (let i=0;i<24;i++){ me.holdT += 1/60; M.drawPitch(w); M.drawDiscs(w); series.push(ringInk()); }
+  o.ringLow = Math.min(...series); o.ringHigh = Math.max(...series);
+  o.ringPulses = o.ringHigh > o.ringLow * 1.25;
+  // Part-charged: a sweeping arc would ink one side far more than the other.
+  me.chargeT = M.CHARGE.max*0.35; me.holdT = 0.35;
+  M.drawPitch(w); M.drawDiscs(w);
+  const [lh, rh] = halves();
+  o.ringHalves = [lh, rh];
+  o.ringIsFullCircle = Math.abs(lh-rh) < Math.max(lh,rh)*0.35;
+  me.kick=false; me.chargeT=0; me.holdT=0;
 
   // 6) Trails reset with the match so nothing streaks in from before. The live
   //    render loop repopulates immediately, so assert the LONG history is gone
@@ -150,6 +174,7 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.chargeVisible > 20 &&              // wind-up reads on the disc
+           r.ringPulses && r.ringIsFullCircle &&  // it flashes, never sweeps
            r.trailsClearedOnStart && r.allThemesRead &&
            errors.length===0;
 if(!ok) console.log('checks:', {

@@ -45,10 +45,10 @@ const r = await p.evaluate(async ()=>{
 
   // --- The slider exists in Game Feel and writes sel.feel.trap
   M.buildSettings();
-  const labels=[...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent);
+  const labels=[...document.querySelectorAll('#feelSlidersBall label, #feelSlidersPlayer label')].map(l=>l.textContent);
   o.sliderPresent = labels.some(t=>/trap window/i.test(t));
   const idx = labels.findIndex(t=>/trap window/i.test(t));
-  const inputs=[...document.querySelectorAll('#feelSliders input')];
+  const inputs=[...document.querySelectorAll('#feelSlidersBall input, #feelSlidersPlayer input')];
   const inp=inputs[idx];
   inp.value = 75; inp.oninput();
   o.sliderWrites = M.sel.feel.trap === 75;

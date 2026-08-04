@@ -61,6 +61,22 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## ⌨️ Controls + Game Feel layout
+- [x] **The charge ring flashes instead of sweeping.** It filled clockwise like a loading bar,
+  which read as progress rather than a player winding up. The whole ring now pulses, faster and
+  brighter as the shot charges. Phase comes from a new `holdT` counter, not `chargeT` — chargeT
+  clamps at the maximum, so using it would have frozen the pulse exactly when fully wound up.
+- [x] **X kicks as well as Space** — and neither is swallowed while you're typing. Space had no
+  text-field guard at all, so it ate spaces in the seat-names box.
+- [x] **Clicking the pitch releases the keyboard.** A focused slider kept the arrow keys, so
+  up/down/left/right were adjusting a setting instead of (or as well as) moving the player. A
+  pointerdown on the canvas now blurs whatever had focus, and `pollKeys` ignores the keyboard
+  entirely while a text field is focused.
+- [x] **Game Feel is grouped** — ⚽ Ball controls (Ball control, kick power, max ball speed, ball
+  glide, magnet, trap window), 🕹️ Player controls (acceleration, float, stick sensitivity,
+  one-handed), 🎬 Presentation (shake, auto-replay, match speed, debug readout). It was one
+  undifferentiated stack of eight sliders.
+
 ## 🎞 Render interpolation, Killer Queen, docs
 - [x] **Match speed 0.5× was juddering.** The sim runs in fixed 1/60 chunks and the renderer drew
   the newest state with no interpolation, so at 0.5× the accumulator only crossed the threshold
@@ -365,7 +381,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 32 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 33 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

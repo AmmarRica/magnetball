@@ -28,9 +28,9 @@ const r = await p.evaluate(async ()=>{
     trapOff:'#trapPick .opt', debug:'#debugPick .opt', oneHand:'#oneHandPick .opt',
     settingsPanel:'#panelPick .opt', juice:'#juicePick .opt', autoReplay:'#autoReplayPick .opt',
     ballSkin:'#ballSkinPick .opt', playerSkin:'#playerSkinPick .opt',
-    magnet:'#feelSliders input', sens:'#feelSliders input', matchSpeed:'#mspeed',
+    magnet:'#feelSlidersBall input', sens:'#feelSlidersPlayer input', matchSpeed:'#mspeed',
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
-    snd:'#sndMaster .opt', feel:'#feelSliders input', names:'#seatNames',
+    snd:'#sndMaster .opt', feel:'#feelSlidersBall input', names:'#seatNames',
   };
   for (const [key, sel] of Object.entries(CONTROLS)){
     const n = document.querySelectorAll(sel).length;
@@ -56,12 +56,12 @@ const r = await p.evaluate(async ()=>{
   // first and you can't tell which one you last used.
   out.duplicateControls = [];
   if (document.getElementById('magnet')) out.duplicateControls.push('magnet (Match card copy)');
-  if (document.querySelectorAll('#feelSliders label').length !==
-      new Set([...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent)).size)
+  const allFeelLabels = [...document.querySelectorAll('#feelSlidersBall label, #feelSlidersPlayer label')];
+  if (allFeelLabels.length !== new Set(allFeelLabels.map(l=>l.textContent)).size)
     out.duplicateControls.push('repeated feel slider label');
 
   // Every Game Feel slider must be present and write its key.
-  const feelLabels=[...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent.toLowerCase());
+  const feelLabels=allFeelLabels.map(l=>l.textContent.toLowerCase());
   out.feelSliders = feelLabels.length;
   for (const want of ['acceleration','float','kick power','max ball speed','ball glide','magnet','trap window','sensitivity'])
     if (!feelLabels.some(t=>t.includes(want))) out.unreachable.push('feel slider: '+want);
