@@ -2493,20 +2493,45 @@ function saveUI(o){ try { localStorage.setItem(UI_KEY, JSON.stringify(o)); } cat
 const uiState = loadUI();
 const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true, online:true,
   theme:true, display:true, skins:true, sound:true, feel:true };
-function initCollapsibles(){
+// Accordion: at most one section open. Opening one closes the rest, so the setup
+// screen is never a wall of every control at once and you don't lose your place
+// scrolling past six expanded cards.
+function openSection(sec){
   document.querySelectorAll('.card.collapsible').forEach(card=>{
-    const sec = card.dataset.sec;
-    const collapsed = uiState.hasOwnProperty(sec) ? !!uiState[sec] : !!SECTION_COLLAPSED_DEFAULT[sec];
-    card.classList.toggle('collapsed', collapsed);
+    const mine = card.dataset.sec === sec;
+    card.classList.toggle('collapsed', !mine);
+    uiState[card.dataset.sec] = !mine;
+  });
+  saveUI(uiState);
+}
+function collapseAllSections(){
+  document.querySelectorAll('.card.collapsible').forEach(card=>{
+    card.classList.add('collapsed');
+    uiState[card.dataset.sec] = true;
+  });
+  saveUI(uiState);
+}
+function initCollapsibles(){
+  const cards = [...document.querySelectorAll('.card.collapsible')];
+  // Honour the stored state, but never restore two open at once — an older build
+  // could have left several expanded.
+  const open = cards.find(c => {
+    const sec = c.dataset.sec;
+    return uiState.hasOwnProperty(sec) ? !uiState[sec] : !SECTION_COLLAPSED_DEFAULT[sec];
+  });
+  cards.forEach(card=>{
+    card.classList.toggle('collapsed', card !== open);
+    uiState[card.dataset.sec] = card !== open;
     const h2 = card.querySelector('h2');
     if (h2 && !h2._wired){ h2._wired = true;
       h2.addEventListener('click', ()=>{
-        const now = !card.classList.contains('collapsed');
-        card.classList.toggle('collapsed', now);
-        uiState[sec] = now; saveUI(uiState);
+        // Clicking the open one closes it; clicking any other opens it alone.
+        if (card.classList.contains('collapsed')) openSection(card.dataset.sec);
+        else collapseAllSections();
       });
     }
   });
+  saveUI(uiState);
 }
 initCollapsibles();
 
@@ -2966,8 +2991,7 @@ function openLook(section){
   dockOrFull('setup');
   const card = document.querySelector('.card.collapsible[data-sec="'+target+'"]');
   if (card){
-    card.classList.remove('collapsed');
-    if (typeof uiState==='object'){ uiState[target]=false; saveUI(uiState); }
+    openSection(target);                       // accordion: this one, and only this one
     try{ card.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ card.scrollIntoView(); }catch(__){} }
   }
 }
@@ -7041,7 +7065,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0655AM';
+const VERSION = '20260804.0731AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7085,6 +7109,7 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
+    openSection, collapseAllSections, initCollapsibles, openLook,
     readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
