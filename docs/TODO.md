@@ -5,9 +5,33 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0910PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.1005PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 📚 Documentation rot pass
+- [x] **README** — said "space kicks" (X kicks too), "6 full palettes" (7), "150+ cosmetics"
+  (210), "12+ drills" (24), and advertised "optional sprite skins" that no longer exist. The
+  project structure listed neither `tests/`, `docs/` nor `settings/`. Now also mentions the bot
+  AI, determinism, surface wear and the contrast pass.
+- [x] **CLAUDE.md** — had no mention of the AI layer, the seeded RNG rule, the shared faceplate
+  slot, `itemName`, `BALL_LOOKS`, the accordion, or the KICK OFF header. Added, plus two gotchas
+  that cost real time: `p.kickUsed` is only cleared on the one-touch path, and duplicated
+  knowledge rots (the category→name chain broke a test).
+- [x] **TERMINOLOGY** — card rows were stale (Game Feel is three groups now; Sound has five
+  per-effect toggles; Your Player gained Text), Killer Queen was missing from the mode list, and
+  the theme list omitted GBA.
+- [x] **ROADMAP** — Tier 1 and 2 still "recommended" eleven things that shipped long ago; marked
+  ✅ with a note. "Amiga visual theme" was never a theme name. Added a Shipped block for the AI
+  rework, shirt numbers, ball looks, the Kick Off header and the contrast pass.
+- [x] **Both audit docs** carried a "no code has been changed" framing that was no longer true;
+  each now opens with a status block and a before/after table. `DETERMINISM-AUDIT` marks the
+  `rand()` item done and is explicit that this is reproducible on one engine, **not** bit-exact
+  across engines — §3b is untouched.
+- [x] **Screenshots re-captured** rather than just labelled stale: `docs/img/` now shows the Kick
+  Off header, shirt numbers and awards-with-counts.
+- [x] `LEADERBOARD_SETUP.md` checked against the code — sheet ID, tab name and column headers all
+  still match. No changes needed.
 
 ## ⚽ Skins out, drawn ball looks in
 - [x] **The Skins card is gone.** It offered a soccer-ball sprite and sprite players

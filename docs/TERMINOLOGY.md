@@ -18,14 +18,14 @@ Each panel is a **card**, named by its heading. A line inside a card is a **row*
 | Card | Rows inside |
 |------|-------------|
 | **Record** | rank, RP, W/L/D, goals, streak, MMR |
-| **Match** | Mode · Field · Difficulty · Match length · Input · Ball magnet · Ball · Pitch surface · Party modifiers |
-| **Your Player** | Name · Colour · Cap · Countryball · Animal · Eyes |
+| **Match** | Mode · Field · Difficulty · Match length · Input · Ball · Pitch surface · Grass cut · Kickoff rule · Player names · Party modifiers — its **heading is the Kick Off button**; the chevron beside it opens the card |
+| **Your Player** | Name · Colour · Cap · Countryball · Animal · **Text** · Eyes |
 | **Controls** | Handed · Stick sensitivity · Who plays · Colour-blind markers · Controller |
 | **Theme** | Visual style |
-| **Display** | Layout |
+| **Display** | Layout · Pitch direction · Settings location · Screen |
 | **Ball** | Look *(nine drawn patterns; cosmetic only — ball physics is Match → Ball)* |
-| **Sound** | Master · Volume |
-| **Game Feel** | Screen shake & effects · Auto-replay goals · Match speed · Preset |
+| **Sound** | Master · Volume · Whistle · Crowd · Pass / kick · Wall bounce · Net |
+| **Game Feel** | Preset, then three groups — **⚽ Ball controls** (Ball control · Kick power · Max ball speed · Ball glide · Ball magnet · Trap window), **🕹️ Player controls** (One-handed · Player acceleration · Player float · Stick sensitivity), **🎬 Presentation** (Screen shake & effects · Auto-replay goals · Match speed · Debug readout) |
 | **Online** | Room code *(coming-soon stub)* |
 
 *Example: "the **Match speed** row in the **Game Feel** card" or "the **Field** row in the **Match** card."*
@@ -33,7 +33,7 @@ Each panel is a **card**, named by its heading. A line inside a card is a **row*
 ### Nav tiles (the button grid)
 The 3-wide grid of buttons — each is a **nav tile**:
 **Season · Drills · Tutorial · Watch · Ranks · Stats · Daily · Shop · Gauntlet · Settings · How to play.**
-The big green button above them is **Kick Off**.
+Above them is **Kick Off** — the big green button, which doubles as the **Match** card's heading.
 
 Some tiles open a screen with a **different name** — worth knowing:
 
@@ -84,7 +84,8 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
 ---
 
 ## Modes & match types
-- **Team sizes:** 1v1 · 2v2 · 3v3 · 4v4 · **Duo** (steer 2) · **2-Player** (same phone) · **Training**.
+- **Team sizes:** 1v1 · 2v2 · 3v3 · 4v4 · **Duo** (steer 2) · **2-Player** (same phone) ·
+  **Killer Queen** · **Training**.
 - **Party modifiers:** Big ball · Low-gravity · Sudden death · **Multi-ball**.
 - **Game modes:** **Cup Run** (Season) · **Gauntlet** · **Drills** · **Tutorial**.
 
@@ -94,7 +95,7 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
   **Streak** · **Coins** (shop currency) · **Unlocks**.
 
 ## Themes (by name)
-**Neon · Flat · Grass · Mono · Videoball · Paper** *(Paper = the light one)*.
+**GBA · Neon · Flat · Grass · Mono · Videoball · Paper** *(Paper = the light one)*.
 
 ---
 
@@ -104,4 +105,5 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
 - If a tile's label differs from where it goes, use the label: *"the **Ranks** tile (Leaderboard)"*.
 - Not sure what something's called? Describe where it is ("top-left of the pitch") — this doc will grow.
 
-*Build shown in screenshots: v20260803.2 (Neon theme). Re-capture the images in `docs/img/` if the UI changes noticeably.*
+*Screenshots in `docs/img/` are current as of v20260804.1005PM (Neon theme). Re-capture them
+with `docs/img/` in mind if the UI changes noticeably.*

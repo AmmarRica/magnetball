@@ -8,6 +8,14 @@ Nothing has been refactored — this is the report only.
 
 ---
 
+> **Status (updated).** Phase 1's headline item is **done**: the bot AI's `rand()` was
+> `Math.random()` and is now `w.rng` — `mulberry32`, seeded per match from `w.seed`, set outside
+> the sim at `startMatch` and pinnable with `setMatchSeed(n)`. `tests/botai.mjs` proves it by
+> monkey-patching `Math.random` during a match and asserting the AI never reaches for it, and by
+> replaying a pinned seed to a bit-identical input trace. **Everything else below still stands** —
+> in particular §3b (transcendental math) is untouched, so this is *reproducible on one engine*,
+> not yet bit-exact across engines. The eight decisions in §8 are still open.
+
 ## 1. Is the simulation separated from rendering?
 
 **Partly. The timestep is already right; the boundary is not.**
@@ -70,14 +78,17 @@ demote juice/slow-mo/match-speed to render-only effects (or lock them in netplay
 
 | Site | In sim? | Notes |
 |---|---|---|
-| `rand()` → bot AI aim error, pass choice (4 uses) | **YES, per step** | `runBot` → `(rand()-0.5)*diff.err` |
+| ~~`rand()` → bot AI aim error, pass choice~~ | **FIXED** | Now `brand(w)` → `w.rng` (`mulberry32`, seeded from `w.seed`). `rand()` is deleted. |
 | `spawnKickFx`, `spawnTouchFx` (particles) | **Called from sim** | Only mutates `fx[]` (render), but is invoked inside `step()` |
 | `shake` jitter in `render()` | No | Render only |
 | Demo field pick, demo countries, rogue perk choice, `SYNC_ID` | Match setup | Must become seed-derived |
 | Audio noise buffers, crowd cheer timings | No | Audio only |
 
-Note `rand()` is literally `function rand(){ return Math.random(); }` with a comment
-claiming it's fine — it is the single per-step randomness source in the sim.
+~~Note `rand()` is literally `function rand(){ return Math.random(); }` with a comment
+claiming it's fine~~ — **resolved.** The AI's stream is now seeded and the function is gone. One
+wrinkle found doing it: seeding from `Date.now()` alone gave two matches started inside the same
+millisecond the *same* bots, which the menu, the idle demo and the tests all do — the seed mixes in
+a counter now.
 
 **A seeded PRNG is already in the repo**: `mulberry32(a)` (used for the social feed).
 It is `Math.imul`-based and integer-safe, so it is a valid Phase 1 drop-in.
@@ -217,7 +228,7 @@ damping compounds it 60 times a second.
 ## 7. Phased plan with independently verifiable checkpoints
 
 ### Phase 1 — cheap wins (safe to do now, no netcode)
-1. Seeded PRNG: promote `mulberry32` to the sim, thread a `w.rng` through `runBot`
+1. ✅ **Done.** Seeded PRNG: `mulberry32` promoted to the sim, `w.rng` threaded through `runBot`
    and match setup. Record the seed at kickoff.
 2. Pull the side effects out of `step()`: it emits an **event list** (`goal`, `wall`,
    `net`, `banner`) that the caller drains and turns into audio/DOM/FX. Removes
