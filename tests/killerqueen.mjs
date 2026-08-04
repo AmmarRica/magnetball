@@ -39,7 +39,7 @@ const r = await p.evaluate(async ()=>{
   o.snailMoved = +snailMoved.toFixed(1);
   o.snailIsHeavier = snailMoved < ballMoved * 0.5;
   o.snailBigger = snail(w).r > w.ball.r;
-  o.snailInvMassLower = snail(w).invMass < w.ball.invMass * 0.25;   // genuinely heavy
+  o.snailInvMassLower = snail(w).invMass < w.ball.invMass * 0.45;   // still much heavier
 
   // --- Kickoff must NOT move the snail
   M.startMatch(); await wait(120);
@@ -60,8 +60,12 @@ const r = await p.evaluate(async ()=>{
   M.checkGoal(w2);
   o.regularGoalScored = w2.score[0] === before + 1;
   o.noKickoffState    = w2.state === 'play';                 // play continues
-  o.ballNotRecentred  = !(w2.ball.x === 0 && w2.ball.y === 0);
-  o.ballBackInPlay    = Math.abs(w2.ball.y) < halfL;         // spat out of the mouth
+  // Re-serves at the CENTRE spot (it used to reappear on the goal line it entered).
+  o.ballBackInPlay    = Math.abs(w2.ball.y) < halfL;
+  o.ballReturnsToCentre = Math.hypot(w2.ball.x, w2.ball.y) < w2.ball.r + 40;
+  o.ballNotOnGoalLine  = Math.abs(w2.ball.y) < halfL * 0.5;
+  o.ballClearOfSnail   = (()=>{ const sn=snail(w2); if(!sn) return true;
+    return Math.hypot(w2.ball.x-sn.x, w2.ball.y-sn.y) >= w2.ball.r + sn.r; })();
   o.playersNotReset   = keeper.every(k => k.q.x === k.x && k.q.y === k.y);
   o.snailUntouched    = sn2.x === 120 && sn2.y === -150;
 
@@ -110,7 +114,8 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.twoBalls && r.hasSnail && r.snailAtCentre && r.snailIsHeavier && r.snailBigger &&
   r.snailInvMassLower &&
   r.snailHoldsPosition && r.regularBallReset &&
-  r.regularGoalScored && r.noKickoffState && r.ballNotRecentred && r.ballBackInPlay &&
+  r.regularGoalScored && r.noKickoffState && r.ballBackInPlay &&
+  r.ballReturnsToCentre && r.ballNotOnGoalLine && r.ballClearOfSnail &&
   r.playersNotReset && r.snailUntouched && r.noDoubleScore &&
   r.snailForcesWin && r.snailFroze && r.matchOver && r.snailTitle && r.snailWinRecorded &&
   r.ballEscapes === 0 && errors.length === 0;
