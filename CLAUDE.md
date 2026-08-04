@@ -17,7 +17,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 
 ## Architecture (all in `index.html`)
 - **Loop:** `loop(t)` → fixed-timestep accumulator calling `step(w)` at `STEP = 1/60`, then
-  `render()`. Juice: `shake`, `hitStop`, goal `slow`-mo.
+  `render()` with `renderAlpha = acc/STEP` so `ix(e)`/`iy(e)` interpolate between steps.
+  Juice: `shake`, `hitStop`, goal `slow`-mo.
+  ⚠️ **Anything that advances over time belongs in the step loop, not in a draw.** Trails
+  (`advanceTrails`) and shake/flash (`decayJuice`) are called next to `step(world)` for this
+  reason: when they ticked inside `render()` a 144Hz screen ran them 2.4× fast and the same
+  match showed a 69-unit ball streak instead of 190. Draw functions only draw. Equally,
+  anything anchored to a moving body must use `ix`/`iy`, not the raw position — mid-step
+  they differ by up to a full step of travel. `tests/smooth.mjs` holds both lines.
 - **State machine:** `world.state` ∈ `kickoff | play | goal | over`; `step()` advances it.
 - **Physics:** `integrate(w, ballFrozen, playersFrozen)` moves players then balls. `moveBall(w,ball,discs)`
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
@@ -90,7 +97,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 42 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 46 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

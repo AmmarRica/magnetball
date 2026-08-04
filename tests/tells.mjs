@@ -45,7 +45,7 @@ const r = await p.evaluate(async ()=>{
       probes.push([sx + dirx*d, sy + diry*d]);
     }
     ref = probes.map(([bx,by]) => px(M.wx(bx), M.wy(by)));
-    for(let i=0;i<n;i++){ M.drawDiscTrails(w); q.x+=q.vx; q.y+=q.vy; }
+    for(let i=0;i<n;i++){ M.advanceTrails(w); q.x+=q.vx; q.y+=q.vy; }
     M.drawPitch(w); M.drawDiscTrails(w);
     let best=0;
     probes.forEach(([bx,by],j)=>{ best = Math.max(best, diff(ref[j], px(M.wx(bx), M.wy(by)))); });
@@ -82,7 +82,7 @@ const r = await p.evaluate(async ()=>{
     const sp=Math.hypot(vx,vy)||1;
     const bx=sx-(vx/sp)*w.ball.r*back, by=sy-(vy/sp)*w.ball.r*back;
     const ref=px(M.wx(bx), M.wy(by));
-    for(let i=0;i<n;i++){ M.drawBallTrail(w); w.ball.x+=vx; w.ball.y+=vy; }
+    for(let i=0;i<n;i++){ M.advanceTrails(w); w.ball.x+=vx; w.ball.y+=vy; }
     M.drawPitch(w); M.drawBallTrail(w);
     const got=px(M.wx(bx), M.wy(by));
     return diff(ref,got);
@@ -134,7 +134,7 @@ const r = await p.evaluate(async ()=>{
   //    rather than expecting an empty array we'd never catch.
   M.resetTrails();
   me.vx=0; me.vy=-3.6;
-  for(let i=0;i<40;i++){ M.drawDiscTrails(w); me.x+=me.vx; me.y+=me.vy; }   // dots need travel
+  for(let i=0;i<40;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }   // dots need travel
   o.longHistoryBefore = Math.max(...M.discTrails.map(h=>h.length));
   M.startMatch();                       // synchronous: check before a frame can regrow it
   o.historyAfterStart = M.discTrails.reduce((n,h)=>n+(h?h.length:0), 0);
@@ -150,14 +150,14 @@ const r = await p.evaluate(async ()=>{
     M.drawPitch(w);
     const probes=[]; for(let j=-3;j<=3;j++) probes.push([0, 160+me.r*2.2+j*2]);
     const ref=probes.map(([x,y])=>px(M.wx(x),M.wy(y)));
-    for(let i=0;i<14;i++){ M.drawDiscTrails(w); me.x+=me.vx; me.y+=me.vy; }
+    for(let i=0;i<14;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }
     M.drawPitch(w); M.drawDiscTrails(w);
     let dots=0; probes.forEach(([x,y],j)=>{ dots=Math.max(dots, diff(ref[j], px(M.wx(x),M.wy(y)))); });
     M.resetTrails();
     w.ball.vx=0; w.ball.vy=-20; w.ball.x=0; w.ball.y=100+20*12; w.ball.lastKickTeam=0;
     M.drawPitch(w);
     const bref=px(M.wx(0), M.wy(100+w.ball.r*3));
-    for(let i=0;i<12;i++){ M.drawBallTrail(w); w.ball.y+=w.ball.vy; }
+    for(let i=0;i<12;i++){ M.advanceTrails(w); w.ball.y+=w.ball.vy; }
     M.drawPitch(w); M.drawBallTrail(w);
     perTheme[th] = { dots, line: diff(bref, px(M.wx(0), M.wy(100+w.ball.r*3))) };
   }
