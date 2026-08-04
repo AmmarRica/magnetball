@@ -5,9 +5,65 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0210PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0505PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🤖 Bot AI rework — steps 2, 4–9 and the difficulty re-tune (checkpoint B)
+Four layers now: team phase → roles → per-bot decision → steering. Still AI-only —
+bots emit a stick vector and KICK, and the suite proves it by diffing the whole
+player object across 400 `runBot` calls.
+
+- [x] **Step 2 — intercept.** Closed-form damped-ball prediction, four fixed
+  iterations, **clamped to the pitch**: unclamped, a fast ball predicts x=536 on a
+  pitch 440 wide and the bot runs at a point outside the boards. Clamping is both the
+  better guess and what makes the iteration settle instead of walking to the limit.
+- [x] **Step 4 — ball-anchored formation** with per-role influence, a real goalie,
+  and `diff.aggr` finally wired in as defensive-line height. Same-role players get
+  distinct lanes, so 4v4 no longer hands two bots an identical spot.
+- [x] **Step 5 — aim scoring.** Every candidate kick — shot, pass, bank, corner
+  clear — is scored by the same function (lane clear, goal progress, openness,
+  distance). Passing is not a mechanic: it is the same kick aimed at a mate.
+- [x] **Step 6 — support-spot grid**, 8×6 over the attacking half, one player's grid
+  every other tick on rotation, with hysteresis so the target doesn't hop between
+  neighbouring cells.
+- [x] **Step 7 — role assignment** every 20 ticks with a 10% switch margin. Chaser by
+  time-to-intercept, goalie by distance to own goal, the rest split support/defender.
+- [x] **Step 8 — bank kicks**, mirrored across the real `w.walls` and **corrected for
+  the actual physics**: boards are `bCoef 0.90`, not a perfect mirror, and the ball
+  turns when its *centre* is one radius off the wall. Measured over 8 geometries,
+  mean miss **4.0 units vs 21.5** for a naive mirror (62.9 → 1.5 close to the boards).
+  The two errors cancel at one particular distance, which is exactly where the first
+  version of the test looked fine.
+- [x] **Step 9 — feel.** Reaction delay in ticks, anticipation limit, one presser,
+  continuous off-ball runs, seeded aim error as the primary knob.
+- [x] **Bots use the human kick path** (decision 8b). The bot-only branch in
+  `handleBallControl` is gone; trapping on/off now applies to bots too, and they
+  trap, carry and release like a human. Two bugs found doing it: `p.kickUsed` is
+  never cleared on the casual path, so gating on it left bots pressing KICK **8
+  times in 30 seconds**; and the press has to start *before* contact or the 0.14 s
+  trap window closes one tick short.
+- [x] **`DIFF` re-tuned** (decision 8a). `power` is retired — it multiplied a
+  bot-only kick that no longer exists. Every AI-side axis now derives from one skill
+  scalar so a tier cannot be better at one thing and worse at another.
+
+Two measurement traps worth recording, both of which produced wrong answers first:
+
+- **The shot aimed at the middle of the GOAL, not the middle of the gap.** So precise
+  bots fired straight at whoever stood in the centre and sloppy ones scattered into
+  space — which inverted the entire ladder. Rookie beat Insane 0.58–0.42 until the
+  aperture code was changed to return the widest clear sub-arc. After: 0.17–0.83.
+- **A one-sided harness favours the side it drives by ~17 points.** Normal-vs-Normal
+  read 0.33 until every pair was played both ways round.
+
+Ladder, both orientations, 2 modes × 4 seeds: rookie<easy **0.72**, rookie<normal
+**0.66**, normal<hard **0.84**, rookie<insane **0.75**, normal-vs-normal **0.50**.
+Adjacent tiers land inside sampling noise, which is what one step up should feel like.
+
+- [ ] The frozen-legacy reference opponent turned out to be contaminated: legacy
+  steering on the *new* kick path traps and fires at full charge, scoring 7.5 goals a
+  match at Elite — behaviour it never had. Balance is therefore measured tier-vs-tier
+  on current mechanics instead, which isolates the AI change.
 
 ## 🤖 Bot AI rework — steps 0, 1 and 3 (checkpoint A)
 Audit and phased plan: [`BOT-AI-AUDIT.md`](BOT-AI-AUDIT.md). All six decisions answered there.
