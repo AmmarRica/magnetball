@@ -915,14 +915,11 @@
       <div class="hint" style="text-align:left; margin-top:4px">There's a ⛶ in the top bar mid-match too. <b>F11</b> works as usual.</div>
     </div>
 
-    <div class="card collapsible collapsed" data-sec="skins">
-      <h2>Skins <small style="color:var(--muted);font-weight:400">experimental</small></h2>
-      <label class="field">Ball</label>
-      <div class="opts" id="ballSkinPick"></div>
-      <div style="height:10px"></div>
-      <label class="field">Players</label>
-      <div class="opts" id="playerSkinPick"></div>
-      <div class="hint" style="text-align:left">Needs two PNGs that aren't in the repo yet — see <code>assets/README.md</code>. Purely cosmetic either way.</div>
+    <div class="card collapsible collapsed" data-sec="ball">
+      <h2>Ball</h2>
+      <label class="field">Look <small style="color:var(--muted);font-weight:400">(cosmetic only)</small></label>
+      <div class="opts tilewrap" id="ballLookPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Every ball is drawn, not an image, so it stays crisp at any size and rolls with real spin. Physics comes from <b>Match → Ball</b>, not from here.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="sound">
@@ -986,7 +983,7 @@
     <div class="footlink">A fast physics soccer game — built for touch.</div>
   </div>
 
-  <!-- Settings (Theme / Display / Skins / Sound / Game Feel) now live inline on
+  <!-- Settings (Theme / Display / Ball / Sound / Game Feel) now live inline on
        the main menu as collapsible cards — see #setup above. -->
 
   <!-- ===================== COCKTAIL SIDES CONFIG ===================== -->
@@ -1234,7 +1231,7 @@ const COLORS = ['#e05a5a','#f0a04b','#f5d547','#46d17a','#3fbfd0','#5a7de0','#a0
 // ============================================================
 //  COUNTRYBALLS — flag "skins" for the player disc. Each draw(c,x,y,r)
 //  paints a flag design; the caller clips it to the disc circle first.
-//  (The soccer ball itself is never skinned — only players.)
+//  (The ball has its own drawn looks — see BALL_LOOKS.)
 // ============================================================
 function _fh(c,x,y,r,cols){ const n=cols.length, t=y-r, h=2*r/n; for(let i=0;i<n;i++){ c.fillStyle=cols[i]; c.fillRect(x-r, t+i*h, 2*r, h+0.6); } }
 function _fv(c,x,y,r,cols){ const n=cols.length, l=x-r, w=2*r/n; for(let i=0;i<n;i++){ c.fillStyle=cols[i]; c.fillRect(l+i*w, y-r, w+0.6, 2*r); } }
@@ -1725,7 +1722,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
-            ballSkin:'classic', playerSkin:'disc',   // 'soccer' ball sprite / 'sprite' players (visual only; physics unchanged)
+            ballLook:'classic',                      // ball pattern (cosmetic only; physics is BALLS)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
             pad: { up:12, down:13, left:14, right:15, kick:0 },
@@ -2616,6 +2613,23 @@ function buildUnlocked(){
 }
 function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
 function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
+// Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
+// pattern reads. No emoji, no image — what you see is what rolls.
+function buildBallLookPick(){
+  const wrap = $('ballLookPick'); if (!wrap) return;
+  wrap.innerHTML = '';
+  BALL_LOOK_KEYS.forEach(k=>{
+    const el = document.createElement('div');
+    el.className = 'opt' + ((sel.ballLook||'classic')===k ? ' sel' : '');
+    const cvs = document.createElement('canvas'); cvs.width = cvs.height = 64;
+    paintBall(cvs.getContext('2d'), 32, 32, 25, -0.5, k);
+    el.appendChild(cvs);
+    const nm = document.createElement('span'); nm.textContent = BALL_LOOKS[k].name;
+    el.appendChild(nm);
+    el.onclick = ()=>{ sel.ballLook = k; saveSel(); buildBallLookPick(); };
+    wrap.appendChild(el);
+  });
+}
 function buildTextPicker(){ buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
 function buildCaps(){
@@ -2689,7 +2703,7 @@ function loadUI(){ try { return JSON.parse(localStorage.getItem(UI_KEY)||'{}'); 
 function saveUI(o){ try { localStorage.setItem(UI_KEY, JSON.stringify(o)); } catch(e){} }
 const uiState = loadUI();
 const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true, online:true,
-  theme:true, display:true, skins:true, sound:true, feel:true };
+  theme:true, display:true, ball:true, sound:true, feel:true };
 // Accordion: at most one section open. Opening one closes the rest, so the setup
 // screen is never a wall of every control at once and you don't lose your place
 // scrolling past six expanded cards.
@@ -3178,7 +3192,7 @@ $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
 $('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
-  if (!confirm('Reset all settings (theme, display, skins, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
+  if (!confirm('Reset all settings (theme, display, ball, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
   // Optional wider scope: appearance is more personal than a setting, so it's a
   // separate opt-in. Cancel here keeps the current default (look preserved).
   const alsoAppearance = confirm('Also reset your player name & appearance (colour, flag/animal, eyes, cap) to defaults?\n\nOK = also reset my look · Cancel = keep my look');
@@ -3199,7 +3213,7 @@ const FEEL_SLIDERS = [
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
 ];
-// Reveal a settings section (theme/display/skins/sound/feel) inline on the main
+// Reveal a settings section (theme/display/ball/sound/feel) inline on the main
 // menu: show the menu (docked on desktop, fullscreen on mobile), rebuild the
 // pickers, then expand + scroll the requested card into view.
 function openLook(section){
@@ -3379,37 +3393,7 @@ function buildSettings(){
   const fb=$('fsBtn'); if (fb) fb.onclick = () => toggleFullscreen(true);
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
-  // The art isn't in the repo, so these used to be switches that did nothing.
-  // Probe on demand, never on open — that 404s on every settings rebuild.
-  const buildSkinPick = (id, key, dflt, items, sprite) => {
-    const wrap=$(id); if(!wrap) return;
-    const known = SKIN_ART[sprite];              // undefined = not probed yet
-    wrap.innerHTML='';
-    items.forEach(([k,lab])=>{
-      const needsArt = (k !== dflt) && known === false;
-      const on=(sel[key]||dflt)===k && !needsArt;
-      const el=document.createElement('div');
-      el.className='opt'+(on?' sel':'')+(needsArt?' disabled':'');
-      el.innerHTML=`<span>${lab}</span>`+(needsArt?'<small>needs art</small>':'');
-      if (needsArt){
-        el.title='Add the image under assets/ to enable this skin';
-        el.onclick=()=>toast('That skin needs art in assets/ — see assets/README.md');
-      } else if (k !== dflt){
-        el.onclick=()=>probeSkinArt(sprite, ok => {
-          if (!ok){ sel[key]=dflt; saveSel(); toast('That skin needs art in assets/ — see assets/README.md'); }
-          else { sel[key]=k; saveSel(); }
-          buildSettings();
-        });
-      } else {
-        el.onclick=()=>{ sel[key]=k; saveSel(); buildSettings(); };
-      }
-      wrap.appendChild(el);
-    });
-    // Never leave a selection pointing at art we know isn't there.
-    if (known === false && sel[key] && sel[key] !== dflt){ sel[key]=dflt; saveSel(); }
-  };
-  buildSkinPick('ballSkinPick','ballSkin','classic',[['classic','● Classic'],['soccer','⚽ Soccer']], BALL_SPRITE);
-  buildSkinPick('playerSkinPick','playerSkin','disc',[['disc','⬤ Disc'],['sprite','🐾 Sprite']], PLAYER_SPRITE);
+  buildBallLookPick();
   // Juice / screen-shake toggle (accessibility: some players want it off).
   const jp=$('juicePick');
   if (jp){ jp.innerHTML='';
@@ -7226,16 +7210,6 @@ function spriteImg(path){
 }
 // Lazy on purpose: probing eagerly 404s on every settings rebuild for art that
 // isn't in the repo.
-const SKIN_ART = {};
-function probeSkinArt(path, done){
-  if (SKIN_ART[path] !== undefined) return done(SKIN_ART[path]);
-  const im = new Image();
-  im.onload  = () => { SKIN_ART[path] = true;  done(true); };
-  im.onerror = () => { SKIN_ART[path] = false; done(false); };
-  im.src = path;
-}
-const BALL_SPRITE = 'assets/ball/soccer.png';
-const PLAYER_SPRITE = 'assets/player/player.png';
 
 // Name plates duck out of the way when they'd cover a disc or the ball: 5% while
 // blocked, back to full once clear, eased so it reads as a fade rather than a blink.
@@ -7259,13 +7233,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     ctx.beginPath(); ctx.arc(x, y+r*0.28, r*0.95, 0, 2*Math.PI);
     ctx.fillStyle=TH.shadow; ctx.fill();
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
-    // Sprite players: keep a team-colour identity ring, stamp the image over the
-    // same collision circle, and skip the drawn face. Physics is untouched.
-    const pim = (sel.playerSkin==='sprite') ? spriteImg(PLAYER_SPRITE) : null;
-    if (pim){
-      ctx.beginPath(); ctx.arc(x, y, r+Math.max(2, r*0.18), 0, 2*Math.PI); ctx.fillStyle=teamCol; ctx.fill();
-      const d = r*2.3; ctx.drawImage(pim, x-d/2, y-d/2, d, d);
-    } else {
+    {
     // Flat sprite: rim, team-colour ring, custom-colour core.
     ctx.beginPath(); ctx.arc(x, y, r+Math.max(2, r*0.16), 0, 2*Math.PI);
     ctx.fillStyle = TH.discRim; ctx.fill();
@@ -7463,52 +7431,95 @@ function drawOneBall(b, x, y, r, s){
   // Squash & stretch: warp the ball along its impact axis for a frame or two.
   const sq = b.sqT || 0;
   const warped = sq > 0.01;
-  // Soccer-ball sprite (if selected and loaded): stamp the image, rolling with
-  // the ball's rotation, and squash along the impact axis. Falls back to drawn.
-  if (sel.ballSkin==='soccer'){
-    const im = spriteImg(BALL_SPRITE);
-    if (im){
-      const d = (r + Math.max(1.5, r*0.16)) * 2;
-      ctx.save(); ctx.translate(x, y);
-      if (warped){ ctx.rotate(b.sqAng||0); ctx.scale(1 + 0.38*sq, 1 - 0.26*sq); ctx.rotate(-(b.sqAng||0)); }
-      ctx.rotate(b.rot || 0);
-      ctx.drawImage(im, -d/2, -d/2, d, d);
-      ctx.restore();
-      return;
-    }
-  }
   if (warped){
     ctx.save(); ctx.translate(x,y); ctx.rotate(b.sqAng||0);
     ctx.scale(1 + 0.38*sq, 1 - 0.26*sq); ctx.translate(-x,-y);
   }
-  const rot = b.rot || 0;
-  // Chunky rim, then a shaded sphere with a rotating soccer pattern so the ball
-  // reads as a 3D ball rolling (rot advances with speed in step()).
-  ctx.beginPath(); ctx.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); ctx.fillStyle=TH.ballRim; ctx.fill();
-  ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=TH.ball; ctx.fill();
-  // Rotating black pentagons (centre + five around), clipped to the ball edge.
-  if (r >= 5){
-    ctx.save();
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.clip();
-    ctx.translate(x, y); ctx.rotate(rot);
-    ctx.fillStyle = TH.ballSpot;
-    ballPentagon(0, 0, r*0.36, -Math.PI/2); ctx.fill();
-    for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5); ballPentagon(Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); ctx.fill(); }
-    ctx.restore();
-  } else {
-    ctx.beginPath(); ctx.arc(x, y, r*0.34, 0, 2*Math.PI); ctx.fillStyle=TH.ballSpot; ctx.fill();
-  }
-  // 3D shading: highlight toward top-left, soft shadow toward bottom-right.
-  const g = ctx.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
-  g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.30)');
-  ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
+  // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
+  // (rot advances with speed in step()). Same painter the picker tiles use.
+  paintBall(ctx, x, y, r, b.rot || 0, sel.ballLook);
   if (warped) ctx.restore();
 }
+// ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
+// across and a sprite at that size is mush, while a path stays crisp at any zoom
+// and can roll with the real spin. `c` is a context, so the picker tiles and the
+// pitch share one implementation and can't drift.
+const BALL_LOOKS = {
+  classic: { name:'Classic', draw:(c,r,rot)=>{
+    ballPent(c, 0, 0, r*0.36, -Math.PI/2 + rot); c.fill();
+    for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
+      ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
+  plain:   { name:'Plain', draw:()=>{} },
+  stripe:  { name:'Stripe', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.fillRect(-r, -r*0.30, r*2, r*0.60);
+    c.restore(); } },
+  cross:   { name:'Cross', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.fillRect(-r, -r*0.17, r*2, r*0.34);
+    c.fillRect(-r*0.17, -r, r*0.34, r*2);
+    c.restore(); } },
+  beach:   { name:'Beach', draw:(c,r,rot)=>{
+    for (let k=0;k<6;k+=2){ const a=rot + k*(Math.PI/3);
+      c.beginPath(); c.moveTo(0,0); c.arc(0,0,r,a,a+Math.PI/3); c.closePath(); c.fill(); } } },
+  tennis:  { name:'Tennis', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.lineWidth = Math.max(1, r*0.14); c.strokeStyle = c.fillStyle;
+    for (const s of [-1, 1]){
+      c.beginPath(); c.arc(s*r*1.15, 0, r*1.06, s>0 ? Math.PI*0.72 : -Math.PI*0.28,
+                                              s>0 ? Math.PI*1.28 : Math.PI*0.28); c.stroke(); }
+    c.restore(); } },
+  eight:   { name:'8-Ball', draw:(c,r,rot)=>{
+    c.beginPath(); c.arc(0,0,r,0,7); c.fill();                       // solid
+    c.save(); c.rotate(rot);
+    c.beginPath(); c.arc(0, -r*0.34, r*0.44, 0, 7);
+    c.fillStyle = '#ffffff'; c.fill();
+    c.fillStyle = '#111111';
+    c.font = 'bold ' + Math.round(r*0.62) + "px system-ui, sans-serif";
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillText('8', 0, -r*0.32);
+    c.restore(); } },
+  dots:    { name:'Dots', draw:(c,r,rot)=>{
+    for (let k=0;k<7;k++){ const a=rot + k*(2*Math.PI/7);
+      c.beginPath(); c.arc(Math.cos(a)*r*0.56, Math.sin(a)*r*0.56, r*0.19, 0, 7); c.fill(); } } },
+  swirl:   { name:'Swirl', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.lineWidth = Math.max(1, r*0.20); c.strokeStyle = c.fillStyle; c.lineCap='round';
+    c.beginPath();
+    for (let i=0;i<=42;i++){ const t=i/42, a=t*Math.PI*2.6, rr=r*0.14 + t*r*0.80;
+      const px=Math.cos(a)*rr, py=Math.sin(a)*rr; i?c.lineTo(px,py):c.moveTo(px,py); }
+    c.stroke(); c.restore(); } },
+};
+const BALL_LOOK_KEYS = Object.keys(BALL_LOOKS);
+// The pattern, clipped to the ball and painted in the theme's spot colour. Shared by
+// the pitch and the picker so a tile can never show something the ball doesn't.
+function paintBallLook(c, x, y, r, rot, key, spot){
+  const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
+  c.save();
+  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+  c.translate(x, y);
+  c.fillStyle = spot;
+  look.draw(c, r, rot || 0);
+  c.restore();
+}
+// One ball, start to finish, on any context — rim, body, pattern, 3D shade. The
+// picker tiles call this too, so they are the ball rather than a picture of it.
+function paintBall(c, x, y, r, rot, key, pal){
+  const P = pal || TH;
+  c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
+  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
+  if (r >= 5) paintBallLook(c, x, y, r, rot, key, P.ballSpot);
+  else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=P.ballSpot; c.fill(); }
+  const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
+  g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.30)');
+  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=g; c.fill();
+}
 // A pentagon path centred at (cx,cy), circumradius rad, rotated by `rot`.
-function ballPentagon(cx, cy, rad, rot){
-  ctx.beginPath();
-  for (let i=0;i<5;i++){ const a=rot + i*(2*Math.PI/5); const px=cx+Math.cos(a)*rad, py=cy+Math.sin(a)*rad; i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
-  ctx.closePath();
+function ballPent(c, cx, cy, rad, rot){
+  c.beginPath();
+  for (let i=0;i<5;i++){ const a=rot + i*(2*Math.PI/5); const px=cx+Math.cos(a)*rad, py=cy+Math.sin(a)*rad; i?c.lineTo(px,py):c.moveTo(px,py); }
+  c.closePath();
 }
 
 // ---------- Ball squash & stretch (game-feel): stretch along the impact axis,
@@ -7855,7 +7866,7 @@ function toMenu(){
 
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize,120));
-buildSettings();          // populate the inline Theme/Display/Skins/Sound/Feel cards on the menu
+buildSettings();          // populate the inline Theme/Display/Ball/Sound/Feel cards on the menu
 resize();
 
 if ('serviceWorker' in navigator) {
@@ -7923,7 +7934,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0745PM';
+const VERSION = '20260804.0910PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7954,7 +7965,8 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
-    spriteImg, BALL_SPRITE, PLAYER_SPRITE, drawDiscs, drawBall, LABEL_FADE,
+    spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
+    paintBall, buildBallLookPick,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,

@@ -5,9 +5,24 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0745PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0910PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## ⚽ Skins out, drawn ball looks in
+- [x] **The Skins card is gone.** It offered a soccer-ball sprite and sprite players
+  from `assets/ball/soccer.png` and `assets/player/player.png` — two files that were
+  never in the repo, so both switches silently did nothing and one of them wore a
+  "needs art" badge. This was the long-standing "ship the art or drop the card" item.
+- [x] **The ball is customisable for real**, in a new Ball section: nine looks —
+  Classic, Plain, Stripe, Cross, Beach, Tennis, 8-Ball, Dots, Swirl. All **drawn**,
+  none an image. A ball is 9–15 px across in play; a bitmap at that size is mush,
+  while a path stays crisp at any zoom and rolls with the real spin.
+- [x] `paintBall()` is shared by the pitch and the picker tiles, so a tile cannot show
+  something the ball won't. Physics still comes from Match → Ball; this is look only.
+- [x] Dead code removed with it: `BALL_SPRITE`, `PLAYER_SPRITE`, `SKIN_ART`,
+  `probeSkinArt`, `buildSkinPick`, and the player-sprite branch in `drawDiscs`.
+- [x] `assets/README.md` no longer advertises a sprite contract the game doesn't read.
 
 ## 🔢 Shirt numbers by default, and a Text faceplate category
 - [x] **Players default to a number, not a country.** A pitch now reads like a team
