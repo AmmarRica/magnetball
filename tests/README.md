@@ -66,7 +66,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `themetiles` | Theme picker shows each theme's palette as a painted canvas (no emoji): one tile per theme, all distinct, every band sampled back to that theme's own colours, picking one still switches the theme |
 | `contrast` | No label sits on a colour too close to it: every visible text element on every screen under every theme is held to WCAG AA against its **composited** background, plus the goal banner's outline; includes a known-bad probe so a clean run can't be vacuous |
 | `awards` | End-of-match awards state the figure that won them ("Most Saves · 5 saves"), the number matches the tally that picked the winner, singulars stay singular, and it reaches the DOM |
-| `botai` | Bot AI steps 0/1/3: a pinned seed replays a match bit-identically and `Math.random` is never reached from the AI; bots write **only** the fields a human's input writes (never x/y/vx/vy); the wrong-side limit cycle is gone (16 velocity flips → ≤2, and the ball actually gets struck); reversals stay under 0.5/bot/s and ball contact no longer collapses at Hard+; no KICK held while merely walking; state dwell and two-threshold hysteresis hold |
+| `botai` | Bot AI, all steps: seeded determinism and no `Math.random`; bots write **only** the fields a human's input writes; the oscillation limit cycle is gone; intercept converges and stays on the pitch; goalie/roles/formation slots are distinct and stable; lane checks, apertures and aim candidates behave; bank kicks land within 4 units mean using the **real** wall restitution and ball radius (21.5 for a naive mirror); bots follow the player's trap setting; the difficulty ladder is monotone across measurable gaps, checked both ways round |
 
 ## Writing a suite
 
@@ -100,6 +100,15 @@ Two more traps, both of which produced false results here:
   `step()`, so a loop of bare `step()` calls never reads the keyboard — the first
   version of `cocktailkeys` passed only because the render loop happened to tick
   between two `evaluate` calls.
+
+Two traps specific to measuring an AI against itself, both of which gave wrong answers:
+
+- **Play every matchup both ways round.** Driving one side manually (the `aiFrozen`
+  seam) hands it about a 17-point edge, so Normal-vs-Normal read 0.33 and made every
+  other ladder number look meaningful when it wasn't.
+- **Don't assert what the sample can't resolve.** Six duels put rookie-vs-normal
+  anywhere from 0.17 to 0.66 run to run. `botai` asserts only the wide gaps and
+  reports the rest.
 
 Two traps specific to measuring colour, both of which produced wrong verdicts here:
 

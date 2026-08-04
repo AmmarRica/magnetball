@@ -1514,14 +1514,18 @@ function showDailyModal(claimedIdx){
 function openDailyView(){ showDailyModal(Math.max(0, login.claimed-1)); }
 function closeDailyModal(){ $('dailyModal').classList.add('hidden'); }
 
+// `react` is the skill scalar the AI derives everything from (see botSkill), `err`
+// is the aim/position noise, `aggr` is how high the defensive line sits. `power` is
+// gone: it multiplied a bot-only kick that no longer exists — bots use the human
+// kick, so their power comes from hold time like everyone else's.
 const DIFF = {
-  rookie: { name:'Rookie', emoji:'🐣', react:0.58, err:40, power:0.72, aggr:0.68 },
-  easy:   { name:'Easy',   emoji:'🙂', react:0.72, err:26, power:0.82, aggr:0.85 },
-  normal: { name:'Normal', emoji:'😎', react:0.85, err:15, power:0.92, aggr:1.0 },
-  hard:   { name:'Hard',   emoji:'🔥', react:0.95, err:7,  power:1.0,  aggr:1.12 },
-  pro:    { name:'Pro',    emoji:'💀', react:1.0,  err:3,  power:1.06, aggr:1.22 },
-  elite:  { name:'Elite',  emoji:'⚡', react:1.05, err:1.5,power:1.10, aggr:1.32 },
-  insane: { name:'Insane', emoji:'👽', react:1.10, err:0.5,power:1.15, aggr:1.42 },
+  rookie: { name:'Rookie', emoji:'🐣', react:0.58, err:34,  aggr:0.68 },
+  easy:   { name:'Easy',   emoji:'🙂', react:0.72, err:20,  aggr:0.85 },
+  normal: { name:'Normal', emoji:'😎', react:0.85, err:9,   aggr:1.0  },
+  hard:   { name:'Hard',   emoji:'🔥', react:0.95, err:5.5, aggr:1.12 },
+  pro:    { name:'Pro',    emoji:'💀', react:1.0,  err:3.2, aggr:1.22 },
+  elite:  { name:'Elite',  emoji:'⚡', react:1.05, err:1.6, aggr:1.32 },
+  insane: { name:'Insane', emoji:'👽', react:1.10, err:0.6, aggr:1.42 },
 };
 
 const MODES = {
@@ -4644,6 +4648,8 @@ function step(w){
 
   // --- Gather controller inputs (ball live, kickoff, or goal celebration)
   if (active){
+    w.aiTick = (w.aiTick || 0) + 1;   // one tick for the whole pitch, so the AI's
+                                      // team-level work runs once per team per step
     for (const p of w.players){
       // While the deck menu is open it owns the pad, so the same stick press can't
       // steer a player and the focus ring at once. Passing null parks the seat.
@@ -4938,20 +4944,11 @@ function handleBallControl(w, p, ball, ballFrozen){
   const dist = Math.hypot(dx,dy);
   const sum = p.r + ball.r;
 
-  if (p.ctrl === 'bot'){
-    // Bots keep the instant one-shot kick (fires the moment they touch the ball).
-    if (p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange){
-      let nx, ny;
-      if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
-      let power = (w.kickPower||PLAYER.kick) * w.diff.power;
-      if (w.magnet > 0 && dist < sum + 22) power *= 1 + (w.magnet/100) * 0.7;
-      ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
-      p.kickUsed = true;
-      noteKick(w, p, power, nx, ny);
-      spawnKickFx(ball.x, ball.y, nx, ny, power); playSfx('kick');
-    }
-    if (!p.kick) p.kickUsed = false;
-  } else if (w.trapOff && !ballFrozen){
+  // Bots take the SAME path as a human from here on. They used to have their own
+  // instant kick with a diff.power multiplier, which meant they could never trap,
+  // dribble or vary their power — and it was the one place a bot did something no
+  // thumb could. Trapping being on or off now applies to everyone equally.
+  if (w.trapOff && !ballFrozen){
     // "Pro" mode: authentic one-shot kick — the ball fires the instant you touch
     // it (no trap/glue), carrying your momentum. Holding KICK still charges power.
     if (p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange){
@@ -5386,46 +5383,106 @@ function renderAwards(w){
 // ============================================================
 // EVERY tuning value the AI uses lives here. Nothing below reads a magic number.
 const BOT = {
-  // --- Decision rate. The AI picks a target at DECIDE_HZ and steers at 60Hz, so
-  // motion stays smooth however slowly it thinks. Bots are staggered by index so
-  // they never all recompute on the same tick.
-  decideTicks: 6,            // 10Hz — one full recompute per bot per 6 ticks
+  // --- Decision rate. The AI picks targets at 10Hz and steers at 60Hz, so motion
+  // stays smooth however slowly it thinks. Bots are staggered by index so they
+  // never all recompute on the same tick.
+  decideTicks: 6,
+  roleTicks: 20,             // roles are re-matched this often, not every frame
+  roleMargin: 0.10,          // a challenger must beat the incumbent by 10% to take a role
 
   // --- Approach geometry. THE standoff point is the strike waypoint: the spot
   // behind the ball from which a straight run kicks it at the aim. It is never
-  // discarded — the old code threw it away inside 43 units while placing it at 27,
+  // discarded — the old code placed it 27 units out and threw it away inside 43,
   // which is the whole oscillation (see docs/BOT-AI-AUDIT.md).
   standoff: 6,               // extra gap beyond (playerR + ballR) for the strike spot
-  clearance: 7,              // how far a path must miss the ball by before it counts as clear
   tangentPad: 10,            // radius padding when walking AROUND the ball
-  arriveR: 46,               // start easing off the stick inside this radius of the target
-  stopR: 5,                  // close enough — stop pushing
+  arcStep: 0.55,             // radians of look-ahead when walking around the ball
+  arriveR: 46,               // start easing off the stick inside this radius
+  stopR: 5,
 
-  // --- Alignment hysteresis. Two thresholds, never one: enter STRIKE when well
-  // lined up, leave only when clearly not. dot(bot->ball, ball->aim).
+  // --- Alignment hysteresis. Two thresholds, never one.  dot(bot->ball, aim)
   strikeEnter: 0.85,
   strikeExit: 0.60,
   strikeRange: 62,           // the chaser must also be this close to commit
   strikeRangeOffBall: 16,    // everyone else only commits if the ball is on them
-  arcStep: 0.55,             // radians of look-ahead when walking around the ball
   dwell: 12,                 // ticks a state must hold before it may change at all
   commitTicks: 50,           // STRIKE gives up after this long without a kick
+  carryAlign: 0.80,          // release a carried ball once facing within this of the aim
+  carryMax: 40,              // ...and never carry longer than this (ticks)
+  windup: 16,                // start holding KICK this far out, so a trap has time to arm
 
   // --- Steering weights (summed, then clamped to a unit stick).
   wSeek: 1.0,
   wSeparate: 0.85,           // teammate repulsion — this is what stops ball-swarming
-  separateR: 78,             // teammates closer than this push you away
+  separateR: 78,
   separateChaser: 0.35,      // the chaser yields less: it has somewhere to be
+  wWall: 0.55,               // off-ball players peel away from the boards
+  wallR: 46,
 
-  // --- Error. Split in two, because one number was doing both jobs badly.
-  // aimErr rotates the APPROACH ANGLE, which is how a bot actually aims (the kick
-  // impulse runs along player->ball, so where it stands IS its aim). posErr wanders
-  // off-ball positioning. Both are re-rolled slowly, not every recompute — fresh
-  // noise per tick flips branches on its own.
-  aimErrScale: 0.60,         // × diff.err, in degrees
+  // --- Interception. Fixed iteration count, no solver, no wall bounces.
+  interceptIters: 4,
+  interceptMaxT: 90,         // ticks of look-ahead
+
+  // --- Formation. Slots are normalised (x across the pitch, y as depth from own
+  // goal), then dragged toward the ball. Defenders track it harder than attackers.
+  ballInfluence: { chaser:0.55, support:0.42, defender:0.68, goalie:0.30 },
+  slotDepth:    { chaser:0.55, support:0.72, defender:0.34, goalie:0.06 },
+  slotSpread:   0.62,        // fraction of half-width the widest slot sits at
+  stretchAtk:   1.18,        // depth multiplier when the team is attacking
+  compressDef:  0.74,        // ...and when defending
+  goalieSpanX:  0.62,        // how far across the mouth a keeper will slide (× goal half)
+  aggrDepth:    0.22,        // how much diff.aggr pushes the defensive line up
+
+  // --- Aim scoring. Everything the bot might kick at is scored the same way, so a
+  // bank off the boards competes with a direct shot instead of being a special case.
+  laneR: 15,                 // an opponent this close to the kick line blocks it
+  apertureMin: 0.10,         // radians of clear goalmouth needed before shooting
+  wLane: 1.0, wProgress: 0.7, wOpen: 0.5, wDist: 0.2,
+  wallPenalty: 0.35,         // banks are riskier, so they need to be clearly better
+  passLead: 8,               // ticks of lead when aiming at a moving teammate
+  cornerDist: 90,            // inside this of a corner, add a "get it out" candidate
+
+  // --- Support-spot grid (Buckland). One player's grid per tick, on rotation.
+  gridX: 8, gridY: 6,
+  gridTicks: 2,              // one support player's grid, every other tick
+  gridMargin: 0.25,          // a new cell must beat the one we're running to by this
+  gridBand: [90, 300],       // ideal distance from the carrier
+  gridCrowd: 110,            // teammates this close to a cell cost it
+
+  // --- Feel. Error is the primary difficulty knob, but it cannot be the ONLY one:
+  // measured against a fixed Normal opponent, every tier from Hard up won ~0.4-0.5
+  // of its matches — below 15, `err` is too small to change a shot. The tiers now
+  // also differ in how fast they think, how long they take to react, whether they
+  // predict the ball at all, and which kicks they can even see.
+  aimErrScale: 1.60,         // × diff.err, in degrees
   posErrScale: 1.10,         // × diff.err, in world units
-  errHoldTicks: 45,          // how long one noise sample is held
+  errHoldTicks: 45,          // one noise sample is held this long
+  reactTicks: 9,             // ticks of delay before acting on a NEW role/state, at skill 0
+  // Decision rate is the SAME for every tier. Measured against a parked opponent,
+  // giving the top tiers a faster recompute made them score LESS (8.30 goals/min at
+  // Hard down to 5.85 at Insane): re-picking the aim more often keeps moving the
+  // strike spot, so the bot re-approaches instead of committing to the shot it
+  // already lined up. Skill belongs in the axes that actually help.
+  decideTicksAll: 5,         // 12Hz
+  pressR: 150,               // only one bot presses a carrier inside this
 };
+// Every AI-side difficulty axis derives from one 0..1 scalar, so the ladder can only
+// ever be monotonic — a tier cannot accidentally be better at one thing and worse at
+// another. `react` is the source because that is what it always meant.
+function botSkill(diff){
+  const s = clamp((((diff && diff.react) || 0.85) - 0.58) / (1.10 - 0.58), 0, 1);
+  return {
+    s,
+    decide: BOT.decideTicksAll,
+    lag:    Math.round(BOT.reactTicks * (1-s)),
+    // Anticipation limit: the weakest bots chase where the ball IS.
+    iters:  s < 0.18 ? 0 : s < 0.45 ? 2 : BOT.interceptIters,
+    // Which kicks a tier can even see. A rookie only knows "boot it at the goal";
+    // banking off the boards is an expert's option, not a universal one.
+    pass:   s >= 0.30,
+    bank:   s >= 0.70,
+  };
+}
 
 // The PRNG is `mulberry32`, already in the file for the social feed: 32-bit state,
 // no 64-bit emulation, identical on every engine. Seeds come from outside the sim so
@@ -5445,23 +5502,33 @@ function nextMatchSeed(){
 // unison: every bot used to start at aiT 0 and recompute on the same tick forever.
 function botInit(w){
   w.rng = mulberry32(w.seed >>> 0);
+  w.ai = [botTeamState(), botTeamState()];
   w.players.forEach((p, i) => botInitPlayer(p, i));
 }
+function botTeamState(){
+  return { phase:'transition', roleT:0, gridT:0, gridWho:0, tick:-1, press:null };
+}
 function botInitPlayer(p, i){
-  p.aiT = (i % BOT.decideTicks) + 1;    // +1: aiT is pre-decremented, so 0 and 1 both fire on tick 1
+  p.aiT = (i % BOT.decideTicks) + 1;   // +1: aiT is pre-decremented, so 0 and 1 would both fire on tick 1
   p.aiState = 'approach';
-  p.aiStateT = BOT.dwell;        // free to pick a state on the first think
-  p.aiCommitT = 0;
+  p.aiStateT = BOT.dwell;              // free to pick a state on the first think
+  p.aiCommitT = 0; p.aiCarryT = 0;
   p.aiTarget = { x: p.x, y: p.y };
   p.aiAim = { x: 0, y: p.team === 0 ? -1 : 1 };
+  p.aiAimPt = { x: 0, y: 0 };
+  p.aiKind = 'goal';                   // what the current aim IS: goal | pass | bank | clear
   p.aiErrT = 0; p.aiAimErr = 0; p.aiPosErrX = 0; p.aiPosErrY = 0;
-  p.aiPass = null;
+  p.aiRole = 'defender'; p.aiRoleT = 0; p.aiSpot = null; p.aiMark = null;
+  p.aiLag = 0;                         // reaction delay left on the pending decision
 }
 // Every AI random draw goes through the world's stream. A bot that finds no stream
 // (a drill world, a replay stub) falls back to no noise rather than to Math.random.
 function brand(w){ return w.rng ? w.rng() : 0.5; }
 
-// ---------- Layer 0: steering primitives (all output a stick vector) ----------
+// ============================================================
+//  LAYER 0 — STEERING. Everything here returns a stick vector; nothing writes
+//  a position, a velocity or a force. A bot can do only what a thumb can do.
+// ============================================================
 // Terminal speed of a player under this world's accel/damp. Arrive needs it to
 // know what "full stick" is actually worth.
 function botMaxSpeed(w){
@@ -5484,8 +5551,8 @@ function botArrive(w, p, tx, ty, out){
   out.x = sx / sl * m; out.y = sy / sl * m;
   return d;
 }
-// Shortest distance from a point to a segment — "would this run take me through
-// the ball?"
+// Shortest distance from a point to a segment — "would this run take me through the
+// ball?", and the same test for "is an opponent standing in this kick lane?".
 function segDist(px, py, ax, ay, bx, by){
   const vx = bx - ax, vy = by - ay;
   const L2 = vx*vx + vy*vy;
@@ -5507,15 +5574,368 @@ function botArcPoint(p, ball, R, sx, sy, lookahead){
   const a = a0 + step;
   return { x: ball.x + Math.cos(a)*R, y: ball.y + Math.sin(a)*R };
 }
+// Push off crowding teammates. This is what stops four bots arriving at one ball.
+function botSeparate(p, mates, out){
+  let sx=0, sy=0;
+  for (const q of mates){ if (q===p) continue;
+    const dx=p.x-q.x, dy=p.y-q.y, d=Math.hypot(dx,dy);
+    if (d>0.001 && d<BOT.separateR){ const f=(BOT.separateR-d)/BOT.separateR; sx+=dx/d*f; sy+=dy/d*f; } }
+  out.x = sx; out.y = sy;
+}
+// Peel off the boards. Only for players who aren't going for the ball — a chaser
+// pinning a ball against the wall is doing its job.
+function botWallAvoid(w, p, out){
+  const mW = w.field.W/2, mL = w.field.L/2;
+  let x=0, y=0;
+  const l = p.x - (-mW), r = mW - p.x, t = p.y - (-mL), b = mL - p.y;
+  if (l < BOT.wallR) x += (BOT.wallR - l)/BOT.wallR;
+  if (r < BOT.wallR) x -= (BOT.wallR - r)/BOT.wallR;
+  if (t < BOT.wallR) y += (BOT.wallR - t)/BOT.wallR;
+  if (b < BOT.wallR) y -= (BOT.wallR - b)/BOT.wallR;
+  out.x = x; out.y = y;
+}
 
+// ============================================================
+//  PREDICTION — where the ball WILL be, not where it is.
+// ============================================================
+// Closed form for a damped ball: x += v each tick, v *= damp. The sum of the
+// geometric series beats stepping a loop and is exactly as deterministic.
+// Wall bounces are deliberately NOT modelled: a bot that predicted rebounds
+// perfectly would read as clairvoyant, and the error self-corrects each recompute.
+function ballAt(ball, t){
+  const d = ball.damp != null ? ball.damp : 0.99;
+  const k = (d >= 0.9999) ? t : (1 - Math.pow(d, t)) / (1 - d);
+  return { x: ball.x + ball.vx*k, y: ball.y + ball.vy*k };
+}
+// Fixed-point iteration: guess a time, see where the ball is then, see how long we
+// would take to get there, repeat. Four passes is plenty and costs nothing.
+function botIntercept(w, p, ball, iters){
+  const sp = Math.max(0.5, botMaxSpeed(w));
+  // Rebounds aren't modelled, so an unclamped prediction sends a fast ball hundreds
+  // of units past the boards — 536 on a pitch 440 wide — and the bot runs at a point
+  // off the field. Clamping to the pitch is both the better guess and what makes the
+  // iteration settle instead of walking out to the look-ahead limit.
+  const br = ball.r || 0;
+  const mW = w.field.W/2 - br, mL = w.field.L/2 - br;
+  let t = 0, at = { x: ball.x, y: ball.y };
+  for (let i = 0; i < iters; i++){
+    at = ballAt(ball, t);
+    at.x = clamp(at.x, -mW, mW); at.y = clamp(at.y, -mL, mL);
+    t = Math.min(BOT.interceptMaxT, Math.hypot(at.x-p.x, at.y-p.y) / sp);
+  }
+  at = ballAt(ball, t);
+  at.x = clamp(at.x, -mW, mW); at.y = clamp(at.y, -mL, mL);
+  return { x: at.x, y: at.y, t };
+}
+// How long this player needs to reach the ball — the number roles are matched on.
+function botTimeToBall(w, p, ball){
+  const i = botIntercept(w, p, ball, BOT.interceptIters);
+  return i.t;
+}
+
+// ============================================================
+//  AIM — every candidate kick scored the same way, so a bank off the boards
+//  competes with a direct shot instead of being a special case.
+// ============================================================
+// 1 when no opponent stands in the lane, falling to 0 as one closes on the line.
+function botLaneClear(w, p, ax, ay, bx, by){
+  let worst = 1;
+  for (const o of w.players){
+    if (o.team === p.team) continue;
+    const d = segDist(o.x, o.y, ax, ay, bx, by);
+    worst = Math.min(worst, Math.min(1, d / (BOT.laneR + o.r)));
+  }
+  return worst;
+}
+// The clear angular window on the opponent goal, seen from the ball: cast at both
+// posts and shrink the window for every opponent body inside it.
+function botAperture(w, p, from, goalY, gh){
+  const aL = Math.atan2(goalY - from.y, -gh - from.x);
+  const aR = Math.atan2(goalY - from.y,  gh - from.x);
+  let lo = Math.min(aL, aR), hi = Math.max(aL, aR);
+  if (hi - lo > Math.PI){ const t = lo; lo = hi; hi = t + 2*Math.PI; }   // wrapped
+  // Blocked arcs, clipped to the mouth.
+  const blocked = [];
+  for (const o of w.players){
+    if (o.team === p.team) continue;
+    const d = Math.hypot(o.x-from.x, o.y-from.y);
+    if (d < 1 || d > Math.hypot(goalY-from.y, gh)) continue;
+    const half = Math.atan2(o.r + w.ball.r, d);
+    let a = Math.atan2(o.y-from.y, o.x-from.x);
+    while (a < lo) a += 2*Math.PI;
+    const s = Math.max(lo, a-half), e = Math.min(hi, a+half);
+    if (e > s) blocked.push([s, e]);
+  }
+  blocked.sort((x,y)=> x[0]-y[0] || x[1]-y[1]);          // numeric, so it is stable
+  // The WIDEST CLEAR GAP, and the angle down the middle of it. Aiming at the
+  // geometric centre of the goal instead — which this used to do — means a precise
+  // bot fires straight at whoever is standing in the middle, and a sloppy one
+  // scatters into the gaps. That inverted the whole difficulty ladder: Rookie beat
+  // Insane 0.58 to 0.42 until the shot was aimed at the gap rather than the goal.
+  let best = 0, bestMid = (lo + hi)/2, cur = lo, span = hi - lo;
+  for (const [s, e] of blocked){
+    if (s > cur){ const g = s - cur; if (g > best){ best = g; bestMid = (cur + s)/2; } }
+    cur = Math.max(cur, e);
+    span -= Math.max(0, e - Math.max(s, lo));
+  }
+  if (hi > cur){ const g = hi - cur; if (g > best){ best = g; bestMid = (cur + hi)/2; } }
+  return { span: Math.max(0, best), lo, hi, aim: bestMid, total: Math.max(0, span) };
+}
+// Mirror a target across a wall so the ball can be aimed at the reflection.
+// CORRECTED FOR RESTITUTION: the boards are bCoef 0.90, not 1.0, so the outgoing
+// normal component is only 90% of the incoming one and the rebound comes off
+// SHALLOWER than a true mirror. Aiming at the naive mirror lands the ball short of
+// the target every time; scaling the perpendicular offset by 1/e fixes it.
+function botMirror(seg, tx, ty, ballR){
+  const ax=seg.a.x, ay=seg.a.y, bx=seg.b.x, by=seg.b.y;
+  let nx = -(by-ay), ny = (bx-ax);
+  const nl = Math.hypot(nx,ny); if (nl < 1e-6) return null;
+  nx/=nl; ny/=nl;
+  let d = (tx-ax)*nx + (ty-ay)*ny;                   // signed distance from the wall
+  const e = seg.bCoef != null ? seg.bCoef : 0.3;
+  if (Math.abs(d) < 1e-3 || e < 0.5) return null;    // on the wall, or a dead surface (nets)
+  // The ball turns when its CENTRE is one radius off the boards, so the surface the
+  // path actually reflects in sits a radius inside the segment. Ignoring that is a
+  // full ball-width of error, and it happens to cancel against the restitution
+  // term — which is how a naive mirror can look accurate in one test and be wrong.
+  const r = ballR || 0;
+  const s = d < 0 ? -1 : 1;
+  d = s * Math.max(1e-3, Math.abs(d) - r);
+  return { x: tx - nx*(d + d/e), y: ty - ny*(d + d/e) };
+}
+// A bank is only real if the straight line to the mirrored point actually crosses
+// that wall segment — otherwise the ball sails past the end of it.
+function botBankHits(seg, sx, sy, mx, my){
+  const p1x=seg.a.x, p1y=seg.a.y, p2x=seg.b.x, p2y=seg.b.y;
+  const d1x=p2x-p1x, d1y=p2y-p1y, d2x=mx-sx, d2y=my-sy;
+  const den = d1x*d2y - d1y*d2x;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((sx-p1x)*d2y - (sy-p1y)*d2x) / den;
+  const u = ((sx-p1x)*d1y - (sy-p1y)*d1x) / den;
+  if (t < 0.02 || t > 0.98 || u < 0.02 || u > 1) return null;
+  return { x: p1x + d1x*t, y: p1y + d1y*t };
+}
+// Score one candidate. Everything is 0..1 so the weights mean what they say.
+function botScoreAim(w, p, ball, tx, ty, progressRef, openness, penalty){
+  const attackDir = p.team===0 ? -1 : 1;
+  const lane = botLaneClear(w, p, ball.x, ball.y, tx, ty);
+  const progress = clamp(((ty - ball.y) * attackDir) / (w.field.L*0.5), -1, 1);
+  const dist = Math.hypot(tx-ball.x, ty-ball.y) / Math.hypot(w.field.W, w.field.L);
+  return lane*BOT.wLane + (progressRef != null ? progressRef : progress)*BOT.wProgress
+       + openness*BOT.wOpen - dist*BOT.wDist - (penalty||0);
+}
+// Build every kick this bot could reasonably play and return the best.
+// Passing is NOT a separate mechanic here: it is the same kick, aimed at a mate.
+function botPickAim(w, p, ball, mates, skill){
+  skill = skill || { pass:true, bank:true };
+  const attackDir = p.team===0 ? -1 : 1;
+  const halfL = w.field.L/2, gh = w.field.goal/2;
+  const goalY = attackDir*halfL;
+  const cands = [];
+
+  // --- Shot at goal, aimed down the middle of the clear window.
+  const ap = botAperture(w, p, ball, goalY, gh);
+  const shotAng = ap.aim;                    // the middle of the biggest gap, not of the goal
+  const shotD = Math.hypot(goalY-ball.y, gh) || 1;
+  const shotX = ball.x + Math.cos(shotAng)*shotD, shotY = ball.y + Math.sin(shotAng)*shotD;
+  const apOpen = Math.min(1, ap.span / Math.max(0.05, ap.hi - ap.lo));
+  cands.push({ kind:'goal', x:shotX, y:shotY,
+    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen, ap.span < BOT.apertureMin ? 0.6 : 0) });
+
+  // --- Kick aimed at a teammate (this IS the pass), led ahead of the runner.
+  if (skill.pass) for (const q of mates){
+    if (q === p) continue;
+    const tx = q.x + q.vx*BOT.passLead, ty = q.y + q.vy*BOT.passLead;
+    let od = 1e9;
+    for (const o of w.players) if (o.team !== p.team) od = Math.min(od, Math.hypot(o.x-tx, o.y-ty));
+    cands.push({ kind:'pass', x:tx, y:ty, who:q,
+      s: botScoreAim(w, p, ball, tx, ty, null, Math.min(1, od/140), 0) });
+  }
+
+  // --- Banks off the boards, for the goal and for each mate. Same scorer, small
+  // penalty, so they win only when the direct lanes are genuinely shut.
+  if (skill.bank) for (const seg of w.walls){
+    if (seg.isNet) continue;
+    for (const base of [{x:0, y:goalY, kind:'goal'}].concat(
+           mates.filter(q=>q!==p).map(q=>({x:q.x, y:q.y, kind:'pass', who:q})))){
+      const m = botMirror(seg, base.x, base.y, ball.r);
+      if (!m) continue;
+      const hit = botBankHits(seg, ball.x, ball.y, m.x, m.y);
+      if (!hit) continue;
+      // The leg BEFORE the bounce has to be clear; after it, we accept the risk.
+      const lane = botLaneClear(w, p, ball.x, ball.y, hit.x, hit.y);
+      if (lane < 0.5) continue;
+      cands.push({ kind:'bank', x:m.x, y:m.y, who:base.who, via:hit,
+        s: botScoreAim(w, p, ball, base.x, base.y, null, lane, BOT.wallPenalty) });
+    }
+  }
+
+  // --- Corner extraction: pinned in a corner, getting it out beats forcing it.
+  const nearCornerX = Math.abs(ball.x) > w.field.W/2 - BOT.cornerDist;
+  const nearCornerY = Math.abs(ball.y) > halfL - BOT.cornerDist;
+  if (nearCornerX && nearCornerY){
+    const outX = -Math.sign(ball.x) * (w.field.W*0.25);
+    const outY = ball.y + attackDir*40;
+    cands.push({ kind:'clear', x:outX, y:outY,
+      s: botScoreAim(w, p, ball, outX, outY, 0.35, 1, 0) });
+  }
+
+  let best = cands[0];
+  for (const c of cands) if (c.s > best.s) best = c;
+  return best;
+}
+
+// ============================================================
+//  LAYER 3 — TEAM STRATEGY, and LAYER 2 — ROLES
+// ============================================================
+function botPhase(w, team){
+  if (w.state === 'kickoff') return 'kickoff';
+  const attackDir = team===0 ? -1 : 1;
+  const ball = w.ball;
+  // Who is closest to the ball decides who is "on" it; ball position decides the rest.
+  let mine=1e9, theirs=1e9;
+  for (const q of w.players){
+    const d = Math.hypot(q.x-ball.x, q.y-ball.y);
+    if (q.team===team) mine = Math.min(mine, d); else theirs = Math.min(theirs, d);
+  }
+  const up = (ball.y*attackDir) / (w.field.L/2);      // +1 deep in their half
+  if (mine < theirs - 12 && up > -0.15) return 'attack';
+  if (theirs < mine - 12 && up < 0.15) return 'defend';
+  return 'transition';
+}
+// Greedy cost matching, re-run every roleTicks with a switch margin so roles don't
+// flicker between two bots standing the same distance from the ball.
+function botAssignRoles(w, team){
+  const st = w.ai[team];
+  const squad = w.players.filter(q => q.team === team);
+  const bots = squad.filter(q => q.ctrl === 'bot');
+  if (!bots.length) return;
+  const ball = w.ball;
+  const attackDir = team===0 ? -1 : 1;
+  const ownGoalY = -attackDir * w.field.L/2;
+
+  // 1. Chaser: lowest time to intercept. The incumbent keeps it unless clearly beaten.
+  let chaser = null, best = 1e9;
+  for (const q of squad){
+    let t = botTimeToBall(w, q, ball);
+    if (q.aiRole === 'chaser') t *= (1 - BOT.roleMargin);
+    if (t < best){ best = t; chaser = q; }
+  }
+  // 2. Goalie: closest to our own goal among the rest, and only worth a body at 3+.
+  const rest = squad.filter(q => q !== chaser);
+  let goalie = null;
+  if (squad.length >= 3){
+    let bg = 1e9;
+    for (const q of rest){
+      let d = Math.hypot(q.x, q.y - ownGoalY);
+      if (q.aiRole === 'goalie') d *= (1 - BOT.roleMargin);
+      if (d < bg){ bg = d; goalie = q; }
+    }
+  }
+  // 3. Everyone else: the forward half support, the rest defend.
+  const others = rest.filter(q => q !== goalie);
+  const ranked = others.slice().sort((a,b) =>
+    ((b.y - a.y) * attackDir) || (a.x - b.x) ||
+    (w.players.indexOf(a) - w.players.indexOf(b)));       // stable, index-tiebroken
+  const nSupport = Math.max(0, Math.min(ranked.length, Math.ceil(ranked.length/2)));
+  ranked.forEach((q, i) => { q.aiRole = i < nSupport ? 'support' : 'defender'; });
+  if (chaser) chaser.aiRole = 'chaser';
+  if (goalie) goalie.aiRole = 'goalie';
+  // 4. Only ONE presser. The second defender covers instead of double-teaming.
+  st.press = chaser || null;
+}
+// Ball-anchored elastic formation. Slots live in normalised space and are dragged
+// toward the ball by a per-role amount, so the shape breathes with the play instead
+// of being recomputed from scratch.
+function botFormationSpot(w, p, phase){
+  const attackDir = p.team===0 ? -1 : 1;
+  const halfW = w.field.W/2, halfL = w.field.L/2;
+  const ball = w.ball;
+  const role = p.aiRole;
+  const squad = w.players.filter(q => q.team === p.team);
+  const peers = squad.filter(q => q.aiRole === role);
+  const rank = peers.indexOf(p);
+  const n = Math.max(1, peers.length);
+  // Spread same-role players across the width so two never share one spot — the
+  // index-parity scheme this replaces gave 4v4 two identical defender targets.
+  const lane = n === 1 ? 0 : (rank/(n-1) - 0.5) * 2;
+  const stretch = phase==='attack' ? BOT.stretchAtk : phase==='defend' ? BOT.compressDef : 1;
+  const aggr = (w.diff && w.diff.aggr) != null ? w.diff.aggr : 1;
+
+  if (role === 'goalie'){
+    // Stay on the goal line; slide across with the ball but never leave the mouth.
+    const gh = w.field.goal/2;
+    return { x: clamp(ball.x*0.5, -gh*BOT.goalieSpanX, gh*BOT.goalieSpanX),
+             y: -attackDir * (halfL - (halfL*BOT.slotDepth.goalie)) };
+  }
+  const depth = BOT.slotDepth[role] * stretch * (role==='defender' ? (1 + (aggr-1)*BOT.aggrDepth) : 1);
+  const infl  = BOT.ballInfluence[role];
+  const baseY = -attackDir*halfL + attackDir * (2*halfL) * clamp(depth, 0.04, 0.94);
+  const baseX = lane * halfW * BOT.slotSpread;
+  return { x: clamp(baseX*(1-infl) + ball.x*infl, -halfW+p.r+6, halfW-p.r-6),
+           y: clamp(baseY*(1-infl) + ball.y*infl, -halfL+p.r+6, halfL-p.r-6) };
+}
+
+// ============================================================
+//  SUPPORT-SPOT GRID (Buckland). One player's grid per tick, on rotation, so the
+//  cost is flat however many bots are on the pitch.
+// ============================================================
+function botUpdateSupportGrid(w, team){
+  const st = w.ai[team];
+  const squad = w.players.filter(q => q.team === team);
+  const supports = squad.filter(q => q.aiRole === 'support');
+  if (!supports.length){ st.spots = []; return; }
+  const me = supports[st.gridWho % supports.length];
+  st.gridWho = (st.gridWho + 1) % supports.length;
+  const carrier = st.press || squad[0];
+  const attackDir = team===0 ? -1 : 1;
+  const halfW = w.field.W/2, halfL = w.field.L/2, gh = w.field.goal/2;
+  const goalY = attackDir*halfL;
+  // The attacking half only: a support spot behind your own carrier isn't support.
+  const y0 = 0, y1 = attackDir*halfL*0.92;
+  let bestS = -1e9, best = null, hereS = -1e9;
+  for (let i=0;i<BOT.gridX;i++){
+    for (let j=0;j<BOT.gridY;j++){
+      const cx = -halfW*0.86 + (i+0.5)*(halfW*1.72/BOT.gridX);
+      const cy = y0 + (j+0.5)*((y1-y0)/BOT.gridY);
+      // Can the carrier reach me, could I then shoot, am I the right distance out,
+      // and is anyone already standing here?
+      const safety = botLaneClear(w, me, carrier.x, carrier.y, cx, cy);
+      const ap = botAperture(w, me, {x:cx,y:cy}, goalY, gh);
+      const shot = Math.min(1, ap.span / 0.6);
+      const d = Math.hypot(cx-carrier.x, cy-carrier.y);
+      const band = d < BOT.gridBand[0] ? d/BOT.gridBand[0]
+                 : d > BOT.gridBand[1] ? Math.max(0, 1 - (d-BOT.gridBand[1])/BOT.gridBand[1]) : 1;
+      let crowd = 0;
+      for (const q of squad){ if (q===me) continue;
+        const qd = Math.hypot(q.x-cx, q.y-cy);
+        if (qd < BOT.gridCrowd) crowd += (BOT.gridCrowd-qd)/BOT.gridCrowd; }
+      const s = safety*1.0 + shot*1.0 + band*0.8 - crowd*0.9;
+      if (s > bestS){ bestS = s; best = {x:cx, y:cy}; }
+      // Score the cell we're already running to, so we only move for a real gain.
+      if (me.aiSpot && Math.abs(me.aiSpot.x-cx) < 1 && Math.abs(me.aiSpot.y-cy) < 1) hereS = s;
+    }
+  }
+  // Hysteresis: adjacent cells score within a hair of each other, and swapping
+  // between two of them every tick is a target that teleports.
+  if (!(me.aiSpot && bestS < hereS + BOT.gridMargin)) me.aiSpot = best;
+}
+
+// ============================================================
+//  LAYER 1 — the per-bot decision, and the tick entry point.
+// ============================================================
 function runBot(w, p){
   const diff = w.diff;
   const ball = w.ball;
-  const attackDir = p.team===0 ? -1 : 1;            // +y toward own goal side is -attackDir
+  const attackDir = p.team===0 ? -1 : 1;
   const halfL = w.field.L/2;
-  const ownGoal = { x:0, y: -attackDir*halfL };
-  const oppGoal = { x:0, y:  attackDir*halfL };
   if (p.aiState == null) botInitPlayer(p, w.players.indexOf(p));
+  if (!w.ai) w.ai = [botTeamState(), botTeamState()];
+  // A harness can freeze a seat's AI and write inX/inY/kick itself. That is how the
+  // difficulty re-tune plays the new bot against a frozen copy of the old one on
+  // identical mechanics. Nothing in the game ever sets this.
+  if (p.aiFrozen) return;
+  const st = w.ai[p.team];
 
   // At kickoff, hold your formation spot instead of stampeding the centre. Ease
   // back toward your spawn if nudged; don't chase or kick until play starts.
@@ -5524,7 +5944,7 @@ function runBot(w, p){
     let dx = hx - p.x, dy = hy - p.y, dl = Math.hypot(dx,dy);
     if (dl > 8){ p.inX = dx/dl; p.inY = dy/dl; } else { p.inX = 0; p.inY = 0; }
     p.kick = false; p.kickUsed = false;
-    p.aiState = 'approach'; p.aiStateT = BOT.dwell; p.aiCommitT = 0;
+    p.aiState = 'approach'; p.aiStateT = BOT.dwell; p.aiCommitT = 0; p.aiCarryT = 0;
     return;
   }
 
@@ -5538,36 +5958,37 @@ function runBot(w, p){
     p.aiPosErrY = (brand(w)-0.5) * diff.err * BOT.posErrScale;
   }
 
+  // --- Team layers. Gated on the world tick, so they run ONCE per team per step
+  // however many bots are on it — decrementing per bot made roleTicks mean 20/N,
+  // which is why 4v4 flickered more than 1v1.
+  if (st.tick !== w.aiTick){
+    st.tick = w.aiTick;
+    if (--st.roleT <= 0){ st.roleT = BOT.roleTicks; st.phase = botPhase(w, p.team); botAssignRoles(w, p.team); }
+    if (--st.gridT <= 0){ st.gridT = BOT.gridTicks; botUpdateSupportGrid(w, p.team); }
+  }
+
   // --- Decision throttle: a fixed 10Hz, staggered by bot index, with steering
-  // still running at 60Hz below. (diff.react used to set this rate, which made
-  // higher tiers oscillate faster; it becomes a real reaction delay in the feel
-  // layer. It is deliberately unused for now.)
-  if (--p.aiT <= 0) p.aiT = BOT.decideTicks;
-  const recompute = p.aiT === BOT.decideTicks;
+  // still running at 60Hz below.
+  const skill = botSkill(diff);
+  if (--p.aiT <= 0) p.aiT = skill.decide;
+  const recompute = p.aiT === skill.decide;
 
   const mates = w.players.filter(q=>q.team===p.team);
-  let closest=null, cd=1e9;
-  for (const q of mates){ const d=dist2(q,ball); if(d<cd){cd=d; closest=q;} }
-  const iAmChaser = closest===p;
+  const iAmChaser = p.aiRole === 'chaser';
+
+  // --- Reaction delay: a real one, in ticks, applied to NEW decisions only. This is
+  // what `react` always claimed to be — it used to set the recompute rate instead,
+  // which made harder bots oscillate faster rather than respond sooner.
+  const lagTicks = skill.lag;
 
   // --- Where do we want the ball to GO? The kick impulse runs along player->ball,
-  // so this vector is not an aim input — it is what decides where we have to stand.
-  if (recompute && p.aiState !== 'strike'){
-    p.aiPass = null;
-    if (iAmChaser && mates.length > 1){
-      let best=null, bestScore=0.15;
-      for (const q of mates){ if (q===p) continue;
-        const fwd=(q.y-p.y)*attackDir; if (fwd < 30) continue;         // forward only
-        const dd=Math.hypot(q.x-p.x, q.y-p.y); if (dd < 70 || dd > 340) continue;
-        let od=1e9; for (const o of w.players){ if (o.team!==p.team) od=Math.min(od, Math.hypot(o.x-q.x, o.y-q.y)); }
-        const score = fwd*0.003 + od*0.01 - dd*0.0015;                 // upfield + open + not too far
-        if (score > bestScore){ bestScore=score; best=q; }
-      }
-      if (best && brand(w) < 0.35) p.aiPass = best;
-    }
-    let ax, ay;
-    if (p.aiPass){ ax = (p.aiPass.x + p.aiPass.vx*8) - ball.x; ay = (p.aiPass.y + p.aiPass.vy*8) - ball.y; }
-    else { ax = oppGoal.x - ball.x; ay = oppGoal.y - ball.y; }
+  // so this is not an aim input — it decides where the bot has to STAND.
+  if (recompute && p.aiState === 'approach'){
+    const pick = botPickAim(w, p, ball, mates, skill);
+    p.aiKind = pick.kind; p.aiAimPt.x = pick.x; p.aiAimPt.y = pick.y;
+    // A bank is aimed at the MIRRORED point, which is what makes the ball arrive
+    // at the real target after the bounce.
+    let ax = pick.x - ball.x, ay = pick.y - ball.y;
     const al = Math.hypot(ax,ay)||1; ax/=al; ay/=al;
     // Aim error rotates the APPROACH ANGLE. That is how a bot aims — it can only
     // change where the impulse points by changing where it stands.
@@ -5576,11 +5997,15 @@ function runBot(w, p){
   }
   const aimx = p.aiAim.x, aimy = p.aiAim.y;
 
-  // --- THE strike waypoint: the spot behind the ball a straight run kicks from.
-  // It is never discarded. The old code placed it 27 units out and threw it away
-  // inside 43, so the bot could never arrive — that was the whole oscillation.
+  // --- Intercept: aim at where the ball WILL be. Low tiers deliberately don't —
+  // that is the anticipation limit, and it is a real difficulty axis.
+  const meet = botIntercept(w, p, ball, skill.iters);
+
+  // --- THE strike waypoint: the spot behind the (predicted) ball a straight run
+  // kicks from. It is never discarded. The old code placed it 27 units out and threw
+  // it away inside 43, so the bot could never arrive — that was the oscillation.
   const standR = p.r + ball.r + BOT.standoff;
-  const strikeX = ball.x - aimx*standR, strikeY = ball.y - aimy*standR;
+  const strikeX = meet.x - aimx*standR, strikeY = meet.y - aimy*standR;
 
   // --- Alignment, with two thresholds. dot(bot->ball, aim): 1 means we are exactly
   // behind the ball and a straight run sends it where we want.
@@ -5592,19 +6017,32 @@ function runBot(w, p){
   // consecutive ticks however close to a threshold it sits.
   p.aiStateT++;
   const reach = iAmChaser ? BOT.strikeRange : (p.r + ball.r + BOT.strikeRangeOffBall);
-  if (p.aiState === 'strike'){
+  if (p.trap){
+    // The ball is at our feet (casual mode). Carry it and release it at the aim —
+    // exactly the human tap/hold/release, no bot-only kick.
+    if (p.aiState !== 'carry'){ p.aiState = 'carry'; p.aiStateT = 0; p.aiCarryT = BOT.carryMax; }
+  } else if (p.aiState === 'carry'){
+    p.aiState = 'approach'; p.aiStateT = 0;
+  } else if (p.aiState === 'strike'){
     p.aiCommitT--;
-    if (p.aiStateT >= BOT.dwell && (align < BOT.strikeExit || p.aiCommitT <= 0 || p.kickUsed)){
-      p.aiState = 'approach'; p.aiStateT = 0;
+    const winding = p.tapArmed && !w.trapOff;     // mid-press: let the trap window finish
+    if (p.aiStateT >= BOT.dwell && !winding &&
+        (align < BOT.strikeExit || p.aiCommitT <= 0 || (w.trapOff && p.kickUsed))){
+      p.aiState = 'approach'; p.aiStateT = 0; p.aiLag = lagTicks;
     }
   } else if (p.aiStateT >= BOT.dwell && align > BOT.strikeEnter && dBall < reach){
     p.aiState = 'strike'; p.aiStateT = 0; p.aiCommitT = BOT.commitTicks;
   }
+  if (p.aiLag > 0) p.aiLag--;
 
   // --- Pick the point to move to.
   let target;
-  if (p.aiState === 'strike'){
-    // Committed: drive straight through the ball along the aim. Nothing recomputes.
+  if (p.aiState === 'carry'){
+    // Dribble toward the aim: facing comes from the stick, and releaseTrap fires
+    // along facing, so steering AT the target is how a carried ball is aimed.
+    p.aiCarryT--;
+    target = { x: p.x + aimx*80, y: p.y + aimy*80 };
+  } else if (p.aiState === 'strike'){
     target = { x: ball.x + aimx*standR, y: ball.y + aimy*standR };
   } else if (iAmChaser){
     const R = p.r + ball.r + BOT.tangentPad;
@@ -5613,27 +6051,36 @@ function runBot(w, p){
     target = (segDist(ball.x, ball.y, p.x, p.y, strikeX, strikeY) < R)
       ? botArcPoint(p, ball, R, strikeX, strikeY, BOT.arcStep)
       : { x: strikeX, y: strikeY };
+  } else if (p.aiRole === 'support' && p.aiSpot){
+    // Off-ball runs happen continuously, not only on a possession change.
+    target = { x: p.aiSpot.x + p.aiPosErrX, y: p.aiSpot.y + p.aiPosErrY };
   } else {
-    // Not the chaser — take up a useful position instead of crowding the ball.
-    const idx = mates.indexOf(p);
-    if (idx % 2 === 0){
-      // Defender: sit on the line between our goal and the ball, goal-side.
-      target = { x: ownGoal.x + (ball.x - ownGoal.x)*0.35, y: ownGoal.y + (ball.y - ownGoal.y)*0.38 };
-    } else {
-      // Attacker support: push ahead of the ball toward the opponent goal,
-      // staying out wide on the opposite side from the ball.
-      const wide = (ball.x >= 0 ? -1 : 1) * (w.field.W*0.28);
-      target = { x: clamp(wide, -w.field.W/2+30, w.field.W/2-30), y: ball.y + attackDir*150 };
+    const slot = botFormationSpot(w, p, st.phase);
+    target = { x: slot.x + p.aiPosErrX, y: slot.y + p.aiPosErrY };
+    // Defenders mark: shade toward the most dangerous opponent on your side. The
+    // mark is only reconsidered on a role tick — re-picking it every frame swings
+    // the target between two attackers and reads as indecision.
+    if (p.aiRole === 'defender'){
+      if (recompute){
+        let mark=null, bs=-1e9;
+        for (const o of w.players){ if (o.team===p.team) continue;
+          let threat = (o.y*-attackDir)/halfL - Math.hypot(o.x-ball.x,o.y-ball.y)/(halfL*2);
+          if (o === p.aiMark) threat += BOT.roleMargin;          // incumbent keeps it
+          if (threat > bs){ bs = threat; mark = o; } }
+        p.aiMark = mark;
+      }
+      if (p.aiMark && st.press !== p){
+        target.x = target.x*0.6 + p.aiMark.x*0.4; target.y = target.y*0.6 + p.aiMark.y*0.4; }
     }
-    target.y = clamp(target.y, -halfL+40, halfL-40);
-    target.x += p.aiPosErrX; target.y += p.aiPosErrY;   // off-ball wander only
   }
 
   // Clamp inside the pitch so bots never pin themselves on a wall chasing a point
-  // that sits outside the field.
+  // that sits outside the field. A lagged bot holds its previous target instead.
   const mW = w.field.W/2 - p.r - 4, mL = w.field.L/2 - p.r - 4;
-  p.aiTarget.x = clamp(target.x, -mW, mW);
-  p.aiTarget.y = clamp(target.y, -mL, mL);
+  if (p.aiLag <= 0){
+    p.aiTarget.x = clamp(target.x, -mW, mW);
+    p.aiTarget.y = clamp(target.y, -mL, mL);
+  }
   // The kickoff line binds bots exactly like humans, so they don't spend the
   // countdown grinding against the invisible wall.
   if (kickoffLineOn(w)){
@@ -5641,29 +6088,43 @@ function runBot(w, p){
     else              p.aiTarget.y = clamp(p.aiTarget.y, -mL, -(p.r + 6));
   }
 
-  // --- Layer 0: arrive at the target, then push off crowding teammates. Steering
-  // runs every tick even though the target only moves at 10Hz.
-  const steer = { x:0, y:0 };
-  botArrive(w, p, p.aiTarget.x, p.aiTarget.y, steer);
-  let mx = steer.x*BOT.wSeek, my = steer.y*BOT.wSeek;
-  let sx=0, sy=0;
-  for (const q of mates){ if (q===p) continue;
-    const ddx=p.x-q.x, ddy=p.y-q.y, dd=Math.hypot(ddx,ddy);
-    if (dd>0.001 && dd<BOT.separateR){ const f=(BOT.separateR-dd)/BOT.separateR; sx += ddx/dd*f; sy += ddy/dd*f; } }
+  // --- Layer 0: arrive, then separate, then peel off the boards. Steering runs
+  // every tick even though the target only moves at 10Hz.
+  const seek = {x:0,y:0}, sep = {x:0,y:0}, wall = {x:0,y:0};
+  botArrive(w, p, p.aiTarget.x, p.aiTarget.y, seek);
+  botSeparate(p, mates, sep);
+  if (!iAmChaser && p.aiState !== 'carry') botWallAvoid(w, p, wall);
   const sw = BOT.wSeparate * (iAmChaser ? BOT.separateChaser : 1);
-  mx += sx*sw; my += sy*sw;
+  let mx = seek.x*BOT.wSeek + sep.x*sw + wall.x*BOT.wWall;
+  let my = seek.y*BOT.wSeek + sep.y*sw + wall.y*BOT.wWall;
   const ml = Math.hypot(mx,my);
   if (ml > 1){ mx/=ml; my/=ml; }
   p.inX = mx; p.inY = my;
   if (ml > 0.05){ const f=Math.hypot(mx,my)||1; p.faceX = mx/f; p.faceY = my/f; }
 
-  // --- KICK. Only while committed to a strike: holding it otherwise drops the bot
-  // to KICK_SLOW (45% accel) exactly when it needs to turn, which fed the wobble.
-  // The impulse runs along player->ball, so `behindBall` is the own-goal guard.
-  const inRange = dBall < p.r + ball.r + (w.kickRange || PLAYER.kickRange) - 5;
+  // --- KICK. Only while committed to a strike, or holding a carry: pressing it
+  // otherwise drops the bot to KICK_SLOW (45% accel) exactly when it needs to turn.
+  // `behindBall` is the own-goal guard — the impulse runs along player->ball.
+  const sum = p.r + ball.r, kr = (w.kickRange || PLAYER.kickRange);
   const behindBall = align > 0.15;
-  p.kick = p.aiState === 'strike' && inRange && behindBall && !p.kickUsed;
-  if (p.kick){ p.faceX = aimx; p.faceY = aimy; }
+  if (p.aiState === 'carry'){
+    // Release when we're facing the aim, or when the trap window is nearly spent.
+    const faceAim = p.faceX*aimx + p.faceY*aimy;
+    p.kick = !(faceAim > BOT.carryAlign || p.aiCarryT <= 0);
+  } else if (w.trapOff){
+    // One-touch: the flag stops a single press firing every frame, and the branch
+    // that owns it clears it on release.
+    p.kick = p.aiState === 'strike' && dBall < sum + kr && behindBall && !p.kickUsed;
+  } else {
+    // Casual: a press near the ball only becomes a trap after TAP_HOLD (0.14s ≈ 9
+    // ticks), so the wind-up has to start BEFORE contact — pressing at contact gave
+    // an 8-tick press and the trap never armed. Holding early costs KICK_SLOW, which
+    // is exactly the trade a human makes to take a touch.
+    // `kickUsed` is deliberately not consulted here: the casual path never clears it,
+    // so gating on it left the bot pressing KICK 8 times in 30 seconds.
+    p.kick = p.aiState === 'strike' && behindBall && dBall < sum + kr + BOT.windup;
+  }
+  if (p.kick && p.aiState === 'strike'){ p.faceX = aimx; p.faceY = aimy; }
 }
 function dist2(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
 function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
@@ -7334,7 +7795,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0210PM';
+const VERSION = '20260804.0505PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7358,7 +7819,9 @@ if (window.__MAGNETDEBUG) {
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
     BOT, runBot, botInit, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
-    setMatchSeed,
+    setMatchSeed, botSkill, DIFF, botIntercept, ballAt, botTimeToBall, botLaneClear, botAperture,
+    botMirror, botBankHits, botPickAim, botFormationSpot, botAssignRoles, botPhase,
+    botUpdateSupportGrid, botSeparate, botWallAvoid, handleBallControl,
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
