@@ -8,6 +8,22 @@ re-run them after any change.
 
 ---
 
+> **Status: the plan in §9 is fully implemented.** All ten steps shipped, plus the six decisions in
+> §8. What the audit measured, and what it measures now:
+>
+> | | before | after |
+> |---|---|---|
+> | Velocity reversals /bot/s | 0.21 – **4.97** | **0.00 – 0.18** |
+> | Wrong-side scenario | 16 flips in 4 s, ball never touched | ≤2 flips, ball struck in 31 ticks |
+> | Ball contact at Hard/Insane | **0 – 2 %** | 8 – 76 % |
+> | Bots within 70 of the ball (4v4) | up to 0.91 | ≤ 0.49 |
+> | Bank-shot miss (8 geometries) | n/a | **4.0 units** (21.5 for a naive mirror) |
+>
+> Everything below is the original read of the shipped-at-the-time code, kept because the reasoning
+> is what the rework was built on. `docs/TODO.md` has the per-step changelog.
+
+---
+
 ## 1. Where the AI lives and how it's structured
 
 | | |

@@ -5,8 +5,8 @@ Guidance for Claude Code (or any contributor) working in this repo.
 ## What this is
 A **single-file** HTML5 canvas game. **Everything lives in `index.html`** — HTML, CSS, and all game
 JS (wrapped in one `(function(){ "use strict"; … })()` IIFE). There is **no build step, no bundler,
-no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `icon.svg`, and
-`assets/` are the only other runtime files.
+no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `icon.svg`,
+`assets/` and `settings/index.html` are the only other runtime files.
 
 **Hard rules**
 - Keep it dependency-free and self-contained. No npm packages shipped to the page, no CDN scripts,
@@ -31,12 +31,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
-- **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `EYES`, `CAPS`,
-  with `FLAG_REQ` / `EYE_REQ` / cap `.req`. `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`.
-  To add content: add the item + its unlock req; the pickers and counters iterate the key lists.
+- **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
+  `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
+  `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one
+  faceplate slot** (`profile.flag`) — `paintFace()` decides which table the key belongs to.
+  `itemName(cat,key)` is the single place that knows what an item is called; use it, don't
+  re-derive it. To add content: add the item + its unlock req and a `UNL_CATS` entry; the pickers
+  and counters iterate the key lists. Players default to a **shirt number** (`shirtNo`).
+- **Ball look:** `BALL_LOOKS` + `paintBall(c,x,y,r,rot,key)` — nine drawn patterns, no sprites.
+  The pitch and the picker tiles call the same painter, so a tile can't show something the ball
+  won't. Ball *physics* is `BALLS`, which is a different thing entirely.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
+- **Bots (AI-only layer):** `runBot(w,p)` in four layers — `botPhase` (attack/defend/transition)
+  → `botAssignRoles` (chaser/support/defender/goalie, every `BOT.roleTicks` with a switch margin)
+  → the per-bot decision → Layer-0 steering (`botArrive`, `botSeparate`, `botArcPoint`,
+  `botWallAvoid`). Aim is `botPickAim` scoring shot / pass / bank / clear candidates through one
+  function. **Every tuning value is in the `BOT` block** — nothing below it reads a magic number.
+  ⚠️ Bots may write **only** `inX/inY/faceX/faceY/kick` and their own `ai*` scratch fields; the
+  kick impulse runs along player→ball, so a bot aims by *where it stands*, not by facing.
+  `tests/botai.mjs` enforces both by diffing the whole player object.
+- **Determinism:** AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
+  outside the sim at `startMatch`). **Never call `Math.random` from inside `step()`.**
+  `setMatchSeed(n)` pins a match for tests. See `docs/DETERMINISM-AUDIT.md`.
 - **Progression:** `stats` (RP `points`, ranks, and Elo `mmr` via `updateMMR`). Saves in
   `localStorage` under `magnetball.*` keys.
 - **Leaderboard:** `LB` config; reads via the public Google **gviz** JSON endpoint (`lbLoad`,
@@ -46,6 +64,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   are pushed in for real.
 - **Replays:** rolling `repBuf`; `repOnGoal` freezes it; `playReplay` re-renders (skippable);
   `saveClip` records via `MediaRecorder`.
+- **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
+  at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
+  match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
+  for `--sticky-top`. `/settings` is the *same document* with the game switched off, kept in sync
+  over `BroadcastChannel`.
 
 ## Testing (Playwright, headless)
 Set `window.__MAGNETDEBUG = true` **before load** to expose `window.__magnet` — a live object with
@@ -67,8 +90,12 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-Always: (1) render every new flag/eye once to catch throwing draw fns, (2) re-verify ball
-containment on all fields after physics changes, (3) check the console for errors.
+`tests/run.mjs` runs all 42 suites; `tests/README.md` lists what each covers and the measurement
+traps that have produced false results here before — read it before writing a new one.
+
+Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
+ball containment on all fields after physics changes, (3) check the console for errors, (4) assert
+the thing you mean — several suites here have passed for the wrong reason.
 
 ## Gotchas
 - `step(w)` takes the world (fixed internal STEP), not a dt.
@@ -76,6 +103,11 @@ containment on all fields after physics changes, (3) check the console for error
 - Service worker is **network-first for HTML**, so deploys show up on reload when online; bump
   `CACHE` in `sw.js` only if you need to force-evict other cached assets.
 - Don't put model identifiers or internal session URLs in committed files.
+- `p.kickUsed` is only cleared on the **one-touch** (`trapOff`) path. Gating anything on it in
+  casual mode silently stops firing after the first kick.
+- Duplicated knowledge rots. The category→name chain lived in three places and broke a test when a
+  category was added; the contrast maths and the ball painter are each in one place now. Keep it
+  that way.
 
 ## Deploy
 Static hosting. GitHub Pages: files at repo root → Settings → Pages → `main` / root.

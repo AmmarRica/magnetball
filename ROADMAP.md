@@ -10,6 +10,33 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 ---
 
 ## ✅ Shipped since
+- **Bot AI rebuilt (four layers)** — the old bots oscillated on the spot: the standoff waypoint sat
+  27 units behind the ball and the branch that discarded it fired at 43, so a bot could never arrive
+  and never touched a stationary ball. Above Normal they reached a loose ball **0–2%** of the time,
+  which made *higher* difficulties worse. Now: team phase → roles (chaser/support/defender/**goalie**)
+  → per-bot decision → steering, with intercept prediction, an elastic ball-anchored formation, a
+  support-spot grid, lane-checked passing, **bank shots off the boards** (corrected for the real
+  0.90 restitution *and* the ball's radius — mean miss 4.0 units vs 21.5 for a naive mirror), and a
+  feel layer. Bots emit only what a thumb can, and now trap and carry like a human. **Fully
+  deterministic** — same seed, same match. See `docs/BOT-AI-AUDIT.md`.
+- **Shirt numbers + Text plates** — players wear a **number** by default (you 1, your bots 2 up, the
+  opposition from 1 again), and a new Text faceplate category adds 48 HaxBall-style glyph avatars.
+- **Ball looks, Skins out** — nine drawn ball patterns (Classic, Plain, Stripe, Cross, Beach, Tennis,
+  8-Ball, Dots, Swirl). The old Skins card pointed at two PNGs that were never in the repo and did
+  nothing; removed. Everything on screen is drawn, not blitted.
+- **Kick Off is the Match card's heading** — collapsed it's the green bar you press; the chevron
+  beside it opens mode/field/difficulty in place.
+- **Contrast pass** — every themed ink is derived from the surface it lands on and nudged to clear
+  WCAG AA, measured. Five real failures fixed, including a HUD that was dark-on-dark at **1.89:1**
+  on Paper and a shop label that always fell back to a hardcoded green.
+- **Theme picker shows the palette** — each tile paints the six colours that make the theme instead
+  of an emoji.
+- **Awards say the number** — "Most Saves · 5 saves", formatted from the same value that picked the
+  winner so it can't drift.
+- **Accordion settings** + a **`/settings` route** (the same document with the game switched off,
+  synced live over BroadcastChannel).
+- **Pitch surfaces wear in** — mud churns and ice picks up skate cuts where the traffic actually was,
+  deterministically, reset per match.
 - **Roguelike "Gauntlet" mode** — a run of escalating matches vs rising bot tiers (1v1 → 2v2 →
   3v3). Start with **3 lives**; **win to descend** a depth and **pick 1 of 3 random upgrades**
   (Cannon, Sprint, Magnet, Beach Ball, Floaty, Stopwatch, Extra Life) that **stack** for the run;
@@ -176,37 +203,41 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 
 ## ✅ Already in Magnetball
 - Mobile-native, touch dual-thumb controls — *the single most-requested platform gap*
-- 1v1 / 2v2 / 3v3 / 4v4 vs bots, difficulty tiers
-- Player customization: name, colour, cap
+- 1v1 / 2v2 / 3v3 / 4v4 vs bots, 7 difficulty tiers
+- Player customization: name, colour, cap, faceplate (flag / animal / text), eyes
 - Ball Magnet (0–100) — adjustable ball control
 - Magnet-charged kicks (hold-close → further shot)
 - Gamepad support (up to 4v4)
-- Multiple fields, PWA/offline, Amiga visual theme
+- 30 fields, PWA/offline, a pixel-art (Amiga-era) look across 7 themes
 
 ---
 
 ## 🎯 Tier 1 — Quick wins (S–M, high delight)
-1. **Charge-kick power meter** (M) — hold KICK to build power, release to shoot; ring/bar shows charge.
+
+> Items 1–7 and 8–11 below are **all shipped** — they're kept for the community-ask
+> rationale that motivated them. The live backlog is Tier 3 onward.
+
+1. ✅ **Charge-kick power meter** (M) — hold KICK to build power, release to shoot; ring/bar shows charge.
    *Top gameplay ask ("variable pass/kick power, FIFA/PES-style").* Extends the magnet-charge you already have.
-2. **Sound & music** (M) — kick/goal/whistle SFX + optional chiptune loop and crowd; mute toggle.
+2. ✅ **Sound & music** (M) — kick/goal/whistle SFX + optional chiptune loop and crowd; mute toggle.
    *Community wants audio/commentary.* Fits the Amiga theme.
-3. **Local stats** (S–M) — goals, assists, wins/losses, win streak, per-session totals in localStorage.
+3. ✅ **Local stats** (S–M) — goals, assists, wins/losses, win streak, per-session totals in localStorage.
    *Stats tracking is a perennial request.*
-4. **Avatars & flags** (S) — emoji or initial avatar on the disc, optional country flag.
+4. ✅ **Avatars & flags** (S) — emoji or initial avatar on the disc, optional country flag.
    *Requested: disc avatars, country flags, custom colours.*
-5. **Match rules** (S) — overtime / golden goal, and a **penalty shootout** on draws.
-6. **Left-handed / swap-thumbs toggle & control tuning** (S) — joystick sensitivity, deadzone, kick keybind.
+5. ✅ **Match rules** (S) — overtime / golden goal, and a **penalty shootout** on draws.
+6. ✅ **Left-handed / swap-thumbs toggle & control tuning** (S) — joystick sensitivity, deadzone, kick keybind.
    *Configurable controls / keybinds are requested.*
-7. **Colourblind-friendly team markers** (S) — shapes/patterns in addition to red/blue.
+7. ✅ **Colourblind-friendly team markers** (S) — shapes/patterns in addition to red/blue.
 
 ## 🎯 Tier 2 — Progression & replay (M–L)
-8. **Rank / ELO ladder vs bots** (M) — climb divisions by beating higher difficulties; title/prefix by rank.
+8. ✅ **Rank / ELO ladder vs bots** (M) — climb divisions by beating higher difficulties; title/prefix by rank.
    *Ranked/ELO + rank prefixes are heavily requested.*
-9. **Goal replays & clip share** (L) — record the last few seconds, instant-replay a goal, export/share a clip/GIF.
+9. ✅ **Goal replays & clip share** (L) — record the last few seconds, instant-replay a goal, export/share a clip/GIF.
    *Replays & clip export (HBR-style) are wanted.*
-10. **Career / season mode** (L) — play a fixture list or bracket **tournament**, track a table.
+10. ✅ **Career / season mode** (L) — play a fixture list or bracket **tournament**, track a table.
     *In-client tournaments / championships.*
-11. **Training mode** (M) — free practice, shooting drills, magnet/kick sandbox.
+11. ✅ **Training mode** (M) — free practice, shooting drills, magnet/kick sandbox.
 
 ## 🎯 Tier 3 — Online & rooms (L–XL)
 
