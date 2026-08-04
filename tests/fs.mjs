@@ -17,14 +17,31 @@ const before = await p.evaluate(()=>!!document.fullscreenElement);
 await p.locator('#fsBtn').click();
 await p.waitForTimeout(500);
 const afterClick = await p.evaluate(()=>({fs:!!document.fullscreenElement, label:document.getElementById('fsBtn').textContent}));
-// F key toggles back
+// F must NOT toggle any more — F11 is the browser's, and swallowing a bare letter
+// fought every text field on the page.
 await p.keyboard.press('f');
+await p.waitForTimeout(400);
+const afterF = await p.evaluate(()=>!!document.fullscreenElement);
+// The button toggles back out
+await p.locator('#fsBtn').click();
 await p.waitForTimeout(500);
-const afterKey = await p.evaluate(()=>({fs:!!document.fullscreenElement, label:document.getElementById('fsBtn').textContent}));
-console.log('before:', before, '| after click:', JSON.stringify(afterClick), '| after F:', JSON.stringify(afterKey));
+const afterSecondClick = await p.evaluate(()=>({fs:!!document.fullscreenElement, label:document.getElementById('fsBtn').textContent}));
+// ...and typing "f" into the seat-names box types an f rather than doing anything else
+const typed = await (async ()=>{
+  await p.evaluate(()=>{ const t=document.getElementById('seatNames'); t.value=''; t.focus(); });
+  await p.keyboard.type('fox');
+  return p.evaluate(()=>document.getElementById('seatNames').value);
+})();
+
+console.log('before:', before, '| after click:', JSON.stringify(afterClick),
+            '| still fs after F:', afterF, '| after 2nd click:', JSON.stringify(afterSecondClick),
+            '| typed:', JSON.stringify(typed));
 console.log('ERRORS:', errors.length?errors.slice(0,4):'none');
-const entered = afterClick.fs===true && afterClick.label.includes('Exit');
-const exited  = afterKey.fs===false && afterKey.label.includes('Enter');
-console.log('enterWorks:', entered, '| exitWorks:', exited);
-console.log('RESULT:', (entered&&exited&&errors.length===0)?'PASS':'FAIL');
-await b.close(); process.exit((entered&&exited&&errors.length===0)?0:1);
+const entered  = afterClick.fs===true && afterClick.label.includes('Exit');
+const fInert   = afterF === true;                    // F changed nothing
+const exited   = afterSecondClick.fs===false && afterSecondClick.label.includes('Enter');
+const typesOk  = typed === 'fox';
+console.log('enterWorks:', entered, '| F is inert:', fInert, '| exitWorks:', exited, '| typing ok:', typesOk);
+const ok = entered && fInert && exited && typesOk && errors.length===0;
+console.log('RESULT:', ok?'PASS':'FAIL');
+await b.close(); process.exit(ok?0:1);

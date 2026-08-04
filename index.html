@@ -858,7 +858,7 @@
       <div style="height:14px"></div>
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
-      <div class="hint" style="text-align:left; margin-top:4px">Or press <b>F</b>. There's a ⛶ in the top bar mid-match too.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">There's a ⛶ in the top bar mid-match too. <b>F11</b> works as usual.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="skins">
@@ -1909,7 +1909,25 @@ function loadProfile() {
     eyes: d.eyes || def.eyes,
   };
 }
-function saveProfile(){ try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} syncPush(); }
+function saveProfile(){
+  try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){}
+  syncProfileToWorld();
+  syncPush();
+}
+// Push your colour/cap/flag/eyes/name onto the live match, so customising mid-game
+// shows up straight away instead of at the next kickoff. Only your own seat(s) —
+// duo drives several, and the idle demo deliberately wears its own countries.
+function syncProfileToWorld(){
+  const w = (typeof world !== 'undefined') ? world : null;
+  if (!w || !w.players || w.demo) return;
+  const custom = seatNameList();
+  w.players.forEach((p, i) => {
+    if (p.ctrl !== 'human1') return;
+    p.color = profile.color; p.cap = profile.cap;
+    p.flag  = profile.flag;  p.eyes = profile.eyes;
+    if (!custom[i]) p.name = profile.name || 'You';   // a typed seat name still wins
+  });
+}
 function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} }
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
 
@@ -2354,6 +2372,27 @@ function pickTextColor(hex){
   if (!/^#[0-9a-f]{6}$/i.test(hex||'')) return INK_LIGHT;
   return contrastRatio(INK_DARK, hex) >= contrastRatio(INK_LIGHT, hex) ? INK_DARK : INK_LIGHT;
 }
+// Keep a colour's hue but push it toward whichever ink the background wants, only
+// as far as it takes to clear AA. Raw team colours on the dark name plate measured
+// as low as 3.06:1 (mono blue) — this keeps them recognisably red/blue and legible.
+function readableInk(col, bg, target){
+  if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
+  const want = target || 4.5;
+  const toward = pickTextColor(bg);          // dark bg -> lighten, light bg -> darken
+  let out = col;
+  for (let t = 0; t <= 1.0001; t += 0.05){
+    out = t === 0 ? col : mixCol(col, toward, t);
+    if (contrastRatio(rgbToHex(out), bg) >= want) break;
+  }
+  return out;
+}
+// mixCol returns an rgb() string; contrast maths wants hex.
+function rgbToHex(c){
+  if (c[0] === '#') return c;
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c);
+  if (!m) return '#ffffff';
+  return '#' + [1,2,3].map(i => (+m[i]).toString(16).padStart(2,'0')).join('');
+}
 
 $('pname').value = profile.name;
 $('pname').oninput = e => { profile.name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
@@ -2696,12 +2735,8 @@ function updateFsUI(){
 $('fsHudBtn').onclick = () => toggleFullscreen(true);
 document.addEventListener('fullscreenchange', ()=>{ updateFsUI(); resize(); });
 document.addEventListener('webkitfullscreenchange', ()=>{ updateFsUI(); resize(); });
-window.addEventListener('keydown', e => {
-  if (e.key === 'f' || e.key === 'F'){
-    const t = e.target; if (t && /input|textarea/i.test(t.tagName)) return;   // don't hijack typing
-    e.preventDefault(); toggleFullscreen(true);
-  }
-});
+// No F shortcut: F11 is the browser's own, and a bare letter key is a bad thing to
+// swallow — it fought the seat-names box and anything else you type into.
 updateFsUI();
 
 // ============================================================
@@ -3923,7 +3958,9 @@ function startMatch(){
   const fieldKeys = Object.keys(FIELDS);
   const field = _startQuiet ? FIELDS[fieldKeys[(Math.random()*fieldKeys.length)|0]]
                             : FIELDS[sel.field];
-  const len = LENGTHS[sel.length];
+  // The idle demo is wallpaper, not a match: no clock, so it never hits full time,
+  // never announces OVERTIME across the menu and never throws up a result overlay.
+  const len = _startQuiet ? { secs:0, goals:0 } : LENGTHS[sel.length];
   const per = mode.per;
   const used = new Set([profile.name]);
 
@@ -3990,11 +4027,12 @@ function startMatch(){
     const a = countries[(Math.random()*countries.length)|0];
     let b = a, guard = 0;
     while (b === a && guard++ < 30) b = countries[(Math.random()*countries.length)|0];
-    for (const pl of players){
+    players.forEach((pl, i) => {
       pl.flag = pl.team === 0 ? a : b;
       pl.cap = 'none';
       pl.eyes = 'googly';
-    }
+      pl.color = teamTint(pl.team, i);   // your colour was still on seat 1 otherwise
+    });
   }
 
   applySeatRotation(players);
@@ -5055,6 +5093,7 @@ function kqGoal(w, ball, team){
 function endMatch(w){
   if (w.state==='over') return;
   w.state='over';
+  if (w.demo){ startDemo(); return; }       // wallpaper: just start another one
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
@@ -6305,16 +6344,14 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       const a = prev + (target - prev) * LABEL_FADE;
       if (idx != null) labelA[idx] = a;
       if (a > 0.004){
-        // Plate is tinted by TEAM, not by the player's own colour — every plate on a
-        // side reads as that side at a glance. Text colour is picked from the plate's
-        // luminance: colouring the TEXT instead and leaving the plate dark measured
-        // as low as 3.06:1 (mono, blue) and failed AA on four of the seven themes,
-        // while this clears 4.5:1 on all seven.
-        const plate = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : TH.nameBg;
+        // The NAME carries the team colour; the box stays the neutral plate. Raw
+        // team colours on that plate drop to 3.06:1 on some themes, so the tint is
+        // lightened toward the plate's preferred ink only as far as AA needs.
+        const team = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : null;
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
-        ctx.fillStyle = plate; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
-        ctx.fillStyle = (p.team === 0 || p.team === 1) ? pickTextColor(plate) : TH.nameText;
+        ctx.fillStyle = TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
+        ctx.fillStyle = team ? readableInk(team, TH.nameBg) : TH.nameText;
         ctx.fillText(label, x, y-r-11);
         ctx.globalAlpha = prevA;
       }
@@ -6877,7 +6914,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0304AM';
+const VERSION = '20260804.0412AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6920,6 +6957,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
+    readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };

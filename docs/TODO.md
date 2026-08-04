@@ -61,13 +61,30 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🔴 Live look + the phantom OVERTIME
+- [x] **Customising your player now shows up mid-match.** Your look was copied onto the disc at
+  kickoff and never read again, so a colour/cap/flag/eyes/name change only landed on the *next*
+  match. `saveProfile()` — the choke point every profile write already goes through — now pushes
+  it onto your live seat(s). A typed seat name still wins over the profile name, opponents are
+  untouched, and the idle demo is skipped.
+- [x] **The idle demo announced OVERTIME across the menu.** It ran a real 5-minute clock, and
+  bot-vs-bot wallpaper is usually level at full time — so it went to sudden death, popped the
+  banner and switched the clock to "OT". If it *wasn't* level it was worse: a full result overlay
+  over the main menu. The demo now has no clock at all, and `endMatch` restarts it rather than
+  taking over the screen. A real timed match still goes to overtime exactly as before.
+- [x] **The demo still wore your colour.** It overrode flag, cap and eyes but not `color`, so seat
+  one kept `profile.color` — the same "menu looks like your own team" problem the random-country
+  change was meant to fix. It now takes the team tint like every other demo disc.
+
 ## 🎽 Name plates read as teams
-- [x] **Plates are tinted by team.** They had been white on every disc since the very first
-  commit — nothing about a plate told you which side someone was on, which got worse once bots
-  stopped copying your look. Plate takes `TH.teamRed` / `TH.teamBlue`; ink is picked from the
-  plate's luminance. Measured first: colouring the **text** and leaving the plate dark scored as
-  low as **3.06:1** (mono, blue) and failed AA on four of seven themes, while the tinted plate
-  clears 4.5:1 on all seven (worst 4.66, GBA).
+- [x] **Full-screen F shortcut removed** — F11 is the browser's own, and swallowing a bare letter
+  key fought every text field on the page (the seat-names box especially). The ⛶ buttons remain.
+- [x] **The NAME is team-coloured; the box stays neutral.** Plates had been white on every disc
+  since the very first commit — nothing told you which side someone was on, which got worse once
+  bots stopped copying your look. Raw team colours on the dark plate measured as low as **3.06:1**
+  (mono, blue), so `readableInk()` keeps the hue and lightens it toward the plate's preferred ink
+  only as far as AA needs: 4 of the 14 team tints are used untouched, the rest shift slightly
+  (e.g. grass red `#e23c3c` → `#e65959`). Worst contrast across all seven themes is now 4.56.
 - [x] **`pickTextColor()` was choosing the wrong ink.** It used a fixed `luma > 150` threshold, so
   on GBA's mid-green it picked white at **2.25:1** where black gives 9.35:1. It now compares
   actual WCAG contrast ratios and takes the better one, with pure black rather than the theme's
@@ -327,7 +344,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 31 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 32 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

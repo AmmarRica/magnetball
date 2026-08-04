@@ -116,11 +116,21 @@ const r = await p.evaluate(async ()=>{
     const d=c3.getImageData(Math.round(sx*DPR2)-2, Math.round(py*DPR2)-2, 5, 5).data;
     let R=0,G=0,B=0,n=0; for(let i=0;i<d.length;i+=4){R+=d[i];G+=d[i+1];B+=d[i+2];n++;}
     return [Math.round(R/n), Math.round(G/n), Math.round(B/n)]; };
+  // The NAME carries the colour; the BOX stays neutral. Sampling the whole plate
+  // rect mixes box and glyphs, so the team signal is a tint of the mean rather than
+  // a flat fill — assert the direction, not a specific colour.
   o.plateTeam0 = plateAt(a2); o.plateTeam1 = plateAt(b2);
   o.platesDifferByTeam = JSON.stringify(o.plateTeam0) !== JSON.stringify(o.plateTeam1);
-  o.team0PlateIsRed  = o.plateTeam0[0] > o.plateTeam0[2] + 40;   // red beats blue
-  o.team1PlateIsBlue = o.plateTeam1[2] > o.plateTeam1[0] + 40;   // blue beats red
-  o.platesNotWhite = !(o.plateTeam0[0]>230 && o.plateTeam0[1]>230 && o.plateTeam0[2]>230);
+  o.team0ReadsRed  = o.plateTeam0[0] > o.plateTeam0[2];          // red channel leads
+  o.team1ReadsBlue = o.plateTeam1[2] > o.plateTeam1[0];          // blue channel leads
+  // The box itself is NOT team-tinted: sample a corner of the plate, away from glyphs.
+  const boxAt = (q) => { const [sx,sy]=M.screenPt(M.wx(q.x), M.wy(q.y));
+    const px=sx - 0, py=sy - q.r*M.cam.s - 21;                   // top strip of the plate
+    const d=c3.getImageData(Math.round(px*DPR2)-1, Math.round(py*DPR2)-1, 3, 3).data;
+    return [d[0],d[1],d[2]]; };
+  const box0=boxAt(a2), box1=boxAt(b2);
+  o.box0=box0; o.box1=box1;
+  o.boxesMatchEachOther = Math.abs(box0[0]-box1[0])<12 && Math.abs(box0[2]-box1[2])<12;
 
   // --- Text on the plate must clear WCAG AA on EVERY theme. Colouring the text and
   // leaving the plate dark measured as low as 3.06:1, which is why it isn't that.
@@ -128,14 +138,22 @@ const r = await p.evaluate(async ()=>{
     .map(x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4));
     return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2]; };
   const ratio=(x,y)=>{const L1=lum(x),L2=lum(y);return (Math.max(L1,L2)+0.05)/(Math.min(L1,L2)+0.05);};
-  o.worstPlateContrast = 99; o.worstPlateTheme='';
+  o.worstPlateContrast = 99; o.worstPlateTheme=''; o.rawWorst = 99;
+  o.inksDifferEveryTheme = true;
   for (const [k,t] of Object.entries(M.THEMES)){
-    for (const plate of [t.pitch.teamRed, t.pitch.teamBlue]){
-      const c = ratio(M.pickTextColor(plate), plate);
+    const bg = t.pitch.nameBg;
+    const inks = [t.pitch.teamRed, t.pitch.teamBlue].map(c => M.rgbToHex(M.readableInk(c, bg)));
+    if (inks[0] === inks[1]) o.inksDifferEveryTheme = false;
+    for (let i=0;i<2;i++){
+      const c = ratio(inks[i], bg);
+      const raw = ratio([t.pitch.teamRed, t.pitch.teamBlue][i], bg);
+      if (raw < o.rawWorst) o.rawWorst = +raw.toFixed(2);
       if (c < o.worstPlateContrast){ o.worstPlateContrast = +c.toFixed(2); o.worstPlateTheme = k; }
     }
   }
   o.everyThemeClearsAA = o.worstPlateContrast >= 4.5;
+  // The lightening is doing real work: at least one raw team colour was under AA.
+  o.rawWouldHaveFailed = o.rawWorst < 4.5;
   return o;
 });
 
@@ -145,8 +163,8 @@ const near = (v,t)=>Math.abs(v-t) < 0.02;
 const okOrient = m => near(m.clear,1) && near(m.discOver,r.floor) && near(m.discAway,1)
                    && near(m.ballOver,r.floor) && near(m.ballAway,1) && near(m.selfNeverDims,1);
 const ok = okOrient(r.upright) && okOrient(r.sideways) && r.gradual && r.replayFades &&
-  r.platesDifferByTeam && r.team0PlateIsRed && r.team1PlateIsBlue && r.platesNotWhite &&
-  r.everyThemeClearsAA && errors.length===0;
+  r.platesDifferByTeam && r.team0ReadsRed && r.team1ReadsBlue && r.boxesMatchEachOther &&
+  r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed && errors.length===0;
 if(!ok) console.log('upright:', okOrient(r.upright), '| sideways:', okOrient(r.sideways), '| gradual:', r.gradual, '| replay:', r.replayFades);
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);
