@@ -17,6 +17,7 @@ const r = await p.evaluate(async ()=>{
   // Counts shown must equal what the unlock model actually reports.
   const chips=[...document.querySelectorAll('#unlChips .unlChip')];
   o.chipCount = chips.length;                       // one per category
+  o.catCount = M.UNL_CATS.length;          // derived, not a hardcoded 4 — a new category is not a failure
   o.chipsMatchModel = M.UNL_CATS.every((c,i)=>{
     const keys=c.keys(), mine=keys.filter(k=>M.isUnlocked(c.cat,k));
     return chips[i] && chips[i].textContent.replace(/\s+/g,' ').includes(`${mine.length}/${keys.length}`);
@@ -32,11 +33,15 @@ const r = await p.evaluate(async ()=>{
   const unlockedTitles = new Set();
   for (const c of M.UNL_CATS)
     for (const k of c.keys().filter(k=>M.isUnlocked(c.cat,k)))
-      if (k!=='none') unlockedTitles.add(
-        c.cat==='cap' ? M.CAPS[k].name : c.cat==='flag' ? M.FLAGS[k].name
-        : c.cat==='animal' ? M.ANIMALS[k].name : M.EYES[k].name);
+      // Ask the game what an item is called rather than keeping a second copy of
+      // that chain here — the copy is what went stale when a category was added.
+      if (k!=='none') unlockedTitles.add(M.itemName(c.cat, k));
   o.stripOnlyUnlocked = items.every(el => unlockedTitles.has(el.title));
-  o.stripCountMatches = items.length === unlockedTitles.size;
+  // Count from the model, not from the Set: two items may legitimately share a name.
+  let expected = 0;
+  for (const c of M.UNL_CATS)
+    expected += c.keys().filter(k=>M.isUnlocked(c.cat,k) && k!=='none').length;
+  o.stripCountMatches = items.length === expected;
 
   // A locked item must never appear. Pick one that is genuinely locked.
   let lockedName=null;
@@ -84,7 +89,7 @@ const r = await p.evaluate(async ()=>{
 
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.chipCount===4 && r.chipsMatchModel && r.totalMatches && r.barMatches &&
+const ok = r.chipCount===r.catCount && r.chipsMatchModel && r.totalMatches && r.barMatches &&
   r.stripNotEmpty && r.stripOnlyUnlocked && r.stripCountMatches && r.lockedNotShown &&
   r.tapEquips && r.markerFollows && r.newUnlockAppears && r.deckFocusable && errors.length===0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));

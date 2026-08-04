@@ -5,9 +5,29 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0620PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0745PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🔢 Shirt numbers by default, and a Text faceplate category
+- [x] **Players default to a number, not a country.** A pitch now reads like a team
+  sheet: you are 1, your bots take 2 upward, and the opposition numbers from 1 again
+  the way a real match does. Countryballs and animals are still there, opt-in.
+- [x] **Text faceplates** — the HaxBall avatar tradition, 48 of them, sharing the
+  faceplate slot with flags and animals: two complete 0–9 runs (plain and circled)
+  usable as shirt numbers, plus every glyph from the posted list (`⠀ _௵ ௸௸ ₧ ⁇⁇ ∴∵ 〄
+  ⓞ № ツ ░░ ⠀*` and the Indic and Braille rows). They're drawn as text, not blitted,
+  so they stay crisp at any disc size, and a two-character plate is measured and
+  scaled to fit rather than spilling off the edge.
+- [x] The Indic and Braille rows stop short of 9, so they're offered as individual
+  glyphs rather than pretending to be a full 0–9 set. Font stack puts Kenney first
+  (digits match the game) with symbol fonts behind it for the rarer characters.
+- [x] Text plates are free — they're typography, not a reward — but they still count
+  toward the unlocked total so the tally stays honest.
+- [x] **Cleanup the change forced:** the cat→name chain was written out three times,
+  once inside `tests/unlocked.mjs`. Adding a category broke the copy nobody was
+  looking at. There is now one `itemName(cat, key)` and everything calls it, tests
+  included. `unlocked` also stopped hardcoding "4 categories".
 
 ## ▶ KICK OFF is the Match section's header
 - [x] **The green bar doubles as a collapsible header.** Collapsed it is exactly the
