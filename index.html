@@ -2332,9 +2332,27 @@ function buildCaps(){
     wrap.appendChild(el);
   });
 }
+// Pick whichever of the two ink colours actually contrasts more with the given
+// background — measured by WCAG ratio, not by a brightness threshold. The old
+// `luma > 150` test chose WHITE on GBA's mid-green (2.25:1) where black gives
+// 9.35:1, and did the same wherever a colour sits near the threshold.
+// Pure black, not the theme's near-black: on a 9px name plate the extra contrast
+// is the difference between clearing AA and missing it (grass measured 4.37 with
+// #10131c, 4.95 with #000000).
+const INK_DARK = '#000000', INK_LIGHT = '#ffffff';
+function relLum(hex){
+  const c = (hex||'').replace('#','');
+  const v = [0,2,4].map(i => parseInt(c.substr(i,2),16)/255)
+    .map(x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4));
+  return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
+}
+function contrastRatio(a, b){
+  const L1 = relLum(a), L2 = relLum(b);
+  return (Math.max(L1,L2) + 0.05) / (Math.min(L1,L2) + 0.05);
+}
 function pickTextColor(hex){
-  const c = hex.replace('#',''); const r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),bl=parseInt(c.substr(4,2),16);
-  return (r*0.299+g*0.587+bl*0.114) > 150 ? '#10131c' : '#ffffff';
+  if (!/^#[0-9a-f]{6}$/i.test(hex||'')) return INK_LIGHT;
+  return contrastRatio(INK_DARK, hex) >= contrastRatio(INK_LIGHT, hex) ? INK_DARK : INK_LIGHT;
 }
 
 $('pname').value = profile.name;
@@ -6287,10 +6305,16 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       const a = prev + (target - prev) * LABEL_FADE;
       if (idx != null) labelA[idx] = a;
       if (a > 0.004){
+        // Plate is tinted by TEAM, not by the player's own colour — every plate on a
+        // side reads as that side at a glance. Text colour is picked from the plate's
+        // luminance: colouring the TEXT instead and leaving the plate dark measured
+        // as low as 3.06:1 (mono, blue) and failed AA on four of the seven themes,
+        // while this clears 4.5:1 on all seven.
+        const plate = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : TH.nameBg;
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
-        ctx.fillStyle=TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
-        ctx.fillStyle = TH.nameText;
+        ctx.fillStyle = plate; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
+        ctx.fillStyle = (p.team === 0 || p.team === 1) ? pickTextColor(plate) : TH.nameText;
         ctx.fillText(label, x, y-r-11);
         ctx.globalAlpha = prevA;
       }
@@ -6853,7 +6877,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0231AM';
+const VERSION = '20260804.0304AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6895,7 +6919,7 @@ if (window.__MAGNETDEBUG) {
     teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
-    seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices,
+    seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
