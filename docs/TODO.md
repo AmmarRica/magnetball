@@ -5,9 +5,32 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0110AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0245AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🏁 Game-over chooser, and sitting a match out
+- [x] **The result screen offers two options: `↻ Restart` and `🧍 Warm-up`.** Restart is
+  the default — the common case is "again, same teams". It deliberately does **not**
+  call `startMatch()`, which re-runs seat assignment and would undo whoever picked
+  which side; it resets the scoreline, stats, seed and pitch wear in place.
+- [x] **Only Player 1 picks.** With four people round a table you don't want whoever
+  mashes first deciding what happens next, so the chooser reads one pad and says so
+  on screen. The match stats stay visible above it.
+- [x] **Step outside the touchline in warm-up to sit the match out.** You keep your
+  controller and can walk the sideline, but you're not in `w.players` — so you never
+  touch the ball and **cannot walk back on mid-match**. Warm-up widens the step-out
+  margin (20 → 74) so "outside" is a real place to stand; in play it's unchanged.
+- [x] Two bugs the tests caught rather than my reading: the bench push-out resolved
+  by the player's **current** sign, so walking left from `+x` popped them out at
+  `-x` the moment they crossed the centre — straight through the pitch; and lining
+  the bench up teleported a human who had just chosen where to stand (only reserve
+  bots are lined up now).
+- [x] Spare bots go to the bench instead of being dropped from the roster — they were
+  vanishing, so every restart fielded fewer bodies than the last.
+- [x] Team size is capped by the bodies that actually exist: filling 1+1 humans to a
+  2v2 needs two spare bots, and with only one on the sheet the honest answer is 1v1,
+  not 2v1. Equal sides beat matching the mode exactly.
 
 ## 🧍 Warm-up lobby, team sides, and cocktail calibration
 A new `warmup` world state that runs before `kickoff` whenever pads are in play (or
