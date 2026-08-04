@@ -57,6 +57,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `cocktailnopad` | Cocktail with **no** controller connected stays playable — the keyboard falls back rather than leaving nothing driving the player |
 | `livelook` | Customising your player shows on the pitch immediately (no restart); the idle demo has no clock, never announces OVERTIME, never throws a result overlay, and never wears your look |
 | `keyfocus` | Space **and** X kick, neither steals a keystroke while typing, clicking the pitch releases a focused slider so arrows drive the player again, Game Feel splits into ball/player groups |
+| `padflairs` | A controller icon per connected pad, bottom-right; goes black on a lit chip while any button is held; nothing drawn with no pads; 4 pads draw more than 1 |
 | `panel` | `/settings` route: same cards as inline, no game, snapshot on open, two-way live sync, telemetry, detached/inline, cross-tab match control |
 | `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
 | `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; picking it keeps you on the menu able to kick off; pitch direction is locked and says why |
