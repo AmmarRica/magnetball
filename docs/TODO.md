@@ -61,6 +61,25 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🐞 Cocktail mode — three bugs, fixed
+- [x] **Picking Cocktail stranded you on the sides-config screen.** The tile jumped
+  straight to `openCocktailCfg()`, which hides `#setup` — and the KICK OFF button with it, so
+  there was no way to start a match. It fired *every* time, not just the first, because leaving
+  without choosing a side left `cocktailSides` empty. The auto-jump is gone; the Display card
+  already carries a "Configure player sides" button.
+- [x] **Pitch direction was a dead control in Cocktail.** The tiles accepted the click, lit up,
+  saved `sel.orient` — and changed nothing, because `pitchHorizontal()` returns false for
+  cocktail by design. They're now disabled with "cocktail is always upright" on them, and the
+  click is blocked at the source rather than just styled.
+- [x] **Cocktail with no controller was unplayable.** Cocktail hands seats to pads and takes the
+  keyboard off the pitch — with zero pads connected that left *nothing* driving the player.
+  `keyboardDrivesGame()` now returns true when no gamepad is connected, so the rule still holds
+  at a real table but the mode can't brick itself.
+
+_(The audit suite missed all three: it tests the orient picker with `display:'auto'`, and it
+never walks the Display tiles as a player would. `tests/cocktailkeys.mjs` now covers the first
+two and `tests/cocktailnopad.mjs` the third.)_
+
 ## ✨ Latest batch
 - [x] **Ball magnet moved to Game Feel** — it had a second copy of itself in the Match card.
   Two controls for one setting drift apart and you can't tell which you last used; the audit
@@ -295,7 +314,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 30 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 31 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
