@@ -5,9 +5,26 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.1005PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.1120PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🐞 Two reported bugs
+- [x] **The KICK pad still swept like a loading bar.** The charge tell was changed to a flash on
+  the player's disc, but `drawKickMarker` kept its own `arc(..., -π/2, -π/2 + frac·2π)` — so the
+  control actually under your thumb still read as progress. It now flashes the same way, from the
+  same `holdT` phase. `tests/tells.mjs` checked the disc and not the pad, which is why the change
+  looked complete; it checks both now, at a phone-sized viewport (the pad only exists in the
+  mobile layout, and that's decided by window width — there is no `sel.display='mobile'`).
+- [x] **Mud was a mud bath at kickoff.** The baked churn went on at full alpha while a match's own
+  wear goes on at `WEAR.mudA` (0.16), so the pitch looked finished before anyone touched the ball.
+  The bake is now laid on at `MUD_BAKE_A` — the same weight, two passes' worth — so kickoff is a
+  green pitch with a few worn patches and the rest genuinely arrives from where players ran.
+- [x] `surfaces` thresholds re-derived from the new measurements (mud-vs-grass warmth 6 → 3, goal
+  mouth vs corner 8 → 5) with the reason recorded. The directions still hold and the dynamic
+  claims — playing on it makes it muddier — are untouched.
+- [x] `MUD_BAKE_A` had to be declared with the pitch constants: the surface picker paints its tiles
+  at module init, so a `const` below its first use is a TDZ crash. Same trap `CENTER_R` hit.
 
 ## 📚 Documentation rot pass
 - [x] **README** — said "space kicks" (X kicks too), "6 full palettes" (7), "150+ cosmetics"

@@ -1625,6 +1625,11 @@ const BALLS = {
 
 // Pitch surface — scales player grip: how quickly they accelerate and how much
 // they glide. Ice = slide a lot / low grip; Mud = sluggish / stops fast.
+// The pre-match mud churn, in the same units as the wear a match adds (WEAR.mudA).
+// Declared up here with the other pitch constants because the surface picker paints
+// its tiles during module init — a const below its first use is a TDZ crash, not a
+// hoisted default. (CENTER_R had to move for the same reason.)
+const MUD_BAKE_A = 0.30;
 const PITCH = {
   normal: { name:'Grass', emoji:'🟩', accel:0.40, damp:0.905 },
   ice:    { name:'Ice',   emoji:'🧊', accel:0.26, damp:0.955 },   // slidey, floaty
@@ -7053,9 +7058,14 @@ function paintMud(c, L, T, W, H, seed, mow){
   });
 
   c.save(); c.beginPath(); c.rect(L,T,W,H); c.clip();
+  // Laid on at the SAME weight a lap of running leaves behind (WEAR.mudA). Baked at
+  // full alpha it read as a finished mud bath before anyone had touched the ball —
+  // the churn is supposed to arrive from play, not be there at kickoff.
+  c.globalAlpha = MUD_BAKE_A;
   c.drawImage(earth, L, T, W, H);
+  c.globalAlpha = 1;
   // Damp, but lightly — the pitch should still read as green until it's been played on.
-  c.fillStyle = 'rgba(46,38,26,0.10)'; c.fillRect(L, T, W, H);
+  c.fillStyle = 'rgba(46,38,26,0.06)'; c.fillRect(L, T, W, H);
   c.restore();
 }
 
@@ -7763,12 +7773,19 @@ function drawKickMarker(pad, isP2){
   ctx.globalAlpha = pad.kick ? 0.42 : 0.16;
   ring(kx, ky, KICK_R, '#ffffff', 2);
   ctx.globalAlpha = 1;
-  // Charge ring: grows as the human holds KICK before contact.
+  // Charge ring: the WHOLE circle flashes while you hold KICK, faster and brighter
+  // as it charges — the same tell the disc wears. This pad was still sweeping round
+  // like a loading bar after the disc stopped, which is exactly the "progress"
+  // reading the change was meant to kill.
   const owner = world && world.players.find(p => p.ctrl === (isP2 ? 'human2' : 'human1'));
-  if (owner && owner.chargeT > 0.01){
-    const frac = Math.min(1, owner.chargeT / CHARGE.max);
-    ctx.beginPath(); ctx.arc(kx, ky, KICK_R*0.78, -Math.PI/2, -Math.PI/2 + frac*2*Math.PI);
-    ctx.strokeStyle = TH.kickRing; ctx.lineWidth = 5; ctx.stroke();
+  if (owner && (owner.kick || (owner.chargeT||0) > 0.01)){
+    const f = Math.min(1, (owner.chargeT||0) / CHARGE.max);
+    const hz = 3.5 + f*8;
+    const pulse = 0.30 + 0.70 * (0.5 + 0.5*Math.sin((owner.holdT||0) * hz * 2*Math.PI));
+    ctx.beginPath(); ctx.arc(kx, ky, KICK_R*0.78, 0, 2*Math.PI);
+    ctx.strokeStyle = rgba(TH.kickRing, 0.18 + 0.82*pulse*(0.25 + 0.75*f));
+    ctx.lineWidth = 5 * (1 + f*0.45);
+    ctx.stroke();
   }
   ctx.fillStyle = '#ffffff';
   ctx.globalAlpha = pad.kick ? 0.85 : 0.55;
@@ -7934,7 +7951,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.1005PM';
+const VERSION = '20260804.1120PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7975,7 +7992,7 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },

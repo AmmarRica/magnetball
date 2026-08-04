@@ -167,6 +167,43 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ---- 5c) The on-screen KICK PAD wears the same tell. It kept sweeping round like a
+// loading bar long after the disc stopped: the disc check above passed while the
+// thing actually under your thumb still read as progress.
+// The pad only exists in the mobile layout, and that is decided by WINDOW WIDTH —
+// there is no `sel.display='mobile'` to force, so the page has to be resized.
+await p.setViewportSize({ width: 420, height: 900 });
+await p.waitForTimeout(250);
+const pad = await p.evaluate(()=>{
+  const M=window.__magnet; const o={};
+  M.sel.display='auto'; M.sel.mode='1v1'; M.sel.controllers='off'; M.applyDisplayMode();
+  o.layoutIsTouch = M.isTouchLayout();
+  M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;
+  const me=w.players.find(q=>q.ctrl==='human1');
+  const cv=document.getElementById('game'), c2=cv.getContext('2d');
+  const DPR=cv.width/cv.clientWidth;
+  const KR=Math.round(M.KICK_R*DPR), m=Math.round(70*DPR);
+  const kx=m, ky=Math.round(cv.height-m);                 // p1, right-handed: bottom-left
+  const bright=(x0,y0,w0,h0)=>{ const d=c2.getImageData(x0,y0,w0,h0).data;
+    let n=0; for(let i=0;i<d.length;i+=4) if(d[i]+d[i+1]+d[i+2]>330) n++; return n; };
+  const ink = () => bright(kx-KR, ky-KR, KR*2, KR*2);
+  M.computeCam();
+  me.kick=true; me.chargeT=M.CHARGE.max; me.holdT=0;
+  const series=[];
+  for (let i=0;i<24;i++){ me.holdT += 1/60; M.render(); series.push(ink()); }
+  o.padLow=Math.min(...series); o.padHigh=Math.max(...series);
+  o.padDrawsSomething = o.padHigh > 0;                    // or everything below is vacuous
+  o.padRingPulses = o.padHigh > o.padLow * 1.25;
+  // Part-charged: a clockwise sweep inks the right half and leaves the left empty.
+  me.chargeT=M.CHARGE.max*0.35; me.holdT=0.35; M.render();
+  const lh=bright(kx-KR, ky-KR, KR, KR*2), rh=bright(kx, ky-KR, KR, KR*2);
+  o.padHalves=[lh,rh];
+  o.padRingIsFullCircle = Math.max(lh,rh) > 0 && Math.abs(lh-rh) < Math.max(lh,rh)*0.40;
+  me.kick=false; me.chargeT=0; me.holdT=0;
+  return o;
+});
+Object.assign(r, pad);
+
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the pitch
@@ -175,6 +212,8 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.chargeVisible > 20 &&              // wind-up reads on the disc
            r.ringPulses && r.ringIsFullCircle &&  // it flashes, never sweeps
+           r.layoutIsTouch && r.padDrawsSomething &&        // the pad is on screen at all
+           r.padRingPulses && r.padRingIsFullCircle &&    // ...and it flashes too
            r.trailsClearedOnStart && r.allThemesRead &&
            errors.length===0;
 if(!ok) console.log('checks:', {
