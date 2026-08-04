@@ -27,7 +27,7 @@ const r = await p.evaluate(async ()=>{
     theme:'#themePick .opt', display:'#displayPick .opt', orient:'#orientPick .opt',
     trapOff:'#trapPick .opt', debug:'#debugPick .opt', oneHand:'#oneHandPick .opt',
     settingsPanel:'#panelPick .opt', juice:'#juicePick .opt', autoReplay:'#autoReplayPick .opt',
-    ballSkin:'#ballSkinPick .opt', playerSkin:'#playerSkinPick .opt',
+    ballLook:'#ballLookPick .opt',
     magnet:'#feelSlidersBall input', sens:'#feelSlidersPlayer input', matchSpeed:'#mspeed',
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
     snd:'#sndMaster .opt', feel:'#feelSlidersBall input', names:'#seatNames',

@@ -23,7 +23,7 @@ Each panel is a **card**, named by its heading. A line inside a card is a **row*
 | **Controls** | Handed · Stick sensitivity · Who plays · Colour-blind markers · Controller |
 | **Theme** | Visual style |
 | **Display** | Layout |
-| **Skins** | Ball · Players *(experimental sprite skins)* |
+| **Ball** | Look *(nine drawn patterns; cosmetic only — ball physics is Match → Ball)* |
 | **Sound** | Master · Volume |
 | **Game Feel** | Screen shake & effects · Auto-replay goals · Match speed · Preset |
 | **Online** | Room code *(coming-soon stub)* |
@@ -89,7 +89,7 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
 - **Game modes:** **Cup Run** (Season) · **Gauntlet** · **Drills** · **Tutorial**.
 
 ## Customization & progression
-- **Cosmetics:** Cap · Countryball (flag) · Animal · Eyes · Colour · Skins (sprites).
+- **Cosmetics:** Cap · Countryball (flag) · Animal · Text · Eyes · Colour · Ball look.
 - **Progression:** **RP** (rank points) → **Rank** (Wood → Legend) · **MMR** (hidden Elo) ·
   **Streak** · **Coins** (shop currency) · **Unlocks**.
 
