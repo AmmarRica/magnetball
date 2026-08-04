@@ -611,6 +611,11 @@
     #ovAwards .awrow .alab { font-family: var(--pix); font-size:12px; color:var(--text); }
     #ovAwards .awrow .anote { color: var(--muted); font-size:12px; }
     /* Match stats — the full scoresheet under the awards. */
+    /* The result screen's chooser — only Player 1 drives it, so the selection has to
+       be obvious from across a room. */
+    #overlay button.navsel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+    #ovHint { font-family: var(--pix); font-size:10px; color: var(--muted);
+      letter-spacing:.5px; margin-top:10px; text-align:center; }
     #ovStats { width:100%; max-width:560px; margin:14px auto 0; }
     .statshead { font-family: var(--pix); font-size:12px; color: var(--muted);
       letter-spacing:1px; text-align:left; margin:0 4px 8px; }
@@ -1149,6 +1154,7 @@
     <button class="primary" id="ovResume" style="max-width:260px">Resume</button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
+    <div id="ovHint" style="display:none"></div>
   </div>
 
   <!-- ===================== DAILY REWARD MODAL ===================== -->
@@ -1670,6 +1676,10 @@ const LOBBY = {
   holdMin: 0.6,        // stick magnitude that counts as "held"
   arrowR: 92,          // radius of the drawn calibration arrow
   maxPerSide: 4,       // a side can never field more than a 4v4 worth
+  // How far outside the touchline you may stand. Bigger than the in-play step-out
+  // margin so "step outside to sit this one out" is a real, visible place to be —
+  // but still bounded, so nobody wanders off the screen.
+  outMargin: 74,
 };
 const PITCH = {
   normal: { name:'Grass', emoji:'🟩', accel:0.40, damp:0.905 },
@@ -1717,6 +1727,7 @@ let renderAlpha = 1;
 const TELEPORT = 120;
 function markPrev(w){
   if (!w) return;
+  if (w.bench) for (const p of w.bench){ p._px = p.x; p._py = p.y; }
   if (w.players) for (const p of w.players){ p._px = p.x; p._py = p.y; }
   const bs = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
   for (const b of bs) if (b){ b._px = b.x; b._py = b.y; }
@@ -4623,7 +4634,8 @@ function loop(t){
   if (!lastT) lastT = t;
   let dt = (t - lastT) / 1000; lastT = t;
   if (dt > 0.1) dt = 0.1;               // clamp big gaps
-  if (paused){ render(); return; }
+  // The result screen is a paused state, so its pad chooser has to poll from here.
+  if (paused){ pollOverOptions(); render(); return; }
   if (hitStop > 0){ hitStop--; render(); return; }   // brief freeze-frame for impact
   const slow = (sel.juice && world && world.state==='goal') ? 0.45 : 1;   // dramatic goal slow-mo
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
@@ -4844,6 +4856,7 @@ function step(w){
   if (w.state==='play'){ w.matchT += STEP; updateThreat(w); } else w.threat = null;
   if (w.ball.sqT) w.ball.sqT *= 0.72;
 
+  if (active) stepBench(w);
   if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, true, false); }
   else if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
@@ -4972,7 +4985,9 @@ function integrate(w, ballFrozen, playersFrozen){
     }
     // …but keep them from wandering off: clamp to the pitch + a small step-out margin.
     if (!w.drillMode){
-      const halfW=w.field.W/2, halfL=w.field.L/2, M=20;
+      // 20 is the in-play step-out margin (getting round a wall-hugging ball). In
+      // warm-up it opens up, because stepping outside is how you sit a match out.
+      const halfW=w.field.W/2, halfL=w.field.L/2, M = w.state==='warmup' ? LOBBY.outMargin : 20;
       for (const p of discs){
         if (p.x < -(halfW+M)){ p.x=-(halfW+M); if(p.vx<0)p.vx=0; }
         else if (p.x > halfW+M){ p.x=halfW+M; if(p.vx>0)p.vx=0; }
@@ -5048,6 +5063,15 @@ function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
 function lobbyHost(w){ return lobbyHumans(w)[0] || null; }
 
 function enterWarmup(w){
+  // Anyone who sat the last one out is back in the pool — warm-up is where you
+  // choose, so nobody is stuck on the bench across matches.
+  if (w.bench && w.bench.length){
+    w.bench.forEach(p => { p.sittingOut = false; });
+    w.players = w.players.concat(w.bench);
+    w.bench = [];
+    applySeatRotation(w.players);
+    labelA = w.players.map(()=>1);
+  }
   w.state = 'warmup'; w.stateT = 0;
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
   w.lobby = { ready: new Set(), calib: null, sides: new Map() };
@@ -5063,19 +5087,30 @@ function enterWarmup(w){
 }
 // Waiting bots stand off the pitch, in a line beside the touchline. They keep their
 // team colour so you can see who you'd be playing, but they don't run the AI.
-function benchBots(w){
-  const bots = w.players.filter(p => p.ctrl === 'bot');
+function benchBots(w){ benchLine(w, w.players.filter(p => p.ctrl === 'bot')); }
+// Stand a list of players along the touchlines, split by team so you can see which
+// side you'd be joining.
+function benchLine(w, list){
   const hw = w.field.W/2;
-  bots.forEach((p, i) => {
-    const side = p.team === 0 ? 1 : -1;
+  let n = [0, 0];
+  list.forEach(p => {
+    const t = p.team === 0 ? 0 : 1;
+    const side = t === 0 ? 1 : -1;
     p.x = side * (hw + LOBBY.benchGap);
-    p.y = (Math.floor(i/2) - (bots.length-1)/4) * LOBBY.benchStep;
+    p.y = (n[t]++ - (list.filter(q => (q.team===0?0:1) === t).length - 1)/2) * LOBBY.benchStep;
     p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
   });
 }
-// Which half is this player standing in? Team 0 defends -y and attacks +y… no:
-// team 0 starts on the +y half (see layTeam), so +y is team 0's side.
-function lobbySideOf(p){ return p.y >= 0 ? 0 : 1; }
+// Which half is this player standing in? Team 0 starts on the +y half (see layTeam),
+// so +y is team 0's side. Standing OUTSIDE the touchlines is a third answer: sitting
+// this one out.
+function lobbyOutside(w, p){
+  return Math.abs(p.x) > w.field.W/2 || Math.abs(p.y) > w.field.L/2;
+}
+function lobbySideOf(p, w){
+  if (w && lobbyOutside(w, p)) return -1;
+  return p.y >= 0 ? 0 : 1;
+}
 
 function stepWarmup(w){
   const L = w.lobby;
@@ -5084,18 +5119,25 @@ function stepWarmup(w){
   // Live side preview — the number under each half comes straight from where people
   // are standing, so it can't disagree with what happens when Start is pressed.
   L.sides = new Map();
-  for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p));
+  for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p, w));
   if (L.calib) stepCalibration(w);
 }
 // Resolve the sides people picked, balance them with bots, and kick off.
 function lobbyStart(w){
   const hs = lobbyHumans(w);
-  let a = hs.filter(p => lobbySideOf(p) === 0);
-  let b = hs.filter(p => lobbySideOf(p) === 1);
+  // Standing outside the touchline means sitting this one out. They keep their
+  // controller and can walk about the sideline, but they are not in the match — and
+  // they cannot walk back in once it has started.
+  const out = hs.filter(p => lobbyOutside(w, p));
+  const inn = hs.filter(p => !lobbyOutside(w, p));
+  let a = inn.filter(p => lobbySideOf(p, w) === 0);
+  let b = inn.filter(p => lobbySideOf(p, w) === 1);
   // One player picks nothing — auto-assign, which is the old behaviour.
-  if (hs.length === 1){ a = [hs[0]]; b = []; }
+  if (inn.length === 1){ a = [inn[0]]; b = []; }
+  // Everyone stepped out: somebody has to play, so the host comes back on.
+  if (!inn.length && hs.length){ a = [hs[0]]; b = []; out.splice(out.indexOf(hs[0]), 1); }
   // Everyone on one side: split them down the middle rather than refusing to start.
-  if (hs.length > 1 && (!a.length || !b.length)){
+  if (a.length + b.length > 1 && (!a.length || !b.length)){
     const all = a.length ? a : b;
     a = all.slice(0, Math.ceil(all.length/2));
     b = all.slice(Math.ceil(all.length/2));
@@ -5106,14 +5148,35 @@ function lobbyStart(w){
   // floor, so two people in a 2v2 get a bot team-mate each rather than silently
   // dropping to 1v1 — picking a side chooses your team, not the match size.
   const modePer = (w.mode && w.mode.per) || 1;
-  const per = Math.max(1, Math.min(LOBBY.maxPerSide, Math.max(modePer, a.length, b.length)));
   const bots = w.players.filter(p => p.ctrl === 'bot');
+  // Cap by the bodies that actually exist. Filling 1+1 humans to a 2v2 needs two
+  // spare bots; with only one on the sheet the honest answer is 1v1, not 2v1 —
+  // equal sides matter more than matching the mode exactly.
+  const want = Math.max(modePer, a.length, b.length);
+  const affordable = Math.floor((bots.length + a.length + b.length) / 2);
+  const per = Math.max(1, Math.min(LOBBY.maxPerSide, want, Math.max(affordable, Math.max(a.length, b.length))));
   const need0 = per - a.length, need1 = per - b.length;
   let bi = 0;
   const keep = [];
   for (let i=0;i<need0;i++){ if (bots[bi]){ bots[bi].team = 0; keep.push(bots[bi]); bi++; } }
   for (let i=0;i<need1;i++){ if (bots[bi]){ bots[bi].team = 1; keep.push(bots[bi]); bi++; } }
+  // Last resort: no bot left to even it up, so the surplus human sits out rather
+  // than playing a match a body short.
+  const size = t => (t === 0 ? a.length : b.length) + keep.filter(p => p.team === t).length;
+  while (size(0) !== size(1)){
+    const long = size(0) > size(1) ? a : b;
+    const spare = long.pop(); if (!spare) break;
+    out.push(spare);
+  }
   w.players = a.concat(b, keep);
+  // Bots that weren't needed go to the bench, NOT into the void: dropping them from
+  // the roster meant every restart fielded fewer bodies than the last.
+  const spareBots = bots.filter(p => !keep.includes(p));
+  w.bench = out.concat(spareBots);
+  w.bench.forEach(p => { p.sittingOut = true; p.ms = freshMs(); });
+  // Only the reserve BOTS get lined up. A human who walked out there chose that
+  // spot; teleporting them to a tidy line throws away the one thing they just did.
+  benchLine(w, w.bench.filter(p => p.ctrl === 'bot'));
   // Seat rotation is per-seat-ordinal, so it has to be recomputed after a reshuffle.
   applySeatRotation(w.players);
   w.players.forEach(p => { p.ms = freshMs(); });
@@ -5197,6 +5260,38 @@ function pollLobbyStart(w){
     if (sel.display === 'cocktail' && !p.calibrated){ beginCalibration(w, p); continue; }
     if (p === lobbyHost(w)){ lobbyStart(w); return; }
     if (w.lobby.ready.has(p)) w.lobby.ready.delete(p); else w.lobby.ready.add(p);
+  }
+}
+
+// A benched player still has a controller, so they still move — along the sideline,
+// clamped outside the pitch. They are NOT in `w.players`, so they never touch the
+// ball, never collide with anyone, and cannot walk back on mid-match.
+function stepBench(w){
+  if (!w.bench || !w.bench.length) return;
+  const accel = (w.pAccel || PLAYER.accel), damp = (w.pDamp || PLAYER.damp);
+  const halfW = w.field.W/2, halfL = w.field.L/2, M = LOBBY.outMargin;
+  for (const p of w.bench){
+    if (p.ctrl === 'bot'){ p.inX = 0; p.inY = 0; p.kick = false; continue; }   // reserves just wait
+    const ox = p.x, oy = p.y;                         // last position outside the pitch
+    applyHumanInput(p, padFor(p));
+    p.kick = false;                                   // nothing to kick out here
+    p.vx += p.inX * accel; p.vy += p.inY * accel;
+    p.vx *= damp; p.vy *= damp;
+    p.x += p.vx; p.y += p.vy;
+    // Held in the ring between the touchline and the outer margin: they can walk
+    // right round the pitch, but never onto it and never off the screen.
+    const insideX = Math.abs(p.x) < halfW + p.r, insideY = Math.abs(p.y) < halfL + p.r;
+    if (insideX && insideY){
+      // Pushed back out the side they CAME FROM, not the side they happen to be on:
+      // resolving by the current sign let someone walking left from +x pop out at
+      // -x the moment they crossed the centre — straight through the pitch.
+      const dx = (halfW + p.r) - Math.abs(p.x), dy = (halfL + p.r) - Math.abs(p.y);
+      const sx = Math.sign(ox) || Math.sign(p.x) || 1, sy = Math.sign(oy) || Math.sign(p.y) || 1;
+      if (Math.abs(ox) >= halfW + p.r - 0.5 || dx < dy){ p.x = sx * (halfW + p.r); p.vx = 0; }
+      else { p.y = sy * (halfL + p.r); p.vy = 0; }
+    }
+    p.x = clamp(p.x, -(halfW+M), halfW+M);
+    p.y = clamp(p.y, -(halfL+M), halfL+M);
   }
 }
 
@@ -5611,6 +5706,54 @@ function kqGoal(w, ball, team){
   ball._goalCd = 0.6;
 }
 
+// Same teams, fresh scoreline. Deliberately NOT startMatch(): that re-runs seat
+// assignment and would undo whoever picked which side in the lobby.
+function restartMatch(w){
+  w.score = [0,0]; w.overtime = false; w.forceWin = null;
+  w.timeLeft = w.mode.train ? 0 : (w.len.secs || 0);
+  w.matchT = 0; w.maxDeficit = [0,0]; w.practiceGoals = 0;
+  w.lastScorer = -1; w.kickTeam = 1; w.threat = null;
+  w.players.forEach(p => { p.ms = freshMs(); });
+  if (w.bench) w.bench.forEach(p => { p.ms = freshMs(); });
+  w.seed = nextMatchSeed(); botInit(w);
+  repReset(); resetTrails(); resetWear();
+  hideOverlay(); paused = false;
+  resetKickoff(w, true);
+  updateScoreUI(); updateClock(w);
+  if (!running){ running = true; lastT = 0; acc = 0; cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }
+}
+function restartToWarmup(w){ restartMatch(w); enterWarmup(w); }
+
+// The result screen's two choices, driven by PLAYER 1 only — with four people round
+// a table you don't want whoever mashes first deciding what happens next.
+let overNav = 0;
+function overButtons(){
+  return ['ovResume','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
+}
+function syncOverNav(){
+  const bs = overButtons();
+  if (!bs.length) return;
+  overNav = ((overNav % bs.length) + bs.length) % bs.length;
+  bs.forEach((b, i) => b.classList.toggle('navsel', i === overNav));
+}
+let _overPrev = {};
+function pollOverOptions(){
+  const ov = $('overlay');
+  if (!ov || !ov.classList.contains('show') || !world || world.state !== 'over'){ _overPrev = {}; return; }
+  const host = world.players.find(p => p.ctrl !== 'bot') ||
+               (world.bench || []).find(p => p.ctrl !== 'bot');
+  if (!host) return;
+  const pad = padFor(host); if (!pad) return;
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  const g = host.ctrl === 'gamepad' ? gps[host.padIndex] : null;
+  const left  = pad.dx < -0.55, right = pad.dx > 0.55;
+  const go    = pad.kick || (g && (btn(g, START_BTN) || btn(g, 0)));
+  const step = (k, v, fn) => { if (v && !_overPrev[k]) fn(); _overPrev[k] = v; };
+  step('l', left,  () => { overNav--; syncOverNav(); playSfx('kick'); });
+  step('r', right, () => { overNav++; syncOverNav(); playSfx('kick'); });
+  step('a', !!go,  () => { const b = overButtons()[overNav]; if (b) b.click(); });
+}
+
 function endMatch(w){
   if (w.state==='over') return;
   w.state='over';
@@ -5641,6 +5784,24 @@ function endMatch(w){
   $('ovTitle').classList.remove('slam'); void $('ovTitle').offsetWidth; $('ovTitle').classList.add('slam');
   renderAwards(w);
   renderMatchStats(w);
+  // Restart is the default — the common case is "again, same teams". Warm-up is
+  // there for when somebody wants to swap sides or sit one out.
+  $('ovResume').textContent = '↻ Restart';
+  $('ovResume').style.display = '';
+  $('ovResume').onclick = () => restartMatch(w);
+  $('ovRematch').textContent = '🧍 Warm-up';
+  $('ovRematch').style.display = '';
+  $('ovRematch').onclick = () => restartToWarmup(w);
+  $('ovMenu').textContent = 'Main Menu'; $('ovMenu').onclick = toMenu;
+  overNav = 0; syncOverNav();
+  const p1 = w.players.find(p => p.ctrl !== 'bot') || (w.bench||[]).find(p => p.ctrl !== 'bot');
+  const hint = $('ovHint');
+  if (hint){
+    hint.textContent = p1 && p1.ctrl === 'gamepad'
+      ? 'PLAYER 1 CHOOSES — STICK TO MOVE, A OR START TO PICK'
+      : 'PLAYER 1 CHOOSES';
+    hint.style.display = '';
+  }
 }
 
 // ---------- End-of-match awards (Towerfall/CoD style): everyone gets something.
@@ -7610,6 +7771,22 @@ let labelA = [];
 function drawDiscs(w){
   const s = cam.s;
   if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
+  // Sitting this one out: drawn faded, on the sideline, so it reads as "waiting"
+  // rather than "missing".
+  if (w.bench && w.bench.length){
+    ctx.globalAlpha = 0.45;
+    for (const p of w.bench){
+      const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s;
+      uprightAt(x, y, (px, py) => {
+        ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
+        ctx.fillStyle = TH.discRim; ctx.fill();
+        ctx.beginPath(); ctx.arc(px, py, r, 0, 2*Math.PI);
+        ctx.fillStyle = TH.dim || '#4a6076'; ctx.fill();
+        paintFace(ctx, px, py, r, p);
+      });
+    }
+    ctx.globalAlpha = 1;
+  }
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
@@ -8229,6 +8406,8 @@ function showOverlay(title, sub, resumable){
   $('ovResume').textContent = 'Resume'; $('ovResume').onclick = () => togglePause(false);
   $('ovRematch').textContent = 'Rematch'; $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
   $('ovMenu').textContent = 'Main Menu';
+  { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
+  ['ovResume','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
   $('ovResume').style.display = resumable ? '' : 'none';
   $('ovRematch').style.display = resumable ? 'none' : '';
   $('overlay').classList.add('show');
@@ -8332,7 +8511,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0110AM';
+const VERSION = '20260805.0245AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -8363,7 +8542,9 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyStart, enterWarmup,
+    LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart,
+    enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
+    get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,

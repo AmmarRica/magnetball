@@ -176,6 +176,103 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
   allErrs.push(...errs); await p.close();
 }
 
+// ---------- Stepping outside = sitting this one out ----------
+{
+  const { p, errs } = await page(3);
+  Object.assign(o, await p.evaluate(()=>{
+    const M=window.__magnet; const r={};
+    const d=document.getElementById('dmCollect'); if(d) d.click();
+    M.sel.controllers='on'; M.sel.mode='2v2'; M.applyDisplayMode();
+    M.setMatchSeed(3); M.startMatch();
+    const w=M.world; const hs=M.lobbyHumans(w);
+    hs[0].x=0; hs[0].y=120; hs[1].x=0; hs[1].y=-120;
+    hs[2].x=w.field.W/2+40; hs[2].y=0;              // P3 steps off the pitch
+    for(let i=0;i<5;i++) M.step(w);
+    r.outsideIsAThirdAnswer = M.lobbySideOf(hs[2], w) === -1 && M.lobbyOutside(w, hs[2]);
+    r.previewShowsOut = [...w.lobby.sides.values()].includes(-1);
+    // In warm-up you can walk out there in the first place — the in-play step-out
+    // margin of 20 would have pinned you to the touchline.
+    r.warmupLetsYouOut = Math.abs(hs[2].x) > w.field.W/2 + 20;
+    window.__pads[0].buttons[9]=true; M.step(w); window.__pads[0].buttons[9]=false;
+    r.benchedOnStart = w.bench.includes(hs[2]) && !w.players.includes(hs[2]);
+    r.sidesStillEqual = w.players.filter(q=>q.team===0).length === w.players.filter(q=>q.team===1).length;
+    // Spare bots go to the bench too — dropping them shrank the roster every restart.
+    r.spareBotsKept = w.bench.some(q=>q.ctrl==='bot') || w.bench.length === 1;
+    r.rosterIntact = w.players.length + w.bench.length === 4;
+    // A benched player CANNOT walk back on mid-match, however hard they push.
+    const bn = w.bench.find(q=>q.ctrl!=='bot');
+    // Seat order is NOT pad order — a 2v2 interleaves the teams when handing out
+    // pads, so `hs[2]` is not necessarily pad 2. Drive the pad they actually hold.
+    const bpad = window.__pads[bn.padIndex];
+    r.benchHasAPad = !!bpad;
+    bpad.axes[0] = -1;
+    let everOn = false;
+    for(let i=0;i<300;i++){ M.step(w);
+      if (Math.abs(bn.x) < w.field.W/2) everOn = true; }
+    bpad.axes[0] = 0;
+    r.cannotEnterMidMatch = !everOn;
+    r.benchNeverTouchesTheBall = !w.players.includes(bn);
+    // ...but they DO move, and they can't wander off the screen either.
+    const y0 = bn.y;
+    bpad.axes[1] = 1;
+    for(let i=0;i<120;i++) M.step(w);
+    r.benchStillMoves = Math.abs(bn.y - y0) > 10;
+    bpad.axes[0]=1; bpad.axes[1]=1;
+    for(let i=0;i<600;i++) M.step(w);
+    bpad.axes[0]=0; bpad.axes[1]=0;
+    r.benchStaysOnScreen = Math.abs(bn.x) <= w.field.W/2 + M.LOBBY.outMargin + 1 &&
+                           Math.abs(bn.y) <= w.field.L/2 + M.LOBBY.outMargin + 1;
+    return r;
+  }));
+  allErrs.push(...errs); await p.close();
+}
+
+// ---------- Game over: Restart (default) and Warm-up, Player 1 only ----------
+{
+  const { p, errs } = await page(3);
+  Object.assign(o, await p.evaluate(()=>{
+    const M=window.__magnet; const r={};
+    const d=document.getElementById('dmCollect'); if(d) d.click();
+    M.sel.controllers='on'; M.sel.mode='2v2'; M.applyDisplayMode();
+    M.setMatchSeed(3); M.startMatch();
+    const w=M.world; const hs=M.lobbyHumans(w);
+    hs[0].x=0; hs[0].y=120; hs[1].x=0; hs[1].y=-120; hs[2].x=w.field.W/2+40; hs[2].y=0;
+    for(let i=0;i<5;i++) M.step(w);
+    window.__pads[0].buttons[9]=true; M.step(w); window.__pads[0].buttons[9]=false;
+    const teams = w.players.map(q=>q.team+':'+q.ctrl).join('|');
+    w.state='play'; w.score=[3,1]; w.players[0].ms.goals=3;
+    M.endMatch(w);
+    const labels = M.overButtons().map(x=>x.textContent);
+    r.showsBothOptions = /restart/i.test(labels[0]) && /warm/i.test(labels[1]);
+    r.restartIsDefault = M.overNav === 0 && M.overButtons()[0].classList.contains('navsel');
+    r.statsShownToo = document.querySelectorAll('#ovStats .statsrow').length > 0;
+    r.saysPlayerOneChooses = /player 1/i.test(document.getElementById('ovHint').textContent);
+    // Player 1's stick moves the selection; NOBODY else's does.
+    window.__pads[1].axes[0]=1; M.pollOverOptions(); window.__pads[1].axes[0]=0;
+    window.__pads[2].axes[0]=1; M.pollOverOptions(); window.__pads[2].axes[0]=0;
+    r.othersCannotPick = M.overNav === 0;
+    window.__pads[0].axes[0]=1; M.pollOverOptions(); window.__pads[0].axes[0]=0; M.pollOverOptions();
+    r.p1MovesSelection = M.overNav === 1;
+    window.__pads[0].axes[0]=-1; M.pollOverOptions(); window.__pads[0].axes[0]=0; M.pollOverOptions();
+    r.selectionGoesBack = M.overNav === 0;
+    // Restart: same teams, fresh scoreline, bench preserved.
+    M.overButtons()[0].click();
+    r.restartKicksOff = M.world.state === 'kickoff';
+    r.restartKeepsTeams = M.world.players.map(q=>q.team+':'+q.ctrl).join('|') === teams;
+    r.restartResetsScore = M.world.score.join('-') === '0-0';
+    r.restartResetsStats = M.world.players.every(q=>q.ms.goals===0);
+    r.restartKeepsBench = M.world.bench.length > 0;
+    r.restartNoOverlay = !document.getElementById('overlay').classList.contains('show');
+    // Warm-up: back to the lobby with everyone available again.
+    M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world);
+    M.overButtons()[1].click();
+    r.warmupOption = M.world.state === 'warmup';
+    r.warmupFreesTheBench = M.world.bench.length === 0 && M.world.players.length === 4;
+    return r;
+  }));
+  allErrs.push(...errs); await p.close();
+}
+
 // ---------- The lobby is drawn, and only in the lobby ----------
 {
   const { p, errs } = await page(2);
@@ -213,7 +310,14 @@ const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsStayPut','b
   'cocktailAlwaysLobbies','startCalibratesFirst','oneArrowAtATime','firstIsUp',
   'shortHoldIgnored','releaseResetsHold','upAccepted','calibrationCompletes','persisted',
   'upIsNowUp','buttonsDoNotCalibrate','dpadCalibrates','calibratedHostStarts',
-  'lobbyPaints','lobbyFrameDiffers','noLobbyAfterKickoff'];
+  'lobbyPaints','lobbyFrameDiffers','noLobbyAfterKickoff',
+  'outsideIsAThirdAnswer','previewShowsOut','warmupLetsYouOut','benchedOnStart',
+  'sidesStillEqual','rosterIntact','cannotEnterMidMatch','benchNeverTouchesTheBall',
+  'benchStillMoves','benchStaysOnScreen','benchHasAPad',
+  'showsBothOptions','restartIsDefault','statsShownToo','saysPlayerOneChooses',
+  'othersCannotPick','p1MovesSelection','selectionGoesBack','restartKicksOff',
+  'restartKeepsTeams','restartResetsScore','restartResetsStats','restartKeepsBench',
+  'restartNoOverlay','warmupOption','warmupFreesTheBench'];
 const bad = must.filter(k => o[k] !== true);
 const ok = bad.length === 0 && allErrs.length === 0;
 if (bad.length) console.log('FAILED:', bad);
