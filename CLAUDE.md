@@ -77,6 +77,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   are pushed in for real.
 - **Replays:** rolling `repBuf`; `repOnGoal` freezes it; `playReplay` re-renders (skippable);
   `saveClip` records via `MediaRecorder`.
+- **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
+  side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
+  so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
+  team *including when everyone picks the same one* (six pads on one half = 6v6 vs bots);
+  `spawnLobbyBot` builds bots to order when the mode's roster runs short. The mode's seat
+  count (`per*2`) is what actually caps controllers, not `LOBBY.maxPerSide`.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header

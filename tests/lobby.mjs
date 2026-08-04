@@ -97,6 +97,20 @@ const sides = async (nPads, mode, place) => {
       .every(q => (q.team===0) === (place[M.lobbyHumans(w).indexOf(q)] === 0) || place.every(x=>x===place[0]));
     out.lobbyCleared = !w.lobby;
     out.statsFresh = w.players.every(q => q.ms.goals===0 && q.ms.touches===0);
+    out.benchedHumans = w.bench.filter(q=>q.ctrl!=='bot').length;
+    out.maxPerSide = M.LOBBY.maxPerSide;   // read, not hardcoded, so the cap can move
+    out.total = w.players.length + w.bench.length;
+    // Bots are built to order when the roster runs short, so prove that settles
+    // instead of growing a body every time you go back to the lobby.
+    const totals=[out.total];
+    for (let round=0; round<3; round++){
+      M.enterWarmup(w);
+      M.lobbyHumans(w).forEach(q=>{ q.x=0; q.y = place[M.lobbyHumans(w).indexOf(q)]===0 ? 120 : -120; q.vx=0; q.vy=0; });
+      for(let i=0;i<5;i++) M.step(w);
+      M.lobbyStart(w);
+      totals.push(w.players.length + w.bench.length);
+    }
+    out.rosterSettles = new Set(totals).size === 1;
     return out;
   }, {mode, place});
   allErrs.push(...errs); await p.close();
@@ -105,6 +119,8 @@ const sides = async (nPads, mode, place) => {
 o.oneEachSide  = await sides(2,'2v2',[0,1]);
 o.twoVsOne     = await sides(3,'4v4',[0,0,1]);
 o.allOneSide   = await sides(3,'4v4',[0,0,0]);
+o.sixOneSide   = await sides(6,'4v4',[0,0,0,0,0,0]);
+o.nineOneSide  = await sides(9,'4v4',[0,0,0,0,0,0,0,0,0]);
 o.soloAuto     = await sides(1,'2v2',[1]);
 o.hostStarts        = o.oneEachSide.state==='kickoff' && o.twoVsOne.state==='kickoff';
 o.guestCannotStart  = [o.oneEachSide,o.twoVsOne,o.allOneSide].every(x=>x.guestStartDoesNotBegin);
@@ -115,8 +131,25 @@ o.modeSetsTheFloor  = o.oneEachSide.t0==='Pb' && o.oneEachSide.t1==='Pb';
 // 2v1 becomes 2v2 by giving the short side a bot (the "5v4 → add one" rule).
 o.unevenGetsABot    = o.twoVsOne.t0.startsWith('PP') && o.twoVsOne.t1.startsWith('P') &&
                       o.twoVsOne.t1.includes('b');
-// Everyone crowding one side is split rather than refused.
-o.allOneSideSplits  = o.allOneSide.t0.includes('P') && o.allOneSide.t1.includes('P');
+// Everyone crowding one side is honoured, not split: standing together means
+// playing together, against a side of bots. Splitting them overrode a choice they
+// had just made with their feet (and, in co-op, one they made in the menu).
+// 3 humans in a 4v4: the mode floor still applies, so it's 4-a-side with all
+// three of them together and a bot alongside, not 2v2 against each other.
+o.allOneSideStaysTogether = o.allOneSide.t0 === 'PPPb' && o.allOneSide.t1 === 'bbbb';
+// Six controllers, all one team. The old cap was a 4v4's worth per side and the
+// roster only held 8 bodies, so this could not be expressed at all.
+o.sixAllOnOneTeam   = o.sixOneSide.t0 === 'PPPPPP' && o.sixOneSide.t1 === 'bbbbbb'
+                      && o.sixOneSide.balanced;
+// The binding limit is the MODE's seat count, not the lobby: a 4v4 has 8 bodies,
+// so a 9th controller is never seated in the first place and the per-side cap
+// (8) can't bind. 8 people all on one team is therefore the real ceiling today.
+o.eightIsTheCeiling = o.nineOneSide.t0 === 'PPPPPPPP' && o.nineOneSide.t1 === 'bbbbbbbb'
+                      && o.nineOneSide.balanced
+                      && o.nineOneSide.preview.length === 8
+                      && o.nineOneSide.maxPerSide >= 8;
+// Building bots to order must converge, not add a body per trip to the lobby.
+o.rosterSettles     = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.sixOneSide].every(x=>x.rosterSettles);
 o.soloIsAutoAssigned= o.soloAuto.t0.startsWith('P') && !o.soloAuto.t1.includes('P');
 o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.statsFresh);
 
@@ -198,7 +231,11 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     r.sidesStillEqual = w.players.filter(q=>q.team===0).length === w.players.filter(q=>q.team===1).length;
     // Spare bots go to the bench too — dropping them shrank the roster every restart.
     r.spareBotsKept = w.bench.some(q=>q.ctrl==='bot') || w.bench.length === 1;
-    r.rosterIntact = w.players.length + w.bench.length === 4;
+    // Bodies are never LOST (the bug this guards: spare bots dropped from the
+    // roster, so every restart fielded fewer). The count may GROW to honour the
+    // mode — a 2v2 with only one spare bot is a 2v2 with a bot built to order,
+    // not a silent downgrade to 1v1.
+    r.rosterIntact = w.players.length + w.bench.length >= 4 && w.players.length === 4;
     // A benched player CANNOT walk back on mid-match, however hard they push.
     const bn = w.bench.find(q=>q.ctrl!=='bot');
     // Seat order is NOT pad order — a 2v2 interleaves the teams when handing out
@@ -267,7 +304,7 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world);
     M.overButtons()[1].click();
     r.warmupOption = M.world.state === 'warmup';
-    r.warmupFreesTheBench = M.world.bench.length === 0 && M.world.players.length === 4;
+    r.warmupFreesTheBench = M.world.bench.length === 0 && M.world.players.length >= 4;
     return r;
   }));
   allErrs.push(...errs); await p.close();
@@ -306,7 +343,8 @@ console.log('ERRORS:', allErrs.length?allErrs.slice(0,5):'none');
 const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsStayPut','botsIdle',
   'ballParked','stickMovesYou','kickCannotMoveBall','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',
-  'unevenGetsABot','allOneSideSplits','soloIsAutoAssigned','lobbyCleared',
+  'unevenGetsABot','allOneSideStaysTogether','sixAllOnOneTeam','eightIsTheCeiling',
+  'rosterSettles','soloIsAutoAssigned','lobbyCleared',
   'cocktailAlwaysLobbies','startCalibratesFirst','oneArrowAtATime','firstIsUp',
   'shortHoldIgnored','releaseResetsHold','upAccepted','calibrationCompletes','persisted',
   'upIsNowUp','buttonsDoNotCalibrate','dpadCalibrates','calibratedHostStarts',

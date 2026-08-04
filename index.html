@@ -1684,7 +1684,11 @@ const LOBBY = {
   holdTicks: 60,       // 1s of holding a direction to register it in calibration
   holdMin: 0.6,        // stick magnitude that counts as "held"
   arrowR: 92,          // radius of the drawn calibration arrow
-  maxPerSide: 4,       // a side can never field more than a 4v4 worth
+  // Six people who all want to be on the same team should get to be. This used to
+  // be 4 (a 4v4's worth) which, combined with splitting a one-sided lineup down the
+  // middle, made that impossible. 8 costs ~2ms a frame at 8v8 — a measured eighth
+  // of the budget — so the cap is about what fits on the pitch, not what fits in it.
+  maxPerSide: 8,
   // How far outside the touchline you may stand. Bigger than the in-play step-out
   // margin so "step outside to sit this one out" is a real, visible place to be —
   // but still bounded, so nobody wanders off the screen.
@@ -5165,52 +5169,60 @@ function stepWarmup(w){
   for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p, w));
   if (L.calib) stepCalibration(w);
 }
-// Resolve the sides people picked, balance them with bots, and kick off.
-function lobbyStart(w){
+// Who plays, on which side, and how many bots fill the gaps. The SINGLE source of
+// truth: drawLobby renders this and lobbyStart executes it, so the preview under
+// each half can't disagree with what pressing Start actually does.
+//
+// Standing on a half picks that team — including when everyone picks the SAME one.
+// Six people who all walked to the left half want a 6-a-side against the computer,
+// not to be split into 3v3 against each other, and co-op routing puts every pad on
+// team 0 to begin with, so splitting was overriding a choice the player had already
+// made in the menu. The short side is filled with bots, spawning new ones if the
+// mode's roster runs out.
+function lobbyPlan(w){
   const hs = lobbyHumans(w);
   // Standing outside the touchline means sitting this one out. They keep their
   // controller and can walk about the sideline, but they are not in the match — and
   // they cannot walk back in once it has started.
-  const out = hs.filter(p => lobbyOutside(w, p));
+  let out = hs.filter(p => lobbyOutside(w, p));
   const inn = hs.filter(p => !lobbyOutside(w, p));
   let a = inn.filter(p => lobbySideOf(p, w) === 0);
   let b = inn.filter(p => lobbySideOf(p, w) === 1);
   // One player picks nothing — auto-assign, which is the old behaviour.
   if (inn.length === 1){ a = [inn[0]]; b = []; }
   // Everyone stepped out: somebody has to play, so the host comes back on.
-  if (!inn.length && hs.length){ a = [hs[0]]; b = []; out.splice(out.indexOf(hs[0]), 1); }
-  // Everyone on one side: split them down the middle rather than refusing to start.
-  if (a.length + b.length > 1 && (!a.length || !b.length)){
-    const all = a.length ? a : b;
-    a = all.slice(0, Math.ceil(all.length/2));
-    b = all.slice(Math.ceil(all.length/2));
-  }
+  if (!inn.length && hs.length){ a = [hs[0]]; b = []; out = out.filter(p => p !== hs[0]); }
+  // More on one side than the pitch will take — the surplus sits out.
+  out = out.concat(a.slice(LOBBY.maxPerSide), b.slice(LOBBY.maxPerSide));
   a = a.slice(0, LOBBY.maxPerSide); b = b.slice(0, LOBBY.maxPerSide);
-  a.forEach(p => p.team = 0); b.forEach(p => p.team = 1);
-  // Balance: 5v4 becomes 5v5 by giving the short side a bot. The MODE still sets the
-  // floor, so two people in a 2v2 get a bot team-mate each rather than silently
-  // dropping to 1v1 — picking a side chooses your team, not the match size.
+  // The MODE sets the floor, so two people in a 4v4 still get a 4v4 rather than
+  // silently dropping to 1v1 — picking a side chooses your team, not the match size.
   const modePer = (w.mode && w.mode.per) || 1;
+  const per = Math.max(1, Math.min(LOBBY.maxPerSide, Math.max(modePer, a.length, b.length)));
+  return { a, b, out, per, need0: per - a.length, need1: per - b.length };
+}
+// A bot built to order when the mode's roster can't cover the side people chose.
+function spawnLobbyBot(w, team, seat, used){
+  const nm = pickNames(1, used)[0] || ('Bot' + (seat+1));
+  return mkPlayer(team, nm, teamTint(team, seat), randCap(seat), 'bot', shirtNo(seat+1), randEyes(seat));
+}
+// Resolve the sides people picked, balance them with bots, and kick off.
+function lobbyStart(w){
+  const { a, b, out, need0, need1 } = lobbyPlan(w);
+  a.forEach(p => p.team = 0); b.forEach(p => p.team = 1);
   const bots = w.players.filter(p => p.ctrl === 'bot');
-  // Cap by the bodies that actually exist. Filling 1+1 humans to a 2v2 needs two
-  // spare bots; with only one on the sheet the honest answer is 1v1, not 2v1 —
-  // equal sides matter more than matching the mode exactly.
-  const want = Math.max(modePer, a.length, b.length);
-  const affordable = Math.floor((bots.length + a.length + b.length) / 2);
-  const per = Math.max(1, Math.min(LOBBY.maxPerSide, want, Math.max(affordable, Math.max(a.length, b.length))));
-  const need0 = per - a.length, need1 = per - b.length;
-  let bi = 0;
+  const used = new Set(w.players.map(p => p.name));
   const keep = [];
-  for (let i=0;i<need0;i++){ if (bots[bi]){ bots[bi].team = 0; keep.push(bots[bi]); bi++; } }
-  for (let i=0;i<need1;i++){ if (bots[bi]){ bots[bi].team = 1; keep.push(bots[bi]); bi++; } }
-  // Last resort: no bot left to even it up, so the surplus human sits out rather
-  // than playing a match a body short.
-  const size = t => (t === 0 ? a.length : b.length) + keep.filter(p => p.team === t).length;
-  while (size(0) !== size(1)){
-    const long = size(0) > size(1) ? a : b;
-    const spare = long.pop(); if (!spare) break;
-    out.push(spare);
-  }
+  let bi = 0;
+  const fill = (team, n, taken) => {
+    for (let i=0;i<n;i++){
+      // Reuse a bot off the sheet first — it keeps its look across restarts.
+      const bot = bots[bi] ? (bi++, bots[bi-1]) : spawnLobbyBot(w, team, taken + i, used);
+      bot.team = team; keep.push(bot);
+    }
+  };
+  fill(0, need0, a.length);
+  fill(1, need1, b.length);
   w.players = a.concat(b, keep);
   // Bots that weren't needed go to the bench, NOT into the void: dropping them from
   // the roster meant every restart fielded fewer bodies than the last.
@@ -7312,10 +7324,15 @@ function drawLobby(w){
   // --- Team sides. Only worth showing when there's actually a choice to make.
   if (hs.length > 1 && !L.calib){
     const halfL = w.field.L/2, halfW = w.field.W/2;
+    // Straight from the plan Start will run — including the bots that will fill the
+    // side nobody chose. Counting bodies by hand here once let the preview show a
+    // player who was standing outside as though they were playing.
+    const plan = lobbyPlan(w);
     [0, 1].forEach(team => {
       const sign = team === 0 ? 1 : -1;
       const col = team === 0 ? T.teamRed : T.teamBlue;
-      const n = hs.filter(p => lobbySideOf(p) === team).length;
+      const n = (team === 0 ? plan.a : plan.b).length;
+      const fillN = team === 0 ? plan.need0 : plan.need1;
       const pts = [[-halfW, 0], [halfW, 0], [halfW, sign*halfL], [-halfW, sign*halfL]]
         .map(([x, y]) => screenPt(wx(x), wy(y)));
       ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
@@ -7330,7 +7347,7 @@ function drawLobby(w){
         ctx.fillText(String(n), x, y - 12);
         ctx.font = `10px ${LOBBY_FONT}`;
         ctx.fillStyle = T.hudSub || T.hudText;
-        ctx.fillText(n === 1 ? 'PLAYER' : 'PLAYERS', x, y + 12);
+        ctx.fillText((n === 1 ? 'PLAYER' : 'PLAYERS') + (fillN > 0 ? ` +${fillN} BOT${fillN===1?'':'S'}` : ''), x, y + 12);
       });
     });
   }
@@ -8762,7 +8779,7 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart,
+    KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
