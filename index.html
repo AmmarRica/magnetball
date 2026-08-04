@@ -769,7 +769,7 @@
       <div style="height:14px"></div>
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played. After that it's a free-for-all.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
       <div style="height:14px"></div>
       <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
       <textarea id="seatNames" rows="4" spellcheck="false" autocomplete="off"
@@ -1046,12 +1046,16 @@
     <div class="card" style="line-height:1.6; font-size:15px; color:var(--text)">
       <p><b>🎯 Goal.</b> Push the ball into the opponent's net. Most goals before the clock runs out wins.</p>
       <p style="margin-top:12px"><b>🕹️ Move.</b> Touch and drag anywhere on the <b>right</b> half — a joystick appears under your thumb. Drag to steer; further = faster.</p>
-      <p style="margin-top:12px"><b>👟 Trap &amp; shoot.</b> Hold the <b>KICK</b> pad and run into the ball — it sticks to your feet for up to half a second so you can line up. <b>Let go to kick or pass</b> in the way you're facing. The longer you hold, the harder the shot (the yellow ring shows the charge).</p>
-      <p style="margin-top:12px"><b>🧲 Magnet.</b> By default the ball is free once you release. Turn up <b>Ball Magnet</b> in setup for a passive stick that keeps the ball at your feet even without holding KICK.</p>
-      <p style="margin-top:12px"><b>🏆 Ranked.</b> Single-player matches vs bots earn <b>RP</b> and climb the rank ladder (Wood → Legend); beating harder bots is worth more. <b>Training</b> mode is free practice with no clock. Tied timed games go to <b>sudden-death overtime</b>.</p>
-      <p style="margin-top:12px"><b>⚡ Dribble.</b> Nudge the ball along with your body as you run, then tap KICK to fire it. Turn up the <b>Ball Magnet</b> in setup (0–100) to make the ball stick to your feet for easier carrying; 0 plays like a free puck.</p>
-      <p style="margin-top:12px"><b>👥 2-Player.</b> Lay the phone flat between you. Player 1 uses the bottom controls, Player 2 the top (rotated) controls.</p>
-      <p style="margin-top:12px"><b>🎮 Controllers.</b> Set <b>Input</b> to Controllers and connect gamepads (press a button to wake them). Each pad takes a seat — you first, then an opponent, then a teammate — so 2 pads is 1v1, 8 pads is a full 4v4. Left stick moves, <b>A / RT</b> kicks. Empty seats stay bots.</p>
+      <p style="margin-top:12px"><b>👟 Trap &amp; shoot.</b> Hold <b>KICK</b> and run into the ball. It sticks to your feet while you line up, then <b>let go to shoot</b> the way you're facing — hold longer for a harder strike (the ring round your disc fills as it charges). A quick tap instead of a hold is an instant pass. How long you can carry is the <b>Trap window</b> slider in Game Feel; set <b>Ball control</b> to One-touch there and the ball fires the moment you touch it, which is faster and far less forgiving.</p>
+      <p style="margin-top:12px"><b>🧲 Magnet.</b> Off by default — the ball is a free puck. <b>Ball magnet</b> (Game Feel, 0–100) adds a passive stick that carries the ball at your feet without holding KICK. Most people leave it at 0.</p>
+      <p style="margin-top:12px"><b>⏱ Kickoff.</b> Both teams hold their own half until the ball is played. The <b>centre circle is a gate</b>: stand in it and you may cross the line early, so you can turn and pass backwards instead of only forwards. Stray over the line anywhere else and you're pushed back. Turn the whole rule off in the Match card.</p>
+      <p style="margin-top:12px"><b>🏆 Ranked.</b> Matches against bots earn <b>RP</b> and climb the ladder (Wood → Legend); harder bots are worth more. <b>Training</b> is free practice with no clock. A timed game that's level at the whistle goes to <b>sudden-death overtime</b> — first goal wins.</p>
+      <p style="margin-top:12px"><b>🐌 Killer Queen.</b> Two balls at once. The normal one scores as usual and re-serves from the centre, but nothing else resets — no kickoff, players hold position. The second is the <b>snail</b>: huge, heavy, and it can only be shoved, never kicked. Push it into their goal and the match ends there and then, whatever the score.</p>
+      <p style="margin-top:12px"><b>🧊 Surfaces.</b> Grass grips. <b>Ice</b> slides and takes an age to stop. <b>Mud</b> grabs and kills the roll. Both wear in as you play — mud churns and ice picks up skate cuts where the traffic is.</p>
+      <p style="margin-top:12px"><b>👥 2-Player.</b> Lay the phone flat between you. Player 1 uses the bottom controls, Player 2 the top (rotated) ones.</p>
+      <p style="margin-top:12px"><b>🎮 Controllers.</b> Set <b>Input</b> to Controllers and connect gamepads (press a button to wake them). Each pad takes a seat — you first, then an opponent, then a teammate — so 2 pads is 1v1, 8 pads a full 4v4. Left stick moves, <b>A / RT</b> kicks. Empty seats stay bots. <b>Extra controllers → Co-op</b> fills your side first instead.</p>
+      <p style="margin-top:12px"><b>🤚 One hand.</b> Game Feel → <b>One-handed</b>. Letting go of the movement stick shoots where you were heading, so you can play with one thumb. The KICK button still works.</p>
+      <p style="margin-top:12px"><b>⚙ Settings elsewhere.</b> Display → <b>Settings location</b> → Separate tab moves every setting to <code>/settings</code> and leaves this page all game. Both stay in sync live, and that tab shows a running readout of ball and player speed.</p>
     </div>
     <button class="ghost" id="howBack">← Back</button>
   </div>
@@ -1511,7 +1515,7 @@ const MODES = {
 
 // Only integrate()'s primary ball gets handleBallControl, so the snail can't be
 // kicked — only shoved. That's the whole mode.
-const SNAIL = { rMul:1.5, invMass:0.11, bCoef:0.25, damp:0.90 };
+const SNAIL = { rMul:1.5, invMass:0.16, bCoef:0.25, damp:0.915 };
 
 // Ball presets — objective physics changes (radius / mass via invMass / bounce / damping).
 const BALLS = {
@@ -1558,6 +1562,31 @@ const LENGTHS = {
 
 // ---------- Physics constants (per fixed 1/60s step)
 const STEP = 1/60;
+// How far between the last two sim states the renderer should draw. The sim runs
+// in fixed 1/60 chunks; without this the renderer just shows the newest state, so
+// at 0.5× match speed the world only advances on every OTHER rendered frame and
+// the picture visibly stutters (measured: 35 of 69 frames completely frozen).
+// 1 = draw the current state exactly, which is what every non-loop caller wants.
+let renderAlpha = 1;
+// Beyond any legal one-step motion (fastest measured ball is ~61/step), so this
+// only ever catches teleports: kickoff resets, goal re-serves, the snail going home.
+const TELEPORT = 120;
+function markPrev(w){
+  if (!w) return;
+  if (w.players) for (const p of w.players){ p._px = p.x; p._py = p.y; }
+  const bs = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
+  for (const b of bs) if (b){ b._px = b.x; b._py = b.y; }
+}
+function ix(e){
+  if (e._px == null || renderAlpha >= 1) return e.x;
+  const d = e.x - e._px;
+  return Math.abs(d) > TELEPORT ? e.x : e._px + d * renderAlpha;
+}
+function iy(e){
+  if (e._py == null || renderAlpha >= 1) return e.y;
+  const d = e.y - e._py;
+  return Math.abs(d) > TELEPORT ? e.y : e._py + d * renderAlpha;
+}
 // Movement feel: snappier than before — reach a (lower) top speed in ~0.4s and
 // stop quickly when you let go (little float), while still carrying some weight.
 // terminal ≈ accel/(1-damp) ≈ 4.2 u/frame; ~0.38s to 90%; glide half-life ~0.12s.
@@ -4291,7 +4320,9 @@ function loop(t){
     step(world);
     acc -= STEP; steps++;
   }
+  renderAlpha = Math.max(0, Math.min(1, acc / STEP));
   render();
+  renderAlpha = 1;                 // anything drawing outside the loop gets the exact state
 }
 
 // ============================================================
@@ -4421,6 +4452,7 @@ async function recordAndShareClip(btn){
 }
 
 function step(w){
+  markPrev(w);                     // renderer interpolates between this and the result
   if (w.drillMode){ stepDrill(w); return; }
   w.stateT += STEP;
 
@@ -5082,11 +5114,21 @@ function kqGoal(w, ball, team){
     setTimeout(()=>endMatch(w), 1200);
     return;
   }
-  // Spit it back into the field of play, moving away from the goal it just entered.
-  const halfL = w.field.L/2, dir = team===0 ? 1 : -1;   // team 0 scored in the top goal
-  ball.y = dir * (halfL - ball.r*1.5);
-  ball.vy = dir * Math.max(3, Math.abs(ball.vy) * 0.5);
-  ball.vx *= 0.5;
+  // Back to the centre spot. Nothing else resets — no kickoff, players hold their
+  // positions — but the ball itself re-serves from the middle like any other mode.
+  ball.x = 0; ball.y = 0; ball.vx = 0; ball.vy = 0; ball.spin = 0;
+  // The snail lives at the centre and never moves on a reset, so nudge clear of it
+  // rather than spawning inside it.
+  const sn = (w.extraBalls||[]).find(b2 => b2.isSnail);
+  if (sn){
+    const dx = ball.x - sn.x, dy = ball.y - sn.y;
+    const d = Math.hypot(dx, dy), min = ball.r + sn.r + 4;
+    if (d < min){
+      const nx = d > 0.001 ? dx/d : 1, ny = d > 0.001 ? dy/d : 0;
+      ball.x = sn.x + nx*min; ball.y = sn.y + ny*min;
+    }
+  }
+  markPrev(w);            // don't interpolate across the re-serve
   ball._goalCd = 0.6;
 }
 
@@ -6262,7 +6304,7 @@ function drawDiscs(w){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
     // plates lie on their side in deck view. Callback x/y are the upright frame.
-    uprightAt(wx(p.x), wy(p.y), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
+    uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
   }
 }
 function drawOneDisc(w, p, x, y, r, s, idx){
@@ -6324,18 +6366,18 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.textAlign='center'; ctx.textBaseline='alphabetic';
       const label = p.name;
       const tw = ctx.measureText(label).width;
-      const [psx, psy] = screenPt(wx(p.x), wy(p.y));
+      const [psx, psy] = screenPt(wx(ix(p)), wy(iy(p)));
       const lx = psx - tw/2 - 5, ly = psy - r - 23, lw = tw + 10, lh = 16;
       let blocked = false;
       for (const q of w.players){
         if (q === p) continue;
-        const [qx, qy] = screenPt(wx(q.x), wy(q.y));
+        const [qx, qy] = screenPt(wx(ix(q)), wy(iy(q)));
         if (circleHitsRect(qx, qy, q.r*s, lx, ly, lw, lh)){ blocked = true; break; }
       }
       if (!blocked && w.ball){
         const balls = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
         for (const bl of balls){
-          const [bx, by] = screenPt(wx(bl.x), wy(bl.y));
+          const [bx, by] = screenPt(wx(ix(bl)), wy(iy(bl)));
           if (circleHitsRect(bx, by, bl.r*s, lx, ly, lw, lh)){ blocked = true; break; }
         }
       }
@@ -6442,7 +6484,7 @@ function drawBall(w){
   const s=cam.s, b=w.ball, r=b.r*s;
   // Upright like the discs, so the drop shadow and 3D highlight keep falling the
   // same way on screen no matter which way the pitch is turned.
-  uprightAt(wx(b.x), wy(b.y), (x, y) => drawOneBall(b, x, y, r, s));
+  uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
 }
 function drawOneBall(b, x, y, r, s){
   ctx.beginPath(); ctx.arc(x, y+r*0.3, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
@@ -6561,13 +6603,13 @@ function drawFx(){
     if (p.ring){
       const rr = (p.r0 + (p.r1-p.r0)*(1-a)) * Math.max(s,0.6);
       ctx.globalAlpha=a*0.9; ctx.strokeStyle=p.c; ctx.lineWidth=Math.max(1.5, 2.4*s);
-      ctx.beginPath(); ctx.arc(wx(p.x), wy(p.y), rr, 0, 2*Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), rr, 0, 2*Math.PI); ctx.stroke();
       ctx.globalAlpha=1; continue;
     }
     p.x+=p.vx; p.y+=p.vy; if(p.grav) p.vy+=p.grav;
     ctx.globalAlpha=a;
     ctx.fillStyle=p.c;
-    ctx.beginPath(); ctx.arc(wx(p.x), wy(p.y), p.r*Math.max(s,0.6)*0.8, 0, 2*Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), p.r*Math.max(s,0.6)*0.8, 0, 2*Math.PI); ctx.fill();
     ctx.globalAlpha=1;
   }
 }
@@ -6914,7 +6956,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0412AM';
+const VERSION = '20260804.0521AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6958,6 +7000,7 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
     readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
+    ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };

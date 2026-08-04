@@ -61,6 +61,27 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🎞 Render interpolation, Killer Queen, docs
+- [x] **Match speed 0.5× was juddering.** The sim runs in fixed 1/60 chunks and the renderer drew
+  the newest state with no interpolation, so at 0.5× the accumulator only crossed the threshold
+  every *other* frame. Measured on painted pixels: **35 of 70 frames completely frozen** at 0.5×
+  (and 8 at 1×). The renderer now draws between the last two sim states using `acc/STEP`
+  (`ix()`/`iy()`, ~7 draw sites). After: **4 frozen frames at 0.5×, 0 at 1×**, and lower step
+  variance. Physics is untouched — this is Phase 1 item 1 of the determinism audit, render-side only.
+  Teleports (kickoff, re-serve, snail home) are excluded by a 120-unit guard, well above the
+  fastest legal one-step motion (~61).
+- [x] **Killer Queen re-serves at the centre spot.** It used to spit the ball back out of the goal
+  mouth it had just entered, so every goal put the ball straight back on a goal line. Nothing else
+  about the mode changed — still no kickoff, players still hold position. The serve nudges clear of
+  the snail rather than spawning inside it.
+- [x] **Snail is a little lighter** — `invMass` 0.11 → 0.16, damp 0.90 → 0.915. Still by far the
+  heaviest thing on the pitch, but it shifts.
+- [x] **How to Play refreshed.** It still described the magnet as living "in setup" (it's in Game
+  Feel), quoted a fixed half-second trap (it's a slider), and said nothing about one-handed mode,
+  the centre-circle kickoff gate, ball control, surfaces, Killer Queen, co-op or `/settings`. Also
+  merged two paragraphs that both explained the magnet. The Kickoff rule hint said "nobody crosses
+  halfway", which stopped being true when the circle became a gate.
+
 ## 🔴 Live look + the phantom OVERTIME
 - [x] **Customising your player now shows up mid-match.** Your look was copied onto the disc at
   kickoff and never read again, so a colour/cap/flag/eyes/name change only landed on the *next*
