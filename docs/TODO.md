@@ -61,6 +61,14 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🎮 Connected-controller flairs
+- [x] **A small pad icon per connected controller, bottom-right** (Kenney `Flairs/Vector/
+  controller_generic.svg`, already in the repo — one of the previously-unreferenced packs). It goes
+  **black** while any button on that pad is held, so you can see which controller a press came from
+  with four people round a table. A black silhouette would vanish on the dark themes, so a press
+  also lights a chip behind it — the icon really is black, the chip is what makes it readable.
+  Sits above the touch-control floor so it never prints over the joystick.
+
 ## ⌨️ Controls + Game Feel layout
 - [x] **The charge ring flashes instead of sweeping.** It filled clockwise like a loading bar,
   which read as progress rather than a player winding up. The whole ring now pulses, faster and
@@ -381,7 +389,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 33 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 34 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,

@@ -5800,7 +5800,62 @@ function render(){
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
+  drawPadFlairs();
   if (sel.debug) drawDebug(world);
+}
+
+// ---------- Connected-controller flairs -------------------------------------
+// One small pad icon per connected controller, bottom-right. It goes black while
+// any button on that pad is held, so a glance tells you which controller a press
+// came from — useful with four people round a table.
+//
+// A black silhouette would simply vanish on the dark themes, so a press also lights
+// a chip behind it. The icon really is black; the chip is what makes that readable.
+const FLAIR_SRC = 'assets/Kenney/kenney_input-prompts_1.5/Flairs/Vector/controller_generic.svg';
+const FLAIR_TINT = {};
+function flairTinted(col){
+  if (FLAIR_TINT[col]) return FLAIR_TINT[col];
+  const im = spriteImg(FLAIR_SRC);
+  if (!im || !im.width) return null;                  // still loading, or missing
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.drawImage(im, 0, 0, 64, 64);
+  x.globalCompositeOperation = 'source-in';           // keep the silhouette, swap the colour
+  x.fillStyle = col; x.fillRect(0, 0, 64, 64);
+  FLAIR_TINT[col] = c;
+  return c;
+}
+function padAnyPressed(index){
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  const g = gps[index];
+  if (!g || !g.buttons) return false;
+  for (const btn of g.buttons) if (btn && (btn.pressed || btn.value > 0.4)) return true;
+  return false;
+}
+function drawPadFlairs(){
+  const pads2 = connectedGamepadIndices();
+  if (!pads2.length) return;
+  const size = 26, gap = 7, pad = 12;
+  // On touch the joystick owns the bottom-right corner, so sit above it rather
+  // than printing over a control (same rule the debug readout follows on the left).
+  const y = ch - debugFloor() - size;
+  let x = cw - pad - size;
+  for (let i = pads2.length - 1; i >= 0; i--){
+    const on = padAnyPressed(pads2[i]);
+    if (on){
+      ctx.fillStyle = TH.hudText || '#ffffff';
+      ctx.globalAlpha = 0.92;
+      ctx.beginPath(); roundRectPath(x-3, y-3, size+6, size+6, 6); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    const art = flairTinted(on ? '#000000' : (TH.hudText || '#ffffff'));
+    if (art){
+      ctx.globalAlpha = on ? 1 : 0.5;
+      ctx.drawImage(art, x, y, size, size);
+      ctx.globalAlpha = 1;
+    }
+    x -= size + gap;
+  }
 }
 
 // The menu's background match is a bot-vs-bot demo, not something you're playing.
@@ -6986,7 +7041,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0621AM';
+const VERSION = '20260804.0655AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7029,6 +7084,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
+    drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
     readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
