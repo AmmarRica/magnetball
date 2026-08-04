@@ -61,6 +61,12 @@ each was shipped at some point and each is a class of mistake worth watching for
   `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
   latter two are the known dead-UI stubs below; nothing else is orphaned.
 
+## 🪗 Settings sections are an accordion
+- [x] **Only one section open at a time.** Opening one closes the rest, clicking the open one
+  closes it, and deep links (the ⚙ tile, `#/settings`, "bring settings inline") go through the same
+  `openSection()` rather than expanding a card behind the scenes. A stored state with several open
+  — which older builds could leave — is repaired to one on load instead of restored as-is.
+
 ## 🎮 Connected-controller flairs
 - [x] **A small pad icon per connected controller, bottom-right** (Kenney `Flairs/Vector/
   controller_generic.svg`, already in the repo — one of the previously-unreferenced packs). It goes
@@ -389,7 +395,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   reported as *unaudited* rather than quietly passing. Currently: 0 unreachable, 0 ineffective,
   0 unaudited, 0 broken nav, all 6 drills and all modes run clean.
 
-- [x] **Committed test suite** — `tests/` holds 34 headless Playwright suites driving the real page
+- [x] **Committed test suite** — `tests/` holds 35 headless Playwright suites driving the real page
   through `window.__magnet`, plus `tests/run.mjs` (`node tests/run.mjs [filter]`) and a README.
   Covers: smoke (dup IDs, every screen/picker/theme/drill/mode/party combo), ball containment across
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
