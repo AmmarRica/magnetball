@@ -54,9 +54,10 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `surfaces` | Ice and mud are visibly distinct and textured (not a flat tint), mud starts green and both **wear in from actual play** (subtle, distance-gated, reset per match), deterministic, cache invalidates, tiles differ, grip unchanged, every field safe |
 | `seatnames` | Player names typed in settings land on seats in order, blanks keep defaults, overflow/long names safe, demo stays generic |
 | `mobilefit` | Phone framing: pitch clears the thumbsticks and leaves no dead slab under the HUD; desktop untouched |
+| `cocktailnopad` | Cocktail with **no** controller connected stays playable — the keyboard falls back rather than leaving nothing driving the player |
 | `panel` | `/settings` route: same cards as inline, no game, snapshot on open, two-way live sync, telemetry, detached/inline, cross-tab match control |
 | `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
-| `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; menu keys and other layouts unaffected |
+| `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; picking it keeps you on the menu able to kick off; pitch direction is locked and says why |
 | `tells` | Motion tells by **canvas pixel sampling**: moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
 
 ## Writing a suite

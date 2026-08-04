@@ -83,6 +83,64 @@ o.escapeStillWorks = await (async ()=>{
   return p.evaluate(()=>!document.getElementById('setup').classList.contains('hidden'));
 })();
 
+// --- Picking Cocktail must leave you on the menu, able to kick off. It used to
+// jump straight to the sides-config screen, which hides #setup and the KICK OFF
+// button with it — and it repeated every time, because leaving without choosing a
+// side left cocktailSides empty.
+o.cocktailKeepsYouOnTheMenu = await (async ()=>{
+  await p.evaluate(()=>{ const M=window.__magnet;
+    M.sel.display='auto'; M.sel.cocktailSides={}; M.saveSel(); M.toMenu(); M.buildSettings(); });
+  await p.waitForTimeout(200);
+  await p.evaluate(()=>[...document.querySelectorAll('#displayPick .opt')]
+    .find(t=>/cocktail/i.test(t.textContent)).click());
+  await p.waitForTimeout(300);
+  const r = await p.evaluate(()=>{
+    const el=document.getElementById('playBtn').getBoundingClientRect();
+    return { play: el.width>0 && el.height>0,
+             visible: [...document.querySelectorAll('.screen')]
+               .filter(s=>!s.classList.contains('hidden')).map(s=>s.id) };
+  });
+  return r.play && r.visible.includes('setup');
+})();
+// ...and KICK OFF really starts a match, twice in a row (the repeat was the bug)
+o.cocktailStartsAMatch = await (async ()=>{
+  await p.click('#playBtn'); await p.waitForTimeout(300);
+  const one2 = await p.evaluate(()=>!!window.__magnet.world && window.__magnet.running);
+  await p.evaluate(()=>{ window.__magnet.toMenu(); window.__magnet.buildSettings(); });
+  await p.waitForTimeout(200);
+  await p.evaluate(()=>[...document.querySelectorAll('#displayPick .opt')]
+    .find(t=>/cocktail/i.test(t.textContent)).click());
+  await p.waitForTimeout(250);
+  const stillThere = await p.evaluate(()=>{
+    const el=document.getElementById('playBtn').getBoundingClientRect();
+    return el.width>0 && el.height>0; });
+  return one2 && stillThere;
+})();
+
+// --- Pitch direction is upright-only in cocktail. It used to accept the click,
+// light up, and change nothing.
+o.orientLockedInCocktail = await p.evaluate(async ()=>{
+  const M=window.__magnet;
+  M.sel.display='cocktail'; M.sel.orient='auto'; M.applyDisplayMode(); M.buildSettings();
+  const tiles=[...document.querySelectorAll('#orientPick .opt')];
+  const allDisabled = tiles.length===3 && tiles.every(t=>t.classList.contains('disabled'));
+  const explained = tiles.every(t=>/upright/i.test(t.textContent));
+  tiles.find(t=>/side/i.test(t.textContent)).click();
+  await new Promise(r=>setTimeout(r,60));
+  return allDisabled && explained && M.sel.orient === 'auto' && M.pitchHorizontal() === false;
+});
+// ...and it comes back unlocked outside cocktail
+o.orientFreeOutsideCocktail = await p.evaluate(async ()=>{
+  const M=window.__magnet;
+  M.sel.display='auto'; M.applyDisplayMode(); M.buildSettings();
+  const tiles=[...document.querySelectorAll('#orientPick .opt')];
+  if (tiles.some(t=>t.classList.contains('disabled'))) return false;
+  tiles.find(t=>/side/i.test(t.textContent)).click();
+  await new Promise(r=>setTimeout(r,80));
+  return M.sel.orient === 'h' && M.pitchHorizontal() === true;
+});
+await p.evaluate(()=>{ const M=window.__magnet; M.sel.orient='auto'; M.applyDisplayMode(); M.saveSel(); });
+
 // --- Back to auto: the keyboard comes straight back
 await setup('auto');
 o.autoRestored = (await keyDrive()).moved;
@@ -92,7 +150,9 @@ console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = o.autoKeyMoves && o.autoSpaceKicks && o.cocktailKeyDead && o.cocktailSpaceDead &&
   o.pollKeysNoOps && o.controllersToggleStillOff && o.cocktailSeatIsPad && o.cocktailPadDrives &&
-  o.escapeStillWorks && o.autoRestored && errors.length === 0;
+  o.escapeStillWorks && o.autoRestored &&
+  o.cocktailKeepsYouOnTheMenu && o.cocktailStartsAMatch &&
+  o.orientLockedInCocktail && o.orientFreeOutsideCocktail && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);
