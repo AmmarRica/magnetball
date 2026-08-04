@@ -4637,6 +4637,12 @@ function goalBurst(w, team){
   addShake(13); hitStop = 5;
   flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9;
 }
+// Both used to decay inside render(), which made a goal flash and a shake last a
+// third as long on a 144Hz screen as on a 60Hz one. Same rates, now per step.
+function decayJuice(){
+  shake = shake > 0.3 ? shake * 0.85 : 0;
+  flash = flash > 0.01 ? flash * 0.88 : 0;
+}
 
 function loop(t){
   pumpTelemetry();
@@ -4654,6 +4660,8 @@ function loop(t){
   let steps = 0;
   while (acc >= STEP && steps < 5){
     step(world);
+    advanceTrails(world);   // motion tells follow the sim, not the refresh rate
+    decayJuice();
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -7176,7 +7184,7 @@ function render(){
   ctx.fillRect(0,0,cw,ch);
   // Screen shake — jitter only the pitch/players, never the touch controls.
   let sx=0, sy=0;
-  if (shake > 0.3){ sx=(Math.random()*2-1)*shake; sy=(Math.random()*2-1)*shake; shake*=0.85; } else shake=0;
+  if (shake > 0.3){ sx=(Math.random()*2-1)*shake; sy=(Math.random()*2-1)*shake; }   // decay is step-locked, see decayJuice
   ctx.save(); ctx.translate(sx, sy);
   if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
   drawPitch(world);
@@ -7188,7 +7196,7 @@ function render(){
   if (world.extraBalls) for (const eb of world.extraBalls) drawBall({ ball: eb });   // multiball extras
   ctx.restore();
   // Goal flash — a quick coloured wash that fades.
-  if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); flash*=0.88; } else flash=0;
+  if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
@@ -7984,23 +7992,48 @@ const BALL_PATH    = 40;   // ball path samples retained (enough for a long stre
 const BALL_LEN_MAX = 320;  // world units of streak at full speed (~40% of a classic pitch)
 const BALL_MIN_SPD = 0.8;  // below this the ball is coasting — no streak
 
-// By index, not on the player — see labelA above for why.
-function drawDiscTrails(w){
-  const s = cam.s;
+// Motion tells are SIM state, not frame state: sampled and faded once per step()
+// from advanceTrails(), never from a draw. Doing it per frame made the same match
+// look different on a faster screen — a 144Hz display cut the ball streak from 190
+// world units to 69 and halved the disc dots, because both are really "the last N
+// frames" dressed up as "the last stretch of play".
+function advanceTrails(w){
+  if (!w) return;
+  const b = w.ball;
+  if (b){
+    if (ballTrail.length >= BALL_PATH) ballTrail.shift();
+    ballTrail.push({x:b.x, y:b.y});
+  }
+  if (!w.players) return;
   if (discTrails.length !== w.players.length) discTrails = w.players.map(()=>[]);
   for (let i = 0; i < w.players.length; i++){
-    const p = w.players[i];
-    let hist = discTrails[i];
+    const p = w.players[i], hist = discTrails[i];
     // Drop a dot only once you've actually covered ground, so spacing is even at
     // any speed and a fast player simply leaves more of them.
     const last = hist[hist.length-1];
     if (!last || Math.hypot(p.x-last.x, p.y-last.y) >= DOT_GAP){
+      if (hist.length >= DOT_MAX) hist.shift();
       hist.push({x:p.x, y:p.y, a:1});
-      if (hist.length > DOT_MAX) hist.shift();
     }
-    for (const d of hist) d.a *= DOT_FADE;
-    hist = discTrails[i] = hist.filter(d => d.a > 0.04);
-    if (!hist.length) continue;
+    // Fade and drop spent dots in place — a filter() per player per frame was the
+    // only steady allocation in the hot path.
+    let n = 0;
+    for (let k = 0; k < hist.length; k++){
+      const d = hist[k];
+      d.a *= DOT_FADE;
+      if (d.a > 0.04) hist[n++] = d;
+    }
+    hist.length = n;
+  }
+}
+
+// By index, not on the player — see labelA above for why.
+function drawDiscTrails(w){
+  const s = cam.s;
+  if (discTrails.length !== w.players.length) return;
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i], hist = discTrails[i];
+    if (!hist || !hist.length) continue;
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
     for (let k = 0; k < hist.length; k++){
       const d = hist[k], f = (k+1) / hist.length;     // older dots smaller + fainter
@@ -8016,14 +8049,14 @@ function drawDiscTrails(w){
 // instead of drawing through a wall. Length tracks speed.
 function drawBallTrail(w){
   const b = w.ball;
-  ballTrail.push({x:b.x, y:b.y});
-  if (ballTrail.length > BALL_PATH) ballTrail.shift();
   const sp = Math.hypot(b.vx||0, b.vy||0);
   if (sp < BALL_MIN_SPD || ballTrail.length < 2) return;
   const drive = Math.min(1, sp / ((w.ballCap || 32) * 0.85));
   const want  = BALL_LEN_MAX * drive;               // world units of streak
-  // Walk back along the path until we've spent that length.
-  const pts = [{x:b.x, y:b.y}];
+  // Start at the INTERPOLATED ball, not the last sampled step: mid-step the two are
+  // up to a full step of travel apart (9 world units at speed — most of a ball
+  // diameter), which reads as the streak coming unstuck from the ball.
+  const pts = [{x: ix(b), y: iy(b)}];
   let used = 0;
   for (let k = ballTrail.length - 1; k > 0 && used < want; k--){
     const a = ballTrail[k], nx = ballTrail[k-1];
@@ -8644,7 +8677,8 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; },
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, KICK_R, drawKickMarker, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, resetTrails, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
+    get shake(){ return shake; }, set shake(v){ shake=v; }, get flash(){ return flash; }, set flash(v){ flash=v; },
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
