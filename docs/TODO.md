@@ -68,6 +68,11 @@ each was shipped at some point and each is a class of mistake worth watching for
   — which older builds could leave — is repaired to one on load instead of restored as-is.
 
 ## 🎮 Connected-controller flairs
+- [x] **Nothing is drawn — or even fetched — without a controller.** Verified on a real phone
+  context with no gamepad stub at all: `drawPadFlairs()` is a provable no-op, and the same check
+  fails on a page that does have a pad, so it isn't vacuous. `connectedGamepadIndices()` also
+  ignores entries that report `connected` but expose no buttons, which some mobile browsers do.
+  Touch controls and the keyboard never count.
 - [x] **A small pad icon per connected controller, bottom-right** (Kenney `Flairs/Vector/
   controller_generic.svg`, already in the repo — one of the previously-unreferenced packs). It goes
   **black** while any button on that pad is held, so you can see which controller a press came from
