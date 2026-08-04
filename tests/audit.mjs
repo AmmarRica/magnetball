@@ -26,7 +26,7 @@ const r = await p.evaluate(async ()=>{
     handed:'#handed .opt', spectate:'#spectate .opt', cb:'#cb .opt',
     theme:'#themePick .opt', display:'#displayPick .opt', orient:'#orientPick .opt',
     trapOff:'#trapPick .opt', debug:'#debugPick .opt', oneHand:'#oneHandPick .opt',
-    settingsPanel:'#panelPick .opt', juice:'#juicePick .opt', autoReplay:'#autoReplayPick .opt',
+    settingsPanel:'#panelPick .opt', juice:'#juicePick .opt', hitStop:'#hitStop', autoReplay:'#autoReplayPick .opt',
     ballLook:'#ballLookPick .opt',
     magnet:'#feelSlidersBall input', sens:'#feelSlidersPlayer input', matchSpeed:'#mspeed',
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
@@ -156,6 +156,17 @@ const r = await p.evaluate(async ()=>{
   M.sel.juice=false; freshMatch(); M.addShake(20); const noShake=M.shake;
   M.sel.juice=true;  freshMatch(); M.addShake(20); const yesShake=M.shake;
   note('screen shake', noShake !== yesShake, 'off='+noShake+' on='+yesShake);
+  // Hit stop has its own dial, so it must survive the shake toggle being off and
+  // must gate on the prediction rather than firing on every kick.
+  { const setup=(frames,vy)=>{ M.sel.hitStop=frames; M.sel.juice=false;
+      const w=freshMatch(); w.state='play'; w.stateT=2; M.hitStop=0;
+      w.players.forEach(q=>{ q.x=620; q.y=620; q.vx=0; q.vy=0; });
+      w.ball.x=0; w.ball.y=60; w.ball.vx=0; w.ball.vy=vy;
+      M.maybeHitStop(w, w.players[0], w.ball); return M.hitStop; };
+    const onGoal=setup(8,-22), offGoal=setup(8,22), off=setup(0,-22);
+    note('hit stop', onGoal===8 && offGoal===0 && off===0,
+         'onGoal='+onGoal+' offGoal='+offGoal+' sliderZero='+off);
+    M.sel.hitStop=5; M.sel.juice=true; }
   M.sel.debug=true; M.render(); const dbgOn=shot();
   M.sel.debug=false; M.render(); note('debug readout', dbgOn !== shot());
   M.sel.oneHand=true;  const oh1=M.world.players[0];
