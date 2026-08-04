@@ -165,6 +165,12 @@
     }
     .opt.sel small { color: var(--cyan); }
     .opt .emoji { font-size: 18px; }
+    /* Section divider inside a settings card — groups related controls. */
+    .subhead {
+      margin: 18px 0 8px; padding-top: 12px; border-top: 1px solid var(--edge);
+      font-family: var(--pix); font-size: 12px; letter-spacing: .5px;
+      color: var(--accent); text-transform: uppercase;
+    }
 
     /* Career stats — tile grid of lifetime numbers */
     .statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px,1fr)); gap: 10px; }
@@ -883,6 +889,22 @@
 
     <div class="card collapsible collapsed" data-sec="feel">
       <h2>Game Feel</h2>
+      <label class="field">Preset</label>
+      <div class="opts" id="feelPresets"></div>
+
+      <div class="subhead">⚽ Ball controls</div>
+      <label class="field">Ball control</label>
+      <div class="opts" id="trapPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
+      <div id="feelSlidersBall"></div>
+
+      <div class="subhead">🕹️ Player controls</div>
+      <label class="field">One-handed</label>
+      <div class="opts" id="oneHandPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
+      <div id="feelSlidersPlayer"></div>
+
+      <div class="subhead">🎬 Presentation</div>
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
@@ -895,20 +917,8 @@
       <label class="field">Debug readout</label>
       <div class="opts" id="debugPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Ball and player speed plus your current feel numbers, bottom-left while you play.</div>
-      <div style="height:10px"></div>
-      <label class="field">Ball control</label>
-      <div class="opts" id="trapPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
-      <div style="height:10px"></div>
-      <label class="field">One-handed</label>
-      <div class="opts" id="oneHandPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
-      <div style="height:10px"></div>
-      <label class="field">Preset</label>
-      <div class="opts" id="feelPresets"></div>
-      <div style="height:8px"></div>
-      <div id="feelSliders"></div>
-      <button class="ghost" id="feelReset" style="margin-top:10px">Reset to defaults</button>
+
+      <button class="ghost" id="feelReset" style="margin-top:14px">Reset to defaults</button>
     </div>
 
     <div class="card collapsible collapsed" data-sec="online">
@@ -2932,16 +2942,18 @@ $('settingsReset').onclick = () => {
 };
 
 const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
+// `g` is which half of Game Feel the slider belongs under: what the BALL does vs
+// what YOU do. They used to be one undifferentiated stack of eight.
 const FEEL_SLIDERS = [
-  {label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
-  {label:'Player float (more glide →)', get:()=>sel.feel.pdamp, set:v=>sel.feel.pdamp=v, min:850,max:985,step:5, fmt:v=>(v/1000).toFixed(3)},
-  {label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
-  {label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
-  {label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
-  {label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:v=>''+v},
-  {label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
+  {g:'player', label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
+  {g:'player', label:'Player float (more glide →)', get:()=>sel.feel.pdamp, set:v=>sel.feel.pdamp=v, min:850,max:985,step:5, fmt:v=>(v/1000).toFixed(3)},
+  {g:'ball', label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
+  {g:'ball', label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
+  {g:'ball', label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
+  {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:v=>''+v},
+  {g:'ball', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
-  {label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
+  {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
 ];
 // Reveal a settings section (theme/display/skins/sound/feel) inline on the main
 // menu: show the menu (docked on desktop, fullscreen on mobile), rebuild the
@@ -3264,8 +3276,10 @@ function buildFeelPresets(){
   }
 }
 function buildFeelSliders(){
-  const wrap=$('feelSliders'); wrap.innerHTML='';
+  const wraps = { ball: $('feelSlidersBall'), player: $('feelSlidersPlayer') };
+  for (const k in wraps) if (wraps[k]) wraps[k].innerHTML='';
   FEEL_SLIDERS.forEach(s=>{
+    const wrap = wraps[s.g] || wraps.ball; if (!wrap) return;
     const lab=document.createElement('label'); lab.className='field'; lab.style.marginTop='12px'; lab.textContent=s.label+'  ';
     const val=document.createElement('small'); val.style.color='var(--accent)'; val.style.fontWeight='700'; val.textContent=s.fmt(s.get());
     lab.appendChild(val);
@@ -4516,8 +4530,8 @@ function step(w){
     }
     // Kick charge: holding KICK winds up power; released or idle resets.
     for (const p of w.players){
-      if (p.kick) p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP);
-      else p.chargeT = 0;
+      if (p.kick){ p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
+      else { p.chargeT = 0; p.holdT = 0; }
     }
   }
 
@@ -5608,7 +5622,8 @@ function stepDrill(w){
     const ddx=nx-g.x; g.x=nx; g.p0.x+=ddx; g.p1.x+=ddx; g.po0.x+=ddx; g.po1.x+=ddx; }
   const p = w.players[0];
   applyHumanInput(p, pads.p1);
-  if (p.kick) p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); else p.chargeT = 0;
+  if (p.kick){ p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
+  else { p.chargeT = 0; p.holdT = 0; }
   // physics (no goals; checkGoal is skipped because state!=='play')
   integrate(w, false, false);
   ballSounds(w);
@@ -6346,18 +6361,20 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.beginPath(); ctx.arc(x, y, r*1.12, 0, 2*Math.PI); ctx.stroke();
       ctx.restore();
     }
-    // Wind-up tell — the ring FILLS as the kick charges, so a still frame shows
-    // both who is holding kick and how big the shot is going to be.
+    // Wind-up tell — the WHOLE ring pulses while you hold kick, faster and brighter
+    // as it charges. It used to sweep round like a loading bar, which read as
+    // progress rather than as a player winding up.
     if (p.kick || (p.chargeT||0) > 0.01){
       const rr = r*1.42, lw = Math.max(2, r*0.16);
-      ctx.beginPath(); ctx.arc(x, y, rr, 0, 2*Math.PI);
-      ctx.strokeStyle = rgba(TH.kickRing, 0.20); ctx.lineWidth = lw; ctx.stroke();
       const f = Math.min(1, (p.chargeT||0) / CHARGE.max);
-      if (f > 0.001){
-        ctx.beginPath(); ctx.arc(x, y, rr, -Math.PI/2, -Math.PI/2 + f*2*Math.PI);
-        ctx.strokeStyle = TH.kickRing; ctx.lineWidth = lw;
-        ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
-      }
+      // Phase comes from chargeT, not a wall clock: same charge always looks the
+      // same, and nothing here depends on frame timing.
+      const hz = 3.5 + f*8;
+      const pulse = 0.30 + 0.70 * (0.5 + 0.5*Math.sin((p.holdT||0) * hz * 2*Math.PI));
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 2*Math.PI);
+      ctx.strokeStyle = rgba(TH.kickRing, 0.18 + 0.82*pulse*(0.25 + 0.75*f));
+      ctx.lineWidth = lw * (1 + f*0.45);
+      ctx.stroke();
     }
     // Fades out while the plate covers a disc or the ball. Draw is in local coords,
     // hit test in true screen space — same rect, the local frame is screen-aligned.
@@ -6701,11 +6718,19 @@ let mouseDownId = 'mouse';
 cv.addEventListener('mousedown', e => onDown(mouseDownId, e.clientX, e.clientY));
 window.addEventListener('mousemove', e => onMove(mouseDownId, e.clientX, e.clientY));
 window.addEventListener('mouseup', () => onUp(mouseDownId));
+// Clicking or touching the pitch takes focus off whatever control had it —
+// otherwise a focused slider keeps eating the arrow keys while you're playing.
+['pointerdown','touchstart'].forEach(ev => cv.addEventListener(ev, () => {
+  const a = document.activeElement;
+  if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+}, { passive: true }));
 
 // Keyboard (desktop testing) — arrows/WASD move p1, space kicks.
 // Not in cocktail: that's a screen flat on a table with people stood around it, so
 // there is no "in front of the keyboard" seat to give it to. Everyone uses a pad.
 // Menu keys (Escape, replay skip) still work — this only gates the game seat.
+// Typing must never double as gameplay input.
+function typingInField(t){ return !!(t && /input|textarea|select/i.test(t.tagName)); }
 function keyboardDrivesGame(){
   if (sel.display !== 'cocktail') return true;
   // Cocktail means pads round a table — but only if there ARE pads. With none
@@ -6716,7 +6741,10 @@ const keys = {};
 window.addEventListener('keydown', e => {
   if (replay.active){ skipReplay(); return; }   // any key skips a playing replay
   keys[e.key.toLowerCase()] = true;
-  if (e.key === ' ' && keyboardDrivesGame()) { pads.p1.kick = true; e.preventDefault(); }
+  const kickKey = e.key === ' ' || e.key === 'x' || e.key === 'X';
+  if (kickKey && keyboardDrivesGame() && !typingInField(e.target)){
+    pads.p1.kick = true; e.preventDefault();
+  }
   if (e.key === 'Escape'){   // close any open sub-page back to the main menu (settings is inline there now)
     const sub = [...document.querySelectorAll('.screen')].find(s=>s.id!=='setup' && !s.classList.contains('hidden'));
     if (sub){ toMenu(); e.preventDefault(); }
@@ -6724,10 +6752,12 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys[e.key.toLowerCase()] = false;
-  if (e.key === ' ') pads.p1.kick = false;         // always release, even if the press was ignored
+  // Always release, even if the press was ignored — otherwise a kick can stick on.
+  if (e.key === ' ' || e.key === 'x' || e.key === 'X') pads.p1.kick = false;
 });
 function pollKeys(){
   if (!keyboardDrivesGame()) return;    // cocktail: pads only
+  if (typingInField(document.activeElement)) return;   // you're writing, not playing
   if (pads.p1.move.id !== null) return; // touch wins
   let dx=0,dy=0;
   if (keys['arrowleft']||keys['a']) dx-=1;
@@ -6956,7 +6986,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0521AM';
+const VERSION = '20260804.0621AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -6998,7 +7028,7 @@ if (window.__MAGNETDEBUG) {
     teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
-    seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor,
+    seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     readableInk, contrastRatio, rgbToHex, mixCol, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,

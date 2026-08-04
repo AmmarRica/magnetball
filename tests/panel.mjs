@@ -116,9 +116,9 @@ o.gameToPanelApplied = await until(panel, ()=>
 
 // --- A slider streams across too (the value that lands is the one that stuck)
 await panel.evaluate(()=>{
-  const labels=[...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent);
+  const labels=[...document.querySelectorAll('#feelSlidersBall label, #feelSlidersPlayer label')].map(l=>l.textContent);
   const i=labels.findIndex(t=>/kick power/i.test(t));
-  const inp=[...document.querySelectorAll('#feelSliders input')][i];
+  const inp=[...document.querySelectorAll('#feelSlidersBall input, #feelSlidersPlayer input')][i];
   inp.value=95; inp.oninput();
 });
 o.sliderCrosses = await until(game, ()=>window.__magnet.sel.feel.kick === 95);
@@ -180,9 +180,9 @@ o.crossTabBotLooks = await game.evaluate(()=>{ const ps=window.__magnet.world.pl
   return ps.filter(q=>q!==you).every(q=>key(q)!==key(you)); });
 // A feel change made in the panel reaches the LIVE match, not just the next one
 await panel.evaluate(()=>{
-  const labels=[...document.querySelectorAll('#feelSliders label')].map(l=>l.textContent);
+  const labels=[...document.querySelectorAll('#feelSlidersBall label, #feelSlidersPlayer label')].map(l=>l.textContent);
   const i=labels.findIndex(t=>/max ball speed/i.test(t));
-  const inp=[...document.querySelectorAll('#feelSliders input')][i];
+  const inp=[...document.querySelectorAll('#feelSlidersBall input, #feelSlidersPlayer input')][i];
   inp.value=58; inp.oninput(); });
 o.panelDrivesLiveMatch = await until(game, ()=>window.__magnet.world.ballCap === 58);
 // Switching the game to cocktail FROM THE PANEL takes the keyboard off the pitch
