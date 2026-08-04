@@ -5,9 +5,21 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.0505PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0620PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## ▶ KICK OFF is the Match section's header
+- [x] **The green bar doubles as a collapsible header.** Collapsed it is exactly the
+  button it always was; the chevron on its right opens the match options — mode,
+  field, difficulty, length, input, ball, surface, mow, kickoff rule, names, party
+  mods — directly underneath it, above the nav tiles. Pressing the button starts a
+  match and never toggles the section; only the chevron does.
+- [x] The sticky offset now measures the **header**, not the button. `#playBtn` used
+  to be the sticky element; nesting it inside a sticky header would have pinned it
+  below itself and left every other section's title overlapping the bar.
+- [x] `/settings` has no game to kick off, so the header falls back to a plain
+  "Match" title there.
 
 ## 🤖 Bot AI rework — steps 2, 4–9 and the difficulty re-tune (checkpoint B)
 Four layers now: team phase → roles → per-bot decision → steering. Still AI-only —

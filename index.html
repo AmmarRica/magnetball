@@ -208,9 +208,30 @@
     /* Sticky "KICKOFF" bar: the hero KICK OFF pins to the top of the scroll once you
        leave the top section, staying above the current section's sticky header.
        Opaque bg (green tint over the page colour) so scrolled content passes under it. */
-    #playBtn {
-      position: sticky; top: 0; z-index: 6;
+    /* The KICK OFF bar is the Match section's HEADER, so the sticky element is that
+       header, not the button inside it — nesting a sticky button in a sticky header
+       would pin it below itself. */
+    #matchCard { background: none; border: none; padding: 0; box-shadow: none; }
+    #matchCard > h2 {
+      top: 0; z-index: 6; gap: 8px; padding: 0; margin-bottom: 0;
       background: linear-gradient(rgba(53,255,135,.15), rgba(53,255,135,.15)), var(--bg);
+    }
+    #matchCard > h2::after { content: none; }     /* the chevron here is a real control */
+    #matchCard > h2 #playBtn { flex: 1 1 auto; margin-top: 0; max-width: none; }
+    #matchCard > h2 .secname { display: none; }   /* only needed where the button isn't */
+    .secchev {
+      flex: 0 0 auto; width: 52px; align-self: stretch; cursor: pointer;
+      background: rgba(53,255,135,0.10); color: var(--go);
+      border: 1px solid var(--go); border-radius: 10px;
+      font-family: var(--pix); font-size: 14px; line-height: 1;
+      transition: transform .15s ease;
+    }
+    #matchCard.collapsed > h2 .secchev { transform: rotate(-90deg); }
+    .secchev:active { transform: translateY(1px); }
+    #matchCard.collapsed > h2 .secchev:active { transform: rotate(-90deg) translateX(-1px); }
+    #matchBody {
+      background: var(--panel); border: 1px solid var(--edge);
+      border-radius: 14px; padding: 16px; margin-top: 10px;
     }
     button.ghost {
       background: rgba(255,255,255,0.03); color: var(--text);
@@ -241,6 +262,8 @@
     body.panel #setup.docked { position: static; width: auto; max-width: none; left: auto; }
     body.panel #setup .navgrid, body.panel #setup #recordCard,
     body.panel #setup #playBtn, body.panel #setup .footlink { display: none; }
+    body.panel #matchCard > h2 .secname { display: block; }
+    body.panel #matchCard > h2 { background: linear-gradient(var(--panel), var(--panel)), var(--bg); }
     /* Detached: the game page keeps the game and hands the settings to the other tab. */
     body.detached:not(.panel) #setup .card.collapsible { display: none; }
     #panelCard, #detachedCard { display: none; }
@@ -737,24 +760,16 @@
       <div id="recLine" class="hint" style="text-align:left;margin-top:10px;font-family:var(--pix);font-size:12px;line-height:1.8"></div>
     </div>
 
-    <button class="primary" id="playBtn">KICK OFF ▶</button>
-
-    <div class="navgrid">
-      <button class="navtile" id="seasonBtn"><span>🏆</span>Season</button>
-      <button class="navtile" id="drillsBtn"><span>🎯</span>Drills</button>
-      <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
-      <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
-      <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
-      <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
-      <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
-      <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
-      <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
-      <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
-      <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
-    </div>
-
-    <div class="card collapsible collapsed" data-sec="match">
-      <h2>Match</h2>
+    <!-- The Match section's header IS the KICK OFF button: collapsed it is just the
+         green bar you press to play, and the chevron on its right opens the match
+         options underneath (mode, field, difficulty, …). -->
+    <div class="card collapsible collapsed" id="matchCard" data-sec="match">
+      <h2>
+        <span class="secname">Match</span>
+        <button class="primary" id="playBtn">KICK OFF ▶</button>
+        <button class="secchev" id="matchChev" type="button" aria-label="Match options" aria-expanded="false">▾</button>
+      </h2>
+      <div id="matchBody">
       <label class="field">Mode</label>
       <div class="opts" id="modes"></div>
       <div style="height:14px"></div>
@@ -797,7 +812,23 @@
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
+      </div>
     </div>
+
+    <div class="navgrid">
+      <button class="navtile" id="seasonBtn"><span>🏆</span>Season</button>
+      <button class="navtile" id="drillsBtn"><span>🎯</span>Drills</button>
+      <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
+      <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
+      <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
+      <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
+      <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
+      <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
+      <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
+      <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
+      <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
+    </div>
+
 
     <div class="card collapsible collapsed" data-sec="player">
       <h2><span style="display:inline-flex;align-items:center;gap:9px"><span>Your Player</span><canvas id="pvMini" width="52" height="52" style="width:26px;height:26px;image-rendering:auto"></canvas></span></h2>
@@ -2592,14 +2623,21 @@ function openSection(sec){
     card.classList.toggle('collapsed', !mine);
     uiState[card.dataset.sec] = !mine;
   });
-  saveUI(uiState);
+  syncChevrons(); saveUI(uiState);
 }
 function collapseAllSections(){
   document.querySelectorAll('.card.collapsible').forEach(card=>{
     card.classList.add('collapsed');
     uiState[card.dataset.sec] = true;
   });
-  saveUI(uiState);
+  syncChevrons(); saveUI(uiState);
+}
+// The Match chevron is a real button, so screen readers need its state kept honest.
+function syncChevrons(){
+  document.querySelectorAll('.card.collapsible').forEach(card=>{
+    const chev = card.querySelector('.secchev');
+    if (chev) chev.setAttribute('aria-expanded', String(!card.classList.contains('collapsed')));
+  });
 }
 function initCollapsibles(){
   const cards = [...document.querySelectorAll('.card.collapsible')];
@@ -2614,13 +2652,17 @@ function initCollapsibles(){
     uiState[card.dataset.sec] = card !== open;
     const h2 = card.querySelector('h2');
     if (h2 && !h2._wired){ h2._wired = true;
-      h2.addEventListener('click', ()=>{
+      h2.addEventListener('click', (e)=>{
+        // The Match header IS the KICK OFF button. Pressing it starts a match; only
+        // the chevron beside it opens the section.
+        if (e.target.closest && e.target.closest('#playBtn')) return;
         // Clicking the open one closes it; clicking any other opens it alone.
         if (card.classList.contains('collapsed')) openSection(card.dataset.sec);
         else collapseAllSections();
       });
     }
   });
+  syncChevrons(); syncSticky();
   saveUI(uiState);
 }
 initCollapsibles();
@@ -2756,7 +2798,13 @@ function openHow(){ dockOrFull('how'); }
 $('playBtn').onclick = startMatch;
 // Keep the section headers pinned right below the sticky KICKOFF bar by feeding
 // its live height into --sticky-top (recomputed on resize + once fonts settle).
-function syncSticky(){ const pb=$('playBtn'), su=$('setup'); if(pb&&su) su.style.setProperty('--sticky-top', pb.offsetHeight+'px'); }
+function syncSticky(){
+  // Every other section's header pins just below the KICK OFF bar. That bar is the
+  // Match header now, so measure the header — measuring the button inside it leaves
+  // the other headers overlapping it by the header's own padding.
+  const head = document.querySelector('#matchCard > h2'), su = $('setup');
+  if (head && su) su.style.setProperty('--sticky-top', head.offsetHeight + 'px');
+}
 syncSticky();
 window.addEventListener('resize', syncSticky);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncSticky);
@@ -7795,7 +7843,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.0505PM';
+const VERSION = '20260804.0620PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
