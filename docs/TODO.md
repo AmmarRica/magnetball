@@ -5,9 +5,22 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0245AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0410AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 💥 Kick off walls and players (optional)
+- [x] **KICK stops being ball-only** when it's on: a wall, arc, post or body in range
+  takes the hit and you take the reaction. A wall has nothing to give, so kicking one
+  **launches you off it** — a real KICK press at the boards moves you 64 units.
+- [x] Kicking a player shoves *them* and recoils *you*, weighted by inverse mass and
+  along the line between you, with the recoil the smaller share.
+- [x] Charge scales it on the same curve as a ball kick (−7.2 → −13.7 at full wind-up).
+  One press is one launch, with a short cooldown so a fast tap isn't a rocket.
+- [x] Never at kickoff (it would wreck the formation) or after the whistle, and the
+  ball is untouched — it has its own kick path.
+- [x] **Off by default**, in Match → Kick off walls & players, because it changes how
+  the game plays rather than how it looks. Applies to everyone equally, bots included.
 
 ## 🏁 Game-over chooser, and sitting a match out
 - [x] **The result screen offers two options: `↻ Restart` and `🧍 Warm-up`.** Restart is

@@ -832,6 +832,10 @@
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
       <div class="opts tilewrap" id="grass"></div>
       <div style="height:14px"></div>
+      <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
+      <div class="opts" id="kickPushPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
+      <div style="height:14px"></div>
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
@@ -1778,7 +1782,7 @@ const PANEL = detectPanel();
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballLook:'classic',                      // ball pattern (cosmetic only; physics is BALLS)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
@@ -3451,6 +3455,14 @@ function buildSettings(){
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   buildBallLookPick();
+  const kp=$('kickPushPick');
+  if (kp){ kp.innerHTML='';
+    [['off','🚫 Off'],['on','💥 On']].forEach(([k,lab])=>{
+      const on=(sel.kickPush||'off')===k;
+      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+      el.onclick=()=>{ sel.kickPush=k; saveSel(); buildSettings(); };
+      kp.appendChild(el); });
+  }
   const lp=$('lobbyPick');
   if (lp){ lp.innerHTML='';
     [['on','🧍 On'],['off','⏭ Skip']].forEach(([k,lab])=>{
@@ -4959,6 +4971,7 @@ function integrate(w, ballFrozen, playersFrozen){
     }
     for (const p of discs){
       handleBallControl(w, p, ball, ballFrozen);
+      handleKickPush(w, p);
     }
     for (const p of discs){
       p.vx *= pdamp; p.vy *= pdamp;
@@ -5471,6 +5484,81 @@ function releaseTrap(w, p, ball){
   p.trap = false; p.trapUsed = true; p.chargeT = 0;
   noteKick(w, p, power, fx, fy);
   spawnKickFx(ball.x, ball.y, fx, fy, power); playSfx('kick');
+}
+
+// ---------- Kick off the boards and off each other (optional) ----------------
+// With this on, KICK stops being a ball-only verb: a wall or a body in range takes
+// the hit too, and you take the reaction. That's the whole point — a wall has
+// nothing to give, so kicking one launches YOU. Off by default: it changes how the
+// game plays, not how it looks.
+const KICKPUSH = {
+  reach: 4,          // extra reach past the normal kick range, so a wall is kickable
+  wall: 7.2,         // launch off an immovable surface (wall, arc, post)
+  player: 5.0,       // the shove a kicked player takes
+  recoil: 0.75,      // ...and the share of it that comes back at you
+  charge: 0.9,       // a full wind-up adds this much again, same curve as a ball kick
+  cool: 0.22,        // seconds before the same player can launch again
+};
+// Closest point on a segment to (px,py) — the same maths collideWall resolves with,
+// so what you can kick is exactly what you'd bump into.
+function segClosest(px, py, ax, ay, bx, by){
+  const vx = bx-ax, vy = by-ay, L2 = vx*vx + vy*vy;
+  let t = L2 > 1e-9 ? ((px-ax)*vx + (py-ay)*vy) / L2 : 0;
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  return { x: ax + vx*t, y: ay + vy*t };
+}
+function handleKickPush(w, p){
+  if (sel.kickPush !== 'on') return;
+  if (w.state === 'kickoff' || w.state === 'over') return;
+  if (p._pushCool > 0) p._pushCool -= STEP;
+  if (!p.kick){ p._pushUsed = false; return; }
+  if (p._pushUsed || p._pushCool > 0) return;
+  const reach = p.r + (w.kickRange || PLAYER.kickRange) + KICKPUSH.reach;
+  const pow = 1 + (Math.min(p.chargeT||0, CHARGE.max) / CHARGE.max) * KICKPUSH.charge;
+  let fired = false;
+
+  // --- Other players first: a body absorbs the kick, so you only get the reaction.
+  for (const q of w.players){
+    if (q === p) continue;
+    const dx = q.x-p.x, dy = q.y-p.y, d = Math.hypot(dx,dy);
+    if (d > p.r + q.r + (w.kickRange || PLAYER.kickRange) || d < 1e-4) continue;
+    const nx = dx/d, ny = dy/d;
+    const im = (q.invMass || 0) + (p.invMass || 0);
+    if (im <= 0) continue;
+    const j = KICKPUSH.player * pow;
+    q.vx += nx * j * (q.invMass/im) * 2; q.vy += ny * j * (q.invMass/im) * 2;
+    p.vx -= nx * j * (p.invMass/im) * 2 * KICKPUSH.recoil;
+    p.vy -= ny * j * (p.invMass/im) * 2 * KICKPUSH.recoil;
+    spawnKickFx(p.x + nx*p.r, p.y + ny*p.r, nx, ny, j); fired = true;
+  }
+
+  // --- Surfaces: nothing to push, so all of it comes back as launch. Posts count —
+  // they're the most satisfying thing on the pitch to shove off.
+  let best = null, bestD = 1e9;
+  const consider = (cx, cy) => {
+    const dx = p.x-cx, dy = p.y-cy, d = Math.hypot(dx,dy);
+    if (d < bestD && d < reach && d > 1e-4){ bestD = d; best = { nx: dx/d, ny: dy/d }; }
+  };
+  for (const seg of w.walls){
+    const c = segClosest(p.x, p.y, seg.a.x, seg.a.y, seg.b.x, seg.b.y);
+    consider(c.x, c.y);
+  }
+  for (const arc of w.arcs){
+    const dx = p.x-arc.cx, dy = p.y-arc.cy, dd = Math.hypot(dx,dy) || 1;
+    consider(arc.cx + dx/dd*arc.r, arc.cy + dy/dd*arc.r);
+  }
+  for (const post of w.posts){
+    const dx = p.x-post.x, dy = p.y-post.y, dd = Math.hypot(dx,dy) || 1;
+    consider(post.x + dx/dd*post.r, post.y + dy/dd*post.r);
+  }
+  if (best){
+    // Away from the surface — the normal already points from it to you.
+    const j = KICKPUSH.wall * pow;
+    p.vx += best.nx * j; p.vy += best.ny * j;
+    spawnKickFx(p.x - best.nx*p.r, p.y - best.ny*p.r, -best.nx, -best.ny, j);
+    fired = true;
+  }
+  if (fired){ p._pushUsed = true; p._pushCool = KICKPUSH.cool; playSfx('wall'); }
 }
 
 // Elastic disc-disc collision weighted by inverse mass.
@@ -8511,7 +8599,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0245AM';
+const VERSION = '20260805.0410AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -8542,7 +8630,7 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart,
+    KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart,
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
