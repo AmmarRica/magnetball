@@ -5,9 +5,49 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260804.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260804.0210PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🤖 Bot AI rework — steps 0, 1 and 3 (checkpoint A)
+Audit and phased plan: [`BOT-AI-AUDIT.md`](BOT-AI-AUDIT.md). All six decisions answered there.
+
+- [x] **Step 0 — deterministic AI.** `rand()` was `Math.random()` under a comment claiming
+  otherwise. Every AI draw now goes through `w.rng` (`mulberry32`, already in the file),
+  seeded per match from outside the sim and stored on the world. Bots are staggered by
+  index — previously all of them recomputed on the same tick, forever. Match seeds also
+  mix in a counter: `Date.now()` alone gave two restarts inside one millisecond the same bots.
+- [x] **Step 1 — the oscillation.** It was geometry, not tuning: the standoff waypoint sat
+  27 units behind the ball and the branch that discarded it fired at 43, so the bot could
+  never arrive. The waypoint is now never discarded; getting to the far side is a curved
+  walk **around** the ball on a circle (ordinary movement to an ordinary waypoint — no new
+  ability); entering STRIKE needs alignment > 0.85 and leaving needs < 0.60; every state
+  change costs a 12-tick dwell; STRIKE freezes its aim until it kicks or times out.
+  Arrive-with-deceleration replaced full-stick-then-stop. KICK is only held while
+  committed, so bots no longer crawl at `KICK_SLOW` exactly when they need to turn.
+- [x] **Step 3 — separation** promoted to a real steering primitive with its own weight;
+  the chaser yields less than everyone else.
+- [x] `diff.err` split into a real **aim** error (it rotates the approach angle, which is
+  how a bot aims — the impulse runs along player→ball) and a smaller **positional** error,
+  both held for 45 ticks rather than re-rolled every recompute. Fresh noise per recompute
+  was itself flipping branches with nothing in the world moving.
+- [x] All AI tuning is in one `BOT` config block.
+
+Measured, human parked, 30–60 s of self-play (baselines in the audit):
+
+| | before | after |
+|---|---|---|
+| Velocity reversals /bot/s | 0.21 – **4.97** | **0.00 – 0.18** |
+| Wrong-side scenario | 16 flips in 4 s, ball never touched | ≤2 flips, ball struck in 31 ticks |
+| Ball contact at Hard/Insane | **0 – 2 %** | 8 – 76 % |
+| Bots within 70 of the ball (4v4) | up to 0.91 | ≤ 0.49 |
+
+- [ ] **Known, deferred to step 4:** non-chasers are still placed by `mates.indexOf(p) % 2`,
+  so in 4v4 two bots compute an *identical* defender spot and two an identical attacker
+  spot. Separation keeps them apart but they still hover as pairs. The ball-anchored
+  formation with distinct slots per role is what fixes it properly.
+- [ ] Steps 2, 4–9 and the `DIFF` re-tune (measured against a frozen copy of the old
+  `runBot` as reference opponent) are still to come.
 
 ## 🎨 Theme picker shows the palette
 - [x] **Emoji swapped for painted swatches.** Each theme tile is a canvas showing the six

@@ -203,7 +203,24 @@ So the AI is *in the right place* but currently breaks lockstep and replay
 reproducibility on its own. Seeding it is a prerequisite for everything else, not an
 optional extra.
 
-## 8. Where I need a decision from you
+## 8. Decisions — ANSWERED
+
+| # | Question | Decision |
+|---|---|---|
+| 8a | Difficulty balance after the fix | **Re-tune `DIFF`**, measured against **win rate vs. a frozen copy of today's `runBot`** kept in the test suite as a reference opponent. |
+| 8b | Bots on the human kick path | **Yes, as part of this work.** Bots follow `w.trapOff`: trapping off → one-touch, trapping on → trap and release like a human. The bot-only branch in `handleBallControl` goes away, and `diff.power` with it. |
+| 8c | PRNG seed | **Seed on the world**, set from outside the sim at `startMatch`, recorded in replays; tests pin it. |
+| 8d | `diff.aggr` | **Wire it into the formation layer** as defensive-line height, folded into 8a's re-tune. |
+| 8e | `KICK_SLOW` | **Fix in step 1** — release KICK when not committing to a strike. |
+| 8f | `diff.err` | **Split** into a real aim error (perturbing the approach angle, which is how a bot actually aims) and a separate, smaller positional error. |
+
+One correction to the framing of 8b: charge **does** exist and does make kicks stronger —
+`CHARGE = { max:0.6, bonus:0.9 }`, +90% at full hold, applied in Pro mode at line 4955 and
+in `releaseTrap` at line 5028. A trap released at the default 0.5 s window already fires at
+about +75%; a quick tap gets base power. So hold time is a real power axis available to
+bots once they're on the human path.
+
+### Original write-up of each decision
 
 These are the points where the constraints you set conflict with each other or with the
 code as it stands. I've stopped rather than guessed.

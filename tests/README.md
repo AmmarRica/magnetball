@@ -66,6 +66,7 @@ Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loud
 | `themetiles` | Theme picker shows each theme's palette as a painted canvas (no emoji): one tile per theme, all distinct, every band sampled back to that theme's own colours, picking one still switches the theme |
 | `contrast` | No label sits on a colour too close to it: every visible text element on every screen under every theme is held to WCAG AA against its **composited** background, plus the goal banner's outline; includes a known-bad probe so a clean run can't be vacuous |
 | `awards` | End-of-match awards state the figure that won them ("Most Saves · 5 saves"), the number matches the tally that picked the winner, singulars stay singular, and it reaches the DOM |
+| `botai` | Bot AI steps 0/1/3: a pinned seed replays a match bit-identically and `Math.random` is never reached from the AI; bots write **only** the fields a human's input writes (never x/y/vx/vy); the wrong-side limit cycle is gone (16 velocity flips → ≤2, and the ball actually gets struck); reversals stay under 0.5/bot/s and ball contact no longer collapses at Hard+; no KICK held while merely walking; state dwell and two-threshold hysteresis hold |
 
 ## Writing a suite
 
