@@ -610,6 +610,27 @@
     #ovAwards .awrow .aic { font-size:20px; width:26px; text-align:center; flex:none; }
     #ovAwards .awrow .alab { font-family: var(--pix); font-size:12px; color:var(--text); }
     #ovAwards .awrow .anote { color: var(--muted); font-size:12px; }
+    /* Match stats — the full scoresheet under the awards. */
+    #ovStats { width:100%; max-width:560px; margin:14px auto 0; }
+    .statshead { font-family: var(--pix); font-size:12px; color: var(--muted);
+      letter-spacing:1px; text-align:left; margin:0 4px 8px; }
+    .statstbl { display:flex; flex-direction:column; gap:3px; }
+    .statsrow { display:grid; grid-template-columns: minmax(96px,1fr) repeat(8, minmax(26px,34px));
+      align-items:center; gap:2px; padding:5px 8px; border-radius:8px;
+      background: rgba(128,128,128,.08); border:1px solid var(--edge); }
+    .statsrow.shead { background:none; border-color:transparent; padding-top:0; padding-bottom:2px; }
+    .statsrow.shead .snum { color: var(--muted); }
+    .statsrow.you { border-color: var(--accent); background: rgba(128,128,128,.16); }
+    .statsrow[data-team="0"] .swho b { color: var(--red); }
+    .statsrow[data-team="1"] .swho b { color: var(--cyan); }
+    .statsrow .sname { text-align:left; overflow:hidden; }
+    .statsrow .swho { display:flex; align-items:center; gap:7px; }
+    .statsrow .swho canvas { width:22px; height:22px; flex:0 0 auto; }
+    .statsrow .swho b { font-family: var(--pix); font-size:11px; font-weight:400;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .statsrow .snum { font-family: var(--pix); font-size:11px; text-align:center; color: var(--text); }
+    .statskey { font-family: var(--pix); font-size:9px; color: var(--muted);
+      text-align:left; margin:8px 4px 0; line-height:1.7; }
     #ovAwards .awrow canvas { width:26px; height:26px; flex:none; image-rendering: pixelated; }
     #ovAwards .awrow .awho { margin-left:auto; font-family: var(--pix); font-size:12px; color:var(--muted); text-align:right; }
     #ovAwards .awrow.you .awho { color: var(--cyan); }
@@ -786,6 +807,10 @@
       <div style="height:14px"></div>
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
+      <div style="height:14px"></div>
+      <label class="field">Warm-up lobby <small style="color:var(--muted)">(controllers only)</small></label>
+      <div class="opts" id="lobbyPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up.</div>
       <div id="coopRow" class="hidden">
         <div style="height:14px"></div>
         <label class="field">Extra controllers <small id="coopInfo" style="color:var(--muted)"></small></label>
@@ -1120,6 +1145,7 @@
     <h2 id="ovTitle">Paused</h2>
     <p id="ovSub"></p>
     <div id="ovAwards"></div>
+    <div id="ovStats"></div>
     <button class="primary" id="ovResume" style="max-width:260px">Resume</button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
@@ -1630,6 +1656,21 @@ const BALLS = {
 // its tiles during module init — a const below its first use is a TDZ crash, not a
 // hoisted default. (CENTER_R had to move for the same reason.)
 const MUD_BAKE_A = 0.30;
+// ---------- Warm-up lobby ----------------------------------------------------
+// A pre-match state where the humans can move and test their controls while the
+// bots wait off the touchline, teams are chosen by standing on a side, and a
+// cocktail player can calibrate which way "up" is from where they're sitting.
+const LOBBY = {
+  // integrate() already clamps every player to halfW + 20 — the HaxBall-style
+  // step-out margin. Benching further out than that just had the physics drag them
+  // back in every frame, so the bench sits exactly at the line the game allows.
+  benchGap: 20,        // how far outside the touchline a waiting bot stands
+  benchStep: 46,       // spacing between waiting bots
+  holdTicks: 60,       // 1s of holding a direction to register it in calibration
+  holdMin: 0.6,        // stick magnitude that counts as "held"
+  arrowR: 92,          // radius of the drawn calibration arrow
+  maxPerSide: 4,       // a side can never field more than a 4v4 worth
+};
 const PITCH = {
   normal: { name:'Grass', emoji:'🟩', accel:0.40, damp:0.905 },
   ice:    { name:'Ice',   emoji:'🧊', accel:0.26, damp:0.955 },   // slidey, floaty
@@ -1726,7 +1767,7 @@ const PANEL = detectPanel();
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
             theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{},   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            display:'auto', cocktailSides:{}, lobby:'on',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             ballLook:'classic',                      // ball pattern (cosmetic only; physics is BALLS)
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
@@ -3399,6 +3440,14 @@ function buildSettings(){
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   buildBallLookPick();
+  const lp=$('lobbyPick');
+  if (lp){ lp.innerHTML='';
+    [['on','🧍 On'],['off','⏭ Skip']].forEach(([k,lab])=>{
+      const on=(sel.lobby||'on')===k;
+      const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+      el.onclick=()=>{ sel.lobby=k; saveSel(); buildSettings(); };
+      lp.appendChild(el); });
+  }
   // Juice / screen-shake toggle (accessibility: some players want it off).
   const jp=$('juicePick');
   if (jp){ jp.innerHTML='';
@@ -4380,6 +4429,9 @@ function startMatch(){
   buildGeometry(world);
   botInit(world);
   resetKickoff(world, true);
+  // Pads in play (or cocktail): warm up first so controls can be tested and sides
+  // chosen. resetKickoff still runs, so the pitch is laid out legally underneath.
+  if (lobbyWanted(world)) enterWarmup(world);
 
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
@@ -4761,7 +4813,7 @@ function step(w){
 
   // Players stay controllable during the goal celebration too, so you're never
   // locked in place after a goal (the ball is already in the net; play resumes at kickoff).
-  const active = (w.state==='play' || w.state==='kickoff' || w.state==='goal');
+  const active = (w.state==='play' || w.state==='kickoff' || w.state==='goal' || w.state==='warmup');
 
   // --- Gather controller inputs (ball live, kickoff, or goal celebration)
   if (active){
@@ -4774,7 +4826,9 @@ function step(w){
       if (p.ctrl==='human1') applyHumanInput(p, menu ? null : pads.p1);
       else if (p.ctrl==='human2') applyHumanInput(p, menu ? null : pads.p2);
       else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null : gamepadPad(p.padIndex));
-      else if (p.ctrl==='bot') runBot(w, p);
+      // Waiting bots don't play — they're stood off the touchline until the whistle.
+      else if (p.ctrl==='bot' && w.state!=='warmup') runBot(w, p);
+      else { p.inX=0; p.inY=0; p.kick=false; }
     }
     // Kick charge: holding KICK winds up power; released or idle resets.
     for (const p of w.players){
@@ -4790,7 +4844,8 @@ function step(w){
   if (w.state==='play'){ w.matchT += STEP; updateThreat(w); } else w.threat = null;
   if (w.ball.sqT) w.ball.sqT *= 0.72;
 
-  if (w.state==='play') integrate(w, false, false);
+  if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, true, false); }
+  else if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
   else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
   ballSounds(w);
@@ -4976,12 +5031,183 @@ function clampBallInside(w, ball){
   if (b.y > bot){ b.y = bot; if (b.vy > 0) b.vy = -b.vy*0.3; }
 }
 
+// ============================================================
+//  WARM-UP LOBBY — team sides, control testing, cocktail calibration
+// ============================================================
+// Worth a lobby when there are pads in play: with a controller connected you want
+// to check the stick does what you expect BEFORE the whistle, and in cocktail you
+// need to tell the game which way you're facing. A keyboard-only match skips it.
+function lobbyWanted(w){
+  if (!w || w.train || w.tutorial || w.drillMode || w.demo || w.watch) return false;
+  if (sel.lobby === 'off') return false;
+  if (sel.display === 'cocktail') return true;
+  return w.players.some(p => p.ctrl === 'gamepad');
+}
+// Everyone a human is driving, in seat order. The FIRST one is the host.
+function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
+function lobbyHost(w){ return lobbyHumans(w)[0] || null; }
+
+function enterWarmup(w){
+  w.state = 'warmup'; w.stateT = 0;
+  w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
+  w.lobby = { ready: new Set(), calib: null, sides: new Map() };
+  benchBots(w);
+  // Humans start spread along the halfway line so nobody is pre-committed to a side.
+  const hs = lobbyHumans(w), n = hs.length;
+  hs.forEach((p, i) => {
+    p.x = n === 1 ? 0 : (i/(n-1) - 0.5) * Math.min(w.field.W*0.6, 300);
+    p.y = (i % 2 ? 1 : -1) * 34;             // alternate sides of the line, clear of the ball
+    p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
+  });
+  resetTrails();
+}
+// Waiting bots stand off the pitch, in a line beside the touchline. They keep their
+// team colour so you can see who you'd be playing, but they don't run the AI.
+function benchBots(w){
+  const bots = w.players.filter(p => p.ctrl === 'bot');
+  const hw = w.field.W/2;
+  bots.forEach((p, i) => {
+    const side = p.team === 0 ? 1 : -1;
+    p.x = side * (hw + LOBBY.benchGap);
+    p.y = (Math.floor(i/2) - (bots.length-1)/4) * LOBBY.benchStep;
+    p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+  });
+}
+// Which half is this player standing in? Team 0 defends -y and attacks +y… no:
+// team 0 starts on the +y half (see layTeam), so +y is team 0's side.
+function lobbySideOf(p){ return p.y >= 0 ? 0 : 1; }
+
+function stepWarmup(w){
+  const L = w.lobby;
+  w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
+  benchBots(w);
+  // Live side preview — the number under each half comes straight from where people
+  // are standing, so it can't disagree with what happens when Start is pressed.
+  L.sides = new Map();
+  for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p));
+  if (L.calib) stepCalibration(w);
+}
+// Resolve the sides people picked, balance them with bots, and kick off.
+function lobbyStart(w){
+  const hs = lobbyHumans(w);
+  let a = hs.filter(p => lobbySideOf(p) === 0);
+  let b = hs.filter(p => lobbySideOf(p) === 1);
+  // One player picks nothing — auto-assign, which is the old behaviour.
+  if (hs.length === 1){ a = [hs[0]]; b = []; }
+  // Everyone on one side: split them down the middle rather than refusing to start.
+  if (hs.length > 1 && (!a.length || !b.length)){
+    const all = a.length ? a : b;
+    a = all.slice(0, Math.ceil(all.length/2));
+    b = all.slice(Math.ceil(all.length/2));
+  }
+  a = a.slice(0, LOBBY.maxPerSide); b = b.slice(0, LOBBY.maxPerSide);
+  a.forEach(p => p.team = 0); b.forEach(p => p.team = 1);
+  // Balance: 5v4 becomes 5v5 by giving the short side a bot. The MODE still sets the
+  // floor, so two people in a 2v2 get a bot team-mate each rather than silently
+  // dropping to 1v1 — picking a side chooses your team, not the match size.
+  const modePer = (w.mode && w.mode.per) || 1;
+  const per = Math.max(1, Math.min(LOBBY.maxPerSide, Math.max(modePer, a.length, b.length)));
+  const bots = w.players.filter(p => p.ctrl === 'bot');
+  const need0 = per - a.length, need1 = per - b.length;
+  let bi = 0;
+  const keep = [];
+  for (let i=0;i<need0;i++){ if (bots[bi]){ bots[bi].team = 0; keep.push(bots[bi]); bi++; } }
+  for (let i=0;i<need1;i++){ if (bots[bi]){ bots[bi].team = 1; keep.push(bots[bi]); bi++; } }
+  w.players = a.concat(b, keep);
+  // Seat rotation is per-seat-ordinal, so it has to be recomputed after a reshuffle.
+  applySeatRotation(w.players);
+  w.players.forEach(p => { p.ms = freshMs(); });
+  labelA = w.players.map(()=>1);
+  botInit(w);
+  w.lobby = null;
+  resetKickoff(w, true);
+}
+// ---------- Cocktail direction calibration -----------------------------------
+// One arrow at a time: hold the stick that way for a second and it's recorded. Two
+// samples (up, then right) are enough to pin the rotation, and taking BOTH means a
+// pad plugged in upside-down is caught rather than silently mirrored.
+const CALIB_STEPS = [{ key:'up', label:'UP', want:[0,-1] }, { key:'right', label:'RIGHT', want:[1,0] }];
+function beginCalibration(w, p){
+  w.lobby.calib = { who: p, step: 0, held: 0, vec: null, got: [] };
+}
+function stepCalibration(w){
+  const c = w.lobby.calib, p = c.who;
+  const pad = padFor(p);
+  const dx = pad ? pad.dx : 0, dy = pad ? pad.dy : 0;
+  const mag = Math.hypot(dx, dy);
+  if (mag >= LOBBY.holdMin){
+    // Restart the clock if they swing somewhere else mid-hold.
+    if (c.vec && (c.vec[0]*dx + c.vec[1]*dy) / (mag * Math.hypot(c.vec[0],c.vec[1]) || 1) < 0.8){ c.held = 0; }
+    c.vec = [dx, dy]; c.held++;
+  } else { c.held = 0; c.vec = null; }
+  if (c.held >= LOBBY.holdTicks){
+    c.got.push([c.vec[0]/mag, c.vec[1]/mag]);
+    c.held = 0; c.vec = null; c.step++;
+    playSfx('whistle');
+    if (c.step >= CALIB_STEPS.length){ finishCalibration(w, p, c.got); w.lobby.calib = null; }
+  }
+}
+// Pick the quarter-turn that best explains both samples, then store it as the seat's
+// SIDE — the same value the cocktail settings card writes, so it persists and every
+// existing code path picks it up without a second source of truth.
+function finishCalibration(w, p, got){
+  let best = 0, bestScore = -9;
+  for (let q = 0; q < 4; q++){
+    let s = 0;
+    got.forEach((g, i) => { const r = rotVec(g[0], g[1], q);
+      s += r[0]*CALIB_STEPS[i].want[0] + r[1]*CALIB_STEPS[i].want[1]; });
+    if (s > bestScore){ bestScore = s; best = q; }
+  }
+  const seat = lobbyHumans(w).indexOf(p) + 1;
+  const side = SIDES.map(s=>s[0]).find(k => sideQuarter(k) === best) || 'bottom';
+  sel.cocktailSides = sel.cocktailSides || {};
+  sel.cocktailSides[seat] = side;
+  saveSel();
+  applySeatRotation(w.players);
+  p.calibrated = true;
+  toast('Player ' + seat + ' facing ' + side);
+}
+function padFor(p){
+  if (p.ctrl === 'human1') return pads.p1;
+  if (p.ctrl === 'human2') return pads.p2;
+  if (p.ctrl === 'gamepad') return gamepadPad(p.padIndex);
+  return null;
+}
+// START, edge-triggered per pad. In cocktail an uncalibrated player calibrates
+// first; after that the HOST's START begins the match and everyone else's marks
+// them ready (which is only ever a display — nobody is blocked by someone idling).
+const START_BTN = 9;                       // standard mapping: Start / Options / +
+let _startPrev = {};
+function pollLobbyStart(w){
+  if (!w || w.state !== 'warmup' || !w.lobby) return;
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  for (const p of lobbyHumans(w)){
+    let pressed = false, key = p.ctrl;
+    if (p.ctrl === 'gamepad'){
+      const g = gps[p.padIndex];
+      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8)));
+      key = 'pad' + p.padIndex;
+    } else {
+      pressed = !!keys['enter'];             // keyboard seats use Enter
+    }
+    const was = _startPrev[key];
+    _startPrev[key] = pressed;
+    if (!pressed || was) continue;           // edge only
+    if (w.lobby.calib) continue;             // mid-calibration: ignore
+    if (sel.display === 'cocktail' && !p.calibrated){ beginCalibration(w, p); continue; }
+    if (p === lobbyHost(w)){ lobbyStart(w); return; }
+    if (w.lobby.ready.has(p)) w.lobby.ready.delete(p); else w.lobby.ready.add(p);
+  }
+}
+
 // ---------- Kickoff line rule
 // The kickoff state already ends on the first touch, so gating on it IS "until the
 // ball is played". Team 0 owns +y. resetKickoff lays everyone out legally first, so
 // a plain clamp never yanks anybody.
 function kickoffLineOn(w){
   return !!(w && w.kickoffRule && !w.drillMode && !w.train && w.state === 'kickoff');
+  // Deliberately NOT in warmup: picking a side means walking to it, and the halfway
+  // rule would shove you back the moment you crossed.
 }
 // The centre circle is a gate in the kickoff line: stand in it and you may cross,
 // so you can turn and pass backwards instead of being pinned with every option in
@@ -5414,6 +5640,7 @@ function endMatch(w){
   showResult(title, sub);
   $('ovTitle').classList.remove('slam'); void $('ovTitle').offsetWidth; $('ovTitle').classList.add('slam');
   renderAwards(w);
+  renderMatchStats(w);
 }
 
 // ---------- End-of-match awards (Towerfall/CoD style): everyone gets something.
@@ -5465,6 +5692,57 @@ function computeAwards(w){
   const mine = ranked.find(a=>a.p._hero);
   if (mine && !shown.includes(mine)){ shown = shown.slice(0,7); shown.push(mine); }
   return shown;
+}
+// The full scoresheet under the awards. Awards say who was best at one thing; this
+// says what everyone actually did, which is the question you have straight after a
+// match and the reason "Most Saves" alone was never enough.
+const STAT_COLS = [
+  { k:'goals',   h:'G',   t:'Goals' },
+  { k:'assists', h:'A',   t:'Assists' },
+  { k:'shots',   h:'SH',  t:'Shots' },
+  { k:'saves',   h:'SV',  t:'Saves' },
+  { k:'clears',  h:'CL',  t:'Clearances' },
+  { k:'passKey', h:'KP',  t:'Key passes' },
+  { k:'posts',   h:'PST', t:'Posts hit' },
+  { k:'touches', h:'TCH', t:'Touches' },
+];
+function renderMatchStats(w){
+  const host = $('ovStats'); if (!host) return; host.innerHTML='';
+  if (!w || w.drillMode || w.tutorial || !w.players || !w.players.length) return;
+  const head = document.createElement('div'); head.className='statshead';
+  head.textContent = 'MATCH STATS';
+  host.appendChild(head);
+  const tbl = document.createElement('div'); tbl.className='statstbl';
+  const row = (cells, cls) => { const r=document.createElement('div'); r.className='statsrow'+(cls||'');
+    cells.forEach((c,i)=>{ const d=document.createElement('span');
+      d.className = i===0 ? 'sname' : 'snum';
+      if (typeof c === 'object'){ d.appendChild(c); } else d.textContent = c;
+      r.appendChild(d); });
+    tbl.appendChild(r); return r; };
+  row(['', ...STAT_COLS.map(c=>c.h)], ' shead');
+  // Teams in order, each player's own line. Sorted by the same MVP score the awards
+  // use, so the two panels can't disagree about who had the better match.
+  for (const team of [0, 1]){
+    const side = w.players.filter(p => p.team === team)
+      .sort((a,b) => mvpScore(b.ms) - mvpScore(a.ms) ||
+                     w.players.indexOf(a) - w.players.indexOf(b));
+    if (!side.length) continue;
+    for (const p of side){
+      const who = document.createElement('span'); who.className='swho';
+      const cv = document.createElement('canvas'); cv.width=cv.height=22;
+      drawDisc(cv.getContext('2d'), 11, 11, 9,
+        { color:p.color||'#7f8aa0', flag:p.flag||'none', eyes:p.eyes||'googly' });
+      const nm = document.createElement('b'); nm.textContent = p.ctrl==='bot' ? p.name : (p.name || 'You');
+      who.append(cv, nm);
+      const r = row([who, ...STAT_COLS.map(c => String(p.ms[c.k] ?? 0))],
+                    p.ctrl !== 'bot' ? ' you' : '');
+      r.dataset.team = team;
+    }
+  }
+  host.appendChild(tbl);
+  const key = document.createElement('div'); key.className='statskey';
+  key.textContent = STAT_COLS.map(c => c.h + ' ' + c.t.toLowerCase()).join(' · ');
+  host.appendChild(key);
 }
 function renderAwards(w){
   const host = $('ovAwards'); if (!host) return; host.innerHTML='';
@@ -6662,12 +6940,114 @@ function render(){
   ctx.restore();
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); flash*=0.88; } else flash=0;
+  if (world.state === 'warmup') drawLobby(world);
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
   drawPadFlairs();
   if (sel.debug) drawDebug(world);
 }
+
+// ---------- Warm-up lobby overlay -------------------------------------------
+// Drawn in SCREEN space, over the pitch: the two halves tinted with a live head
+// count, a prompt per player, and (mid-calibration) one big arrow at a time.
+function drawLobby(w){
+  const L = w.lobby; if (!L) return;
+  const hs = lobbyHumans(w), host = lobbyHost(w);
+  const T = TH;
+  // --- Team sides. Only worth showing when there's actually a choice to make.
+  if (hs.length > 1 && !L.calib){
+    const halfL = w.field.L/2, halfW = w.field.W/2;
+    [0, 1].forEach(team => {
+      const sign = team === 0 ? 1 : -1;
+      const col = team === 0 ? T.teamRed : T.teamBlue;
+      const n = hs.filter(p => lobbySideOf(p) === team).length;
+      const pts = [[-halfW, 0], [halfW, 0], [halfW, sign*halfL], [-halfW, sign*halfL]]
+        .map(([x, y]) => screenPt(wx(x), wy(y)));
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i=1;i<4;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = rgba(col, 0.10 + 0.06*Math.min(1, n)); ctx.fill();
+      const [cx, cy] = screenPt(wx(0), wy(sign*halfL*0.84));   // clear of the players and the line
+      uprightAt(cx, cy, (x, y) => {
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.font = `26px ${LOBBY_FONT}`;
+        ctx.fillStyle = readableInk(col, T.fieldBg);
+        ctx.fillText(String(n), x, y - 12);
+        ctx.font = `10px ${LOBBY_FONT}`;
+        ctx.fillStyle = T.hudSub || T.hudText;
+        ctx.fillText(n === 1 ? 'PLAYER' : 'PLAYERS', x, y + 12);
+      });
+    });
+  }
+  // --- Per-player prompt, floating above each human.
+  if (!L.calib) for (const p of hs){
+    const [sx, sy] = screenPt(wx(p.x), wy(p.y));
+    const seat = hs.indexOf(p) + 1;
+    const needCal = sel.display === 'cocktail' && !p.calibrated;
+    const txt = needCal ? 'START = SET DIRECTIONS'
+              : p === host ? 'START = KICK OFF'
+              : L.ready.has(p) ? 'READY' : 'START = READY';
+    uprightAt(sx, sy - p.r*cam.s - 48, (x, y) => {          // above the name plate, not on it
+      ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      const wd = ctx.measureText(txt).width + 12;
+      ctx.fillStyle = T.nameBg; ctx.fillRect(x - wd/2, y - 8, wd, 16);
+      ctx.fillStyle = L.ready.has(p) ? readableInk(T.good || '#3ec06a', T.nameBg) : T.nameText;
+      ctx.fillText(txt, x, y);
+      ctx.font = `8px ${LOBBY_FONT}`; ctx.fillStyle = T.hudSub || T.nameText;
+      ctx.fillText('P' + seat, x, y - 16);
+    });
+  }
+  // --- The headline. One line, always the same place, so "what do I press?" is
+  // answered without reading anyone's disc.
+  if (!L.calib){
+    const host = lobbyHost(w);
+    const cal = sel.display === 'cocktail' && host && !host.calibrated;
+    const txt = cal ? 'PRESS START TO SET YOUR DIRECTIONS' : 'PRESS START TO CONTINUE';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const y0 = Math.round(ch * 0.085);
+    ctx.font = `13px ${LOBBY_FONT}`;
+    const wd = ctx.measureText(txt).width + 26;
+    ctx.fillStyle = rgba(TH.fieldBg, 0.86);
+    roundRectPath(cw/2 - wd/2, y0 - 15, wd, 30, 8); ctx.fill();
+    ctx.strokeStyle = rgba(TH.accent, 0.55); ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = TH.hudText; ctx.fillText(txt, cw/2, y0);
+    if (hs.length > 1){
+      ctx.font = `9px ${LOBBY_FONT}`;
+      ctx.fillStyle = TH.hudSub || TH.hudText;
+      ctx.fillText('STAND ON THE SIDE YOU WANT TO PLAY — BOTS FILL THE REST', cw/2, y0 + 22);
+    }
+  }
+  // --- Calibration: ONE arrow at a time, with a ring that fills as it's held.
+  if (L.calib){
+    const c = L.calib, stepDef = CALIB_STEPS[c.step];
+    ctx.fillStyle = rgba(TH.fieldBg, 0.72); ctx.fillRect(0, 0, cw, ch);
+    const x = cw/2, y = ch/2;
+    const ang = Math.atan2(stepDef.want[1], stepDef.want[0]);
+    const R = LOBBY.arrowR;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    ctx.fillStyle = TH.accent;
+    ctx.beginPath();
+    ctx.moveTo(R, 0); ctx.lineTo(R*0.45, -R*0.42); ctx.lineTo(R*0.45, -R*0.16);
+    ctx.lineTo(-R*0.55, -R*0.16); ctx.lineTo(-R*0.55, R*0.16); ctx.lineTo(R*0.45, R*0.16);
+    ctx.lineTo(R*0.45, R*0.42); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // Hold progress. A ring that fills is honest here — this IS progress, unlike the
+    // kick charge, which is a wind-up and flashes instead.
+    const f = Math.min(1, c.held / LOBBY.holdTicks);
+    ctx.beginPath(); ctx.arc(x, y, R*1.35, -Math.PI/2, -Math.PI/2 + f*2*Math.PI);
+    ctx.strokeStyle = TH.kickRing; ctx.lineWidth = 7; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = TH.hudText;
+    ctx.font = `18px ${LOBBY_FONT}`;
+    ctx.fillText('HOLD ' + stepDef.label, x, y - R*1.9);
+    ctx.font = `10px ${LOBBY_FONT}`;
+    ctx.fillStyle = TH.hudSub || TH.hudText;
+    ctx.fillText('PUSH THE STICK THE WAY THAT IS ' + stepDef.label + ' FOR YOU', x, y + R*1.9);
+    ctx.fillText((c.step+1) + ' / ' + CALIB_STEPS.length, x, y + R*1.9 + 18);
+  }
+}
+const LOBBY_FONT = "'Kenney', system-ui, -apple-system, sans-serif";
 
 // ---------- Connected-controller flairs -------------------------------------
 // One small pad icon per connected controller, bottom-right. It goes black while
@@ -7843,7 +8223,8 @@ function showOverlay(title, sub, resumable){
   $('ovTitle').textContent = title;
   $('ovTitle').classList.remove('slam');
   $('ovSub').textContent = sub;
-  { const aw=$('ovAwards'); if (aw) aw.innerHTML=''; }   // awards only appear on a match result
+  { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML=''; }   // awards/stats only on a match result
   // Restore the standard match/pause buttons (the drill result repurposes them).
   $('ovResume').textContent = 'Resume'; $('ovResume').onclick = () => togglePause(false);
   $('ovRematch').textContent = 'Rematch'; $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
@@ -7951,7 +8332,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260804.1120PM';
+const VERSION = '20260805.0110AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -7974,7 +8355,7 @@ if (window.__MAGNETDEBUG) {
     unlockCounts, UNL_CATS, isUnlocked, drawDisc, updatePreview,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
-    computeAwards, renderAwards, mvpScore, noteKick, ballSquash, endMatch,
+    computeAwards, renderAwards, renderMatchStats, STAT_COLS, mvpScore, noteKick, ballSquash, endMatch,
     BOT, runBot, botInit, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
     setMatchSeed, botSkill, DIFF, botIntercept, ballAt, botTimeToBall, botLaneClear, botAperture,
     botMirror, botBankHits, botPickAim, botFormationSpot, botAssignRoles, botPhase,
@@ -7982,6 +8363,8 @@ if (window.__MAGNETDEBUG) {
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
+    LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyStart, enterWarmup,
+    benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     paintBall, buildBallLookPick,
