@@ -5,7 +5,40 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0730AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0930AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🎧 VJ Mode — video decks + DJ decks
+- [x] **Audit first: VJ Mode did not exist.** The brief described extending it; the repo had
+  nothing — no `<video>`, no decks, no tap tempo, no crossfader. "VIDEOBALL" is a theme
+  palette and the `Deck:` commits are Steam Deck. Built both halves from scratch.
+- [x] **Five slots of a mixer, one AudioContext, in the GAME tab.** `sfxBus → mainMix →
+  master → limiter`. Two contexts across two tabs cannot be mixed and drift within seconds,
+  so `/settings` sends commands and receives meters and never holds a node.
+- [x] **Two audio decks** on `MediaElementSource`: transport, cue point, 4 hot cues, manual
+  and 1/2/4/8-beat auto-loops off the master clock, 3-band kill EQ (−40dB is a real kill),
+  single-knob HP/LP sweep, ±8/16/50% pitch with key-lock, trim, fader, assign, VU.
+  ⚠️ Sync is beat-matchable, **not** turntable-locked — `currentTime` is not sample-accurate,
+  so phase is re-nudged rather than held. That was the chosen tradeoff; key-lock and sane
+  memory are what it buys.
+- [x] **Offline BPM + waveform**, once per file, cached: decode → envelope → onset pick →
+  IOI histogram → best tempo in 70–180 + grid offset. Manual override and grid nudge, because
+  detection is wrong sometimes.
+- [x] **Two video decks** with opacity, fit, look, tint, rate and optional clip audio (off by
+  default — video and music are fully decoupled), an independent video crossfader, and TAKE
+  quantised to the master clock.
+- [x] **ONE tempo system.** Tap tempo drives TAKE quantisation, auto-loops and deck sync.
+- [x] **Guarantees are structural.** Video composites at one seam between the pitch surface
+  and its markings; discs/ball/trails draw later, so no deck value can dim a player. Markings
+  floor at 20%. Limiter always in the chain while live, and taken back out when off.
+- [x] **Measured, then designed around it.** `ctx.filter` at full resolution cost 45.9ms/frame
+  against 20.4ms for the same two draws — looks now render through a half-scale pass and tint
+  is a composite op. Decks at zero opacity are not decoded.
+- [x] **PANIC** on the game page (Shift+Esc), working with `/settings` closed or dead.
+- [x] Presets carry the full board position and no media (649 bytes for a full board).
+- [ ] **Headphone cue is built and flagged experimental.** Chromium-only `setSinkId`, and the
+  MediaStream route puts cue ~20–100ms behind main — it is not sample-aligned. Judge it in situ.
 
 ---
 

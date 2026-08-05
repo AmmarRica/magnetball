@@ -81,6 +81,7 @@ version, so it refreshes with it).
 | `kickoffhead` | The KICK OFF button **is** the Match section's header: collapsed it's just the green bar with a chevron on its right, expanding shows the mode/field/difficulty pickers, pressing the button starts a match without toggling the section, the accordion still holds, and the sticky offset is measured from the header rather than the button nested inside it |
 | `hitstop` | Hit stop is its own slider (0 = off, survives Screen shake being turned off, writes and persists) and the freeze only pays out on a **first touch** whose shot the game has walked forward and seen score: wide, backwards, too soft, dying short, wrong attacker and blocked-by-a-body all get nothing (the block is cross-checked against the real sim), a trapped-and-carried shot gets nothing even though it would score, nothing fires at kickoff or after the whistle, and the prediction is deterministic and provably inert — a whole-world diff across 25 predictions, since `collideDiscs` writes to both bodies |
 | `netpass` | Players pass through the net, the ball still doesn't: every net wall is `ballOnly` and no wall blocks a player at all, while the collider itself still works (so the geometry didn't just vanish); a player walking sideways inside the goal mouth gets past the post instead of pinning at `gh - r`, enters the mouth but is stopped by the step-out clamp rather than the netting, and never reaches the net's back; checked on all 30 fields for both ball escapes and player escapes |
+| `vjmode` | VJ Mode's four load-bearing claims: **off means untouched** (markings alpha is *exactly* 1 and the seam is a byte-identical no-op on a whole frame); **players are untouchable** — a video deck driven to full opacity over a probe pixel proven to be on a disc leaves it unchanged, which is a claim about draw order, and the suite first passed vacuously reading a black pixel that wasn't a player; **the line floor holds** at `VJ.lineFloor` for any deck value including absurd ones; and **zero sim impact** — 600 steps on one seed, VJ off vs both decks blazing, bit-identical. Plus the master clock (tap → 120 BPM, 240 folded into range, no-tempo fires now not never), both crossfader laws (equal-power with no hole; the cut law *holds full to centre then cuts*), a real −40dB kill EQ, a structured-cloneable snapshot with no audio nodes, an unknown command that must not throw, PANIC by call and by hotkey, a preset round trip carrying no media, and a 4-beat auto-loop reading the master clock |
 | `themeslots` | A theme is a collection of five slots and "Custom" is derived: every slot is a real registry whose every option names itself; Pool sets all five (including `sel.snd`, checked against the arrays `playSfx` reads) and reaches the live render; changing one slot names it Custom, unmarks every bundle tile and leaves the other four alone; putting it back brings the name back, and assembling Pool slot-by-slot from Neon gets Pool's name too; a hand-picked sound reads Custom rather than throwing; every set's every variant exists and plays; the ball slot moves in both the Theme and Ball cards and the sound set in both the Theme and Sound cards; every option in every slot renders, plus a starfield over the Grass palette; and a legacy `theme`/`ballLook` save migrates to its bundle once, keeping a hand-picked ball look and a hand-picked whistle |
 | `photo` | Your own photo as a faceplate: a 1600×900 source is stored **centre-cropped at 128²** and under 40KB (a camera-sized image would blow the localStorage budget), it's worn automatically, actually drawn on the disc and reaches a live match, it **never leaves the device** — the real leaderboard payload is intercepted and checked for `data:`/`base64`, and confirmed to carry only the word `photo` — it persists, Remove falls back rather than leaving a blank plate, Reset look clears it, and a refused camera leaves Upload working with a message that says so |
 | `menunav` | Menu navigation: each big card shows one pane at a time with chips and panes matching **one-for-one** (a spare chip shows nothing, a spare pane can never be shown), only one pane visible at a time and every pane genuinely visible when its chip is pressed; both cards measurably shrank (599px and 749px, from 6777 and 3121 flat) and the tallest single pane still beats the old flat card; the 11 nav tiles are grouped under three labels with none lost, duplicated or unwired; and the jump bar is sticky, has a chip per section and no more, labels them, opens one section alone and marks which |
@@ -165,6 +166,26 @@ would have let a bug through:
   `sel.snd`, which the Sound card edits one category at a time, so it can legitimately
   be a combination no set describes. `SLOTS.sfx.name('custom')` would throw — the label
   has to check `keys().includes()` first, and the suite drives that path deliberately.
+
+A third VJ trap, which produced a silently STALE settings page rather than a failure:
+
+- **`hello` is the whole handshake — do not add a second one.** The game's only full
+  state push is gated on `!wasLive`, and every inbound message marks the peer live.
+  A `vjhello` posted from the panel's build raced ahead of `hello`, swallowed the
+  push, and the panel came up showing localStorage instead of the game's live state.
+  Nothing threw and no console error appeared; `panel`'s `snapshotAdopted` is what
+  caught it. Anything the panel needs at open must ride the existing `hello`.
+
+Two traps specific to VJ Mode, both of which produced a false pass here:
+
+- **Sabotage your own sabotage.** Moving the video composite to "after the players"
+  by inserting it before `drawDiscs` is still *under* the players — the check
+  correctly passed and it looked like the test was weak. Verify the sabotage landed
+  and does what you meant before concluding anything about the test.
+- **Prove the probe is on the thing.** The draw-order check sampled world (0,0) and
+  read `[0,0,0]` — the disc's own rim colour, indistinguishable from missing the
+  player entirely. It now searches for a pixel that differs from the bare pitch and
+  asserts it found one, so the check cannot pass by sampling nothing.
 
 Also: **`getBoundingClientRect` on a ROTATED element gives axis-aligned bounds.** The
 collapsed chevron is `rotate(-90deg)`, so its rect "height" is really its width —

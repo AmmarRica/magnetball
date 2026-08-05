@@ -151,6 +151,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `audit` checks for orphan panes for exactly that reason. Sticky order is chips → KICK OFF →
   section headers, so `syncSticky()` folds the jump bar's height into `--sticky-top`.
   `tests/menunav.mjs`.
+- **VJ Mode (render/audio layer ONLY):** two video decks + two DJ decks, operated from
+  `/settings` while the game runs fullscreen. **Default off**; `sel.vj.on` is the only part
+  in `sel` — decks, library and files live in `vj`, deliberately outside it, because
+  `saveSel()` serialises all of `sel` to localStorage and `syncAdopt()` shallow-merges it.
+  Every tunable is in the `VJ` block.
+  ⚠️ **ONE `AudioContext`, in the GAME tab.** Two contexts across two tabs cannot be mixed
+  and drift within seconds. `/settings` sends `{t:'vjc'}` commands and files (`{t:'vjf'}` —
+  the **Blob**, never an object URL, which is per-document) and receives `{t:'vjs'}`
+  snapshots at `VJ.meterHz`. It never holds a node.
+  ⚠️ **Two guarantees are STRUCTURAL, not policy.** `vjPaintVideo` composites at one seam in
+  `drawPitch` — over the surface, under the markings — and discs/ball/trails draw later in
+  `render()`, so no deck value can dim a player. `vjMarkA()` floors markings at
+  `VJ.lineFloor` and returns *exactly* 1 with VJ off. `tests/vjmode.mjs` sabotage-checks both.
+  ⚠️ **`ctx.filter` at full resolution cost 2.2× the entire frame budget** (45.9ms vs 20.4ms
+  for the same two draws). Deck looks render through a `VJ.videoFxRes` intermediate; tint is
+  a composite op, which is free. A deck at zero opacity is not decoded at all.
+  The limiter is inserted on arm and **removed** when VJ Mode is off, so "additive" is literal.
+  `Aud` gained buses (`sfxBus → mainMix → master`); with VJ off that is three unity gains and
+  nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
+  goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
+  the projector for six seconds.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header

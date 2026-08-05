@@ -340,6 +340,60 @@
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
+
+    /* ---- VJ Mode operator panel: laid out like hardware, not like a form ---- */
+    #vjPanel { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+    .vjrow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .vjtop { gap:10px; }
+    .vjh { font-family:var(--pix); font-size:13px; color:var(--accent); margin:14px 0 2px;
+           letter-spacing:.06em; }
+    .vjlab { font-family:var(--pix); font-size:10px; color:var(--muted); letter-spacing:.06em;
+             min-width:58px; }
+    .vjtiny { font-size:10px; color:var(--muted); }
+    .vjnote { font-size:11px; color:var(--muted); line-height:1.5; }
+    .vjwarn { font-size:11px; color:var(--yellow); line-height:1.5; }
+    .vjstate { font-family:var(--pix); font-size:11px; color:var(--accent); }
+    .vjbtn { font-family:var(--pix); font-size:11px; padding:8px 10px; min-height:34px;
+             background:rgba(255,255,255,.04); color:var(--text);
+             border:1px solid var(--edge); border-radius:8px; cursor:pointer; width:auto; margin:0; }
+    .vjbtn.sel { background:rgba(53,255,135,.16); border-color:var(--go); color:var(--go); }
+    .vjbtn.big { font-size:14px; padding:12px 16px; min-height:46px; }
+    .vjbtn.panic { border-color:var(--red); color:var(--red); background:rgba(255,59,107,.10);
+                   margin-left:auto; }
+    .vjsl { flex:1 1 90px; min-width:90px; }
+    .vjcv { border-radius:6px; display:block; max-width:100%; }
+    .vjdecks { align-items:stretch; gap:12px; }
+    .vjstrip { flex:1 1 340px; min-width:290px; display:flex; flex-direction:column; gap:8px;
+               background:rgba(255,255,255,.03); border:1px solid var(--edge);
+               border-radius:12px; padding:12px; }
+    .vjhead { justify-content:space-between; }
+    .vjdeckid { font-family:var(--pix); font-size:12px; color:var(--accent); }
+    .vjtrack { font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis;
+               white-space:nowrap; max-width:60%; }
+    .vjpos, .vjdbpm, .vjval { font-family:var(--pix); font-size:11px; color:var(--muted); }
+    .vjbpmbox { display:flex; align-items:center; gap:6px; }
+    .vjbpm { font-family:var(--pix); font-size:20px; color:var(--accent); }
+    .vjxf .vjsl { flex:1 1 200px; }
+    .vjcurve { display:flex; gap:4px; }
+    /* Three bands must sit on ONE line or the strip stops reading as a channel. */
+    .vjeq { flex-wrap:nowrap; }
+    .vjeq .vjlab { min-width:0; }
+    .vjeq .vjsl { flex:1 1 40px; min-width:40px; }
+    .vjfile { width:100%; font-size:12px; color:var(--text); }
+    .vjsel, .vjtext, .vjnum { font-family:inherit; font-size:12px; padding:7px 8px;
+             background:var(--field); color:var(--text); border:1px solid var(--edge);
+             border-radius:8px; }
+    .vjnum { width:88px; } .vjcol { width:44px; height:32px; padding:0; border:1px solid var(--edge);
+             border-radius:8px; background:var(--field); }
+    .vjlib { display:flex; flex-direction:column; gap:4px; max-height:260px; overflow-y:auto; }
+    .vjitem { display:flex; align-items:center; gap:8px; padding:6px 8px;
+              background:rgba(255,255,255,.03); border-radius:8px; }
+    .vjiname { flex:1 1 auto; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .vjimeta { font-family:var(--pix); font-size:10px; color:var(--muted); }
+    .vjpresets { display:flex; gap:6px; flex-wrap:wrap; }
+    /* The projector output has NO chrome: VJ Mode hides the build tag and the dock. */
+    body.vjlive #buildTag, body.vjlive #dock, body.vjlive .replaybar { display:none !important; }
+
     /* Tutorial coaching tip */
     #tutTip {
       position: fixed; top: 66px; left: 0; right: 0; z-index: 14; text-align: center; pointer-events: none;
@@ -1180,6 +1234,12 @@
       <button class="ghost" id="feelReset" style="margin-top:14px">Reset to defaults</button>
     </div>
 
+
+    <div class="card collapsible collapsed" data-sec="vj">
+      <h2>VJ Mode</h2>
+      <div class="hint" style="text-align:left">Two video decks and two DJ decks, run from here while the game plays fullscreen on the projector. Everything is off until you turn it on, and the game looks and sounds exactly as normal until then.</div>
+      <div id="vjPanel"></div>
+    </div>
     <div class="card collapsible collapsed" data-sec="online">
       <h2>Online</h2>
       <div class="hint" style="text-align:left">Local and vs-bot only for now. Online is not built.</div>
@@ -1981,6 +2041,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             look: { palette:'neon', field:'none', discs:'none', ball:'classic' },
+            vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
             pad: { up:12, down:13, left:14, right:15, kick:0 },
@@ -2272,10 +2333,20 @@ function rgba(col, a){
 //  AUDIO — everything synthesised at runtime (Web Audio, no files)
 // ============================================================
 const Aud = (function(){
-  let AC=null, master=null;
+  let AC=null, master=null, sfxBus=null, mainMix=null;
+  // ⚠️ With VJ Mode off this chain must be INAUDIBLY identical to the single gain it
+  // replaced. Three unity gains in series are exactly that — no filter, no compressor,
+  // no colour. The limiter is inserted only when VJ Mode arms (see vjArm), because a
+  // compressor in the path would genuinely change how the game sounds.
+  //   sfx one-shots -> sfxBus -> mainMix -> master -> destination
+  // The music decks join at mainMix, so `sfxBus` is the game's own fader and nothing
+  // else touches it.
   function ensure(){
-    if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); master=AC.createGain();
-      master.gain.value=(sel.snd.vol||40)/100; master.connect(AC.destination); }catch(e){ return false; } }
+    if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)();
+      master=AC.createGain(); master.gain.value=(sel.snd.vol||40)/100;
+      mainMix=AC.createGain(); sfxBus=AC.createGain();
+      sfxBus.connect(mainMix); mainMix.connect(master); master.connect(AC.destination);
+    }catch(e){ return false; } }
     if(AC.state==='suspended') AC.resume();
     return true;
   }
@@ -2288,7 +2359,7 @@ const Aud = (function(){
     const v=o.vol!=null?o.vol:0.4; g.gain.setValueAtTime(0.0001,t);
     g.gain.exponentialRampToValueAtTime(v,t+(o.atk||0.005)); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     let last=osc; if(o.lp){ const fl=AC.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=o.lp; osc.connect(fl); last=fl; }
-    last.connect(g); g.connect(master); osc.start(t); osc.stop(t+dur+0.03);
+    last.connect(g); g.connect(sfxBus); osc.start(t); osc.stop(t+dur+0.03);
   }
   function noise(dur,o){ if(!ensure()||!on())return; o=o||{}; const t=AC.currentTime+(o.delay||0);
     const n=Math.max(1,Math.floor(AC.sampleRate*dur)); const buf=AC.createBuffer(1,n,AC.sampleRate);
@@ -2298,10 +2369,12 @@ const Aud = (function(){
     g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     let last=src; const bt=o.bp?'bandpass':o.hp?'highpass':o.lp?'lowpass':null;
     if(bt){ const f=AC.createBiquadFilter(); f.type=bt; f.frequency.value=o.bp||o.hp||o.lp; if(o.Q)f.Q.value=o.Q; src.connect(f); last=f; }
-    last.connect(g); g.connect(master); src.start(t); src.stop(t+dur+0.03);
+    last.connect(g); g.connect(sfxBus); src.start(t); src.stop(t+dur+0.03);
   }
   return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; },
-           gain:()=>master?master.gain.value:null };
+           gain:()=>master?master.gain.value:null,
+           // Handles for the VJ mixer. Null until ensure() has run on a user gesture.
+           ctx:()=>AC, busSfx:()=>sfxBus, busMain:()=>mainMix, busMaster:()=>master };
 })();
 
 // So prompts can say "press a button" instead of "tap" at a desk.
@@ -2382,6 +2455,9 @@ const SFX = {
 };
 const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Chirp'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash'], kick:['Thock','Punch','Pluck','Clack','Zap'], wall:['Tick','Click','Bonk','Cushion','Ping'], net:['Swish','Thud','Rustle','Pocket','Warp'] };
 function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
+  // A goal dips the MUSIC bus so the crowd lands, then restores. Hooked here rather
+  // than at the four goal call sites, so a fifth one can't forget.
+  if (cat === 'crowd' && typeof vjDuckGoal === 'function') vjDuckGoal();
   const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
 // falling "aww" on a near miss / post.
@@ -2636,14 +2712,28 @@ if (bc){
       if (!PANEL){
         if (!wasLive) syncPush();                 // first contact: full state
         syncPost({ t:'tel', rows: telemetryRows() });   // every time: proof of life + readout
+        // ⚠️ VJ state rides THIS message. Do not add a second handshake: `hello` is the
+        // only thing that triggers the full push above, and it is gated on !wasLive —
+        // any earlier message marks the peer live and the panel comes up stale.
+        if (typeof vjPush === 'function') vjPush(true);
       }
       return;
     }
     if (m.t === 'pong') return;                   // liveness only
     if (m.t === 'state'){ syncAdopt(m); return; }
     if (m.t === 'tel'){ if (PANEL) renderTelemetry(m); return; }
+    // ---- VJ Mode. Commands travel one way, state the other. ----
+    if (m.t === 'vjc'){ if (!PANEL) vjExec(m.cmd, m.arg); return; }
+    if (m.t === 'vjf'){ if (!PANEL){                 // a File/Blob, never an object URL
+      if (m.kind === 'video') vjLoadVideo(m.deck, m.file); else vjLoadAudio(m.deck, m.file); } return; }
+    if (m.t === 'vjs'){ if (PANEL){ vjView = m.s; vjPanelRender(); } return; }
   };
 }
+// PANIC lives on the game page on purpose: it has to work with /settings closed,
+// crashed, or never opened. Shift+Esc kills both video decks, drops master audio and
+// restores the theme. Alt+Space taps the master clock without leaving the projector.
+window.addEventListener('keydown', e => { if (typeof vjKey === 'function') vjKey(e); }, true);
+
 // A drag guard so an incoming update can't rebuild the slider you're holding.
 let sliderDragging = false;
 ['pointerdown','pointerup','pointercancel'].forEach(ev=>{
@@ -2736,8 +2826,1165 @@ function recordResult(w){
   lbSubmit().then(ok=>{ if(ok) toast('Score uploaded to leaderboard', 'ok', '☁️'); });
   return delta;
 }
+// ============================================================
+//  VJ MODE — two video decks + two DJ decks, driven from /settings
+//
+//  RENDER AND AUDIO ONLY. Nothing in here is reachable from step(), integrate(),
+//  moveBall(), collide*(), runBot() or w.rng. The sim cannot see it, so
+//  determinism, replays and lockstep are untouched by anything below.
+//
+//  Two structural decisions carry the safety guarantees, rather than a rule
+//  somebody has to remember:
+//
+//  1. VIDEO COMPOSITES AT ONE SEAM inside drawPitch — over the pitch surface,
+//     under the markings. Trails, discs and ball draw later in render(), so there
+//     is no deck value, no crossfader position and no transition that can put
+//     video in front of a player. "Players always full opacity" is draw order.
+//  2. ALL AUDIO IS ONE AudioContext IN THE GAME TAB. Two contexts in two tabs
+//     cannot be mixed and would drift apart within seconds. /settings sends
+//     commands and receives meters; it never makes a sound.
+//
+//  Default off. With vj.on false, vjPaintVideo() returns immediately, vjMarkA()
+//  returns exactly 1, and the audio graph is the three unity gains Aud always
+//  builds — the game looks and sounds as it did before any of this existed.
+// ============================================================
+
+// ---------- Every tunable value, in one place -------------------------------
+const VJ = {
+  // Master clock (tap tempo). ONE tempo system: video TAKE quantisation, auto-loops
+  // and deck sync all read it.
+  tapTimeout:   2.4,      // s — a gap longer than this starts a new tap set
+  tapMin:       3,        // taps before a tempo is trusted
+  tapKeep:      8,        // rolling taps averaged
+  bpmMin:       70,       // detection + tap clamp, both ends inclusive
+  bpmMax:       180,
+  // Video
+  fadeCurve:    'smooth', // default crossfader law: 'sharp' | 'smooth'
+  takeQuant:    'beat',   // 'off' | 'beat' | 'bar' — when a TAKE actually fires
+  barBeats:     4,
+  lineFloor:    0.20,     // ⚠️ markings can never fade below this. Non-negotiable.
+  markFull:     1.0,
+  videoFxRes:   0.5,      // filtered decks render through an intermediate at this
+                          // scale — ctx.filter cost is per-pixel, and at full res it
+                          // measured 2.2x the whole frame budget on its own.
+  // Audio deck EQ. Shelf/peak corner frequencies and the gain that counts as a kill.
+  eqLowHz:      250,
+  eqMidHz:      1000,
+  eqMidQ:       0.9,
+  eqHighHz:     4000,
+  eqMaxDb:      6,        // +6 boost
+  eqKillDb:    -40,       // full kill at the bottom of the throw
+  // Single-knob filter sweep. Centre is bypass; below is HP, above is LP.
+  filtMinHz:    30,
+  filtMaxHz:    20000,
+  filtQ:        0.8,
+  filtDead:     0.04,     // knob travel either side of centre that stays bypassed
+  // Pitch
+  pitchRanges:  [8, 16, 50],
+  pitchDefault: 8,
+  keyLockWarn:  10,       // beyond +/- this %, preservesPitch audibly degrades
+  // Master
+  limThreshold: -3,       // dB. Always in the chain in VJ mode — never clip a PA.
+  limKnee:      0,
+  limRatio:     20,
+  limAttack:    0.003,
+  limRelease:   0.15,
+  masterDefault: 0.8,
+  // Game SFX under VJ Mode: present but well out of the way.
+  sfxDefault:   0.15,
+  duckAmount:   0.35,     // music dips TO this fraction on a goal
+  duckAttack:   0.08,     // s
+  duckHold:     0.9,      // s
+  duckRelease:  0.6,      // s
+  // Analysis (offline, once per file, cached)
+  waveBuckets:  1000,
+  envRate:      200,      // Hz — envelope sample rate for onset picking
+  onsetLpHz:    250,
+  // Cross-tab
+  meterHz:      20,       // meter/position updates. Do NOT send per frame.
+  heartbeatMs:  1200,     // VJ mode wants to know sooner than the 4s settings window
+  // Auto-loop lengths offered, in beats
+  loopBeats:    [1, 2, 4, 8],
+  hotCues:      4,
+};
+
+// ---------- State ------------------------------------------------------------
+// ⚠️ Deliberately NOT in `sel`. saveSel() serialises the whole of sel to
+// localStorage on every write and syncAdopt() shallow-merges it across tabs —
+// deck state there would blow the ~5MB budget and get clobbered by an unrelated
+// setting change from the other tab. Only the on/off flag is small enough to live
+// in sel, and it is the one thing that should survive a reload.
+function vjDeckAudio(id){
+  return { id, kind:'audio', name:'', file:null, url:'',
+    el:null, src:null, trim:null, low:null, mid:null, high:null, filt:null,
+    fader:null, toMain:null, toCue:null, meter:null, meterBuf:null,
+    ready:false, playing:false, dur:0, pos:0, level:0,
+    gainTrim:1, fader01:1, assign:'main', cue:false,
+    eq:{ low:0, mid:0, high:0 },   // -1 kill .. 0 unity .. +1 boost
+    sweep:0,                        // -1 full HP .. 0 bypass .. +1 full LP
+    pitch:0, pitchRange:VJ.pitchDefault, keyLock:true,
+    bpm:null, bpmAuto:null, grid:0, wave:null,
+    cues:new Array(VJ.hotCues).fill(null), cuePoint:0,
+    loop:null, loopBeats:0, sync:false };
+}
+function vjDeckVideo(id){
+  return { id, kind:'video', name:'', file:null, url:'',
+    el:null, ready:false, playing:false, dur:0, pos:0,
+    opacity:0, fitMode:'cover', rate:1, loop:true,
+    tint:'', tintAmt:0, filter:'', audioOn:false, audioGain:0,
+    srcNode:null, gainNode:null, fxCv:null, fxCtx:null };
+}
+const vj = {
+  on:false, armed:false, armError:'',
+  a:null, b:null, va:null, vb:null,     // audio decks A/B, video decks A/B
+  xf:0.5, xfCurve:VJ.fadeCurve,         // audio crossfader
+  vxf:0.5, vxfCurve:VJ.fadeCurve,       // video crossfader (independent)
+  master:VJ.masterDefault, masterL:0, masterR:0,
+  sfxLevel:VJ.sfxDefault, duck:true, ducking:0,
+  clock:{ bpm:0, taps:[], last:0, phase0:0 },
+  cue:{ level:0.8, deviceId:'', el:null, dest:null, ok:false, why:'' },
+  outDeviceId:'',
+  lib:{ audio:[], video:[] },
+  pendingTake:null,
+  // Everything the panel needs to draw itself, refreshed at VJ.meterHz.
+  _lastPush:0,
+};
+// Nodes that only exist once armed.
+let vjAC=null, vjMainMix=null, vjMaster=null, vjLimiter=null, vjCueMix=null,
+    vjMusicBus=null, vjMeterNode=null, vjMeterBuf=null, vjArmedOnce=false;
+
+// ---------- Master clock -----------------------------------------------------
+// ONE tempo system. Tap tempo is the authority; deck sync and TAKE quantisation
+// both read it rather than keeping their own.
+function vjTap(now){
+  const t = now == null ? performance.now()/1000 : now;
+  const c = vj.clock;
+  if (c.last && t - c.last > VJ.tapTimeout) c.taps = [];
+  if (c.last) c.taps.push(t - c.last);
+  c.last = t;
+  if (c.taps.length > VJ.tapKeep) c.taps.shift();
+  if (c.taps.length >= VJ.tapMin - 1){
+    const sorted = c.taps.slice().sort((x,y)=>x-y);
+    const med = sorted[sorted.length>>1];                 // median beats jitter
+    if (med > 0){
+      let bpm = 60/med;
+      while (bpm < VJ.bpmMin) bpm *= 2;                   // fold into range
+      while (bpm > VJ.bpmMax) bpm /= 2;
+      c.bpm = Math.round(bpm*10)/10;
+      c.phase0 = t;                                       // the last tap IS a downbeat
+    }
+  }
+  return c.bpm;
+}
+function vjClockReset(){ vj.clock.taps = []; vj.clock.last = 0; }
+function vjBeatLen(){ return vj.clock.bpm > 0 ? 60/vj.clock.bpm : 0; }
+// Seconds until the next beat (or bar). 0 when there is no tempo yet, which makes
+// every quantised action fire immediately rather than never.
+function vjTimeToGrid(unit){
+  const bl = vjBeatLen(); if (!bl) return 0;
+  const span = unit === 'bar' ? bl*VJ.barBeats : bl;
+  const now = performance.now()/1000;
+  const since = now - vj.clock.phase0;
+  const nxt = Math.ceil(since/span)*span;
+  return Math.max(0, nxt - since);
+}
+
+// ---------- Arming: one AudioContext, on a gesture, in the GAME tab ----------
+// An AudioContext created without a user gesture starts suspended, and a projector
+// session might otherwise never touch the game page at all. This is deliberately a
+// thing you DO on the game screen before showtime.
+function vjArm(){
+  if (PANEL){ vj.armError = 'Audio must be armed on the game page, not here.'; return false; }
+  if (!Aud.ensure()){ vj.armError = 'This browser refused an AudioContext.'; return false; }
+  vjAC = Aud.ctx();
+  if (!vjArmedOnce){
+    vjMainMix = Aud.busMain();
+    vjMaster  = Aud.busMaster();
+    // Music sits on its own bus so a goal can duck IT without touching the SFX.
+    vjMusicBus = vjAC.createGain(); vjMusicBus.gain.value = 1;
+    vjMusicBus.connect(vjMainMix);
+    // Limiter, always in the chain from here on. Never clip into a PA.
+    vjLimiter = vjAC.createDynamicsCompressor();
+    vjLimiter.threshold.value = VJ.limThreshold;
+    vjLimiter.knee.value      = VJ.limKnee;
+    vjLimiter.ratio.value     = VJ.limRatio;
+    vjLimiter.attack.value    = VJ.limAttack;
+    vjLimiter.release.value   = VJ.limRelease;
+    try { vjMaster.disconnect(); } catch(_){}
+    vjMaster.connect(vjLimiter); vjLimiter.connect(vjAC.destination);
+    // Master meter, post-limiter so it shows what actually leaves the box.
+    vjMeterNode = vjAC.createAnalyser(); vjMeterNode.fftSize = 256;
+    vjMeterBuf = new Float32Array(vjMeterNode.fftSize);
+    vjLimiter.connect(vjMeterNode);
+    // Cue bus. Sums independently of the main crossfader — that is the whole point.
+    vjCueMix = vjAC.createGain(); vjCueMix.gain.value = vj.cue.level;
+    vjArmedOnce = true;
+  }
+  vj.armed = true; vj.armError = '';
+  if (!vj.a){ vj.a = vjDeckAudio('a'); vj.b = vjDeckAudio('b'); }
+  if (!vj.va){ vj.va = vjDeckVideo('a'); vj.vb = vjDeckVideo('b'); }
+  vjApplyMix();
+  return true;
+}
+// Take the limiter back OUT when VJ Mode is switched off, so the game sounds
+// exactly as it did. Leaving a compressor in the path would not be "additive".
+function vjDisarmChain(){
+  if (!vjArmedOnce || !vjMaster) return;
+  try { vjMaster.disconnect(); } catch(_){}
+  vjMaster.connect(vjAC.destination);
+}
+function vjRearmChain(){
+  if (!vjArmedOnce || !vjMaster) return;
+  try { vjMaster.disconnect(); } catch(_){}
+  vjMaster.connect(vjLimiter);
+}
+
+// ---------- Crossfader laws --------------------------------------------------
+// x is 0 (full A) .. 1 (full B). Sharp cuts hard at the ends for cutting; smooth is
+// equal-power so a blend doesn't dip in the middle.
+function vjXGain(x, side, curve){
+  const p = side === 'a' ? 1-x : x;
+  if (curve === 'sharp') return Math.min(1, p*2);          // full by the halfway point
+  return Math.sin(p * Math.PI/2);                          // equal power
+}
+
+// ---------- Audio deck -------------------------------------------------------
+// MediaElementSource, as chosen: key-lock works, memory stays sane, and phase is
+// good to roughly +/-5-20ms with a nudge on the beat. It is beat-matchable, not
+// turntable-locked, and nothing here pretends otherwise.
+function vjBuildAudioGraph(d){
+  if (!vjAC || d.src) return;
+  d.src   = vjAC.createMediaElementSource(d.el);
+  d.trim  = vjAC.createGain();
+  d.low   = vjAC.createBiquadFilter(); d.low.type='lowshelf';   d.low.frequency.value=VJ.eqLowHz;
+  d.mid   = vjAC.createBiquadFilter(); d.mid.type='peaking';    d.mid.frequency.value=VJ.eqMidHz; d.mid.Q.value=VJ.eqMidQ;
+  d.high  = vjAC.createBiquadFilter(); d.high.type='highshelf'; d.high.frequency.value=VJ.eqHighHz;
+  d.filt  = vjAC.createBiquadFilter(); d.filt.type='allpass';   d.filt.Q.value=VJ.filtQ;
+  d.fader = vjAC.createGain();
+  d.toMain= vjAC.createGain();
+  d.toCue = vjAC.createGain();
+  d.meter = vjAC.createAnalyser(); d.meter.fftSize = 256;
+  d.meterBuf = new Float32Array(d.meter.fftSize);
+  d.src.connect(d.trim); d.trim.connect(d.low); d.low.connect(d.mid);
+  d.mid.connect(d.high); d.high.connect(d.filt); d.filt.connect(d.fader);
+  d.fader.connect(d.meter);
+  d.fader.connect(d.toMain); d.toMain.connect(vjMusicBus);
+  d.fader.connect(d.toCue);  d.toCue.connect(vjCueMix);
+  vjApplyDeck(d);
+}
+// Straight-line map: 0 -> 0dB, +1 -> +eqMaxDb, -1 -> eqKillDb (a real kill, not a dip).
+function vjEqDb(v){ return v >= 0 ? v*VJ.eqMaxDb : -v*VJ.eqKillDb; }
+function vjApplyDeck(d){
+  if (!d || !d.src) return;
+  const now = vjAC.currentTime, R = 0.02;                   // short ramp: no zipper
+  const set = (p, v) => { try { p.setTargetAtTime(v, now, R); } catch(_){ p.value = v; } };
+  set(d.trim.gain, d.gainTrim);
+  set(d.low.gain,  vjEqDb(d.eq.low));
+  set(d.mid.gain,  vjEqDb(d.eq.mid));
+  set(d.high.gain, vjEqDb(d.eq.high));
+  // Single-knob sweep: dead zone in the middle, HP below, LP above. Exponential so
+  // the throw feels even to a hand rather than to a number line.
+  const s = d.sweep;
+  if (Math.abs(s) <= VJ.filtDead){ d.filt.type = 'allpass'; set(d.filt.frequency, 1000); }
+  else if (s < 0){
+    d.filt.type = 'highpass';
+    const k = (-s - VJ.filtDead)/(1-VJ.filtDead);
+    set(d.filt.frequency, VJ.filtMinHz * Math.pow(VJ.filtMaxHz/VJ.filtMinHz, k*0.62));
+  } else {
+    d.filt.type = 'lowpass';
+    const k = 1 - (s - VJ.filtDead)/(1-VJ.filtDead);
+    set(d.filt.frequency, VJ.filtMinHz * Math.pow(VJ.filtMaxHz/VJ.filtMinHz, 0.38 + k*0.62));
+  }
+  set(d.fader.gain, d.fader01);
+  const xg = vjXGain(vj.xf, d.id, vj.xfCurve);
+  const toMain = (d.assign==='main'||d.assign==='both') ? xg : 0;
+  const toCue  = (d.assign==='cue' ||d.assign==='both'||d.cue) ? 1 : 0;
+  set(d.toMain.gain, toMain);
+  set(d.toCue.gain,  toCue);
+  if (d.el){
+    d.el.playbackRate = 1 + (d.pitch/100);
+    // preservesPitch is the browser's time-stretcher, not a DJ key-lock. It is
+    // honest up to about +/-10% and audibly poor past it — the UI says so.
+    if ('preservesPitch' in d.el) d.el.preservesPitch = d.keyLock;
+    if ('webkitPreservesPitch' in d.el) d.el.webkitPreservesPitch = d.keyLock;
+  }
+}
+function vjApplyMix(){
+  if (!vj.armed) return;
+  const now = vjAC.currentTime, R = 0.02;
+  if (vj.a) vjApplyDeck(vj.a);
+  if (vj.b) vjApplyDeck(vj.b);
+  try { vjMaster.gain.setTargetAtTime(vj.master * ((sel.snd.vol||40)/100), now, R); } catch(_){}
+  try { Aud.busSfx().gain.setTargetAtTime(vj.on ? vj.sfxLevel : 1, now, R); } catch(_){}
+  try { vjCueMix.gain.setTargetAtTime(vj.cue.level, now, R); } catch(_){}
+  for (const v of [vj.va, vj.vb]) if (v && v.gainNode)
+    try { v.gainNode.gain.setTargetAtTime(v.audioOn ? v.audioGain : 0, now, R); } catch(_){}
+}
+
+// Load a File into a deck. The BLOB arrives over the channel and the object URL is
+// minted HERE — a URL created in the /settings document is meaningless in this one.
+async function vjLoadAudio(deckId, file){
+  if (!vjArm()) return false;
+  const d = deckId === 'b' ? vj.b : vj.a;
+  if (d.url) try { URL.revokeObjectURL(d.url); } catch(_){}
+  d.file = file; d.name = file.name || 'track'; d.url = URL.createObjectURL(file);
+  if (!d.el){
+    d.el = new Audio(); d.el.preload = 'auto'; d.el.crossOrigin = 'anonymous';
+    d.el.addEventListener('ended', ()=>{ d.playing = false; });
+  }
+  d.el.src = d.url; d.ready = false; d.playing = false; d.pos = 0;
+  d.cues = new Array(VJ.hotCues).fill(null); d.cuePoint = 0; d.loop = null;
+  await new Promise(res=>{ const go=()=>{ d.el.removeEventListener('loadedmetadata',go); res(); };
+                           d.el.addEventListener('loadedmetadata', go); d.el.load(); setTimeout(res, 4000); });
+  d.dur = isFinite(d.el.duration) ? d.el.duration : 0;
+  vjBuildAudioGraph(d);
+  d.ready = true;
+  vjApplyDeck(d);
+  // Analysis is offline and once per file — never in the render loop.
+  vjAnalyse(file).then(an => { if (d.file === file && an){
+    d.bpmAuto = an.bpm; if (d.bpm == null) d.bpm = an.bpm; d.grid = an.grid; d.wave = an.wave; vjPush(true);
+  }}).catch(()=>{});
+  vjPush(true);
+  return true;
+}
+function vjPlay(d, on){
+  if (!d || !d.ready || !d.el) return;
+  if (on){ d.el.play().then(()=>{ d.playing = true; }).catch(()=>{ d.playing = false; }); }
+  else { d.el.pause(); d.playing = false; }
+}
+function vjSeek(d, sec){ if (d && d.ready && d.el){ try { d.el.currentTime = Math.max(0, Math.min(d.dur||0, sec)); d.pos = d.el.currentTime; } catch(_){} } }
+function vjSetCue(d, i){ if (d && d.ready) d.cues[i] = d.el.currentTime; }
+function vjJumpCue(d, i){ if (d && d.cues[i] != null) vjSeek(d, d.cues[i]); }
+// Auto-loop off the MASTER clock when there is one, else off the deck's own BPM.
+function vjAutoLoop(d, beats){
+  if (!d || !d.ready) return;
+  const bpm = vj.clock.bpm || d.bpm; if (!bpm){ d.loop = null; d.loopBeats = 0; return; }
+  if (!beats){ d.loop = null; d.loopBeats = 0; return; }
+  const len = (60/bpm) * beats;
+  const start = d.el.currentTime;
+  d.loop = { in:start, out:start+len }; d.loopBeats = beats;
+}
+function vjLoopTick(d){
+  if (!d || !d.loop || !d.playing || !d.el) return;
+  if (d.el.currentTime >= d.loop.out) { try { d.el.currentTime = d.loop.in; } catch(_){} }
+}
+// Sync: match the master tempo by pitch, then nudge phase to the nearest beat.
+// This is where the MediaElementSource tradeoff shows — currentTime is not
+// sample-accurate, so phase is re-corrected rather than locked.
+function vjSync(d){
+  if (!d || !d.ready || !d.bpm || !vj.clock.bpm) return;
+  const want = vj.clock.bpm / d.bpm;
+  const pct = (want - 1) * 100;
+  const lim = d.pitchRange;
+  d.pitch = Math.max(-lim, Math.min(lim, pct));
+  d.sync = true;
+  vjApplyDeck(d);
+  const bl = vjBeatLen(); if (!bl || !d.playing) return;
+  const since = (performance.now()/1000) - vj.clock.phase0;
+  const off = ((since % bl) + bl) % bl;
+  const nudge = off > bl/2 ? (bl - off) : -off;
+  if (Math.abs(nudge) > 0.004) vjSeek(d, d.el.currentTime + nudge);
+}
+
+// ---------- Offline analysis: BPM + waveform, once per file ------------------
+// Decode, build an amplitude envelope, pick onsets, histogram the gaps, and take
+// the strongest tempo in range. Detection is wrong sometimes — the deck carries a
+// manual BPM override and a grid nudge for exactly that reason.
+const vjAnCache = new Map();
+async function vjAnalyse(file){
+  const key = file.name + ':' + file.size + ':' + (file.lastModified||0);
+  if (vjAnCache.has(key)) return vjAnCache.get(key);
+  if (!vjAC) return null;
+  let buf;
+  try { buf = await vjAC.decodeAudioData(await file.arrayBuffer()); }
+  catch(_){ return null; }
+  const ch = buf.getChannelData(0), sr = buf.sampleRate;
+  // Waveform: min/max per bucket off the same decode. No second pass.
+  const wave = new Float32Array(VJ.waveBuckets*2);
+  const per = Math.max(1, Math.floor(ch.length / VJ.waveBuckets));
+  for (let i=0;i<VJ.waveBuckets;i++){
+    let lo=1, hi=-1; const s=i*per, e=Math.min(ch.length, s+per);
+    for (let j=s;j<e;j++){ const v=ch[j]; if(v<lo)lo=v; if(v>hi)hi=v; }
+    wave[i*2]=lo; wave[i*2+1]=hi;
+  }
+  // Envelope at envRate, low-passed by simple block averaging, half-wave rectified.
+  const step = Math.max(1, Math.round(sr/VJ.envRate));
+  const n = Math.floor(ch.length/step);
+  const env = new Float32Array(n);
+  for (let i=0;i<n;i++){
+    let sum=0; const s=i*step, e=s+step;
+    for (let j=s;j<e;j++){ const v=ch[j]; sum += v>0 ? v : -v; }
+    env[i] = sum/step;
+  }
+  // Onsets: rising edges that clear a local mean by a margin.
+  const onsets=[]; const W=Math.round(VJ.envRate*0.4);
+  for (let i=1;i<n-1;i++){
+    let m=0, c=0;
+    for (let j=Math.max(0,i-W); j<Math.min(n,i+W); j++){ m+=env[j]; c++; }
+    m/=Math.max(1,c);
+    if (env[i] > m*1.35 && env[i] >= env[i-1] && env[i] > env[i+1]) onsets.push(i/VJ.envRate);
+  }
+  let best={bpm:0,score:-1,grid:0};
+  if (onsets.length > 8){
+    // Inter-onset intervals, folded into the tempo range, histogrammed.
+    const hist=new Map();
+    for (let i=0;i<onsets.length;i++)
+      for (let k=1;k<=4 && i+k<onsets.length;k++){
+        let d=onsets[i+k]-onsets[i]; if (d<=0) continue;
+        let bpm=60/d; while(bpm<VJ.bpmMin) bpm*=2; while(bpm>VJ.bpmMax) bpm/=2;
+        const b=Math.round(bpm*2)/2;
+        hist.set(b,(hist.get(b)||0)+1);
+      }
+    for (const [bpm,score] of hist) if (score>best.score) best={bpm,score,grid:0};
+    // Grid offset: whichever phase lines the most onsets up with that tempo.
+    if (best.bpm){
+      const bl=60/best.bpm; let bg=0, bs=-1;
+      for (let p=0;p<32;p++){
+        const off=(p/32)*bl; let sc=0;
+        for (const o of onsets){ const ph=((o-off)%bl+bl)%bl; if (Math.min(ph, bl-ph) < bl*0.08) sc++; }
+        if (sc>bs){ bs=sc; bg=off; }
+      }
+      best.grid=bg;
+    }
+  }
+  const out = { bpm: best.bpm || null, grid: best.grid||0, wave, dur: buf.duration };
+  vjAnCache.set(key, out);
+  return out;
+}
+
+// ---------- Video decks ------------------------------------------------------
+async function vjLoadVideo(deckId, file){
+  if (!vjArm()) return false;
+  const v = deckId === 'b' ? vj.vb : vj.va;
+  if (v.url) try { URL.revokeObjectURL(v.url); } catch(_){}
+  v.file = file; v.name = file.name || 'clip'; v.url = URL.createObjectURL(file);
+  if (!v.el){
+    v.el = document.createElement('video');
+    v.el.playsInline = true; v.el.loop = true; v.el.preload = 'auto';
+    v.el.style.display = 'none'; document.body.appendChild(v.el);
+  }
+  // Clip audio is OPTIONAL and off by default — video and music are decoupled.
+  v.el.muted = !v.audioOn;
+  v.el.src = v.url; v.ready = false;
+  await new Promise(res=>{ const go=()=>{ v.el.removeEventListener('loadeddata',go); res(); };
+                           v.el.addEventListener('loadeddata', go); v.el.load(); setTimeout(res, 6000); });
+  v.dur = isFinite(v.el.duration) ? v.el.duration : 0;
+  v.ready = true;
+  if (v.audioOn) vjVideoAudio(v, true);
+  vjVideoPlay(v, v.opacity > 0);
+  vjPush(true);
+  return true;
+}
+// A clip's own audio joins the same mixer as a source strip, or not at all.
+function vjVideoAudio(v, on){
+  v.audioOn = !!on;
+  if (!vjAC || !v.el) return;
+  if (on && !v.srcNode){
+    try {
+      v.srcNode = vjAC.createMediaElementSource(v.el);
+      v.gainNode = vjAC.createGain(); v.gainNode.gain.value = v.audioGain;
+      v.srcNode.connect(v.gainNode); v.gainNode.connect(vjMusicBus);
+    } catch(_){ v.audioOn = false; return; }
+  }
+  v.el.muted = !on;
+  vjApplyMix();
+}
+// A deck sitting at zero opacity is not decoded at all — that is the single
+// biggest saving available, and it costs nothing to take.
+function vjVideoPlay(v, on){
+  if (!v || !v.el || !v.ready) return;
+  if (on && !v.playing){ v.el.play().then(()=>{v.playing=true;}).catch(()=>{}); }
+  else if (!on && v.playing){ v.el.pause(); v.playing = false; }
+}
+function vjVideoOpacity(v, o){
+  v.opacity = Math.max(0, Math.min(1, o));
+  vjVideoPlay(v, v.opacity > 0.001 || v.audioOn);
+}
+// TAKE: hard-cut the video crossfader to the other side, quantised to the master
+// clock so it lands on the beat rather than whenever a finger moved.
+function vjTake(){
+  const fire = ()=>{ vj.vxf = vj.vxf < 0.5 ? 1 : 0; vjPush(true); };
+  const wait = VJ.takeQuant === 'off' ? 0 : vjTimeToGrid(VJ.takeQuant);
+  if (wait <= 0.001) fire();
+  else { vj.pendingTake = setTimeout(()=>{ vj.pendingTake = null; fire(); }, wait*1000); }
+}
+
+// ---------- The render seam --------------------------------------------------
+// Called from drawPitch between the surface and the markings. Returns immediately
+// when VJ Mode is off, so this is a branch and nothing else on the normal path.
+function vjPaintVideo(L, T, W, H){
+  if (!vj.on || !vj.va) return;
+  for (const [v, side] of [[vj.va,'a'], [vj.vb,'b']]){
+    if (!v || !v.ready || !v.el || v.el.readyState < 2) continue;
+    const a = v.opacity * vjXGain(vj.vxf, side, vj.vxfCurve);
+    if (a <= 0.004) continue;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // ⚠️ ctx.filter is NOT applied at full resolution. Measured, it cost 2.2x the
+    // ENTIRE frame budget on its own — 45.9ms median against 20.4ms for the same
+    // two draws unfiltered. Filtered decks render through a smaller intermediate
+    // and upscale; the cost is per-pixel, so a half-scale pass is a quarter of it.
+    if (v.filter){
+      const fw = Math.max(16, Math.round(W*VJ.videoFxRes)), fh = Math.max(16, Math.round(H*VJ.videoFxRes));
+      if (!v.fxCv){ v.fxCv = document.createElement('canvas'); v.fxCtx = v.fxCv.getContext('2d'); }
+      if (v.fxCv.width !== fw || v.fxCv.height !== fh){ v.fxCv.width = fw; v.fxCv.height = fh; }
+      v.fxCtx.filter = v.filter;
+      vjDrawFit(v.fxCtx, v.el, 0, 0, fw, fh, v.fitMode);
+      v.fxCtx.filter = 'none';
+      ctx.drawImage(v.fxCv, L, T, W, H);
+    } else {
+      vjDrawFit(ctx, v.el, L, T, W, H, v.fitMode);
+    }
+    // Tint is a composite op, not a filter — free where ctx.filter is not.
+    if (v.tint && v.tintAmt > 0.004){
+      ctx.globalAlpha = a * v.tintAmt;
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = v.tint; ctx.fillRect(L, T, W, H);
+    }
+    ctx.restore();
+  }
+}
+function vjDrawFit(c, el, L, T, W, H, mode){
+  const vw = el.videoWidth || W, vh = el.videoHeight || H;
+  if (mode === 'stretch'){ c.drawImage(el, L, T, W, H); return; }
+  const sc = mode === 'contain' ? Math.min(W/vw, H/vh) : Math.max(W/vw, H/vh);
+  const dw = vw*sc, dh = vh*sc;
+  c.drawImage(el, L + (W-dw)/2, T + (H-dh)/2, dw, dh);
+}
+// Pitch markings alpha. Exactly 1 with VJ Mode off, and floored so that no deck,
+// no crossfader and no preset can make the pitch unreadable.
+function vjMarkA(){
+  if (!vj.on) return VJ.markFull;
+  const cover = Math.max(
+    (vj.va ? vj.va.opacity * vjXGain(vj.vxf,'a',vj.vxfCurve) : 0),
+    (vj.vb ? vj.vb.opacity * vjXGain(vj.vxf,'b',vj.vxfCurve) : 0));
+  return Math.max(VJ.lineFloor, 1 - cover*0.75);
+}
+
+// ---------- Goal ducking -----------------------------------------------------
+// A live room wants the music, but a goal should still land. Dip the MUSIC bus
+// only — the SFX bus is untouched, so the crowd comes through the hole.
+function vjDuckGoal(){
+  if (!vj.on || !vj.armed || !vj.duck || !vjMusicBus) return;
+  const t = vjAC.currentTime, g = vjMusicBus.gain;
+  try {
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(VJ.duckAmount, t, VJ.duckAttack);
+    g.setTargetAtTime(1, t + VJ.duckAttack + VJ.duckHold, VJ.duckRelease);
+  } catch(_){}
+}
+
+// ---------- Headphone cue (fragile by nature — see the UI note) -------------
+// MediaStreamDestination -> <audio> -> setSinkId. Chromium only, needs a secure
+// context, and the MediaStream round trip adds its own latency, so cue is NOT
+// time-aligned with main. It degrades to a visual-only preview rather than failing.
+async function vjCueDevice(deviceId){
+  vj.cue.deviceId = deviceId || '';
+  if (!vj.armed || !vjCueMix){ vj.cue.ok=false; vj.cue.why='not armed'; return false; }
+  if (!deviceId){ vjCueStop(); vj.cue.why='visual preview only'; return false; }
+  try {
+    if (!vj.cue.dest){
+      vj.cue.dest = vjAC.createMediaStreamDestination();
+      vjCueMix.connect(vj.cue.dest);
+      vj.cue.el = new Audio(); vj.cue.el.autoplay = true;
+    }
+    if (typeof vj.cue.el.setSinkId !== 'function'){
+      vj.cue.ok=false; vj.cue.why='this browser has no setSinkId (Chromium only)'; return false;
+    }
+    vj.cue.el.srcObject = vj.cue.dest.stream;
+    await vj.cue.el.setSinkId(deviceId);
+    await vj.cue.el.play().catch(()=>{});
+    vj.cue.ok = true; vj.cue.why = 'routed — expect 20-100ms behind main';
+    return true;
+  } catch(e){ vj.cue.ok=false; vj.cue.why = 'device refused: ' + (e && e.name || 'error'); return false; }
+}
+function vjCueStop(){ if (vj.cue.el){ try{ vj.cue.el.pause(); vj.cue.el.srcObject=null; }catch(_){} } vj.cue.ok=false; }
+
+// ---------- PANIC ------------------------------------------------------------
+// Must work with /settings disconnected, dead, or never opened. It is a keydown
+// listener on the game page and touches nothing but the render and audio layer.
+function vjPanic(){
+  if (vj.pendingTake){ clearTimeout(vj.pendingTake); vj.pendingTake = null; }
+  for (const v of [vj.va, vj.vb]) if (v){ v.opacity = 0; vjVideoPlay(v, false); v.tintAmt = 0; v.filter=''; }
+  for (const d of [vj.a, vj.b]) if (d){ vjPlay(d, false); d.loop = null; }
+  vj.on = false; vj.master = 0;
+  if (vj.armed){
+    try { vjMaster.gain.cancelScheduledValues(vjAC.currentTime);
+          vjMaster.gain.setTargetAtTime(0, vjAC.currentTime, 0.03); } catch(_){}
+    try { vjMusicBus.gain.cancelScheduledValues(vjAC.currentTime); vjMusicBus.gain.value = 1; } catch(_){}
+    try { Aud.busSfx().gain.setTargetAtTime(1, vjAC.currentTime, 0.05); } catch(_){}
+    vjDisarmChain();
+  }
+  if (sel.vj) sel.vj.on = false;
+  toast('VJ PANIC — decks killed, theme restored', 'warn', '🛑');
+  vjPush(true);
+}
+function vjSetOn(on){
+  vj.on = !!on;
+  if (!sel.vj) sel.vj = { on:false };
+  sel.vj.on = vj.on;
+  // Clean output: no build tag, no dock, no replay bar on the projector.
+  if (!PANEL) document.body.classList.toggle('vjlive', vj.on);
+  if (vj.on){ vjArm(); vjRearmChain(); }
+  else {
+    for (const v of [vj.va, vj.vb]) if (v) vjVideoPlay(v, false);
+    vjDisarmChain();
+  }
+  vjApplyMix();
+  vjPush(true);
+}
+
+// ---------- Cross-tab protocol ----------------------------------------------
+// The game tab OWNS everything: the AudioContext, the video elements, the clock.
+// /settings sends commands and receives a state snapshot to draw itself from. It
+// never holds a node and never makes a sound.
+//
+// ⚠️ Blobs, not object URLs. A URL.createObjectURL() minted in the /settings
+// document is invalid in this one — the blob is structured-cloned across and the
+// game tab mints its own. MediaStream is NOT cloneable, which is why the webcam
+// (if it is ever added) must be opened by the game tab on command, not sent.
+function vjCmd(cmd, arg){
+  if (PANEL){ syncPost({ t:'vjc', cmd, arg }); return; }
+  vjExec(cmd, arg);
+}
+function vjSendFile(kind, deck, file){ syncPost({ t:'vjf', kind, deck, file }); }
+const VJ_CMDS = {
+  on:      a => vjSetOn(a),
+  arm:     () => { vjArm(); vjPush(true); },
+  panic:   () => vjPanic(),
+  tap:     () => { vjTap(); vjPush(true); },
+  clockReset: () => { vjClockReset(); vjPush(true); },
+  bpm:     a => { vj.clock.bpm = Math.max(0, +a||0); vj.clock.phase0 = performance.now()/1000; },
+  take:    () => vjTake(),
+  xf:      a => { vj.xf = +a; vjApplyMix(); },
+  xfCurve: a => { vj.xfCurve = a; vjApplyMix(); },
+  vxf:     a => { vj.vxf = +a; },
+  vxfCurve:a => { vj.vxfCurve = a; },
+  master:  a => { vj.master = +a; vjApplyMix(); },
+  sfx:     a => { vj.sfxLevel = +a; vjApplyMix(); },
+  duck:    a => { vj.duck = !!a; },
+  cueLevel:a => { vj.cue.level = +a; vjApplyMix(); },
+  cueDev:  a => vjCueDevice(a),
+  // Audio deck commands carry {d:'a'|'b', ...}
+  play:    a => vjPlay(a.d==='b'?vj.b:vj.a, a.v),
+  seek:    a => vjSeek(a.d==='b'?vj.b:vj.a, a.v),
+  cueSet:  a => vjSetCue(a.d==='b'?vj.b:vj.a, a.i),
+  cueJump: a => vjJumpCue(a.d==='b'?vj.b:vj.a, a.i),
+  loop:    a => vjAutoLoop(a.d==='b'?vj.b:vj.a, a.v),
+  loopIn:  a => { const d=a.d==='b'?vj.b:vj.a; if(d.ready) d.loop={in:d.el.currentTime,out:(d.loop&&d.loop.out)||d.dur}; },
+  loopOut: a => { const d=a.d==='b'?vj.b:vj.a; if(d.ready&&d.loop) d.loop.out=d.el.currentTime; },
+  sync:    a => vjSync(a.d==='b'?vj.b:vj.a),
+  deck:    a => { const d=a.d==='b'?vj.b:vj.a; Object.assign(d, a.set||{}); vjApplyDeck(d); },
+  eq:      a => { const d=a.d==='b'?vj.b:vj.a; d.eq[a.band]=+a.v; vjApplyDeck(d); },
+  // Video deck commands carry {d:'a'|'b', ...}
+  vop:     a => vjVideoOpacity(a.d==='b'?vj.vb:vj.va, a.v),
+  vset:    a => { const v=a.d==='b'?vj.vb:vj.va; Object.assign(v, a.set||{});
+                  if (v.el && a.set && a.set.rate!=null) v.el.playbackRate=v.rate; vjApplyMix(); },
+  vaudio:  a => vjVideoAudio(a.d==='b'?vj.vb:vj.va, a.v),
+  vseek:   a => { const v=a.d==='b'?vj.vb:vj.va; if(v.el) try{ v.el.currentTime=+a.v; }catch(_){} },
+  preset:  a => vjPresetApply(a),
+};
+function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (f) try { f(arg); } catch(e){ console.warn('vj', cmd, e); } }
+
+// The snapshot /settings draws from. Throttled to VJ.meterHz — pushing this per
+// frame floods the channel and starves the very thing it is reporting on.
+// Waveforms are sent ONCE per load (they are ~8KB) and never in the meter tick.
+function vjSnap(full){
+  const deck = d => d && ({ id:d.id, name:d.name, ready:d.ready, playing:d.playing,
+    dur:d.dur, pos:d.pos, level:d.level, bpm:d.bpm, bpmAuto:d.bpmAuto, grid:d.grid,
+    gainTrim:d.gainTrim, fader01:d.fader01, assign:d.assign, cue:d.cue, eq:d.eq,
+    sweep:d.sweep, pitch:d.pitch, pitchRange:d.pitchRange, keyLock:d.keyLock,
+    cues:d.cues, loop:d.loop, loopBeats:d.loopBeats, sync:d.sync,
+    wave: full && d.wave ? Array.from(d.wave) : undefined });
+  const vid = v => v && ({ id:v.id, name:v.name, ready:v.ready, playing:v.playing,
+    dur:v.dur, pos:v.pos, opacity:v.opacity, fitMode:v.fitMode, rate:v.rate,
+    tint:v.tint, tintAmt:v.tintAmt, filter:v.filter, audioOn:v.audioOn, audioGain:v.audioGain });
+  return { on:vj.on, armed:vj.armed, armError:vj.armError,
+    a:deck(vj.a), b:deck(vj.b), va:vid(vj.va), vb:vid(vj.vb),
+    xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
+    master:vj.master, masterL:vj.masterL, masterR:vj.masterR,
+    sfxLevel:vj.sfxLevel, duck:vj.duck,
+    bpm:vj.clock.bpm, cue:{ level:vj.cue.level, ok:vj.cue.ok, why:vj.cue.why, deviceId:vj.cue.deviceId },
+    full:!!full };
+}
+function vjPush(full){
+  if (PANEL || !bc) return;
+  const now = Date.now();
+  if (!full && now - vj._lastPush < 1000/VJ.meterHz) return;
+  vj._lastPush = now;
+  syncPost({ t:'vjs', s: vjSnap(full) });
+}
+// The panel's mirror of the game's state. Read by the operator UI, never authored.
+let vjView = null;
+
+// Per-frame housekeeping in the GAME tab: meters, positions, loop wrap. Called
+// from loop() next to the sim, but it only reads audio nodes and video elements.
+function vjTick(){
+  if (PANEL || !vj.on || !vj.armed) return;
+  const rms = (an, buf) => { if(!an) return 0; an.getFloatTimeDomainData(buf);
+    let s=0; for(let i=0;i<buf.length;i++) s+=buf[i]*buf[i];
+    return Math.min(1, Math.sqrt(s/buf.length)*3); };
+  for (const d of [vj.a, vj.b]) if (d && d.ready){
+    if (d.el) d.pos = d.el.currentTime;
+    d.level = rms(d.meter, d.meterBuf);
+    vjLoopTick(d);
+  }
+  for (const v of [vj.va, vj.vb]) if (v && v.ready && v.el) v.pos = v.el.currentTime;
+  const m = rms(vjMeterNode, vjMeterBuf);
+  vj.masterL = vj.masterR = m;
+  vjPush(false);
+}
+
+// ---------- Presets ----------------------------------------------------------
+// The FULL state minus the files themselves — a preset is a board position, not a
+// playlist. Small enough for localStorage, unlike anything holding media.
+const VJ_PRESET_KEY = 'magnetball.vjpresets';
+function vjPresets(){ try { return JSON.parse(localStorage.getItem(VJ_PRESET_KEY)||'{}'); } catch(_){ return {}; } }
+function vjPresetSave(name){
+  const d = x => x && ({ gainTrim:x.gainTrim, fader01:x.fader01, assign:x.assign,
+    eq:{...x.eq}, sweep:x.sweep, pitch:x.pitch, pitchRange:x.pitchRange, keyLock:x.keyLock, bpm:x.bpm });
+  const v = x => x && ({ opacity:x.opacity, fitMode:x.fitMode, rate:x.rate, tint:x.tint,
+    tintAmt:x.tintAmt, filter:x.filter, audioOn:x.audioOn, audioGain:x.audioGain });
+  const all = vjPresets();
+  all[name] = { a:d(vj.a), b:d(vj.b), va:v(vj.va), vb:v(vj.vb),
+    xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
+    master:vj.master, sfxLevel:vj.sfxLevel, duck:vj.duck, bpm:vj.clock.bpm,
+    takeQuant:VJ.takeQuant };
+  try { localStorage.setItem(VJ_PRESET_KEY, JSON.stringify(all)); } catch(_){}
+  return all;
+}
+function vjPresetApply(name){
+  const p = vjPresets()[name]; if (!p) return;
+  if (p.a && vj.a) Object.assign(vj.a, p.a, { eq:{...p.a.eq} });
+  if (p.b && vj.b) Object.assign(vj.b, p.b, { eq:{...p.b.eq} });
+  if (p.va && vj.va) Object.assign(vj.va, p.va);
+  if (p.vb && vj.vb) Object.assign(vj.vb, p.vb);
+  vj.xf=p.xf; vj.xfCurve=p.xfCurve; vj.vxf=p.vxf; vj.vxfCurve=p.vxfCurve;
+  vj.master=p.master; vj.sfxLevel=p.sfxLevel; vj.duck=p.duck;
+  if (p.bpm) { vj.clock.bpm = p.bpm; vj.clock.phase0 = performance.now()/1000; }
+  if (p.takeQuant) VJ.takeQuant = p.takeQuant;
+  for (const v of [vj.va, vj.vb]) if (v) vjVideoPlay(v, v.opacity > 0.001 || v.audioOn);
+  vjApplyMix(); vjPush(true);
+}
+function vjPresetDelete(name){ const all=vjPresets(); delete all[name];
+  try { localStorage.setItem(VJ_PRESET_KEY, JSON.stringify(all)); } catch(_){} return all; }
+
+// ---------- Game-page wiring -------------------------------------------------
+// PANIC is on the game page and works with /settings closed, crashed, or never
+// opened. Everything else about VJ Mode is remote; this one thing cannot be.
+const VJ_PANIC_KEYS = ['Escape'];
+function vjKey(e){
+  if (PANEL) return;
+  if (e.key === 'Escape' && e.shiftKey){ e.preventDefault(); vjPanic(); return; }
+  if (!vj.on) return;
+  if (e.code === 'Space' && e.altKey){ e.preventDefault(); vjTap(); vjPush(true); }
+}
+// Output-device pickers need labels, and labels need a microphone grant. Asking
+// for one is a real cost, so it is an explicit action rather than something that
+// happens on load.
+async function vjDevices(){
+  try {
+    const list = await navigator.mediaDevices.enumerateDevices();
+    return list.filter(d=>d.kind==='audiooutput')
+               .map(d=>({ id:d.deviceId, label:d.label || ('Output ' + d.deviceId.slice(0,6)) }));
+  } catch(_){ return []; }
+}
+
+
+
+// ---------- Operator UI ------------------------------------------------------
+// Laid out like hardware, top to bottom: transport strip, two audio decks with
+// waveforms either side of the audio crossfader, two video decks either side of
+// the video crossfader + TAKE, then library, game SFX and panic.
+//
+// It draws ONLY from `vjView`, the snapshot the game tab pushes. Nothing here
+// holds an audio node, and nothing here plays a sound — that is the whole reason
+// there is one AudioContext and it lives in the other tab.
+const VJUI = { waveH: 56, meterH: 8 };
+let vjLibAudio = [], vjLibVideo = [], vjLibTab = 'audio', vjWaveCache = {};
+
+function vjPanelRender(){
+  if (!PANEL) return;
+  const host = $('vjPanel'); if (!host) return;
+  const V = vjView;
+  const st = $('vjState');
+  if (st) st.textContent = !V ? '· waiting for the game tab…'
+    : !V.armed ? '· NOT ARMED — press Arm audio on the game page'
+    : V.on ? '· LIVE' : '· standing by';
+  if (!V){ return; }
+  vjSyncControls(V);
+  vjDrawWave('a', V.a); vjDrawWave('b', V.b);
+  vjDrawMeters(V);
+}
+// Push values into controls the operator is not currently holding. Rebuilding the
+// DOM at 20Hz would fight every drag; this only writes what changed.
+function vjSyncControls(V){
+  const set = (id, val) => { const e=$(id); if (e && document.activeElement!==e && e.value!=val) e.value = val; };
+  const txt = (id, val) => { const e=$(id); if (e && e.textContent!==val) e.textContent = val; };
+  const on  = (id, yes) => { const e=$(id); if (e) e.classList.toggle('sel', !!yes); };
+  txt('vjBpm', V.bpm ? V.bpm.toFixed(1) : '—');
+  set('vjXf', Math.round(V.xf*100)); set('vjVxf', Math.round(V.vxf*100));
+  set('vjMaster', Math.round(V.master*100)); set('vjSfx', Math.round(V.sfxLevel*100));
+  on('vjDuck', V.duck); on('vjOn', V.on);
+  txt('vjCueWhy', V.cue.why || '');
+  for (const id of ['a','b']){
+    const d = V[id]; if (!d) continue;
+    txt('vjName'+id, d.name || '—');
+    txt('vjPos'+id, vjTime(d.pos) + ' / ' + vjTime(d.dur));
+    txt('vjDeckBpm'+id, d.bpm ? d.bpm.toFixed(1) + (d.bpmAuto && d.bpm!==d.bpmAuto ? ' (man)' : '') : '—');
+    on('vjPlay'+id, d.playing);
+    on('vjCue'+id, d.cue);
+    set('vjTrim'+id, Math.round(d.gainTrim*100));
+    set('vjFader'+id, Math.round(d.fader01*100));
+    set('vjLow'+id, Math.round(d.eq.low*100));
+    set('vjMid'+id, Math.round(d.eq.mid*100));
+    set('vjHigh'+id, Math.round(d.eq.high*100));
+    set('vjSweep'+id, Math.round(d.sweep*100));
+    set('vjPitch'+id, d.pitch.toFixed(1));
+    txt('vjPitchVal'+id, (d.pitch>=0?'+':'') + d.pitch.toFixed(1) + '%');
+    on('vjKey'+id, d.keyLock);
+    on('vjSync'+id, d.sync);
+    const warn = $('vjKeyWarn'+id);
+    if (warn) warn.textContent = (d.keyLock && Math.abs(d.pitch) > VJ.keyLockWarn)
+      ? '⚠ key-lock is a browser time-stretcher — audibly poor past ±' + VJ.keyLockWarn + '%' : '';
+    for (let i=0;i<VJ.hotCues;i++) on('vjHot'+id+i, d.cues[i]!=null);
+    for (const n of VJ.loopBeats) on('vjLoop'+id+n, d.loopBeats===n);
+    if (d.wave) vjWaveCache[id] = d.wave;
+  }
+  for (const id of ['a','b']){
+    const v = V['v'+id]; if (!v) continue;
+    txt('vjVName'+id, v.name || '—');
+    set('vjVOp'+id, Math.round(v.opacity*100));
+    set('vjVTintAmt'+id, Math.round(v.tintAmt*100));
+    set('vjVRate'+id, Math.round(v.rate*100));
+    on('vjVAudio'+id, v.audioOn);
+    set('vjVAudioGain'+id, Math.round(v.audioGain*100));
+  }
+}
+function vjTime(s){ s = Math.max(0, s||0); const m=Math.floor(s/60); return m+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+
+// Waveform is a STATIC canvas painted once per load, with the playhead and beat
+// grid drawn over it each tick — repainting 1000 buckets at 20Hz would be silly.
+function vjDrawWave(id, d){
+  const cv = $('vjWave'+id); if (!cv || !d) return;
+  const w = cv.width, h = cv.height, c = cv.getContext('2d');
+  const peaks = vjWaveCache[id];
+  c.clearRect(0,0,w,h);
+  c.fillStyle = 'rgba(255,255,255,0.04)'; c.fillRect(0,0,w,h);
+  if (peaks && peaks.length){
+    const n = peaks.length/2;
+    c.fillStyle = 'var(--accent)'; c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#21e6ff';
+    for (let x=0;x<w;x++){
+      const i = Math.floor(x/w*n);
+      const lo = peaks[i*2], hi = peaks[i*2+1];
+      const y0 = h/2 - hi*h/2, y1 = h/2 - lo*h/2;
+      c.fillRect(x, y0, 1, Math.max(1, y1-y0));
+    }
+  } else {
+    c.fillStyle='rgba(255,255,255,0.25)'; c.font='11px system-ui'; c.textAlign='center';
+    c.fillText(d.ready ? 'analysing…' : 'no track', w/2, h/2);
+  }
+  // Beat grid off the deck's own detected tempo + offset.
+  if (d.bpm && d.dur){
+    const bl = 60/d.bpm; c.strokeStyle='rgba(255,255,255,0.18)'; c.lineWidth=1;
+    for (let t=d.grid||0; t<d.dur; t+=bl){ const x=Math.round(t/d.dur*w)+0.5;
+      c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke(); }
+  }
+  if (d.loop && d.dur){
+    c.fillStyle='rgba(255,210,60,0.18)';
+    const x0=d.loop.in/d.dur*w, x1=d.loop.out/d.dur*w;
+    c.fillRect(x0, 0, Math.max(2, x1-x0), h);
+  }
+  if (d.dur){
+    const x = Math.round(d.pos/d.dur*w)+0.5;
+    c.strokeStyle='#fff'; c.lineWidth=2; c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke();
+  }
+}
+function vjDrawMeters(V){
+  const bar = (id, lvl) => { const cv=$(id); if(!cv) return;
+    const c=cv.getContext('2d'), w=cv.width, h=cv.height;
+    c.clearRect(0,0,w,h); c.fillStyle='rgba(255,255,255,0.07)'; c.fillRect(0,0,w,h);
+    const n = Math.round(w*Math.min(1,lvl||0));
+    const g = c.createLinearGradient(0,0,w,0);
+    g.addColorStop(0,'#35ff87'); g.addColorStop(0.7,'#ffe23d'); g.addColorStop(1,'#ff3b6b');
+    c.fillStyle=g; c.fillRect(0,0,n,h); };
+  bar('vjMetera', V.a && V.a.level); bar('vjMeterb', V.b && V.b.level);
+  bar('vjMeterMaster', V.masterL);
+}
+
+// ---------- Building the panel ----------------------------------------------
+function vjBuildPanel(){
+  const host = $('vjPanel'); if (!host) return;
+  host.innerHTML = '';
+  const el = (tag, cls, txt) => { const e=document.createElement(tag); if(cls) e.className=cls;
+    if(txt!=null) e.textContent=txt; return e; };
+  const row = cls => el('div', 'vjrow' + (cls?' '+cls:''));
+  const btn = (id, label, fn, cls) => { const b=el('button', 'vjbtn'+(cls?' '+cls:''), label); b.id=id;
+    b.type='button'; b.onclick=fn; return b; };
+  const slider = (id, min, max, step, fn, val) => { const i=document.createElement('input');
+    i.type='range'; i.id=id; i.min=min; i.max=max; i.step=step; i.value=val!=null?val:0;
+    i.className='vjsl'; i.oninput=()=>fn(+i.value); return i; };
+  const lab = t => el('div','vjlab',t);
+
+  // ---- master strip -------------------------------------------------------
+  const top = row('vjtop');
+  const onBtn = btn('vjOn','⏻ VJ MODE', ()=>vjCmd('on', !(vjView&&vjView.on)), 'big');
+  top.append(onBtn,
+    btn('vjArmBtn','🔌 Arm audio', ()=>vjCmd('arm')),
+    btn('vjTap','◉ TAP', ()=>vjCmd('tap'), 'big'),
+    (()=>{ const d=el('div','vjbpmbox'); d.append(el('span','vjlab','BPM'), (()=>{const s=el('span','vjbpm','—'); s.id='vjBpm'; return s;})()); return d; })(),
+    btn('vjClockReset','reset', ()=>vjCmd('clockReset')),
+    btn('vjPanicBtn','🛑 PANIC', ()=>vjCmd('panic'), 'panic'));
+  host.append(top);
+  const stateLine = el('div','vjstate','· waiting for the game tab…'); stateLine.id='vjState';
+  host.append(stateLine);
+  host.append(el('div','vjnote','Audio lives in the GAME tab — one AudioContext, or two would drift. Arm it there once before showtime. PANIC also works on the game page as Shift+Esc, even if this page is closed.'));
+
+  // ---- audio decks --------------------------------------------------------
+  host.append(el('h3','vjh','🎛 Audio decks'));
+  const adecks = row('vjdecks');
+  for (const id of ['a','b']) adecks.append(vjAudioStrip(id, el, row, btn, slider, lab));
+  host.append(adecks);
+  const xrow = row('vjxf');
+  xrow.append(lab('A'), slider('vjXf',0,100,1, v=>vjCmd('xf', v/100), 50), lab('B'));
+  const curve = el('div','vjcurve');
+  for (const c of ['smooth','sharp']){ const b=btn('vjXfC'+c, c, ()=>vjCmd('xfCurve', c)); curve.append(b); }
+  xrow.append(curve);
+  host.append(el('div','vjlab','AUDIO CROSSFADER'), xrow);
+  const mrow = row('vjmaster');
+  mrow.append(lab('MASTER'), slider('vjMaster',0,100,1, v=>vjCmd('master', v/100), 80),
+              vjCanvas('vjMeterMaster', 220, VJUI.meterH));
+  host.append(mrow);
+  host.append(el('div','vjnote','A limiter is permanently in the master chain while VJ Mode is on — you cannot clip into the PA from here.'));
+
+  // ---- video decks --------------------------------------------------------
+  host.append(el('h3','vjh','🎬 Video decks'));
+  const vdecks = row('vjdecks');
+  for (const id of ['a','b']) vdecks.append(vjVideoStrip(id, el, row, btn, slider, lab));
+  host.append(vdecks);
+  const vxrow = row('vjxf');
+  vxrow.append(lab('A'), slider('vjVxf',0,100,1, v=>vjCmd('vxf', v/100), 50), lab('B'),
+               btn('vjTake','TAKE', ()=>vjCmd('take'), 'big'));
+  host.append(el('div','vjlab','VIDEO CROSSFADER — independent of audio'), vxrow);
+  const qrow = row();
+  qrow.append(lab('TAKE lands on'));
+  for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>{ VJ.takeQuant=q; vjCmd('vset',{d:'a',set:{}}); }));
+  host.append(qrow);
+
+  // ---- game SFX + cue -----------------------------------------------------
+  host.append(el('h3','vjh','⚽ Game sound'));
+  const srow = row();
+  srow.append(lab('SFX level'), slider('vjSfx',0,100,1, v=>vjCmd('sfx', v/100), Math.round(VJ.sfxDefault*100)),
+              btn('vjDuck','Goal ducks music', ()=>vjCmd('duck', !(vjView&&vjView.duck))));
+  host.append(srow);
+  host.append(el('div','vjnote','Game SFX are their own bus. A goal dips the MUSIC only, so the crowd comes through the hole and the music comes back.'));
+
+  host.append(el('h3','vjh','🎧 Headphone cue'));
+  host.append(el('div','vjwarn','FRAGILE. Chromium only, needs a second output device, and the MediaStream route puts cue roughly 20–100ms BEHIND main — it is not sample-aligned. With no device it degrades to the waveform preview above and no audio.'));
+  const crow = row();
+  const devSel = document.createElement('select'); devSel.id='vjCueDev'; devSel.className='vjsel';
+  devSel.innerHTML = '<option value="">— visual preview only —</option>';
+  devSel.onchange = ()=>vjCmd('cueDev', devSel.value);
+  crow.append(lab('Output'), devSel,
+    btn('vjCueScan','Find devices', async ()=>{
+      try { await navigator.mediaDevices.getUserMedia({audio:true}); } catch(_){}
+      const list = await vjDevices();
+      devSel.innerHTML = '<option value="">— visual preview only —</option>' +
+        list.map(d=>`<option value="${d.id}">${d.label}</option>`).join('');
+    }),
+    lab('Level'), slider('vjCueLevel',0,100,1, v=>vjCmd('cueLevel', v/100), 80));
+  host.append(crow);
+  host.append((()=>{ const d=el('div','vjnote',''); d.id='vjCueWhy'; return d; })());
+
+  // ---- library ------------------------------------------------------------
+  host.append(el('h3','vjh','📚 Library'));
+  const tabs = row();
+  for (const t of ['audio','video']) tabs.append(btn('vjLibTab'+t, t==='audio'?'🎵 Audio':'🎬 Video',
+    ()=>{ vjLibTab=t; vjBuildLib(); }));
+  host.append(tabs);
+  const fi = document.createElement('input'); fi.type='file'; fi.id='vjFiles'; fi.multiple=true;
+  fi.accept='audio/*,video/*'; fi.className='vjfile';
+  fi.onchange = ()=>{ vjAddFiles([...fi.files]); fi.value=''; };
+  host.append(fi);
+  host.append(el('div','vjnote','Clicking a track loads it into the deck that is currently faded OUT — never the one you can hear.'));
+  const libHost = el('div','vjlib'); libHost.id='vjLib'; host.append(libHost);
+
+  // ---- presets ------------------------------------------------------------
+  host.append(el('h3','vjh','💾 Presets'));
+  const prow = row();
+  const pn = document.createElement('input'); pn.type='text'; pn.id='vjPresetName';
+  pn.placeholder='name'; pn.className='vjtext';
+  prow.append(pn, btn('vjPresetSave','Save', ()=>{ if(pn.value.trim()){ vjPresetSave(pn.value.trim()); vjBuildPresets(); } }));
+  host.append(prow);
+  const ph = el('div','vjpresets'); ph.id='vjPresetList'; host.append(ph);
+
+  vjBuildLib(); vjBuildPresets();
+  vjPanelRender();
+}
+function vjCanvas(id, w, h){ const c=document.createElement('canvas'); c.id=id; c.width=w; c.height=h;
+  c.className='vjcv'; return c; }
+
+function vjAudioStrip(id, el, row, btn, slider, lab){
+  const s = el('div','vjstrip');
+  const head = row('vjhead');
+  head.append((()=>{const t=el('div','vjdeckid','DECK '+id.toUpperCase()); return t;})(),
+              (()=>{const t=el('div','vjtrack','—'); t.id='vjName'+id; return t;})());
+  s.append(head);
+  s.append(vjCanvas('vjWave'+id, 420, VJUI.waveH));
+  const t1 = row();
+  t1.append(btn('vjPlay'+id,'▶︎/❚❚', ()=>vjCmd('play',{d:id, v: !(vjView&&vjView[id]&&vjView[id].playing)})),
+            btn('vjHome'+id,'⏮', ()=>vjCmd('seek',{d:id, v:0})),
+            (()=>{const t=el('div','vjpos','0:00 / 0:00'); t.id='vjPos'+id; return t;})(),
+            (()=>{const t=el('div','vjdbpm','—'); t.id='vjDeckBpm'+id; return t;})(),
+            btn('vjSync'+id,'SYNC', ()=>vjCmd('sync',{d:id})));
+  s.append(t1);
+  const bpmRow = row();
+  const bi = document.createElement('input'); bi.type='number'; bi.step='0.1'; bi.className='vjnum';
+  bi.placeholder='BPM'; bi.onchange=()=>vjCmd('deck',{d:id, set:{ bpm:+bi.value||null }});
+  bpmRow.append(lab('Manual BPM'), bi,
+    btn('vjGridBack'+id,'grid ◀', ()=>vjCmd('deck',{d:id, set:{ grid: Math.max(0,(vjView&&vjView[id]?vjView[id].grid:0) - 0.01) }})),
+    btn('vjGridFwd'+id,'grid ▶', ()=>vjCmd('deck',{d:id, set:{ grid: (vjView&&vjView[id]?vjView[id].grid:0) + 0.01 }})));
+  s.append(el('div','vjnote','Detection is wrong sometimes — override it here and nudge the grid.'), bpmRow);
+  const eq = row('vjeq');
+  eq.append(lab('LOW'),  slider('vjLow'+id, -100,100,1, v=>vjCmd('eq',{d:id,band:'low', v:v/100}), 0),
+            lab('MID'),  slider('vjMid'+id, -100,100,1, v=>vjCmd('eq',{d:id,band:'mid', v:v/100}), 0),
+            lab('HIGH'), slider('vjHigh'+id,-100,100,1, v=>vjCmd('eq',{d:id,band:'high',v:v/100}), 0));
+  s.append(el('div','vjlab','3-BAND KILL EQ'), eq);
+  const fl = row();
+  fl.append(lab('HP ◀ FILTER ▶ LP'), slider('vjSweep'+id,-100,100,1, v=>vjCmd('deck',{d:id,set:{sweep:v/100}}), 0));
+  s.append(fl);
+  const pr = row();
+  pr.append(lab('PITCH'), slider('vjPitch'+id,-50,50,0.1, v=>vjCmd('deck',{d:id,set:{pitch:v}}), 0),
+            (()=>{const t=el('div','vjval','+0.0%'); t.id='vjPitchVal'+id; return t;})());
+  s.append(pr);
+  const prng = row();
+  for (const r of VJ.pitchRanges) prng.append(btn('vjRange'+id+r, '±'+r+'%', ()=>vjCmd('deck',{d:id,set:{pitchRange:r}})));
+  prng.append(btn('vjKey'+id,'KEY LOCK', ()=>vjCmd('deck',{d:id,set:{keyLock: !(vjView&&vjView[id]&&vjView[id].keyLock)}})));
+  s.append(prng);
+  s.append((()=>{const t=el('div','vjwarn',''); t.id='vjKeyWarn'+id; return t;})());
+  const hc = row();
+  hc.append(lab('HOT CUES'));
+  for (let i=0;i<VJ.hotCues;i++){
+    const b = btn('vjHot'+id+i, String(i+1), ()=>vjCmd('cueJump',{d:id,i}));
+    b.oncontextmenu = e => { e.preventDefault(); vjCmd('cueSet',{d:id,i}); };
+    hc.append(b);
+  }
+  hc.append(el('span','vjtiny','right-click to set'));
+  s.append(hc);
+  const lp = row();
+  lp.append(lab('AUTO LOOP'));
+  for (const n of VJ.loopBeats) lp.append(btn('vjLoop'+id+n, n+'', ()=>vjCmd('loop',{d:id, v:n})));
+  lp.append(btn('vjLoopOff'+id,'off', ()=>vjCmd('loop',{d:id, v:0})),
+            btn('vjLoopIn'+id,'IN', ()=>vjCmd('loopIn',{d:id})),
+            btn('vjLoopOut'+id,'OUT', ()=>vjCmd('loopOut',{d:id})));
+  s.append(lp);
+  const lv = row();
+  lv.append(lab('TRIM'),  slider('vjTrim'+id,0,200,1, v=>vjCmd('deck',{d:id,set:{gainTrim:v/100}}), 100),
+            lab('FADER'), slider('vjFader'+id,0,100,1, v=>vjCmd('deck',{d:id,set:{fader01:v/100}}), 100),
+            vjCanvas('vjMeter'+id, 120, VJUI.meterH));
+  s.append(lv);
+  const asg = row();
+  asg.append(lab('ASSIGN'));
+  for (const a of ['main','cue','both','off'])
+    asg.append(btn('vjAsg'+id+a, a, ()=>vjCmd('deck',{d:id,set:{assign:a}})));
+  asg.append(btn('vjCue'+id,'🎧 CUE', ()=>vjCmd('deck',{d:id,set:{cue: !(vjView&&vjView[id]&&vjView[id].cue)}})));
+  s.append(asg);
+  return s;
+}
+
+function vjVideoStrip(id, el, row, btn, slider, lab){
+  const s = el('div','vjstrip');
+  const head = row('vjhead');
+  head.append(el('div','vjdeckid','VIDEO '+id.toUpperCase()),
+              (()=>{const t=el('div','vjtrack','—'); t.id='vjVName'+id; return t;})());
+  s.append(head);
+  const o = row();
+  o.append(lab('OPACITY'), slider('vjVOp'+id,0,100,1, v=>vjCmd('vop',{d:id, v:v/100}), 0));
+  s.append(o);
+  s.append(el('div','vjnote','A deck at zero opacity is not decoded at all — that is the cheapest saving there is.'));
+  const fit = row();
+  fit.append(lab('FIT'));
+  for (const f of ['cover','contain','stretch']) fit.append(btn('vjFit'+id+f, f, ()=>vjCmd('vset',{d:id,set:{fitMode:f}})));
+  s.append(fit);
+  const fx = row();
+  fx.append(lab('LOOK'));
+  for (const [n,f] of [['none',''],['sat','saturate(1.8)'],['hue','hue-rotate(90deg)'],
+                       ['inv','invert(1)'],['bw','grayscale(1) contrast(1.4)']])
+    fx.append(btn('vjFx'+id+n, n, ()=>vjCmd('vset',{d:id,set:{filter:f}})));
+  s.append(fx);
+  s.append(el('div','vjnote','Looks render through a half-scale pass — at full resolution a canvas filter measured 2.2× the entire frame budget.'));
+  const tn = row();
+  const ci = document.createElement('input'); ci.type='color'; ci.className='vjcol'; ci.value='#ff00aa';
+  ci.oninput = ()=>vjCmd('vset',{d:id,set:{tint:ci.value}});
+  tn.append(lab('TINT'), ci, slider('vjVTintAmt'+id,0,100,1, v=>vjCmd('vset',{d:id,set:{tintAmt:v/100}}), 0));
+  s.append(tn);
+  const rt = row();
+  rt.append(lab('RATE'), slider('vjVRate'+id,25,200,1, v=>vjCmd('vset',{d:id,set:{rate:v/100}}), 100));
+  s.append(rt);
+  const au = row();
+  au.append(btn('vjVAudio'+id,'Clip audio', ()=>vjCmd('vaudio',{d:id, v: !(vjView&&vjView['v'+id]&&vjView['v'+id].audioOn)})),
+            slider('vjVAudioGain'+id,0,100,1, v=>vjCmd('vset',{d:id,set:{audioGain:v/100}}), 0));
+  s.append(au);
+  s.append(el('div','vjnote','Off by default. Video and music are decoupled — any clip plays under any unrelated track.'));
+  return s;
+}
+
+// ---------- Library ----------------------------------------------------------
+async function vjAddFiles(files){
+  for (const f of files){
+    const isVid = /^video\//.test(f.type) || /\.(mp4|webm|mov|mkv)$/i.test(f.name);
+    const item = { file:f, name:f.name, size:f.size, bpm:null, dur:null };
+    (isVid ? vjLibVideo : vjLibAudio).push(item);
+  }
+  vjBuildLib();
+}
+function vjBuildLib(){
+  const host = $('vjLib'); if (!host) return;
+  host.innerHTML = '';
+  const list = vjLibTab === 'video' ? vjLibVideo : vjLibAudio;
+  for (const t of ['audio','video']){ const b=$('vjLibTab'+t); if(b) b.classList.toggle('sel', vjLibTab===t); }
+  if (!list.length){ host.append(Object.assign(document.createElement('div'),
+    {className:'vjnote', textContent:'Nothing loaded yet — pick files above.'})); return; }
+  list.forEach((it, i) => {
+    const r = document.createElement('div'); r.className='vjitem';
+    const nm = document.createElement('span'); nm.className='vjiname'; nm.textContent = it.name;
+    const meta = document.createElement('span'); meta.className='vjimeta';
+    meta.textContent = [it.bpm ? it.bpm.toFixed(1)+' BPM' : null,
+                        it.dur ? vjTime(it.dur) : null,
+                        Math.round(it.size/1048576)+' MB'].filter(Boolean).join(' · ');
+    // Load into the deck that is faded OUT, never the one you can hear.
+    const target = () => {
+      const V = vjView; if (!V) return 'a';
+      return (vjLibTab==='video' ? V.vxf : V.xf) < 0.5 ? 'b' : 'a';
+    };
+    const go = document.createElement('button'); go.className='vjbtn'; go.type='button';
+    go.textContent = '→ offline deck';
+    go.onclick = ()=>{ const d = target(); vjSendFile(vjLibTab==='video'?'video':'audio', d, it.file); };
+    r.append(nm, meta, go);
+    host.append(r);
+  });
+}
+function vjBuildPresets(){
+  const host = $('vjPresetList'); if (!host) return;
+  host.innerHTML='';
+  const all = vjPresets();
+  const names = Object.keys(all);
+  if (!names.length){ host.textContent = 'No presets saved.'; host.className='vjnote'; return; }
+  host.className='vjpresets';
+  for (const n of names){
+    const b = document.createElement('button'); b.className='vjbtn'; b.type='button'; b.textContent = n;
+    b.onclick = ()=>vjCmd('preset', n);
+    b.oncontextmenu = e => { e.preventDefault(); vjPresetDelete(n); vjBuildPresets(); };
+    host.append(b);
+  }
+}
+
+
 loadSel();
 applyTheme(sel.look.palette);
+// VJ Mode's flag survives a reload; its AUDIO does not — an AudioContext needs a
+// gesture, so the game page always asks you to arm before showtime.
+if (sel.vj && sel.vj.on && !PANEL) { vj.on = true; document.body.classList.add('vjlive'); }
 applyDisplayMode();
 
 const $ = id => document.getElementById(id);
@@ -4267,6 +5514,7 @@ function buildSettings(){
   }
   buildFeelPresets();
   buildFeelSliders();
+  if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
 // "Pro" = HaxBall-authentic — no magnet, no trap (instant one-shot kick), floatier
@@ -5400,6 +6648,7 @@ function loop(t){
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
   render();
   renderAlpha = 1;                 // anything drawing outside the loop gets the exact state
+  vjTick();                        // meters, deck positions, loop wrap — never the sim
 }
 
 // ============================================================
@@ -5537,7 +6786,7 @@ function step(w){
     if (w.stateT > 1.8){
       const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
       if (w.overtime) endMatch(w);                 // golden goal — first goal in OT wins
-      else if (sel.autoReplay && !w.demo && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
+      else if (sel.autoReplay && !vj.on && !w.demo && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
                && lastReplay.players === w.players.length && !w._autoReplayed){
         w._autoReplayed = true;                    // slow-mo instant replay, then kick off
         playReplay(0.5).then(()=>{ if (world===w){ resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; } });
@@ -8510,6 +9759,16 @@ function drawPitch(w){
   const b = w.bounds;
   const L = wx(-b.halfW), R = wx(b.halfW), T = wy(-b.halfL), B = wy(b.halfL);
   drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
+  // ⚠️ THE VJ SEAM. Video composites here — over the pitch SURFACE, under the
+  // MARKINGS, and therefore under the trails, discs and ball, which draw later in
+  // render(). That ordering is what makes "players always full opacity" a
+  // structural guarantee instead of a slider nobody may touch: there is no value
+  // any deck can hold that puts video in front of a player. Off, it is a no-op.
+  vjPaintVideo(L, T, R-L, B-T);
+  // Markings are dimmed as a group so heavy video doesn't bury the pitch, floored
+  // at VJ.lineFloor so they can never vanish. vjMarkA() is exactly 1 with VJ off.
+  const _mA = vjMarkA();
+  ctx.save(); ctx.globalAlpha = _mA;
   ctx.fillStyle = TH.netPocket;
   const gh = f.goal/2;
   ctx.fillRect(wx(-gh), wy(-b.halfL-b.net), (gh*2)*s, b.net*s);
@@ -8553,9 +9812,9 @@ function drawPitch(w){
     // from either side. Draw it solid so it reads as the way through rather than
     // more of the same barrier.
     ctx.setLineDash([]);
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.9 * _mA;          // multiply, don't assign — see the seam above
     ctx.beginPath(); ctx.arc(cx, yMid, cr, 0, 2*Math.PI); ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = _mA;
     ctx.restore();
   } else {
     ctx.beginPath(); ctx.moveTo(L, wy(0)); ctx.lineTo(R, wy(0)); ctx.stroke();
@@ -8570,7 +9829,7 @@ function drawPitch(w){
   // box — and fainter than the lines, so the one you must not confuse it with, the
   // goal line itself, stays the strongest mark down there.
   ctx.save();
-  ctx.globalAlpha = GOAL_BOX_A;
+  ctx.globalAlpha = GOAL_BOX_A * _mA;     // ...and here
   ctx.setLineDash([]);
   for (const sign of [-1, 1]){
     const yLine = wy(sign*b.halfL), yIn = wy(sign*(b.halfL - b.net));
@@ -8585,6 +9844,7 @@ function drawPitch(w){
 
   // Goal nets (crosshatch) + goal line coloring
   drawGoal(w, -1); drawGoal(w, 1);
+  ctx.restore();
 }
 // Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
 // in the selected style. Purely cosmetic.
@@ -9917,8 +11177,9 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0730AM';
+const VERSION = '20260805.0930AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
+
 
 if (window.__MAGNETDEBUG) {
   window.__magnet = {
@@ -9972,6 +11233,13 @@ if (window.__MAGNETDEBUG) {
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
+    vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
+    vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
+    vjEqDb, vjDuckGoal, vjTake, vjVideoOpacity, vjVideoAudio, vjExec, vjCmd, vjSnap, vjTick,
+    vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,
+    vjDeckAudio, vjDeckVideo, get vjView(){ return vjView; }, set vjView(v){ vjView=v; },
+    vjCueDevice, vjDevices, vjKey, vjPush, VJ_CMDS,
     bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
     finishMatch, FINAL_SLOW, awardRow,
