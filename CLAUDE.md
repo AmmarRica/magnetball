@@ -50,6 +50,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   (`gamepadPad`). `applyHumanInput(p, pad)` maps a pad to a player and applies cocktail rotation.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **Goal box:** the net pocket mirrored onto the pitch in front of each goal line — same
+  mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
+  `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
+  `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -135,7 +139,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 50 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 51 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
