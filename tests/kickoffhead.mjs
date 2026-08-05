@@ -89,7 +89,17 @@ const r = await p.evaluate(async ()=>{
   const off = parseFloat(getComputedStyle(document.getElementById('setup'))
     .getPropertyValue('--sticky-top'));
   o.stickyTop = off;
-  o.stickyMatchesHeader = Math.abs(off - head.getBoundingClientRect().height) < 3;
+  // Two things pin above the section headers now: the jump-to chip row at the very
+  // top and the KICK OFF bar under it. The offset has to clear BOTH, or a section
+  // header lands on top of one of them.
+  const jump = document.getElementById('jumpBar');
+  o.jumpH = jump ? jump.getBoundingClientRect().height : 0;
+  o.headH = head.getBoundingClientRect().height;
+  o.stickyMatchesHeader = Math.abs(off - (o.headH + o.jumpH)) < 3;
+  // ...and the stack really is chips → KICK OFF → headers, top to bottom.
+  o.jumpAboveHeader = o.jumpH > 0 &&
+    parseFloat(getComputedStyle(jump).top) === 0 &&
+    Math.abs(parseFloat(getComputedStyle(head).top) - o.jumpH) < 3;
   o.headerIsTheStickyOne = getComputedStyle(head).position === 'sticky' &&
                            getComputedStyle(btn).position !== 'sticky';
   return o;
@@ -102,7 +112,8 @@ const must = ['cardIsCollapsible','buttonIsTheHeader','chevronIsInHeader','optio
   'chevronSameHeight','optionsHiddenWhenCollapsed','chevronExpands','optionsShowWhenOpen',
   'buttonStillVisibleWhenOpen','ariaTracksState','canPickAModeWhileOpen','chevronCollapses',
   'ariaTracksClosed','buttonStartsMatch','buttonDoesNotExpand','buttonDoesNotCollapse',
-  'matchAloneWhenOpen','otherSectionClosesMatch','stickyMatchesHeader','headerIsTheStickyOne'];
+  'matchAloneWhenOpen','otherSectionClosesMatch','stickyMatchesHeader','jumpAboveHeader',
+  'headerIsTheStickyOne'];
 const bad = must.filter(k => r[k] !== true);
 const ok = bad.length === 0 && errors.length === 0;
 if (bad.length) console.log('FAILED:', bad);

@@ -186,6 +186,38 @@
 
     /* Compact destination grid at the top of the main menu */
     .navgrid { width: 100%; max-width: 460px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 4px 0 2px; }
+    /* Grouped nav: a quiet label per kind, so the three sorts of destination read apart. */
+    .navgroup { width: 100%; max-width: 460px; margin: 6px 0 2px; }
+    .navlab { font-family: var(--pix); font-size: 10px; letter-spacing: 1px; color: var(--muted);
+      text-align: left; margin: 0 2px 5px; }
+    /* Jump bar: sticky under the KICK OFF header, scrolls sideways rather than wrapping. */
+    /* flex:0 0 auto — #setup is a column flex container, so the default flex-shrink
+       squashed this to 4px (its padding) and clipped every chip. */
+    #jumpBar { width: 100%; max-width: 460px; display: flex; gap: 6px; margin: 8px 0 2px;
+      flex: 0 0 auto; overflow-x: auto; overflow-y: hidden;
+      padding: 6px 0 7px;
+      /* Pins directly under the KICK OFF bar, ABOVE the section headers — which is
+         why syncSticky folds this height into --sticky-top. Opaque: content scrolls
+         underneath it, and a see-through bar over a grid of tiles reads as a bug. */
+      position: sticky; top: 0; z-index: 7;
+      background: var(--bg); border-bottom: 1px solid var(--edge);
+      scrollbar-width: none; }
+    #jumpBar::-webkit-scrollbar { display: none; }
+    #jumpBar:empty { display: none; }
+    .jumpchip { flex: 0 0 auto; font-family: var(--pix); font-size: 10px; color: var(--muted);
+      background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 999px;
+      padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+    .jumpchip:hover { border-color: var(--cyan); color: var(--text); }
+    .jumpchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
+    /* Sub-tabs inside a card: one pane visible at a time. */
+    .subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+    .subchip { font-family: var(--pix); font-size: 11px; color: var(--muted);
+      background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 9px;
+      padding: 7px 11px; cursor: pointer; }
+    .subchip:hover { border-color: var(--cyan); color: var(--text); }
+    .subchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
+    .subpane { display: none; }
+    .subpane.on { display: block; }
     .navtile {
       display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 4px; cursor: pointer;
       background: rgba(255,255,255,.03); border: 1px solid var(--edge); border-radius: 11px;
@@ -213,7 +245,7 @@
        would pin it below itself. */
     #matchCard { background: none; border: none; padding: 0; box-shadow: none; }
     #matchCard > h2 {
-      top: 0; z-index: 6; gap: 8px; padding: 0; margin-bottom: 0;
+      top: var(--jump-h, 0px); z-index: 6; gap: 8px; padding: 0; margin-bottom: 0;
       background: linear-gradient(rgba(53,255,135,.15), rgba(53,255,135,.15)), var(--bg);
     }
     #matchCard > h2::after { content: none; }     /* the chevron here is a real control */
@@ -850,6 +882,12 @@
     <!-- The Match section's header IS the KICK OFF button: collapsed it is just the
          green bar you press to play, and the chevron on its right opens the match
          options underneath (mode, field, difficulty, …). -->
+    <!-- Jump straight to a section instead of scrolling past the ones you don't want.
+         Built from the cards themselves, so it can't list a section that isn't there.
+         Sits ABOVE the Match card so the sticky things stack instead of colliding:
+         chips at the top, KICK OFF under them, section headers under that. -->
+    <div id="jumpBar"></div>
+
     <div class="card collapsible collapsed" id="matchCard" data-sec="match">
       <h2>
         <span class="secname">Match</span>
@@ -860,18 +898,36 @@
            it's reachable without opening the section — same as the button above it. -->
       <button class="ghost" id="warmupBtn" type="button">🧍 Warm-up</button>
       <div id="matchBody">
+      <!-- Four things you might be here for, not one list of thirteen. -->
+      <div class="subtabs" data-tabs="match"></div>
+
+      <div class="subpane" data-pane="game">
       <label class="field">Mode</label>
       <div class="opts" id="modes"></div>
-      <div style="height:14px"></div>
-      <label class="field">Field</label>
-      <div class="opts tilewrap" id="fields"></div>
       <div style="height:14px"></div>
       <label class="field">Difficulty <small style="color:var(--muted)">(bots)</small></label>
       <div class="opts" id="diffs"></div>
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
+      </div>
+
+      <div class="subpane" data-pane="pitch">
+      <label class="field">Field</label>
+      <div class="opts tilewrap" id="fields"></div>
       <div style="height:14px"></div>
+      <label class="field">Ball</label>
+      <div class="opts" id="balls"></div>
+      <div style="height:14px"></div>
+      <label class="field">Pitch surface</label>
+      <div class="opts tilewrap" id="pitches"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Ice slides and takes a long time to stop. Mud grips badly and kills the roll.</div>
+      <div style="height:14px"></div>
+      <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
+      <div class="opts tilewrap" id="grass"></div>
+      </div>
+
+      <div class="subpane" data-pane="players">
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
       <div style="height:14px"></div>
@@ -884,47 +940,55 @@
         <div class="opts" id="coop"></div>
       </div>
       <div style="height:14px"></div>
-      <label class="field">Ball</label>
-      <div class="opts" id="balls"></div>
-      <div style="height:14px"></div>
-      <label class="field">Pitch surface</label>
-      <div class="opts tilewrap" id="pitches"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Ice slides and takes a long time to stop. Mud grips badly and kills the roll.</div>
-      <div style="height:14px"></div>
-      <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
-      <div class="opts tilewrap" id="grass"></div>
-      <div style="height:14px"></div>
-      <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
-      <div class="opts" id="kickPushPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
-      <div style="height:14px"></div>
-      <label class="field">Kickoff rule</label>
-      <div class="opts" id="kickoffRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
-      <div style="height:14px"></div>
       <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
       <textarea id="seatNames" rows="4" spellcheck="false" autocomplete="off"
                 placeholder="One name per line, in seat order"></textarea>
       <div class="hint" style="text-align:left; margin-top:4px">Your side first (you, then your team-mates), then the opposition. Blank lines keep the default name. Applies to the next match.</div>
       <button class="ghost" id="namesClear" style="margin-top:8px">Clear names</button>
+      </div>
+
+      <div class="subpane" data-pane="rules">
+      <label class="field">Kickoff rule</label>
+      <div class="opts" id="kickoffRule"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
+      <div style="height:14px"></div>
+      <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
+      <div class="opts" id="kickPushPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
       </div>
+      </div>
     </div>
 
-    <div class="navgrid">
-      <button class="navtile" id="seasonBtn"><span>🏆</span>Season</button>
-      <button class="navtile" id="drillsBtn"><span>🎯</span>Drills</button>
-      <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
-      <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
-      <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
-      <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
-      <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
-      <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
-      <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
-      <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
-      <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
+    <!-- Three kinds of thing, three groups. Eleven identical tiles in one grid made
+         "play something else" and "look at a number" cost the same glance. -->
+    <div class="navgroup">
+      <div class="navlab">Play</div>
+      <div class="navgrid">
+        <button class="navtile" id="seasonBtn"><span>🏆</span>Season</button>
+        <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
+        <button class="navtile" id="drillsBtn"><span>🎯</span>Drills</button>
+        <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
+      </div>
+    </div>
+    <div class="navgroup">
+      <div class="navlab">Progress</div>
+      <div class="navgrid">
+        <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
+        <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
+        <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
+        <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
+        <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
+      </div>
+    </div>
+    <div class="navgroup">
+      <div class="navlab">Help</div>
+      <div class="navgrid">
+        <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
+        <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
+      </div>
     </div>
 
 
@@ -944,23 +1008,34 @@
       </div>
       <input id="pname" type="text" maxlength="12" placeholder="Enter a name" autocomplete="off" />
       <div style="height:14px"></div>
-      <label class="field">Colour</label>
-      <div class="swatches" id="swatches"></div>
-      <div style="height:14px"></div>
-      <label class="field">Cap</label>
-      <div class="opts" id="caps"></div>
-      <div style="height:14px"></div>
-      <label class="field">Countryball <small id="unlockCount" style="color:var(--muted);font-weight:400"></small></label>
-      <div class="opts tilewrap" id="flagPick"></div>
-      <div style="height:14px"></div>
-      <label class="field">Animal</label>
-      <div class="opts tilewrap" id="animalPick"></div>
-      <div style="height:14px"></div>
-      <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
-      <div class="opts tilewrap" id="textPick"></div>
-      <div style="height:14px"></div>
-      <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
-      <div class="opts tilewrap" id="eyesPick"></div>
+      <!-- One picker at a time. Flat, this card ran 212 controls over seven and a half
+           screens — and the faceplate ones (flags / animals / text) all write the SAME
+           slot, so at most one of them was ever relevant to what you were doing. -->
+      <div class="subtabs" data-tabs="player"></div>
+      <div class="subpane" data-pane="colour">
+        <label class="field">Colour</label>
+        <div class="swatches" id="swatches"></div>
+      </div>
+      <div class="subpane" data-pane="cap">
+        <label class="field">Cap</label>
+        <div class="opts" id="caps"></div>
+      </div>
+      <div class="subpane" data-pane="flag">
+        <label class="field">Countryball <small id="unlockCount" style="color:var(--muted);font-weight:400"></small></label>
+        <div class="opts tilewrap" id="flagPick"></div>
+      </div>
+      <div class="subpane" data-pane="animal">
+        <label class="field">Animal</label>
+        <div class="opts tilewrap" id="animalPick"></div>
+      </div>
+      <div class="subpane" data-pane="text">
+        <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
+        <div class="opts tilewrap" id="textPick"></div>
+      </div>
+      <div class="subpane" data-pane="eyes">
+        <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
+        <div class="opts tilewrap" id="eyesPick"></div>
+      </div>
       <div class="preview">
         <canvas class="pvBall" id="pvCanvas" width="120" height="120"></canvas>
         <div class="pvName" id="pvName">Player</div>
@@ -3083,6 +3158,69 @@ window.addEventListener('gamepadconnected', updatePadInfo);
 window.addEventListener('gamepaddisconnected', updatePadInfo);
 
 function openHow(){ dockOrFull('how'); }
+// ---------- Sub-tabs + jump bar ---------------------------------------------
+// Two cards held 78% of every control in the menu — Your Player ran seven and a
+// half screens, Match three and a half. Neither is a list you read; it's a place
+// you go for ONE thing. So each shows one pane at a time, and a sticky chip row
+// jumps between cards instead of scrolling past the ones you don't want.
+//
+// The panes are markup (`.subpane[data-pane]`); this only decides which is shown,
+// so every control still exists and `audit` still finds it.
+const SUBTABS = {
+  player: [['colour','🎨 Colour'], ['cap','🧢 Cap'], ['flag','🏴 Flags'],
+           ['animal','🐻 Animals'], ['text','🔢 Text'], ['eyes','👀 Eyes']],
+  match:  [['game','⚽ Game'], ['pitch','🏟 Pitch'], ['players','🎮 Players'], ['rules','📋 Rules']],
+};
+const subTab = {};                                  // which pane each group is showing
+function showSubTab(group, pane){
+  const card = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!card) return;
+  subTab[group] = pane;
+  const scope = card.closest('.card') || document;
+  for (const el of scope.querySelectorAll('.subpane'))
+    el.classList.toggle('on', el.dataset.pane === pane);
+  for (const el of card.querySelectorAll('.subchip'))
+    el.classList.toggle('sel', el.dataset.pane === pane);
+}
+function buildSubTabs(){
+  for (const group in SUBTABS){
+    const host = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!host) continue;
+    host.innerHTML = '';
+    for (const [pane, label] of SUBTABS[group]){
+      const bt = document.createElement('button');
+      bt.type='button'; bt.className='subchip'; bt.dataset.pane = pane; bt.textContent = label;
+      bt.onclick = () => showSubTab(group, pane);
+      host.appendChild(bt);
+    }
+    showSubTab(group, subTab[group] || SUBTABS[group][0][0]);
+  }
+}
+// Built from the cards themselves so it can never offer a section that isn't there.
+function buildJumpBar(){
+  const host = $('jumpBar'); if (!host) return;
+  host.innerHTML = '';
+  for (const card of document.querySelectorAll('#setup .card.collapsible')){
+    const sec = card.dataset.sec; if (!sec) continue;
+    const nm = (card.querySelector('.secname') || card.querySelector('h2'));
+    const bt = document.createElement('button');
+    bt.type='button'; bt.className='jumpchip'; bt.dataset.sec = sec;
+    bt.textContent = (nm ? nm.textContent : sec).trim().split('\n')[0].slice(0, 14);
+    bt.onclick = () => {
+      openSection(sec);
+      // Opening changes the layout, so scroll on the next frame or you land short.
+      requestAnimationFrame(()=> card.scrollIntoView({ block:'start', behavior:'smooth' }));
+      syncJumpBar(sec);
+    };
+    host.appendChild(bt);
+  }
+  syncJumpBar();
+}
+function syncJumpBar(sec){
+  const first = document.querySelector('#setup .card.collapsible:not(.collapsed)');
+  const open = sec || (first && first.dataset.sec);
+  for (const bt of document.querySelectorAll('#jumpBar .jumpchip')) bt.classList.toggle('sel', bt.dataset.sec === open);
+}
+buildSubTabs(); buildJumpBar();
+
 $('playBtn').onclick = startMatch;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
@@ -3103,7 +3241,14 @@ function syncSticky(){
   // Match header now, so measure the header — measuring the button inside it leaves
   // the other headers overlapping it by the header's own padding.
   const head = document.querySelector('#matchCard > h2'), su = $('setup');
-  if (head && su) su.style.setProperty('--sticky-top', head.offsetHeight + 'px');
+  if (!head || !su) return;
+  // The jump bar pins above the section headers, so they have to start below BOTH
+  // it and the KICK OFF bar — otherwise two sticky things land on the same line.
+  const jump = $('jumpBar');
+  const jh = jump && jump.offsetParent !== null ? jump.offsetHeight : 0;
+  su.style.setProperty('--jump-h', jh + 'px');
+  su.style.setProperty('--kick-h', head.offsetHeight + 'px');
+  su.style.setProperty('--sticky-top', (head.offsetHeight + jh) + 'px');
 }
 syncSticky();
 window.addEventListener('resize', syncSticky);
@@ -9381,6 +9526,7 @@ if (window.__MAGNETDEBUG) {
     botMirror, botBankHits, botPickAim, botFormationSpot, botAssignRoles, botPhase,
     botUpdateSupportGrid, botSeparate, botWallAvoid, handleBallControl,
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
+    showSubTab, buildSubTabs, buildJumpBar, syncJumpBar, SUBTABS, get subTab(){ return subTab; },
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,

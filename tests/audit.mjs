@@ -35,6 +35,18 @@ const r = await p.evaluate(async ()=>{
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
     snd:'#sndMaster .opt', feel:'#feelSlidersBall input', names:'#seatNames',
   };
+  // Sub-panes hide controls with display:none, and querySelectorAll still finds
+  // those — so "the node exists" stopped being the same as "you can get to it".
+  // Every pane must be reachable from a chip in its own tab row, or the controls
+  // inside it are orphaned however present they are in the DOM.
+  out.orphanPanes = [...document.querySelectorAll('#setup .subpane')]
+    .filter(pane => {
+      const card = pane.closest('.card');
+      const row = card && card.querySelector('.subtabs');
+      return !row || !row.querySelector(`.subchip[data-pane="${pane.dataset.pane}"]`);
+    })
+    .map(pane => pane.dataset.pane);
+  out.paneCount = document.querySelectorAll('#setup .subpane').length;
   for (const [key, sel] of Object.entries(CONTROLS)){
     const n = document.querySelectorAll(sel).length;
     if (!n) out.unreachable.push(key + ' (' + sel + ')');
@@ -238,7 +250,7 @@ const r = await p.evaluate(async ()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,8):'none');
 const clean = r.unreachable.length===0 && r.noEffect.length===0 && r.navBroken.length===0 &&
-  r.duplicateControls.length===0 &&
+  r.duplicateControls.length===0 && r.orphanPanes.length===0 && r.paneCount > 0 &&
   r.drillsRun.length===0 && r.modesRun.length===0 && r.cosmeticThrows.length===0 && errors.length===0;
 console.log('RESULT:', clean?'ALL PASS':'FINDINGS');
 process.exit(clean?0:1);
