@@ -63,8 +63,12 @@ const r = await p.evaluate(()=>{
 
   // ...and it reaches the DOM, not just the array.
   w.players.forEach((q,i)=>Object.assign(q.ms, tally[i]));
-  M.renderAwards(w);
-  const rows = [...document.querySelectorAll('#ovAwards .awrow')].map(x=>x.textContent);
+  // Ribbons live inside each team's panel now, so build the panels and read them
+  // from there — same rows, grouped under the side that earned them.
+  M.renderAwards(w); M.renderMatchStats(w);
+  const rows = [...document.querySelectorAll('#ovStats .tpawards .awrow')].map(x=>x.textContent);
+  o.everyRibbonUnderItsTeam = [...document.querySelectorAll('#ovStats .tpanel')]
+    .every(pan => [...pan.querySelectorAll('.awrow')].every(r => r.dataset.team === pan.dataset.team));
   o.rowCount = rows.length;
   o.domShowsCounts = rows.length > 0 && rows.every(t=>/\d/.test(t));
   o.domSaysSaves = rows.some(t=>/Most Saves/.test(t) && /5 saves/.test(t));
@@ -76,7 +80,7 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.count >= 6 && r.everyAwardHasNote && r.everyNoteHasDigits &&
   r.goals && r.saves && r.assists && r.wall && r.playmkr && r.hat && r.ironBoot && r.mvp &&
   r.notesMatchValues && r.savesWinner && r.wallWinner && r.plural && r.singularShown &&
-  r.domShowsCounts && r.domSaysSaves && errors.length === 0;
+  r.domShowsCounts && r.domSaysSaves && r.everyRibbonUnderItsTeam && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

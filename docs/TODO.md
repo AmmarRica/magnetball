@@ -482,18 +482,18 @@ two and `tests/cocktailnopad.mjs` the third.)_
   from your hands. Desktop and Deck are untouched. Covered by `tests/mobilefit.mjs`.
 
 ## 🔜 Now — highest value next
-- [ ] **Delete ~31 MB of unreferenced art** — `assets/` is 36 MB / 7,170 files, but
+- [x] **Unreferenced art: KEPT, deliberately.** `assets/` is 36 MB / 7,170 files, of which
   `kenney_input-prompts_1.5` (21 MB), `mobile-controls-1` (7.1 MB) and `kenney_sports-pack`
-  (2.7 MB) have **zero references** in `index.html`, `sw.js` or `manifest.json`. Only the fonts,
-  10 animal PNGs and the flag vectors are used. Nothing ships them to the player, but they bloat
-  every clone of a repo whose whole pitch is "dependency-free single file". *(Left in place —
-  deleting 31 MB is the owner's call, not a drive-by.)*
-- [ ] **Ship sprite-skin art, or drop the feature** — `assets/ball/soccer.png` and
-  `assets/player/player.png` don't exist, so both Skins options were switches that did nothing.
-  They now probe on demand and show **needs art** instead of lying, but the honest end state is
-  either shipping two PNGs or removing the card.
-- [ ] **CI** — `tests/` is committed and green; wire a GitHub Action to run `node tests/run.mjs`
-  on push so regressions fail the build instead of the player.
+  (2.7 MB) have **zero references** in `index.html`, `sw.js` or `manifest.json` — only the fonts,
+  10 animal PNGs and the flag vectors are used. Nothing is shipped to the player either way; it
+  only costs clone size. The owner's call is to keep it, so this is settled — don't re-propose
+  deleting it.
+- [x] **Sprite skins: removed, not shipped.** The Skins card is gone entirely; the ball has nine
+  **drawn** looks (`BALL_LOOKS` / `paintBall`) and needs no PNGs. `tests/balllook.mjs` asserts
+  no request is made for sprite art.
+- [x] **CI** — `.github/workflows/tests.yml` runs `node tests/run.mjs` on every push and PR.
+  Playwright is installed dev-only with `--no-save --no-package-lock`, so the repo still carries
+  no `package.json` and no lockfile; the version is pinned in the workflow instead.
 
 ## ✅ Recently done (committed)
 - [x] **Kickoff hold bulges around the centre circle** — carrying the ball inside the circle lets
@@ -697,7 +697,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   all fields, the kickoff rule, controller routing, deck layout/pad-ownership/menu, pitch direction,
   full screen. Playwright is dev-only — the page stays dependency-free.
   `tests/README.md` documents the two false-pass traps this project has actually hit.
-- [ ] **CI** — run the suite on push (see "Now" above). The suite exists; nothing runs it automatically.
+- [x] **CI** — the suite runs on every push and PR (`.github/workflows/tests.yml`).
 - [ ] **Console-error budget is strict** — suites fail on *any* console error, which already caught a
   self-inflicted 404 (eagerly probing missing skin art on every settings build). Keep it strict.
 - [ ] After physics changes: re-verify **ball containment on every field**.
