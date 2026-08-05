@@ -10,6 +10,7 @@ await p.evaluate(()=>{ const M=window.__magnet;
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.sel.display='auto'; M.applyDisplayMode(); M.buildSettings();
   document.querySelectorAll('.card.collapsible').forEach(c=>c.classList.remove('collapsed'));
+  window.__magnet.showSubTab('match','players');   // seat names live behind the Players sub-tab
 });
 await p.waitForTimeout(200);
 const before = await p.evaluate(()=>!!document.fullscreenElement);

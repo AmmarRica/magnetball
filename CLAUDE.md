@@ -118,6 +118,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   result screen starts the next match on the same config after 30s (`stepResultClock`, any input
   resets it). ⚠️ The result clock is counted on **wall-clock in `loop()`'s paused branch** —
   the result screen is a paused state, so `step()` isn't running. `tests/autoadvance.mjs`.
+- **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
+  3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
+  declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress
+  / Help; `#jumpBar` chips jump to a section and are built from the cards themselves.
+  ⚠️ A pane with no chip **hides** its controls while `querySelectorAll` still finds them —
+  `audit` checks for orphan panes for exactly that reason. Sticky order is chips → KICK OFF →
+  section headers, so `syncSticky()` folds the jump bar's height into `--sticky-top`.
+  `tests/menunav.mjs`.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
@@ -144,7 +152,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 52 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 53 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

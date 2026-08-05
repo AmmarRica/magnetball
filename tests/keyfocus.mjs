@@ -15,6 +15,7 @@ const start = () => p.evaluate(()=>{ const M=window.__magnet;
   M.sel.display='auto'; M.sel.mode='1v1'; M.sel.controllers='off'; M.applyDisplayMode();
   M.buildSettings();
   document.querySelectorAll('.card.collapsible').forEach(c=>c.classList.remove('collapsed'));
+  window.__magnet.showSubTab('match','players');   // seat names live behind the Players sub-tab
   M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;
   M.pads.p1.dx=0; M.pads.p1.dy=0; M.pads.p1.kick=false; });
 
