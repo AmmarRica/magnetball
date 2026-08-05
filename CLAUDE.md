@@ -113,6 +113,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   rather than a row on the touchline — off `w.lobby.rng`, never `w.rng`, or how long someone
   spent choosing would change every bot decision in the match. The mode's seat
   count (`per*2`) is what actually caps controllers, not `LOBBY.maxPerSide`.
+- **Auto-advance:** `AUTO` — the lobby kicks off by itself after 30s (`stepLobbyClock`, reset
+  to full on movement, stick/KICK, or a pad connecting, and frozen during calibration) and the
+  result screen starts the next match on the same config after 30s (`stepResultClock`, any input
+  resets it). ⚠️ The result clock is counted on **wall-clock in `loop()`'s paused branch** —
+  the result screen is a paused state, so `step()` isn't running. `tests/autoadvance.mjs`.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
@@ -139,7 +144,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 51 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 52 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
