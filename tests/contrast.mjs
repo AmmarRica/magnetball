@@ -6,9 +6,12 @@
 // with a gradient (so backgroundColor is transparent) and panels/pills are rgba.
 // An earlier version of this walk fell back to white and reported ~90 phantom
 // failures per theme while missing the real ones.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, stubLeaderboard } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1280,height:1000} });
+// This suite opens the Leaderboard, which fetches a public Google Sheet.
+// Serve it locally so the run is hermetic — see stubLeaderboard.
+await stubLeaderboard(p, [{n:'Ada', rp:900}, {n:'Grace', rp:800}]);
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
 p.on('console',m=>{ if(m.type()==='error' && !/ERR_TUNNEL|Failed to load/.test(m.text())) errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
