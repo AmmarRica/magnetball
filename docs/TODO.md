@@ -5,7 +5,29 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0930AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.1130AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🐛 /settings could not be scrolled
+- [x] **Pre-existing, and total.** `html`/`body` lock the page down so the game canvas can
+  never be scrolled off screen (`overflow:hidden`, `height:100%`, `touch-action:none`). In
+  panel mode `#setup` is `position:static`, so it grew to its full content height and NOTHING
+  scrolled — everything past the first viewport was unreachable on a page that is nothing but
+  a stack of settings cards. `touch-action:none` blocked a swipe even where overflow didn't.
+  Not caused by VJ Mode, but VJ Mode took the page from 1.5k px to 4.7k px and made it
+  impossible to miss. Undone on the panel route only via an `html.panelroute` class set in
+  `applyPanelMode`. `tests/panel.mjs` now scrolls to the bottom on desktop AND a phone
+  viewport and checks the game page is still locked down.
+
+## 🎬 The idle demo is a showcase
+- [x] **Both benches at the top tier**, derived from the last key of `DIFF` rather than
+  spelled, so a harder tier added later moves the demo up with it. It ignores the player's
+  own difficulty — that setting is for matches they play.
+- [x] **A real 3-minute match** that rolls straight into the next one. The
+  `endMatch → finishMatch → startDemo` path already existed; the demo just had no clock.
+- [x] ⚠️ **A level demo does not go to overtime.** It would hang on the menu until someone
+  scored and throw OVERTIME! across the screen. Real matches still get sudden death.
 
 ---
 

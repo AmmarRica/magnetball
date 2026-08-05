@@ -57,11 +57,13 @@ const r = await p.evaluate(async ()=>{
   o.seatNameWins = w2.players[0].name === 'Custom1';
   M.sel.names=''; M.saveSel();
 
-  // --- The idle demo has no clock, so it never reaches full time
+  // --- The idle demo is a timed SHOWCASE now: a real DEMO.secs clock that rolls
+  // into the next match, top tier on both benches. What must still never happen is
+  // the ceremony — no OVERTIME banner and no result overlay across the menu.
   M.startDemo(); await wait(60);
   const dw=M.world;
   o.demoIsDemo = dw.demo === true;
-  o.demoHasNoClock = !dw.len.secs && !dw.len.goals;
+  o.demoIsTimed = dw.len.secs === M.DEMO.secs && !dw.len.goals;
   o.demoClockLabel = document.getElementById('clock').textContent;
   dw.state='play'; dw.stateT=1;
   for(let i=0;i<400;i++) M.step(dw);
@@ -88,7 +90,7 @@ const r = await p.evaluate(async ()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.updatesLive && r.matchNotRestarted && r.repaints && r.foeUnchanged && r.seatNameWins &&
-  r.demoIsDemo && r.demoHasNoClock && r.demoNeverOvertime && r.noOvertimeBanner &&
+  r.demoIsDemo && r.demoIsTimed && r.demoNeverOvertime && r.noOvertimeBanner &&
   r.noResultOverlay && r.demoStillPlaying && r.demoIgnoresYou && r.realMatchOvertime &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));

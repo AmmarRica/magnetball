@@ -66,6 +66,44 @@ o.snapshotNotFromStorage = await panel.evaluate(()=>
   (JSON.parse(localStorage.getItem('magnetball.sel')||'{}').look||{}).palette !== 'gba' ||
   window.__magnet.syncPeerLive() === true);
 
+// --- The page can actually be SCROLLED to the bottom.
+// ⚠️ It could not. html/body lock scrolling down so the game canvas can never be
+// scrolled off screen (overflow:hidden, height:100%, touch-action:none), and in panel
+// mode #setup is position:static — so it grew to its full content height and NOTHING
+// scrolled. Everything past the first viewport was unreachable, on a page that is
+// nothing but a long stack of settings cards. Checked on a phone viewport too,
+// because touch-action:none blocks a swipe even where overflow would allow it.
+const scrollCheck = async (pg) => pg.evaluate(async ()=>{
+  const d = document.documentElement;
+  window.scrollTo(0, 0); await new Promise(r=>setTimeout(r,60));
+  const tall = d.scrollHeight > d.clientHeight + 40;      // there IS something below
+  window.scrollTo(0, 99999); await new Promise(r=>setTimeout(r,220));
+  const moved = window.scrollY;
+  const cards = [...document.querySelectorAll('#setup .card.collapsible')];
+  const last = cards[cards.length-1];
+  const rect = last.getBoundingClientRect();
+  return { tall, moved, reachedBottom: rect.top < innerHeight && rect.bottom > -2,
+           lastSec: last.dataset.sec, docH: d.scrollHeight,
+           touchAction: getComputedStyle(d).touchAction,
+           overflow: getComputedStyle(d).overflow };
+});
+o.scrollDesktop = await scrollCheck(panel);
+const phone = await ctx.newPage();
+await phone.setViewportSize({ width: 390, height: 844 });
+await phone.goto(srv.url + '/settings/');
+await phone.waitForTimeout(900);
+o.scrollPhone = await scrollCheck(phone);
+await phone.close();
+o.panelScrolls = o.scrollDesktop.tall && o.scrollDesktop.moved > 100 && o.scrollDesktop.reachedBottom;
+o.panelScrollsOnPhone = o.scrollPhone.tall && o.scrollPhone.moved > 100 && o.scrollPhone.reachedBottom;
+o.touchNotBlocked = o.scrollPhone.touchAction !== 'none';
+// ...and the GAME page must still be locked down, or its canvas scrolls away.
+o.gameStillLocked = await game.evaluate(()=>{
+  const d=document.documentElement, cs=getComputedStyle(d);
+  return cs.overflow === 'hidden' && cs.touchAction === 'none' &&
+         !d.classList.contains('panelroute'); });
+await panel.evaluate(()=>window.scrollTo(0,0));
+
 // --- Identical settings UI: same cards, same structure, in the same order
 const cardSig = pg => pg.evaluate(()=>[...document.querySelectorAll('#setup .card.collapsible')]
   .map(c=>c.dataset.sec + ':' + c.querySelector('h2').textContent.trim() +
@@ -265,6 +303,7 @@ const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCan
   o.stillConnectedIdle && o.readoutStillLive && o.heartbeatReaches &&
   o.dailyModalClosed && o.panelIsClickable && o.subPageHasWayBack &&
   o.dockStateStaysLocal && o.panelNotDockedOnDeck &&
+  o.panelScrolls && o.panelScrollsOnPhone && o.touchNotBlocked && o.gameStillLocked &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

@@ -313,7 +313,21 @@
     body.panel #game, body.panel #hud, body.panel #scorebug, body.panel #overlay,
     body.panel #dockToggle, body.panel #deckHint, body.panel #tutTip,
     body.panel #resetBtn { display: none !important; }
-    body.panel #setup { position: static; min-height: 100vh; }
+    /* ⚠️ /settings could not be scrolled AT ALL below the first viewport.
+       html/body lock the page down so the game canvas can never be scrolled off
+       screen — `overflow:hidden`, `height:100%`, `touch-action:none`. On the panel
+       route there is no canvas to protect, and that lockdown leaves nothing able to
+       scroll: #setup is `position:static` here, so it grows to its full content
+       height (4.7k px) and the document has `overflow:hidden`, so neither one
+       scrolls. `touch-action:none` would have blocked a swipe even if they did.
+       Undo the lockdown on this route only — the class is set in applyPanelMode. */
+    html.panelroute, html.panelroute body {
+      height: auto; min-height: 100%;
+      overflow: visible;
+      overscroll-behavior: auto;
+      touch-action: auto;
+    }
+    body.panel #setup { position: static; min-height: 100vh; overflow: visible; }
     /* Deck/cocktail dock the menu beside the pitch. There is no pitch here. */
     body.panel #setup.docked { position: static; width: auto; max-width: none; left: auto; }
     body.panel #setup .navgrid, body.panel #setup #recordCard,
@@ -4941,6 +4955,15 @@ function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','
 // page fullscreen on mobile. Navigating pages never disturbs the running match.
 var deskDockId = null;                     // id of the page currently docked (desktop), else null
 var _forceWatch = false, _startQuiet = false;   // flags read by startMatch() for the idle demo
+// The idle demo is a SHOWCASE, not wallpaper. Both sides play at the TOP tier so what
+// is on screen is the best football the bots can produce, and it runs a real timed
+// match that rolls straight into the next one (endMatch -> finishMatch -> startDemo).
+// ⚠️ The tier is DERIVED from the last key of DIFF, not spelled 'insane' — add a
+// harder tier above it and the demo picks it up instead of quietly staying behind.
+const DEMO = {
+  get diff(){ const k = Object.keys(DIFF); return k[k.length-1]; },
+  secs: 180,          // 3 minutes, then straight into the next one
+};
 function paneLive(){ return !!(world && running); }
 function ensureDemo(){ if(PANEL) return; if(dockCapable() && !paneLive()) startDemo(); }   // keep a match on the right
 function startDemo(){ if (PANEL) return; _forceWatch = true; _startQuiet = true; try{ startMatch(); } finally { _forceWatch = false; _startQuiet = false; } }
@@ -5261,6 +5284,8 @@ function rotVec(x,y,q){ q=((q%4)+4)%4; if(q===0)return [x,y]; if(q===1)return [-
 function applyPanelMode(){
   const detached = sel.settingsPanel === 'detached';
   document.body.classList.toggle('panel', PANEL);
+  // The scroll lockdown lives on <html>, which no body-scoped selector can reach.
+  document.documentElement.classList.toggle('panelroute', PANEL);
   document.body.classList.toggle('detached', detached);
   if (PANEL){
     const h1 = document.querySelector('#setup .logo h1'); if (h1) h1.textContent = 'SETTINGS';
@@ -6273,9 +6298,10 @@ function startMatch(){
   const fieldKeys = Object.keys(FIELDS);
   const fieldKey = _startQuiet ? fieldKeys[(Math.random()*fieldKeys.length)|0] : sel.field;
   const field = FIELDS[fieldKey];
-  // The idle demo is wallpaper, not a match: no clock, so it never hits full time,
-  // never announces OVERTIME across the menu and never throws up a result overlay.
-  const len = _startQuiet ? { secs:0, goals:0 } : LENGTHS[sel.length];
+  // The demo runs a real DEMO.secs match. It still never throws up a result overlay —
+  // finishMatch sees w.demo and starts the next one instead — and it never goes to
+  // overtime (see the clock in step), so a draw ends on time like everything else.
+  const len = _startQuiet ? { secs: DEMO.secs, goals:0 } : LENGTHS[sel.length];
   const per = mode.per;
   const used = new Set([profile.name]);
 
@@ -6357,7 +6383,8 @@ function startMatch(){
   const fv = feelVals();
   const usePitchGrip = sel.pitch !== 'normal';   // Grass grip comes from the feel sliders
   world = {
-    field, fieldKey, mode, len, diff: DIFF[sel.diff],
+    // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
+    field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : DIFF[sel.diff],
     magnet: sel.magnet,
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
@@ -6812,7 +6839,10 @@ function step(w){
     w.timeLeft -= STEP;
     if (w.timeLeft <= 0){
       w.timeLeft = 0;
-      if (w.score[0] === w.score[1]){ w.overtime = true; showBanner('OVERTIME!', 'var(--accent)'); }
+      // A real match level at the whistle goes to sudden death. The demo does NOT —
+      // it would hang on the menu until someone scored, and it would throw OVERTIME!
+      // across the screen. It just ends and the next demo starts.
+      if (w.score[0] === w.score[1] && !w.demo){ w.overtime = true; showBanner('OVERTIME!', 'var(--accent)'); }
       else endMatch(w);
     }
     updateClock(w);
@@ -11177,7 +11207,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0930AM';
+const VERSION = '20260805.1130AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11231,6 +11261,7 @@ if (window.__MAGNETDEBUG) {
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
+    DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,

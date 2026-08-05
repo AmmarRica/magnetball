@@ -52,7 +52,7 @@ version, so it refreshes with it).
 | `unlocked` | Unlocked summary: counts match the unlock model, strip shows only earned items, tap equips |
 | `demo` | Idle demo uses two random countries (not your look), and the Demo tag paints only in demo |
 | `debug` | Debug readout gated by its toggle, numbers track the live sim and feel values, build stamp |
-| `demo2` | Demo picks a random court and never replays; controller wording; crowd cheers — the three Stadium-family ones longer than the three originals, all distinct, and **every** SFX category's variant count matching its label count (an unlabelled sound is unpickable). Counts are derived, not pinned: themed sets add variants, and a suite that says "exactly six" only measures how recently someone edited it |
+| `demo2` | Demo picks a random court and never replays; the demo is a **showcase** — top-tier bots on both benches (derived from the last `DIFF` key, not spelled), a real 3-minute clock, ignoring the player's own difficulty and length, and a **level demo ends rather than going to overtime** (it would hang on the menu until someone scored) while a real match at the same point still gets sudden death; controller wording; crowd cheers — the three Stadium-family ones longer than the three originals, all distinct, and **every** SFX category's variant count matching its label count (an unlabelled sound is unpickable). Counts are derived, not pinned: themed sets add variants, and a suite that says "exactly six" only measures how recently someone edited it |
 | `killerqueen` | Killer Queen: two balls, heavy non-resetting snail, goals that don't reset play, snail = instant win |
 | `grasstiles` | Grass cut tiles draw the selected court with each mow pattern, and field/grass/theme picks redraw each other |
 | `trapwindow` | Trap window slider changes how long the ball actually sticks, applies live, survives reset/presets/drills, and one-touch ignores it |
@@ -175,6 +175,12 @@ A third VJ trap, which produced a silently STALE settings page rather than a fai
   push, and the panel came up showing localStorage instead of the game's live state.
   Nothing threw and no console error appeared; `panel`'s `snapshotAdopted` is what
   caught it. Anything the panel needs at open must ride the existing `hello`.
+
+Also, a flake worth naming: **a keydown is delivered asynchronously.** `keyfocus`
+pressed ArrowUp and stepped immediately, reading a pad that had not seen the key yet
+— about one run in nine under load. An extra round trip added while debugging made
+it pass every time, which is the signature of a timing flake rather than a broken
+feature. It now waits for `pads.p1` to actually show the key first.
 
 Two traps specific to VJ Mode, both of which produced a false pass here:
 
