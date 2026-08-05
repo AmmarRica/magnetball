@@ -660,6 +660,30 @@
     .statsrow .swho b { font-family: var(--pix); font-size:11px; font-weight:400;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .statsrow .snum { font-family: var(--pix); font-size:11px; text-align:center; color: var(--text); }
+    /* End-of-match map vote. Deliberately small — it's an aside, not a gate. */
+    #ovVote:empty { display:none; }
+    #ovVote { width:100%; max-width:820px; margin:12px auto 0; }
+    .votebox { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:9px;
+      padding:9px 12px; border-radius:11px; border:1px solid var(--edge);
+      background: rgba(128,128,128,.08); }
+    .voteq { font-family: var(--pix); font-size:11px; color: var(--muted); }
+    .votemap { font-family: var(--pix); font-size:11px; font-weight:400; color: var(--accent); }
+    .votetally { font-family: var(--pix); font-size:11px; color: var(--text); }
+    .votebtn { font-size:17px; line-height:1; padding:5px 13px; cursor:pointer;
+      border-radius:9px; border:1px solid var(--edge); background: rgba(128,128,128,.14); }
+    .votebtn:active { transform: translateY(1px); }
+    .votebtn.up:hover { border-color: var(--go); }
+    .votebtn.down:hover { border-color: var(--red); }
+    /* Career screen readout. */
+    #mapVoteList { display:flex; flex-direction:column; gap:4px; }
+    .mvrow { display:grid; grid-template-columns: 1fr auto auto auto; align-items:center; gap:10px;
+      padding:6px 9px; border-radius:9px; background: rgba(128,128,128,.08); border:1px solid var(--edge); }
+    .mvrow .mvname { font-family: var(--pix); font-size:11px; color: var(--text); text-align:left;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mvrow .mvn { font-family: var(--pix); font-size:11px; color: var(--muted); }
+    .mvrow .mvup { font-family: var(--pix); font-size:11px; color: var(--go); }
+    .mvrow .mvdown { font-family: var(--pix); font-size:11px; color: var(--red); }
+    .mvempty { font-family: var(--pix); font-size:11px; color: var(--muted); text-align:left; line-height:1.7; }
     .statskey { font-family: var(--pix); font-size:9px; color: var(--muted);
       text-align:left; margin:8px 4px 0; line-height:1.7; }
     .awrow canvas { width:26px; height:26px; flex:none; image-rendering: pixelated; }
@@ -1092,6 +1116,11 @@
       <h2>Lifetime <small id="statsRank" style="color:var(--muted);font-weight:400"></small></h2>
       <div class="statgrid" id="statGrid"></div>
     </div>
+    <!-- Which map/size pairs went down well, built from the end-of-match votes. -->
+    <div class="card" id="mapVoteCard">
+      <h2>Maps rated <small id="mapVoteSub" style="color:var(--muted);font-weight:400"></small></h2>
+      <div id="mapVoteList"></div>
+    </div>
     <button class="ghost" id="statsBack" style="margin-top:8px">← Back</button>
   </div>
 
@@ -1200,6 +1229,7 @@
     <h2 id="ovTitle">Paused</h2>
     <p id="ovSub"></p>
     <div id="ovStats"></div>
+    <div id="ovVote"></div>
     <div id="ovAwards"></div>
     <button class="primary" id="ovResume" style="max-width:260px">Resume</button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
@@ -2982,6 +3012,7 @@ function buildStats(){
     {k:'Coins',            v: (typeof shopCoins==='function'?shopCoins():0)},
   ];
   g.innerHTML = tiles.map(t=>`<div class="stat${t.hl?' hl':''}"><div class="sv">${t.v}</div><div class="sk">${t.k}</div></div>`).join('');
+  buildMapVotes();
 }
 function openStats(){ dockOrFull('stats', buildStats); }
 
@@ -4427,8 +4458,8 @@ function startMatch(){
   // The idle demo cycles a random court each time it restarts, so the menu isn't
   // the same picture every visit.
   const fieldKeys = Object.keys(FIELDS);
-  const field = _startQuiet ? FIELDS[fieldKeys[(Math.random()*fieldKeys.length)|0]]
-                            : FIELDS[sel.field];
+  const fieldKey = _startQuiet ? fieldKeys[(Math.random()*fieldKeys.length)|0] : sel.field;
+  const field = FIELDS[fieldKey];
   // The idle demo is wallpaper, not a match: no clock, so it never hits full time,
   // never announces OVERTIME across the menu and never throws up a result overlay.
   const len = _startQuiet ? { secs:0, goals:0 } : LENGTHS[sel.length];
@@ -4513,7 +4544,7 @@ function startMatch(){
   const fv = feelVals();
   const usePitchGrip = sel.pitch !== 'normal';   // Grass grip comes from the feel sliders
   world = {
-    field, mode, len, diff: DIFF[sel.diff],
+    field, fieldKey, mode, len, diff: DIFF[sel.diff],
     magnet: sel.magnet,
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
@@ -6113,6 +6144,7 @@ function finishMatch(w){
   $('ovTitle').classList.remove('slam'); void $('ovTitle').offsetWidth; $('ovTitle').classList.add('slam');
   renderAwards(w);
   renderMatchStats(w);
+  renderMapVote(w);
   // Restart is the default — the common case is "again, same teams". Warm-up is
   // there for when somebody wants to swap sides or sit one out.
   $('ovResume').textContent = '↻ Restart';
@@ -6267,6 +6299,103 @@ function renderMatchStats(w){
   key.textContent = STAT_COLS.map(c => c.h + ' ' + c.t.toLowerCase()).join(' · ');
   host.appendChild(key);
 }
+// ============================================================
+//  MAP VOTES — "was this map good at THIS size?"
+// ============================================================
+// A map plays completely differently 1v1 and 6v6: Huge is a lonely trudge with two
+// people and a proper match with twelve. So the thing being rated is the PAIR, not
+// the map — the tally is keyed on (field, players per side) and the two never mix.
+//
+// The count comes from the bodies actually fielded, not the mode, because the warm-up
+// lobby can put six a side on a 4v4. Rating what you played beats rating what you picked.
+// Career screen readout: every (map, size) pair anyone has rated, best first.
+function buildMapVotes(){
+  const host = $('mapVoteList'); if (!host) return; host.innerHTML='';
+  const rows = mapVoteTable();
+  const sub = $('mapVoteSub');
+  const votes = rows.reduce((n,x)=>n+x.n, 0);
+  if (sub) sub.textContent = rows.length
+    ? `${rows.length} ${rows.length===1?'pairing':'pairings'} · ${votes} ${votes===1?'vote':'votes'}`
+    : '';
+  if (!rows.length){
+    const e = document.createElement('div'); e.className='mvempty';
+    e.textContent = 'No votes yet. After a match you can rate the map at the size you played it — '
+      + 'the same map is rated separately at each player count, because that’s what changes how it plays.';
+    host.appendChild(e); return;
+  }
+  for (const r of rows){
+    const row = document.createElement('div'); row.className='mvrow'; row.dataset.key = r.key;
+    const nm = document.createElement('span'); nm.className='mvname'; nm.textContent = r.label;
+    const up = document.createElement('span'); up.className='mvup';   up.textContent = '👍 '+r.up;
+    const dn = document.createElement('span'); dn.className='mvdown'; dn.textContent = '👎 '+r.down;
+    const n  = document.createElement('span'); n.className='mvn';     n.textContent = (r.net>0?'+':'')+r.net;
+    row.append(nm, up, dn, n); host.appendChild(row);
+  }
+}
+function mapVoteKey(w){
+  if (!w || !w.fieldKey || !w.players) return null;
+  const per = Math.max(w.players.filter(p=>p.team===0).length,
+                       w.players.filter(p=>p.team===1).length);
+  if (!per) return null;
+  return `${w.fieldKey}@${per}v${per}`;
+}
+function mapVoteLabel(key){
+  const [f, size] = String(key).split('@');
+  return `${(FIELDS[f] && FIELDS[f].name) || f} · ${size || ''}`.trim();
+}
+function loadMapVotes(){
+  try { return JSON.parse(localStorage.getItem('magnetball.mapvotes')||'{}') || {}; } catch(e){ return {}; }
+}
+function saveMapVotes(v){ try { localStorage.setItem('magnetball.mapvotes', JSON.stringify(v)); } catch(e){} }
+function castMapVote(key, up){
+  if (!key) return null;
+  const all = loadMapVotes();
+  const e = all[key] || (all[key] = { up:0, down:0 });
+  if (up) e.up++; else e.down++;
+  saveMapVotes(all);
+  return e;
+}
+// A rated pair, worst-to-best, for the career screen. `net` is up minus down —
+// blunt on purpose: with a handful of plays a ratio swings wildly on one vote.
+function mapVoteTable(){
+  const all = loadMapVotes();
+  return Object.keys(all).map(k => {
+    const e = all[k], n = (e.up||0) + (e.down||0);
+    return { key:k, label:mapVoteLabel(k), up:e.up||0, down:e.down||0, n, net:(e.up||0)-(e.down||0) };
+  }).filter(x => x.n > 0).sort((a,b) => b.net - a.net || b.n - a.n || a.key.localeCompare(b.key));
+}
+// The prompt on the result screen. Voting is optional — ignoring it is a valid answer,
+// so nothing blocks on it and there's no "skip" to press.
+function renderMapVote(w){
+  const host = $('ovVote'); if (!host) return; host.innerHTML='';
+  if (!w || w.drillMode || w.tutorial || w.demo || w.train) return;
+  const key = mapVoteKey(w); if (!key) return;
+  const wrap = document.createElement('div'); wrap.className='votebox'; wrap.dataset.key = key;
+  const draw = (voted) => {
+    wrap.innerHTML='';
+    const q = document.createElement('span'); q.className='voteq';
+    q.textContent = voted ? 'Thanks — noted for' : 'Good map at this size?';
+    const nm = document.createElement('b'); nm.className='votemap'; nm.textContent = mapVoteLabel(key);
+    wrap.append(q, nm);
+    if (voted){
+      const tally = document.createElement('span'); tally.className='votetally';
+      tally.textContent = `👍 ${voted.up} · 👎 ${voted.down}`;
+      wrap.appendChild(tally);
+      return;
+    }
+    for (const [up, lab] of [[true,'👍'], [false,'👎']]){
+      const bt = document.createElement('button');
+      bt.className = 'votebtn' + (up ? ' up' : ' down');
+      bt.type='button'; bt.textContent = lab;
+      bt.setAttribute('aria-label', up ? 'Liked this map' : 'Disliked this map');
+      bt.onclick = () => draw(castMapVote(key, up));
+      wrap.appendChild(bt);
+    }
+  };
+  draw(null);
+  host.appendChild(wrap);
+}
+
 // One award ribbon. Built here rather than inline so the panels and anything else
 // that lists an award draw the same thing.
 function awardRow(a){
@@ -8969,7 +9098,8 @@ function showOverlay(title, sub, resumable){
   $('ovTitle').classList.remove('slam');
   $('ovSub').textContent = sub;
   { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
-    const st=$('ovStats'); if (st) st.innerHTML=''; }   // awards/stats only on a match result
+    const st=$('ovStats'); if (st) st.innerHTML='';
+    const vt=$('ovVote'); if (vt) vt.innerHTML=''; }    // awards/stats/vote only on a match result
   // Restore the standard match/pause buttons (the drill result repurposes them).
   $('ovResume').textContent = 'Resume'; $('ovResume').onclick = () => togglePause(false);
   $('ovRematch').textContent = 'Rematch'; $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
@@ -9130,6 +9260,7 @@ if (window.__MAGNETDEBUG) {
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     finishMatch, FINAL_SLOW, awardRow,
+    mapVoteKey, mapVoteLabel, mapVoteTable, loadMapVotes, saveMapVotes, castMapVote, renderMapVote, buildMapVotes,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },

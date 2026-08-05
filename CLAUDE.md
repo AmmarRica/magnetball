@@ -85,6 +85,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Determinism:** AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
   outside the sim at `startMatch`). **Never call `Math.random` from inside `step()`.**
   `setMatchSeed(n)` pins a match for tests. See `docs/DETERMINISM-AUDIT.md`.
+- **Map votes:** a thumbs up/down after each match, keyed on **(field, players per side)** —
+  `mapVoteKey(w)` — because a map plays nothing alike 1v1 and 6v6. The size comes from the
+  bodies actually FIELDED, not `mode.per`, since the lobby can put six a side on a 4v4.
+  Stored in `localStorage` under `magnetball.mapvotes`; `mapVoteTable()` ranks the pairs and
+  `buildMapVotes()` draws them on the career screen. `tests/mapvote.mjs` holds the split.
 - **Progression:** `stats` (RP `points`, ranks, and Elo `mmr` via `updateMMR`). Saves in
   `localStorage` under `magnetball.*` keys.
 - **Leaderboard:** `LB` config; reads via the public Google **gviz** JSON endpoint (`lbLoad`,
@@ -126,7 +131,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 49 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 50 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
