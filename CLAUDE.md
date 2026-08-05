@@ -72,6 +72,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `itemName(cat,key)` is the single place that knows what an item is called; use it, don't
   re-derive it. To add content: add the item + its unlock req and a `UNL_CATS` entry; the pickers
   and counters iterate the key lists. Players default to a **shirt number** (`shirtNo`).
+- **Photo faceplate:** `profile.photo` is a data URL and `profile.flag === 'photo'` wears it;
+  `paintFace` clips it to the plate. Imported through `photoFrom()`, which centre-crops and
+  rescales to `PHOTO.size` (128²) — ⚠️ storing a camera-sized image would blow the ~5MB
+  `localStorage` budget on its own. It never leaves the device: `lbSubmit` posts
+  `profile.flag`, which is the literal string `photo`. `tests/photo.mjs` checks both.
 - **Ball look:** `BALL_LOOKS` + `paintBall(c,x,y,r,rot,key)` — nine drawn patterns, no sprites.
   The pitch and the picker tiles call the same painter, so a tile can't show something the ball
   won't. Ball *physics* is `BALLS`, which is a different thing entirely.
@@ -152,7 +157,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 53 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 54 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

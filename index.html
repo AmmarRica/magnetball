@@ -216,6 +216,17 @@
       padding: 7px 11px; cursor: pointer; }
     .subchip:hover { border-color: var(--cyan); color: var(--text); }
     .subchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
+    /* Photo pane: what you'd wear, next to the two ways of changing it. */
+    .photorow { display: flex; align-items: center; gap: 14px; }
+    .photoprev { width: 66px; height: 66px; flex: 0 0 auto; image-rendering: auto; }
+    .photobtns { display: flex; flex-wrap: wrap; gap: 7px; }
+    .photocam { width: 100%; max-width: 260px; margin-top: 10px; border-radius: 12px;
+      border: 1px solid var(--edge); background: #000; display: block;
+      transform: scaleX(-1); }   /* mirrored: a selfie feed you can aim */
+    .photomsg { font-family: var(--pix); font-size: 10px; color: var(--muted);
+      text-align: left; margin-top: 8px; line-height: 1.6; }
+    .photomsg:empty { display: none; }
+    .ghost.mini.primaryish { color: var(--go); border-color: var(--go); }
     .subpane { display: none; }
     .subpane.on { display: block; }
     .navtile {
@@ -1031,6 +1042,12 @@
       <div class="subpane" data-pane="text">
         <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
         <div class="opts tilewrap" id="textPick"></div>
+      </div>
+      <div class="subpane" data-pane="photo">
+        <label class="field">Your photo <small style="color:var(--muted);font-weight:400">(stays on this device)</small></label>
+        <div id="photoPane"></div>
+        <input id="photoFile" type="file" accept="image/*" hidden />
+        <div class="hint" style="text-align:left; margin-top:6px">Saved at <b>128×128</b> — the size it's actually drawn at, so it costs a few KB rather than the several megabytes a camera produces. It is never uploaded: the leaderboard only ever sees the word "photo".</div>
       </div>
       <div class="subpane" data-pane="eyes">
         <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
@@ -2375,7 +2392,7 @@ let rafId = 0;
 // Factory defaults for the player's look/name — the single source of truth for
 // both a first-time profile and the optional "reset appearance" path.
 // Players wear a NUMBER by default, like a shirt — countryballs are opt-in.
-function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly' }; }
+function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly', photo:'' }; }
 function loadProfile() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem('magnetball.profile')||'{}'); } catch(e){}
@@ -2386,6 +2403,7 @@ function loadProfile() {
     cap: d.cap || def.cap,
     flag: d.flag || def.flag,
     eyes: d.eyes || def.eyes,
+    photo: typeof d.photo === 'string' ? d.photo : def.photo,
   };
 }
 function saveProfile(){
@@ -2634,6 +2652,58 @@ function buildOpts(containerId, obj, key, extra){
 // falls back rather than breaking — "⁇⁇" rendering as four question marks is the
 // look the original list describes anyway.
 const TEXT_FONT = "'Kenney', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'DejaVu Sans', system-ui, sans-serif";
+// ---------- Your own photo as a faceplate -----------------------------------
+// Stored on the profile as a data URL and never sent anywhere: lbSubmit posts
+// `profile.flag`, which for this is the literal string "photo", so the picture
+// itself stays on the device.
+//
+// Imported at the size it is actually DRAWN at, not the size the camera produced.
+// A phone photo is several megabytes and localStorage has about five in total, so
+// keeping the original would break saving entirely — and the disc is ~60px across
+// on screen. 128 square covers the 120px preview and a retina disc with room to
+// spare, and lands around 6KB as JPEG.
+const PHOTO = { size: 128, quality: 0.86 };
+let photoImg = null, photoSrc = null;
+// Decoded lazily and cached, so drawing a disc never re-parses the data URL.
+function photoFace(){
+  const src = profile.photo || '';
+  if (!src) return (photoImg = null, photoSrc = null);
+  if (photoSrc !== src){
+    photoSrc = src;
+    const im = new Image();
+    im.onload = () => { photoImg = im; updatePreview(); buildPhotoPane(); };
+    im.onerror = () => { photoImg = null; };
+    im.src = src;
+    return null;                       // next paint gets it
+  }
+  return photoImg;
+}
+// Cover-fit a square out of the middle of whatever came in — a portrait photo
+// squashed to a square is worse than a cropped one, and the plate is a circle.
+function photoFrom(source, w, h){
+  const n = PHOTO.size;
+  const cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const c = cv.getContext('2d');
+  const side = Math.min(w, h);
+  c.drawImage(source, (w-side)/2, (h-side)/2, side, side, 0, 0, n, n);
+  return cv.toDataURL('image/jpeg', PHOTO.quality);
+}
+function setPhoto(dataUrl){
+  profile.photo = dataUrl || '';
+  if (dataUrl) profile.flag = 'photo';
+  else if (profile.flag === 'photo') profile.flag = defaultProfile().flag;
+  photoSrc = null; photoImg = null; photoMsgText = ''; photoFace();
+  saveProfile(); buildSettings(); updatePreview(); buildPhotoPane();
+}
+function photoFromFile(file){
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => { setPhoto(photoFrom(im, im.naturalWidth, im.naturalHeight)); URL.revokeObjectURL(url); };
+  im.onerror = () => { URL.revokeObjectURL(url); photoNote('Could not read that image.'); };
+  im.src = url;
+}
+
 function paintFace(c, x, y, r, o){
   const key = o.flag, has = key && key!=='none';
   c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
@@ -2652,6 +2722,12 @@ function paintFace(c, x, y, r, o){
     c.fillText(t, x, y + r*0.04);
     c.restore();
     return;
+  }
+  if (key === 'photo'){
+    const im = photoFace();
+    if (im){ c.save(); c.beginPath(); c.arc(x,y,r*0.84,0,7); c.clip();
+      const d = r*1.68; c.drawImage(im, x-d/2, y-d/2, d, d); c.restore(); return; }
+    // Still decoding, or gone: fall through to the plain face rather than a hole.
   }
   if (has && ANIMALS[key]){
     const im = spriteImg(ANIMALS[key].img);
@@ -2789,6 +2865,7 @@ function updatePreview(){
 // picker, in the unlocked strip and again inside a test — adding a category broke
 // the copy nobody was looking at.
 function itemName(cat, key){
+  if (key === 'photo') return 'Your photo';
   return cat==='cap'    ? (CAPS[key]||{}).name
        : cat==='flag'   ? (FLAGS[key]||{}).name
        : cat==='animal' ? (ANIMALS[key]||{}).name
@@ -3168,7 +3245,7 @@ function openHow(){ dockOrFull('how'); }
 // so every control still exists and `audit` still finds it.
 const SUBTABS = {
   player: [['colour','🎨 Colour'], ['cap','🧢 Cap'], ['flag','🏴 Flags'],
-           ['animal','🐻 Animals'], ['text','🔢 Text'], ['eyes','👀 Eyes']],
+           ['animal','🐻 Animals'], ['text','🔢 Text'], ['photo','📷 Photo'], ['eyes','👀 Eyes']],
   match:  [['game','⚽ Game'], ['pitch','🏟 Pitch'], ['players','🎮 Players'], ['rules','📋 Rules']],
 };
 const subTab = {};                                  // which pane each group is showing
@@ -3219,6 +3296,91 @@ function syncJumpBar(sec){
   const open = sec || (first && first.dataset.sec);
   for (const bt of document.querySelectorAll('#jumpBar .jumpchip')) bt.classList.toggle('sel', bt.dataset.sec === open);
 }
+// ---------- Photo pane: upload, or take one with the camera -----------------
+// Two ways in, because they fail in different places. A file input covers every
+// device and on a phone already offers "take a photo"; getUserMedia is the only
+// way to use a laptop webcam, and it is the one that can be refused, absent over
+// http, or have no camera behind it — so it is the optional half.
+let photoStream = null, photoMsgText = '';
+// The note is STATE, not just a write: decoding a photo finishes asynchronously and
+// rebuilds this pane, which would otherwise wipe a "camera was refused" message a
+// moment after it appeared.
+function photoNote(msg){
+  photoMsgText = msg || '';
+  const el = document.getElementById('photoMsg');
+  if (el) el.textContent = photoMsgText;
+}
+function stopPhotoCam(){
+  if (photoStream){ photoStream.getTracks().forEach(t=>t.stop()); photoStream = null; }
+  const v = document.getElementById('photoCam'); if (v) v.srcObject = null;
+  const pane = document.getElementById('photoPane'); if (pane) pane.classList.remove('live');
+}
+function buildPhotoPane(){
+  const host = document.getElementById('photoPane'); if (!host) return;
+  const live = host.classList.contains('live');
+  host.innerHTML = '';
+  const row = document.createElement('div'); row.className = 'photorow';
+  // What you'd actually wear, drawn by the same painter the pitch uses.
+  const cv = document.createElement('canvas'); cv.width = cv.height = 132; cv.className = 'photoprev';
+  cv.id = 'photoPrev';
+  drawDisc(cv.getContext('2d'), 66, 66, 52,
+    { color: profile.color, flag: profile.photo ? 'photo' : 'none', eyes: profile.eyes, cap: profile.cap });
+  row.appendChild(cv);
+  const btns = document.createElement('div'); btns.className = 'photobtns';
+  const add = (label, fn, cls) => { const b=document.createElement('button');
+    b.type='button'; b.className='ghost mini'+(cls?' '+cls:''); b.textContent=label; b.onclick=fn;
+    btns.appendChild(b); return b; };
+  if (live){
+    add('📸 Capture', () => {
+      const v = document.getElementById('photoCam');
+      if (!v || !v.videoWidth) return photoNote('Camera not ready yet.');
+      setPhoto(photoFrom(v, v.videoWidth, v.videoHeight));
+      stopPhotoCam(); buildPhotoPane();
+    }, 'primaryish');
+    add('Cancel', () => { stopPhotoCam(); buildPhotoPane(); });
+  } else {
+    add('📁 Upload', () => document.getElementById('photoFile').click());
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      add('📷 Take photo', startPhotoCam);
+    if (profile.photo){
+      add('Wear it', () => { profile.flag = 'photo'; saveProfile(); buildSettings(); updatePreview(); buildPhotoPane(); });
+      add('Remove', () => setPhoto(''));
+    }
+  }
+  row.appendChild(btns);
+  host.appendChild(row);
+  if (live){
+    const v = document.createElement('video');
+    v.id = 'photoCam'; v.autoplay = true; v.playsInline = true; v.muted = true; v.className = 'photocam';
+    host.appendChild(v);
+    if (photoStream) v.srcObject = photoStream;
+  }
+  const msg = document.createElement('div'); msg.id = 'photoMsg'; msg.className = 'photomsg';
+  msg.textContent = photoMsgText;
+  host.appendChild(msg);
+  if (profile.photo && profile.flag !== 'photo' && !live) photoNote('Saved — press "Wear it" to put it on.');
+}
+async function startPhotoCam(){
+  photoNote('');
+  try {
+    // Ask for a square-ish feed near the stored size; the browser gives what it can
+    // and photoFrom centre-crops whatever arrives, so an odd aspect is not a problem.
+    photoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }, audio: false });
+    const pane = document.getElementById('photoPane');
+    if (pane) pane.classList.add('live');
+    buildPhotoPane();
+  } catch (e){
+    stopPhotoCam();
+    photoNote(e && e.name === 'NotAllowedError'
+      ? 'Camera permission was refused — Upload still works.'
+      : 'No camera available here — use Upload instead.');
+  }
+}
+{ const f = document.getElementById('photoFile');
+  if (f) f.onchange = () => { photoFromFile(f.files && f.files[0]); f.value = ''; }; }
+buildPhotoPane();
+
 buildSubTabs(); buildJumpBar();
 
 $('playBtn').onclick = startMatch;
@@ -3230,7 +3392,9 @@ $('warmupBtn').onclick = () => { startMatch(); if (world && world.state !== 'war
 // or progress. Sits beside Name because that's the top of what it resets.
 $('lookReset').onclick = () => {
   Object.assign(profile, defaultProfile());
+  photoSrc = null; photoImg = null;   // the photo is part of your look, so it goes too
   saveProfile();                      // this is also what pushes the look to the pitch live
+  buildPhotoPane();
   const nm = $('pname'); if (nm) nm.value = profile.name;
   buildSettings(); updatePreview();
 };
@@ -9527,6 +9691,7 @@ if (window.__MAGNETDEBUG) {
     botUpdateSupportGrid, botSeparate, botWallAvoid, handleBallControl,
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     showSubTab, buildSubTabs, buildJumpBar, syncJumpBar, SUBTABS, get subTab(){ return subTab; },
+    PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
