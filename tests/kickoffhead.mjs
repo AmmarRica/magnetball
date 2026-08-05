@@ -34,10 +34,18 @@ const r = await p.evaluate(async ()=>{
   // --- Collapsed: the green bar is visible, the options are not.
   M.collapseAllSections(); await wait(60);
   o.startsCollapsed = collapsed();
+  // ⚠️ Collapsed, the chevron is rotated -90°, so getBoundingClientRect returns the
+  // AXIS-ALIGNED bounds of a turned box — its "height" is really its width. Widening
+  // the button then reads as a height change and fails a check about height. Use the
+  // untransformed layout box for size; the rect is only right for POSITION.
   const rb = btn.getBoundingClientRect(), rc = chev.getBoundingClientRect();
   o.buttonVisibleWhenCollapsed = rb.width > 100 && rb.height > 30;
-  o.chevronOnTheRight = rc.left >= rb.right - 2 && rc.width > 20;
-  o.chevronSameHeight = Math.abs(rc.height - rb.height) < 6;
+  o.chevronOnTheRight = rc.left >= rb.right - 2 && chev.offsetWidth > 20;
+  o.chevSize = [chev.offsetWidth, chev.offsetHeight, btn.offsetHeight];
+  o.chevronSameHeight = Math.abs(chev.offsetHeight - btn.offsetHeight) < 6;
+  // ...and it is big enough to hit and to read — it is the only way to open the card.
+  o.chevronIsATapTarget = chev.offsetWidth >= 44 && chev.offsetHeight >= 44 &&
+                          parseFloat(getComputedStyle(chev).fontSize) >= 18;
   o.optionsHiddenWhenCollapsed = body.getBoundingClientRect().height === 0;
 
   // --- The chevron expands it, and shows the mode picker.
@@ -109,7 +117,7 @@ console.log(JSON.stringify(r,null,1));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must = ['cardIsCollapsible','buttonIsTheHeader','chevronIsInHeader','optionsAreTheBody',
   'noDuplicateIds','startsCollapsed','buttonVisibleWhenCollapsed','chevronOnTheRight',
-  'chevronSameHeight','optionsHiddenWhenCollapsed','chevronExpands','optionsShowWhenOpen',
+  'chevronSameHeight','chevronIsATapTarget','optionsHiddenWhenCollapsed','chevronExpands','optionsShowWhenOpen',
   'buttonStillVisibleWhenOpen','ariaTracksState','canPickAModeWhileOpen','chevronCollapses',
   'ariaTracksClosed','buttonStartsMatch','buttonDoesNotExpand','buttonDoesNotCollapse',
   'matchAloneWhenOpen','otherSectionClosesMatch','stickyMatchesHeader','jumpAboveHeader',

@@ -108,7 +108,7 @@ const r = await p.evaluate(async ()=>{
   M.sel.pitch='mud';    const gM=freshMatch().pAccel;
   out.pitchGrip = [gN,gI,gM];
   note('pitch surface (physics)', gN!==gI && gI!==gM);
-  M.sel.theme='neon'; M.applyTheme('neon'); M.sel.grass='stripes'; M.sel.field='classic';
+  M.applyBundle('neon'); M.sel.grass='stripes'; M.sel.field='classic';
   M.sel.ball='normal'; M.sel.pitch='normal';
 
   // -- physics settings: a world value must move

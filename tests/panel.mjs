@@ -33,8 +33,8 @@ async function until(pg, fn, ms=4000){
 // shows it, the snapshot can only have come over the channel.
 await game.evaluate(()=>{
   const M=window.__magnet;
-  M.sel.theme='neon'; M.sel.grass='stripes'; M.sel.settingsPanel='inline'; M.saveSel();
-  M.sel.theme='gba';                       // in memory ONLY — no saveSel
+  M.applyBundle('neon'); M.sel.grass='stripes'; M.sel.settingsPanel='inline'; M.saveSel();
+  M.sel.look.palette='gba';                // in memory ONLY — no saveSel
 });
 
 const panel = await ctx.newPage();
@@ -61,9 +61,9 @@ o.panelIsClickable = await panel.evaluate(()=>{
   return !!el && !!el.closest('#setup'); });
 
 // --- Snapshot on open: the panel adopted the game's in-memory theme
-o.snapshotAdopted = await panel.evaluate(()=>window.__magnet.sel.theme === 'gba');
+o.snapshotAdopted = await panel.evaluate(()=>window.__magnet.sel.look.palette === 'gba');
 o.snapshotNotFromStorage = await panel.evaluate(()=>
-  JSON.parse(localStorage.getItem('magnetball.sel')||'{}').theme !== 'gba' ||
+  (JSON.parse(localStorage.getItem('magnetball.sel')||'{}').look||{}).palette !== 'gba' ||
   window.__magnet.syncPeerLive() === true);
 
 // --- Identical settings UI: same cards, same structure, in the same order
@@ -77,8 +77,8 @@ o.gameCards = gs.length; o.panelCards = ps.length;
 o.cardsIdentical = gs.length > 5 && JSON.stringify(gs) === JSON.stringify(ps);
 // ...and they render the same, not just the same markup. Put both on one theme
 // first: they're mid-sync here, and two different palettes SHOULD look different.
-await game.evaluate(()=>{ const M=window.__magnet; M.sel.theme='neon'; M.applyTheme('neon'); M.saveSel(); });
-await until(panel, ()=>window.__magnet.sel.theme === 'neon');
+await game.evaluate(()=>{ const M=window.__magnet; M.applyBundle('neon'); M.saveSel(); });
+await until(panel, ()=>window.__magnet.sel.look.palette === 'neon');
 const feelStyle = pg => pg.evaluate(()=>{
   const c=document.querySelector('#setup .card.collapsible[data-sec="feel"]');
   c.classList.remove('collapsed');
@@ -92,8 +92,8 @@ await panel.evaluate(()=>{
   const tiles=[...document.querySelectorAll('#themePick .opt')];
   tiles.find(t=>/paper/i.test(t.textContent)).click();
 });
-o.panelPickedLight = await panel.evaluate(()=>window.__magnet.sel.theme === 'light');
-o.panelToGame = await until(game, ()=>window.__magnet.sel.theme === 'light');
+o.panelPickedLight = await panel.evaluate(()=>window.__magnet.sel.look.palette === 'light');
+o.panelToGame = await until(game, ()=>window.__magnet.sel.look.palette === 'light');
 o.panelToGameApplied = await until(game, ()=>
   [...document.querySelectorAll('#themePick .opt')].some(t=>t.classList.contains('sel') && /paper/i.test(t.textContent)));
 // Applied for real, not just recorded: the palette moved on BOTH pages, and it is

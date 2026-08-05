@@ -20,7 +20,7 @@ const r = await p.evaluate(async ()=>{
                     !document.getElementById('playerSkinPick');
   o.noSkinSettings = M.sel.ballSkin === undefined && M.sel.playerSkin === undefined;
   o.ballCardExists = !!document.querySelector('[data-sec="ball"]');
-  o.ballLookDefault = M.sel.ballLook === 'classic';
+  o.ballLookDefault = M.sel.look.ball === 'classic';
 
   // ---- Every look paints, and they all differ from one another
   o.lookCount = M.BALL_LOOK_KEYS.length;
@@ -81,8 +81,8 @@ const r = await p.evaluate(async ()=>{
   // ---- Picking one sticks, persists, and reaches the pitch
   const pick = M.BALL_LOOK_KEYS.indexOf('eight');
   tiles[pick].click(); await wait(60);
-  o.pickWrites = M.sel.ballLook === 'eight';
-  o.pickPersists = (JSON.parse(localStorage.getItem('magnetball.sel')||'{}')).ballLook === 'eight';
+  o.pickWrites = M.sel.look.ball === 'eight';
+  o.pickPersists = (JSON.parse(localStorage.getItem('magnetball.sel')||'{}')).look.ball === 'eight';
   o.pickMarksTile = [...document.querySelectorAll('#ballLookPick .opt')][pick].classList.contains('sel');
   return o;
 });
@@ -91,7 +91,7 @@ const r = await p.evaluate(async ()=>{
 const pitch = await p.evaluate(async (looks)=>{
   const M=window.__magnet;
   const shot = (look) => {
-    M.sel.ballLook = look;
+    M.sel.look.ball = look;
     M.setMatchSeed(5); M.sel.mode='1v1'; M.startMatch();
     const w=M.world; w.state='play'; w.stateT=1;
     w.players.forEach(q=>{ q.x=9999; q.y=9999; });         // clear the ball's neighbourhood
@@ -106,7 +106,7 @@ const pitch = await p.evaluate(async (looks)=>{
   };
   const out = {};
   for (const l of looks) out[l] = shot(l);
-  M.sel.ballLook='classic'; M.saveSel(); M.setMatchSeed(null);
+  M.sel.look.ball='classic'; M.saveSel(); M.setMatchSeed(null);
   return out;
 }, ['classic','plain','eight','beach']);
 const vals = Object.values(pitch);

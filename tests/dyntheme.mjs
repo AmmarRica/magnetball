@@ -29,7 +29,7 @@ const r = await p.evaluate(async ()=>{
     const d=c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data; return [d[0],d[1],d[2]]; };
 
   const setup = th => {
-    M.sel.theme=th; M.applyTheme(th);
+    M.applyBundle(th);
     M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.sel.grass='stripes'; M.sel.pitch='normal';
     M.setMatchSeed(9); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2; M.computeCam();
@@ -38,8 +38,9 @@ const r = await p.evaluate(async ()=>{
 
   // ---- the mechanism --------------------------------------------------------
   o.registry = Object.keys(M.DYN_FIELDS).sort().join(',');
+  // The bundle is what names the field now, not the palette object.
   o.themesDeclareReal = ['warp','pool'].every(k => {
-    const t = M.THEMES[k]; return t && t.dyn && !!M.DYN_FIELDS[t.dyn];
+    const s = M.bundleSlots(k); return s && s.field !== 'none' && !!M.DYN_FIELDS[s.field];
   });
 
   // ---- warp: the field moves, and only on a STEP ----------------------------
@@ -105,8 +106,8 @@ const r = await p.evaluate(async ()=>{
   o.poolBallsDiffer = JSON.stringify(solidTop) !== JSON.stringify(stripeTop);
 
   // ---- both themes survive the picker and a full render ---------------------
-  o.picksBack = ['warp','pool'].every(k => { M.applyTheme(k); M.render(); return M.sel.theme != null; });
-  M.applyTheme('neon'); M.sel.theme='neon';
+  o.picksBack = ['warp','pool'].every(k => { M.applyBundle(k); M.render(); return M.currentBundle() === k; });
+  M.applyBundle('neon');
   return o;
 });
 

@@ -88,9 +88,9 @@ const r = await p.evaluate(async ()=>{
 
   // The cache must invalidate on the things that change the picture.
   const iceNeon = show('ice').sig;
-  M.sel.theme='light'; M.applyTheme('light'); const iceLight=show('ice').sig;
+  M.applyBundle('light'); const iceLight=show('ice').sig;
   o.rebakesOnTheme = iceNeon !== iceLight;
-  M.sel.theme='neon'; M.applyTheme('neon');
+  M.applyBundle('neon');
   const mudClassic = show('mud').sig;
   M.sel.field='huge'; M.sel.pitch='mud'; M.startMatch(); M.world.state='play'; M.computeCam(); M.render();
   o.rebakesOnField = mudClassic !== sig();

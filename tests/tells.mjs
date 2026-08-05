@@ -161,7 +161,7 @@ const r = await p.evaluate(async ()=>{
     M.drawPitch(w); M.drawBallTrail(w);
     perTheme[th] = { dots, line: diff(bref, px(M.wx(0), M.wy(100+w.ball.r*3))) };
   }
-  M.applyTheme(M.sel.theme);
+  M.applyTheme(M.sel.look.palette);
   o.perTheme = perTheme;
   o.allThemesRead = Object.values(perTheme).every(v => v.dots > 25 && v.line > 40);
   return o;

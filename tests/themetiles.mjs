@@ -1,6 +1,12 @@
-// The theme picker shows each theme's PALETTE, the way the field picker shows each
-// court — so the tiles have to be canvases painted from THEMES, not emoji, and the
-// seven of them have to actually differ from one another.
+// The palette tiles show each palette's colours, the way the field picker shows each
+// court — so they have to be canvases painted from THEMES, not emoji, and they have to
+// actually differ from one another.
+//
+// Since themes became a collection of slots there are TWO grids of them: the Bundle
+// row (the whole look — its field, its players, its ball) and the Background slot row
+// (the colours). The bands live in the second one now, and the two must not paint the
+// same picture — that was the bug this suite was extended to catch: a Bundle row that
+// was just the Background row again taught nothing about what a bundle is.
 import { chromium, LAUNCH } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1100,height:1000} });
@@ -15,7 +21,8 @@ const r = await p.evaluate(async ()=>{
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.openLook('theme'); await wait(150);
 
-  const tiles = () => [...document.querySelectorAll('#themePick .opt')];
+  const tiles = () => [...document.querySelectorAll('#slot_palette .opt')];
+  const bundles = () => [...document.querySelectorAll('#themePick .opt')];
   o.tileCount = tiles().length;
   o.oneTilePerTheme = o.tileCount === Object.keys(M.THEMES).length;
   o.everyTileHasCanvas = tiles().every(t=>!!t.querySelector('canvas'));
@@ -53,19 +60,28 @@ const r = await p.evaluate(async ()=>{
     });
   });
   o.everyBandRight = o.bandsMatchPalette.every(Boolean);
+  // The bundle tile is a different picture from the palette tile it sits above —
+  // and is painted, distinct per bundle, and taller than it is a colour strip.
+  const bsigs = bundles().map(t=>sig(t.querySelector('canvas')));
+  o.bundleCount = bundles().length;
+  o.oneBundlePerTheme = o.bundleCount === keys.length;
+  o.bundlesPainted = bsigs.every(s=>s.ink > 0);
+  o.bundlesDistinct = new Set(bsigs.map(s=>s.h)).size === bsigs.length;
+  o.bundleIsNotThePalette = keys.every((k,i)=>bsigs[i].h !== sigs[i].h);
   o.swatchUsesSixColours = M.themeSwatchColors(M.THEMES.neon).length === 6;
 
   // Picking one still switches the theme (the tiles are controls, not decoration).
-  const before = M.sel.theme;
+  const before = M.sel.look.palette;
   const other = keys.find(k=>k!==before);
   tiles()[keys.indexOf(other)].click(); await wait(120);
-  o.clickSwitches = M.sel.theme === other &&
+  o.paletteAloneIsCustom = M.currentBundle() === null;   // one slot moved, not the theme
+  o.clickSwitches = M.sel.look.palette === other &&
     getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === M.THEMES[other].ui.bg;
   o.selectedTileMarked = tiles()[keys.indexOf(other)].classList.contains('sel') &&
     tiles().filter(t=>t.classList.contains('sel')).length === 1;
   // ...and the tiles repaint under the new theme without going blank.
   o.stillPaintedAfterSwitch = tiles().every(t=>sig(t.querySelector('canvas')).ink > 0);
-  M.sel.theme = before; M.applyTheme(before); M.saveSel();
+  M.applyBundle(before); M.saveSel();
   return o;
 });
 
@@ -73,6 +89,8 @@ console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.oneTilePerTheme && r.everyTileHasCanvas && r.noEmojiSpans && r.everyTileNamed &&
   r.allPainted && r.allDistinct && r.everyBandRight && r.swatchUsesSixColours &&
+  r.oneBundlePerTheme && r.bundlesPainted && r.bundlesDistinct && r.bundleIsNotThePalette &&
+  r.paletteAloneIsCustom &&
   r.clickSwitches && r.selectedTileMarked && r.stillPaintedAfterSwitch && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

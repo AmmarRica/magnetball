@@ -5,7 +5,32 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0410AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0730AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🎨 Themes are a collection of slots
+- [x] **A theme is five slots, not one key.** `SLOTS` declares Background (palette),
+  Field, Players, Ball and Sound. The first four live in `sel.look`; the sound slot has
+  **no stored value at all** — `sfxSetKey()` derives it from `sel.snd`, which the Sound
+  card already owns one category at a time.
+- [x] **Bundles set all five at once.** Every palette is a bundle (`bundleSlots`), and
+  `THEME_BUNDLES` lists only the two that own more than colour. Picking **Pool** sets the
+  pool table, pool-ball players, the cue ball, and a pool-hall sound set — ball-on-ball
+  clacks, cushion thuds, a pocket drop, and the rack breaking for the kickoff whistle.
+  **Warp** gets a Space set on the same mechanism.
+- [x] **"Custom" is derived, never stored.** `currentBundle()` matches the live slots
+  against the table, so changing one slot reads Custom and putting it back brings the
+  name straight back — and assembling Pool by hand from a different bundle gets Pool.
+  A stored `custom` could have gone stale; this can't.
+- [x] **One tile builder.** `buildSlotPicker(slot, host)` paints any slot into any host,
+  so the Ball card and the Sound card show the same state as the Theme card's slot rows
+  rather than a second copy of it. `sel.theme`/`sel.ballLook` were dropped rather than
+  kept alongside — `normalizeLook()` folds a legacy save in once, at load.
+- [x] **The bundle tile shows the collection**, not the palette bands again: its field,
+  its players and its ball, painted under its own palette. Two identical grids labelled
+  "Bundle" and "Background" taught nothing. `tests/themeslots.mjs`, `tests/themetiles.mjs`.
+- [x] **Section chevrons enlarged** — 22px glyph, and the Match card's is a 64px button.
 
 ---
 
