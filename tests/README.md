@@ -22,7 +22,14 @@ If you have a browser already on disk, point at it instead of downloading one:
 CHROME_PATH=/path/to/chrome node tests/run.mjs
 ```
 
-Every suite exits non-zero on failure, so `run.mjs` (and any CI step) fails loudly.
+Every suite exits non-zero on failure, so `run.mjs` fails loudly — and
+`.github/workflows/tests.yml` runs it on every push and pull request.
+
+CI installs Playwright with `npm install --no-save --no-package-lock playwright@<pinned>`,
+which writes nothing but `node_modules`: the repo deliberately carries no
+`package.json` and no lockfile, so the version is pinned in the workflow instead.
+Bump it there when you want a newer Playwright (the browser cache key uses the same
+version, so it refreshes with it).
 
 ## Suites
 
