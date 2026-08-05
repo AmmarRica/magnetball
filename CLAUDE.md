@@ -172,6 +172,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
+- **Service worker:** network-first for HTML, cache-first for everything else — and
+  ⚠️ **HTML is decided by the URL, not just `request.mode`.** `/settings` pulls the real page
+  in with `fetch('../index.html')`, which is not a navigation and sends `Accept: */*`; classified
+  by mode/accept alone it took the cache-first branch and **pinned /settings to whatever
+  `index.html` was precached, making every deploy invisible there**. `{cache:'no-cache'}` on that
+  fetch is an HTTP directive and does not bypass a worker. `tests/swupdate.mjs` registers the real
+  worker against a temp site, changes the file, and checks the settings route sees the new build.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header

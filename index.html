@@ -2414,6 +2414,38 @@ const SFX = {
     ()=>{ Aud.tone(620,0.18,'sine',{to:2400,vol:0.28});
           Aud.tone(1240,0.16,'sine',{to:3600,vol:0.11,delay:0.03}); },
   ],
+  // Full time is its OWN category, not a second use of the kickoff whistle. A match
+  // does not end the way it starts: a referee blows a single peep to start play and a
+  // PROGRESSIVE TRIPLE to end it — short, short, and a long one that climbs and fades
+  // away. Being a category rather than a one-off function means the themed sound sets
+  // get to end their own matches too (see SFX_SETS).
+  fulltime: [
+    // The one everybody knows. BEE — BEE — BEEEEP.
+    ()=>{ const blast=(f,dur,delay,vol,to)=>Aud.tone(f,dur,'triangle',{vib:28,vibA:75,vol,delay,to});
+          blast(1950, 0.15, 0.00, 0.34);
+          blast(1950, 0.15, 0.26, 0.34);
+          blast(2150, 0.85, 0.52, 0.38, 2500); },   // longer, rising, fading out
+    // Same rhythm, brighter and DESCENDING — the other way refs phrase it.
+    ()=>{ const blast=(f,dur,delay,vol,to)=>Aud.tone(f,dur,'triangle',{vib:22,vibA:60,vol,delay,to});
+          blast(2500, 0.14, 0.00, 0.33);
+          blast(2250, 0.14, 0.25, 0.33);
+          blast(2000, 0.90, 0.50, 0.37, 1750); },
+    // Air rather than pea: three breathy bursts, the last one long.
+    ()=>{ Aud.noise(0.16,{bp:2200,Q:9,vol:0.38});
+          Aud.noise(0.16,{bp:2200,Q:9,vol:0.38,delay:0.26});
+          Aud.noise(0.95,{bp:2350,Q:8,vol:0.40,delay:0.52,swell:true});
+          Aud.tone(2200,0.9,'sine',{delay:0.52,vol:0.12,vib:16,vibA:40,to:2500}); },
+    // Pool hall: two clacks and the last ball rattling into the pocket.
+    ()=>{ Aud.tone(1450,0.05,'square',{to:680,vol:0.34});
+          Aud.tone(1450,0.05,'square',{to:680,vol:0.34,delay:0.24});
+          Aud.tone(900,0.55,'triangle',{to:150,vol:0.30,delay:0.50});
+          Aud.noise(0.5,{bp:1200,Q:2,vol:0.18,delay:0.54}); },
+    // Space: three rising blips and a long sweep that climbs away and fades.
+    ()=>{ Aud.tone(700,0.13,'sine',{to:1200,vol:0.30});
+          Aud.tone(900,0.13,'sine',{to:1500,vol:0.30,delay:0.25});
+          Aud.tone(1100,0.95,'sine',{to:3200,vol:0.32,delay:0.50});
+          Aud.tone(550,0.9,'triangle',{to:1600,vol:0.10,delay:0.50}); },
+  ],
   crowd: [
     ()=>{ Aud.noise(0.9,{bp:800,Q:0.7,vol:0.5,swell:true}); },
     ()=>{ for(let i=0;i<9;i++) Aud.noise(0.05,{hp:1600,vol:0.22,delay:i*0.055}); Aud.noise(0.7,{bp:720,Q:0.6,vol:0.32,swell:true}); },
@@ -2467,7 +2499,7 @@ const SFX = {
     ()=>{ Aud.tone(900,0.3,'sine',{to:90,vol:0.25}); Aud.noise(0.25,{bp:600,Q:1.2,vol:0.13}); },
   ],
 };
-const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Chirp'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash'], kick:['Thock','Punch','Pluck','Clack','Zap'], wall:['Tick','Click','Bonk','Cushion','Ping'], net:['Swish','Thud','Rustle','Pocket','Warp'] };
+const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Chirp'], fulltime:['Full time','Descending','Airy triple','Rack out','Power down'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash'], kick:['Thock','Punch','Pluck','Clack','Zap'], wall:['Tick','Click','Bonk','Cushion','Ping'], net:['Swish','Thud','Rustle','Pocket','Warp'] };
 function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
   // A goal dips the MUSIC bus so the crowd lands, then restores. Hooked here rather
   // than at the four goal call sites, so a fifth one can't forget.
@@ -2507,9 +2539,9 @@ function crowdReact(w){
 // ============================================================
 // A named set of per-category SFX picks. Indices into the SFX arrays above.
 const SFX_SETS = {
-  classic: { name:'Classic',   emoji:'⚽', pick:{ whistle:0, crowd:0, kick:0, wall:0, net:0 } },
-  pool:    { name:'Pool hall', emoji:'🎱', pick:{ whistle:3, crowd:6, kick:3, wall:3, net:3 } },
-  space:   { name:'Space',     emoji:'🌌', pick:{ whistle:4, crowd:7, kick:4, wall:4, net:4 } },
+  classic: { name:'Classic',   emoji:'⚽', pick:{ whistle:0, fulltime:0, crowd:0, kick:0, wall:0, net:0 } },
+  pool:    { name:'Pool hall', emoji:'🎱', pick:{ whistle:3, fulltime:3, crowd:6, kick:3, wall:3, net:3 } },
+  space:   { name:'Space',     emoji:'🌌', pick:{ whistle:4, fulltime:4, crowd:7, kick:4, wall:4, net:4 } },
 };
 // The categories come from SFX itself — a sixth one must not need remembering here.
 function sfxCatKeys(){ return Object.keys(SFX); }
@@ -5216,7 +5248,7 @@ $('settingsReset').onclick = () => {
   resetSettings(alsoAppearance);
 };
 
-const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
+const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['fulltime','Full time (end of match)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
 // `g` is which half of Game Feel the slider belongs under: what the BALL does vs
 // what YOU do. They used to be one undifferentiated stack of eight.
 const FEEL_SLIDERS = [
@@ -8071,7 +8103,9 @@ function endMatch(w){
   if (w.state==='over') return;
   w.state='over';
   if (w.demo){ finishMatch(w); return; }   // wallpaper: no ceremony, just start another
-  playSfx('whistle');
+  // Full time gets its OWN whistle — the triple blast, not the single peep that
+  // starts play. It runs ~1.4s, comfortably inside the FINAL_SLOW wind-down.
+  playSfx('fulltime');
   w.endRamp = 0;
 }
 function finishMatch(w){
@@ -11207,7 +11241,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.1130AM';
+const VERSION = '20260805.0130PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11243,7 +11277,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,

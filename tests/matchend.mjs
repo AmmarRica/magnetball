@@ -19,6 +19,76 @@ const r = await p.evaluate(async ()=>{
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   const overlayUp = () => document.getElementById('overlay').classList.contains('show');
 
+  // ---- 0) full time has its OWN whistle: the progressive triple -------------
+  // A match doesn't end the way it starts. Kickoff is a single peep; full time is
+  // BEE - BEE - BEEEEP: two short blasts and a long one that fades away.
+  //
+  // The SFX closures call Aud.tone/Aud.noise as PROPERTIES of the exported Aud
+  // object, so patching the methods intercepts the real scheduled notes — no need
+  // to parse source text for durations.
+  // ⚠️ playSfx() is silent while `world` is the idle demo, which it is on load. Start
+  // a real match FIRST or every one of these reads zero and passes for nothing.
+  M.sel.mode='1v1'; M.sel.autoReplay=false; M.startMatch();
+  M.world.state='play'; M.world.stateT=2;
+  M.sel.snd.muted = false;
+  const log=[]; const realTone=M.Aud.tone, realNoise=M.Aud.noise;
+  M.Aud.tone  = (f,dur,type,opt)=>log.push({k:'tone', f, dur, delay:(opt&&opt.delay)||0, to:(opt&&opt.to)||null});
+  M.Aud.noise = (dur,opt)=>log.push({k:'noise', dur, delay:(opt&&opt.delay)||0});
+
+  o.hasFullTimeCategory = Array.isArray(M.SFX.fulltime) && M.SFX.fulltime.length >= 3;
+  o.fullTimeLabelled = (M.SFX_LABELS.fulltime||[]).length === M.SFX.fulltime.length;
+  o.fullTimeInSoundCard = M.SFX_CATS.some(c=>c[0]==='fulltime');
+
+  // The default full-time sound, blast by blast.
+  M.sel.snd.fulltime = 0; log.length = 0; M.playSfx('fulltime');
+  const blasts = log.slice().sort((a,b)=>a.delay-b.delay);
+  o.blastCount = blasts.length;
+  o.blasts = blasts.map(x=>({ dur:+x.dur.toFixed(3), at:+x.delay.toFixed(3), f:x.f, to:x.to }));
+  o.isTriple = blasts.length === 3;
+  // Short - Short - LONG. The last must be clearly longer, not marginally.
+  o.shortShortLong = o.isTriple &&
+    Math.abs(o.blasts[0].dur - o.blasts[1].dur) < 0.05 &&
+    o.blasts[2].dur > o.blasts[0].dur * 3;
+  // ...and they are three SEPARATE blasts, not one run-on tone.
+  o.separated = o.isTriple &&
+    o.blasts[1].at > o.blasts[0].at + o.blasts[0].dur &&
+    o.blasts[2].at > o.blasts[1].at + o.blasts[1].dur;
+  // The long one glides to a different pitch (the fading BEEEEP), the shorts don't.
+  o.lastNoteGlides = o.isTriple && !!o.blasts[2].to && o.blasts[2].to !== o.blasts[2].f;
+  o.wholeThingFits = o.isTriple && (o.blasts[2].at + o.blasts[2].dur) < M.FINAL_SLOW;
+
+  // It is NOT the kickoff whistle.
+  log.length = 0; M.sel.snd.whistle = 0; M.playSfx('whistle');
+  const kick = log.slice();
+  o.kickoffBlasts = kick.length;
+  o.differsFromKickoff = JSON.stringify(kick.map(x=>[x.dur,x.delay])) !==
+                         JSON.stringify(blasts.map(x=>[x.dur,x.delay]));
+  o.kickoffIsShorter = Math.max(...kick.map(x=>x.delay+x.dur)) <
+                       Math.max(...blasts.map(x=>x.delay+x.dur));
+
+  // Every full-time variant is a real sound, and every themed set names one.
+  const bad=[];
+  for (let i=0;i<M.SFX.fulltime.length;i++){
+    log.length=0;
+    try { M.sel.snd.fulltime=i; M.playSfx('fulltime'); } catch(e){ bad.push(i+': '+e.message); continue; }
+    if (!log.length) bad.push(i+': silent');
+  }
+  o.variantsBad = bad;
+  o.everySetEndsItsOwnMatch = Object.entries(M.SFX_SETS).every(([k,v]) =>
+    v.pick.fulltime != null && M.SFX.fulltime[v.pick.fulltime] && M.SFX_LABELS.fulltime[v.pick.fulltime]);
+
+  // ---- and endMatch actually blows THAT whistle ----------------------------
+  M.sel.snd.fulltime = 0;
+  M.sel.mode='1v1'; M.startMatch();
+  const ew = M.world; ew.state='play'; ew.stateT=2;
+  log.length = 0;
+  M.endMatch(ew);
+  const atEnd = log.slice().sort((a,b)=>a.delay-b.delay);
+  o.endMatchBlasts = atEnd.length;
+  o.endMatchIsTheTriple = atEnd.length === 3 && atEnd[2].dur > atEnd[0].dur * 3;
+  M.Aud.tone = realTone; M.Aud.noise = realNoise;
+  M.finishMatch(ew);
+
   // ---- 1) the wind-down -----------------------------------------------------
   M.sel.mode='2v2'; M.sel.autoReplay=false; M.setMatchSeed(4); M.startMatch();
   const w=M.world; w.state='play'; w.stateT=2;
@@ -142,6 +212,21 @@ ok(r.awardsUnderOwnTeam, 'an award is under the wrong team panel');
 ok(r.winnerMarked, 'the winning panel is not the one that actually won');
 ok(r.goalsShown, 'the goals column does not match the tally');
 
+ok(r.hasFullTimeCategory, 'full time has no sound category of its own');
+ok(r.fullTimeLabelled, 'a full-time variant has no label, so it cannot be picked');
+ok(r.fullTimeInSoundCard, 'full time is not listed in the Sound card');
+ok(r.isTriple, `the full-time whistle is ${r.blastCount} blasts, not three: ${JSON.stringify(r.blasts)}`);
+ok(r.shortShortLong, `not short-short-LONG: ${JSON.stringify(r.blasts)}`);
+ok(r.separated, `the three blasts overlap into one run-on tone: ${JSON.stringify(r.blasts)}`);
+ok(r.lastNoteGlides, `the final blast does not glide, so it is a flat beep not a BEEEEP: ${JSON.stringify(r.blasts)}`);
+ok(r.wholeThingFits, `the whistle outlasts the ${r.duration}s wind-down: ${JSON.stringify(r.blasts)}`);
+ok(r.kickoffBlasts > 0, 'the kickoff whistle scheduled nothing, so the comparison proves nothing');
+ok(r.differsFromKickoff, 'full time plays the same sound as kickoff');
+ok(r.kickoffIsShorter, 'the kickoff whistle is not shorter than full time');
+ok(r.variantsBad.length === 0, `a full-time variant is silent or throws: ${JSON.stringify(r.variantsBad)}`);
+ok(r.everySetEndsItsOwnMatch, 'a themed sound set does not name a full-time whistle');
+ok(r.endMatchBlasts > 0, 'endMatch scheduled no sound at all');
+ok(r.endMatchIsTheTriple, `endMatch did not blow the triple: ${r.endMatchBlasts} blasts`);
 ok(r.warmupBtnExists, 'no Warm-up button');
 ok(r.warmupVisibleCollapsed, 'Warm-up is hidden when the Match section is collapsed');
 ok(r.warmupOutsideBody, 'Warm-up is inside the collapsible body, so it disappears when collapsed');
