@@ -52,7 +52,7 @@ version, so it refreshes with it).
 | `unlocked` | Unlocked summary: counts match the unlock model, strip shows only earned items, tap equips |
 | `demo` | Idle demo uses two random countries (not your look), and the Demo tag paints only in demo |
 | `debug` | Debug readout gated by its toggle, numbers track the live sim and feel values, build stamp |
-| `demo2` | Demo picks a random court and never replays; controller wording; six crowd cheers, new ones longer |
+| `demo2` | Demo picks a random court and never replays; controller wording; crowd cheers — the three Stadium-family ones longer than the three originals, all distinct, and **every** SFX category's variant count matching its label count (an unlabelled sound is unpickable). Counts are derived, not pinned: themed sets add variants, and a suite that says "exactly six" only measures how recently someone edited it |
 | `killerqueen` | Killer Queen: two balls, heavy non-resetting snail, goals that don't reset play, snail = instant win |
 | `grasstiles` | Grass cut tiles draw the selected court with each mow pattern, and field/grass/theme picks redraw each other |
 | `trapwindow` | Trap window slider changes how long the ball actually sticks, applies live, survives reset/presets/drills, and one-touch ignores it |
@@ -70,7 +70,7 @@ version, so it refreshes with it).
 | `botlook` | Bots wear their own face/cap/eyes — never yours — vary from each other, and stay stable across restarts |
 | `cocktailkeys` | Cocktail takes the keyboard off the pitch and seats player 1 on a controller; picking it keeps you on the menu able to kick off; pitch direction is locked and says why |
 | `tells` | Motion tells by **canvas pixel sampling** (incl. the charge ring flashing as a full circle rather than sweeping): moving players leave ink, parked ones don't, ball streak scales with speed, wind-up shows on the disc, and both read on **all six themes** |
-| `themetiles` | Theme picker shows each theme's palette as a painted canvas (no emoji): one tile per theme, all distinct, every band sampled back to that theme's own colours, picking one still switches the theme |
+| `themetiles` | The two grids in the Theme card are different pictures: the **Background** slot shows each palette as a painted canvas (no emoji) — one tile per palette, all distinct, every band sampled back to that palette's own colours — while the **Bundle** row shows the whole collection (its field, its players, its ball) and is asserted to differ pixel-wise from the palette tile it sits above; picking a palette alone switches the colours *and* makes the theme Custom |
 | `contrast` | No label sits on a colour too close to it: every visible text element on every screen under every theme is held to WCAG AA against its **composited** background, plus the goal banner's outline; includes a known-bad probe so a clean run can't be vacuous |
 | `awards` | End-of-match awards state the figure that won them ("Most Saves · 5 saves"), the number matches the tally that picked the winner, singulars stay singular, and it reaches the DOM |
 | `kickpush` | Optional "kick off walls & players": off by default and provably inert when off; on, a wall/arc/post launches you *away* from it on all four boundaries, charge scales it, a body takes the shove while you take the smaller recoil along the same line, empty space and out-of-range targets do nothing, one press is one launch with a cooldown, it never fires at kickoff or after the whistle, the ball is untouched, and the picker writes and persists |
@@ -81,6 +81,7 @@ version, so it refreshes with it).
 | `kickoffhead` | The KICK OFF button **is** the Match section's header: collapsed it's just the green bar with a chevron on its right, expanding shows the mode/field/difficulty pickers, pressing the button starts a match without toggling the section, the accordion still holds, and the sticky offset is measured from the header rather than the button nested inside it |
 | `hitstop` | Hit stop is its own slider (0 = off, survives Screen shake being turned off, writes and persists) and the freeze only pays out on a **first touch** whose shot the game has walked forward and seen score: wide, backwards, too soft, dying short, wrong attacker and blocked-by-a-body all get nothing (the block is cross-checked against the real sim), a trapped-and-carried shot gets nothing even though it would score, nothing fires at kickoff or after the whistle, and the prediction is deterministic and provably inert — a whole-world diff across 25 predictions, since `collideDiscs` writes to both bodies |
 | `netpass` | Players pass through the net, the ball still doesn't: every net wall is `ballOnly` and no wall blocks a player at all, while the collider itself still works (so the geometry didn't just vanish); a player walking sideways inside the goal mouth gets past the post instead of pinning at `gh - r`, enters the mouth but is stopped by the step-out clamp rather than the netting, and never reaches the net's back; checked on all 30 fields for both ball escapes and player escapes |
+| `themeslots` | A theme is a collection of five slots and "Custom" is derived: every slot is a real registry whose every option names itself; Pool sets all five (including `sel.snd`, checked against the arrays `playSfx` reads) and reaches the live render; changing one slot names it Custom, unmarks every bundle tile and leaves the other four alone; putting it back brings the name back, and assembling Pool slot-by-slot from Neon gets Pool's name too; a hand-picked sound reads Custom rather than throwing; every set's every variant exists and plays; the ball slot moves in both the Theme and Ball cards and the sound set in both the Theme and Sound cards; every option in every slot renders, plus a starfield over the Grass palette; and a legacy `theme`/`ballLook` save migrates to its bundle once, keeping a hand-picked ball look and a hand-picked whistle |
 | `photo` | Your own photo as a faceplate: a 1600×900 source is stored **centre-cropped at 128²** and under 40KB (a camera-sized image would blow the localStorage budget), it's worn automatically, actually drawn on the disc and reaches a live match, it **never leaves the device** — the real leaderboard payload is intercepted and checked for `data:`/`base64`, and confirmed to carry only the word `photo` — it persists, Remove falls back rather than leaving a blank plate, Reset look clears it, and a refused camera leaves Upload working with a message that says so |
 | `menunav` | Menu navigation: each big card shows one pane at a time with chips and panes matching **one-for-one** (a spare chip shows nothing, a spare pane can never be shown), only one pane visible at a time and every pane genuinely visible when its chip is pressed; both cards measurably shrank (599px and 749px, from 6777 and 3121 flat) and the tallest single pane still beats the old flat card; the 11 nav tiles are grouped under three labels with none lost, duplicated or unwired; and the jump bar is sticky, has a chip per section and no more, labels them, opens one section alone and marks which |
 | `autoadvance` | Neither screen needs a button press to move on: the lobby counts down 30s and kicks off itself, going back to full on movement, on a stick pushed with **no** displacement (leaning into a wall still counts), and on a controller connecting — and never running at all during calibration; the result screen counts down 30s and starts the next match on the same field with the same teams and a reset score, holds the clock open while any input is held, says so in the hint, and stays out of drills |
@@ -151,6 +152,32 @@ Two traps specific to measuring smoothness, both of which wasted a measurement h
 - **Measure the jitter you actually have.** Real rAF deltas on this engine are 16.60–16.80ms
   p05–p99. A synthetic ±3ms jitter makes frame pacing look like the problem when it isn't —
   the deficiency was render state advancing per frame, which no amount of pacing work fixes.
+
+Two traps specific to a setting that is DERIVED rather than stored, both of which
+would have let a bug through:
+
+- **Prove both directions of the round trip.** The theme's name is computed by
+  matching the live slots against the bundle table, so "changing a slot says Custom"
+  is only half of it — a `currentBundle()` that ignored one slot passed that check and
+  still lied. `themeslots` also assembles Pool slot-by-slot from a *different* bundle
+  and asserts the name comes back.
+- **A derived value can hold something with no name.** The sound slot is derived from
+  `sel.snd`, which the Sound card edits one category at a time, so it can legitimately
+  be a combination no set describes. `SLOTS.sfx.name('custom')` would throw — the label
+  has to check `keys().includes()` first, and the suite drives that path deliberately.
+
+Also: **`getBoundingClientRect` on a ROTATED element gives axis-aligned bounds.** The
+collapsed chevron is `rotate(-90deg)`, so its rect "height" is really its width —
+widening the button read as a height change and failed a check about height.
+`offsetWidth`/`offsetHeight` give the untransformed layout box; the rect is only right
+for position.
+
+Also: `drawBundleSwatch` swaps the module-level `TH` for the duration of the paint,
+because the disc skins and the ball painter read the live palette — previewing another
+bundle without the swap silently wears the current one. If you add a painter that reads
+`TH`, it inherits that, and a mixed slot combination (a starfield over the Grass palette)
+is a legitimate setting someone can pick, so fall back through the palette
+(`TH.dynMark || TH.line`) rather than a hard-coded colour.
 
 Also: with a gamepad connected a seat's `ctrl` becomes `'gamepad'`, so `pads.p1` no longer
 drives it — feed the fake pad instead. And in a sideways pitch `rotQuarter=1`, so stick-up

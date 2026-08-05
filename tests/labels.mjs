@@ -101,7 +101,7 @@ const r = await p.evaluate(async ()=>{
 
   // --- Plates are tinted by TEAM. They were white on every disc, so nothing about
   // the plate told you which side a player was on.
-  M.sel.theme='neon'; M.applyTheme('neon'); M.sel.mode='2v2'; M.startMatch();
+  M.applyBundle('neon'); M.sel.mode='2v2'; M.startMatch();
   const tw2=M.world; tw2.state='play'; tw2.stateT=1;
   const a2=tw2.players.find(q=>q.team===0), b2=tw2.players.find(q=>q.team===1);
   a2.x=-120; a2.y=-150; b2.x=120; b2.y=-150;      // apart, so nothing dims either

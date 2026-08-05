@@ -59,9 +59,15 @@ const r = await p.evaluate(async ()=>{
   o.padOnlyOnDeck = M.padOnly() === true;
   M.sel.display='auto'; M.applyDisplayMode(); await wait(150);
 
-  // --- Six crowd cheers, the three new ones longer than the originals
+  // --- Crowd cheers: the three STADIUM ones longer than the three originals.
+  // Counts are derived, not pinned at six — themed sets have since added more, and a
+  // suite that says "exactly six" only ever measures how recently someone edited it.
+  // What must hold is that every sound is labelled (an unlabelled one is unpickable)
+  // and that no two are the same closure.
   o.crowdCount = M.SFX.crowd.length;
   o.crowdLabels = M.SFX_LABELS.crowd.length;
+  o.everyCatLabelled = Object.keys(M.SFX).every(c => M.SFX[c].length === M.SFX_LABELS[c].length);
+  o.unlabelled = Object.keys(M.SFX).filter(c => M.SFX[c].length !== M.SFX_LABELS[c].length);
   // The SFX closures capture the module-scope Aud, so a spy can't intercept them.
   // Assert the declared durations from the source instead.
   const src = M.SFX.crowd.map(f=>f.toString());
@@ -78,10 +84,10 @@ const r = await p.evaluate(async ()=>{
   };
   const lens = src.map(durOf);
   o.origMax = Math.max(...lens.slice(0,3));
-  o.newMin  = Math.min(...lens.slice(3));
+  o.newMin  = Math.min(...lens.slice(3,6));      // Stadium / Chant / Ovation only
   o.lens = lens;
   o.newAreLonger = o.newMin > o.origMax;
-  o.allSixDistinct = new Set(src).size === 6;
+  o.allDistinct = new Set(src).size === src.length;
 
   M.sel.controllers='off'; M.sel.mode='1v1';
   return o;
@@ -93,7 +99,7 @@ const ok = r.demoFieldsVary && r.demoIsDemo && r.realMatchUsesSelected &&
   r.demoNeverReplays && r.autoReplayStillOn &&
   r.padOnlyWhenTouch && r.touchWordNoButton && r.seatsArePad && r.padOnlyWhenPads &&
   r.padWordSaysButton && r.padOnlyOnDeck &&
-  r.crowdCount === 6 && r.crowdLabels === 6 && r.newAreLonger && r.allSixDistinct &&
+  r.crowdCount >= 6 && r.everyCatLabelled && r.newAreLonger && r.allDistinct &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

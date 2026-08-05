@@ -60,14 +60,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
-- **Dynamic visual themes:** a theme may also OWN its field and what a player *is*.
-  `THEMES[k].dyn` names a `DYN_FIELDS` entry (`{reset?, step?, paint}`) that paints over the
-  pitch surface; `THEMES[k].discs` names a `DISC_SKINS` entry that replaces `drawOneDisc`'s
-  body. `warp` = black-and-white with a starfield tunnel; `pool` = a pool table with numbered
-  solids vs stripes. ⚠️ Field state advances in `advanceDynField()` next to `step()`, **never
-  in a paint** (same rule as the trails), and off its own seeded PRNG so it can't touch `w.rng`.
-  A monochrome theme *must* supply a disc skin — player colour comes from `profile`, which no
-  palette can reach. `tests/dyntheme.mjs` holds all of it by pixel sampling.
+- **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares five — `palette`
+  (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
+  (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key) and `sfx` (an `SFX_SETS` key).
+  The first four live in `sel.look`; **the sound slot has no stored value at all** —
+  `sfxSetKey()` derives it from `sel.snd`, which the Sound card already owns one category
+  at a time. A **bundle** sets all five: every palette is one (`bundleSlots(k)`), and
+  `THEME_BUNDLES` only lists the two that own more than colour. Names/emoji are read from
+  `THEMES`, never copied.
+  ⚠️ **"Custom" is DERIVED, never stored** — `currentBundle()` matches the live slots
+  against the table, so rebuilding Pool by hand gets Pool's name back instead of leaving a
+  lie on screen, and a stored `custom` can't go stale. Same reason `sel.theme`/`sel.ballLook`
+  were dropped rather than kept alongside: `normalizeLook()` folds a legacy save in **once**,
+  at load, so nothing downstream knows two shapes.
+  `buildSlotPicker(slot, host)` is the one tile builder — the Theme card stacks all five and
+  the Ball/Sound cards each show one again, so a card can't drift from the theme.
+  `tests/themeslots.mjs`.
+- **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
+  the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
+  with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes.
+  ⚠️ Field state advances in `advanceDynField()` next to `step()`, **never in a paint**
+  (same rule as the trails), and off its own seeded PRNG so it can't touch `w.rng`.
+  A monochrome palette *must* be paired with a disc skin — player colour comes from `profile`,
+  which no palette can reach. Because slots mix freely, a field painter must fall back through
+  the palette it's given (`TH.dynMark || TH.line`) or a starfield over Grass paints black on
+  black. `tests/dyntheme.mjs` holds all of it by pixel sampling.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one
@@ -137,8 +154,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
-  for `--sticky-top`. `/settings` is the *same document* with the game switched off, kept in sync
-  over `BroadcastChannel`.
+  for `--sticky-top`. There are **two** open/close chevrons: `.secchev` is a real `<button>` on the
+  Match card (the header itself is KICK OFF, so it can't double as the toggle), and every other
+  section uses the `.card.collapsible > h2::after` pseudo-element with the whole header as the
+  target. Both are sized together — change one, change the other. `/settings` is the *same
+  document* with the game switched off, kept in sync over `BroadcastChannel`.
 
 ## Testing (Playwright, headless)
 Set `window.__MAGNETDEBUG = true` **before load** to expose `window.__magnet` — a live object with

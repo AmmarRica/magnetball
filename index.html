@@ -267,11 +267,17 @@
     .ghost.mini { margin:0; padding:5px 10px; font-size:11px; width:auto; max-width:none; }
     #matchCard > h2 #playBtn { flex: 1 1 auto; margin-top: 0; max-width: none; }
     #matchCard > h2 .secname { display: none; }   /* only needed where the button isn't */
+    /* ⚠️ display:flex, not a bare text button. The chevron is `align-self: stretch`
+       so it matches KICK OFF's height — but a bare button's content box is the pixel
+       font's line box, which at this size is TALLER than the button and drives the
+       whole header instead of following it. Centring the glyph in a flex box keeps
+       the intrinsic height at the glyph and lets stretch do its job. */
     .secchev {
-      flex: 0 0 auto; width: 52px; align-self: stretch; cursor: pointer;
+      flex: 0 0 auto; width: 64px; align-self: stretch; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0;
       background: rgba(53,255,135,0.10); color: var(--go);
       border: 1px solid var(--go); border-radius: 10px;
-      font-family: var(--pix); font-size: 14px; line-height: 1;
+      font-family: var(--pix); font-size: 22px; line-height: 1;
       transition: transform .15s ease;
     }
     #matchCard.collapsed > h2 .secchev { transform: rotate(-90deg); }
@@ -324,10 +330,13 @@
     #panelLink { color: var(--accent); }
 
     /* Mow patterns are fine bands — they need more pixels than a flag tile to read. */
-    #grass, #pitches, #themePick { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+    #grass, #pitches, #themePick, #slotRows .opts { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
     #grass .opt canvas, #pitches .opt canvas { width: 66px; height: 66px; }
     /* Palette bands read better wide than square. */
-    #themePick .opt canvas { width: 72px; height: 46px; }
+    #themePick .opt canvas { width: 84px; height: 58px; }
+    /* Slot tiles: smaller than a bundle, big enough to tell two pool balls apart. */
+    #slotRows .opt canvas, #sfxSetPick .opt canvas { width: 56px; height: 56px; }
+    #slot_palette .opt canvas { width: 60px; height: 38px; }
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
@@ -385,8 +394,12 @@
       cursor: pointer; user-select: none; display: flex; align-items: center;
       justify-content: space-between; margin-bottom: 0;
     }
+    /* The open/close chevron on every other section. Not a separate button — the
+       whole header is the target — but it's the only thing that SAYS the header is
+       one, so it's sized to be read at a glance rather than hunted for. */
     .card.collapsible > h2::after {
-      content: '▾'; font-size: 14px; color: var(--muted); transition: transform .15s ease;
+      content: '▾'; font-size: 22px; line-height: 1; width: 26px; text-align: center;
+      color: var(--muted); transition: transform .15s ease;
     }
     .card.collapsible.collapsed > h2::after { transform: rotate(-90deg); }
     .card.collapsible > h2 { margin-bottom: 14px; }
@@ -1080,8 +1093,10 @@
 
     <div class="card collapsible collapsed" data-sec="theme">
       <h2>Theme</h2>
-      <label class="field">Visual style</label>
+      <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
       <div class="opts tilewrap" id="themePick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every slot below in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them.</div>
+      <div id="slotRows"></div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="display">
@@ -1110,7 +1125,7 @@
       <h2>Ball</h2>
       <label class="field">Look <small style="color:var(--muted);font-weight:400">(cosmetic only)</small></label>
       <div class="opts tilewrap" id="ballLookPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Every ball is drawn, not an image, so it stays crisp at any size and rolls with real spin. Physics comes from <b>Match → Ball</b>, not from here.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Every ball is drawn, not an image, so it stays crisp at any size and rolls with real spin. Physics comes from <b>Match → Ball</b>, not from here. This is the Ball slot of your <b>Theme</b>, so changing it here changes it there.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="sound">
@@ -1120,6 +1135,10 @@
       <div style="height:12px"></div>
       <label class="field">Volume <small id="volVal" style="color:var(--accent)"></small></label>
       <input id="vol" class="slider" type="range" min="0" max="100" step="5" />
+      <div style="height:14px"></div>
+      <label class="field">Set</label>
+      <div class="opts" id="sfxSetPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">A set fills in all five below at once. It's the same slot the Theme card shows.</div>
       <div id="sndCats"></div>
     </div>
 
@@ -1957,9 +1976,11 @@ const PANEL = detectPanel();
 
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
-            theme:'neon', trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
-            ballLook:'classic',                      // ball pattern (cosmetic only; physics is BALLS)
+            // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
+            // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
+            look: { palette:'neon', field:'none', discs:'none', ball:'classic' },
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
             pad: { up:12, down:13, left:14, right:15, kick:0 },
@@ -1981,7 +2002,7 @@ const THEMES = {
   // The field is WHITE and the stars are black because the lines are black — black
   // lines over a black starfield would be invisible. `dyn` points at DYN_FIELDS.
   warp: {
-    name: 'Warp', emoji: '🌌', dyn: 'starfield', discs: 'mono',
+    name: 'Warp', emoji: '🌌',
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #1a1a1a 0%, #0a0a0a 55%, #000000 100%)',
       bg:'#000000', panel:'rgba(255,255,255,0.07)', edge:'#5a5a5a', text:'#ffffff', muted:'#b4b4b4',
@@ -2002,7 +2023,7 @@ const THEMES = {
   // IS (a pool ball). Team 0 racks solids, team 1 stripes — the sides already
   // divide that way, so nothing new has to be tracked. The ball is the cue ball.
   pool: {
-    name: 'Pool', emoji: '🎱', dyn: 'pooltable', discs: 'pool',
+    name: 'Pool', emoji: '🎱',
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #14371f 0%, #0a1d11 55%, #050d08 100%)',
       bg:'#071008', panel:'rgba(12,32,20,0.88)', edge:'#2f6b45', text:'#f3f7f2', muted:'#9fc0aa',
@@ -2299,6 +2320,12 @@ const SFX = {
     ()=>{ Aud.tone(2100,0.16,'triangle',{vib:26,vibA:70,vol:0.35}); Aud.tone(2100,0.15,'triangle',{delay:0.2,vib:26,vibA:70,vol:0.35}); },
     ()=>{ Aud.noise(0.4,{bp:2200,Q:9,vol:0.4,swell:true}); Aud.tone(2050,0.34,'sine',{vol:0.14,vib:18,vibA:45}); },
     ()=>{ Aud.tone(1500,0.5,'triangle',{to:2350,vol:0.3,vib:10,vibA:22}); },
+    // Break — the rack going. A crack, then balls scattering. Kickoff in a pool hall.
+    ()=>{ Aud.noise(0.06,{hp:1800,vol:0.5}); Aud.tone(880,0.06,'square',{to:260,vol:0.28});
+          for(let i=0;i<8;i++) Aud.noise(0.018,{hp:2600,vol:0.13,delay:0.06+i*0.042}); },
+    // Chirp — a rising synth blip, for a pitch with no air in it.
+    ()=>{ Aud.tone(620,0.18,'sine',{to:2400,vol:0.28});
+          Aud.tone(1240,0.16,'sine',{to:3600,vol:0.11,delay:0.03}); },
   ],
   crowd: [
     ()=>{ Aud.noise(0.9,{bp:800,Q:0.7,vol:0.5,swell:true}); },
@@ -2319,24 +2346,41 @@ const SFX = {
           for(let i=0;i<26;i++) Aud.noise(0.035,{hp:1900,vol:0.10+Math.random()*0.13,
                                                  delay:0.05+i*0.062+Math.random()*0.03});
           Aud.tone(240,2.0,'sawtooth',{to:420,vol:0.06,delay:0.15}); },
+    // Hall — a few pairs of hands in a quiet room, not a stadium. Deliberately thin.
+    ()=>{ for(let i=0;i<11;i++) Aud.noise(0.03,{hp:1500,vol:0.13,delay:0.04+i*0.085});
+          Aud.noise(0.7,{bp:900,Q:1.1,vol:0.09,swell:true}); },
+    // Wash — a shimmer that swells and slides upward. No voices in it at all.
+    ()=>{ Aud.noise(1.8,{bp:1400,Q:0.6,vol:0.28,swell:true});
+          Aud.tone(130,1.6,'sine',{to:480,vol:0.10});
+          Aud.tone(190,1.4,'sine',{to:720,vol:0.06,delay:0.2}); },
   ],
   kick: [
     ()=>{ Aud.tone(320,0.09,'square',{to:120,vol:0.5}); },
     ()=>{ Aud.noise(0.05,{lp:1200,vol:0.5}); Aud.tone(200,0.06,'triangle',{to:90,vol:0.3}); },
     ()=>{ Aud.tone(520,0.08,'triangle',{to:260,vol:0.45}); },
+    // Clack — phenolic on phenolic. Very short and very high, or it isn't a pool ball.
+    ()=>{ Aud.tone(1450,0.035,'square',{to:680,vol:0.34}); Aud.noise(0.018,{hp:3000,vol:0.24}); },
+    ()=>{ Aud.tone(1400,0.08,'sawtooth',{to:180,vol:0.34}); Aud.noise(0.035,{hp:2400,vol:0.17}); },
   ],
   wall: [
     ()=>{ Aud.tone(230,0.05,'square',{to:150,vol:0.32}); },
     ()=>{ Aud.noise(0.03,{lp:2200,vol:0.4}); },
     ()=>{ Aud.tone(160,0.07,'triangle',{to:110,vol:0.33}); },
+    // Cushion — rubber under cloth: all body, no click.
+    ()=>{ Aud.noise(0.06,{lp:480,vol:0.34}); Aud.tone(120,0.07,'sine',{to:78,vol:0.20}); },
+    ()=>{ Aud.tone(1800,0.09,'sine',{to:1500,vol:0.21}); },
   ],
   net: [
     ()=>{ Aud.noise(0.18,{lp:900,vol:0.3}); },
     ()=>{ Aud.tone(180,0.12,'triangle',{to:120,vol:0.2}); Aud.noise(0.1,{lp:700,vol:0.16,delay:0.02}); },
     ()=>{ Aud.noise(0.13,{bp:520,Q:1.6,vol:0.28}); },
+    // Pocket — the drop, then the rattle down the return.
+    ()=>{ Aud.noise(0.05,{lp:800,vol:0.30}); Aud.tone(215,0.10,'triangle',{to:88,vol:0.24,delay:0.04});
+          Aud.noise(0.04,{bp:1400,Q:2,vol:0.15,delay:0.11}); },
+    ()=>{ Aud.tone(900,0.3,'sine',{to:90,vol:0.25}); Aud.noise(0.25,{bp:600,Q:1.2,vol:0.13}); },
   ],
 };
-const SFX_LABELS = { whistle:['Pea','Airy','Rising'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation'], kick:['Thock','Punch','Pluck'], wall:['Tick','Click','Bonk'], net:['Swish','Thud','Rustle'] };
+const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Chirp'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash'], kick:['Thock','Punch','Pluck','Clack','Zap'], wall:['Tick','Click','Bonk','Cushion','Ping'], net:['Swish','Thud','Rustle','Pocket','Warp'] };
 function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
   const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
@@ -2355,6 +2399,110 @@ function crowdReact(w){
     const inThird = (sign<0 ? b.y < -halfL*0.45 : b.y > halfL*0.45);
     if (towardGoal && inThird && Math.abs(b.x) < gh + 80){ sfxSwell(); w._crowdCd=1.4; break; }
   }
+}
+
+// ============================================================
+//  THEME SLOTS — a theme is a COLLECTION, not one key
+//
+//  Five things make up a look: the palette (page + pitch colours), what's painted
+//  ON the field, what a player IS, what the ball IS, and what the game SOUNDS
+//  like. A BUNDLE sets all five at once; change any one of them and the theme
+//  reads "Custom".
+//
+//  ⚠️ Nothing is ever STORED called "custom". The bundle name is DERIVED by
+//  matching the live slots against the bundle table, so rebuilding Pool by hand
+//  gets Pool's name back instead of leaving a lie on screen. Same reason the
+//  sound slot has no stored value of its own: it is derived from `sel.snd`, which
+//  the Sound card already owns one category at a time.
+// ============================================================
+// A named set of per-category SFX picks. Indices into the SFX arrays above.
+const SFX_SETS = {
+  classic: { name:'Classic',   emoji:'⚽', pick:{ whistle:0, crowd:0, kick:0, wall:0, net:0 } },
+  pool:    { name:'Pool hall', emoji:'🎱', pick:{ whistle:3, crowd:6, kick:3, wall:3, net:3 } },
+  space:   { name:'Space',     emoji:'🌌', pick:{ whistle:4, crowd:7, kick:4, wall:4, net:4 } },
+};
+// The categories come from SFX itself — a sixth one must not need remembering here.
+function sfxCatKeys(){ return Object.keys(SFX); }
+function sfxSetKey(){
+  for (const k of Object.keys(SFX_SETS)){
+    const p = SFX_SETS[k].pick;
+    if (sfxCatKeys().every(c => (sel.snd[c]|0) === p[c])) return k;
+  }
+  return 'custom';                 // hand-picked: no set describes it
+}
+function applySfxSet(k){
+  const s = SFX_SETS[k]; if (!s) return;
+  for (const c of sfxCatKeys()) if (s.pick[c] != null) sel.snd[c] = s.pick[c];
+}
+// One slot each. `keys`/`name` are functions because the registries they read
+// (DYN_FIELDS, DISC_SKINS, BALL_LOOKS) are defined with the renderer, far below.
+const SLOTS = {
+  palette: { label:'Background', emoji:'🎨', hint:'Page and pitch colours.',
+             keys:()=>Object.keys(THEMES), name:k=>THEMES[k].name,
+             get:()=>sel.look.palette, set:k=>{ sel.look.palette = k; applyTheme(k); } },
+  field:   { label:'Field', emoji:'🏟', hint:"What's painted on the pitch itself.",
+             keys:()=>['none'].concat(Object.keys(DYN_FIELDS)),
+             name:k=>k==='none' ? 'Plain' : DYN_FIELDS[k].name,
+             get:()=>sel.look.field, set:k=>sel.look.field = k },
+  discs:   { label:'Players', emoji:'🧑', hint:'What a player IS. "Your look" wears each player’s own colours.',
+             keys:()=>['none'].concat(Object.keys(DISC_SKINS)),
+             name:k=>k==='none' ? 'Your look' : DISC_SKINS[k].name,
+             get:()=>sel.look.discs, set:k=>sel.look.discs = k },
+  ball:    { label:'Ball', emoji:'⚽', hint:'Cosmetic only — how the ball PLAYS is Match → Ball.',
+             keys:()=>BALL_LOOK_KEYS, name:k=>BALL_LOOKS[k].name,
+             get:()=>sel.look.ball, set:k=>sel.look.ball = k },
+  sfx:     { label:'Sound', emoji:'🔊', hint:'A whole set at once. Sound still picks them one at a time.',
+             keys:()=>Object.keys(SFX_SETS), name:k=>SFX_SETS[k].name,
+             get:()=>sfxSetKey(), set:k=>applySfxSet(k) },
+};
+const SLOT_KEYS = Object.keys(SLOTS);
+// Every palette is a bundle; only the ones that own more than colour say so here.
+const THEME_BUNDLES = {
+  warp: { field:'starfield', discs:'mono', ball:'plain', sfx:'space' },
+  pool: { field:'pooltable', discs:'pool', ball:'plain', sfx:'pool'  },
+};
+function bundleKeys(){ return Object.keys(THEMES); }
+// Names and emoji live in THEMES and are read from there, never copied.
+function bundleSlots(k){
+  if (!THEMES[k]) return null;
+  const b = THEME_BUNDLES[k] || {};
+  return { palette:k, field:b.field||'none', discs:b.discs||'none',
+           ball:b.ball||'classic', sfx:b.sfx||'classic' };
+}
+function currentBundle(){
+  for (const k of bundleKeys()){
+    const s = bundleSlots(k);
+    if (SLOT_KEYS.every(x => SLOTS[x].get() === s[x])) return k;
+  }
+  return null;                     // → Custom
+}
+function bundleName(){ const k = currentBundle(); return k ? THEMES[k].name : 'Custom'; }
+function applyBundle(k){
+  const s = bundleSlots(k); if (!s) return;
+  for (const x of SLOT_KEYS) SLOTS[x].set(s[x]);
+  saveSel();
+}
+function setSlot(slot, k){
+  const S = SLOTS[slot]; if (!S || !S.keys().includes(k)) return;
+  S.set(k); saveSel();
+}
+// A save from before themes were slots carries `theme` and `ballLook`. Fold them
+// in once, here, so nothing downstream ever has to know about two shapes.
+function normalizeLook(){
+  const d = defaultSel().look;
+  const L = sel.look = Object.assign({}, d, sel.look || {});
+  if (sel.theme){
+    const s = bundleSlots(sel.theme);
+    if (s){
+      L.palette = s.palette; L.field = s.field; L.discs = s.discs; L.ball = s.ball;
+      // Only adopt the bundle's sounds if they were never touched — a hand-picked
+      // whistle survives the migration.
+      if (sfxSetKey() === 'classic') applySfxSet(s.sfx);
+    }
+    delete sel.theme;
+  }
+  if (sel.ballLook){ L.ball = sel.ballLook; delete sel.ballLook; }
+  if (!THEMES[L.palette]) L.palette = d.palette;
 }
 
 // ---- Game feel: adjustable physics from the sliders. Stored as ints (slider-friendly).
@@ -2425,7 +2573,7 @@ function syncProfileToWorld(){
     if (!custom[i]) p.name = profile.name || 'You';   // a typed seat name still wins
   });
 }
-function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} }
+function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} normalizeLook(); }
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
 
 // ---------- Cross-window sync -----------------------------------------------
@@ -2450,7 +2598,7 @@ function syncPeerLive(){ return syncPeer && (Date.now() - syncPeer) < 4000; }
 // so anything deferred to a frame is NOT instant over there. Only the expensive DOM
 // rebuild is coalesced, and it catches up the moment the tab is looked at again.
 function syncApply(){
-  applyTheme(sel.theme); applyFeel(); applyDisplayMode(); applyPanelMode();
+  normalizeLook(); applyTheme(sel.look.palette); applyFeel(); applyDisplayMode(); applyPanelMode();
   if (typeof Aud!=='undefined' && Aud.setVol) Aud.setVol(sel.snd.vol);
 }
 function syncRefresh(){
@@ -2514,7 +2662,7 @@ function resetSettings(alsoAppearance){
     Object.assign(profile, defaultProfile());   // mutate in place — keeps live references valid
     saveProfile();
   }
-  applyTheme(sel.theme); applyDisplayMode(); applyFeel();
+  applyTheme(sel.look.palette); applyDisplayMode(); applyFeel();
   if (typeof Aud!=='undefined' && Aud.setVol) Aud.setVol(sel.snd.vol);
   buildSettings();
   if (alsoAppearance){
@@ -2589,7 +2737,7 @@ function recordResult(w){
   return delta;
 }
 loadSel();
-applyTheme(sel.theme);
+applyTheme(sel.look.palette);
 applyDisplayMode();
 
 const $ = id => document.getElementById(id);
@@ -2785,6 +2933,41 @@ function drawThemeSwatch(c, t, cw, ch){
   c.beginPath(); roundRectOn(c, x0, y0, w, h, r);
   c.strokeStyle = t.ui.edge || 'rgba(255,255,255,.25)'; c.lineWidth = Math.max(1, k); c.stroke();
 }
+// A bundle tile is the whole COLLECTION at a glance — its field, its players, its
+// ball, on its own palette. Painting the palette bands here instead left the Theme
+// card showing the same grid twice, once as "Bundle" and again as "Background",
+// which taught nothing about what a bundle actually is.
+// ⚠️ TH is swapped for the duration: the skins and the ball painter read the LIVE
+// palette, so a preview of another bundle would otherwise wear the current one.
+function drawBundleSwatch(c, key, cw, ch){
+  const t = THEMES[key], s = bundleSlots(key);
+  if (!t || !s) return;
+  const keep = TH; TH = t.pitch;
+  try {
+    c.clearRect(0,0,cw,ch);
+    c.fillStyle = t.pitch.court || t.ui.bg; c.fillRect(0,0,cw,ch);
+    const f = DYN_FIELDS[s.field];
+    if (f){ const st={}; if (f.reset) f.reset(st); if (f.step) for(let i=0;i<40;i++) f.step(st);
+            f.paint(c, st, 0, 0, cw, ch); }
+    else {
+      c.strokeStyle = t.pitch.line || '#ffffff'; c.lineWidth = Math.max(1, cw/64);
+      c.beginPath(); c.moveTo(cw*0.06, ch/2); c.lineTo(cw*0.94, ch/2); c.stroke();
+      c.beginPath(); c.arc(cw/2, ch/2, ch*0.20, 0, 2*Math.PI); c.stroke();
+    }
+    const skin = DISC_SKINS[s.discs], r = ch*0.19;
+    for (const team of [0,1]){
+      const x = team ? cw*0.75 : cw*0.25, pl = { team, color: team ? '#4d7bff' : '#ff3b6b' };
+      if (skin) skin.paint(c, pl, x, ch/2, r, null);
+      else {
+        c.beginPath(); c.arc(x, ch/2, r*1.16, 0, 2*Math.PI); c.fillStyle = t.pitch.discRim; c.fill();
+        c.beginPath(); c.arc(x, ch/2, r, 0, 2*Math.PI);
+        c.fillStyle = team ? t.pitch.teamBlue : t.pitch.teamRed; c.fill();
+        c.beginPath(); c.arc(x, ch/2, r*0.55, 0, 2*Math.PI); c.fillStyle = pl.color; c.fill();
+      }
+    }
+    paintBall(c, cw/2, ch/2, r*0.60, -0.5, s.ball, t.pitch);
+  } finally { TH = keep; }
+}
 // roundRectPath draws on the module ctx; the pickers paint onto their own contexts.
 function roundRectOn(c, x, y, ww, hh, r){
   c.moveTo(x+r, y);
@@ -2955,20 +3138,65 @@ function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>prof
 function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
 // Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
 // pattern reads. No emoji, no image — what you see is what rolls.
-function buildBallLookPick(){
-  const wrap = $('ballLookPick'); if (!wrap) return;
-  wrap.innerHTML = '';
-  BALL_LOOK_KEYS.forEach(k=>{
+function buildBallLookPick(){ buildSlotPicker('ball', $('ballLookPick')); }
+// One tile strip for one theme slot, painted into whatever host is handed over —
+// the Theme card stacks all five, the Ball and Sound cards each show one of them
+// again. Same builder, same state, so a card can't drift from the theme.
+function buildSlotPicker(slot, host){
+  const S = SLOTS[slot]; if (!host || !S) return;
+  host.innerHTML = '';
+  const cur = S.get();
+  for (const k of S.keys()){
     const el = document.createElement('div');
-    el.className = 'opt' + ((sel.ballLook||'classic')===k ? ' sel' : '');
-    const cvs = document.createElement('canvas'); cvs.width = cvs.height = 64;
-    paintBall(cvs.getContext('2d'), 32, 32, 25, -0.5, k);
-    el.appendChild(cvs);
-    const nm = document.createElement('span'); nm.textContent = BALL_LOOKS[k].name;
-    el.appendChild(nm);
-    el.onclick = ()=>{ sel.ballLook = k; saveSel(); buildBallLookPick(); };
-    wrap.appendChild(el);
-  });
+    el.className = 'opt' + (cur===k ? ' sel' : '');
+    el.dataset.slot = slot; el.dataset.key = k;
+    const cvs = slotSwatch(slot, k);
+    if (cvs) el.appendChild(cvs);
+    const nm = document.createElement('span'); nm.textContent = S.name(k); el.appendChild(nm);
+    if (slot === 'sfx'){ const s=document.createElement('small'); s.textContent='tap to hear'; el.appendChild(s); }
+    el.onclick = ()=>{
+      setSlot(slot, k);
+      buildSettings(); refreshPitchTiles(); updatePreview();
+      if (slot === 'sfx') playSfx('kick');
+    };
+    host.appendChild(el);
+  }
+}
+// What a slot's option looks like, drawn rather than described. Null for sound.
+function slotSwatch(slot, k){
+  if (slot === 'sfx') return null;
+  const cvs = document.createElement('canvas');
+  cvs.width = 64; cvs.height = slot==='palette' ? 41 : 64;
+  const c = cvs.getContext('2d');
+  if (slot === 'palette'){ drawThemeSwatch(c, THEMES[k], 64, 41); return cvs; }
+  if (slot === 'ball'){ paintBall(c, 32, 32, 25, -0.5, k); return cvs; }
+  if (slot === 'field'){
+    c.fillStyle = TH.court || '#1c3a26'; c.fillRect(0,0,64,64);
+    const f = DYN_FIELDS[k];
+    if (f){ const st={}; if (f.reset) f.reset(st); if (f.step) for(let i=0;i<40;i++) f.step(st);
+            f.paint(c, st, 0, 0, 64, 64); }
+    else { c.strokeStyle = TH.line || '#fff'; c.lineWidth = 1.5;
+           c.beginPath(); c.moveTo(4,32); c.lineTo(60,32); c.stroke();
+           c.beginPath(); c.arc(32,32,11,0,2*Math.PI); c.stroke(); }
+    return cvs;
+  }
+  if (slot === 'discs'){
+    const skin = DISC_SKINS[k];
+    for (const team of [0,1]){
+      const x = team ? 44 : 20, p = { team, color: team ? '#4d7bff' : '#ff3b6b' };
+      if (skin) skin.paint(c, p, x, 32, 14, null);
+      else {
+        c.beginPath(); c.arc(x, 32, 16, 0, 2*Math.PI);
+        c.fillStyle = TH.discRim || '#000'; c.fill();
+        c.beginPath(); c.arc(x, 32, 14, 0, 2*Math.PI);
+        c.fillStyle = (team ? TH.teamBlue : TH.teamRed) || p.color; c.fill();
+        c.beginPath(); c.arc(x, 32, 8, 0, 2*Math.PI);
+        c.fillStyle = p.color; c.fill();
+      }
+    }
+    return cvs;
+  }
+  return null;
 }
 function buildTextPicker(){ buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
@@ -3859,19 +4087,42 @@ function buildCocktailRows(){
 
 function buildSettings(){
   Aud.ensure();
-  // Theme picker — each tile switches the whole look instantly.
+  // Bundle picker — each tile sets ALL five slots at once. Selected only when every
+  // slot still matches; the moment one doesn't, none is marked and the label reads
+  // Custom, which is the honest answer.
+  const live = currentBundle();
+  const tn=$('themeNow'); if (tn) tn.textContent = '· ' + bundleName();
   const tp=$('themePick'); tp.innerHTML='';
-  for(const key of Object.keys(THEMES)){
+  for(const key of bundleKeys()){
     const t=THEMES[key];
-    const el=document.createElement('div'); el.className='opt'+(sel.theme===key?' sel':'');
-    const cvs=document.createElement('canvas'); cvs.width=cvs.height=128;
-    drawThemeSwatch(cvs.getContext('2d'), t, 128, 128);
+    const el=document.createElement('div'); el.className='opt'+(live===key?' sel':'');
+    el.dataset.bundle = key;
+    const cvs=document.createElement('canvas'); cvs.width=128; cvs.height=88;
+    drawBundleSwatch(cvs.getContext('2d'), key, 128, 88);
     el.appendChild(cvs);
-    const nm=document.createElement('span'); nm.textContent=t.name; el.appendChild(nm);
+    const nm=document.createElement('span'); nm.textContent=(t.emoji?t.emoji+' ':'')+t.name; el.appendChild(nm);
     // updatePreview too: your name is drawn in your own disc colour, which has to be
     // re-measured against the new theme's panel or it can land unreadable on it.
-    el.onclick=()=>{ sel.theme=key; saveSel(); applyTheme(key); buildSettings(); refreshPitchTiles(); updatePreview(); };
+    el.onclick=()=>{ applyBundle(key); buildSettings(); refreshPitchTiles(); updatePreview(); };
     tp.appendChild(el);
+  }
+  // ...and the slots themselves, one row each, in the order they're declared.
+  const sr=$('slotRows');
+  if (sr){ sr.innerHTML='';
+    for (const slot of SLOT_KEYS){
+      const S=SLOTS[slot], cur=S.get();
+      // Sound is the one slot that can hold a value no set describes — the Sound
+      // card picks categories one at a time. Say Custom rather than throwing on it.
+      const curName = S.keys().includes(cur) ? S.name(cur) : 'Custom';
+      const lab=document.createElement('label'); lab.className='field'; lab.style.marginTop='14px';
+      lab.innerHTML = `${S.emoji} ${S.label} <small style="color:var(--accent);font-weight:400">· ${curName}</small>`;
+      sr.appendChild(lab);
+      const row=document.createElement('div'); row.className='opts tilewrap'; row.id='slot_'+slot;
+      sr.appendChild(row);
+      buildSlotPicker(slot, row);
+      const h=document.createElement('div'); h.className='hint'; h.style.textAlign='left'; h.textContent=S.hint;
+      sr.appendChild(h);
+    }
   }
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
   const dp=$('displayPick');
@@ -4001,6 +4252,7 @@ function buildSettings(){
   });
   $('vol').value=sel.snd.vol; $('volVal').textContent=sel.snd.vol+'%';
   $('vol').oninput=()=>{ sel.snd.vol=+$('vol').value; $('volVal').textContent=sel.snd.vol+'%'; Aud.setVol(sel.snd.vol); saveSel(); };
+  buildSlotPicker('sfx', $('sfxSetPick'));
   const cc=$('sndCats'); cc.innerHTML='';
   for(const [cat,label] of SFX_CATS){
     const lab=document.createElement('label'); lab.className='field'; lab.style.marginTop='14px'; lab.textContent=label; cc.appendChild(lab);
@@ -8636,7 +8888,7 @@ function noteWear(w, p){
 let surfCache = { key:'', cv:null };
 function surfaceTexture(w){
   const F = w.field;
-  const key = [sel.pitch, sel.grass, sel.theme, F.W, F.L].join('|');
+  const key = [sel.pitch, sel.grass, sel.look.palette, F.W, F.L].join('|');
   if (surfCache.key === key && surfCache.cv) return surfCache.cv;
   const long = 700, px = Math.max(F.W, F.L);
   const cw2 = Math.max(64, Math.round(long * F.W / px)), ch2 = Math.max(64, Math.round(long * F.L / px));
@@ -8646,7 +8898,7 @@ function surfaceTexture(w){
   return cv2;
 }
 // ---------- Dynamic visual themes -------------------------------------------
-// A theme whose pitch MOVES. `THEMES.<key>.dyn` names an entry here; everything
+// A field the theme OWNS. The `field` slot names an entry here; everything
 // else about a theme (palette, UI, pitch colours) works exactly as before, so this
 // is a field painter bolted onto the existing theme system rather than a parallel one.
 //
@@ -8660,7 +8912,7 @@ const DYN_FIELDS = {
   // Flying through starfall: stars stream out from the centre spot with perspective,
   // so the pitch reads as the view out of the front of something moving fast.
   starfield: {
-    n: 190,
+    name: 'Starfield', n: 190,
     near: 0.055,        // a star this close has reached the edge; respawn it
     speed: 0.0085,      // depth covered per step — how fast we're travelling
     reset(st){
@@ -8684,7 +8936,7 @@ const DYN_FIELDS = {
       const cx = L + W/2, cy = T + H/2;
       const maxR = Math.hypot(W, H) / 2;
       const pMax = 1/this.near - 1;
-      c.strokeStyle = TH.dynMark || '#000000';
+      c.strokeStyle = TH.dynMark || TH.line || '#000000';
       c.lineCap = 'round';
       for (let i=0;i<this.n;i++){
         const z = st.z[i], a = st.a[i];
@@ -8708,6 +8960,7 @@ const DYN_FIELDS = {
 // A pool table: baize, cushions and pockets. Not animated — a dynamic theme is one
 // that OWNS its field, and some of those fields simply hold still. `step` is optional.
 DYN_FIELDS.pooltable = {
+  name: 'Pool table',
   paint(c, st, L, T, W, H){
     const rail = Math.max(6, Math.min(W, H) * 0.055);
     const pr = rail * 1.15;                                  // pocket radius
@@ -8736,6 +8989,7 @@ const DISC_SKINS = {
   // up covered in the one thing the theme says it doesn't have. Sides read by fill:
   // team 0 black, team 1 white, both rimmed black so they hold on either background.
   mono: {
+    name: 'Mono discs',
     paint(c, p, x, y, r, w){
       const dark = p.team === 0;
       c.beginPath(); c.arc(x, y, r + Math.max(1.5, r*0.14), 0, 2*Math.PI);
@@ -8754,6 +9008,7 @@ const DISC_SKINS = {
   // Stripes vs solids. Team 0 racks solid (1-7), team 1 stripes (9-15), which is
   // exactly how the two sides already divide — so the skin needs no new state.
   pool: {
+    name: 'Pool balls',
     hue(p, w){
       // Stable per-seat colour off the pool rack, so a player keeps their ball all match.
       const RACK = ['#f2c31d','#1b53c4','#d02b1f','#6d2c8f','#e2711d','#1b7a3c','#8c2f2a'];
@@ -8792,17 +9047,14 @@ const DISC_SKINS = {
     },
   },
 };
-function discSkin(){
-  const t = THEMES[sel.theme];
-  return (t && t.discs && DISC_SKINS[t.discs]) || null;
-}
+function discSkin(){ return DISC_SKINS[sel.look.discs] || null; }
 let dynState = null, dynKey = null;
-// The animator for the live theme, or null for an ordinary one.
+// The painter for the field slot, or null when the slot is 'none'.
 function dynField(){
-  const t = THEMES[sel.theme];
-  const f = t && t.dyn && DYN_FIELDS[t.dyn];
+  const key = sel.look.field;
+  const f = key && DYN_FIELDS[key];
   if (!f) return null;
-  if (dynKey !== t.dyn){ dynState = {}; if (f.reset) f.reset(dynState); dynKey = t.dyn; }
+  if (dynKey !== key){ dynState = {}; if (f.reset) f.reset(dynState); dynKey = key; }
   return f;
 }
 // Called once per sim step from loop() — see the warning above.
@@ -9157,7 +9409,7 @@ function drawOneBall(b, x, y, r, s){
   }
   // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
   // (rot advances with speed in step()). Same painter the picker tiles use.
-  paintBall(ctx, x, y, r, b.rot || 0, sel.ballLook);
+  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball);
   if (warped) ctx.restore();
 }
 // ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
@@ -9665,7 +9917,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0410AM';
+const VERSION = '20260805.0730AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 if (window.__MAGNETDEBUG) {
@@ -9719,6 +9971,9 @@ if (window.__MAGNETDEBUG) {
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
+    DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
+    sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
     finishMatch, FINAL_SLOW, awardRow,
     mapVoteKey, mapVoteLabel, mapVoteTable, loadMapVotes, saveMapVotes, castMapVote, renderMapVote, buildMapVotes,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,

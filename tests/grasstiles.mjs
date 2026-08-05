@@ -68,7 +68,7 @@ const r = await p.evaluate(async ()=>{
   o.tilesFollowTheme = tiles().map(t=>sig(t.querySelector('canvas'))).some((v,i)=>v!==tBefore[i]);
 
   // --- Every pattern still renders on the real pitch without throwing
-  M.sel.theme='neon'; M.applyTheme('neon');
+  M.applyBundle('neon');
   M.sel.mode='1v1'; M.startMatch(); await wait(120);
   const w=M.world; w.state='play'; w.stateT=1;
   o.allPatternsRender = true;

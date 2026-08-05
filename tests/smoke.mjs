@@ -28,7 +28,7 @@ console.log('PICKERS:', await p.evaluate(()=>{
 console.log('THEMES:', await p.evaluate(()=>{
   const M=window.__magnet; const bad=[];
   for(const k of Object.keys(M.THEMES)) try{ M.applyTheme(k); }catch(e){ bad.push(k); }
-  M.applyTheme(M.sel.theme); return bad.length?bad:'all ok'; }));
+  M.applyTheme(M.sel.look.palette); return bad.length?bad:'all ok'; }));
 
 console.log('DRILLS:', await p.evaluate(()=>{
   const M=window.__magnet; const bad=[];
