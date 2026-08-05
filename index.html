@@ -5021,11 +5021,17 @@ function buildGeometry(w){
     w.walls.push({a:{x: gh,y}, b:{x: halfW-c,y}, bCoef:cB, ballOnly:true});
     w.posts.push({x:-gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
     w.posts.push({x: gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
-    // Net: box behind goal (walls). Depth = net
+    // Net: box behind goal (walls). Depth = net.
+    // `ballOnly` like every other boundary: the net catches the BALL, but a player
+    // walks through it. It was the one surface that stopped you, so chasing a ball
+    // into the mouth snagged on the side netting while stepping over the goal LINE
+    // a metre to either side was free — the step-out margin is uniform now.
+    // Containment is unaffected: integrate() still clamps players to halfL + 20,
+    // far short of the net's back wall.
     const ny = y + sign*f.net;
-    w.walls.push({a:{x:-gh,y}, b:{x:-gh,y:ny}, bCoef:0.2, isNet:true}); // left net wall
-    w.walls.push({a:{x: gh,y}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true}); // right net wall
-    w.walls.push({a:{x:-gh,y:ny}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true}); // back net wall
+    w.walls.push({a:{x:-gh,y}, b:{x:-gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // left net wall
+    w.walls.push({a:{x: gh,y}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // right net wall
+    w.walls.push({a:{x:-gh,y:ny}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // back net wall
   }
 
   // Corners: either chamfered (cut = straight diagonal → octagon) or rounded (arc).
@@ -9694,7 +9700,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
