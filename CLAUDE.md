@@ -31,7 +31,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `predictsGoal` re-uses the real `moveBall`/`collide*` so it can't disagree with the physics,
   and `collideDiscs` writes to **both** bodies — so it runs on reused scratch copies and must stay
   provably inert. `tests/hitstop.mjs` diffs the whole world across 25 predictions.
-- **State machine:** `world.state` ∈ `kickoff | play | goal | over`; `step()` advances it.
+- **State machine:** `world.state` ∈ `kickoff | play | goal | warmup | over`; `step()` advances it.
+- **Full time:** `endMatch(w)` blows the whistle and sets `w.endRamp = 0`; `loop()` eases the step
+  rate 1→0 over `FINAL_SLOW` seconds, then `finishMatch(w)` shows the result. ⚠️ The ramp is
+  counted in `loop()` off **wall-clock**, never in `step()` — the sim rate is the thing being wound
+  down, so it can't also be what measures the wind-down. `step()` integrates during `over` **only**
+  while `endRamp != null`, otherwise the pitch freezes solid and there's nothing to see.
+  Tests wanting the screen immediately call `endMatch` then `finishMatch`.
+- **Result screen:** one panel per team (`renderMatchStats` → `.tpanel`), each reading players →
+  score → that team's awards. `computeAwards` stays the one source of who won what; `awardRow`
+  is the one place a ribbon is built. `renderAwards` now only holds the replay/clip footer.
 - **Physics:** `integrate(w, ballFrozen, playersFrozen)` moves players then balls. `moveBall(w,ball,discs)`
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
   containment backstop (the ball must NEVER leave the pitch except through the goal mouth — verify on
@@ -109,7 +118,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 47 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 48 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

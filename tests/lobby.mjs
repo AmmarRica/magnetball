@@ -278,7 +278,9 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     window.__pads[0].buttons[9]=true; M.step(w); window.__pads[0].buttons[9]=false;
     const teams = w.players.map(q=>q.team+':'+q.ctrl).join('|');
     w.state='play'; w.score=[3,1]; w.players[0].ms.goals=3;
-    M.endMatch(w);
+    // Full time now eases play to a stop before the screen; loop() drives that
+    // ramp off wall-clock, so finish it here rather than idling for FINAL_SLOW.
+    M.endMatch(w); M.finishMatch(w);
     const labels = M.overButtons().map(x=>x.textContent);
     r.showsBothOptions = /restart/i.test(labels[0]) && /warm/i.test(labels[1]);
     r.restartIsDefault = M.overNav === 0 && M.overButtons()[0].classList.contains('navsel');
@@ -301,7 +303,7 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     r.restartKeepsBench = M.world.bench.length > 0;
     r.restartNoOverlay = !document.getElementById('overlay').classList.contains('show');
     // Warm-up: back to the lobby with everyone available again.
-    M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world);
+    M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world); M.finishMatch(M.world);
     M.overButtons()[1].click();
     r.warmupOption = M.world.state === 'warmup';
     r.warmupFreesTheBench = M.world.bench.length === 0 && M.world.players.length >= 4;

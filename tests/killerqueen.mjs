@@ -83,7 +83,9 @@ const r = await p.evaluate(async ()=>{
   M.checkGoal(w3);
   o.snailForcesWin = w3.forceWin === 0;
   o.snailFroze     = w3.state === 'goal';
-  await wait(1700);                               // endMatch fires on a timer
+  // endMatch fires on a timer, then the final whistle eases play to a standstill
+  // (FINAL_SLOW) before the result screen appears.
+  await wait(1700 + M.FINAL_SLOW*1000 + 400);
   o.matchOver      = M.world.state === 'over';
   const title = document.getElementById('ovTitle');
   o.snailTitle = !!title && /SNAIL/i.test(title.textContent);
