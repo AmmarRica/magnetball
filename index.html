@@ -1831,6 +1831,10 @@ function iy(e){
 // terminal ≈ accel/(1-damp) ≈ 4.2 u/frame; ~0.38s to 90%; glide half-life ~0.12s.
 // Centre-circle radius. Drives the drawn circle, the picker previews AND the
 // kickoff gate, so those three can never drift apart.
+// How faint the mirrored goal box is against the pitch lines. Low enough that the
+// goal line stays the loudest mark near the net — the point is a depth cue, not a
+// second line to mistake for it.
+const GOAL_BOX_A = 0.34;
 const CENTER_R = 58;
 const PLAYER = { r:15, invMass:0.5, bCoef:0.45, damp:0.905, accel:0.40, kick:5.5, kickRange:14 };
 const BALL   = { r:10, invMass:1.0, bCoef:0.55, damp:0.990 };
@@ -7932,6 +7936,25 @@ function drawPitch(w){
   ctx.beginPath(); ctx.arc(wx(0), wy(0), CENTER_R*s, 0, 2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.arc(wx(0), wy(0), 3, 0, 2*Math.PI); ctx.fillStyle=TH.centerDot; ctx.fill();
 
+  // The net pocket mirrored onto the pitch: same mouth width, same depth, in FRONT
+  // of the goal line. Gives you a read on how deep you are without looking at the
+  // net. Drawn OPEN (three sides) — the goal line closes it, exactly like a six-yard
+  // box — and fainter than the lines, so the one you must not confuse it with, the
+  // goal line itself, stays the strongest mark down there.
+  ctx.save();
+  ctx.globalAlpha = GOAL_BOX_A;
+  ctx.setLineDash([]);
+  for (const sign of [-1, 1]){
+    const yLine = wy(sign*b.halfL), yIn = wy(sign*(b.halfL - b.net));
+    ctx.beginPath();
+    ctx.moveTo(wx(-gh), yLine);
+    ctx.lineTo(wx(-gh), yIn);
+    ctx.lineTo(wx( gh), yIn);
+    ctx.lineTo(wx( gh), yLine);
+    ctx.stroke();
+  }
+  ctx.restore();
+
   // Goal nets (crosshatch) + goal line coloring
   drawGoal(w, -1); drawGoal(w, 1);
 }
@@ -9307,7 +9330,7 @@ if (window.__MAGNETDEBUG) {
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     paintBall, buildBallLookPick,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; },
