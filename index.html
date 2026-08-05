@@ -4810,7 +4810,7 @@ function loop(t){
   let dt = (t - lastT) / 1000; lastT = t;
   if (dt > 0.1) dt = 0.1;               // clamp big gaps
   // The result screen is a paused state, so its pad chooser has to poll from here.
-  if (paused){ pollOverOptions(); render(); return; }
+  if (paused){ pollOverOptions(); stepResultClock(dt); render(); return; }
   if (hitStop > 0){ hitStop--; render(); return; }   // brief freeze-frame for impact
   // Full time: wind play down to a standstill, then show the result. Counted on
   // wall-clock because the sim rate is what's being wound down — see endMatch.
@@ -5310,6 +5310,11 @@ function benchLine(w, list){
 // the ones that aren't walk off. Leaving is faster than arriving: the count is the
 // answer to "how many bots am I getting?", so it has to settle quickly.
 const LOBBY_WALK = { on: 6.5, off: 11 };     // world units per step
+// Nobody should have to press anything to keep a session going. Both the lobby and
+// the result screen count down and then do the obvious thing — start, and start
+// again. The lobby's clock RESETS on any sign of life, so it only ever runs out on
+// a room that has genuinely stopped deciding.
+const AUTO = { warmup: 30, result: 30 };
 function lobbySpotFor(w, team){
   const rnd = (w.lobby && w.lobby.rng) || Math.random;   // seeded — never touches w.rng
   const side = team === 0 ? 1 : -1;
@@ -5368,7 +5373,26 @@ function stepWarmup(w){
   // are standing, so it can't disagree with what happens when Start is pressed.
   L.sides = new Map();
   for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p, w));
-  if (L.calib) stepCalibration(w);
+  if (L.calib){ stepCalibration(w); L.idle = AUTO.warmup; return; }   // mid-setup: no clock
+  stepLobbyClock(w);
+}
+// Counts down to kicking off by itself, and goes back to full on any sign that
+// somebody is still deciding: a stick pushed, KICK pressed, someone walking about,
+// or a controller appearing. Only a room that has actually gone quiet times out.
+function stepLobbyClock(w){
+  const L = w.lobby;
+  if (L.idle == null) L.idle = AUTO.warmup;
+  const hs = lobbyHumans(w);
+  const pads = connectedGamepadIndices().length;
+  let alive = pads !== L.pads;                        // somebody just plugged in
+  L.pads = pads;
+  const mark = hs.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join('|');
+  if (mark !== L.mark) alive = true;                  // ...or moved
+  L.mark = mark;
+  if (hs.some(p => p.kick || Math.abs(p.inX) > 0.2 || Math.abs(p.inY) > 0.2)) alive = true;
+  if (alive){ L.idle = AUTO.warmup; return; }
+  L.idle -= STEP;
+  if (L.idle <= 0){ L.idle = AUTO.warmup; lobbyStart(w); }
 }
 // Who plays, on which side, and how many bots fill the gaps. The SINGLE source of
 // truth: drawLobby renders this and lobbyStart executes it, so the preview under
@@ -6143,6 +6167,35 @@ function syncOverNav(){
   bs.forEach((b, i) => b.classList.toggle('navsel', i === overNav));
 }
 let _overPrev = {};
+// The result screen starts the next match by itself: same teams, same settings, so
+// a room can keep playing without anyone reaching for a menu. Any input puts the
+// clock back to full, so Player 1 deliberating never gets kicked into a match.
+//
+// Counted on WALL-CLOCK, because the result screen is a paused state and step()
+// isn't running — the same reason the final whistle's ramp lives in loop().
+let resultIdle = null, _overHint = '';
+function anyoneTouchingSomething(){
+  for (const k in keys) if (keys[k]) return true;
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  for (const g of gps){
+    if (!g || !g.buttons) continue;
+    for (const b of g.buttons) if (b && b.pressed) return true;
+    for (const a of (g.axes || [])) if (Math.abs(a) > 0.45) return true;
+  }
+  return false;
+}
+function stepResultClock(dt){
+  const ov = $('overlay');
+  const live = ov && ov.classList.contains('show') && world && world.state === 'over'
+               && !world.rogue && !world.season && !world.drillMode && !world.demo;
+  if (!live){ resultIdle = null; return; }
+  if (resultIdle == null) resultIdle = AUTO.result;
+  if (anyoneTouchingSomething()) resultIdle = AUTO.result;
+  else resultIdle -= dt;
+  const hint = $('ovHint');
+  if (hint) hint.textContent = _overHint + ' · NEXT MATCH IN ' + Math.max(0, Math.ceil(resultIdle)) + 'S';
+  if (resultIdle <= 0){ resultIdle = null; restartMatch(world); }
+}
 function pollOverOptions(){
   const ov = $('overlay');
   if (!ov || !ov.classList.contains('show') || !world || world.state !== 'over'){ _overPrev = {}; return; }
@@ -6219,10 +6272,12 @@ function finishMatch(w){
   const p1 = w.players.find(p => p.ctrl !== 'bot') || (w.bench||[]).find(p => p.ctrl !== 'bot');
   const hint = $('ovHint');
   if (hint){
-    hint.textContent = p1 && p1.ctrl === 'gamepad'
+    _overHint = p1 && p1.ctrl === 'gamepad'
       ? 'PLAYER 1 CHOOSES — STICK TO MOVE, A OR START TO PICK'
       : 'PLAYER 1 CHOOSES';
+    hint.textContent = _overHint;
     hint.style.display = '';
+    resultIdle = AUTO.result;          // fresh screen, fresh clock
   }
 }
 
@@ -7734,6 +7789,12 @@ function drawLobby(w){
     roundRectPath(cw/2 - wd/2, y0 - 15, wd, 30, 8); ctx.fill();
     ctx.strokeStyle = rgba(TH.accent, 0.55); ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = TH.hudText; ctx.fillText(txt, cw/2, y0);
+    // ...and how long until it starts on its own. Any movement puts this back to full.
+    if (!cal && L.idle != null){
+      ctx.font = `10px ${LOBBY_FONT}`;
+      ctx.fillStyle = TH.hudSub || TH.hudText;
+      ctx.fillText('STARTING IN ' + Math.max(0, Math.ceil(L.idle)) + 'S', cw/2, y0 + 26);
+    }
     if (hs.length > 1){
       ctx.font = `9px ${LOBBY_FONT}`;
       ctx.fillStyle = TH.hudSub || TH.hudText;
@@ -9323,6 +9384,8 @@ if (window.__MAGNETDEBUG) {
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     KICKPUSH, handleKickPush, segClosest, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
+    get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
