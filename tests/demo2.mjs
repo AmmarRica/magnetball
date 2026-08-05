@@ -59,6 +59,40 @@ const r = await p.evaluate(async ()=>{
   o.padOnlyOnDeck = M.padOnly() === true;
   M.sel.display='auto'; M.applyDisplayMode(); await wait(150);
 
+  // --- The demo is a SHOWCASE: top-tier bots on BOTH sides, a real 3-minute clock,
+  // and it rolls straight into the next one. It must ignore the player's own
+  // difficulty and length — those are for matches the player actually plays.
+  M.sel.diff = 'rookie'; M.sel.length = '5';
+  M.startDemo();
+  const sw = M.world;
+  o.demoIsDemo2 = !!sw.demo;
+  o.demoAllBots = sw.players.every(q => q.ctrl === 'bot');
+  const tiers = Object.keys(M.DIFF);
+  o.demoDiff = sw.diff && sw.diff.name;
+  o.demoIsTopTier = sw.diff === M.DIFF[tiers[tiers.length-1]];
+  // Derived, not spelled: adding a harder tier must move the demo up with it.
+  o.demoIgnoresPlayerDiff = sw.diff !== M.DIFF.rookie;
+  // Both sides read ONE w.diff, so top tier on one bench is top tier on both.
+  o.oneDiffForBothSides = sw.players.filter(q=>q.team===0).length > 0 &&
+                          sw.players.filter(q=>q.team===1).length > 0;
+  o.demoSecs = sw.len.secs;
+  o.demoIsTimed = sw.len.secs === M.DEMO.secs && M.DEMO.secs === 180;
+  o.demoIgnoresPlayerLength = sw.len.secs !== M.LENGTHS['5'].secs;
+  // ⚠️ A LEVEL demo must NOT go to sudden death. It would hang on the menu until
+  // someone scored and throw OVERTIME! across the screen — the demo just ends and
+  // the next one starts.
+  sw.state='play'; sw.stateT=2; sw.score=[2,2]; sw.timeLeft=0.01;
+  const swBefore = sw;
+  M.step(sw);
+  o.demoSkipsOvertime = sw.overtime === false;
+  o.demoEndedOrRolled = M.world !== swBefore || sw.state === 'over';
+  // ...and a real match at exactly the same point still goes to overtime.
+  M.sel.diff='normal'; M.sel.length='3'; M.startMatch();
+  const rw = M.world; rw.state='play'; rw.stateT=2; rw.score=[1,1]; rw.timeLeft=0.01;
+  M.step(rw);
+  o.realMatchKeepsOvertime = rw.overtime === true;
+  o.realMatchKeepsItsDiff = rw.diff === M.DIFF.normal;
+
   // --- Crowd cheers: the three STADIUM ones longer than the three originals.
   // Counts are derived, not pinned at six — themed sets have since added more, and a
   // suite that says "exactly six" only ever measures how recently someone edited it.
@@ -100,6 +134,10 @@ const ok = r.demoFieldsVary && r.demoIsDemo && r.realMatchUsesSelected &&
   r.padOnlyWhenTouch && r.touchWordNoButton && r.seatsArePad && r.padOnlyWhenPads &&
   r.padWordSaysButton && r.padOnlyOnDeck &&
   r.crowdCount >= 6 && r.everyCatLabelled && r.newAreLonger && r.allDistinct &&
+  r.demoIsDemo2 && r.demoAllBots && r.demoIsTopTier && r.demoIgnoresPlayerDiff &&
+  r.oneDiffForBothSides && r.demoIsTimed && r.demoIgnoresPlayerLength &&
+  r.demoSkipsOvertime && r.demoEndedOrRolled &&
+  r.realMatchKeepsOvertime && r.realMatchKeepsItsDiff &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

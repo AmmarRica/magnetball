@@ -76,13 +76,24 @@ o.sliderFocusReleased = await (async ()=>{
 // ...and the arrows drive the player again after that click
 o.arrowsDrivePlayer = await (async ()=>{
   await p.keyboard.down('ArrowUp');
+  // ⚠️ Poll, don't assume. The keydown is delivered asynchronously, so stepping
+  // straight after pressing can read a pad that has not seen it yet — this failed
+  // about one run in nine under load, and an extra round trip inserted while
+  // debugging made it pass every time, which is the signature of a timing flake
+  // rather than a broken feature. pollKeys() runs from drawControls(), so wait for
+  // the pad itself to show the key before measuring anything.
+  const armed = await p.waitForFunction(()=>{
+    window.__magnet.drawControls();
+    return window.__magnet.pads.p1.dy < -0.5;
+  }, null, { timeout: 3000 }).then(()=>true).catch(()=>false);
+  o.arrowsReachedPad = armed;
   const moved = await p.evaluate(()=>{
     const M=window.__magnet, w=M.world, me=w.players.find(q=>q.ctrl==='human1');
     me.x=0; me.y=60; me.vx=0; me.vy=0;
     for(let i=0;i<25;i++){ M.drawControls(); M.step(w); }
     return Math.hypot(me.vx,me.vy) > 0.3; });
   await p.keyboard.up('ArrowUp');
-  return moved;
+  return armed && moved;
 })();
 
 // --- Game Feel is split into ball vs player groups, and nothing went missing
