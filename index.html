@@ -1849,6 +1849,49 @@ let sel = defaultSel();
 //  pitch→ every colour the canvas draws with, so a theme fully reskins the game
 // ============================================================
 const THEMES = {
+  // The first DYNAMIC theme: the pitch is not a picture, it's an animation. Black
+  // and white throughout, with the field a starfield streaming out from the centre
+  // spot so you're playing on the view out the front of something moving fast.
+  // The field is WHITE and the stars are black because the lines are black — black
+  // lines over a black starfield would be invisible. `dyn` points at DYN_FIELDS.
+  warp: {
+    name: 'Warp', emoji: '🌌', dyn: 'starfield', discs: 'mono',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #1a1a1a 0%, #0a0a0a 55%, #000000 100%)',
+      bg:'#000000', panel:'rgba(255,255,255,0.07)', edge:'#5a5a5a', text:'#ffffff', muted:'#b4b4b4',
+      red:'#ffffff', blue:'#9a9a9a', cyan:'#ffffff', magenta:'#d0d0d0', green:'#ffffff', yellow:'#e6e6e6',
+      accent:'#ffffff', go:'#d8d8d8', field:'#101010', onAccent:'#000000' },
+    pitch: { glow:false, fieldBg:'#000000', court:'#ffffff', stripeA:'#ffffff', stripeB:'#ffffff',
+      netPocket:'rgba(0,0,0,0.12)', line:'#000000', centerDot:'#000000',
+      netMesh:'rgba(0,0,0,0.45)', post:'#000000', teamRed:'#000000', teamBlue:'#8c8c8c',
+      discRim:'#000000', kickRing:'#000000', kickText:'#ffffff', cbRing:'#000000',
+      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#000000', nameText:'#ffffff',
+      shadow:'rgba(0,0,0,0.22)', ballRim:'#000000', ball:'#000000', ballSpot:'#ffffff', trailRGB:'0,0,0',
+      obstacle:'#000000', good:'#000000', warn:'#4d4d4d', dim:'#9a9a9a', cone:'#000000',
+      hudText:'#ffffff', hudSub:'#c8c8c8', accent:'#ffffff', padRing:'rgba(255,255,255,0.7)',
+      dynMark:'#000000' },   // the stars themselves — black, so they read on the white field
+  },
+  // Second of the family, and the one that shows the mechanism isn't just about
+  // motion: a theme can own the FIELD (baize, cushions, pockets) and what a player
+  // IS (a pool ball). Team 0 racks solids, team 1 stripes — the sides already
+  // divide that way, so nothing new has to be tracked. The ball is the cue ball.
+  pool: {
+    name: 'Pool', emoji: '🎱', dyn: 'pooltable', discs: 'pool',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #14371f 0%, #0a1d11 55%, #050d08 100%)',
+      bg:'#071008', panel:'rgba(12,32,20,0.88)', edge:'#2f6b45', text:'#f3f7f2', muted:'#9fc0aa',
+      red:'#e0483c', blue:'#4f86e8', cyan:'#46c8b4', magenta:'#c76fd0', green:'#4fbf6a', yellow:'#f2c31d',
+      accent:'#f2c31d', go:'#4fbf6a', field:'#0d2415', onAccent:'#101010' },
+    pitch: { glow:false, fieldBg:'#0a1a10', court:'#177a45', stripeA:'#177a45', stripeB:'#15703f',
+      netPocket:'rgba(0,0,0,0.55)', line:'rgba(255,255,255,0.55)', centerDot:'rgba(255,255,255,0.75)',
+      netMesh:'rgba(0,0,0,0.5)', post:'#e8e2d2', teamRed:'#d02b1f', teamBlue:'#1b53c4',
+      discRim:'#0d0d0d', kickRing:'#f2c31d', kickText:'#101010', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#101010', nameBg:'#0d1f14', nameText:'#f3f7f2',
+      shadow:'rgba(0,0,0,0.34)', ballRim:'#0d0d0d', ball:'#f7f4ec', ballSpot:'#e8e2d2', trailRGB:'255,255,255',
+      obstacle:'#c76fd0', good:'#4fbf6a', warn:'#f2c31d', dim:'#3f7d57', cone:'#e2711d',
+      hudText:'#f3f7f2', hudSub:'#f2c31d', accent:'#f2c31d', padRing:'rgba(255,255,255,0.7)',
+      dynRail:'#7a4a1e', dynRailEdge:'rgba(0,0,0,0.4)', dynPocket:'#080808' },
+  },
   gba: {
     name: 'GBA', emoji: '🎮',
     ui: { scan:false,
@@ -4748,6 +4791,7 @@ function loop(t){
   while (acc >= STEP && steps < 5){
     step(world);
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
+    advanceDynField();      // ...and so does an animated theme's field
     decayJuice();
     acc -= STEP; steps++;
   }
@@ -8016,6 +8060,171 @@ function surfaceTexture(w){
   surfCache = { key, cv: cv2 };
   return cv2;
 }
+// ---------- Dynamic visual themes -------------------------------------------
+// A theme whose pitch MOVES. `THEMES.<key>.dyn` names an entry here; everything
+// else about a theme (palette, UI, pitch colours) works exactly as before, so this
+// is a field painter bolted onto the existing theme system rather than a parallel one.
+//
+// ⚠️ The state advances in the STEP loop (advanceDynField, called next to step()),
+// never in the paint — the same rule the motion trails follow. Ticking it in a draw
+// would run it 2.4× fast on a 144Hz screen. And it draws from its OWN seeded PRNG,
+// so it can't perturb `w.rng` or the match.
+//
+// To add one: give it {reset, step, paint} here and point a theme's `dyn` at it.
+const DYN_FIELDS = {
+  // Flying through starfall: stars stream out from the centre spot with perspective,
+  // so the pitch reads as the view out of the front of something moving fast.
+  starfield: {
+    n: 190,
+    near: 0.055,        // a star this close has reached the edge; respawn it
+    speed: 0.0085,      // depth covered per step — how fast we're travelling
+    reset(st){
+      const rnd = mulberry32(0x5741B0);          // fixed: the field looks the same every match
+      st.a = new Float64Array(this.n);
+      st.z = new Float64Array(this.n);
+      for (let i=0;i<this.n;i++){
+        st.a[i] = rnd() * Math.PI * 2;
+        st.z[i] = this.near + rnd() * (1 - this.near);   // spread through the tunnel, not all at once
+        st.spin = 0;
+      }
+      st.rnd = rnd;
+    },
+    step(st){
+      for (let i=0;i<this.n;i++){
+        st.z[i] -= this.speed;
+        if (st.z[i] <= this.near){ st.z[i] = 1; st.a[i] = st.rnd() * Math.PI * 2; }
+      }
+    },
+    paint(c, st, L, T, W, H){
+      const cx = L + W/2, cy = T + H/2;
+      const maxR = Math.hypot(W, H) / 2;
+      const pMax = 1/this.near - 1;
+      c.strokeStyle = TH.dynMark || '#000000';
+      c.lineCap = 'round';
+      for (let i=0;i<this.n;i++){
+        const z = st.z[i], a = st.a[i];
+        const p  = (1/z - 1) / pMax;                       // 0 far, 1 at the edge
+        const pPrev = (1/Math.min(1, z + this.speed) - 1) / pMax;
+        const r = maxR * p, rPrev = maxR * pPrev;
+        if (r > maxR * 1.5) continue;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        // Nearer stars are bigger, longer and more solid — that's the whole illusion.
+        c.globalAlpha = Math.min(1, 0.15 + p * 1.2);
+        c.lineWidth = 0.6 + p * 3.4;
+        c.beginPath();
+        c.moveTo(cx + ca*rPrev, cy + sa*rPrev);
+        c.lineTo(cx + ca*r,     cy + sa*r);
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+    },
+  },
+};
+// A pool table: baize, cushions and pockets. Not animated — a dynamic theme is one
+// that OWNS its field, and some of those fields simply hold still. `step` is optional.
+DYN_FIELDS.pooltable = {
+  paint(c, st, L, T, W, H){
+    const rail = Math.max(6, Math.min(W, H) * 0.055);
+    const pr = rail * 1.15;                                  // pocket radius
+    c.fillStyle = TH.court; c.fillRect(L, T, W, H);           // baize
+    // Cushions: a border with the corners mitred, the way a real table reads.
+    c.strokeStyle = TH.dynRail || '#5a3a1c';
+    c.lineWidth = rail;
+    c.strokeRect(L + rail/2, T + rail/2, W - rail, H - rail);
+    c.strokeStyle = TH.dynRailEdge || 'rgba(0,0,0,0.35)';
+    c.lineWidth = Math.max(1, rail*0.14);
+    c.strokeRect(L + rail, T + rail, W - rail*2, H - rail*2);
+    // Six pockets: four corners and two down the long sides.
+    c.fillStyle = TH.dynPocket || '#0b0b0b';
+    for (const [px, py] of [[L,T],[L+W,T],[L,T+H],[L+W,T+H],[L,T+H/2],[L+W,T+H/2]]){
+      c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI); c.fill();
+    }
+  },
+};
+// ---------- Theme-owned player looks ----------------------------------------
+// `THEMES.<key>.discs` names an entry here and takes over drawOneDisc's body, so a
+// theme can change what a player IS, not just what colour they are. Everything
+// outside the disc (name plate, charge ring, colour-blind ring) is untouched.
+const DISC_SKINS = {
+  // Strict black and white. Player colour comes from the profile, which no palette
+  // can reach, so a monochrome theme has to paint the disc itself or the pitch ends
+  // up covered in the one thing the theme says it doesn't have. Sides read by fill:
+  // team 0 black, team 1 white, both rimmed black so they hold on either background.
+  mono: {
+    paint(c, p, x, y, r, w){
+      const dark = p.team === 0;
+      c.beginPath(); c.arc(x, y, r + Math.max(1.5, r*0.14), 0, 2*Math.PI);
+      c.fillStyle = '#000000'; c.fill();
+      c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+      c.fillStyle = dark ? '#000000' : '#ffffff'; c.fill();
+      if (r > 6){
+        const mates = w && w.players ? w.players.filter(q => q.team === p.team) : [p];
+        c.fillStyle = dark ? '#ffffff' : '#000000';
+        c.font = `${Math.round(r*0.86)}px ${LOBBY_FONT}`;
+        c.textAlign='center'; c.textBaseline='middle';
+        c.fillText(String(Math.max(0, mates.indexOf(p)) + 1), x, y + r*0.04);
+      }
+    },
+  },
+  // Stripes vs solids. Team 0 racks solid (1-7), team 1 stripes (9-15), which is
+  // exactly how the two sides already divide — so the skin needs no new state.
+  pool: {
+    hue(p, w){
+      // Stable per-seat colour off the pool rack, so a player keeps their ball all match.
+      const RACK = ['#f2c31d','#1b53c4','#d02b1f','#6d2c8f','#e2711d','#1b7a3c','#8c2f2a'];
+      const mates = w && w.players ? w.players.filter(q => q.team === p.team) : [p];
+      return RACK[Math.max(0, mates.indexOf(p)) % RACK.length];
+    },
+    num(p, w){
+      const mates = w && w.players ? w.players.filter(q => q.team === p.team) : [p];
+      const i = Math.max(0, mates.indexOf(p)) % 7;
+      return p.team === 0 ? i + 1 : i + 9;        // solids 1-7, stripes 9-15
+    },
+    paint(c, p, x, y, r, w){
+      const col = this.hue(p, w), striped = p.team === 1;
+      c.beginPath(); c.arc(x, y, r + Math.max(1, r*0.10), 0, 2*Math.PI);
+      c.fillStyle = TH.discRim; c.fill();
+      // Solid: coloured all over. Stripe: white ball with a coloured band across it.
+      c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+      c.fillStyle = striped ? '#f7f4ec' : col; c.fill();
+      if (striped){
+        c.save();
+        c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+        c.fillStyle = col; c.fillRect(x - r, y - r*0.52, r*2, r*1.04);
+        c.restore();
+      }
+      // Gloss, then the numbered spot — the two things that say "pool ball".
+      c.beginPath(); c.arc(x - r*0.32, y - r*0.34, r*0.30, 0, 2*Math.PI);
+      c.fillStyle = 'rgba(255,255,255,0.42)'; c.fill();
+      if (r > 6){
+        c.beginPath(); c.arc(x, y, r*0.50, 0, 2*Math.PI);
+        c.fillStyle = '#f7f4ec'; c.fill();
+        c.fillStyle = '#101010';
+        c.font = `${Math.round(r*0.62)}px ${LOBBY_FONT}`;
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(String(this.num(p, w)), x, y + r*0.03);
+      }
+    },
+  },
+};
+function discSkin(){
+  const t = THEMES[sel.theme];
+  return (t && t.discs && DISC_SKINS[t.discs]) || null;
+}
+let dynState = null, dynKey = null;
+// The animator for the live theme, or null for an ordinary one.
+function dynField(){
+  const t = THEMES[sel.theme];
+  const f = t && t.dyn && DYN_FIELDS[t.dyn];
+  if (!f) return null;
+  if (dynKey !== t.dyn){ dynState = {}; if (f.reset) f.reset(dynState); dynKey = t.dyn; }
+  return f;
+}
+// Called once per sim step from loop() — see the warning above.
+function advanceDynField(){
+  const f = dynField();
+  if (f && f.step) f.step(dynState);   // a still field (the pool table) has no step
+}
 function drawGrass(w, L, R, T, B){
   ctx.save();
   ctx.beginPath(); ctx.rect(L, T, R-L, B-T); ctx.clip();
@@ -8024,6 +8233,10 @@ function drawGrass(w, L, R, T, B){
     if (wearCv) ctx.drawImage(wearCv, L, T, R-L, B-T);   // what this match has done to it
   }
   else paintGrass(ctx, sel.grass || 'stripes', L, T, R-L, B-T);
+  // Over the surface, not instead of it: ice and mud change how the game PLAYS, so
+  // they still have to read. The mow pattern underneath is cosmetic either way.
+  const dyn = dynField();
+  if (dyn) dyn.paint(ctx, dynState, L, T, R-L, B-T);
   ctx.restore();
 }
 function roundRectPath(x,y,ww,hh,r){
@@ -8127,7 +8340,10 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     ctx.beginPath(); ctx.arc(x, y+r*0.28, r*0.95, 0, 2*Math.PI);
     ctx.fillStyle=TH.shadow; ctx.fill();
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
-    {
+    // A theme can own what a player LOOKS like, not just what colour they are.
+    const skin = discSkin();
+    if (skin){ skin.paint(ctx, p, x, y, r, w); }
+    else {
     // Flat sprite: rim, team-colour ring, custom-colour core.
     ctx.beginPath(); ctx.arc(x, y, r+Math.max(2, r*0.16), 0, 2*Math.PI);
     ctx.fillStyle = TH.discRim; ctx.fill();
@@ -8912,6 +9128,7 @@ if (window.__MAGNETDEBUG) {
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
+    DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     finishMatch, FINAL_SLOW, awardRow,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
