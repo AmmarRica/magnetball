@@ -45,7 +45,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
   containment backstop (the ball must NEVER leave the pitch except through the goal mouth — verify on
   every field after physics changes). Collisions: `collideDiscs`, `collideWall`, `collideArc`.
-  Multi-ball extras live in `world.extraBalls`.
+  Multi-ball extras live in `world.extraBalls`. Walls/arcs flagged `ballOnly` contain the
+  **ball** but not players — that's every boundary INCLUDING the net, so the HaxBall-style
+  step-out margin is uniform all the way round. What actually holds a player in is
+  `integrate`'s clamp to `halfL/halfW + 20`, never a wall. `tests/netpass.mjs`.
 - **Input:** touch pads (`pads.p1/p2`, `onDown/onMove/onUp`), keyboard (`pollKeys`), gamepads
   (`gamepadPad`). `applyHumanInput(p, pad)` maps a pad to a player and applies cocktail rotation.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
@@ -157,7 +160,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 54 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 55 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
