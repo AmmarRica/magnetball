@@ -5261,7 +5261,11 @@ function enterWarmup(w){
   }
   w.state = 'warmup'; w.stateT = 0; w.endRamp = null;
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
-  w.lobby = { ready: new Set(), calib: null, sides: new Map() };
+  // Own PRNG: where a bot walks on must not consume draws from w.rng, or how long
+  // somebody spent in the lobby would change every bot decision in the match.
+  w.lobby = { ready: new Set(), calib: null, sides: new Map(),
+              rng: mulberry32(((w.seed|0) ^ 0x9E3779B9) >>> 0) };
+  w.players.forEach(p => { p._lobT = undefined; p._lobTo = null; });
   benchBots(w);
   // Humans start spread along the halfway line so nobody is pre-committed to a side.
   const hs = lobbyHumans(w), n = hs.length;
@@ -5275,18 +5279,71 @@ function enterWarmup(w){
 // Waiting bots stand off the pitch, in a line beside the touchline. They keep their
 // team colour so you can see who you'd be playing, but they don't run the AI.
 function benchBots(w){ benchLine(w, w.players.filter(p => p.ctrl === 'bot')); }
-// Stand a list of players along the touchlines, split by team so you can see which
-// side you'd be joining.
-function benchLine(w, list){
+// Where each of `list` stands on the touchline, split by team so you can see which
+// side you'd be joining. Returned rather than applied, so the lobby can WALK a bot
+// to its slot while lobbyStart just puts it there.
+function benchSlots(w, list){
   const hw = w.field.W/2;
-  let n = [0, 0];
+  const n = [0, 0], out = new Map();
   list.forEach(p => {
     const t = p.team === 0 ? 0 : 1;
     const side = t === 0 ? 1 : -1;
-    p.x = side * (hw + LOBBY.benchGap);
-    p.y = (n[t]++ - (list.filter(q => (q.team===0?0:1) === t).length - 1)/2) * LOBBY.benchStep;
-    p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+    out.set(p, { x: side * (hw + LOBBY.benchGap),
+                 y: (n[t]++ - (list.filter(q => (q.team===0?0:1) === t).length - 1)/2) * LOBBY.benchStep });
   });
+  return out;
+}
+function benchLine(w, list){
+  const slots = benchSlots(w, list);
+  list.forEach(p => { const s = slots.get(p);
+    p.x = s.x; p.y = s.y; p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false; });
+}
+
+// ---------- Bots walking on and off during warm-up --------------------------
+// The lobby should show the match you'd GET, not a row of bodies waiting at the
+// side. As people pick halves, the number of bots each side needs changes — so the
+// ones that are needed walk on to a random spot in the middle of their half, and
+// the ones that aren't walk off. Leaving is faster than arriving: the count is the
+// answer to "how many bots am I getting?", so it has to settle quickly.
+const LOBBY_WALK = { on: 6.5, off: 11 };     // world units per step
+function lobbySpotFor(w, team){
+  const rnd = (w.lobby && w.lobby.rng) || Math.random;   // seeded — never touches w.rng
+  const side = team === 0 ? 1 : -1;
+  return { x: (rnd()*2 - 1) * (w.field.W/2) * 0.62,
+           y: side * (w.field.L/2) * (0.16 + rnd() * 0.36) };
+}
+// Staging movement, not gameplay: positions are set directly and velocity is held at
+// zero, exactly as the touchline placement already did. These bots never run the AI.
+function walkTo(p, to, sp){
+  p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+  const dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy);
+  if (d <= sp){ p.x = to.x; p.y = to.y; return true; }
+  p.x += dx/d * sp; p.y += dy/d * sp; return false;
+}
+function stepLobbyBots(w){
+  const plan = lobbyPlan(w);
+  const bots = w.players.filter(p => p.ctrl === 'bot');
+  // Which side each bot is wanted on, in roster order, so a bot doesn't swap halves
+  // every time somebody shuffles. -1 means "not needed".
+  const want = [];
+  for (let i=0;i<plan.need0;i++) want.push(0);
+  for (let i=0;i<plan.need1;i++) want.push(1);
+  const leaving = [];
+  bots.forEach((b, i) => {
+    const t = i < want.length ? want[i] : -1;
+    if (b._lobT !== t){
+      b._lobT = t;
+      if (t >= 0){ b.team = t; b._lobTo = lobbySpotFor(w, t); }
+      else b._lobTo = null;                 // filled in below, once the row is known
+    }
+    if (t < 0) leaving.push(b);
+  });
+  const slots = benchSlots(w, leaving);     // tidy row, computed as a group
+  for (const b of leaving) b._lobTo = slots.get(b);
+  for (const b of bots){
+    if (!b._lobTo) continue;
+    walkTo(b, b._lobTo, b._lobT < 0 ? LOBBY_WALK.off : LOBBY_WALK.on);
+  }
 }
 // Which half is this player standing in? Team 0 starts on the +y half (see layTeam),
 // so +y is team 0's side. Standing OUTSIDE the touchlines is a third answer: sitting
@@ -5302,7 +5359,7 @@ function lobbySideOf(p, w){
 function stepWarmup(w){
   const L = w.lobby;
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
-  benchBots(w);
+  stepLobbyBots(w);
   // Live side preview — the number under each half comes straight from where people
   // are standing, so it can't disagree with what happens when Start is pressed.
   L.sides = new Map();

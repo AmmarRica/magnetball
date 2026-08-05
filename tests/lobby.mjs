@@ -38,11 +38,30 @@ const o = {}; const allErrs = [];
     r.twoBotsWaiting = r.benched === 2;
     r.botsOffThePitch = w.players.filter(q=>q.ctrl==='bot')
       .every(q => Math.abs(q.x) > w.field.W/2 + q.r);
-    // Waiting bots don't play: no AI, no drifting back on.
-    const bx = w.players.filter(q=>q.ctrl==='bot').map(q=>q.x+','+q.y).join('|');
+    // Bots the plan needs WALK ON to a spot in the middle of their own half, so the
+    // lobby shows the match you'd get. One human a side in a 2v2 needs one bot each.
     for(let i=0;i<200;i++) M.step(w);
-    r.botsStayPut = w.players.filter(q=>q.ctrl==='bot').map(q=>q.x+','+q.y).join('|') === bx;
-    r.botsIdle = w.players.filter(q=>q.ctrl==='bot').every(q=>q.inX===0 && q.inY===0 && !q.kick);
+    const bots = () => w.players.filter(q=>q.ctrl==='bot');
+    const onPitch = q => Math.abs(q.x) < w.field.W/2 - q.r && Math.abs(q.y) < w.field.L/2 - q.r;
+    r.botsWalkedOn = bots().length === 2 && bots().every(onPitch);
+    // ...on their own half, and not stacked on the touchline.
+    r.botsOnOwnHalf = bots().every(q => (q.team===0 ? q.y > 0 : q.y < 0));
+    r.botsInTheMiddle = bots().every(q => Math.abs(q.y) < w.field.L/2 * 0.62);
+    // Having arrived they settle — no jitter, no drift.
+    const px = bots().map(q=>q.x.toFixed(3)+','+q.y.toFixed(3)).join('|');
+    for(let i=0;i<90;i++) M.step(w);
+    r.botsSettle = bots().map(q=>q.x.toFixed(3)+','+q.y.toFixed(3)).join('|') === px;
+    r.botsIdle = bots().every(q=>q.inX===0 && q.inY===0 && !q.kick);
+    // Both humans crowd one half: that side now needs NO bots and the other needs two,
+    // so both bots leave and come back on the far side — the maths fixes itself live.
+    M.lobbyHumans(w).forEach(q=>{ q.x=0; q.y=120; q.vx=0; q.vy=0; });
+    for(let i=0;i<200;i++) M.step(w);
+    r.botsSwappedSides = bots().length === 2 && bots().every(q => q.team === 1 && q.y < 0);
+    // ...and a bot with no seat at all goes back off the pitch, quickly.
+    M.lobbyHumans(w).forEach((q,i)=>{ q.x=0; q.y = i===0 ? 120 : -120; q.vx=0; q.vy=0; });
+    for(let i=0;i<200;i++) M.step(w);
+    r.backToOnePerSide = bots().filter(q=>q.team===0).length === 1 &&
+                         bots().filter(q=>q.team===1).length === 1;
     // ...and the ball stays parked, so nothing can be scored in the lobby.
     r.ballParked = w.ball.x===0 && w.ball.y===0 && w.ball.vx===0 && w.ball.vy===0;
     // Controls ARE testable: the stick moves your player.
@@ -342,7 +361,8 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
 await b.close();
 console.log(JSON.stringify(o,null,1));
 console.log('ERRORS:', allErrs.length?allErrs.slice(0,5):'none');
-const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsStayPut','botsIdle',
+const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWalkedOn','botsOnOwnHalf',
+  'botsInTheMiddle','botsSettle','botsSwappedSides','backToOnePerSide','botsIdle',
   'ballParked','stickMovesYou','kickCannotMoveBall','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',
   'unevenGetsABot','allOneSideStaysTogether','sixAllOnOneTeam','eightIsTheCeiling',
