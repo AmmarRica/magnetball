@@ -5,7 +5,24 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.1130AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0130PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🚨 /settings never saw a deploy
+- [x] **The real reason a fix "didn't work".** `/settings` pulls the page in with
+  `fetch('../index.html')` — not a navigation, and `Accept: */*`. The service worker decided
+  "is this HTML?" from mode/accept alone, so that request took the **cache-first** branch and
+  the settings page was pinned to whatever `index.html` was precached at install. Every deploy
+  since the route existed was invisible there. `{cache:'no-cache'}` does not bypass a worker.
+  HTML is now decided by the URL too, `CACHE` bumped to v4 to evict the stale copy, and
+  `tests/swupdate.mjs` proves it end to end (and was verified to fail on the old predicate).
+
+## 🔔 Full time gets its own whistle
+- [x] **A progressive triple** — BEE-BEE-BEEEEP: two short blasts and a long one that climbs
+  and fades. A match does not end the way it starts, and `endMatch` was reusing the kickoff peep.
+- [x] It is a **category**, not a one-off function, so the themed sound sets end their own
+  matches too (pool racks out, space powers down). Five variants, all labelled and pickable.
 
 ---
 

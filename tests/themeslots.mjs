@@ -89,7 +89,8 @@ const r = await p.evaluate(async ()=>{
   M.applySfxSet('pool');
   o.setRestoresName = M.sfxSetKey() === 'pool';
   // The categories come from SFX itself, so a new one can't be forgotten here.
-  o.sfxCats = M.sfxCatKeys().join(',');
+  // Sorted: adding a category is legitimate, changing or losing one is not.
+  o.sfxCats = M.sfxCatKeys().slice().sort().join(',');
   o.setsCoverEveryCat = Object.values(M.SFX_SETS).every(s =>
     M.sfxCatKeys().every(c => s.pick[c] != null && M.SFX[c][s.pick[c]] && M.SFX_LABELS[c][s.pick[c]]));
 
@@ -151,7 +152,10 @@ const r = await p.evaluate(async ()=>{
   o.noLegacyKeys = saved.theme === undefined && saved.ballLook === undefined;
   // A save from before slots existed: one theme key and one ball key.
   M.sel.theme = 'warp'; M.sel.ballLook = 'cross'; delete M.sel.look;
-  M.sel.snd.whistle = 0; M.sel.snd.crowd = 0; M.sel.snd.kick = 0; M.sel.snd.wall = 0; M.sel.snd.net = 0;
+  // Category-driven, not a hand-written list of five — adding a sixth (full time)
+  // silently left this one un-reset, so the save no longer looked "untouched" and the
+  // migration correctly declined to overwrite it. The test was the thing that drifted.
+  M.applySfxSet('classic');
   M.normalizeLook();
   o.migrated = slots();
   o.legacyBecomesBundle = M.sel.look.palette === 'warp' && M.sel.look.field === 'starfield' &&
@@ -188,7 +192,7 @@ ok(r.sfxCanBeCustom, `a hand-picked sound reads as "${r.handPickedSfx}" instead 
 ok(r.customSfxReadsCustom, `the sound row throws or mislabels a hand-picked set: "${r.customSfxLabel}"`);
 ok(r.themeIsCustomToo, 'a hand-picked sound did not make the theme Custom');
 ok(r.setRestoresName, 'applying a set did not restore its name');
-ok(r.sfxCats === 'whistle,crowd,kick,wall,net', `sound categories drifted: ${r.sfxCats}`);
+ok(r.sfxCats === 'crowd,fulltime,kick,net,wall,whistle', `sound categories drifted: ${r.sfxCats}`);
 ok(r.setsCoverEveryCat, 'a sound set is missing a category, or names a variant with no sound/label');
 ok(r.sfxThrew.length === 0, `a set names a sound that throws: ${JSON.stringify(r.sfxThrew)}`);
 ok(r.themeCardWrites && r.ballCardFollowed, 'the Theme card ball slot did not move the Ball card');

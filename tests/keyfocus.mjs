@@ -89,7 +89,14 @@ o.arrowsDrivePlayer = await (async ()=>{
   o.arrowsReachedPad = armed;
   const moved = await p.evaluate(()=>{
     const M=window.__magnet, w=M.world, me=w.players.find(q=>q.ctrl==='human1');
-    me.x=0; me.y=60; me.vx=0; me.vy=0;
+    // ⚠️ Pin the state instead of inheriting whatever the sections above left behind.
+    // This measured ~1 run in 8 as "the arrows don't drive the player" because the
+    // world could be mid-kickoff, where the half-line gate holds the player still —
+    // a true statement about the kickoff rule, and nothing at all about the arrows.
+    M.sel.kickoffRule = 'off';
+    w.state = 'play'; w.stateT = 2;
+    w.ball.x = 400; w.ball.y = 400; w.ball.vx = 0; w.ball.vy = 0;   // out of the way
+    me.x = 0; me.y = 60; me.vx = 0; me.vy = 0;
     for(let i=0;i<25;i++){ M.drawControls(); M.step(w); }
     return Math.hypot(me.vx,me.vy) > 0.3; });
   await p.keyboard.up('ArrowUp');
