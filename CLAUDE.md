@@ -53,6 +53,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
+- **Dynamic visual themes:** a theme may also OWN its field and what a player *is*.
+  `THEMES[k].dyn` names a `DYN_FIELDS` entry (`{reset?, step?, paint}`) that paints over the
+  pitch surface; `THEMES[k].discs` names a `DISC_SKINS` entry that replaces `drawOneDisc`'s
+  body. `warp` = black-and-white with a starfield tunnel; `pool` = a pool table with numbered
+  solids vs stripes. ⚠️ Field state advances in `advanceDynField()` next to `step()`, **never
+  in a paint** (same rule as the trails), and off its own seeded PRNG so it can't touch `w.rng`.
+  A monochrome theme *must* supply a disc skin — player colour comes from `profile`, which no
+  palette can reach. `tests/dyntheme.mjs` holds all of it by pixel sampling.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one
@@ -118,7 +126,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 48 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 49 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
