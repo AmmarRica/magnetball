@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0250PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0345PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -53,20 +53,23 @@ _Current build: **v20260806.0250PM** (shown under the title; bump `VERSION` in `
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
 
 ## 🦐 Shrimp theme, and a ring on every player
-- [x] **Shrimp vs Lobster** — full bundle: a sand seabed with ripples and shells, an underwater
-  palette, and two different creatures. Team 0 is a curled prawn (thorax, three tapering
-  abdomen segments, tail fan, rostrum, antennae, swimmerets, eye); team 1 is a lobster (big
-  claws held wide, cephalothorax, a straight tapered abdomen with creases, tail fan, six
-  walking legs, antennae, eyes).
-- [x] The sides differ by SILHOUETTE, measured off covered pixels in the suite rather than
-  trusted from the drawing code. ⚠️ Both are LONG — the crab this replaced was wide, so
-  "one is wider" stopped being the discriminator. It is now the lobster's claw span and the
-  shrimp's curl (6.0 off-axis against the lobster's -0.5). Claws at 0.40 across left the
-  lobster only 6% wider than the shrimp, inside noise; they are held at 0.47 now.
-- [x] ⚠️ The abdomen was three wide strokes along the axis, which draws bars ACROSS the body —
-  three of them made a ladder, not a tail. One tapered polygon with thin creases instead.
-  And the pincer gap is a LINE, not a dark disc over the claw, which greyed the whole body. Segments are three arcs of decreasing width because canvas cannot taper
-  a stroke — and the steps read as segments, which is what a shrimp looks like anyway.
+- [x] **Rockpool** — full bundle: a sand seabed with ripples and shells, an underwater palette,
+  and **crabs against lobsters**.
+- [x] **Three creatures in one `SEA` registry** — shrimp, crab and lobster — with `seaPair()`
+  building the pairings. The theme fields crab vs lobster; Shrimp vs Lobster and Shrimp vs Crab
+  are both still pickable in the Players slot. A pairing is now a two-line entry rather than a
+  copy of a creature.
+- [x] The sides differ by SILHOUETTE, measured off covered pixels rather than trusted from the
+  drawing code. ⚠️ The discriminator has had to change with the pairing **twice** — "one is
+  wider" worked for shrimp vs crab, not for shrimp vs lobster (both long, so it became claw
+  span and curl), and now crab vs lobster is stubby-vs-long. That is the argument for measuring
+  it instead of asserting it.
+- [x] ⚠️ Three drawing bugs recorded on the way: the crab's legs crossed the guide ring; the
+  lobster's abdomen was three wide strokes ALONG the axis, which draws bars ACROSS the body and
+  made a ladder; and a pincer gap drawn as a dark disc over the claw greyed out the whole body.
+- [x] ⚠️ And a TDZ: the legacy-key migration in `normalizeLook()` read `DISC_SKINS`, which is
+  declared with the renderer far below, and took the page down with "Cannot access before
+  initialization". It is a pure string swap now. Third incident of this shape.
 - [x] **THE RULE, made structural: every skin gets a guide ring.** `drawOneDisc` strokes it
   after the skin paints, so a new skin cannot forget one. A player is a circle and that circle
   is what collides, however un-circular the art inside it.
