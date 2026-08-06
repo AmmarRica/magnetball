@@ -282,11 +282,13 @@
       background: rgba(53,255,135,0.10); color: var(--go);
       border: 1px solid var(--go); border-radius: 10px;
       font-family: var(--pix); font-size: 22px; line-height: 1;
-      transition: transform .15s ease;
     }
-    #matchCard.collapsed > h2 .secchev { transform: rotate(-90deg); }
+    /* ⚠️ The GLYPH turns, not the button. Rotating the button spun its whole rounded
+       rectangle, so a wide pill became a tall one and the header jumped shape every
+       time you opened the card. */
+    .secchev .chevglyph { display: block; line-height: 1; transition: transform .15s ease; }
+    #matchCard.collapsed > h2 .secchev .chevglyph { transform: rotate(-90deg); }
     .secchev:active { transform: translateY(1px); }
-    #matchCard.collapsed > h2 .secchev:active { transform: rotate(-90deg) translateX(-1px); }
     #matchBody {
       background: var(--panel); border: 1px solid var(--edge);
       border-radius: 14px; padding: 16px; margin-top: 10px;
@@ -999,7 +1001,7 @@
       <h2>
         <span class="secname">Match</span>
         <button class="primary" id="playBtn">KICK OFF ▶</button>
-        <button class="secchev" id="matchChev" type="button" aria-label="Match options" aria-expanded="false">▾</button>
+        <button class="secchev" id="matchChev" type="button" aria-label="Match options" aria-expanded="false"><span class="chevglyph">▾</span></button>
       </h2>
       <!-- Warm-up sits directly under KICK OFF and OUTSIDE the collapsible body, so
            it's reachable without opening the section — same as the button above it. -->
@@ -1256,6 +1258,13 @@
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
       <div style="height:10px"></div>
+      <label class="field">Goal zoom <small id="goalZoomVal" style="color:var(--accent)"></small></label>
+      <input id="goalZoom" class="slider" type="range" min="100" max="800" step="10" />
+      <div style="height:6px"></div>
+      <label class="field">Goal zoom speed <small id="goalZoomSpdVal" style="color:var(--accent)"></small></label>
+      <input id="goalZoomSpd" class="slider" type="range" min="20" max="300" step="5" />
+      <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes — lower is slower. Both ride the Screen shake &amp; effects toggle.</div>
+      <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
       <div style="height:10px"></div>
@@ -1485,6 +1494,10 @@ const FIELDS = {
   // --- Expansion set ---
   tiny:    { name:'Tiny',     emoji:'🔬', W:300, L:460,  goal:150, corner:0,   net:48 },
   giant:   { name:'Giant',    emoji:'🦣', W:660, L:1160, goal:220, corner:0,   net:82 },
+  // Four times the AREA of Giant, which was the biggest — every dimension doubled.
+  // (Quadrupling the dimensions instead would be sixteen times the area: six times
+  // Classic end to end, which nobody could cross before the whistle.)
+  colossus:{ name:'Colossus', emoji:'🐋', W:1320, L:2320, goal:440, corner:0,   net:164 },
   ultra:   { name:'Ultrawide',emoji:'📺', W:660, L:560,  goal:210, corner:0,   net:64 },
   marathon:{ name:'Marathon', emoji:'🏃', W:340, L:1200, goal:150, corner:0,   net:66 },
   pancake: { name:'Pancake',  emoji:'🥞', W:600, L:480,  goal:200, corner:40,  net:60 },
@@ -2073,7 +2086,8 @@ const PANEL = detectPanel();
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
+            goalZoom:500, goalZoomSpd:115,      // goal camera: 5.0x over 1.15s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             look: { palette:'neon', field:'none', discs:'none', ball:'classic' },
@@ -2675,6 +2689,22 @@ const KICK_SLOW = 0.45;                   // accel multiplier while holding kick
 const KICK_CARRY = 0.5;
 // Trap-and-release: humans hold KICK to stick the ball to their feet, then let go to shoot.
 const TRAP = { max:0.5 };                // ball stays stuck for at most half a second
+
+// ⚠️ Declared HERE, above the bootstrap, not down with the camera code. The
+// slider wiring calls syncGoalCamSliders() at init, and a const declared further
+// down the file is still in the temporal dead zone at that point — which took the
+// whole page down with "Cannot access 'GOALCAM' before initialization".
+const GOALCAM = {
+  zoom:    5.0,    // DEFAULT magnification: the view covers 0.2x of what it did
+  inSecs:  1.15,   // DEFAULT sim-seconds to get there. The goal state lasts 1.8.
+  outSecs: 0.5,    // sim-seconds to ease back once the celebration is over
+  zoomMin: 1.0, zoomMax: 8.0,      // slider range — 1.0x is "no push at all"
+  spdMin:  0.2, spdMax:  3.0,      // slider range, in sim-seconds for the push in
+};
+// Both are player dials. Stored as ints so the sliders stay integer-friendly, the
+// same shape the feel sliders use.
+function goalZoom(){ const v = sel.goalZoom; return v == null ? GOALCAM.zoom : Math.max(GOALCAM.zoomMin, Math.min(GOALCAM.zoomMax, v/100)); }
+function goalZoomSecs(){ const v = sel.goalZoomSpd; return v == null ? GOALCAM.inSecs : Math.max(GOALCAM.spdMin, Math.min(GOALCAM.spdMax, v/100)); }
 const TAP_HOLD = 0.14;                    // press shorter than this near the ball = instant pass; longer = trap
 
 let cv = document.getElementById('game');
@@ -4688,6 +4718,25 @@ if (mspeedEl){
 // Hit stop has its own control, not the Screen shake toggle: a freeze-frame is a
 // different thing from a camera wobble, and people who turn shake off for motion
 // reasons don't necessarily want to lose the strike either.
+// The goal camera's two dials, wired the same way. Read through goalZoom() /
+// goalZoomSecs() rather than off sel directly, so the clamp and the default live in
+// one place and a synced value from /settings can't push the camera out of range.
+function goalZoomLabel(){ const z = goalZoom();
+  return z <= 1.0001 ? 'off' : z.toFixed(1) + '×'; }
+function goalSpeedLabel(){ return goalZoomSecs().toFixed(2) + 's'; }
+function syncGoalCamSliders(){
+  const z=$('goalZoom'), zv=$('goalZoomVal'), sp=$('goalZoomSpd'), sv=$('goalZoomSpdVal');
+  if (z){ z.value = Math.round(goalZoom()*100); }
+  if (zv) zv.textContent = goalZoomLabel();
+  if (sp){ sp.value = Math.round(goalZoomSecs()*100); }
+  if (sv) sv.textContent = goalSpeedLabel();
+}
+{
+  const z=$('goalZoom'), sp=$('goalZoomSpd');
+  if (z) z.oninput = () => { sel.goalZoom = +z.value; saveSel(); syncGoalCamSliders(); };
+  if (sp) sp.oninput = () => { sel.goalZoomSpd = +sp.value; saveSel(); syncGoalCamSliders(); };
+  syncGoalCamSliders();
+}
 const hsEl = $('hitStop'), hsValEl = $('hitStopVal');
 if (hsEl){
   const showHS = () => { if (hsValEl) hsValEl.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; };
@@ -5577,6 +5626,7 @@ function buildSettings(){
   { const hs=$('hitStop'), hv=$('hitStopVal');
     if (hs){ hs.value = hitStopFrames();
       if (hv) hv.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; } }
+  syncGoalCamSliders();          // same reason: a preset, a reset or a cross-tab sync
   const dbp=$('debugPick');
   if (dbp){ dbp.innerHTML='';
     [['off','Off'],['on','🐞 On']].forEach(([k,lab])=>{
@@ -9278,17 +9328,13 @@ let cam = { s:1, ox:0, oy:0 };
 // run the push 2.4x fast. A happy side effect of being step-locked is that the goal
 // slow-mo stretches it too — the goal state is 1.8s of SIM time, which is about 4s
 // on the clock at the 0.45 rate.
-const GOALCAM = {
-  zoom:    5.0,    // magnification at full push: the view covers 0.2x of what it did
-  inSecs:  1.15,   // sim-seconds to get there. The goal state lasts 1.8.
-  outSecs: 0.5,    // sim-seconds to ease back once the celebration is over
-};
 let goalCam = { t:0, x:0, y:0, p:null, live:false };
 function goalCamReset(){ goalCam = { t:0, x:0, y:0, p:null, live:false }; }
 // `p` is the player to follow — the last toucher, whichever side they were on, since
 // that is who the moment belongs to. Falls back to the ball.
 function goalCamStart(w, p){
   if (!sel.juice) return;                      // rides the Screen shake & effects dial
+  if (goalZoom() <= 1.0001) return;            // the dial at 1.0x means no push at all
   goalCam.live = true; goalCam.p = p || null;
   goalCam.x = p ? p.x : w.ball.x;
   goalCam.y = p ? p.y : w.ball.y;
@@ -9297,7 +9343,7 @@ function advanceGoalCam(w){
   // A replay owns the framing while it runs, so the push has to be out of the way
   // even though w.state is still 'goal' underneath it.
   const want = (goalCam.live && w && w.state === 'goal' && !replay.active) ? 1 : 0;
-  const rate = STEP / (want ? GOALCAM.inSecs : GOALCAM.outSecs);
+  const rate = STEP / (want ? goalZoomSecs() : GOALCAM.outSecs);
   goalCam.t = want ? Math.min(1, goalCam.t + rate) : Math.max(0, goalCam.t - rate);
   if (goalCam.t <= 0 && !want){ goalCam.live = false; goalCam.p = null; }
 }
@@ -9312,7 +9358,7 @@ function applyGoalCam(){
   // is supposed to be following.
   const p = goalCam.p;
   const tx = p ? ix(p) : goalCam.x, ty = p ? iy(p) : goalCam.y;
-  cam.s *= 1 + (GOALCAM.zoom - 1) * g;
+  cam.s *= 1 + (goalZoom() - 1) * g;
   // Slide the origin so (tx,ty) ends up where the pitch centre was. The rotation in
   // deck view pivots on the origin we are moving, so the shift has to be rotated by
   // the same angle or the followed player lands off to one side.
@@ -11485,7 +11531,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0630PM';
+const VERSION = '20260805.0830PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11539,7 +11585,7 @@ if (window.__MAGNETDEBUG) {
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
-    GOALCAM, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
+    GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,

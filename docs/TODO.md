@@ -5,7 +5,23 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0630PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0830PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🧱 Bits
+- [x] **Colossus court** — 1320 × 2320, four times the AREA of Giant (every dimension
+  doubled). Quadrupling the dimensions instead would be sixteen times the area: six times
+  Classic end to end, which nobody could cross before the whistle.
+- [x] **Goal zoom sliders** — amount (1.0×–8.0×) and speed (0.20s–3.00s), under Game Feel →
+  Presentation. **1.0× is off** and the camera never latches. Clamped in one place, so a
+  value synced across from /settings can't push it out of range.
+- [x] **The Match chevron rotates its GLYPH, not the button.** Rotating the button spun its
+  whole rounded rectangle, so a wide pill became a tall one and the header changed shape
+  every time you opened the card.
+- [x] ⚠️ `const GOALCAM` had to move up with the feel constants — the slider wiring reads it
+  during the bootstrap, and declared down with the camera code it was in the TDZ and took
+  the whole page down.
 
 ---
 

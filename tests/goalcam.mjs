@@ -52,7 +52,7 @@ const r = await p.evaluate(async ()=>{
   // ...and it does move when stepped.
   // ⚠️ Stop before the goal state does. It lasts 1.8s (108 steps) and the push takes
   // GOALCAM.inSecs (69) — sampling at 120 measured the ease-BACK and read 3.59x.
-  const steps = Math.ceil(M.GOALCAM.inSecs * 60) + 10;
+  const steps = Math.ceil(M.goalZoomSecs() * 60) + 10;
   o.pushSteps = steps;
   const ramp = [];
   for (let i=0;i<steps;i++){
@@ -65,8 +65,10 @@ const r = await p.evaluate(async ()=>{
   o.rampIsMonotonic = ramp.every((v,i)=> i===0 || v >= ramp[i-1] - 0.01);
   M.computeCam();
   o.peak = +(M.cam.s/base).toFixed(2);
-  o.reachesTheZoom = Math.abs(o.peak - M.GOALCAM.zoom) < 0.05;
-  o.declaredZoom = M.GOALCAM.zoom;
+  // Read the DIAL, not the default — they are the same out of the box, which would
+  // let a slider that does nothing pass this.
+  o.reachesTheZoom = Math.abs(o.peak - M.goalZoom()) < 0.05;
+  o.declaredZoom = M.goalZoom();
 
   // ...and the scorer really is in the middle of the view.
   {
@@ -128,6 +130,44 @@ const r = await p.evaluate(async ()=>{
   o.simBitIdentical = snap(w3) === on;
   o.simSample = on.slice(0, 50);
 
+  // ---- the two dials actually drive it -------------------------------------
+  const dial = (zoomPct, spdPct) => {
+    const z=document.getElementById('goalZoom'), sp=document.getElementById('goalZoomSpd');
+    z.value = zoomPct; z.oninput(); sp.value = spdPct; sp.oninput();
+  };
+  o.slidersExist = !!document.getElementById('goalZoom') && !!document.getElementById('goalZoomSpd');
+  dial(250, 40);
+  o.dialValues = [M.goalZoom(), M.goalZoomSecs()];
+  o.dialLabels = [document.getElementById('goalZoomVal').textContent,
+                  document.getElementById('goalZoomSpdVal').textContent];
+  o.dialReads = Math.abs(M.goalZoom()-2.5) < 1e-9 && Math.abs(M.goalZoomSecs()-0.4) < 1e-9;
+  // A smaller zoom really does peak smaller, and a faster speed really is faster.
+  M.sel.juice = true;
+  M.goalCamReset();
+  let wd = start(); wd.ball.lastKicker = wd.players[0]; M.scoreGoal(wd, 0);
+  M.computeCam(); const dBase = M.cam.s / (1 + (M.goalZoom()-1)*0);   // t is 0 here
+  let hitFullAt = -1;
+  for (let i=0;i<120 && hitFullAt<0;i++){ M.step(wd); M.advanceGoalCam(wd); if (M.goalCam.t >= 1) hitFullAt = i; }
+  M.computeCam();
+  o.fastPeak = +(M.cam.s/dBase).toFixed(2);
+  o.fastStepsToFull = hitFullAt;
+  o.dialChangesPeak = Math.abs(o.fastPeak - 2.5) < 0.05;
+  // 0.40s at 60Hz is 24 steps; the 1.15s default would take 69.
+  o.dialChangesSpeed = hitFullAt >= 0 && hitFullAt < 40;
+  // ...and 1.0x is genuinely OFF — the camera must not even latch.
+  dial(100, 115);
+  M.goalCamReset();
+  let wo = start(); wo.ball.lastKicker = wo.players[0]; M.scoreGoal(wo, 0);
+  for (let i=0;i<60;i++){ M.step(wo); M.advanceGoalCam(wo); }
+  M.computeCam();
+  o.zoomOffLabel = document.getElementById('goalZoomVal').textContent;
+  o.oneMeansOff = M.goalCam.live === false && M.goalCam.t === 0 && o.zoomOffLabel === 'off';
+  // Out-of-range values are clamped, not obeyed — /settings can push anything across.
+  M.sel.goalZoom = 99999; M.sel.goalZoomSpd = -5;
+  o.clamped = [M.goalZoom(), M.goalZoomSecs()];
+  o.clampsWildValues = M.goalZoom() === M.GOALCAM.zoomMax && M.goalZoomSecs() === M.GOALCAM.spdMin;
+  dial(500, 115);
+
   M.goalCamReset(); M.setMatchSeed(null);
   return o;
 });
@@ -148,6 +188,12 @@ ok(r.releasedOx, 'the camera let go of the zoom but not of the pan');
 ok(r.standsDownForReplay, `the push stayed up through the instant replay (t ${r.midPush})`);
 ok(r.juiceOffFlat, 'the camera still moved with Screen shake & effects off');
 ok(r.simBitIdentical, 'the sim diverged with the goal camera running — it is reachable from step()');
+ok(r.slidersExist, 'there are no goal-zoom sliders');
+ok(r.dialReads, `the sliders did not reach the camera: ${JSON.stringify(r.dialValues)}`);
+ok(r.dialChangesPeak, `the zoom dial did not change the peak: ${r.fastPeak}x on a 2.5x setting`);
+ok(r.dialChangesSpeed, `the speed dial did not change the push: full at step ${r.fastStepsToFull}, expected under 40 for 0.40s`);
+ok(r.oneMeansOff, `1.0x did not mean off (label "${r.zoomOffLabel}")`);
+ok(r.clampsWildValues, `out-of-range dial values were obeyed rather than clamped: ${JSON.stringify(r.clamped)}`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify(r, null, 1));
