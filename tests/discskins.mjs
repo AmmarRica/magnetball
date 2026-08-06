@@ -108,6 +108,39 @@ const r = await p.evaluate(async ()=>{
   o.monoIgnores = paintAt('mono',   true) === paintAt('mono',   false);
   M.profile.spin = true;
 
+  // ---- shrimp vs crab: the sides differ by SILHOUETTE, not just colour -------
+  // ⚠️ Colour alone is not enough at 12 pixels, and it is exactly what colour-blind
+  // players cannot use. A shrimp is LONG along its facing; a crab is WIDE across it.
+  // Measured off covered pixels rather than the drawing code, so a redraw that
+  // quietly makes them the same shape fails here.
+  const extent = (team) => {
+    c.fillStyle = '#7f7f7f'; c.fillRect(0,0,300,300);
+    const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+    M.DISC_SKINS.shrimp.paint(c, q, CX, CY, R, { players:[q] });
+    const d = c.getImageData(CX-R-4, CY-R-4, (R+4)*2, (R+4)*2).data;
+    const wide = (R+4)*2;
+    let minA=1e9, maxA=-1e9, minB=1e9, maxB=-1e9, n=0;
+    for (let i=0;i<d.length;i+=4){
+      // "Covered" = anything that is not the flat grey backdrop, and not the faint
+      // team wash that fills the whole body disc on both sides.
+      const px=d[i], py2=d[i+1], pz=d[i+2];
+      const flat = Math.abs(px-127)+Math.abs(py2-127)+Math.abs(pz-127) < 60;
+      if (flat) continue;
+      const k=(i/4)|0, ax=(k%wide)-(R+4), ay=((k/wide)|0)-(R+4);
+      minA=Math.min(minA,ax); maxA=Math.max(maxA,ax);      // along facing (+x)
+      minB=Math.min(minB,ay); maxB=Math.max(maxB,ay);      // across it
+      n++;
+    }
+    return { along: maxA-minA, across: maxB-minB, n };
+  };
+  const shr = extent(0), crb = extent(1);
+  o.shrimpExtent = shr; o.crabExtent = crb;
+  o.shrimpIsLong  = shr.along > shr.across;
+  o.crabIsWide    = crb.across > crb.along;
+  o.sidesDifferInShape = o.shrimpIsLong && o.crabIsWide;
+  // ...and neither one breaks out of the body. The ring IS the player.
+  o.bothInsideTheRing = Math.max(shr.along, shr.across, crb.along, crb.across) <= R*2 + 2;
+
   // ---- the Shrimp theme is a real bundle -------------------------------------
   o.isBundle = !!M.bundleSlots('shrimp');
   M.applyBundle('shrimp');
@@ -151,6 +184,8 @@ ok(r.zeroFaceYIsNotFalsy, 'a player facing exactly along x got the fallback faci
 ok(r.noFacingIsSane, 'a player with no facing at all does not point anywhere sensible');
 ok(r.shrimpTurns && r.arrowTurns, `a direction-drawn skin ignored the rotation setting: shrimp ${r.shrimpTurns}, arrow ${r.arrowTurns}`);
 ok(r.poolIgnores && r.monoIgnores, 'a ROUND skin changed with the rotation setting — the control promises it only affects themes whose players have a front');
+ok(r.sidesDifferInShape, `shrimp and crab are not different SHAPES: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)} — colour alone is what colour-blind players cannot use`);
+ok(r.bothInsideTheRing, `a body draws outside its own guide ring: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)}`);
 ok(r.isBundle && r.named === 'Shrimp', `the Shrimp bundle does not resolve: ${r.named}`);
 ok(r.setsFieldAndDiscs, `the bundle does not set both field and discs: ${r.slots}`);
 ok(r.escapes === 0, `${r.escapes} ball escapes on the shrimp theme`);

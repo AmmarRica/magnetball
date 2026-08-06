@@ -11539,13 +11539,83 @@ const SHRIMP = {
   fan: 0.30,         // tail fan half-spread
   eye: 0.10,
 };
+// The other half of the theme. A crab is WIDE where a shrimp is long, so the two
+// sides are told apart by silhouette and not only by colour — which is the same
+// trick Pool uses (solids vs stripes) and the reason it works at 12 pixels.
+// ⚠️ Every point here is checked against 1.0 including its own stroke half-width.
+// The first version put leg tips at 0.88 across with a 0.09 stroke and they crossed
+// the guide ring — the one thing a skin is not allowed to do, since the ring IS the
+// body. Legs now reach 0.74, claws 0.66 + 0.15 radius = 0.81.
+const CRAB = {
+  bodyA: 0.40,      // carapace semi-axis along facing...
+  bodyB: 0.56,      // ...and across it. Wider than long: that IS the crab.
+  claw:  [0.42, 0.46],   // claw centre [along, across]
+  clawR: 0.15,
+  legs:  [[0.02, 0.50], [-0.24, 0.46], [-0.46, 0.34]],   // [along, across] per leg
+  legLen: 0.22,
+  eye:   [0.24, 0.19],
+  eyeR:  0.085,
+};
 DISC_SKINS.shrimp = {
-  name: 'Shrimp',
+  name: 'Shrimp vs Crab',
   paint(c, p, x, y, r, w){
     const { ux, uy } = discFace(p);                 // honours the rotation checkbox
     const px = -uy, py = ux;
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
     const pt = (a, b2) => [x + ux*a*r + px*b2*r, y + uy*a*r + py*b2*r];
+    if (p.team === 1){ this.crab(c, p, x, y, r, col, ux, uy, px, py, pt); return; }
+    this.shrimp(c, p, x, y, r, col, ux, uy, px, py, pt);
+  },
+  crab(c, p, x, y, r, col, ux, uy, px, py, pt){
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, 0.16); c.fill();
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    // Legs first, so the carapace sits on top of where they meet the body.
+    c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.09);
+    for (const [along, across] of CRAB.legs){
+      for (const sgn of [-1, 1]){
+        const A = pt(along, across*sgn*0.55);
+        const B = pt(along - CRAB.legLen*0.5, (across + CRAB.legLen)*sgn);
+        c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+      }
+    }
+    // Claws: an arm out to a solid pincer, split by a thin gap. ⚠️ The gap is a LINE,
+    // not a dark disc laid over the claw — that version covered most of the claw and
+    // every crab came out grey instead of its team colour.
+    c.lineWidth = Math.max(1, r*0.10);
+    for (const sgn of [-1, 1]){
+      const A = pt(0.10, 0.30*sgn), C = pt(CRAB.claw[0], CRAB.claw[1]*sgn);
+      c.strokeStyle = col;
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(C[0],C[1]); c.stroke();
+      c.beginPath(); c.arc(C[0], C[1], CRAB.clawR*r, 0, 2*Math.PI);
+      c.fillStyle = col; c.fill();
+      if (r > 7){
+        const G0 = pt(CRAB.claw[0] + 0.04, (CRAB.claw[1] - 0.04)*sgn);
+        const G1 = pt(CRAB.claw[0] + 0.19, (CRAB.claw[1] + 0.07)*sgn);
+        c.strokeStyle = TH.discRim || '#101010';
+        c.lineWidth = Math.max(1, r*0.06);
+        c.beginPath(); c.moveTo(G0[0],G0[1]); c.lineTo(G1[0],G1[1]); c.stroke();
+        c.lineWidth = Math.max(1, r*0.10);
+      }
+    }
+    // Carapace — wider than it is long.
+    c.save();
+    c.translate(x, y); c.rotate(Math.atan2(uy, ux));
+    c.beginPath(); c.ellipse(0, 0, CRAB.bodyA*r, CRAB.bodyB*r, 0, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    c.restore();
+    // Eyes on the front edge, close together, which is the crab tell.
+    if (r > 5){
+      for (const sgn of [-1, 1]){
+        const E = pt(CRAB.eye[0], CRAB.eye[1]*sgn);
+        c.beginPath(); c.arc(E[0], E[1], CRAB.eyeR*r, 0, 2*Math.PI);
+        c.fillStyle = TH.discRim || '#101010'; c.fill();
+      }
+    }
+    c.restore();
+  },
+  shrimp(c, p, x, y, r, col, ux, uy, px, py, pt){
     // Body plate first, so the shrimp reads against any court.
     c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
     c.fillStyle = rgba(col, 0.16); c.fill();
@@ -12573,7 +12643,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.1245PM';
+const VERSION = '20260806.0130PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
