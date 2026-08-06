@@ -156,6 +156,67 @@ const r = await p.evaluate(async ()=>{
   // ---- both themes survive the picker and a full render ---------------------
   o.picksBack = ['warp','pool'].every(k => { M.applyBundle(k); M.render(); return M.currentBundle() === k; });
   M.applyBundle('neon');
+
+  // ---- VIDEOBALL arrowheads: the RING is the player ------------------------
+  // ⚠️ A disc is a circle of radius r, and that circle is what collides. The first
+  // build drew the arrowhead alone, overhanging it in every direction (nose 1.55r,
+  // wings 1.05r), so the shape on screen was a third bigger than the shape in the
+  // physics. The ring is drawn at exactly r and the triangle is inscribed in it.
+  {
+    M.applyBundle('videoball');
+    M.sel.mode='1v1'; M.sel.kickoffRule='off'; M.setMatchSeed(3); M.startMatch();
+    const w=M.world; w.state='play'; w.stateT=2;
+    const me=w.players[0];
+    me.x=0; me.y=0; me.vx=0; me.vy=0; me.faceX=1; me.faceY=0;   // pointing +x
+    w.players.slice(1).forEach(q=>{ q.x=1e4; q.y=1e4; });
+    w.ball.x=1e4; w.ball.y=1e4;
+    for (let i=0;i<6;i++) M.render();
+    const s2 = M.cam.s * M.cam.body, R = me.r * s2;
+    const ink = (dx,dy) => {
+      const [sx,sy] = M.screenPt(M.wx(me.x)+dx, M.wy(me.y)+dy);
+      const d = c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data;
+      return [d[0],d[1],d[2]];
+    };
+    // ⚠️ Do NOT compare against one background sample. The Videoball court is BANDED,
+    // so "differs from the pixel over there" is true of half the empty court and the
+    // probe reports the arrowhead overhanging when it is a cream stripe. Test for the
+    // player's own ink instead: the ring and the arrowhead are team-coloured, the
+    // court is not.
+    const hex = h => { const n = parseInt(String(h).replace('#',''), 16);
+      return [(n>>16)&255, (n>>8)&255, n&255]; };
+    const close = (a, c, tol) => Math.abs(a[0]-c[0]) + Math.abs(a[1]-c[1]) + Math.abs(a[2]-c[2]) < tol;
+    const mine = hex(M.TH.teamRed), theirs = hex(M.TH.teamBlue);
+    const isTeam = c => close(c, mine, 150) || close(c, theirs, 150);
+    // A RING exists: ink all the way round at the body radius, including BEHIND the
+    // arrowhead where the old skin drew nothing at all.
+    const onRing = [];
+    for (let a=0; a<360; a+=15){
+      const t = a*Math.PI/180;
+      // ⚠️ Sample the MIDDLE of the ring stroke (radius R), not its inner edge. The
+      // stroke is centred on R and spans 0.93R-1.08R, so a sample at 0.97R sits on the
+      // antialiased inner boundary and reads as wash on a few arcs — which looks like
+      // a gap in the ring and is nothing of the kind.
+      onRing.push(isTeam(ink(Math.cos(t)*R, Math.sin(t)*R)));
+    }
+    o.ringAllRound = onRing.every(Boolean);
+    o.ringSamples = onRing.filter(Boolean).length + '/' + onRing.length;
+    o.ringGaps = onRing.map((v,i)=>v?null:i*15).filter(v=>v!==null);
+    // ...and NOTHING is drawn outside it. The old nose reached 1.55r and the wings
+    // 1.05r; sample where they used to be and there must be no player ink there.
+    o.oldNoseNowClear = !isTeam(ink(R*1.45, 0));
+    o.oldWingNowClear = !isTeam(ink(-R*0.72, R*1.34));
+    // The arrowhead is still there and still points where the player faces.
+    // ⚠️ Sample WELL inside it, not near the tip: the triangle is only a few pixels
+    // across near the nose and its own outline covers most of that, so a tip sample
+    // reads the outline and reports the arrowhead missing. Forward vs backward is the
+    // honest discriminator — the tail is notched, so the axis behind centre is court.
+    o.arrowAhead  = isTeam(ink(R*0.35, 0));
+    o.tailNotched = !isTeam(ink(-R*0.38, 0));
+    me.faceX=-1; me.faceY=0; for (let i=0;i<3;i++) M.render();
+    o.turnsWithFacing = isTeam(ink(-R*0.35, 0)) && !isTeam(ink(R*0.38, 0));
+    o.pointsAtFacing = o.arrowAhead && o.tailNotched && o.turnsWithFacing;
+    o.vbRadius = +R.toFixed(1);
+  }
   return o;
 });
 
@@ -181,6 +242,12 @@ ok(r.pocketIsDark, 'no pocket drawn on the pool table');
 ok(r.poolBallsDiffer, 'solids and stripes render identically');
 ok(r.stripeHasWhiteShoulder, `the stripe ball has no white shoulder: ${JSON.stringify(r.stripeTop)}`);
 ok(r.solidShoulderColoured, `the solid ball is not coloured through: ${JSON.stringify(r.solidTop)}`);
+ok(r.ringAllRound, `the Videoball arrowhead has no ring round the whole body (${r.ringSamples} arcs inked) — the circle you actually collide with is invisible`);
+ok(r.oldNoseNowClear, 'the arrowhead still overhangs the body where the old 1.55r nose was — what you see is bigger than what the physics uses');
+ok(r.oldWingNowClear, 'the arrowhead wings still reach past the body radius');
+ok(r.arrowAhead, 'the arrowhead vanished — the skin is now just a ring');
+ok(r.pointsAtFacing, 'the arrowhead does not point along the facing');
+ok(r.turnsWithFacing, 'the arrowhead did not turn when the player did');
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

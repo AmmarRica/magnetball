@@ -113,12 +113,91 @@ const r = await p.evaluate(async ()=>{
   o.ballEscapes = esc;
 
   M.sel.mode='1v1';
+  // ================= The snail is KICKABLE, and still heavy =================
+  // ⚠️ It does NOT go through handleBallControl: that path traps and carries, and
+  // being able to dribble the objective onto the goal line is the whole match in one
+  // run. It gets its own shove, scaled by SNAIL.kick.
+  // ⚠️ Measure ACROSS the pitch on a big court. Kicking toward a goal ends the match
+  // (snail home) or re-serves the ball, and the "travel" you then measure is the
+  // reset, not the kick — the first version of this check read the ball at 33 units
+  // and the snail at 183 and looked like the snail was lighter.
+  {
+    const glide = (target) => {
+      M.sel.mode='kq'; M.sel.field='colossus'; M.sel.trapOff=true;
+      M.applyFeel(); M.setMatchSeed(4); M.startMatch();
+      const w2=M.world; w2.state='play'; w2.stateT=2;
+      w2.players.forEach(q=>{ q.ctrl='none'; q.x=-1e4; q.y=-1e4; });
+      const sn = w2.extraBalls.find(x=>x.isSnail);
+      w2.extraBalls.filter(x=>x.isBerry).forEach(x=>{ x.banked = true; });
+      const body  = target==='ball' ? w2.ball : sn;
+      const other = target==='ball' ? sn : w2.ball;
+      other.x=0; other.y=900;
+      body.x=-300; body.y=0; body.vx=0; body.vy=0;
+      const me=w2.players[0]; me.ctrl='human1';
+      me.x=body.x-(body.r+me.r+6); me.y=0; me.vx=0; me.vy=0;
+      M.pads.p1.dx=1; M.pads.p1.dy=0; M.pads.p1.kick=true;
+      let peak=0;
+      for(let i=0;i<8;i++){ M.step(w2); peak=Math.max(peak, Math.hypot(body.vx,body.vy)); }
+      M.pads.p1.kick=false; M.pads.p1.dx=0;
+      const x0=body.x, y0=body.y;
+      for(let i=0;i<200;i++) M.step(w2);
+      return { peak:+peak.toFixed(2), travel:+Math.hypot(body.x-x0, body.y-y0).toFixed(0) };
+    };
+    // A full-speed body check, for calibration: a kick that does less than running
+    // into it is not a mechanic, it is a button that does nothing.
+    const shove = () => {
+      M.sel.mode='kq'; M.sel.field='colossus'; M.setMatchSeed(4); M.startMatch();
+      const w2=M.world; w2.state='play'; w2.stateT=2;
+      w2.players.forEach(q=>{ q.ctrl='none'; q.x=-1e4; q.y=-1e4; });
+      const sn=w2.extraBalls.find(x=>x.isSnail);
+      w2.extraBalls.filter(x=>x.isBerry).forEach(x=>{ x.banked = true; });
+      w2.ball.x=0; w2.ball.y=900;
+      sn.x=-300; sn.y=0; sn.vx=0; sn.vy=0;
+      const me=w2.players[0]; me.ctrl='human1';
+      me.x=sn.x-160; me.y=0; me.vx=0; me.vy=0;
+      M.pads.p1.dx=1; M.pads.p1.dy=0; M.pads.p1.kick=false;
+      for(let i=0;i<40;i++) M.step(w2);
+      const x0=sn.x, y0=sn.y; M.pads.p1.dx=0;
+      for(let i=0;i<200;i++) M.step(w2);
+      return +Math.hypot(sn.x-x0, sn.y-y0).toFixed(0);
+    };
+    const ballG = glide('ball'), snailG = glide('snail'), shoveT = shove();
+    o.kickBall = ballG; o.kickSnail = snailG; o.shoveTravel = shoveT;
+    o.snailIsKickable   = snailG.travel > 5 && snailG.peak > 1;
+    o.kickBeatsShove    = snailG.travel > shoveT * 1.4;
+    o.snailStaysHeavy   = ballG.travel > snailG.travel * 8;
+    o.snailSlowerThanBall = snailG.peak < ballG.peak;
+    // ...and it can still never be TRAPPED. Holding KICK next to the snail must not
+    // glue it to you: p.trap is the ball's mechanic and the snail is not the ball.
+    M.sel.mode='kq'; M.sel.trapOff=false; M.applyFeel();
+    M.setMatchSeed(4); M.startMatch();
+    const w3=M.world; w3.state='play'; w3.stateT=2;
+    w3.players.forEach(q=>{ q.ctrl='none'; q.x=-1e4; q.y=-1e4; });
+    const sn3=w3.extraBalls.find(x=>x.isSnail);
+    w3.extraBalls.filter(x=>x.isBerry).forEach(x=>{ x.banked = true; });
+    w3.ball.x=0; w3.ball.y=900;
+    sn3.x=0; sn3.y=0; sn3.vx=0; sn3.vy=0;
+    const me3=w3.players[0]; me3.ctrl='human1';
+    me3.x=0; me3.y=sn3.r+me3.r+4; me3.vx=0; me3.vy=0;
+    M.pads.p1.dx=0; M.pads.p1.dy=-1; M.pads.p1.kick=true;
+    for(let i=0;i<40;i++) M.step(w3);
+    o.snailNotTrapped = !me3.trap;
+    // One press is one shove, not a shove every frame while the button is held.
+    const held = Math.hypot(sn3.vx, sn3.vy);
+    for(let i=0;i<40;i++) M.step(w3);
+    o.holdIsNotRepeat = Math.hypot(sn3.vx, sn3.vy) < held;
+    M.pads.p1.kick=false; M.pads.p1.dy=0;
+    M.sel.field='classic';
+  }
   return o;
+
 });
 
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.twoBalls && r.oneScoringBall && r.hasSnail && r.snailAtCentre && r.snailIsHeavier && r.snailBigger &&
+const ok = r.snailIsKickable && r.kickBeatsShove && r.snailStaysHeavy &&
+  r.snailSlowerThanBall && r.snailNotTrapped && r.holdIsNotRepeat &&
+  r.twoBalls && r.oneScoringBall && r.hasSnail && r.snailAtCentre && r.snailIsHeavier && r.snailBigger &&
   r.snailInvMassLower &&
   r.snailHoldsPosition && r.regularBallReset &&
   r.regularGoalScored && r.noKickoffState && r.ballBackInPlay &&

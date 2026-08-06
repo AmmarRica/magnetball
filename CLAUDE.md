@@ -102,7 +102,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
-  still frame shows intent as well as position.
+  still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
+  circle of radius `r` and that circle is what collides. The first build drew the arrowhead
+  alone, overhanging it (nose 1.55r, wings 1.05r), so the shape on screen was a third bigger
+  than the shape in the physics. The ring is drawn at exactly `r` and the triangle is inscribed
+  (`ARROW`). ⚠️ `p.faceY || fallback` is a bug: a player facing exactly along x has
+  `faceY === 0`, which is falsy, so the fallback fired and the arrow pointed diagonally at
+  nothing. The default applies only when there is no facing at all.
   ⚠️ Field state advances in `advanceDynField()` next to `step()`, **never in a paint**
   (same rule as the trails), and off its own seeded PRNG so it can't touch `w.rng`.
   A monochrome palette *must* be paired with a disc skin — player colour comes from `profile`,
@@ -121,6 +127,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   never quite the mark you played with. **Bots wear `BOT_CAP` ('none')**: cycling the whole
   CAPS table put a different hat on every disc and made a cap read as decoration rather than
   as yours. Bots still vary by colour, shirt number and eyes.
+- **Icons:** `ICONS` (one 24×24 grid, one stroke weight, `currentColor`) → `iconSvg(name)` →
+  `optGlyph(entry)`, which every option tile and nav tile goes through. ⚠️ **Opting in is an
+  `icon:` FIELD, never a lookup by emoji** — emoji are not unique across tables (⚡ is both the
+  Quick match length and the Elite difficulty tier), so a by-emoji map puts a stopwatch on a
+  difficulty tile. ⚠️ **Cosmetic tables are deliberately NOT converted**: in `CAPS`, `EYES`,
+  `ANIMALS` and `TEXTS` the emoji IS the item — `paintCap` draws that exact glyph on the disc —
+  so an icon there would show a picture of something other than what you picked. Anything with
+  no `icon:` keeps its emoji. Difficulty is drawn as a **ramp** (`tierNofM`, filled pips) rather
+  than seven unrelated pictures, generated from `DIFF`'s own length. `tests/icons.mjs`.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one
@@ -139,6 +154,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
+- **The snail is KICKABLE and heavy.** `handleSnailKick` — deliberately *not*
+  `handleBallControl`, which traps and carries: dribbling the objective onto the goal line
+  would be the whole match in one run. ⚠️ The impulse is scaled by `SNAIL.kick`, not by
+  `invMass` — a kick sets velocity directly, so an unscaled one sends the snail off at ball
+  speed and "kickable" quietly means "weightless". `p.snailKicked` latches until KICK is
+  released. Measured on Colossus: one kick moves it 22 units, **twice** a full-speed body
+  check, while the same kick sends the ball 453.
 - **Killer Queen berries:** `BERRY` + `makeBerry`/`placeBerry`/`kqBerry`/`kqHiveFull`/`stepBerries`.
   Six floaty purple bodies you shepherd into the end you ATTACK — the same end as the ball and
   the snail, so "your hive" is never the opposite way round from everything else in the mode.
