@@ -57,20 +57,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
   `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
-- **Motion tells — THE 3-SECOND RULE:** a screenshot should say what happened in the last
-  `TRAIL_SECS`. That makes trails a claim about **time**, not world units or dot count.
-  ⚠️ They used to be capped both ways (12 dots × 9 units; 320 units of ball streak), so the
-  faster you moved the **less time** your trail covered — measured at top speed, 0.47s for a
-  player and 0.17s for the ball. Players are now DASHES sampled every `DOT_EVERY` steps and
-  aged out at `TRAIL_STEPS`, drawn along the heading recorded **with the sample** (deriving it
-  from neighbours gets the ends wrong and everything wrong once a dash ages out).
-  ⚠️ **Sample spacing and dash length are one decision** — a dash longer than the gap merges
-  into a solid line, which is what the first build drew. At a crawl the gap collapses and they
-  overlap into a clump, which is the "hovering here" read.
-  ⚠️ **Three seconds is impossible for the ball**: at the speed cap that is 7.6 pitch lengths.
-  It keeps a 3s *history*, a streak capped at `BALL_LEN_PITCH` of the pitch **length** (so a
-  big court scales), and `BALL_HOLD` seconds of linger so a saved shot is still legible.
-  `tests/trail3s.mjs` asserts the impossibility too, so nobody "fixes" it later.
+- **Motion tells:** short dot tails behind the players and one streak behind the ball,
+  both capped in world units (`DOT_GAP`/`DOT_MAX`, `BALL_LEN_MAX`). ⚠️ A three-second,
+  time-measured version of these was built and **reverted**: at the speed cap it drew a
+  streak most of a pitch long that hung off a stationary ball, and it read as a tail
+  rather than a tell. Length is deliberately short — the tells say *where someone just
+  came from*, not what the whole possession looked like. Advanced in `advanceTrails`
+  next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
+  streak instead of 190.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -268,7 +262,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 61 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 60 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
