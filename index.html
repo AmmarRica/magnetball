@@ -10285,20 +10285,99 @@ const DYN_FIELDS = {
 // that OWNS its field, and some of those fields simply hold still. `step` is optional.
 DYN_FIELDS.pooltable = {
   name: 'Pool table',
-  paint(c, st, L, T, W, H){
+  // ⚠️ Drawn OUTSIDE the play area — see `bleed` in drawGrass. Three things were wrong
+  // when it was a rectangle painted inside: the wood covered the green so the ball
+  // rolled across the cushion instead of bouncing off it; the rails ran straight
+  // through both GOAL MOUTHS, so a shot went through solid timber to score; and on the
+  // 20-odd rounded and chamfered fields a straight rail left a band of baize outside
+  // the line that no ball could ever reach.
+  //
+  // The cushion now HUGS THE FIELD'S OWN BOUNDARY: the same path drawPitch strokes,
+  // stroked at double width and clipped to the outside of itself, with the goal mouths
+  // punched out of the clip. It follows a circle, an octagon or a rectangle for free.
+  bleed: true,
+  // The field outline, in screen space — rounded, chamfered or square, matching
+  // drawPitch. Kept here rather than duplicated per shape.
+  // ⚠️ Does NOT call beginPath — it APPENDS a subpath. Starting a path here silently
+  // wiped the enclosing rect out of the even-odd clip below, which inverted it: the
+  // cushion was kept INSIDE the boundary, exactly the bug this rewrite was fixing.
+  // Every caller begins its own path.
+  path(c, f, L, T, W, H){
+    const cc = (f.corner || 0) / f.W * W;
+    if (f.corner > 0 && f.cut){
+      c.moveTo(L+cc, T); c.lineTo(L+W-cc, T); c.lineTo(L+W, T+cc); c.lineTo(L+W, T+H-cc);
+      c.lineTo(L+W-cc, T+H); c.lineTo(L+cc, T+H); c.lineTo(L, T+H-cc); c.lineTo(L, T+cc);
+      c.closePath();
+    } else if (f.corner > 0){
+      c.moveTo(L+cc, T);
+      c.arcTo(L+W, T, L+W, T+H, cc); c.arcTo(L+W, T+H, L, T+H, cc);
+      c.arcTo(L, T+H, L, T, cc);     c.arcTo(L, T, L+W, T, cc);
+      c.closePath();
+    } else c.rect(L, T, W, H);
+  },
+  paint(c, st, L, T, W, H, w){
     const rail = Math.max(6, Math.min(W, H) * 0.055);
-    const pr = rail * 1.15;                                  // pocket radius
-    c.fillStyle = TH.court; c.fillRect(L, T, W, H);           // baize
-    // Cushions: a border with the corners mitred, the way a real table reads.
-    c.strokeStyle = TH.dynRail || '#5a3a1c';
-    c.lineWidth = rail;
-    c.strokeRect(L + rail/2, T + rail/2, W - rail, H - rail);
-    c.strokeStyle = TH.dynRailEdge || 'rgba(0,0,0,0.35)';
-    c.lineWidth = Math.max(1, rail*0.14);
-    c.strokeRect(L + rail, T + rail, W - rail*2, H - rail*2);
-    // Six pockets: four corners and two down the long sides.
-    c.fillStyle = TH.dynPocket || '#0b0b0b';
-    for (const [px, py] of [[L,T],[L+W,T],[L,T+H],[L+W,T+H],[L,T+H/2],[L+W,T+H/2]]){
+    const pr = rail * 0.95;
+    // ⚠️ Baize follows the FIELD SHAPE, not its bounding box. Painting a rect here
+    // left green in the cut corners of every octagon and rounded field — outside the
+    // line, outside the wood, unreachable and clearly wrong. There is no clip to
+    // catch it any more, because this field bleeds on purpose.
+    // ...and the mow pattern underneath is drawn clipped to the BOUNDING BOX, not the
+    // field shape, so on an octagon it leaves court colour in the cut corners. Blank
+    // the box back to the page colour first, then lay baize in the shape.
+    if (w){
+      c.fillStyle = TH.fieldBg || '#0a1a10'; c.fillRect(L, T, W, H);
+      c.fillStyle = TH.court; c.beginPath(); this.path(c, w.field, L, T, W, H); c.fill();
+    } else { c.fillStyle = TH.court; c.fillRect(L, T, W, H); }
+    const wood = TH.dynRail || '#7a4a1e';
+    const edge = TH.dynRailEdge || 'rgba(0,0,0,0.4)';
+    // No world means a picker tile: lay a closed table INSIDE the tile instead.
+    if (!w){
+      c.strokeStyle = wood; c.lineWidth = rail;
+      c.strokeRect(L + rail/2, T + rail/2, W - rail, H - rail);
+      c.strokeStyle = edge; c.lineWidth = Math.max(1, rail*0.14);
+      c.strokeRect(L + rail, T + rail, W - rail*2, H - rail*2);
+      c.fillStyle = TH.dynPocket || '#080808';
+      for (const [px,py] of [[L+rail,T+rail],[L+W-rail,T+rail],[L+rail,T+H-rail],
+                             [L+W-rail,T+H-rail],[L+rail,T+H/2],[L+W-rail,T+H/2]]){
+        c.beginPath(); c.arc(px, py, pr*0.8, 0, 2*Math.PI); c.fill();
+      }
+      return;
+    }
+    const f = w.field;
+    const ghPx = (f.goal/2) / f.W * W;
+    const cx = L + W/2, M = rail * 2.2;
+    // Clip to "outside the boundary, minus the two goal mouths", then stroke the
+    // boundary at double width. Only the outer half survives, so the cushion face
+    // lands exactly on the line the ball actually bounces off.
+    c.save();
+    c.beginPath();
+    c.rect(L - M, T - M, W + M*2, H + M*2);          // everything nearby...
+    this.path(c, f, L, T, W, H);                      // ...minus the play area...
+    c.rect(cx - ghPx, T - M, ghPx*2, M);              // ...minus the top goal mouth...
+    c.rect(cx - ghPx, T + H, ghPx*2, M);              // ...and the bottom one
+    c.clip('evenodd');
+    c.strokeStyle = wood; c.lineWidth = rail * 2;
+    c.beginPath(); this.path(c, f, L, T, W, H); c.stroke();
+    c.restore();
+    // A darker line along the cushion FACE — the surface the ball meets.
+    c.save();
+    c.beginPath();
+    c.rect(L - M, T - M, W + M*2, H + M*2);
+    this.path(c, f, L, T, W, H);
+    c.rect(cx - ghPx, T - M, ghPx*2, M);
+    c.rect(cx - ghPx, T + H, ghPx*2, M);
+    c.clip('evenodd');
+    c.strokeStyle = edge; c.lineWidth = Math.max(1.5, rail*0.34);
+    c.beginPath(); this.path(c, f, L, T, W, H); c.stroke();
+    c.restore();
+    // Six pockets on the boundary: four corners and two down the long sides. On a
+    // rounded field the corners sit on the arc, not out in space where a rectangle
+    // would have put them.
+    const cc = (f.corner || 0) / f.W * W, k = f.corner > 0 ? cc * (f.cut ? 0.5 : 0.29) : 0;
+    c.fillStyle = TH.dynPocket || '#080808';
+    for (const [px, py] of [[L+k, T+k], [L+W-k, T+k], [L+k, T+H-k], [L+W-k, T+H-k],
+                            [L, T+H/2], [L+W, T+H/2]]){
       c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI); c.fill();
     }
   },
@@ -10397,8 +10476,14 @@ function drawGrass(w, L, R, T, B){
   // Over the surface, not instead of it: ice and mud change how the game PLAYS, so
   // they still have to read. The mow pattern underneath is cosmetic either way.
   const dyn = dynField();
-  if (dyn) dyn.paint(ctx, dynState, L, T, R-L, B-T);
+  if (dyn && !dyn.bleed) dyn.paint(ctx, dynState, L, T, R-L, B-T, w);
   ctx.restore();
+  // A field that owns its FRAME rather than its surface has to draw OUTSIDE the play
+  // area. The pool table's cushions are the clearest case: the ball bounces off the
+  // pitch boundary, so the cushion FACE has to sit on that line and the wood beyond
+  // it. Painted inside the clip the wood covered the green and the ball rolled over
+  // the top of it. `bleed` opts a field out of the clip; the starfield keeps it.
+  if (dyn && dyn.bleed) dyn.paint(ctx, dynState, L, T, R-L, B-T, w);
 }
 function roundRectPath(x,y,ww,hh,r){
   ctx.moveTo(x+r,y);
@@ -11241,7 +11326,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0130PM';
+const VERSION = '20260805.0300PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 

@@ -105,6 +105,54 @@ const r = await p.evaluate(async ()=>{
   o.solidShoulderColoured = spread(solidTop) > 40 || Math.min(...solidTop) < 150;
   o.poolBallsDiffer = JSON.stringify(solidTop) !== JSON.stringify(stripeTop);
 
+  // ---- the pool table's WOOD lands where a cushion actually is --------------
+  // Three things were wrong when the rails were a rectangle painted inside the play
+  // area, and each one is invisible unless you sample for it.
+  {
+    const w3 = setup('pool');
+    w3.players.forEach(q=>{ q.x=9999; q.y=9999; });
+    w3.ball.x=9999; w3.ball.y=9999;
+    M.computeCam(); M.render();
+    const bb = w3.bounds, f3 = w3.field;
+    const near = (A,B,tol) => [0,1,2].every(i=>Math.abs(A[i]-B[i]) <= (tol||26));
+    const hex = h => { const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+    const baize = hex(M.TH.court), timber = hex(M.TH.dynRail);
+    // 1) THE GOAL MOUTH IS A GAP. Rails ran straight through it, so a shot went
+    //    through solid timber to score.
+    o.goalMouth = at(0, bb.halfL + 6);
+    o.goalMouthIsNotWood = !near(o.goalMouth, timber, 40);
+    // 2) THE PLAY AREA IS BAIZE ALL THE WAY TO THE LINE. Wood inside the boundary
+    //    meant the ball rolled across the cushion instead of bouncing off its face.
+    // ⚠️ Sample AWAY from features. The first version of this read (halfW-8, 0) and
+    //    (halfW+10, 0) — which are the halfway line and the side pocket — and read
+    //    white and black rather than baize and timber. Take the side boundary at
+    //    0.4 of the way down, clear of the halfway line, the pocket and the goal.
+    const yProbe = bb.halfL * 0.4;
+    o.justInside = at(bb.halfW - 10, yProbe);
+    o.insideIsBaize = near(o.justInside, baize, 30);
+    o.deepInside = at(bb.halfW * 0.5, yProbe);
+    o.deepIsBaize = near(o.deepInside, baize, 30);
+    // 3) ...and the wood is really out there, or (1) and (2) pass on a table with
+    //    no cushions at all.
+    o.justOutside = at(bb.halfW + 10, yProbe);
+    o.outsideIsWood = near(o.justOutside, timber, 45);
+  }
+  // ...and on a CHAMFERED field the cushion follows the shape, leaving no unreachable
+  // court colour stranded in the cut corners.
+  {
+    const w4 = setup('pool');
+    M.sel.field = 'octagon'; M.setMatchSeed(9); M.startMatch();
+    const w5 = M.world; w5.state='play'; w5.stateT=2;
+    w5.players.forEach(q=>{ q.x=9999; q.y=9999; }); w5.ball.x=9999; w5.ball.y=9999;
+    M.computeCam(); M.render();
+    const bb = w5.bounds;
+    // The cut corner: outside the octagon but inside its bounding box.
+    o.cutCorner = at(-bb.halfW + 12, -bb.halfL + 12);
+    const court = (h=>{ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; })(M.TH.court);
+    o.cutCornerIsNotCourt = ![0,1,2].every(i=>Math.abs(o.cutCorner[i]-court[i]) <= 30);
+    M.sel.field = 'classic';
+  }
+
   // ---- both themes survive the picker and a full render ---------------------
   o.picksBack = ['warp','pool'].every(k => { M.applyBundle(k); M.render(); return M.currentBundle() === k; });
   M.applyBundle('neon');
@@ -115,6 +163,11 @@ const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(/pooltable/.test(r.registry) && /starfield/.test(r.registry), `DYN_FIELDS is missing an entry: ${r.registry}`);
 ok(r.themesDeclareReal, 'a theme declares a dyn field that does not exist');
+ok(r.goalMouthIsNotWood, `the pool table's rail runs through the GOAL MOUTH — a shot would pass through timber: ${JSON.stringify(r.goalMouth)}`);
+ok(r.insideIsBaize, `wood is inside the boundary, so the ball rolls over the cushion instead of bouncing off it: ${JSON.stringify(r.justInside)}`);
+ok(r.deepIsBaize, `the middle of the table is not baize, so the probe is not measuring the cloth: ${JSON.stringify(r.deepInside)}`);
+ok(r.outsideIsWood, `there is no cushion outside the boundary at all, so the checks above prove nothing: ${JSON.stringify(r.justOutside)}`);
+ok(r.cutCornerIsNotCourt, `court colour is stranded in a chamfered field's cut corner, outside the line and outside the wood: ${JSON.stringify(r.cutCorner)}`);
 ok(r.stillWithoutStep, 'the field advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it fast');
 ok(r.movesWithStep, 'the starfield never moved when stepped');
 ok(r.samples >= 60, `too few samples to mean anything: ${r.samples}`);

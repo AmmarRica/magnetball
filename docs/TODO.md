@@ -5,7 +5,21 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0130PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0300PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🎱 The pool table's wood was in the wrong place
+- [x] **Rails ran through both goal mouths** — a shot passed through solid timber to score.
+  The cushion now breaks at each mouth, which is the one place the ball is meant to leave.
+- [x] **Wood was inside the play area**, so the ball rolled across the cushion instead of
+  bouncing off its face. The cushion face now sits exactly on the boundary the ball collides
+  with, and the timber is beyond it (`bleed` opts a field out of `drawGrass`'s clip).
+- [x] **It follows the field's own outline** — rounded, chamfered or square — instead of being
+  a rectangle. On the 20-odd non-rectangular fields a straight rail left a band of baize
+  outside the line that no ball could reach.
+- [x] ⚠️ The helper that builds that outline **must not call `beginPath()`**: doing so wiped
+  the enclosing rect out of the even-odd clip and inverted it, putting the wood back inside.
 
 ---
 
