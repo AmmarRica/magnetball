@@ -143,7 +143,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   stretched, never per frame: at a 4px cell a 400×700 pitch is 17,500 rects a frame. Cached on
   the INK, because slots mix and it can be asked for over another palette. And the threshold is
   `(B + 0.5)/16` — the lowest Bayer value is ZERO, so a raw `B/16` fills one cell in sixteen
-  even where the ramp says clear, and the pitch stayed stippled at halfway.
+  even where the ramp says clear, and the pitch stayed stippled at halfway. The grid is 192
+  cells, so the dots land ~2px; written as **ImageData**, because 37,000 `fillRect`s is a
+  visible hitch even once. The discs carry the same dither ramped the other way — clear in the
+  middle where the bar lives, dense at the rim — off ONE cached mask per ink (`chalkMask`),
+  one `drawImage` a disc.
+  `sleeve` (shown as **Bootleg**) = a printed record sleeve: black card, a grid of big red
+  dots, green bars punched through, acid-yellow markings. Players are the sleeve's own two
+  marks — a red DOT against a green BAR. ⚠️ Red vs green is the one pair a colour-blind player
+  cannot separate, so the difference is the SILHOUETTE and the colour rides on top; the square
+  is **inscribed** in the guide ring (`SLEEVE.sq`), never circumscribed — a square drawn to `r`
+  puts its corners at 1.41`r`, which is the Videoball arrowhead mistake with a different shape.
+  ⚠️ The court dots are a **muted maroon** and twice a body across: a field of bright red
+  circles under a team drawn as a bright red circle is a field of decoys. `tests/dyntheme.mjs`
+  measures both — coverage at 0.9`r` all the way round for the dot, only on the diagonals for
+  the bar, and the print's luminance against the team's.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
