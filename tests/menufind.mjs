@@ -129,6 +129,20 @@ r.recents = await p.evaluate(()=>{
   if (locked){ M.noteRecent('flag', locked); M.buildFlagPicker(); }
   o.lockedHidden = !locked || !tiles('flagRecent').includes(M.itemName('flag', locked));
 
+  // The REAL path: clicking a tile in the grid must record it. Everything above
+  // drives noteRecent directly, which proves the store and not the wiring.
+  const fresh = M.FLAG_KEYS.find(k => k !== 'none' && M.isUnlocked('flag', k) &&
+                                      !(M.recents.flag||[]).includes(k));
+  o.hadFreshItem = !!fresh;
+  if (fresh){
+    const tile = [...document.querySelectorAll('#flagPick .opt')]
+      .find(el => el.querySelector('span') &&
+                  el.querySelector('span').textContent === M.itemName('flag', fresh));
+    o.tileFound = !!tile;
+    if (tile) tile.click();
+    o.clickRecorded = (M.recents.flag || [])[0] === fresh;
+  }
+
   // It survives a reload — that is what makes it recents rather than history.
   o.persisted = !!(JSON.parse(localStorage.getItem('magnetball.recents')||'{}').flag||[]).length;
   return o;
@@ -174,6 +188,8 @@ ok(r.recents.noneNotRecorded, '"none" was recorded as a recent pick — it is a 
 ok(r.recents.animalRowClean, 'a flag pick showed up in the ANIMALS recents row — recents are keyed on the shared faceplate slot instead of the category');
 ok(r.recents.shortGridNoRow, 'a short picker got a recents row, which is longer than the list it shortcuts');
 ok(r.recents.lockedHidden, 'a locked item appeared in recents');
+ok(r.recents.hadFreshItem && r.recents.tileFound, 'could not find an unused unlocked tile to click — the fixture is wrong, not the feature');
+ok(r.recents.clickRecorded, 'clicking a tile in the grid did not record a recent — the store works but nothing is wired to it');
 ok(r.afterReload.shows && r.afterReload.n >= 2, `recents did not survive a reload: ${JSON.stringify(r.afterReload)}`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

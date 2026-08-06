@@ -8103,7 +8103,15 @@ function applyKickoffLine(w, discs){
 // from the other direction and bury the keeper under a scrum. One of each is
 // allowed inside a goal box now, and the box is exactly the region the pitch
 // already draws — the net pocket plus its mirror in front of the goal line.
-function boxRuleOn(w){ return !!(w && w.boxRule && !w.drillMode && !w.train); }
+// ⚠️ DURING PLAY ONLY. Without the state gate the rule also fired in the warm-up
+// lobby — where walking about and standing wherever you like is the entire point,
+// and being shoved off a spot reads as the controls breaking — and during the
+// full-time wind-down, shoving people around after the whistle had gone. Measured:
+// 1 of 2 lobby bodies moved, and 3 players moved during the wind-down against 0 with
+// the rule off. applyKickoffLine has the same shape of gate for the same reason.
+function boxRuleOn(w){
+  return !!(w && w.boxRule && !w.drillMode && !w.train && w.state === 'play');
+}
 // Which team defends the end at this sign: team 0 defends the bottom (+1).
 function boxDefender(sign){ return sign < 0 ? 1 : 0; }
 function applyGoalBox(w, discs){
@@ -10103,6 +10111,13 @@ function resize(){
     dockOrFull('setup', null, true);   // automatic: keep the collapse state as-is
   }
 }
+// Smallest a player disc may be drawn. Below this the faceplate, the shirt number
+// and the team colour are all unreadable, and every disc reads as the same dot.
+// ⚠️ Declared ABOVE computeCam, which reads it. It sat below and only survived
+// because computeCam's one bootstrap-time caller is guarded by `if (world)`, and
+// world is still null there — luck, not design. Two TDZ incidents are already
+// recorded in CLAUDE.md (VJUI, GOALCAM); this is the same shape.
+const MIN_BODY_PX = 7;
 function computeCam(){
   const f = world.field;
   const padL = uiPadLeft || 0;              // keep the pitch clear of a docked panel
@@ -10144,9 +10159,7 @@ function computeCam(){
   const pr = (world.players && world.players[0] ? world.players[0].r : 14) * cam.s;
   cam.body = pr > 0 ? Math.max(1, MIN_BODY_PX / pr) : 1;
 }
-// Smallest a player disc may be drawn. Below this the faceplate, the shirt number
-// and the team colour are all unreadable, and every disc reads as the same dot.
-const MIN_BODY_PX = 7;
+
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
 // Draw screen-upright content at a point inside the rotated pitch (name plates,
@@ -12381,7 +12394,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0955AM';
+const VERSION = '20260806.1120AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
