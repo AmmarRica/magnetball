@@ -2376,6 +2376,32 @@ const THEMES = {
   // The shrimp is still in the registry and still pickable; the Players slot offers
   // all three pairings. ⚠️ Lines are a deep teal rather than white: white ripples over pale sand
   // gave the pitch markings nothing to hold against.
+  // Acid yellow field, black lines, WHITE everywhere else — a wireframe on a
+  // highlighter. ⚠️ The page background being white is the whole reason the pitch
+  // colours are picked the way they are: every mark that lives outside the court has
+  // to read on white, so teamRed/teamBlue are black and dark grey rather than colours
+  // (Warp does the same for the same reason). The discs are white and are separated
+  // by a black MARK, not by hue — see DISC_SKINS.chalk.
+  chalk: {
+    name: 'Highlighter', emoji: '🟨',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #ffffff 0%, #f7f7f2 55%, #eeeeea 100%)',
+      bg:'#ffffff', panel:'rgba(0,0,0,0.05)', edge:'#c9c9c0', text:'#101010', muted:'#5f5f58',
+      red:'#101010', blue:'#5a5a52', cyan:'#101010', magenta:'#3a3a34', green:'#101010',
+      yellow:'#8f9600', accent:'#101010', go:'#101010', field:'#c2ce18', onAccent:'#ffffff' },
+    pitch: { glow:false, fieldBg:'#ffffff', court:'#c2ce18', stripeA:'#c2ce18', stripeB:'#bac618',
+      netPocket:'rgba(0,0,0,0.06)', line:'#000000', centerDot:'#000000',
+      netMesh:'rgba(0,0,0,0.42)', post:'#000000', teamRed:'#000000', teamBlue:'#54544c',
+      discRim:'#000000', kickRing:'#000000', kickText:'#ffffff', cbRing:'#000000',
+      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#000000', nameText:'#ffffff',
+      shadow:'rgba(0,0,0,0.18)', ballRim:'#000000', ball:'#ffffff', ballSpot:'#000000',
+      trailRGB:'0,0,0',
+      obstacle:'#000000', good:'#101010', warn:'#6a6a60', dim:'#9a9a92', cone:'#000000',
+      hudText:'#101010', hudSub:'#5f5f58', accent:'#101010', padRing:'rgba(0,0,0,0.55)',
+      // The guide ring on a WHITE disc: the light tone has nothing to read against, so
+      // the dark one carries it. That is exactly why the ring is two-tone.
+      discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
+  },
   shrimp: {
     name: 'Rockpool', emoji: '🦞',
     ui: { scan:false,
@@ -2920,6 +2946,7 @@ const THEME_BUNDLES = {
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
+  chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11334,6 +11361,52 @@ function surfaceTexture(w){
 const DYN_FIELDS = {
   // Flying through starfall: stars stream out from the centre spot with perspective,
   // so the pitch reads as the view out of the front of something moving fast.
+  // An ordered Bayer dither over whatever court it is given: dense at the two ends,
+  // clearing to nothing at halfway. Overlays rather than fills, so it works on any
+  // palette — on Highlighter that is black dots on acid yellow.
+  // ⚠️ Built ONCE into an offscreen canvas and stretched, never per frame: at a
+  // 4-pixel cell a 400x700 pitch is 17,500 rects a frame. The tile is 64x64 cells,
+  // built once and cached, and rebuilt only when the INK changes — slots mix freely,
+  // so the same field can be asked for over a different palette.
+  // ⚠️ imageSmoothing is off globally, so stretching the tile keeps hard edges. That
+  // is the look, not an accident.
+  dither: {
+    name: 'Dither', res: 256, cell: 4,
+    // ⚠️ Tuned DOWN from 1.6/0.78, which made the two ends nearly solid black and put
+    // a wall of texture between the player and the ball. A dither is a surface, not an
+    // obstacle: it has to lose every contest against a disc, the ball and the lines.
+    ramp: 2.4,          // how fast the dots thin out toward halfway
+    peak: 0.46,         // densest the ends get
+    alpha: 0.62,        // ...and it never draws at full strength
+    build(st, ink){
+      const N = this.res, C = this.cell, n = N / C;
+      const cv = document.createElement('canvas'); cv.width = cv.height = N;
+      const c2 = cv.getContext('2d');
+      c2.fillStyle = ink;
+      // 4x4 ordered (Bayer) matrix: the thresholds that make a dither read as an
+      // even texture rather than as clumps.
+      const B = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+      for (let gy=0; gy<n; gy++){
+        const fy = (gy + 0.5) / n;
+        const d = Math.abs(fy - 0.5) * 2;                 // 0 at halfway, 1 at the ends
+        const dens = Math.pow(d, this.ramp) * this.peak;
+        for (let gx=0; gx<n; gx++){
+          // ⚠️ (B + 0.5)/16, not B/16. The lowest Bayer value is ZERO, so a raw
+          // threshold makes `dens > 0` true for one cell in sixteen — and the pitch
+          // stayed stippled at halfway where the ramp says clear.
+          if (dens > (B[(gy & 3)*4 + (gx & 3)] + 0.5) / 16) c2.fillRect(gx*C, gy*C, C, C);
+        }
+      }
+      st.cv = cv; st.ink = ink;
+    },
+    paint(c, st, L, T, W, H){
+      const ink = TH.dynMark || TH.line || '#000000';
+      if (!st.cv || st.ink !== ink) this.build(st, ink);
+      const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+      c.drawImage(st.cv, L, T, W, H);
+      c.globalAlpha = a;
+    },
+  },
   // Seabed: sand, ripples and a scatter of shells. Still — no step — because the
   // shrimp are the thing that moves and a drifting floor under them reads as lag.
   // ⚠️ The scatter is generated ONCE in reset() off its own fixed PRNG and read from
@@ -11910,6 +11983,31 @@ const SEA = {
 
 // A pairing: which creature each side draws. The skin key is what `sel.look.discs`
 // stores, so it is stable across renames of the display name.
+// Both sides WHITE, told apart by a black BAR — horizontal for team 0, vertical for
+// team 1. ⚠️ "Players are white" and "two teams" are in tension: two white discs are
+// the same disc. Hue cannot do the work here (the whole theme is yellow, black and
+// white, and hue is what a colour-blind player cannot use anyway), so the mark is a
+// SHAPE, and one that survives 12 pixels — a bar either way up is legible when a
+// number is not. Same argument as Pool's solids vs stripes.
+const CHALK = { bar: 0.62, thick: 0.26, rim: 0.13 };
+DISC_SKINS.chalk = {
+  name: 'Chalk discs',
+  paint(c, p, x, y, r, w){
+    c.beginPath(); c.arc(x, y, r + Math.max(1.5, r*CHALK.rim), 0, 2*Math.PI);
+    c.fillStyle = '#000000'; c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = '#ffffff'; c.fill();
+    // The bar is clipped to the disc, so it reads as a marking ON the body rather
+    // than a stick laid across it — and it can never cross the guide ring.
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+    c.fillStyle = '#000000';
+    const L = r*CHALK.bar, T = r*CHALK.thick;
+    if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
+    else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
 function seaPair(name, t0, t1){
   return {
     name,
@@ -12911,7 +13009,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0505PM';
+const VERSION = '20260806.0620PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12978,7 +13076,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,

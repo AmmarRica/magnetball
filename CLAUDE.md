@@ -135,6 +135,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `normalizeLook()` folds the old single-skin key `shrimp` → `crablobster` as a **pure string
   swap with no `DISC_SKINS` lookup**: it runs during the bootstrap and `DISC_SKINS` is declared
   with the renderer far below, so reading it there took the whole page down.
+  `chalk` (shown as **Highlighter**) = an acid-yellow court, black lines, white everywhere
+  else, dithered. ⚠️ Its two demands fight: "players are white" and "two teams" make one disc.
+  Hue cannot settle it — the palette is yellow, black and white — so the sides carry a black
+  BAR, horizontal against vertical, and the suite checks the SHAPE. Same argument as Pool.
+  ⚠️ `DYN_FIELDS.dither` is an ordered Bayer ramp built ONCE into an offscreen canvas and
+  stretched, never per frame: at a 4px cell a 400×700 pitch is 17,500 rects a frame. Cached on
+  the INK, because slots mix and it can be asked for over another palette. And the threshold is
+  `(B + 0.5)/16` — the lowest Bayer value is ZERO, so a raw `B/16` fills one cell in sixteen
+  even where the ramp says clear, and the pitch stayed stippled at halfway.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead

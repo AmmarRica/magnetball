@@ -218,6 +218,69 @@ const r = await p.evaluate(async ()=>{
     o.pointsAtFacing = o.arrowAhead && o.tailNotched && o.turnsWithFacing;
     o.vbRadius = +R.toFixed(1);
   }
+
+  // ---- Highlighter: yellow field, black lines, white everything else --------
+  // ⚠️ "Players are white" and "two teams" are in tension — two white discs are the
+  // same disc. Hue cannot resolve it here (the palette is yellow, black and white),
+  // so the sides carry a black BAR, one horizontal and one vertical, and this checks
+  // the SHAPE rather than the colour.
+  {
+    M.applyBundle('chalk');
+    o.chalkName = M.bundleName();
+    o.chalkSlots = JSON.stringify(M.liveSlots());
+    M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.setMatchSeed(3); M.startMatch();
+    const w=M.world; w.state='play'; w.stateT=2;
+    const me=w.players[0], them=w.players.find(q=>q.team===1);
+    w.players.forEach(q=>{ q.x=1e4; q.y=1e4; });
+    me.x=-90; me.y=0; them.x=90; them.y=0;
+    w.ball.x=1e4; w.ball.y=1e4;
+    for (let i=0;i<5;i++) M.render();
+    const s3 = M.cam.s * M.cam.body;
+    const at = (px,py) => { const [sx,sy]=M.screenPt(M.wx(px), M.wy(py));
+      const d=c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR),1,1).data; return [d[0],d[1],d[2]]; };
+    const dark = c3 => c3[0]<90 && c3[1]<90 && c3[2]<90;
+    const pale = c3 => c3[0]>200 && c3[1]>200 && c3[2]>200;
+    const R = me.r * s3;
+    // The field is yellow: green-ish channel high, blue low.
+    o.chalkCourt = at(0, w.field.L*0.30);
+    o.courtIsYellow = o.chalkCourt[0] > 120 && o.chalkCourt[1] > 140 && o.chalkCourt[2] < 110;
+    // Both bodies are WHITE...
+    o.body0 = at(me.x + R*0.62, me.y);         // clear of team 0's horizontal bar
+    o.body1 = at(them.x + R*0.62, them.y);     // ...ON team 1's, so this one is dark
+    o.discsArePale = pale(at(me.x, me.y - R*0.62)) && pale(at(them.x + R*0.62, them.y - R*0.4));
+    // ...and the bars run different ways. Team 0 horizontal, team 1 vertical.
+    o.t0Across  = dark(at(me.x - R*0.5, me.y)) && dark(at(me.x + R*0.5, me.y));
+    o.t0NotDown = pale(at(me.x, me.y - R*0.55)) && pale(at(me.x, me.y + R*0.55));
+    o.t1Down    = dark(at(them.x, them.y - R*0.5)) && dark(at(them.x, them.y + R*0.5));
+    o.t1NotAcross = pale(at(them.x - R*0.55, them.y)) && pale(at(them.x + R*0.55, them.y));
+    o.sidesDifferByShape = o.t0Across && o.t0NotDown && o.t1Down && o.t1NotAcross;
+
+    // ---- the dither is a SURFACE, not a wall ------------------------------
+    // Built once and cached; rebuilt only when the ink changes. And it must be
+    // denser at the ends than at halfway, or it is not a ramp.
+    const f = M.DYN_FIELDS.dither;
+    const st = {}; f.reset && f.reset(st);
+    const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 300;
+    const cc = cv2.getContext('2d');
+    cc.fillStyle = '#ffffff'; cc.fillRect(0,0,300,300);
+    f.paint(cc, st, 0, 0, 300, 300);
+    o.ditherCached = !!st.cv;
+    const inkAt = (yFrac) => {
+      const d = cc.getImageData(0, Math.round(yFrac*299), 300, 1).data;
+      let n=0; for (let i=0;i<d.length;i+=4) if (d[i] < 160) n++;
+      return n;
+    };
+    o.ditherEnd = inkAt(0.02); o.ditherMid = inkAt(0.5);
+    o.ditherRamps = o.ditherEnd > o.ditherMid + 20;
+    o.ditherClearsAtHalfway = o.ditherMid < 30;
+    o.ditherNotSolid = o.ditherEnd < 260;
+    // ...and it rebuilds when the INK changes, because slots mix across palettes.
+    const firstCv = st.cv;
+    st.ink = '#123456';
+    f.paint(cc, st, 0, 0, 300, 300);
+    o.ditherRebuildsOnInk = st.cv !== firstCv;
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -252,6 +315,15 @@ ok(r.oldWingNowClear, 'the arrowhead wings still reach past the body radius');
 ok(r.arrowAhead, 'the arrowhead vanished — the skin is now just a ring');
 ok(r.pointsAtFacing, 'the arrowhead does not point along the facing');
 ok(r.turnsWithFacing, 'the arrowhead did not turn when the player did');
+ok(r.chalkName === 'Highlighter', `the Highlighter bundle does not resolve: ${r.chalkName}`);
+ok(r.courtIsYellow, `the Highlighter court is not yellow: ${r.chalkCourt}`);
+ok(r.discsArePale, 'the Highlighter discs are not white');
+ok(r.sidesDifferByShape, `the two white discs are not separated by a black bar: across ${r.t0Across}/${r.t0NotDown}, down ${r.t1Down}/${r.t1NotAcross} — two white discs with no mark are the same disc`);
+ok(r.ditherCached, 'the dither is not cached — it would rebuild 17,500 rects a frame');
+ok(r.ditherRamps, `the dither does not ramp: ${r.ditherEnd} ink at the end vs ${r.ditherMid} at halfway`);
+ok(r.ditherClearsAtHalfway, `the dither never clears (${r.ditherMid} ink at halfway) — a surface has to lose to the ball`);
+ok(r.ditherNotSolid, `the dither goes solid at the ends (${r.ditherEnd}), which buries the goal box`);
+ok(r.ditherRebuildsOnInk, 'the dither does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

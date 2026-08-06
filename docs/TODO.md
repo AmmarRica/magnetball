@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0505PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0620PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -51,6 +51,21 @@ _Current build: **v20260806.0505PM** (shown under the title; bump `VERSION` in `
   input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
   blocks kenney.nl, so it could not be fetched. Commit
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
+
+## 🟨 Highlighter theme
+- [x] Acid-yellow court, black lines, white surround, dithered — from a reference image.
+- [x] ⚠️ "Players are white" and "two teams" are in tension: two white discs are the same disc,
+  and hue cannot settle it in a yellow/black/white palette. The sides carry a black BAR,
+  horizontal against vertical — a shape, which also survives 12 pixels and colour blindness.
+- [x] `DYN_FIELDS.dither` — an ordered Bayer ramp, dense at the ends, clear at halfway. Built
+  once into an offscreen canvas and stretched; per frame at a 4px cell it would be 17,500
+  rects. Cached on the ink, since slots mix across palettes.
+- [x] ⚠️ Tuned down from the first pass, which made the ends nearly solid and put a wall of
+  texture between the player and the ball. A dither is a surface: it must lose every contest
+  against a disc, the ball and the lines.
+- [x] ⚠️ Bayer bug: the lowest matrix value is ZERO, so `dens > B/16` is true for one cell in
+  sixteen at ANY density — the pitch stayed stippled at halfway where the ramp says clear.
+  The threshold is `(B + 0.5)/16`.
 
 ## 🧭 UI/UX pass (approved plan, one change at a time)
 - [x] **4. Help text is progressive.** One component (`buildHintToggles`) folds every help
