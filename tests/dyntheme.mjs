@@ -455,6 +455,67 @@ const r = await p.evaluate(async ()=>{
     o.sheepDraws = ballShot('sheep') !== ballShot('plain');
     M.applyBundle('classic');
   }
+
+  // ---- Asteroids: a vector monitor, and nothing on it is filled -------------
+  // ⚠️ "Everything is a thin line" is the whole theme, so it is measured rather than
+  // asserted in a comment: the middle of a ship, and the middle of the ball, both
+  // have to still be the court underneath.
+  {
+    const w6 = setup('vector');
+    w6.players.forEach(q=>{ q.x=9999; q.y=9999; q.vx=0; q.vy=0; });
+    w6.ball.x=9999; w6.ball.y=9999; w6.ball.vx=0; w6.ball.vy=0;
+    o.vectorName = M.bundleName();
+    M.render(); const g0 = frame();
+    M.render(); o.voidStillWithoutStep = frame() === g0;   // a draw must not advance the sky
+    for (let i=0;i<40;i++) M.advanceDynField();
+    M.render(); o.voidMovesWithStep = frame() !== g0;
+
+    const R = 60, CX = 150, CY = 150, BG = 127;
+    const cv6 = document.createElement('canvas'); cv6.width = cv6.height = 300;
+    const cc6 = cv6.getContext('2d');
+    const paintShip = (team, fx, fy) => {
+      cc6.fillStyle = '#7f7f7f'; cc6.fillRect(0,0,300,300);
+      const q = { team, faceX:fx, faceY:fy, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.vector.paint(cc6, q, CX, CY, R, { players:[q] });
+    };
+    const off = (d,i) => Math.abs(d[i]-BG) + Math.abs(d[i+1]-BG) + Math.abs(d[i+2]-BG);
+    // Hollow: the middle of a ship is a thin wash over the court, not a body.
+    paintShip(0, 1, 0);
+    o.shipMiddle = off(cc6.getImageData(CX + Math.round(R*0.62), CY, 1, 1).data, 0);
+    o.shipRing   = off(cc6.getImageData(CX + R, CY, 1, 1).data, 0);
+    o.shipIsHollow = o.shipMiddle < 60 && o.shipRing > 120;
+    // ⚠️ The silhouette is an EXTENT, not a pixel count: these are outlines, so a
+    // scan line crosses two strokes whether the shape there is a hand's width or a
+    // pitch across. And the scan stops short of 0.8r, because the ring is at r and
+    // crosses every column — measured through it, both sides are 1.73r and identical.
+    const tailExtent = (team) => {
+      paintShip(team, 1, 0);
+      const col = Math.round(CX - R*0.5), top = Math.round(CY - R*0.8);
+      const d = cc6.getImageData(col, top, 1, Math.round(R*1.6)).data;
+      let lo = -1, hi = -1;
+      for (let i=0, row=0; i<d.length; i+=4, row++)
+        if (off(d, i) > 90){ if (lo < 0) lo = row; hi = row; }
+      return lo < 0 ? 0 : hi - lo;
+    };
+    // ⚠️ Named apart from the Abduction block's saucerTail: both write into the
+    // same result object, and the later one silently overwrote the earlier reading.
+    o.dartTail = tailExtent(0); o.vecSaucerTail = tailExtent(1);
+    o.shipsDifferByShape = o.dartTail > o.vecSaucerTail * 1.8;
+    // The dart points where it goes; the saucer flies level, the way the arcade's did.
+    const shipShot = (team, fx, fy) => { paintShip(team, fx, fy);
+      return cc6.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
+    M.profile.spin = true;
+    o.dartTurns = shipShot(0,1,0) !== shipShot(0,0,1);
+    o.saucerFliesLevel = shipShot(1,1,0) === shipShot(1,0,1);
+    // The ball is a rock outline: bright rim, court in the middle.
+    cc6.fillStyle = '#7f7f7f'; cc6.fillRect(0,0,300,300);
+    M.paintBall(cc6, CX, CY, R, 0, 'asteroid', M.TH);
+    const lum = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
+    o.ballMid = lum(cc6.getImageData(CX + Math.round(R*0.62), CY, 1, 1).data);
+    o.ballEdge = lum(cc6.getImageData(CX, CY - Math.round(R*1.08), 1, 1).data);
+    o.ballIsHollow = o.ballEdge > o.ballMid + 90;
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -519,6 +580,14 @@ ok(r.paddockStill, 'the paddock has a step — the field is scenery, and anythin
 ok(r.craftDifferByShape, `the two craft do not differ by SILHOUETTE: tail widths ${r.saucerTail} vs ${r.triangleTail}. Both are long the way they point, so the tail is the only thing that separates them`);
 ok(r.craftTurns, 'the craft does not turn with its facing — the 3D bank is decoration if it does not say which way you are going');
 ok(r.ballLookExists && r.sheepDraws, 'the sheep ball look draws nothing');
+ok(r.vectorName === 'Asteroids', `the Asteroids bundle does not resolve: ${r.vectorName}`);
+ok(r.voidStillWithoutStep, 'the vector sky advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
+ok(r.voidMovesWithStep, 'the vector sky never moved when stepped');
+ok(r.shipIsHollow, `a vector ship is FILLED (middle ${r.shipMiddle}, ring ${r.shipRing}) — a solid body on a line court is the only solid thing on screen`);
+ok(r.shipsDifferByShape, `the dart and the saucer do not differ by SILHOUETTE: tail extents ${r.dartTail} vs ${r.vecSaucerTail}`);
+ok(r.dartTurns, 'the dart does not turn with its facing');
+ok(r.saucerFliesLevel, 'the saucer turns with its facing — rotated ninety degrees it is a lens nobody can name, which is why the arcade flew it level');
+ok(r.ballIsHollow, `the ball is not an outline (edge ${Math.round(r.ballEdge)}, middle ${Math.round(r.ballMid)}) — on this palette the rim ring IS the rock's outline`);
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
