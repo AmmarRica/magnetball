@@ -98,9 +98,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   bundle, painted from the mix you actually built (`drawSlotsSwatch`), and pressing it
   restores `sel.customLook` so Custom is somewhere you can go *back* to.
   `tests/themeslots.mjs`.
+- **EVERY skin gets a guide ring, and that is STRUCTURAL.** `drawOneDisc` strokes
+  `strokeDiscGuide` after the skin paints, so a new skin cannot forget one — a player is a
+  circle of radius `r` and that circle is what collides, however un-circular the art inside it
+  is. ⚠️ **Two tones**, hugging `r` from either side: a single-colour ring is invisible whenever
+  the skin under it happens to be that colour, and Mono's white team-1 disc ate a white ring on
+  7 of 24 arcs. `tests/discskins.mjs` pixel-checks every entry in the registry, both teams.
+- **Rotation is the PLAYER's choice, not the theme's** — `profile.spin`, a two-tile pick in
+  Your Player → Colour. Direction-drawn skins (arrow, shrimp) go through the one `discFace(p)`
+  helper so they cannot honour it differently; round skins (mono, pool) are unaffected, which
+  is what the hint under the control promises and what the suite checks. Off points the body up
+  its OWN pitch, so the two sides don't both face one way.
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
+  `shrimp` = a sand seabed with ripples and shells, played by curled prawns;
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead

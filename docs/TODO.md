@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.1245PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -51,6 +51,20 @@ _Current build: **v20260806.1120AM** (shown under the title; bump `VERSION` in `
   input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
   blocks kenney.nl, so it could not be fetched. Commit
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
+
+## 🦐 Shrimp theme, and a ring on every player
+- [x] **Shrimp** — full bundle: a sand seabed with ripples and shells, curled prawns for
+  players (thorax, three tapering abdomen segments, tail fan, rostrum, antennae, eye), an
+  underwater palette. Segments are three arcs of decreasing width because canvas cannot taper
+  a stroke — and the steps read as segments, which is what a shrimp looks like anyway.
+- [x] **THE RULE, made structural: every skin gets a guide ring.** `drawOneDisc` strokes it
+  after the skin paints, so a new skin cannot forget one. A player is a circle and that circle
+  is what collides, however un-circular the art inside it.
+- [x] ⚠️ **The ring had to become TWO tones.** The first version was one colour and Mono draws
+  team 1 as a WHITE disc — a white ring on it vanished on 7 of 24 arcs. Dark outside, light
+  inside, so one of the two always reads whatever the skin painted.
+- [x] **Rotation is a per-player checkbox** (`profile.spin`, Your Player → Colour), not a
+  property of the theme. One `discFace(p)` helper, so two skins cannot honour it differently.
 
 ## 🔍 Self-review of this session's code (2026-08-06)
 Read back everything added this session looking for defects rather than for confirmation.

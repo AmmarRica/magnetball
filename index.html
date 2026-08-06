@@ -1182,6 +1182,10 @@
       <div class="subpane" data-pane="colour">
         <label class="field">Colour</label>
         <div class="swatches" id="swatches"></div>
+        <div style="height:14px"></div>
+        <label class="field">Turn to face where I'm going</label>
+        <div class="opts" id="spinPick"></div>
+        <div class="hint" style="text-align:left; margin-top:4px">Only changes themes whose players have a front — Shrimp, Videoball arrowheads. Off keeps your body pointing up the pitch, which some people find easier to track. A round theme (Pool, Mono) looks the same either way, and every theme draws a ring at your real size regardless.</div>
       </div>
       <div class="subpane" data-pane="cap">
         <label class="field">Cap</label>
@@ -1945,7 +1949,7 @@ function checkDailyLogin(){
   login.claimed = idx+1; login.last = today; saveLogin();
   // refresh UI so the new unlock shows immediately
   if (typeof renderStats==='function') renderStats();
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
   showDailyModal(idx);
   return true;
 }
@@ -2337,6 +2341,29 @@ const THEMES = {
       obstacle:'#000000', good:'#000000', warn:'#4d4d4d', dim:'#9a9a9a', cone:'#000000',
       hudText:'#ffffff', hudSub:'#c8c8c8', accent:'#ffffff', padRing:'rgba(255,255,255,0.7)',
       dynMark:'#000000' },   // the stars themselves — black, so they read on the white field
+  },
+  // Underwater. Warm sand under blue-green water, and the players are shrimp — a
+  // theme that owns the FIELD (seabed) and what a player IS, the same mechanism as
+  // Pool. ⚠️ Lines are a deep teal rather than white: white ripples over pale sand
+  // gave the pitch markings nothing to hold against.
+  shrimp: {
+    name: 'Shrimp', emoji: '🦐',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #0d3b4a 0%, #072430 55%, #04151d 100%)',
+      bg:'#04151d', panel:'rgba(150,220,235,0.07)', edge:'#2b6273', text:'#e8f6fa', muted:'#8fb6c2',
+      red:'#ff7a4d', blue:'#4fc3e8', cyan:'#5fe0d8', magenta:'#ff9ec4', green:'#63d69b', yellow:'#f4d06f',
+      accent:'#5fe0d8', go:'#63d69b', field:'#0a2c38', onAccent:'#04151d' },
+    pitch: { glow:false, fieldBg:'#072430', court:'#cbb187', stripeA:'#cbb187', stripeB:'#c3a87c',
+      netPocket:'rgba(10,44,56,0.20)', line:'#2f6b6b', centerDot:'#2f6b6b',
+      netMesh:'rgba(47,107,107,0.45)', post:'#2f6b6b', teamRed:'#f2683c', teamBlue:'#3aa7d9',
+      discRim:'#12303a', kickRing:'#5fe0d8', kickText:'#04151d', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#12303a', nameBg:'#0a2c38', nameText:'#e8f6fa',
+      shadow:'rgba(6,30,40,0.26)', ballRim:'#12303a', ball:'#f6f2e6', ballSpot:'#2f6b6b', trailRGB:'95,224,216',
+      obstacle:'#12303a', good:'#63d69b', warn:'#f4d06f', dim:'#6d93a0', cone:'#f2683c',
+      hudText:'#e8f6fa', hudSub:'#8fb6c2', accent:'#5fe0d8', padRing:'rgba(95,224,216,0.7)',
+      dynSand:'#cbb187',        // the seabed floor
+      dynMark:'#8f7a55',        // ripples and shells on it
+      discGuide:'rgba(255,255,255,0.5)', discGuideDark:'rgba(12,42,51,0.6)' },
   },
   // Second of the family, and the one that shows the mechanism isn't just about
   // motion: a theme can own the FIELD (baize, cushions, pockets) and what a player
@@ -2862,6 +2889,7 @@ const THEME_BUNDLES = {
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
+  shrimp:    { field:'seabed',    discs:'shrimp', ball:'plain', sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -2966,7 +2994,7 @@ let rafId = 0;
 // Factory defaults for the player's look/name — the single source of truth for
 // both a first-time profile and the optional "reset appearance" path.
 // Players wear a NUMBER by default, like a shirt — countryballs are opt-in.
-function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly', photo:'' }; }
+function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly', photo:'', spin:true }; }
 function loadProfile() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem('magnetball.profile')||'{}'); } catch(e){}
@@ -2978,6 +3006,8 @@ function loadProfile() {
     flag: d.flag || def.flag,
     eyes: d.eyes || def.eyes,
     photo: typeof d.photo === 'string' ? d.photo : def.photo,
+    // Default ON: a shape that turns is the point of a direction-drawn skin.
+    spin: d.spin !== false,
   };
 }
 function saveProfile(){
@@ -3038,7 +3068,7 @@ function syncRefresh(){
     buildSettings(); refreshPitchTiles();
     const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = profile.name;
     if (typeof buildSwatches==='function') buildSwatches();
-    buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildCaps(); updatePreview();
+    buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildCaps(); buildSpinPick(); updatePreview();
     buildMatchOpts(); buildPartyMods();
   });
 }
@@ -3109,7 +3139,7 @@ function resetSettings(alsoAppearance){
     // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
     const nm=$('pname'); if (nm) nm.value = profile.name;
     if (typeof buildSwatches==='function') buildSwatches();
-    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
+    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
   }
   toast(alsoAppearance ? 'Settings & appearance reset' : 'Settings reset to defaults', 'ok', '↺');
 }
@@ -4793,7 +4823,7 @@ function buildUnlocked(){
         else if (c.cat==='eyes') profile.eyes=k;
         else profile.flag=k;
         saveProfile();
-        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview();
+        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview();
       };
       strip.appendChild(el);
     }
@@ -4871,6 +4901,19 @@ function buildTextPicker(){ buildRecentRow('textRecent','text',TEXT_KEYS,()=>pro
                             buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
 function buildEyesPicker(){ buildRecentRow('eyesRecent','eyes',EYE_KEYS,()=>profile.eyes);
                             buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
+// The rotation choice, as a two-tile pick like every other boolean in the menu.
+function buildSpinPick(){
+  const host = $('spinPick'); if (!host) return;
+  host.innerHTML = '';
+  [['on','Turn'],['off','Stay upright']].forEach(([k, lab])=>{
+    const on = (k === 'on') === (profile.spin !== false);
+    const el = document.createElement('div');
+    el.className = 'opt' + (on ? ' sel' : '');
+    el.innerHTML = `<span>${lab}</span>`;
+    el.onclick = ()=>{ profile.spin = (k === 'on'); saveProfile(); buildSpinPick(); updatePreview(); };
+    host.appendChild(el);
+  });
+}
 function buildCaps(){
   const wrap=$('caps'); if(!wrap) return; wrap.innerHTML='';
   Object.keys(CAPS).forEach(k=>{
@@ -5055,7 +5098,7 @@ function renderStats(){
     + `goals ${stats.gf}-${stats.ga} (${gd>=0?'+':''}${gd}) · streak ${streakTxt} · best W${Math.max(0,stats.best)}<br>`
     + `<span style="color:var(--accent)">MMR ${stats.mmr||1000}</span> · peak ${stats.mmrPeak||stats.mmr||1000}`;
   // Refresh customization pickers so anything newly unlocked shows up.
-  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); }
+  if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
 }
 renderStats();
 
@@ -11164,6 +11207,47 @@ function surfaceTexture(w){
 const DYN_FIELDS = {
   // Flying through starfall: stars stream out from the centre spot with perspective,
   // so the pitch reads as the view out of the front of something moving fast.
+  // Seabed: sand, ripples and a scatter of shells. Still — no step — because the
+  // shrimp are the thing that moves and a drifting floor under them reads as lag.
+  // ⚠️ The scatter is generated ONCE in reset() off its own fixed PRNG and read from
+  // st in paint(). Rolling it in paint would re-scatter every frame; using w.rng
+  // would make where a shell sits change every bot decision after it.
+  seabed: {
+    name: 'Seabed', shells: 26, ripples: 9,
+    reset(st){
+      const rnd = mulberry32(0x5EA6ED);   // fixed: the floor is the same every match
+      st.s = [];
+      for (let i=0;i<this.shells;i++) st.s.push([rnd(), rnd(), rnd()*Math.PI, 0.5+rnd()*0.9]);
+      st.r = [];
+      for (let i=0;i<this.ripples;i++) st.r.push([rnd(), 0.5+rnd()*0.7]);
+    },
+    paint(c, st, L, T, W, H){
+      c.fillStyle = TH.dynSand || '#cbb187';
+      c.fillRect(L, T, W, H);
+      // Ripples: long soft bands across the floor, the way sand sits under water.
+      c.strokeStyle = rgba(TH.dynMark || TH.line || '#8f7a55', 0.16);
+      c.lineCap = 'round';
+      for (const [fy, wgt] of (st.r || [])){
+        c.lineWidth = Math.max(2, H*0.012*wgt);
+        c.beginPath();
+        for (let i=0;i<=24;i++){
+          const t = i/24, px = L + t*W;
+          const py = T + fy*H + Math.sin(t*Math.PI*3 + fy*9) * H*0.02;
+          i ? c.lineTo(px, py) : c.moveTo(px, py);
+        }
+        c.stroke();
+      }
+      // Shells: little fans, so the floor has something to judge distance against.
+      for (const [fx, fy, rot, sc] of (st.s || [])){
+        const px = L + fx*W, py = T + fy*H, rr = Math.min(W,H)*0.014*sc;
+        c.save(); c.translate(px, py); c.rotate(rot);
+        c.fillStyle = rgba(TH.dynMark || TH.line || '#8f7a55', 0.22);
+        c.beginPath(); c.moveTo(0, 0);
+        c.arc(0, 0, rr, -0.9, 0.9); c.closePath(); c.fill();
+        c.restore();
+      }
+    },
+  },
   starfield: {
     name: 'Starfield', n: 190,
     near: 0.055,        // a star this close has reached the edge; respawn it
@@ -11327,6 +11411,35 @@ DYN_FIELDS.vbcourt = {
 // `THEMES.<key>.discs` names an entry here and takes over drawOneDisc's body, so a
 // theme can change what a player IS, not just what colour they are. Everything
 // outside the disc (name plate, charge ring, colour-blind ring) is untouched.
+// The guide ring. ⚠️ TWO tones, hugging r from either side, and that is not
+// decoration: a single-colour ring is invisible whenever the skin under it happens
+// to be that colour. Measured — Mono draws team 1 as a WHITE disc, and a white ring
+// on it vanished on 7 of 24 arcs. Dark outside, light inside, so one of the two
+// always reads whatever the skin painted.
+const DISC_GUIDE = { w: 0.05, a: 0.45, dark: 'rgba(0,0,0,0.55)', light: 'rgba(255,255,255,0.55)' };
+function strokeDiscGuide(c, x, y, r){
+  const lw = Math.max(1, r * DISC_GUIDE.w);
+  c.lineWidth = lw;
+  c.strokeStyle = TH.discGuideDark || DISC_GUIDE.dark;
+  c.beginPath(); c.arc(x, y, r + lw*0.5, 0, 2*Math.PI); c.stroke();
+  c.strokeStyle = TH.discGuide || DISC_GUIDE.light;
+  c.beginPath(); c.arc(x, y, r - lw*0.5, 0, 2*Math.PI); c.stroke();
+}
+// Direction-drawn skins (arrowheads, shrimp) turn to face where the player is
+// looking. Some people read intent off that; some find a spinning body harder to
+// track, so it is a per-player choice rather than a property of the theme.
+// ⚠️ ONE helper, so a skin cannot honour the setting differently from its neighbour.
+// The fallback is only for a player with NO facing at all: `p.faceY || fallback` is
+// a bug, because a player facing exactly along x has faceY === 0, which is falsy.
+function discRotates(){ return profile.spin !== false; }
+function discFace(p){
+  const up = p.team === 0 ? -1 : 1;                 // fixed: point up your own pitch
+  if (!discRotates()) return { ux: 0, uy: up };
+  let fx = p.faceX || 0, fy = p.faceY || 0;
+  if (!fx && !fy) return { ux: 0, uy: up };
+  const m = Math.hypot(fx, fy) || 1;
+  return { ux: fx/m, uy: fy/m };
+}
 const DISC_SKINS = {
   // Strict black and white. Player colour comes from the profile, which no palette
   // can reach, so a monochrome theme has to paint the disc itself or the pitch ends
@@ -11411,16 +11524,74 @@ const ARROW = {
   wing:  0.58,
   notch: 0.35,   // how far the tail notch comes forward, as a fraction of back
 };
+// Shrimp. A curled prawn drawn head-first along the player's facing: thorax, three
+// tapering abdomen segments, a tail fan, a rostrum and two antennae. All of it
+// inside r — drawOneDisc rings the body afterwards, so the circle you collide with
+// is never in doubt however un-circular the thing inside it is.
+// ⚠️ Segments are drawn as three arcs of DECREASING width rather than one tapering
+// stroke, because canvas cannot taper a stroke — and the steps read as segments,
+// which is what a shrimp looks like anyway.
+const SHRIMP = {
+  head: 0.30,        // thorax centre, along facing
+  headR: 0.33,
+  seg: [[0.10, 0.34], [-0.18, 0.27], [-0.42, 0.19]],   // [along, half-width] per segment
+  curl: 0.30,        // how far the abdomen swings off the axis
+  fan: 0.30,         // tail fan half-spread
+  eye: 0.10,
+};
+DISC_SKINS.shrimp = {
+  name: 'Shrimp',
+  paint(c, p, x, y, r, w){
+    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
+    const px = -uy, py = ux;
+    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    const pt = (a, b2) => [x + ux*a*r + px*b2*r, y + uy*a*r + py*b2*r];
+    // Body plate first, so the shrimp reads against any court.
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, 0.16); c.fill();
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    // Antennae — thin, forward, and the first thing that says "not a ball".
+    c.strokeStyle = rgba(col, 0.85); c.lineWidth = Math.max(1, r*0.06);
+    for (const off of [-0.16, 0.10]){
+      const A = pt(SHRIMP.head, off), B = pt(0.92, off*2.4);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+    }
+    // Abdomen: three arcs, each narrower than the last, curling off the axis.
+    c.strokeStyle = col;
+    for (let i=0;i<SHRIMP.seg.length;i++){
+      const [along, halfW] = SHRIMP.seg[i];
+      const drop = SHRIMP.curl * (i + 1) / SHRIMP.seg.length;
+      const A = pt(along + 0.10, drop*0.55), B = pt(along - 0.10, drop);
+      c.lineWidth = halfW * 2 * r;
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+    }
+    // Tail fan.
+    const T0 = pt(-0.44, SHRIMP.curl);
+    const T1 = pt(-0.80, SHRIMP.curl + SHRIMP.fan);
+    const T2 = pt(-0.78, SHRIMP.curl - SHRIMP.fan*0.55);
+    c.beginPath(); c.moveTo(T0[0],T0[1]); c.lineTo(T1[0],T1[1]); c.lineTo(T2[0],T2[1]); c.closePath();
+    c.fillStyle = col; c.fill();
+    // Thorax and rostrum.
+    const H = pt(SHRIMP.head, -0.02);
+    c.beginPath(); c.arc(H[0], H[1], SHRIMP.headR*r, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    const R0 = pt(SHRIMP.head + 0.10, -0.14), R1 = pt(0.86, -0.24);
+    c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.09);
+    c.beginPath(); c.moveTo(R0[0],R0[1]); c.lineTo(R1[0],R1[1]); c.stroke();
+    // Eye — the thing that makes it an animal rather than a comma.
+    if (r > 5){
+      const E = pt(SHRIMP.head + 0.13, -0.15);
+      c.beginPath(); c.arc(E[0], E[1], SHRIMP.eye*r, 0, 2*Math.PI);
+      c.fillStyle = TH.discRim || '#101010'; c.fill();
+    }
+    c.restore();
+  },
+};
 DISC_SKINS.arrow = {
   name: 'Arrowheads',
   paint(c, p, x, y, r, w){
-    // ⚠️ `p.faceY || fallback` is wrong and was wrong before: a player facing exactly
-    // along x has faceY === 0, which is falsy, so the fallback fired and the arrow
-    // pointed diagonally at something the player was not looking at. The default is
-    // only for a player with NO facing at all.
-    let fx = p.faceX || 0, fy = p.faceY || 0;
-    if (!fx && !fy) fy = p.team === 0 ? -1 : 1;     // never moved yet: face up the pitch
-    const m = Math.hypot(fx, fy) || 1, ux = fx/m, uy = fy/m;
+    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
     const px = -uy, py = ux;                        // perpendicular
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
     // The body: rim, wash, and a ring in the team colour so the circle is the
@@ -11610,7 +11781,15 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
     // A theme can own what a player LOOKS like, not just what colour they are.
     const skin = discSkin();
-    if (skin){ skin.paint(ctx, p, x, y, r, w); }
+    if (skin){
+      skin.paint(ctx, p, x, y, r, w);
+      // ⚠️ STRUCTURAL, not policy. A disc is a circle of radius r and that circle is
+      // what collides — so every skin gets a guide ring drawn HERE, after it paints,
+      // and a new skin cannot forget one. The Videoball arrowhead shipped without a
+      // ring and the shape on screen was a third bigger than the shape in the
+      // physics; a skin free to draw a triangle is not free to hide the body.
+      strokeDiscGuide(ctx, x, y, r);
+    }
     else {
     // Flat sprite: rim, team-colour ring, custom-colour core.
     ctx.beginPath(); ctx.arc(x, y, r+Math.max(2, r*0.16), 0, 2*Math.PI);
@@ -12394,7 +12573,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.1120AM';
+const VERSION = '20260806.1245PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12434,7 +12613,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    ICONS, iconSvg, optGlyph, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
