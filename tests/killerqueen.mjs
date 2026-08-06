@@ -18,8 +18,13 @@ const r = await p.evaluate(async ()=>{
   const w=M.world;
   const snail = (ww) => (ww.extraBalls||[]).find(b=>b.isSnail);
 
-  // --- Two balls, one of them the snail
-  o.twoBalls   = 1 + (w.extraBalls||[]).length === 2;
+  // --- One scoring ball, one snail, and BERRY.count berries. Derived, not pinned:
+  // the mode gained berries and a suite that says "exactly two bodies" only measures
+  // how recently someone edited it.
+  o.bodies     = 1 + (w.extraBalls||[]).length;
+  o.expected   = 2 + M.BERRY.count;
+  o.twoBalls   = o.bodies === o.expected;
+  o.oneScoringBall = (w.extraBalls||[]).filter(b=>!b.isSnail && !b.isBerry).length === 0;
   o.hasSnail   = !!snail(w);
   o.snailAtCentre = !!snail(w) && snail(w).x===0 && snail(w).y===0;
 
@@ -113,7 +118,7 @@ const r = await p.evaluate(async ()=>{
 
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.twoBalls && r.hasSnail && r.snailAtCentre && r.snailIsHeavier && r.snailBigger &&
+const ok = r.twoBalls && r.oneScoringBall && r.hasSnail && r.snailAtCentre && r.snailIsHeavier && r.snailBigger &&
   r.snailInvMassLower &&
   r.snailHoldsPosition && r.regularBallReset &&
   r.regularGoalScored && r.noKickoffState && r.ballBackInPlay &&

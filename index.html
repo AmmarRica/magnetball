@@ -1946,6 +1946,28 @@ const MODES = {
 // Only integrate()'s primary ball gets handleBallControl, so the snail can't be
 // kicked — only shoved. That's the whole mode.
 const SNAIL = { rMul:1.5, invMass:0.16, bCoef:0.25, damp:0.915 };
+// Killer Queen berries: light, floaty things you shepherd into your own hive. They
+// are physics bodies like any other ball, so nothing new had to be taught to
+// moveBall — what makes them FLOATY is a low mass and a damp close to 1, so they
+// drift on after a nudge instead of settling.
+// ⚠️ Spawn positions come from w.rng, never Math.random: berries are sim state and
+// a match has to replay identically. See docs/DETERMINISM-AUDIT.md.
+const BERRY = {
+  count:    6,      // in play at once
+  rMul:     0.72,   // of the match ball's radius
+  invMass:  2.6,    // light — a shoulder barge sends one a long way
+  bCoef:    0.55,
+  damp:     0.994,  // floaty: barely sheds speed
+  ringMin:  0.22,   // spawn ring, as a fraction of the half-length...
+  ringMax:  0.62,   // ...so they never appear on top of a goal or the centre spot
+  respawn:  4.0,    // seconds before a banked berry is replaced
+  cells:    6,      // hive cells per side — bank this many to win
+  bobSpeed: 2.6,    // rad/s of the float wobble (advanced in step, never a draw)
+  bobAmt:   0.14,   // how much of the radius the wobble is worth
+  hue:      '#a855f7',
+  hueDark:  '#6b21a8',
+  hueLite:  '#d8b4fe',
+};
 
 // Ball presets — objective physics changes (radius / mass via invMass / bounce / damping).
 const BALLS = {
@@ -6598,13 +6620,19 @@ function startMatch(){
     world.extraBalls.push({ x:0, y:0, vx:0, vy:0, r:sr,
       invMass:SNAIL.invMass, bCoef:SNAIL.bCoef, damp:SNAIL.damp,
       isBall:true, extra:true, isSnail:true });
+    world.hive = [0, 0];
+    world.berryT = 0;
+    // ⚠️ The berries themselves are spawned AFTER botInit — that is where w.rng is
+    // seeded, and their positions come off it. Spawned here they'd fall back to
+    // Math.random and the opening layout would differ every replay.
   }
   if (party.multi && !mode.train && !mode.kq){          // two extra free balls (3 total), fully physical + scorable
     for (let i=0;i<2;i++) world.extraBalls.push({ x:0, y:0, vx:0, vy:0, r:world.ball.r,
       invMass:bp.invMass, bCoef:bp.bCoef, damp:world.ball.damp, isBall:true, extra:true });
   }
   buildGeometry(world);
-  botInit(world);
+  botInit(world);                    // ...seeds world.rng
+  if (mode.kq) for (let i=0;i<BERRY.count;i++) world.extraBalls.push(makeBerry(world, i));
   resetKickoff(world, true);
   // Pads in play (or cocktail): warm up first so controls can be tested and sides
   // chosen. resetKickoff still runs, so the pitch is laid out legally underneath.
@@ -6756,6 +6784,9 @@ function resetKickoff(w, initial){
     let n = 0;
     w.extraBalls.forEach(eb=>{
       if (eb.isSnail){ eb.vx=0; eb.vy=0; eb.sqT=0; return; }   // the snail holds its ground
+      // Berries keep their own scatter — herding them to two tidy points beside the
+      // centre spot after every goal would undo the whole chase.
+      if (eb.isBerry){ if (!eb.banked){ eb.vx=0; eb.vy=0; eb.sqT=0; } return; }
       eb.x = (n++%2?-1:1)*spread; eb.y = 0; eb.vx=0; eb.vy=0; eb.sqT=0;
     });
   }
@@ -7075,6 +7106,7 @@ function step(w){
     bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
     bl.spin = (bl.spin||0) * 0.90;
   }
+  if (active) stepBerries(w);   // float bob + respawn of banked berries (never in a draw)
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
 
@@ -7211,9 +7243,12 @@ function integrate(w, ballFrozen, playersFrozen){
   // primary ball and any multiball extras, then balls bounce off each other.
   if (!ballFrozen){
     moveBall(w, ball, discs);
-    if (w.extraBalls) for (const eb of w.extraBalls) moveBall(w, eb, discs);
+    // A banked KQ berry is out of play entirely — no movement, no collisions. It is
+    // sat in the net waiting on its respawn timer, and anything that touched it would
+    // either drag it back onto the pitch (clampBallInside) or let a player bat it.
+    if (w.extraBalls) for (const eb of w.extraBalls){ if (!eb.banked) moveBall(w, eb, discs); }
     if (w.extraBalls && w.extraBalls.length){
-      const all = [ball, ...w.extraBalls];
+      const all = [ball, ...w.extraBalls.filter(eb => !eb.banked)];
       for (let i=0;i<all.length;i++) for (let j=i+1;j<all.length;j++) collideDiscs(all[i], all[j]);
     }
   }
@@ -7997,7 +8032,8 @@ function maybeHitStop(w, p, ball){
 
 function checkGoal(w){
   const halfL = w.field.L/2, gh = w.field.goal/2;
-  const balls = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
+  const balls = (w.extraBalls && w.extraBalls.length)
+    ? [w.ball, ...w.extraBalls.filter(eb => !eb.banked)] : [w.ball];
   for (const ball of balls){
     if (ball._goalCd > 0){ ball._goalCd -= STEP; continue; }   // just scored; don't re-trigger
     const inTop = ball.y < -halfL + ball.r*0.4 && Math.abs(ball.x) < gh;
@@ -8016,6 +8052,9 @@ function checkGoal(w){
       updateScoreUI();
       return;
     }
+    // ⚠️ Before the snail and before kqGoal: a berry must never be mistaken for a
+    // shot. It banks into the hive of the side whose goal it entered.
+    if (ball.isBerry){ kqBerry(w, ball, inTop ? 0 : 1); return; }
     if (ball.isSnail){ snailHome(w, ball, inTop ? 0 : 1); return; }   // snail = instant win
     if (w.mode && w.mode.kq){ kqGoal(w, ball, inTop ? 0 : 1); return; }
     if (w.party && w.party.multi){ scoreMultiBall(w, ball, inTop ? 0 : 1); return; }
@@ -8098,6 +8137,73 @@ function scoreMultiBall(w, ball, team){
   }
 }
 
+// Scattered around the middle, mirrored top and bottom so neither side starts
+// nearer a berry than the other. Deterministic: w.rng only.
+function makeBerry(w, i){
+  const b = { x:0, y:0, vx:0, vy:0, r: Math.max(4, Math.round(w.ball.r * BERRY.rMul)),
+    invMass:BERRY.invMass, bCoef:BERRY.bCoef, damp:BERRY.damp,
+    isBall:true, extra:true, isBerry:true, bob: w.rng() * Math.PI * 2 };
+  placeBerry(w, b, i);
+  return b;
+}
+function placeBerry(w, b, i){
+  // ⚠️ w.rng, with no Math.random fallback: a fallback here would go non-deterministic
+  // SILENTLY. Calling this before botInit seeds the rng throws instead, loudly.
+  const rnd = w.rng;
+  const halfL = w.field.L/2, halfW = w.field.W/2;
+  const side = (i % 2) ? 1 : -1;                       // mirrored, so it is fair
+  const t = BERRY.ringMin + rnd() * (BERRY.ringMax - BERRY.ringMin);
+  b.x = (rnd()*2 - 1) * halfW * 0.72;
+  b.y = side * halfL * t;
+  b.vx = 0; b.vy = 0; b.sqT = 0; b._goalCd = 0;
+  b._px = b.x; b._py = b.y;    // a respawn is a teleport: don't let ix/iy streak it across
+}
+// A berry reaching a goal is BANKED, not scored: it goes into that side's hive and
+// leaves play. Fill every cell and the mode is over — the same instant-win shape as
+// the snail, so there is a second way to end a Killer Queen match.
+function kqBerry(w, berry, team){
+  berry._goalCd = 99;
+  w.hive = w.hive || [0,0];
+  if (w.hive[team] < BERRY.cells) w.hive[team]++;
+  // Out of play until it respawns. ⚠️ `banked` is the ONLY mechanism — it is skipped
+  // by integrate, by the ball-vs-ball pass, by checkGoal and by the draw. Parking it
+  // far off-pitch instead does NOT work: clampBallInside is a hard backstop and would
+  // drag it straight back onto the field the very next step.
+  berry.vx = 0; berry.vy = 0;
+  berry.banked = true; berry.bankT = BERRY.respawn;
+  playSfx('net');
+  if (sel.juice){ addShake(5); for (let i=0;i<10;i++) spawnConfetti(berry.x, berry.y); }
+  updateScoreUI();
+  if (w.hive[team] >= BERRY.cells) kqHiveFull(w, team);
+}
+function kqHiveFull(w, team){
+  if (w.state === 'over' || w.forceWin != null) return;
+  w.forceWin = team;
+  w.forceWinBy = 'hive';                   // ...so the result screen doesn't say "snail"
+  w.lastScorer = team;
+  updateScoreUI();
+  playSfx('crowd');
+  showBanner('🫐 HIVE FULL!', team===0?'var(--red)':'var(--cyan)');
+  for (let i=0;i<(sel.juice?30:14);i++) spawnConfetti(0, team===0 ? w.field.L/2 : -w.field.L/2);
+  if (sel.juice){ addShake(12); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9; }
+  w.state='goal'; w.stateT=0;
+  repOnGoal(w);
+  setTimeout(()=>endMatch(w), 1400);
+}
+// Banked berries come back after a beat, so the mode keeps having something to
+// chase. Advanced in step(), which is where everything that ticks belongs — the
+// float bob included: ticked in a draw it would wobble 2.4× fast on a 144Hz screen
+// (the trails rule, see advanceTrails).
+function stepBerries(w){
+  if (!w.mode || !w.mode.kq || !w.extraBalls) return;
+  for (const b of w.extraBalls){
+    if (!b.isBerry) continue;
+    b.bob = (b.bob || 0) + BERRY.bobSpeed * STEP;
+    if (!b.banked) continue;
+    b.bankT -= STEP;
+    if (b.bankT <= 0){ b.banked = false; b._goalCd = 0; placeBerry(w, b, (w.berryT++)|0); }
+  }
+}
 // Wins outright however the goals stand, so it overrides the result rather than
 // faking a scoreline — recordResult/endMatch honour w.forceWin.
 function snailHome(w, ball, team){
@@ -8258,10 +8364,15 @@ function finishMatch(w){
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
   if (w.forceWin != null){
-    // Killer Queen: the snail decides it outright, so say so instead of quoting a
-    // scoreline that may well favour the loser.
-    title = w.forceWin===0 ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
-    sub = `${w.score[0]} – ${w.score[1]}   ·   snail win`;
+    // Killer Queen: the snail — or a full hive — decides it outright, so say WHICH
+    // instead of quoting a scoreline that may well favour the loser.
+    if (w.forceWinBy === 'hive'){
+      title = w.forceWin===0 ? 'HIVE FULL! 🫐' : (w.mode.twoP ? 'PLAYER 2 FILLED THE HIVE' : 'HIVE LOST 🫐');
+      sub = `${w.score[0]} – ${w.score[1]}   ·   hive win`;
+    } else {
+      title = w.forceWin===0 ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
+      sub = `${w.score[0]} – ${w.score[1]}   ·   snail win`;
+    }
   }
   else if (w.score[0]===w.score[1]){ title='DRAW'; sub=`${w.score[0]} – ${w.score[1]}`; }
   else if (w.score[0]>w.score[1]){ title='YOU WIN! 🏆'; sub=`${w.score[0]} – ${w.score[1]}`; }
@@ -9780,7 +9891,9 @@ function render(){
   drawDiscTrails(world);      // under the discs: motion reads, clutter doesn't
   drawDiscs(world);
   drawBall(world);
-  if (world.extraBalls) for (const eb of world.extraBalls) drawBall({ ball: eb });   // multiball extras
+  // Multiball extras — plus the KQ snail and berries. A banked berry is parked far
+  // off-pitch until it respawns; skip it rather than draw a halo out in the void.
+  if (world.extraBalls) for (const eb of world.extraBalls){ if (!eb.banked) drawBall({ ball: eb }); }
   ctx.restore();
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
@@ -10737,6 +10850,27 @@ function drawGoal(w, sign){
   for (let gx=wx(-gh); gx<=wx(gh); gx+=step){ ctx.moveTo(gx, wy(y)); ctx.lineTo(gx, wy(ny)); }
   for (let gy=Math.min(wy(y),wy(ny)); gy<=Math.max(wy(y),wy(ny)); gy+=step){ ctx.moveTo(wx(-gh),gy); ctx.lineTo(wx(gh),gy); }
   ctx.stroke();
+  // Killer Queen hive: BERRY.cells slots sunk into the net pocket, on the end this
+  // team ATTACKS — the same end they shoot at and shove the snail into, so "your
+  // hive" is never the opposite way round from everything else in the mode.
+  // Filled cells are berry-purple; empty ones are outlined in the owning team's
+  // colour, so the score you can't read off the scorebug is legible on the pitch.
+  if (w.mode && w.mode.kq){
+    const team = sign < 0 ? 0 : 1;
+    const filled = (w.hive && w.hive[team]) || 0;
+    const tcol = team===0 ? TH.teamRed : TH.teamBlue;
+    const gap = (gh*2) / BERRY.cells;
+    const cy = wy(y + sign*b.net*0.5);
+    const cr = Math.min(gap*0.34, b.net*0.30) * s;
+    ctx.lineWidth = Math.max(1, 1.6*s);
+    for (let i=0;i<BERRY.cells;i++){
+      const cx = wx(-gh + gap*(i+0.5));
+      ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 2*Math.PI);
+      if (i < filled){ ctx.fillStyle = BERRY.hue; ctx.fill(); ctx.strokeStyle = BERRY.hueLite; }
+      else ctx.strokeStyle = rgba(tcol, 0.5);
+      ctx.stroke();
+    }
+  }
   // posts
   for (const px of [-gh, gh]){
     ctx.beginPath(); ctx.arc(wx(px), wy(y), POST.r*s, 0, 2*Math.PI);
@@ -11080,6 +11214,28 @@ function drawOneBall(b, x, y, r, s){
     g.addColorStop(0, 'rgba(255,255,255,0.40)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
     g.addColorStop(1, 'rgba(0,0,0,0.32)');
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
+    return;
+  }
+  // Killer Queen berry: a floaty purple orb you shepherd into your own hive. It
+  // HOVERS — the body lifts off its own shadow with the bob — so a still frame
+  // reads "cargo", not "this is the ball you score with".
+  // ⚠️ b.bob is advanced in stepBerries(), not here: a wobble ticked in a draw runs
+  // 2.4× fast on a 144Hz screen (same rule as the trails).
+  if (b.isBerry){
+    const bob = Math.sin(b.bob || 0);
+    const lift = r * BERRY.bobAmt * (1 + bob);            // 0..2× — never sinks below the shadow
+    const yy = y - lift, rr = r * (1 + BERRY.bobAmt * 0.35 * bob);
+    const halo = ctx.createRadialGradient(x, yy, rr*0.55, x, yy, rr*2.1);
+    halo.addColorStop(0, rgba(BERRY.hueLite, 0.34)); halo.addColorStop(1, rgba(BERRY.hueLite, 0));
+    ctx.beginPath(); ctx.arc(x, yy, rr*2.1, 0, 2*Math.PI); ctx.fillStyle=halo; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, yy, rr + Math.max(1.5, rr*0.16), 0, 2*Math.PI);
+    ctx.fillStyle = BERRY.hueDark; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, yy, rr, 0, 2*Math.PI);
+    ctx.fillStyle = BERRY.hue; ctx.fill();
+    const gl = ctx.createRadialGradient(x - rr*0.38, yy - rr*0.42, rr*0.08, x, yy, rr*1.06);
+    gl.addColorStop(0, 'rgba(255,255,255,0.62)'); gl.addColorStop(0.42, 'rgba(255,255,255,0)');
+    gl.addColorStop(1, 'rgba(0,0,0,0.30)');
+    ctx.beginPath(); ctx.arc(x, yy, rr, 0, 2*Math.PI); ctx.fillStyle=gl; ctx.fill();
     return;
   }
   // Squash & stretch: warp the ball along its impact axis for a frame or two.
@@ -11622,7 +11778,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.1030PM';
+const VERSION = '20260806.0210AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11673,6 +11829,7 @@ if (window.__MAGNETDEBUG) {
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,

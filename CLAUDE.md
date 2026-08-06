@@ -134,6 +134,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
+- **Killer Queen berries:** `BERRY` + `makeBerry`/`placeBerry`/`kqBerry`/`kqHiveFull`/`stepBerries`.
+  Six floaty purple bodies you shepherd into the end you ATTACK — the same end as the ball and
+  the snail, so "your hive" is never the opposite way round from everything else in the mode.
+  A berry crossing the line **banks** (`checkGoal` dispatches it *before* the snail and `kqGoal`)
+  and fills a cell of that team's hive, drawn as `BERRY.cells` slots in the net pocket by
+  `drawGoal`. Fill them all and `kqHiveFull` wins outright — it sets `w.forceWinBy='hive'`
+  so the result screen doesn't claim the snail did it.
+  ⚠️ **Being banked is a FLAG, not a parking spot.** The first build parked a banked berry at
+  (99999, 99999) the way the code parks anything it wants ignored; `clampBallInside` is a hard
+  containment backstop and dragged it back onto the pitch to bank again. `banked` is honoured by
+  `integrate`, the ball-vs-ball pass, `checkGoal` and the draw.
+  ⚠️ **Spawn after `botInit`** — that is where `w.rng` is seeded, and `placeBerry` has no
+  `Math.random` fallback on purpose: a fallback would go non-deterministic silently.
+  The float bob advances in `stepBerries`, never in a draw (the trails rule). `tests/kqberry.mjs`.
 - **Bots (AI-only layer):** `runBot(w,p)` in four layers — `botPhase` (attack/defend/transition)
   → `botAssignRoles` (chaser/support/defender/goalie, every `BOT.roleTicks` with a switch margin)
   → the per-bot decision → Layer-0 steering (`botArrive`, `botSeparate`, `botArcPoint`,
@@ -254,7 +268,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 55 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 61 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
