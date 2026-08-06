@@ -62,7 +62,13 @@ const r = await p.evaluate(async ()=>{
   o.oneChangeIsCustom = M.currentBundle() === null && o.afterOneChange === 'Custom';
   M.buildSettings();
   const bundleTiles = () => [...document.querySelectorAll('#themePick .opt')];
-  o.noBundleMarked = bundleTiles().filter(t=>t.classList.contains('sel')).length === 0;
+  // ⚠️ No NAMED bundle may be marked — but the Custom tile must be, and it is a real
+  // tile in the same row. Counting "no tile selected" would now be asserting that
+  // Custom does not exist.
+  const named = () => bundleTiles().filter(t=>t.dataset.bundle !== 'custom');
+  o.noBundleMarked = named().filter(t=>t.classList.contains('sel')).length === 0;
+  o.customTileMarked = bundleTiles().some(t=>t.dataset.bundle==='custom' && t.classList.contains('sel'));
+  o.exactlyOneMarked = bundleTiles().filter(t=>t.classList.contains('sel')).length === 1;
   o.labelSaysCustom = /custom/i.test(document.getElementById('themeNow').textContent);
   // Every other slot is untouched — one slot changed, not the theme thrown away.
   o.restSurvived = M.SLOTS.palette.get()==='pool' && M.SLOTS.discs.get()==='pool' &&
@@ -183,7 +189,9 @@ ok(r.poolNamed, 'Pool did not name itself after being applied');
 ok(r.soundActuallyChanged, `the sound slot did not move sel.snd: ${JSON.stringify(r.poolSnd)}`);
 ok(r.reachesRender, 'the field/player slots did not reach the live render');
 ok(r.oneChangeIsCustom, `changing one slot left the theme named "${r.afterOneChange}"`);
-ok(r.noBundleMarked, 'a bundle tile is still marked selected after a slot was changed');
+ok(r.noBundleMarked, 'a NAMED bundle tile is still marked selected after a slot was changed');
+ok(r.customTileMarked, 'the Custom tile is not marked when the slots match no bundle');
+ok(r.exactlyOneMarked, 'more than one tile is marked in the bundle row');
 ok(r.labelSaysCustom, 'the header does not say Custom after a slot was changed');
 ok(r.restSurvived, 'changing one slot reset the others');
 ok(r.nameComesBack, `putting the slot back left it named "${r.roundTrip}" — the name is not derived`);

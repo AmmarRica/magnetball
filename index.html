@@ -634,10 +634,15 @@
     /* ---------- In-game HUD ---------- */
     #hud {
       position: fixed; top: 0; left: 0; right: 0; z-index: 10;
-      display: flex; align-items: center; justify-content: center; gap: 12px;
+      /* 1fr | auto | 1fr — the middle column is the screen centre whatever sits
+         either side of it, which a flex row with gaps could not promise. */
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
       padding: max(10px, env(safe-area-inset-top)) 12px 8px;
       pointer-events: none;
     }
+    .hudside { display: flex; align-items: center; gap: 10px; }
+    #hudLeft { justify-self: start; }
+    #hudRight { justify-self: end; }
     #hud.hidden { display: none; }
     /* The floating pills sit over the PITCH, not the page, so they carry their own
        surface (--overlay) and their own inks (--overlay-*), both derived per theme
@@ -652,7 +657,7 @@
     .scorebug .rd { color: var(--overlay-red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
     .scorebug .bl { color: var(--overlay-blue); text-shadow: 0 0 10px rgba(33,230,255,.6); }
     .scorebug .tm { font-size: 12px; color: var(--overlay-yellow); min-width: 46px; text-align:center; }
-    #pauseBtn, #resetBtn, #gearBtn, #fsHudBtn {
+    #pauseBtn, #resetBtn, #fsHudBtn {
       pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
       color: var(--overlay-ink); width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
@@ -918,15 +923,21 @@
   <canvas id="game"></canvas>
 
   <!-- HUD -->
+  <!-- Three columns, so the scorebug is centred on the SCREEN rather than centred
+       among whatever buttons happen to be showing. Settings moved into the pause
+       menu — a gear you can press mid-play was one tap from losing the ball. -->
   <div id="hud" class="hidden">
-    <button id="pauseBtn" aria-label="Pause">⏸</button>
-    <button id="gearBtn" aria-label="Settings">⚙</button>
-    <button id="fsHudBtn" aria-label="Full screen">⛶</button>
-    <button id="resetBtn" aria-label="Reset" style="display:none">↺</button>
+    <div class="hudside" id="hudLeft">
+      <button id="pauseBtn" aria-label="Pause">⏸</button>
+      <button id="resetBtn" aria-label="Reset" style="display:none">↺</button>
+    </div>
     <div class="scorebug" id="scorebug">
       <span class="sc rd" id="scoreR">0</span>
       <span class="tm" id="clock">5:00</span>
       <span class="sc bl" id="scoreB">0</span>
+    </div>
+    <div class="hudside" id="hudRight">
+      <button id="fsHudBtn" aria-label="Full screen">⛶</button>
     </div>
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
@@ -1417,6 +1428,7 @@
     <div id="ovVote"></div>
     <div id="ovAwards"></div>
     <button class="primary" id="ovResume" style="max-width:260px">Resume</button>
+    <button class="ghost" id="ovSettings" style="display:none">⚙ Settings</button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
     <div id="ovHint" style="display:none"></div>
@@ -2606,8 +2618,16 @@ function applyBundle(k){
 }
 function setSlot(slot, k){
   const S = SLOTS[slot]; if (!S || !S.keys().includes(k)) return;
-  S.set(k); saveSel();
+  S.set(k);
+  // Remember the mix. Without this "Custom" is only a label — you could never get
+  // back to what you had built after trying a bundle.
+  if (currentBundle() === null) sel.customLook = liveSlots();
+  saveSel();
 }
+function liveSlots(){ const o={}; for (const x of SLOT_KEYS) o[x] = SLOTS[x].get(); return o; }
+function applySlots(sl){ if (!sl) return;
+  for (const x of SLOT_KEYS) if (sl[x] != null) SLOTS[x].set(sl[x]);
+  saveSel(); }
 // A save from before themes were slots carries `theme` and `ballLook`. Fold them
 // in once, here, so nothing downstream ever has to know about two shapes.
 function normalizeLook(){
@@ -4254,8 +4274,11 @@ function drawThemeSwatch(c, t, cw, ch){
 // which taught nothing about what a bundle actually is.
 // ⚠️ TH is swapped for the duration: the skins and the ball painter read the LIVE
 // palette, so a preview of another bundle would otherwise wear the current one.
-function drawBundleSwatch(c, key, cw, ch){
-  const t = THEMES[key], s = bundleSlots(key);
+function drawBundleSwatch(c, key, cw, ch){ drawSlotsSwatch(c, bundleSlots(key), cw, ch); }
+// Paints any SET of slots, so the Custom tile shows the mix you actually built
+// rather than a question mark.
+function drawSlotsSwatch(c, s, cw, ch){
+  const t = s && THEMES[s.palette];
   if (!t || !s) return;
   const keep = TH; TH = t.pitch;
   try {
@@ -4994,6 +5017,9 @@ $('pauseBtn').onclick = () => togglePause(true);
 $('resetBtn').onclick = () => { if (world && world.drillMode) resetDrill(); };
 $('ovResume').onclick = () => togglePause(false);
 $('ovMenu').onclick = toMenu;
+// Settings is reached from the pause menu now. The gear used to sit in the HUD, one
+// mis-tap from the ball while the match was live.
+$('ovSettings').onclick = () => openLook('theme');
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
 function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
@@ -5258,7 +5284,6 @@ $('settingsBtn').onclick = () => {
 { const ob=$('openPanelBtn'); if (ob) ob.onclick = () => window.open(settingsUrl(), 'magnetball-settings'); }
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
-$('gearBtn').onclick = () => openLook('theme');
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
 $('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
@@ -5430,6 +5455,27 @@ function buildSettings(){
     // updatePreview too: your name is drawn in your own disc colour, which has to be
     // re-measured against the new theme's panel or it can land unreadable on it.
     el.onclick=()=>{ applyBundle(key); buildSettings(); refreshPitchTiles(); updatePreview(); };
+    tp.appendChild(el);
+  }
+  // ...and CUSTOM. It is a real tile, selected whenever the live slots match no
+  // bundle, showing the mix you actually built. Pressing it takes you back to that
+  // mix after you have wandered off to try a named theme.
+  {
+    const el=document.createElement('div');
+    el.className='opt'+(live===null?' sel':'');
+    el.dataset.bundle = 'custom';
+    const mix = live===null ? liveSlots() : (sel.customLook || null);
+    const cvs=document.createElement('canvas'); cvs.width=128; cvs.height=88;
+    if (mix) drawSlotsSwatch(cvs.getContext('2d'), mix, 128, 88);
+    else { const c2=cvs.getContext('2d');
+      c2.fillStyle=(THEMES[sel.look.palette]||THEMES.neon).pitch.fieldBg||'#111';
+      c2.fillRect(0,0,128,88);
+      c2.fillStyle='rgba(255,255,255,0.30)'; c2.font='30px system-ui';
+      c2.textAlign='center'; c2.textBaseline='middle'; c2.fillText('?', 64, 44); }
+    el.appendChild(cvs);
+    const nm=document.createElement('span'); nm.textContent='🎛 Custom'; el.appendChild(nm);
+    el.onclick=()=>{ if (sel.customLook) applySlots(sel.customLook);
+                     buildSettings(); refreshPitchTiles(); updatePreview(); };
     tp.appendChild(el);
   }
   // ...and the slots themselves, one row each, in the order they're declared.
@@ -6688,6 +6734,7 @@ const SHAKE_SCALE = 0.5;
 function addShake(a){ if (!sel.juice) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
 function goalBurst(w, team){
   hitStop = Math.max(hitStop, hitStopFrames());   // its own dial — see hitStopFrames
+  goalCamStart(w, w.goalCamP);                    // push in on whoever put it there
   if (!sel.juice) return;
   addShake(13);
   flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9;
@@ -6728,6 +6775,7 @@ function loop(t){
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
     advanceDynField();      // ...and so does an animated theme's field
     decayJuice();
+    advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -7914,6 +7962,9 @@ function checkGoal(w){
 // Awards: credit the scorer (last attacker to touch a given ball) and any recent
 // teammate assist. An own goal (last touch by the conceding side) credits no scorer.
 function creditScorer(w, b, team){
+  // Who the goal camera follows: the last toucher, whichever side they were on — an
+  // own goal is still their moment. Captured here because the chain is cleared below.
+  w.goalCamP = b.lastKicker || null;
   if (b.lastKicker && b.lastKicker.team===team && b.lastKicker.ms){
     b.lastKicker.ms.goals++;
     if (b.prevKicker && b.prevKicker!==b.lastKicker && b.prevKicker.team===team &&
@@ -8044,6 +8095,7 @@ function kqGoal(w, ball, team){
 // assignment and would undo whoever picked which side in the lobby.
 function restartMatch(w){
   w.score = [0,0]; w.overtime = false; w.forceWin = null; w.endRamp = null;
+  goalCamReset();                 // a new match starts on a level camera
   w.timeLeft = w.mode.train ? 0 : (w.len.secs || 0);
   w.matchT = 0; w.maxDeficit = [0,0]; w.practiceGoals = 0;
   w.lastScorer = -1; w.kickTeam = 1; w.threat = null;
@@ -8062,7 +8114,7 @@ function restartToWarmup(w){ restartMatch(w); enterWarmup(w); }
 // a table you don't want whoever mashes first deciding what happens next.
 let overNav = 0;
 function overButtons(){
-  return ['ovResume','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
+  return ['ovResume','ovSettings','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
 }
 function syncOverNav(){
   const bs = overButtons();
@@ -9206,6 +9258,59 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 //  RENDER
 // ============================================================
 let cam = { s:1, ox:0, oy:0 };
+// ---------- Goal camera ------------------------------------------------------
+// On a goal the view pushes in on whoever last touched the ball and eases back out
+// when the celebration ends. Render layer only — it moves `cam`, which no physics,
+// hit test or bot decision reads.
+//
+// ⚠️ Advanced in the STEP loop (advanceGoalCam, next to decayJuice), not in a draw:
+// the same rule the trails and the dynamic fields follow, or a 144Hz screen would
+// run the push 2.4x fast. A happy side effect of being step-locked is that the goal
+// slow-mo stretches it too — the goal state is 1.8s of SIM time, which is about 4s
+// on the clock at the 0.45 rate.
+const GOALCAM = {
+  zoom:    5.0,    // magnification at full push: the view covers 0.2x of what it did
+  inSecs:  1.15,   // sim-seconds to get there. The goal state lasts 1.8.
+  outSecs: 0.5,    // sim-seconds to ease back once the celebration is over
+};
+let goalCam = { t:0, x:0, y:0, p:null, live:false };
+function goalCamReset(){ goalCam = { t:0, x:0, y:0, p:null, live:false }; }
+// `p` is the player to follow — the last toucher, whichever side they were on, since
+// that is who the moment belongs to. Falls back to the ball.
+function goalCamStart(w, p){
+  if (!sel.juice) return;                      // rides the Screen shake & effects dial
+  goalCam.live = true; goalCam.p = p || null;
+  goalCam.x = p ? p.x : w.ball.x;
+  goalCam.y = p ? p.y : w.ball.y;
+}
+function advanceGoalCam(w){
+  // A replay owns the framing while it runs, so the push has to be out of the way
+  // even though w.state is still 'goal' underneath it.
+  const want = (goalCam.live && w && w.state === 'goal' && !replay.active) ? 1 : 0;
+  const rate = STEP / (want ? GOALCAM.inSecs : GOALCAM.outSecs);
+  goalCam.t = want ? Math.min(1, goalCam.t + rate) : Math.max(0, goalCam.t - rate);
+  if (goalCam.t <= 0 && !want){ goalCam.live = false; goalCam.p = null; }
+}
+// Smoothstep, so it leaves and arrives without a corner.
+function goalCamEase(){ const t = goalCam.t; return t*t*(3 - 2*t); }
+// Apply to a camera that has already been fitted to the pitch.
+function applyGoalCam(){
+  const g = goalCamEase();
+  if (g <= 0.0001) return;
+  // ⚠️ ix/iy, not the raw position — mid-step they differ by up to a full step of
+  // travel, and a camera locked to a stale position judders against the player it
+  // is supposed to be following.
+  const p = goalCam.p;
+  const tx = p ? ix(p) : goalCam.x, ty = p ? iy(p) : goalCam.y;
+  cam.s *= 1 + (GOALCAM.zoom - 1) * g;
+  // Slide the origin so (tx,ty) ends up where the pitch centre was. The rotation in
+  // deck view pivots on the origin we are moving, so the shift has to be rotated by
+  // the same angle or the followed player lands off to one side.
+  const c = Math.cos(cam.rot), sn = Math.sin(cam.rot);
+  const dx = tx * cam.s * g, dy = ty * cam.s * g;
+  cam.ox -= dx*c - dy*sn;
+  cam.oy -= dx*sn + dy*c;
+}
 function resize(){
   // Shrank below desktop while a page was docked — collapse the dock to a plain
   // fullscreen page (mobile layout). deskDockId set → dockOrFull re-docks on widen.
@@ -9258,6 +9363,7 @@ function computeCam(){
   }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
+  applyGoalCam();
 }
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
@@ -11262,8 +11368,11 @@ function showOverlay(title, sub, resumable){
   $('ovRematch').textContent = 'Rematch'; $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
   $('ovMenu').textContent = 'Main Menu';
   { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
-  ['ovResume','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
+  ['ovResume','ovSettings','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
   $('ovResume').style.display = resumable ? '' : 'none';
+  // Settings is a PAUSE option — offered where the match is already stopped, never
+  // over a result screen where it would just be clutter.
+  { const st2=$('ovSettings'); if (st2) st2.style.display = resumable ? '' : 'none'; }
   $('ovRematch').style.display = resumable ? 'none' : '';
   $('overlay').classList.add('show');
 }
@@ -11366,7 +11475,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0430PM';
+const VERSION = '20260805.0630PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11415,11 +11524,12 @@ if (window.__MAGNETDEBUG) {
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
-    get paused(){ return paused; }, get running(){ return running; },
+    get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
+    GOALCAM, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
@@ -11431,6 +11541,7 @@ if (window.__MAGNETDEBUG) {
     vjDeckAudio, vjDeckVideo, get vjView(){ return vjView; }, set vjView(v){ vjView=v; },
     vjCueDevice, vjDevices, vjKey, vjPush, VJ_CMDS,
     bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
+    liveSlots, applySlots, drawSlotsSwatch,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
     finishMatch, FINAL_SLOW, awardRow,
     mapVoteKey, mapVoteLabel, mapVoteTable, loadMapVotes, saveMapVotes, castMapVote, renderMapVote, buildMapVotes,
