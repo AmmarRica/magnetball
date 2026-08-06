@@ -121,7 +121,7 @@ const r = await p.evaluate(async ()=>{
     M.DISC_SKINS.shrimp.paint(c, q, CX, CY, R, { players:[q] });
     const d = c.getImageData(CX-R-4, CY-R-4, (R+4)*2, (R+4)*2).data;
     const wide = (R+4)*2;
-    let minA=1e9, maxA=-1e9, minB=1e9, maxB=-1e9, n=0;
+    let minA=1e9, maxA=-1e9, minB=1e9, maxB=-1e9, n=0, sumB=0;
     for (let i=0;i<d.length;i+=4){
       // "Covered" = anything that is not the flat grey backdrop, and not the faint
       // team wash that fills the whole body disc on both sides.
@@ -131,21 +131,26 @@ const r = await p.evaluate(async ()=>{
       const k=(i/4)|0, ax=(k%wide)-(R+4), ay=((k/wide)|0)-(R+4);
       minA=Math.min(minA,ax); maxA=Math.max(maxA,ax);      // along facing (+x)
       minB=Math.min(minB,ay); maxB=Math.max(maxB,ay);      // across it
+      sumB+=ay;                                            // ...and how far off-axis it sits
       n++;
     }
-    return { along: maxA-minA, across: maxB-minB, n };
+    return { along: maxA-minA, across: maxB-minB, n, curl: +(sumB/Math.max(1,n)).toFixed(1) };
   };
-  const shr = extent(0), crb = extent(1);
+  const shr = extent(0), lob = extent(1);
   // Both frames must stay inside the body, not just the resting one.
-  const shr1 = extent(0, 1), crb1 = extent(1, 1);
-  o.walkExtents = { shr1, crb1 };
-  o.shrimpExtent = shr; o.crabExtent = crb;
-  o.shrimpIsLong  = shr.along > shr.across;
-  o.crabIsWide    = crb.across > crb.along;
-  o.sidesDifferInShape = o.shrimpIsLong && o.crabIsWide;
+  const shr1 = extent(0, 1), lob1 = extent(1, 1);
+  o.walkExtents = { shr1, lob1 };
+  o.shrimpExtent = shr; o.lobsterExtent = lob;
+  // ⚠️ Both creatures are LONG, so "one is wide" is not the discriminator any more —
+  // it was when the other side was a crab. What separates a lobster from a shrimp is
+  // the two claws held out front, and a straight tail where the shrimp's curls under.
+  // Both are measured off covered pixels, so a redraw that loses either one fails.
+  o.lobsterIsWider = lob.across > shr.across * 1.15;
+  o.shrimpIsCurled = Math.abs(shr.curl) > Math.abs(lob.curl) * 2 && Math.abs(shr.curl) > 3;
+  o.sidesDifferInShape = o.lobsterIsWider && o.shrimpIsCurled;
   // ...and neither one breaks out of the body. The ring IS the player.
-  o.bothInsideTheRing = Math.max(shr.along, shr.across, crb.along, crb.across,
-                                 shr1.along, shr1.across, crb1.along, crb1.across) <= R*2 + 2;
+  o.bothInsideTheRing = Math.max(shr.along, shr.across, lob.along, lob.across,
+                                 shr1.along, shr1.across, lob1.along, lob1.across) <= R*2 + 2;
 
   // ---- the two-frame leg animation ------------------------------------------
   // ⚠️ Driven by DISTANCE TRAVELLED, not by a clock. Anything advanced on a timer has
@@ -247,8 +252,8 @@ ok(r.drawsDontWalk, 'a DRAW advanced the walk cycle — on a 144Hz screen the le
 ok(r.gaitStopsWhenStopped, 'the gait kept accumulating with the player stood still');
 ok(r.restIsFrameZero, `a stopped player is frozen mid-stride on frame ${r.stoppedFrame}`);
 ok(r.fasterLegsWhenFaster, `the legs do not speed up with the player: ${r.flipsSlow} flips slow vs ${r.flipsFast} fast`);
-ok(r.sidesDifferInShape, `shrimp and crab are not different SHAPES: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)} — colour alone is what colour-blind players cannot use`);
-ok(r.bothInsideTheRing, `a body draws outside its own guide ring: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)}`);
+ok(r.sidesDifferInShape, `shrimp and lobster are not different SHAPES: shrimp ${JSON.stringify(r.shrimpExtent)}, lobster ${JSON.stringify(r.lobsterExtent)} — the lobster's claws must make it wider (${r.lobsterIsWider}) and the shrimp must be the curled one (${r.shrimpIsCurled}). Colour alone is what a colour-blind player cannot use`);
+ok(r.bothInsideTheRing, `a body draws outside its own guide ring: shrimp ${JSON.stringify(r.shrimpExtent)}, lobster ${JSON.stringify(r.lobsterExtent)}`);
 ok(r.isBundle && r.named === 'Shrimp', `the Shrimp bundle does not resolve: ${r.named}`);
 ok(r.setsFieldAndDiscs, `the bundle does not set both field and discs: ${r.slots}`);
 ok(r.escapes === 0, `${r.escapes} ball escapes on the shrimp theme`);
