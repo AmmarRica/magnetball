@@ -152,7 +152,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `integrate`, the ball-vs-ball pass, `checkGoal` and the draw.
   ⚠️ **Spawn after `botInit`** — that is where `w.rng` is seeded, and `placeBerry` has no
   `Math.random` fallback on purpose: a fallback would go non-deterministic silently.
-  The float bob advances in `stepBerries`, never in a draw (the trails rule). `tests/kqberry.mjs`.
+  The float bob advances in `stepBerries`, never in a draw (the trails rule).
+  ⚠️ **Bots finish berry runs, they do not courier them.** `botAssignBerry` gives at most
+  `BOT.berryRunners` (1) bot a side a berry, never the chaser or the goalie, never while
+  defending, and only one already inside `BOT.berryLastLeg` of the hive. Ungated they drove
+  berries the length of the pitch and **7 of 8 bot matches ended on a full hive inside 90
+  seconds** with the ball barely involved; raising the cell count only made the same foregone
+  race longer. A runner targets the far side of the berry once lined up — targeting the spot
+  *behind* it makes `botArrive` decelerate and the bot stands there admiring it.
+  `tests/kqberry.mjs`.
+- **Goal box occupancy (`sel.boxRule`):** one defender and one attacker inside a goal box at a
+  time, so nobody parks a wall in front of their keeper. The box is the region the pitch already
+  draws — net pocket plus its mirror — read from `w.bounds`, never re-derived, so the line you
+  are pushed off is the line on the grass. ⚠️ The slot is **sticky**: the holder keeps it until
+  they leave. Recomputing "who is deepest" every step made two defenders trade it and shove each
+  other out on alternate frames. Eased out like `applyKickoffLine`, with the same hard backstop.
+  `tests/boxrule.mjs`.
 - **Bots (AI-only layer):** `runBot(w,p)` in four layers — `botPhase` (attack/defend/transition)
   → `botAssignRoles` (chaser/support/defender/goalie, every `BOT.roleTicks` with a switch margin)
   → the per-bot decision → Layer-0 steering (`botArrive`, `botSeparate`, `botArcPoint`,
@@ -190,7 +205,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
   team *including when everyone picks the same one* (six pads on one half = 6v6 vs bots);
-  `spawnLobbyBot` builds bots to order when the mode's roster runs short. Bots the plan
+  `spawnLobbyBot` builds bots to order when the mode's roster runs short.
+  ⚠️ Standing **on** the halfway line is not a side pick — it is where everyone spawns
+  (`LOBBY.neutral`). Walking into a half is one. Without that distinction a lone player was
+  auto-assigned team 0 however far they walked, and the on-screen preview — computed separately
+  from `lobbySideOf` — happily showed them on the other half. The preview reads `lobbyPlan` now,
+  so it cannot disagree with what Start does. Bots the plan
   needs **walk on** to a random spot in the middle of their half and surplus ones walk off
   (`stepLobbyBots`, leaving faster than arriving), so the lobby shows the match you'd get
   rather than a row on the touchline — off `w.lobby.rng`, never `w.rng`, or how long someone

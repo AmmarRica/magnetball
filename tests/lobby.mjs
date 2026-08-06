@@ -94,7 +94,9 @@ const sides = async (nPads, mode, place) => {
     M.sel.controllers='on'; M.sel.mode=mode; M.applyDisplayMode();
     M.setMatchSeed(3); M.startMatch();
     const w=M.world; const hs=M.lobbyHumans(w);
-    hs.forEach((q,i)=>{ q.x=0; q.y = place[i]===0 ? 120 : -120; q.vx=0; q.vy=0; });
+    // 'n' = left standing on the halfway line, i.e. NOT a side pick. Anything else
+    // walks them well into a half, which is one.
+    hs.forEach((q,i)=>{ q.x=0; q.y = place[i]==='n' ? 0 : (place[i]===0 ? 120 : -120); q.vx=0; q.vy=0; });
     for(let i=0;i<5;i++) M.step(w);
     out.preview = [...w.lobby.sides.values()].join('');
     // A non-host START must NOT begin the match — it only readies them.
@@ -140,11 +142,21 @@ o.twoVsOne     = await sides(3,'4v4',[0,0,1]);
 o.allOneSide   = await sides(3,'4v4',[0,0,0]);
 o.sixOneSide   = await sides(6,'4v4',[0,0,0,0,0,0]);
 o.nineOneSide  = await sides(9,'4v4',[0,0,0,0,0,0,0,0,0]);
-o.soloAuto     = await sides(1,'2v2',[1]);
+// ⚠️ A LONE player's side pick is a real pick, and it used to be thrown away: the
+// plan auto-assigned team 0 whenever there was exactly one human, so a solo player
+// could never end up on team 1 however far they walked — while the on-screen side
+// preview, computed separately, cheerfully showed them on the half they were
+// standing in. Reported from a real 4v4. Both halves are checked, plus the case the
+// auto-assign was actually FOR: somebody who has not moved off the halfway line.
+o.soloAuto     = await sides(1,'2v2',['n']);   // never moved -> the default side
+o.soloPicksBot = await sides(1,'2v2',[0]);     // walked into team 0's half
+o.soloPicksTop = await sides(1,'2v2',[1]);     // walked into team 1's half
+o.solo4v4Top   = await sides(1,'4v4',[1]);     // the reported case, at its reported size
 o.hostStarts        = o.oneEachSide.state==='kickoff' && o.twoVsOne.state==='kickoff';
 o.guestCannotStart  = [o.oneEachSide,o.twoVsOne,o.allOneSide].every(x=>x.guestStartDoesNotBegin);
 o.guestReadies      = o.oneEachSide.guestStartReadies;
-o.alwaysBalanced    = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.soloAuto].every(x=>x.balanced);
+o.alwaysBalanced    = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.soloAuto,
+                       o.soloPicksBot,o.soloPicksTop,o.solo4v4Top].every(x=>x.balanced);
 // 2 people in a 2v2 stay a 2v2 — picking a side chooses your TEAM, not the match size.
 o.modeSetsTheFloor  = o.oneEachSide.t0==='Pb' && o.oneEachSide.t1==='Pb';
 // 2v1 becomes 2v2 by giving the short side a bot (the "5v4 → add one" rule).
@@ -170,6 +182,13 @@ o.eightIsTheCeiling = o.nineOneSide.t0 === 'PPPPPPPP' && o.nineOneSide.t1 === 'b
 // Building bots to order must converge, not add a body per trip to the lobby.
 o.rosterSettles     = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.sixOneSide].every(x=>x.rosterSettles);
 o.soloIsAutoAssigned= o.soloAuto.t0.startsWith('P') && !o.soloAuto.t1.includes('P');
+o.soloKeepsItsSide  = o.soloPicksBot.t0.includes('P') && !o.soloPicksBot.t1.includes('P') &&
+                      o.soloPicksTop.t1.includes('P') && !o.soloPicksTop.t0.includes('P') &&
+                      o.solo4v4Top.t1.includes('P')   && !o.solo4v4Top.t0.includes('P');
+// ...and the preview agreed with it beforehand, which is the half that was lying.
+o.previewTellsTruth = o.soloPicksTop.preview === '1' && o.soloPicksBot.preview === '0' &&
+                      o.soloAuto.preview === '0' && o.solo4v4Top.preview === '1';
+o.solo4v4IsStill4v4 = o.solo4v4Top.t0.length === 4 && o.solo4v4Top.t1.length === 4;
 o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.statsFresh);
 
 // ---------- Cocktail direction calibration ----------
@@ -366,7 +385,8 @@ const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWalkedOn','
   'ballParked','stickMovesYou','kickCannotMoveBall','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',
   'unevenGetsABot','allOneSideStaysTogether','sixAllOnOneTeam','eightIsTheCeiling',
-  'rosterSettles','soloIsAutoAssigned','lobbyCleared',
+  'rosterSettles','soloIsAutoAssigned','soloKeepsItsSide','previewTellsTruth',
+  'solo4v4IsStill4v4','lobbyCleared',
   'cocktailAlwaysLobbies','startCalibratesFirst','oneArrowAtATime','firstIsUp',
   'shortHoldIgnored','releaseResetsHold','upAccepted','calibrationCompletes','persisted',
   'upIsNowUp','buttonsDoNotCalibrate','dpadCalibrates','calibratedHostStarts',

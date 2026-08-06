@@ -1,0 +1,168 @@
+// Goal box occupancy: one keeper, one attacker.
+//
+// A team could park its whole defence on its own line and a wall of bodies would sit
+// there all match; the attack could bury the keeper under a scrum from the other
+// side. One of each is allowed inside a goal box now.
+//
+// ⚠️ The box is EXACTLY the region the pitch draws — the net pocket plus its mirror
+// in front of the goal line, which tests/goalbox.mjs pixel-checks on all 30 fields.
+// The rule reads its geometry from w.bounds rather than re-deriving it, and this
+// suite checks the enforced edge against the drawn edge: a rule enforced somewhere
+// other than where the line is drawn is worse than no rule, because the player is
+// being pushed off a line that is not there.
+//
+// ⚠️ Measurement trap: do NOT leave the AI running while measuring the rule. Bots
+// chase the ball, so they walk out of the box on their own and every number reads as
+// the rule working. Park the ball, set ctrl to something with no input handler, and
+// what is left is the rule and nothing else. (The first version of this suite parked
+// the ball at 1e4, which sent every bot sprinting at the corner and reported that
+// zero attackers could enter — which was the bots leaving, not the rule.)
+import { chromium, LAUNCH } from './_browser.mjs';
+const b = await chromium.launch(LAUNCH);
+const p = await b.newPage({ viewport:{width:900,height:900} });
+const errors=[]; p.on('pageerror',e=>errors.push(e.message));
+p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
+await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
+await p.goto('file://' + process.cwd() + '/index.html');
+await p.waitForTimeout(800);
+
+const r = await p.evaluate(async ()=>{
+  const M=window.__magnet; const o={};
+
+  const start = (boxRule, mode) => {
+    M.sel.mode = mode || '4v4'; M.sel.kickoffRule='off'; M.sel.boxRule = boxRule;
+    M.setMatchSeed(3); M.startMatch();
+    const w=M.world; w.state='play'; w.stateT=2;
+    return w;
+  };
+  const freeze = w => { w.players.forEach(q=>{ q.ctrl='none'; }); w.ball.x=0; w.ball.y=0; w.ball.vx=0; w.ball.vy=0; };
+  const geom = w => ({ gh:w.field.goal/2, front:w.bounds.halfL-w.bounds.net, halfL:w.bounds.halfL });
+  const inBox = (q, sign, g) => Math.abs(q.x) < g.gh + q.r && sign*q.y > g.front - q.r;
+  const pack = (w, team, sign, g) => w.players.filter(q=>q.team===team)
+    .map((q,i)=>{ q.x=(i-1.5)*30; q.y=sign*(g.halfL-8); q.vx=0; q.vy=0; return q; });
+
+  // ---- the wall of defenders becomes one keeper ----------------------------
+  let w = start('on'); freeze(w); let g = geom(w);
+  let def = pack(w, 0, 1, g);                       // team 0 defends the bottom (+1)
+  w.players.filter(q=>q.team===1).forEach(q=>{ q.x=0; q.y=-g.halfL+40; });
+  o.defBefore = def.filter(q=>inBox(q,1,g)).length;
+  for (let i=0;i<180;i++) M.step(w);
+  o.defAfter = def.filter(q=>inBox(q,1,g)).length;
+  o.wallBecomesAKeeper = o.defBefore === 4 && o.defAfter === 1;
+  // The one left is a real player standing in a sane place, not one wedged in a wall.
+  const keeper = def.find(q=>inBox(q,1,g));
+  o.keeperOnThePitch = !!keeper && Math.abs(keeper.x) < g.gh + 40 && keeper.y <= g.halfL + w.bounds.net;
+
+  // ---- an attacker may join, and only one ----------------------------------
+  let atk = pack(w, 1, 1, g);
+  for (let i=0;i<180;i++) M.step(w);
+  o.atkIn = atk.filter(q=>inBox(q,1,g)).length;
+  o.defStillIn = def.filter(q=>inBox(q,1,g)).length;
+  o.oneEach = o.atkIn === 1 && o.defStillIn === 1;
+  // ...and the attacker did NOT evict the keeper, which is the whole point.
+  o.keeperSurvived = def.find(q=>inBox(q,1,g)) === keeper;
+
+  // ---- the slot is STICKY -------------------------------------------------
+  // Recomputing "who is deepest" every step made two defenders trade the slot and
+  // shove each other out on alternate frames. The holder keeps it while inside.
+  const holder = def.find(q=>inBox(q,1,g));
+  let flips = 0, last = holder;
+  for (let i=0;i<240;i++){
+    M.step(w);
+    const now = def.find(q=>inBox(q,1,g));
+    if (now && now !== last){ flips++; last = now; }
+  }
+  o.slotFlips = flips;
+  o.slotIsSticky = flips === 0;
+
+  // ---- ...and it is released when the holder leaves ------------------------
+  holder.x = 0; holder.y = 0; holder.vx = 0; holder.vy = 0;        // walks out
+  const other = def.find(q=>q!==holder);
+  other.x = 0; other.y = g.halfL-8; other.vx=0; other.vy=0;
+  for (let i=0;i<120;i++) M.step(w);
+  o.slotReleased = inBox(other, 1, g);
+
+  // ---- BOTH ends are policed ----------------------------------------------
+  w = start('on'); freeze(w); g = geom(w);
+  const topDef = w.players.filter(q=>q.team===1);   // team 1 defends the top (-1)
+  topDef.forEach((q,i)=>{ q.x=(i-1.5)*30; q.y=-(g.halfL-8); q.vx=0; q.vy=0; });
+  w.players.filter(q=>q.team===0).forEach(q=>{ q.x=0; q.y=g.halfL-40; });
+  for (let i=0;i<180;i++) M.step(w);
+  o.topEndPoliced = topDef.filter(q=>inBox(q,-1,g)).length === 1;
+
+  // ---- the edge enforced is the edge DRAWN --------------------------------
+  // Sit a spare defender just outside the drawn front edge and it must be left alone;
+  // a hair inside and it must be moved. That is the line on the grass.
+  w = start('on'); freeze(w); g = geom(w);
+  const d2 = w.players.filter(q=>q.team===0);
+  // ⚠️ Spread them in x. Stacked on x=0 the one being pushed out of the box collides
+  // with the one outside it, and the probe reports the RULE moving a player it never
+  // touched — which is what the first version of this check did.
+  d2[0].x = 0;   d2[0].y = g.halfL - 8;                      // the keeper, holds the slot
+  d2[1].x = -52; d2[1].y = g.front - d2[1].r - 6;            // clearly OUTSIDE
+  d2[2].x =  52; d2[2].y = g.front - d2[2].r + 6;            // clearly INSIDE
+  d2[3].x = 1e4; d2[3].y = 1e4;
+  w.players.filter(q=>q.team===1).forEach(q=>{ q.x=0; q.y=-g.halfL+40; });
+  const y1 = d2[1].y, y2 = d2[2].y;
+  for (let i=0;i<90;i++) M.step(w);
+  o.outsideUntouched = Math.abs(d2[1].y - y1) < 0.5;
+  o.insideMoved = (d2[2].y - y2) < -2;                        // pushed back up the pitch
+  o.edgeIsTheDrawnEdge = o.outsideUntouched && o.insideMoved;
+
+  // ---- off means OFF ------------------------------------------------------
+  w = start('off'); freeze(w); g = geom(w);
+  const off = pack(w, 0, 1, g);
+  w.players.filter(q=>q.team===1).forEach(q=>{ q.x=0; q.y=-g.halfL+40; });
+  for (let i=0;i<180;i++) M.step(w);
+  o.offKeepsTheWall = off.filter(q=>inBox(q,1,g)).length === 4;
+  // ...and training is exempt however the setting is set — a drill parks bodies
+  // wherever it likes and being shoved out of them is not a rule, it is a bug.
+  o.trainExempt = M.boxRuleOn({ boxRule:true, train:true }) === false &&
+                  M.boxRuleOn({ boxRule:true, drillMode:true }) === false;
+
+  // ---- it does not wreck the bots ------------------------------------------
+  // Bots get shoved by this the same way they get shoved by the kickoff line. What
+  // matters is that matches still look like matches: goals still go in, and nobody
+  // ends up vibrating on the edge of the box for three minutes.
+  const play = (rule) => {
+    const ww = start(rule); ww.players.forEach(q=>{ q.ctrl='bot'; });
+    let stuck = 0;
+    for (let i=0;i<60*120;i++){
+      M.step(ww);
+      if (i % 60 === 0){ const gg = geom(ww);
+        for (const q of ww.players){
+          const sign = q.y >= 0 ? 1 : -1;
+          if (inBox(q, sign, gg) && Math.hypot(q.vx,q.vy) < 0.05) stuck++;
+        } }
+    }
+    return { score: ww.score.slice(), goals: ww.score[0]+ww.score[1], stuck };
+  };
+  o.botsOn  = play('on');
+  o.botsOff = play('off');
+  o.botsStillScore = o.botsOn.goals > 0;
+  o.botsNotStuck = o.botsOn.stuck <= o.botsOff.stuck + 6;
+
+  M.sel.boxRule='on'; M.sel.mode='1v1'; M.setMatchSeed(null);
+  return o;
+});
+
+const fail=[];
+const ok=(c,m)=>{ if(!c) fail.push(m); };
+ok(r.wallBecomesAKeeper, `four defenders in the box became ${r.defAfter}, not one`);
+ok(r.keeperOnThePitch, 'the surviving keeper ended up somewhere the player never put them');
+ok(r.oneEach, `after the attack arrived: ${r.atkIn} attackers and ${r.defStillIn} defenders inside, not one each`);
+ok(r.keeperSurvived, 'an arriving attacker evicted the keeper — the two slots are not independent');
+ok(r.slotIsSticky, `the slot changed hands ${r.slotFlips} times while nobody left the box — two players are trading it and shoving each other out on alternate frames`);
+ok(r.slotReleased, 'the slot was never released after its holder walked out, so the box stayed locked to nobody');
+ok(r.topEndPoliced, 'only one end of the pitch is policed');
+ok(r.edgeIsTheDrawnEdge, `the enforced edge is not the drawn edge: outside-untouched ${r.outsideUntouched}, inside-moved ${r.insideMoved}`);
+ok(r.offKeepsTheWall, 'turning the rule off did not bring the wall back — the setting does nothing');
+ok(r.trainExempt, 'the rule applies in training and drills, which park bodies wherever they like');
+ok(r.botsStillScore, `two minutes of bots with the rule on produced no goals: ${JSON.stringify(r.botsOn)}`);
+ok(r.botsNotStuck, `bots are jammed on the box edge: ${r.botsOn.stuck} stuck samples vs ${r.botsOff.stuck} with the rule off`);
+ok(errors.length===0, 'console errors: '+errors.join(' | '));
+
+console.log(JSON.stringify(r, null, 1));
+await b.close();
+if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
+console.log('\nboxrule OK');

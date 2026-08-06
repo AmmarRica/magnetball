@@ -5,9 +5,44 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0510AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0640AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🧤 Goal box: one keeper, one attacker
+- [x] A team could park its whole defence on its own line, and the attack could bury the keeper
+  under a scrum from the other side. One of each inside a goal box now (`sel.boxRule`, on by
+  default, off-able like the kickoff rule). Eased out with the same shove-and-backstop shape as
+  `applyKickoffLine` — being turned back reads as something acting on you.
+- [x] The box is the region the pitch already **draws**, read from `w.bounds`. A rule enforced
+  anywhere else is worse than no rule: you would be pushed off a line that is not there.
+- [x] ⚠️ The slot is sticky. Recomputing "who is deepest" every step made two defenders trade it
+  and shove each other out on alternate frames.
+- [x] Measured effect on scoring: **22 goals vs 19** across eight 3-minute bot 4v4s, on vs off —
+  it slightly *helps* scoring, because the goalmouth stops being a car park.
+
+## 🐛 A lone player's side pick was thrown away
+- [x] **Reported and fixed.** `lobbyPlan` auto-assigned team 0 whenever there was exactly one
+  human, so a solo player could never end up on team 1 however far they walked into that half.
+  Standing **on** the halfway line is not a pick (`LOBBY.neutral`) — walking into a half is.
+- [x] And the on-screen preview was computed separately from `lobbySideOf`, so it happily showed
+  the player on the half they were standing in while Start put them on the other. It reads
+  `lobbyPlan` now, which is what CLAUDE.md already claimed. The old test had encoded the bug.
+
+## 🫐 Bots contest the berries
+- [x] At most one runner a side, never the chaser or the goalie, never while defending, and only
+  finishing a berry already within `BOT.berryLastLeg` of the hive.
+- [x] ⚠️ **Three tunings to get the balance right**, recorded so it is not relitigated. Ungated,
+  bots drove berries the length of the pitch and **7 of 8 matches ended on a full hive inside 90
+  seconds**. A phase gate barely moved it. Raising the cell count only made the same foregone
+  race longer. What worked was restricting bots to the LAST LEG and spawning berries in the
+  middle third. Final: `BERRY.cells` 12 (two rows of 6), **4 of 8** matches decided on the hive
+  at the default 5-minute length, all after 220 seconds, with goals per match **up** to 3.75.
+- [x] ⚠️ A bot given the spot *behind* a berry walks up, stops one radius short and admires it —
+  `botArrive` decelerates into its target. The target flips to the far side once lined up, which
+  is exactly how the ball's strike waypoint works.
+- [x] ⚠️ A runner promoted to chaser kept its berry and was invisible to the cap, so the side
+  assigned a second. Counted across the whole squad now.
 
 ## 🔒 Determinism audit closed, and the rule made literal
 - [x] **Decision: same-engine reproducibility.** A pinned seed reproduces a match bit-exactly in

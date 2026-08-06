@@ -1061,6 +1061,10 @@
       <div class="opts" id="kickoffRule"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
       <div style="height:14px"></div>
+      <label class="field">Goal box crowding <small style="color:var(--muted)">(changes play)</small></label>
+      <div class="opts" id="boxRule"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
+      <div style="height:14px"></div>
       <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="kickPushPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
@@ -1963,10 +1967,20 @@ const BERRY = {
   invMass:  2.6,    // light — a shoulder barge sends one a long way
   bCoef:    0.55,
   damp:     0.994,  // floaty: barely sheds speed
-  ringMin:  0.22,   // spawn ring, as a fraction of the half-length...
-  ringMax:  0.62,   // ...so they never appear on top of a goal or the centre spot
+  // ⚠️ The spawn ring keeps berries in the MIDDLE of the pitch, clear of the centre
+  // spot and well clear of both goals. It used to reach 0.62 of the half-length,
+  // which dropped three of them inside the range a bot will finish a run from — so a
+  // side banked a burst of berries in the first minute without anybody moving one.
+  // A berry should only get near a hive because a player put it there.
+  ringMin:  0.18,   // spawn ring, as a fraction of the half-length...
+  ringMax:  0.45,   // ...so they start in the middle third, not on somebody's doorstep
   respawn:  4.0,    // seconds before a banked berry is replaced
-  cells:    6,      // hive cells per side — bank this many to win
+  // ⚠️ Tuned against the bots, not guessed. At 6 cells a contested hive filled in
+  // about 100 seconds and decided 6 matches in 8 — the snail and the scoreline
+  // stopped mattering. 12 puts a full hive at roughly the length of a match, so it
+  // is a race you can win rather than the only thing happening.
+  cells:    12,     // hive cells per side — bank this many to win
+  cellRow:  6,      // ...drawn this many to a row in the net pocket
   bobSpeed: 2.6,    // rad/s of the float wobble (advanced in step, never a draw)
   bobAmt:   0.14,   // how much of the radius the wobble is worth
   hue:      '#a855f7',
@@ -2001,6 +2015,12 @@ const LOBBY = {
   benchStep: 46,       // spacing between waiting bots
   holdTicks: 60,       // 1s of holding a direction to register it in calibration
   holdMin: 0.6,        // stick magnitude that counts as "held"
+  // ⚠️ Standing ON the halfway line is not a side pick — it is where everyone
+  // spawns. Walking into a half IS one. Without this distinction the code could not
+  // tell "hasn't chosen yet" from "chose the top half", and a lone player who walked
+  // all the way into one half was silently put on the other team. Spawn offset is
+  // 34, so the band has to be wider than that and narrower than a half.
+  neutral: 60,         // world units either side of halfway that count as undecided
   arrowR: 92,          // radius of the drawn calibration arrow
   // Six people who all want to be on the same team should get to be. This used to
   // be 4 (a 4v4's worth) which, combined with splitting a one-sided lineup down the
@@ -2036,6 +2056,25 @@ const COOP = {
 const KICKOFFRULE = {
   on:  { name:'On',  emoji:'🚧' },
   off: { name:'Off', emoji:'🏃' },
+};
+const BOXRULE = {
+  on:  { name:'On',  emoji:'🧤' },
+  off: { name:'Off', emoji:'🧱' },
+};
+// Goal-box occupancy: ONE defender and ONE attacker inside a goal box at a time, so
+// a team cannot park three bodies in front of their keeper and call it defending.
+// ⚠️ The box is the same region the pitch already draws — the net pocket plus its
+// mirror in front of the goal line — so the rule is enforced exactly where the
+// player can see it. Read the geometry from w.bounds, never re-derive it, or the
+// line you are pushed off stops matching the line on the grass.
+// The slot is STICKY: whoever holds it keeps it while they stay inside, and it only
+// changes hands when they leave. Recomputing the owner every step from "who is
+// deepest" made two defenders trade the slot back and forth and shove each other
+// out of the box on alternate frames.
+const GOALBOX = {
+  push: 0.62,     // per-step shove back out, for whoever does not hold the slot
+  hard: 16,       // world units inside the box before the hard backstop clamps
+  bleed: 0.86,    // how fast the momentum carrying you in bleeds off
 };
 
 const LENGTHS = {
@@ -2111,7 +2150,7 @@ function detectPanel(){
 const PANEL = detectPanel();
 
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', orient:'auto', spectate:'play', cb:'off',
+            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
             goalZoom:500, goalZoomSpd:115,      // goal camera: 5.0x over 1.15s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
@@ -4679,6 +4718,7 @@ function buildMatchOpts(){
   buildOpts('fields', FIELDS, 'field');
   buildOpts('grass', GRASS, 'grass');
   buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
+  buildOpts('boxRule', BOXRULE, 'boxRule');
   buildOpts('diffs', DIFF, 'diff');
   buildOpts('lengths', LENGTHS, 'length');
   buildOpts('controllers', CONTROLLERS, 'controllers');
@@ -6638,6 +6678,7 @@ function startMatch(){
     matchT: 0,                // seconds of play elapsed (for assist/pass windows)
     maxDeficit: [0,0],        // biggest debt each team clawed back from (Comeback King)
     kickoffRule: sel.kickoffRule!=='off' && !mode.train,   // hold your half until the ball is played
+    boxRule: sel.boxRule!=='off' && !mode.train,          // one keeper, one attacker in a goal box
   };
   // Party modifiers (fun match variety; layered on top of the base setup).
   const party = sel.party || {};
@@ -7272,6 +7313,7 @@ function integrate(w, ballFrozen, playersFrozen){
       }
     }
     applyKickoffLine(w, discs);
+    applyGoalBox(w, discs);
     // After the final positions for this step: ice and mud remember where you went.
     if (w.state === 'play') for (const p of discs) noteWear(w, p);
   }
@@ -7459,8 +7501,16 @@ function stepWarmup(w){
   stepLobbyBots(w);
   // Live side preview — the number under each half comes straight from where people
   // are standing, so it can't disagree with what happens when Start is pressed.
+  // ⚠️ Read from lobbyPlan, NOT from lobbySideOf. The plan is the single source of
+  // truth for who plays where, and it applies rules lobbySideOf knows nothing about
+  // (the undecided default, the per-side cap, the everybody-stepped-out fallback).
+  // Computing the preview separately is how the screen came to show a player on one
+  // half while Start put them on the other.
+  const plan = lobbyPlan(w);
   L.sides = new Map();
-  for (const p of lobbyHumans(w)) L.sides.set(p, lobbySideOf(p, w));
+  for (const p of plan.a) L.sides.set(p, 0);
+  for (const p of plan.b) L.sides.set(p, 1);
+  for (const p of plan.out) L.sides.set(p, -1);
   if (L.calib){ stepCalibration(w); L.idle = AUTO.warmup; return; }   // mid-setup: no clock
   stepLobbyClock(w);
 }
@@ -7501,8 +7551,12 @@ function lobbyPlan(w){
   const inn = hs.filter(p => !lobbyOutside(w, p));
   let a = inn.filter(p => lobbySideOf(p, w) === 0);
   let b = inn.filter(p => lobbySideOf(p, w) === 1);
-  // One player picks nothing — auto-assign, which is the old behaviour.
-  if (inn.length === 1){ a = [inn[0]]; b = []; }
+  // ⚠️ One player who has picked NOTHING — still stood on the halfway line where they
+  // spawned — gets team 0, which is the old behaviour and the sane default. One who
+  // has WALKED INTO A HALF has picked, and honouring that is the whole point of the
+  // lobby. This used to fire unconditionally, so a solo player could never end up on
+  // team 1 however far they walked, and the on-screen side preview said otherwise.
+  if (inn.length === 1 && Math.abs(inn[0].y) < LOBBY.neutral){ a = [inn[0]]; b = []; }
   // Everyone stepped out: somebody has to play, so the host comes back on.
   if (!inn.length && hs.length){ a = [hs[0]]; b = []; out = out.filter(p => p !== hs[0]); }
   // More on one side than the pitch will take — the surplus sits out.
@@ -7705,6 +7759,61 @@ function applyKickoffLine(w, discs){
     if (p._koFx <= 0){ p._koFx = 0.3;
       spawnTouchFx(p.x, own * p.r, TH.lineLock2 || '#ff8080', 10); }
   }
+}
+
+// ---------- Goal box occupancy: one keeper, one attacker ---------------------
+// A team used to be able to park its whole defence on its own line and a wall of
+// bodies would sit there for the whole match; the attack could do the same thing
+// from the other direction and bury the keeper under a scrum. One of each is
+// allowed inside a goal box now, and the box is exactly the region the pitch
+// already draws — the net pocket plus its mirror in front of the goal line.
+function boxRuleOn(w){ return !!(w && w.boxRule && !w.drillMode && !w.train); }
+// Which team defends the end at this sign: team 0 defends the bottom (+1).
+function boxDefender(sign){ return sign < 0 ? 1 : 0; }
+function applyGoalBox(w, discs){
+  if (!boxRuleOn(w)) return;
+  const gh = w.field.goal/2, b = w.bounds;
+  // Front edge of the drawn box. Anything beyond it, out to the back of the net, is
+  // inside — so a player cannot dodge the rule by standing in the net itself.
+  const front = b.halfL - b.net;
+  w.boxLock = w.boxLock || {};
+  for (const sign of [-1, 1]){
+    const inside = p => Math.abs(p.x) < gh + p.r && sign*p.y > front - p.r;
+    for (let role = 0; role < 2; role++){          // 0 = defends this end, 1 = attacks it
+      const team = role === 0 ? boxDefender(sign) : 1 - boxDefender(sign);
+      const key = sign + ':' + role;
+      let owner = w.boxLock[key];
+      // Sticky: the holder keeps the slot until they leave it of their own accord.
+      if (!owner || owner.team !== team || !discs.includes(owner) || !inside(owner)) owner = null;
+      let best = null;
+      for (const p of discs){
+        if (p.team !== team || !inside(p)) continue;
+        if (owner){ if (p !== owner) easeOutOfBox(p, sign, front); continue; }
+        // Nobody holds it: the deepest player takes it, which is the keeper on their
+        // line rather than whoever happens to be scanned first.
+        if (!best || sign*p.y > sign*best.y) best = p;
+      }
+      if (!owner && best){
+        owner = best;
+        for (const p of discs){ if (p.team===team && p!==best && inside(p)) easeOutOfBox(p, sign, front); }
+      }
+      w.boxLock[key] = owner;
+    }
+  }
+}
+// Eased out, not teleported — same shape as the kickoff line, so being turned back
+// reads as something acting on you rather than the controls going vague.
+function easeOutOfBox(p, sign, front){
+  p.vy -= sign * GOALBOX.push;
+  if (sign * p.vy > 0) p.vy *= GOALBOX.bleed;
+  const depth = sign*p.y - (front - p.r);          // how far past the edge you are
+  if (depth > GOALBOX.hard){                       // backstop — the shove is never a bypass
+    p.y = sign * (front - p.r + GOALBOX.hard);
+    if (sign * p.vy > 0) p.vy = 0;
+  }
+  p._boxFx = (p._boxFx || 0) - STEP;
+  if (p._boxFx <= 0){ p._boxFx = 0.34;
+    spawnTouchFx(p.x, sign * front, TH.lineLock2 || '#ff8080', 10); }
 }
 
 // Record a kick for the awards system: maintains the "who touched it last / before
@@ -8727,6 +8836,17 @@ const BOT = {
   roleTicks: 20,             // roles are re-matched this often, not every frame
   roleMargin: 0.10,          // a challenger must beat the incumbent by 10% to take a role
 
+  // --- Killer Queen berries. A berry is shepherded by walking into it — no kick, no
+  // bot-only mechanic — so the bot stands behind it on the line to its own hive and
+  // keeps walking, exactly the way it lines up a shot on the ball.
+  berryRunners: 1,           // per side. Two and the match stops being football.
+  berryReach: 0.45,          // of pitch LENGTH: don't cross the world for a berry
+  berryLastLeg: 0.22,        // of pitch LENGTH: only finish one already near the hive
+  berryGoalWeight: 0.6,      // how much "nearly there" beats "close to me"
+  berryStandoff: 4,          // extra gap beyond (playerR + berryR) for the push spot
+  berryArrive: 26,           // how close before the target flips to the far side
+  berryAlign: 0.55,          // how squarely lined up on the hive before pushing
+
   // --- Approach geometry. THE standoff point is the strike waypoint: the spot
   // behind the ball from which a straight run kicks it at the aim. It is never
   // discarded — the old code placed it 27 units out and threw it away inside 43,
@@ -8857,6 +8977,7 @@ function botInitPlayer(p, i){
   p.aiErrT = 0; p.aiAimErr = 0; p.aiPosErrX = 0; p.aiPosErrY = 0;
   p.aiRole = 'defender'; p.aiRoleT = 0; p.aiSpot = null; p.aiMark = null;
   p.aiLag = 0;                         // reaction delay left on the pending decision
+  p.aiBerry = null;                    // the KQ berry this bot is shepherding, if any
 }
 // Every AI random draw goes through the world's stream. A bot that finds no stream
 // (a drill world, a replay stub) falls back to no noise rather than to Math.random.
@@ -9180,7 +9301,63 @@ function botAssignRoles(w, team){
   if (goalie) goalie.aiRole = 'goalie';
   // 4. Only ONE presser. The second defender covers instead of double-teaming.
   st.press = chaser || null;
+  // 5. Killer Queen: at most ONE berry runner per side. More than one and the
+  // football collapses into a fruit-collection minigame — measured at two runners a
+  // side, hives filled in under a minute and the ball barely moved.
+  botAssignBerry(w, team, squad, chaser, goalie, st.phase);
 }
+// Who, if anyone, is shepherding a berry. Pure geometry — no random draws, so it
+// costs nothing from w.rng and the assignment replays identically.
+// ⚠️ The chaser and the goalie are never taken: the chaser IS the match, and pulling
+// the goalie for a berry left an empty net every time a berry drifted goalward.
+function botAssignBerry(w, team, squad, chaser, goalie, phase){
+  for (const q of squad) if (q.aiBerry && !berryLive(w, q.aiBerry)) q.aiBerry = null;
+  if (!w.mode || !w.mode.kq) return;
+  // ⚠️ Not while defending. An ungated runner ferried berries the whole match and
+  // Killer Queen stopped being football: measured 7 of 8 bot matches ending on a full
+  // hive inside 90 seconds, with the ball barely involved. A side under pressure
+  // drops the errand and gets back in the game, which is also what a person does.
+  if (phase === 'defend'){ for (const q of squad) q.aiBerry = null; return; }
+  // ⚠️ Drop the errand the moment you become the chaser or the goalie. Roles are
+  // re-matched on their own tick, so a runner could be promoted to chaser while still
+  // holding a berry — and because the count below only looked at the free players,
+  // the side then assigned a SECOND runner. Measured two at once against a cap of one.
+  if (chaser) chaser.aiBerry = null;
+  if (goalie) goalie.aiBerry = null;
+  const free = squad.filter(q => q.ctrl === 'bot' && q !== chaser && q !== goalie);
+  if (!free.length) return;
+  // Already have a runner on a live berry? Leave them to it — swapping the job
+  // around on every role tick means nobody ever finishes a run. Counted across the
+  // WHOLE squad, so nobody can hide from the cap by holding another role.
+  const held = new Set();
+  let runners = 0;
+  for (const q of squad){ if (q.aiBerry){ runners++; held.add(q.aiBerry); } }
+  if (runners >= BOT.berryRunners) return;
+  const attackDir = team===0 ? -1 : 1;
+  const goalY = attackDir * w.field.L/2;
+  let bestQ = null, bestB = null, bestScore = -1e9;
+  for (const b of (w.extraBalls||[])){
+    if (!berryLive(w, b) || held.has(b)) continue;
+    // How far it still has to go, and whether it is on the right side of us to push.
+    // ⚠️ THE LAST LEG ONLY. A bot allowed to shepherd a berry from anywhere drove it
+    // the length of the pitch, uncontested, and Killer Queen became a delivery job:
+    // 7 of 8 bot matches ended on a full hive and the ball was barely involved.
+    // Raising the cell count only made the same foregone race longer. Finishing a
+    // berry that is already near the hive is a real contribution; couriering one
+    // from the far half is the whole match.
+    const toGoal = Math.hypot(b.x - 0, b.y - goalY);
+    if (toGoal > w.field.L * BOT.berryLastLeg) continue;
+    for (const q of free){
+      if (q.aiBerry) continue;
+      const d = Math.hypot(q.x-b.x, q.y-b.y);
+      if (d > w.field.L * BOT.berryReach) continue;
+      const sc = -d - toGoal * BOT.berryGoalWeight;
+      if (sc > bestScore){ bestScore = sc; bestQ = q; bestB = b; }
+    }
+  }
+  if (bestQ && bestB) bestQ.aiBerry = bestB;
+}
+function berryLive(w, b){ return !!b && b.isBerry && !b.banked && (w.extraBalls||[]).includes(b); }
 // Ball-anchored elastic formation. Slots live in normalised space and are dragged
 // toward the ball by a per-role amount, so the shape breathes with the play instead
 // of being recomputed from scratch.
@@ -9388,6 +9565,26 @@ function runBot(w, p){
     target = (segDist(ball.x, ball.y, p.x, p.y, strikeX, strikeY) < R)
       ? botArcPoint(p, ball, R, strikeX, strikeY, BOT.arcStep)
       : { x: strikeX, y: strikeY };
+  } else if (p.aiBerry && berryLive(w, p.aiBerry)){
+    // Shepherding: stand behind the berry on the line to our own hive and walk. The
+    // push spot is the same construction as the ball's strike waypoint, so a bot
+    // arrives at it instead of orbiting — see BOT.standoff for why that matters.
+    const bb = p.aiBerry;
+    const gy = attackDir * halfL;
+    let hx = 0 - bb.x, hy = gy - bb.y;
+    const hl = Math.hypot(hx,hy)||1; hx/=hl; hy/=hl;
+    const sr = p.r + bb.r + BOT.berryStandoff;
+    // ⚠️ TWO points, not one. Standing at the spot BEHIND the berry is where you go
+    // to line the push up — but botArrive decelerates into its target, so a bot given
+    // only that point walks up to the berry, stops one radius short and stands there
+    // admiring it. Once lined up the target moves to the far side so the run goes
+    // THROUGH the berry, which is exactly how the ball's strike waypoint works.
+    let mbx = bb.x-p.x, mby = bb.y-p.y;
+    const mbl = Math.hypot(mbx,mby)||1;
+    const lined = (mbx/mbl)*hx + (mby/mbl)*hy;      // 1 = the hive is straight past it
+    target = (lined > BOT.berryAlign && mbl < sr + BOT.berryArrive)
+      ? { x: bb.x + hx*sr, y: bb.y + hy*sr }
+      : { x: bb.x - hx*sr, y: bb.y - hy*sr };
   } else if (p.aiRole === 'support' && p.aiSpot){
     // Off-ball runs happen continuously, not only on a possession change.
     target = { x: p.aiSpot.x + p.aiPosErrX, y: p.aiSpot.y + p.aiPosErrY };
@@ -10909,12 +11106,18 @@ function drawGoal(w, sign){
     const team = sign < 0 ? 0 : 1;
     const filled = (w.hive && w.hive[team]) || 0;
     const tcol = team===0 ? TH.teamRed : TH.teamBlue;
-    const gap = (gh*2) / BERRY.cells;
-    const cy = wy(y + sign*b.net*0.5);
-    const cr = Math.min(gap*0.34, b.net*0.30) * s;
+    // Laid out in rows of BERRY.cellRow, filling from the goal line outwards, so a
+    // long hive still fits the mouth instead of shrinking to invisible dots.
+    const per = Math.min(BERRY.cellRow, BERRY.cells);
+    const rows = Math.ceil(BERRY.cells / per);
+    const gap = (gh*2) / per;
+    const rowGap = b.net / (rows + 1);
+    const cr = Math.min(gap*0.34, rowGap*0.42) * s;
     ctx.lineWidth = Math.max(1, 1.6*s);
     for (let i=0;i<BERRY.cells;i++){
-      const cx = wx(-gh + gap*(i+0.5));
+      const col = i % per, row = (i / per) | 0;
+      const cx = wx(-gh + gap*(col+0.5));
+      const cy = wy(y + sign*rowGap*(row+1));
       ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 2*Math.PI);
       if (i < filled){ ctx.fillStyle = BERRY.hue; ctx.fill(); ctx.strokeStyle = BERRY.hueLite; }
       else ctx.strokeStyle = rgba(tcol, 0.5);
@@ -11781,7 +11984,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0510AM';
+const VERSION = '20260806.0640AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11808,7 +12011,7 @@ if (window.__MAGNETDEBUG) {
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, renderMatchStats, STAT_COLS, mvpScore, noteKick, ballSquash, endMatch,
-    BOT, runBot, botInit, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
+    BOT, runBot, botInit, botAssignBerry, berryLive, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
     setMatchSeed, botSkill, DIFF, botIntercept, ballAt, botTimeToBall, botLaneClear, botAperture,
     botMirror, botBankHits, botPickAim, botFormationSpot, botAssignRoles, botPhase,
     botUpdateSupportGrid, botSeparate, botWallAvoid, handleBallControl,
@@ -11829,7 +12032,7 @@ if (window.__MAGNETDEBUG) {
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
