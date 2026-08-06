@@ -188,6 +188,10 @@
     .navgrid { width: 100%; max-width: 460px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 4px 0 2px; }
     /* Grouped nav: a quiet label per kind, so the three sorts of destination read apart. */
     .navgroup { width: 100%; max-width: 460px; margin: 6px 0 2px; }
+    /* Inside the More card the card already sets the width; a second max-width just
+       left the tiles narrower than every other control in the stack. */
+    .card .navgroup, .card .navgrid { max-width: none; }
+    .card .navgroup:first-of-type { margin-top: 0; }
     .navlab { font-family: var(--pix); font-size: 10px; letter-spacing: 1px; color: var(--muted);
       text-align: left; margin: 0 2px 5px; }
     /* Jump bar: sticky under the KICK OFF header, scrolls sideways rather than wrapping. */
@@ -1065,8 +1069,13 @@
       </div>
     </div>
 
-    <!-- Three kinds of thing, three groups. Eleven identical tiles in one grid made
-         "play something else" and "look at a number" cost the same glance. -->
+    <!-- Eleven tiles, three kinds of thing. They used to sit loose on the menu taking
+         a full screen between KICK OFF and the settings cards; now they are one
+         section like everything else, so the main menu is the match and a short stack
+         of cards. The three groups inside it stay — "play something else" and "look at
+         a number" should not cost the same glance. -->
+    <div class="card collapsible collapsed" data-sec="more">
+      <h2>More</h2>
     <div class="navgroup">
       <div class="navlab">Play</div>
       <div class="navgrid">
@@ -1092,6 +1101,7 @@
         <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
         <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
       </div>
+    </div>
     </div>
 
 
