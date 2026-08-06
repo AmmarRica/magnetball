@@ -203,6 +203,17 @@
        full list below still reads as the real list. */
     .recentlab { opacity: .72; margin-bottom: 4px; }
     .recentrow { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--edge); }
+    /* Progressive disclosure for help text. The paragraph is kept VERBATIM — it is
+       folded away, never rewritten or dropped — and the toggle sits on the label so
+       the row still reads as one control. */
+    .infobtn { display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; margin-left: 6px; padding: 0; vertical-align: -4px;
+      background: none; border: 0; border-radius: 50%; cursor: pointer;
+      color: var(--muted); opacity: .8; }
+    .infobtn:hover { color: var(--cyan); opacity: 1; }
+    .infobtn.on { color: var(--cyan); opacity: 1; background: rgba(33,230,255,.12); }
+    .infobtn .ic { width: 15px; height: 15px; }
+    .hint.folded { display: none; }
     #searchWrap { position: relative; width: 100%; max-width: 460px; margin: 0 0 6px; }
     #menuSearch { width: 100%; box-sizing: border-box; font-family: var(--pix); font-size: 12px;
       color: var(--text); background: rgba(127,127,127,.10); border: 1px solid var(--edge);
@@ -1107,15 +1118,15 @@
       <div class="subpane" data-pane="rules">
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
       <div style="height:14px"></div>
       <label class="field">Goal box crowding <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="boxRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
       <div style="height:14px"></div>
       <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="kickPushPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -2147,6 +2158,7 @@ const ICONS = {
   bag:       'M5.4 8h13.2l1 12H4.4Z M8.6 10V6.9a3.4 3.4 0 0 1 6.8 0V10',
   phone:     'M7.4 3h9.2a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6V4.6A1.6 1.6 0 0 1 7.4 3Z M10.4 5.6h3.2 M12 17.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
   gear:      'M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z M12 3.4v1.9 M12 18.7v1.9 M20.6 12h-1.9 M5.3 12H3.4 M18.1 5.9l-1.4 1.4 M7.3 16.7l-1.4 1.4 M18.1 18.1l-1.4-1.4 M7.3 7.3 5.9 5.9',
+  info:      'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 10.8v5.6 M12 7.4a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
   question:  'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M9.4 9.4a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.2-2.6 4 M12 17.2a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z',
   // --- match length
   bolt:      'M13.4 2.6 5.6 13.4h5.4l-.8 8 7.8-10.8h-5.4Z',
@@ -5257,6 +5269,52 @@ function buildSubTabs(){
   }
 }
 // Built from the cards themselves so it can never offer a section that isn't there.
+// ---------- Progressive disclosure for help text ----------------------------
+// Nearly every control carried a paragraph. The writing is the problem: it is good
+// enough that nothing gets skipped and everything gets scrolled past. Label plus an
+// info toggle, and the paragraph expands VERBATIM — no copy is deleted or rewritten,
+// it only moves behind an affordance.
+//
+// ⚠️ ONE component, applied by walking the DOM. Per-card bespoke markup would mean
+// 27 places to keep in step, and a new setting would arrive without a toggle.
+//
+// ⚠️ GAMEPLAY-AFFECTING HELP STAYS OPEN — `class="hint always"`. Whether a match is
+// comparable is not a detail to hide behind a disclosure triangle. Cosmetic and
+// presentation help folds.
+//
+// ⚠️ Not persisted, by decision: every visit starts collapsed.
+//
+// ⚠️ A hint with no label before it is a NOTE, not help for a control (the panel
+// status line, the record readout). Those are left exactly as they are — attaching a
+// toggle to the nearest label above would fold text that belongs to nothing.
+const HINT_SKIP = new Set(['recLine']);      // a data readout that borrows .hint styling
+function buildHintToggles(root){
+  const scope = root || document;
+  for (const h of scope.querySelectorAll('.hint')){
+    if (h.dataset.hint) continue;                       // already wired
+    // Marked, not just skipped: an unclassified hint should mean 'the component
+    // never saw this', which is a bug, rather than 'we chose to leave it'.
+    if (h.id && HINT_SKIP.has(h.id)){ h.dataset.hint = 'readout'; continue; }
+    if (h.classList.contains('always')){ h.dataset.hint = 'always'; continue; }
+    let lab = h.previousElementSibling;
+    while (lab && !lab.classList.contains('field')) lab = lab.previousElementSibling;
+    if (!lab){ h.dataset.hint = 'note'; continue; }
+    h.dataset.hint = 'fold';
+    h.classList.add('folded');
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.className = 'infobtn';
+    bt.setAttribute('aria-label', 'What this does');
+    bt.setAttribute('aria-expanded', 'false');
+    bt.innerHTML = iconSvg('info') || 'i';
+    bt.onclick = e => {
+      e.preventDefault(); e.stopPropagation();
+      const open = !h.classList.toggle('folded');
+      bt.classList.toggle('on', open);
+      bt.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    lab.appendChild(bt);
+  }
+}
 function buildJumpBar(){
   const host = $('jumpBar'); if (!host) return;
   host.innerHTML = '';
@@ -5496,7 +5554,7 @@ async function startPhotoCam(){
   if (f) f.onchange = () => { photoFromFile(f.files && f.files[0]); f.value = ''; }; }
 buildPhotoPane();
 
-buildSubTabs(); buildJumpBar(); buildMenuSearch();
+buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
 
 $('playBtn').onclick = startMatch;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
@@ -6189,6 +6247,10 @@ function buildSettings(){
   }
   buildFeelPresets();
   buildFeelSliders();
+  // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
+  // created by this function, so a one-shot pass at startup left them unclassified
+  // and permanently expanded — the exact clutter the component exists to remove.
+  buildHintToggles();
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
@@ -12800,7 +12862,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0345PM';
+const VERSION = '20260806.0430PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12836,6 +12898,7 @@ if (window.__MAGNETDEBUG) {
     EYE_KEYS, ANIMAL_KEYS,
     buildAnimalPicker, buildEyesPicker, buildTilePicker,
     RECENT_KEEP, RECENT_MIN_GRID, get recents(){ return recents; }, noteRecent, recentKeys, buildRecentRow, loadRecents,
+    buildHintToggles, HINT_SKIP,
     menuSearchIndex, menuSearchRank, menuSearchGo, menuSearchDraw, menuSearchClose, buildMenuSearch, SEARCH_MAX,
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,

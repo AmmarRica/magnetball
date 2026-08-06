@@ -278,6 +278,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   result screen starts the next match on the same config after 30s (`stepResultClock`, any input
   resets it). ⚠️ The result clock is counted on **wall-clock in `loop()`'s paused branch** —
   the result screen is a paused state, so `step()` isn't running. `tests/autoadvance.mjs`.
+- **Help text is PROGRESSIVE:** `buildHintToggles()` walks every `.hint` and folds it behind
+  an info toggle on its label — one component, applied by walking the DOM, because per-card
+  markup means 27 places to keep in step and a new setting arrives without a toggle. The
+  paragraph is folded VERBATIM, never rewritten or dropped. ⚠️ Also called at the END of
+  `buildSettings()`, which creates six of the paragraphs itself — a one-shot pass at boot left
+  those permanently expanded. ⚠️ `class="hint always"` keeps gameplay-affecting help open;
+  whether a match is comparable is not a detail to hide. Never persisted: every visit starts
+  collapsed. `tests/hints.mjs`.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress

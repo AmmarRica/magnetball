@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0345PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0430PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -51,6 +51,17 @@ _Current build: **v20260806.0345PM** (shown under the title; bump `VERSION` in `
   input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
   blocks kenney.nl, so it could not be fetched. Commit
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
+
+## 🧭 UI/UX pass (approved plan, one change at a time)
+- [x] **4. Help text is progressive.** One component (`buildHintToggles`) folds every help
+  paragraph behind an info toggle on its label. No copy deleted or rewritten — folded verbatim,
+  3,963 characters still in the DOM. Gameplay-affecting help (`hint always`) stays open.
+  Never persisted. ⚠️ Wired into `buildSettings()` too: six paragraphs are created there and a
+  boot-only pass left them permanently expanded.
+- [ ] 1. Touch players cannot start a match (confirmed hard block in cocktail).
+- [ ] 2. Dead controls · 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
+- [ ] 7. Search: help text, synonyms, fuzzy · 8. Reduce motion · 10. Polish batch
+- [ ] 9. Match flow timers — two questions outstanding for the owner.
 
 ## 🦐 Shrimp theme, and a ring on every player
 - [x] **Rockpool** — full bundle: a sand seabed with ripples and shells, an underwater palette,
