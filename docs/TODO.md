@@ -5,9 +5,22 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0640AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0810AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🎨 Drawn icons instead of emoji
+- [x] Emoji render differently on every platform, sit on their own baseline so a row never lines
+  up, and cannot take a colour from the theme. `ICONS` is 27 drawn glyphs on one 24×24 grid at
+  one stroke weight in `currentColor`, through one `optGlyph()` that every tile already uses.
+- [x] Difficulty is now a **ramp** — filled pips out of `DIFF`'s own length — instead of seven
+  unrelated pictures. A row of tiles reads as "harder to the right", which it never did before.
+- [x] ⚠️ Opting in is an `icon:` field, not an emoji lookup: ⚡ is both Quick and Elite.
+- [x] ⚠️ Cosmetic tables stay on emoji, because there the emoji IS the item.
+- [ ] **The Kenney `kenney_game-icons` pack is not in the repo** (only animal / flag /
+  input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
+  blocks kenney.nl, so it could not be fetched. Commit
+  `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
 
 ## 🧤 Goal box: one keeper, one attacker
 - [x] A team could park its whole defence on its own line, and the attack could bury the keeper

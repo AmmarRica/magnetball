@@ -121,6 +121,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   never quite the mark you played with. **Bots wear `BOT_CAP` ('none')**: cycling the whole
   CAPS table put a different hat on every disc and made a cap read as decoration rather than
   as yours. Bots still vary by colour, shirt number and eyes.
+- **Icons:** `ICONS` (one 24×24 grid, one stroke weight, `currentColor`) → `iconSvg(name)` →
+  `optGlyph(entry)`, which every option tile and nav tile goes through. ⚠️ **Opting in is an
+  `icon:` FIELD, never a lookup by emoji** — emoji are not unique across tables (⚡ is both the
+  Quick match length and the Elite difficulty tier), so a by-emoji map puts a stopwatch on a
+  difficulty tile. ⚠️ **Cosmetic tables are deliberately NOT converted**: in `CAPS`, `EYES`,
+  `ANIMALS` and `TEXTS` the emoji IS the item — `paintCap` draws that exact glyph on the disc —
+  so an icon there would show a picture of something other than what you picked. Anything with
+  no `icon:` keeps its emoji. Difficulty is drawn as a **ramp** (`tierNofM`, filled pips) rather
+  than seven unrelated pictures, generated from `DIFF`'s own length. `tests/icons.mjs`.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one

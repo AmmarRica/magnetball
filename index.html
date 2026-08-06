@@ -217,7 +217,9 @@
     .subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
     .subchip { font-family: var(--pix); font-size: 11px; color: var(--muted);
       background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 9px;
-      padding: 7px 11px; cursor: pointer; }
+      padding: 7px 11px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; }
+    .subchip .ic { width: 15px; height: 15px; }
     .subchip:hover { border-color: var(--cyan); color: var(--text); }
     .subchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
     /* Photo pane: what you'd wear, next to the two ways of changing it. */
@@ -242,6 +244,15 @@
     .navtile span { font-size: 19px; line-height: 1; }
     .navtile:active { transform: translateY(1px); }
     .navtile:hover { border-color: var(--cyan); background: rgba(33,230,255,.06); }
+    /* Drawn icons. currentColor is the whole point — a tile inherits the palette's
+       text colour, and hover/selected states tint the icon along with the label
+       instead of leaving a fixed-colour emoji sitting there. */
+    .ic { width: 21px; height: 21px; display: block; flex: 0 0 auto; color: currentColor; }
+    .navtile .ic { width: 22px; height: 22px; }
+    .navtile:hover .ic { color: var(--cyan); }
+    .opt .ic { margin: 0 auto 2px; }
+    .opt.sel .ic { color: var(--cyan); }
+    h2 .ic { width: 17px; height: 17px; opacity: .75; }
 
     button.primary {
       width: 100%; max-width: 460px; margin-top: 6px;
@@ -1085,27 +1096,27 @@
     <div class="navgroup">
       <div class="navlab">Play</div>
       <div class="navgrid">
-        <button class="navtile" id="seasonBtn"><span>🏆</span>Season</button>
-        <button class="navtile" id="rogueBtn"><span>☠️</span>Gauntlet</button>
-        <button class="navtile" id="drillsBtn"><span>🎯</span>Drills</button>
-        <button class="navtile" id="tutBtn"><span>🎓</span>Tutorial</button>
+        <button class="navtile" id="seasonBtn" data-icon="trophy">Season</button>
+        <button class="navtile" id="rogueBtn" data-icon="skull">Gauntlet</button>
+        <button class="navtile" id="drillsBtn" data-icon="target">Drills</button>
+        <button class="navtile" id="tutBtn" data-icon="mortar">Tutorial</button>
       </div>
     </div>
     <div class="navgroup">
       <div class="navlab">Progress</div>
       <div class="navgrid">
-        <button class="navtile" id="statsBtn"><span>📈</span>Stats</button>
-        <button class="navtile" id="lbBtn"><span>📊</span>Ranks</button>
-        <button class="navtile" id="dailyBtn"><span>🎁</span>Daily</button>
-        <button class="navtile" id="shopBtn"><span>🛍</span>Shop</button>
-        <button class="navtile" id="socialBtn"><span>📱</span>Watch</button>
+        <button class="navtile" id="statsBtn" data-icon="chartline">Stats</button>
+        <button class="navtile" id="lbBtn" data-icon="chartbars">Ranks</button>
+        <button class="navtile" id="dailyBtn" data-icon="gift">Daily</button>
+        <button class="navtile" id="shopBtn" data-icon="bag">Shop</button>
+        <button class="navtile" id="socialBtn" data-icon="phone">Watch</button>
       </div>
     </div>
     <div class="navgroup">
       <div class="navlab">Help</div>
       <div class="navgrid">
-        <button class="navtile" id="settingsBtn"><span>⚙</span>Settings</button>
-        <button class="navtile" id="howBtn"><span>❔</span>How to play</button>
+        <button class="navtile" id="settingsBtn" data-icon="gear">Settings</button>
+        <button class="navtile" id="howBtn" data-icon="question">How to play</button>
       </div>
     </div>
     </div>
@@ -1932,24 +1943,24 @@ function closeDailyModal(){ $('dailyModal').classList.add('hidden'); }
 // gone: it multiplied a bot-only kick that no longer exists — bots use the human
 // kick, so their power comes from hold time like everyone else's.
 const DIFF = {
-  rookie: { name:'Rookie', emoji:'🐣', react:0.58, err:34,  aggr:0.68 },
-  easy:   { name:'Easy',   emoji:'🙂', react:0.72, err:20,  aggr:0.85 },
-  normal: { name:'Normal', emoji:'😎', react:0.85, err:9,   aggr:1.0  },
-  hard:   { name:'Hard',   emoji:'🔥', react:0.95, err:5.5, aggr:1.12 },
-  pro:    { name:'Pro',    emoji:'💀', react:1.0,  err:3.2, aggr:1.22 },
-  elite:  { name:'Elite',  emoji:'⚡', react:1.05, err:1.6, aggr:1.32 },
-  insane: { name:'Insane', emoji:'👽', react:1.10, err:0.6, aggr:1.42 },
+  rookie: { name:'Rookie', emoji:'🐣', icon:'tier1of7', react:0.58, err:34,  aggr:0.68 },
+  easy:   { name:'Easy',   emoji:'🙂', icon:'tier2of7', react:0.72, err:20,  aggr:0.85 },
+  normal: { name:'Normal', emoji:'😎', icon:'tier3of7', react:0.85, err:9,   aggr:1.0  },
+  hard:   { name:'Hard',   emoji:'🔥', icon:'tier4of7', react:0.95, err:5.5, aggr:1.12 },
+  pro:    { name:'Pro',    emoji:'💀', icon:'tier5of7', react:1.0,  err:3.2, aggr:1.22 },
+  elite:  { name:'Elite',  emoji:'⚡', icon:'tier6of7', react:1.05, err:1.6, aggr:1.32 },
+  insane: { name:'Insane', emoji:'👽', icon:'tier7of7', react:1.10, err:0.6, aggr:1.42 },
 };
 
 const MODES = {
-  '1v1':  { name:'1 v 1',   emoji:'👤', per:1, twoP:false, desc:'You vs bot' },
-  '2v2':  { name:'2 v 2',   emoji:'👥', per:2, twoP:false, desc:'You + bot' },
-  '3v3':  { name:'3 v 3',   emoji:'⚔️', per:3, twoP:false, desc:'You + 2 bots' },
-  '4v4':  { name:'4 v 4',   emoji:'🏟️', per:4, twoP:false, desc:'You + 3 bots' },
-  'duo':  { name:'Duo',     emoji:'👯', per:2, twoP:false, duo:true, desc:'Steer 2 at once' },
-  'local':{ name:'2-Player',emoji:'🎮', per:1, twoP:true,  desc:'Same phone' },
-  'kq':   { name:'Killer Queen', emoji:'🐌', per:3, twoP:false, kq:true, desc:'Snail wins it' },
-  'train':{ name:'Training',emoji:'🎯', per:0, twoP:false, train:true, desc:'Free practice' },
+  '1v1':  { name:'1 v 1',   emoji:'👤', icon:'person', per:1, twoP:false, desc:'You vs bot' },
+  '2v2':  { name:'2 v 2',   emoji:'👥', icon:'people', per:2, twoP:false, desc:'You + bot' },
+  '3v3':  { name:'3 v 3',   emoji:'⚔️', icon:'swords', per:3, twoP:false, desc:'You + 2 bots' },
+  '4v4':  { name:'4 v 4',   emoji:'🏟️', icon:'stadium', per:4, twoP:false, desc:'You + 3 bots' },
+  'duo':  { name:'Duo',     emoji:'👯', icon:'duo', per:2, twoP:false, duo:true, desc:'Steer 2 at once' },
+  'local':{ name:'2-Player',emoji:'🎮', icon:'gamepad', per:1, twoP:true,  desc:'Same phone' },
+  'kq':   { name:'Killer Queen', emoji:'🐌', icon:'snail', per:3, twoP:false, kq:true, desc:'Snail wins it' },
+  'train':{ name:'Training',emoji:'🎯', icon:'target', per:0, twoP:false, train:true, desc:'Free practice' },
 };
 
 // Only integrate()'s primary ball gets handleBallControl, so the snail can't be
@@ -2053,13 +2064,95 @@ const COOP = {
   on:  { name:'Co-op',   emoji:'🤝' },
 };
 // Kickoff rule: both sides hold their own half until the ball is played.
+// ============================================================
+//  ICONS — drawn, not typed
+// ============================================================
+// The menu ran on emoji. They render differently on every platform, sit on their own
+// baseline so a row of them never lines up, and cannot take a colour from the theme.
+// These are drawn on one 24x24 grid at one stroke weight, in `currentColor`, so a
+// tile inherits whatever the palette gives it and a row of them is a row.
+//
+// ⚠️ COSMETIC TABLES ARE DELIBERATELY NOT CONVERTED. In CAPS, EYES, ANIMALS and
+// TEXTS the emoji IS the item — paintCap draws that exact glyph on the disc. Giving
+// those an icon would show you a picture of something other than the thing you
+// picked. Only UI chrome is converted, and the switch is opt-in per entry.
+//
+// ⚠️ Opt in with an `icon:` FIELD, never by looking the emoji up. Emoji are not
+// unique across tables — ⚡ is both the Quick match length and the Elite difficulty
+// tier — so a by-emoji map silently puts a stopwatch on a difficulty tile.
+const ICON_SW = 1.8;                 // one stroke weight for the whole set
+const ICONS = {
+  // --- navigation
+  trophy:    'M7 4h10v4.6a5 5 0 0 1-10 0Z M7 5.6H4.2v1.3a3 3 0 0 0 2.9 3 M17 5.6h2.8v1.3a3 3 0 0 1-2.9 3 M12 13.6V17 M9 20h6 M10.4 17h3.2v3h-3.2Z',
+  skull:     'M12 3.2a7 7 0 0 0-7 7v3.2l1.7 1.3V18h10.6v-3.3L19 13.4v-3.2a7 7 0 0 0-7-7Z M10.6 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M16.4 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M12 14.2l-1 2h2Z M9.4 18v2.6 M12 18v2.6 M14.6 18v2.6',
+  target:    'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 7.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z M12 11.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6Z',
+  mortar:    'M2.6 9.2 12 5.1l9.4 4.1L12 13.3Z M6.4 11.1v4.2c0 1.7 2.5 3 5.6 3s5.6-1.3 5.6-3v-4.2 M20.6 9.6v5.2',
+  chartline: 'M4 4v16h16 M7.2 15.4l3.4-3.9 2.8 2.2 4.4-5.3 M17.8 8.4h-2.6 M17.8 8.4v2.6',
+  chartbars: 'M4 4v16h16 M8 17V11 M12 17V7.4 M16 17v-4',
+  gift:      'M4 10h16v9.6H4Z M4 10V7.6h16V10 M12 7.6v12 M12 7.6C10.6 5 9.5 4 8.3 4a2.1 2.1 0 0 0 0 4.2 M12 7.6C13.4 5 14.5 4 15.7 4a2.1 2.1 0 0 1 0 4.2',
+  bag:       'M5.4 8h13.2l1 12H4.4Z M8.6 10V6.9a3.4 3.4 0 0 1 6.8 0V10',
+  phone:     'M7.4 3h9.2a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6V4.6A1.6 1.6 0 0 1 7.4 3Z M10.4 5.6h3.2 M12 17.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
+  gear:      'M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z M12 3.4v1.9 M12 18.7v1.9 M20.6 12h-1.9 M5.3 12H3.4 M18.1 5.9l-1.4 1.4 M7.3 16.7l-1.4 1.4 M18.1 18.1l-1.4-1.4 M7.3 7.3 5.9 5.9',
+  question:  'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M9.4 9.4a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.2-2.6 4 M12 17.2a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z',
+  // --- match length
+  bolt:      'M13.4 2.6 5.6 13.4h5.4l-.8 8 7.8-10.8h-5.4Z',
+  clock:     'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 7.2V12l3.4 2',
+  medal:     'M8 2.6 10.4 8 M16 2.6 13.6 8 M12 8.6a5.7 5.7 0 1 0 0 11.4 5.7 5.7 0 0 0 0-11.4Z M12 12.1l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3Z',
+  // --- modes
+  person:    'M12 4.4a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z M5.4 20.4c0-3.7 3-6.2 6.6-6.2s6.6 2.5 6.6 6.2',
+  people:    'M8.6 5.2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z M2.8 20c0-3.3 2.6-5.6 5.8-5.6s5.8 2.3 5.8 5.6 M15.8 5.6a3 3 0 0 1 0 5.6 M16.6 14.7c2.8.4 4.6 2.5 4.6 5.3',
+  swords:    'M3.4 3.4h3.2l11 11-3.2 3.2-11-11Z M20.6 3.4h-3.2l-11 11 3.2 3.2 11-11Z M4.8 17.6l-1.4 3 3-1.4 M19.2 17.6l1.4 3-3-1.4',
+  stadium:   'M4.4 4.2h15.2a1.8 1.8 0 0 1 1.8 1.8v12a1.8 1.8 0 0 1-1.8 1.8H4.4a1.8 1.8 0 0 1-1.8-1.8V6a1.8 1.8 0 0 1 1.8-1.8Z M12 4.2v15.6 M12 9.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z M2.6 9.4h2.6v5.2H2.6 M21.4 9.4h-2.6v5.2h2.6',
+  duo:       'M7.4 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M16.6 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M2.8 20v-1.6a4.6 4.6 0 0 1 4.6-4.6 4.6 4.6 0 0 1 4.6 4.6V20 M12.2 20v-1.6a4.6 4.6 0 0 1 4.4-4.6 4.6 4.6 0 0 1 4.6 4.6V20',
+  gamepad:   'M8.2 7.4h7.6a5.6 5.6 0 0 1 5.4 4.2l.9 3.6a2.7 2.7 0 0 1-5 1.9l-1-1.7H8l-1 1.7a2.7 2.7 0 0 1-5-1.9l.9-3.6a5.6 5.6 0 0 1 5.3-4.2Z M7 10.6v3.2 M5.4 12.2h3.2 M15.4 11.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z M17.8 13.6a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z',
+  snail:     'M13 7.6a5.4 5.4 0 1 0 0 10.8 5.4 5.4 0 0 0 0-10.8Z M13 10.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Z M7.6 18.4H3.6c0-2.2 1.4-3.4 3.2-3.6 M4.6 14.8 2.8 12 M6.4 14.4 5.6 11.2',
+  // --- rules
+  barrier:   'M3 8.6h18v6.8H3Z M3 8.6l6 6.8 M9 8.6l6 6.8 M15 8.6l6 6.8 M5.4 15.4V20 M18.6 15.4V20',
+  run:       'M13.6 3.4a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z M9.4 20.6l2.2-5.2-2.6-2.6.8-4.6 3.2-1 2.6 3 3 1 M11 12.8 6.6 14 M14.2 15.4l2.6 5.2',
+  glove:     'M7 20.4V11a1.7 1.7 0 0 1 3.4 0V8.2a1.7 1.7 0 0 1 3.4 0V10a1.7 1.7 0 0 1 3.4 0v1.4a1.7 1.7 0 0 1 3.4 0v3.4c0 3.2-2.6 5.6-5.8 5.6Z M4 14.4l3 2.4',
+  ball:      'M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2Z M12 7.4l3.4 2.5-1.3 4h-4.2l-1.3-4Z M12 3.4v4 M19.6 9.9l-4.2 0M8.6 9.9l-4.2 0 M9.9 13.9 7.4 17.6 M14.1 13.9l2.5 3.7',
+  clipboard: 'M8.6 4.4H6.4A1.4 1.4 0 0 0 5 5.8v13.4a1.4 1.4 0 0 0 1.4 1.4h11.2a1.4 1.4 0 0 0 1.4-1.4V5.8a1.4 1.4 0 0 0-1.4-1.4h-2.2 M9.4 2.8h5.2v3.2H9.4Z M8.6 11h6.8 M8.6 15h4.8',
+  wall:      'M3 5.4h18v13.2H3Z M3 9.8h18 M3 14.2h18 M9 5.4v4.4 M15 5.4v4.4 M6 9.8v4.4 M12 9.8v4.4 M18 9.8v4.4 M9 14.2v4.4 M15 14.2v4.4',
+};
+// Difficulty is a RAMP, not seven unrelated pictures. Drawn as filled pips out of
+// DIFF's own length, so adding a tier does not need a new drawing — and a row of
+// tiles reads as "harder to the right" at a glance, which seven emoji never did.
+function iconTier(n, of){
+  let d = '';
+  for (let i = 0; i < of; i++){
+    const x = 3 + i * (18 / Math.max(1, of - 1));
+    d += `<circle cx="${x.toFixed(2)}" cy="12" r="${i < n ? 2.6 : 1.7}"` +
+         (i < n ? ' fill="currentColor"' : ' fill="none" stroke="currentColor" stroke-width="1.4"') + '/>';
+  }
+  return d;
+}
+function iconSvg(name, cls){
+  let inner;
+  if (name && name.slice(0,4) === 'tier'){
+    const [n, of] = name.slice(4).split('of');
+    inner = iconTier(+n, +of || 7);
+  } else {
+    const d = ICONS[name];
+    if (!d) return '';
+    inner = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${ICON_SW}" ` +
+            'stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  return `<svg class="ic ${cls||''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${inner}</svg>`;
+}
+// What an option tile shows. An entry with an `icon:` gets the drawn one; anything
+// else keeps its emoji, which is what every cosmetic table wants.
+function optGlyph(o){
+  const sv = o && o.icon ? iconSvg(o.icon) : '';
+  return sv || `<span class="emoji">${(o && o.emoji) || '—'}</span>`;
+}
+
 const KICKOFFRULE = {
-  on:  { name:'On',  emoji:'🚧' },
-  off: { name:'Off', emoji:'🏃' },
+  on:  { name:'On',  emoji:'🚧', icon:'barrier' },
+  off: { name:'Off', emoji:'🏃', icon:'run' },
 };
 const BOXRULE = {
-  on:  { name:'On',  emoji:'🧤' },
-  off: { name:'Off', emoji:'🧱' },
+  on:  { name:'On',  emoji:'🧤', icon:'glove' },
+  off: { name:'Off', emoji:'🧱', icon:'wall' },
 };
 // Goal-box occupancy: ONE defender and ONE attacker inside a goal box at a time, so
 // a team cannot park three bodies in front of their keeper and call it defending.
@@ -2078,10 +2171,10 @@ const GOALBOX = {
 };
 
 const LENGTHS = {
-  '3':  { name:'Quick', emoji:'⚡', secs:180, goals:0 },
-  '5':  { name:'Normal',emoji:'⏱️', secs:300, goals:0 },
-  'g3': { name:'First to 3', emoji:'🥉', secs:0, goals:3 },
-  'g5': { name:'First to 5', emoji:'🏆', secs:0, goals:5 },
+  '3':  { name:'Quick', emoji:'⚡', icon:'bolt', secs:180, goals:0 },
+  '5':  { name:'Normal',emoji:'⏱️', icon:'clock', secs:300, goals:0 },
+  'g3': { name:'First to 3', emoji:'🥉', icon:'medal', secs:0, goals:3 },
+  'g5': { name:'First to 5', emoji:'🏆', icon:'trophy', secs:0, goals:5 },
 };
 
 // ---------- Physics constants (per fixed 1/60s step)
@@ -4231,7 +4324,7 @@ function buildOpts(containerId, obj, key, extra){
       const nm=document.createElement('span'); nm.textContent=o.name; el.appendChild(nm);
       if(sub){ const sm=document.createElement('small'); sm.innerHTML=sub; el.appendChild(sm); }
     } else {
-      el.innerHTML = `<span class="emoji">${o.emoji||'—'}</span><span>${o.name}</span>${sub?`<small>${sub}</small>`:''}`;
+      el.innerHTML = `${optGlyph(o)}<span>${o.name}</span>${sub?`<small>${sub}</small>`:''}`;
     }
     el.onclick = () => {
       if (key==='cap'){ profile.cap = k; saveProfile(); }
@@ -4717,6 +4810,12 @@ function buildMatchOpts(){
   buildOpts('modes', MODES, 'mode', o=>o.desc);
   buildOpts('fields', FIELDS, 'field');
   buildOpts('grass', GRASS, 'grass');
+  // Nav tiles carry their icon name in markup and are painted here — one place, so a
+  // tile can't end up with an icon the registry doesn't have.
+  document.querySelectorAll('[data-icon]').forEach(el => {
+    const sv = iconSvg(el.getAttribute('data-icon'));
+    if (sv) el.insertAdjacentHTML('afterbegin', sv);
+  });
   buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
   buildOpts('boxRule', BOXRULE, 'boxRule');
   buildOpts('diffs', DIFF, 'diff');
@@ -4970,10 +5069,14 @@ function openHow(){ dockOrFull('how'); }
 //
 // The panes are markup (`.subpane[data-pane]`); this only decides which is shown,
 // so every control still exists and `audit` still finds it.
+// [pane, label, icon]. The icon is optional — the Your Player chips keep their emoji
+// on purpose, because those panes are exactly the cosmetic tables the icon set stays
+// out of, and a drawn hat next to a row of emoji hats would be the odd one out.
 const SUBTABS = {
   player: [['colour','🎨 Colour'], ['cap','🧢 Cap'], ['flag','🏴 Flags'],
            ['animal','🐻 Animals'], ['text','🔢 Text'], ['photo','📷 Photo'], ['eyes','👀 Eyes']],
-  match:  [['game','⚽ Game'], ['pitch','🏟 Pitch'], ['players','🎮 Players'], ['rules','📋 Rules']],
+  match:  [['game','Game','ball'], ['pitch','Pitch','stadium'],
+           ['players','Players','gamepad'], ['rules','Rules','clipboard']],
 };
 const subTab = {};                                  // which pane each group is showing
 function showSubTab(group, pane){
@@ -4989,9 +5092,12 @@ function buildSubTabs(){
   for (const group in SUBTABS){
     const host = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!host) continue;
     host.innerHTML = '';
-    for (const [pane, label] of SUBTABS[group]){
+    for (const [pane, label, ic] of SUBTABS[group]){
       const bt = document.createElement('button');
-      bt.type='button'; bt.className='subchip'; bt.dataset.pane = pane; bt.textContent = label;
+      bt.type='button'; bt.className='subchip'; bt.dataset.pane = pane;
+      const sv = ic ? iconSvg(ic) : '';
+      if (sv) bt.innerHTML = sv + `<span>${label}</span>`;
+      else bt.textContent = label;
       bt.onclick = () => showSubTab(group, pane);
       host.appendChild(bt);
     }
@@ -11984,7 +12090,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0640AM';
+const VERSION = '20260806.0810AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12020,6 +12126,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
+    ICONS, iconSvg, optGlyph, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
