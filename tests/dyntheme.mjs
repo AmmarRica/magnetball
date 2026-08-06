@@ -379,6 +379,82 @@ const r = await p.evaluate(async ()=>{
     try { f2.paint(cc4, st3, 0, 0, 200, 200); } catch(e){ threw2 = e.message; }
     o.boardFallsBack = threw2;
   }
+
+  // ---- Abduction: a fence that knows where the goal is, and two craft --------
+  // ⚠️ The fence is drawn OUTSIDE the play area, which is the pool table's mistake
+  // waiting to happen again: rails through the goal mouth, or timber inside the line
+  // that the ball rolls over instead of bouncing off. Sampled for, both ways.
+  {
+    const w5 = setup('ufo');
+    w5.players.forEach(q=>{ q.x=9999; q.y=9999; });
+    w5.ball.x=9999; w5.ball.y=9999;
+    M.computeCam(); M.render();
+    o.ufoName = M.bundleName();
+    const bb = w5.bounds, f5 = w5.field;
+    const hex = h => { const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+    const timber = hex(M.TH.dynMark), grass = hex(M.TH.court);
+    const near = (A,B,tol) => [0,1,2].every(i=>Math.abs(A[i]-B[i]) <= (tol||30));
+    // 1) THE GOAL MOUTH IS A GAP — scanned across, not sampled once: the fence is
+    //    posts and rails, so a single probe can land in a gap and prove nothing.
+    // ⚠️ The middle of the mouth, not its full width: the fence STOPS at the mouth,
+    // so its last post stands on the edge and a full-width scan reports the post as a
+    // fence across the gap. What matters is that the span you shoot through is clear.
+    let mouthWood = 0, mouthN = 0;
+    for (let gx = -f5.goal*0.36; gx <= f5.goal*0.36; gx += 3){
+      mouthN++; if (near(at(gx, bb.halfL + 5), timber, 44)) mouthWood++; }
+    o.mouthN = mouthN; o.mouthWood = mouthWood;
+    o.mouthIsOpen = mouthN > 4 && mouthWood === 0;
+    // 2) ...and the fence really is out there, or (1) passes on a field with no fence.
+    let sideWood = 0, sideN = 0;
+    for (let gy = -bb.halfL*0.6; gy <= bb.halfL*0.6; gy += 5){
+      sideN++; if (near(at(bb.halfW + 4, gy), timber, 44)) sideWood++; }
+    o.sideN = sideN; o.sideWood = sideWood;
+    o.fenceIsThere = sideWood > sideN * 0.5;
+    // 3) ...and none of it is inside the line, where the ball plays.
+    o.justInside = at(bb.halfW - 10, bb.halfL*0.4);
+    o.insideIsGrass = !near(o.justInside, timber, 44);
+    o.paddockStill = !M.DYN_FIELDS.paddock.step;
+
+    // ---- the two craft differ by SILHOUETTE -------------------------------
+    // ⚠️ Measured at the TAIL, across the facing. Both are long the way they point —
+    // a saucer's hull and a triangle's nose both reach ~0.9r — so a coverage-round-
+    // the-rim check would call them the same shape. Behind the middle they are not
+    // remotely alike: an ellipse has tapered to a sliver, a triangle is at its widest.
+    const R = 60, CX = 150, CY = 150;
+    const cv5 = document.createElement('canvas'); cv5.width = cv5.height = 300;
+    const cc5 = cv5.getContext('2d');
+    const paintUfo = (team, fx, fy) => {
+      cc5.fillStyle = '#7f7f7f'; cc5.fillRect(0,0,300,300);
+      const q = { team, faceX:fx, faceY:fy, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.ufo.paint(cc5, q, CX, CY, R, { players:[q] });
+    };
+    const tailWidth = (team) => {
+      paintUfo(team, 1, 0);                       // pointing along +x, tail at -x
+      const col = Math.round(CX - R*0.5);
+      const d = cc5.getImageData(col, CY - R, 1, R*2).data;
+      let n = 0;
+      for (let i=0;i<d.length;i+=4)
+        if (Math.abs(d[i]-127) + Math.abs(d[i+1]-127) + Math.abs(d[i+2]-127) > 40) n++;
+      return n;
+    };
+    o.saucerTail = tailWidth(0); o.triangleTail = tailWidth(1);
+    o.craftDifferByShape = o.triangleTail > o.saucerTail * 1.5;
+    // It is drawn pointing where it goes, or the 3D is decoration.
+    const shot = (fx, fy) => { paintUfo(0, fx, fy);
+      return cc5.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
+    M.profile.spin = true;
+    o.craftTurns = shot(1,0) !== shot(0,1);
+
+    // ---- and the ball is a sheep, not a plain ball ------------------------
+    o.ballLookExists = !!M.BALL_LOOKS.sheep;
+    const ballShot = (key) => {
+      cc5.fillStyle = '#7f7f7f'; cc5.fillRect(0,0,300,300);
+      M.paintBall(cc5, CX, CY, R, 0.4, key, M.TH);
+      return cc5.getImageData(CX-R, CY-R, R*2, R*2).data.join(',');
+    };
+    o.sheepDraws = ballShot('sheep') !== ballShot('plain');
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -435,6 +511,14 @@ ok(r.laneIsRed, `the lane probe is not on the lane at all: ${JSON.stringify(r.la
 ok(r.laneIsTinted, `the safety lane (${Math.round(r.laneLum)}) is as saturated as the team drawn on top of it (${Math.round(r.laneTeamLum)}) — a column of five team-coloured squares is a column of five decoys`);
 ok(r.boardStill, 'the board field has a step — a printed board does not move');
 ok(!r.boardFallsBack, `the board field threw over a palette that does not declare its inks: ${r.boardFallsBack}`);
+ok(r.ufoName === 'Abduction', `the Abduction bundle does not resolve: ${r.ufoName}`);
+ok(r.mouthIsOpen, `the fence runs through the GOAL MOUTH — ${r.mouthWood}/${r.mouthN} probes hit timber, and a shot would go through it to score`);
+ok(r.fenceIsThere, `there is no fence outside the boundary at all (${r.sideWood}/${r.sideN}), so the goal-mouth check proves nothing`);
+ok(r.insideIsGrass, `fence timber is INSIDE the line, where the ball plays: ${JSON.stringify(r.justInside)}`);
+ok(r.paddockStill, 'the paddock has a step — the field is scenery, and anything that advances must do it next to step(), not in a paint');
+ok(r.craftDifferByShape, `the two craft do not differ by SILHOUETTE: tail widths ${r.saucerTail} vs ${r.triangleTail}. Both are long the way they point, so the tail is the only thing that separates them`);
+ok(r.craftTurns, 'the craft does not turn with its facing — the 3D bank is decoration if it does not say which way you are going');
+ok(r.ballLookExists && r.sheepDraws, 'the sheep ball look draws nothing');
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

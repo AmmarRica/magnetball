@@ -169,6 +169,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
+  `ufo` (shown as **Abduction**) = a fenced night pasture with crop circles, craft for players
+  and a sheep for a ball. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
+  rather than copying it: a fence has to stand ON the boundary the ball bounces off, follow a
+  rounded or chamfered field for free, and leave both GOAL MOUTHS open — the same job the
+  cushion does, so it is the same code. ⚠️ The two sides are a **saucer and a triangle**, both
+  70s sighting-report stock: two saucers in two colours are one shape at twelve pixels, at
+  night, over grass. The 3D is a TILT of the hull about the facing axis — leading edge down,
+  dome pushed back — never a bigger shape; the hull is 0.90`r` so the bank cannot push a wing
+  past the guide ring. ⚠️ The silhouette check measures the **tail**, across the facing: both
+  craft are long the way they point, so a coverage-round-the-rim test calls them identical.
+  The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
+  is the ball itself and the ink draws only what is not fleece. Anything drawn on the rim is
+  lost, because `ballRim` is dark too.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
