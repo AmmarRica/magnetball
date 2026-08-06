@@ -62,11 +62,17 @@ const r = await p.evaluate(async ()=>{
   o.everyBandRight = o.bandsMatchPalette.every(Boolean);
   // The bundle tile is a different picture from the palette tile it sits above —
   // and is painted, distinct per bundle, and taller than it is a colour strip.
-  const bsigs = bundles().map(t=>sig(t.querySelector('canvas')));
+  // The Bundle row is one tile per palette PLUS a Custom tile — a real, selectable
+  // member of the row, not a label, so it counts.
+  const named = () => bundles().filter(t=>t.dataset.bundle !== 'custom');
+  const bsigs = named().map(t=>sig(t.querySelector('canvas')));
   o.bundleCount = bundles().length;
-  o.oneBundlePerTheme = o.bundleCount === keys.length;
+  o.namedCount = named().length;
+  o.oneBundlePerTheme = o.namedCount === keys.length && o.bundleCount === keys.length + 1;
+  o.hasCustomTile = bundles().some(t=>t.dataset.bundle === 'custom');
   o.bundlesPainted = bsigs.every(s=>s.ink > 0);
   o.bundlesDistinct = new Set(bsigs.map(s=>s.h)).size === bsigs.length;
+  o.customPainted = sig(bundles().find(t=>t.dataset.bundle==='custom').querySelector('canvas')).ink > 0;
   o.bundleIsNotThePalette = keys.every((k,i)=>bsigs[i].h !== sigs[i].h);
   o.swatchUsesSixColours = M.themeSwatchColors(M.THEMES.neon).length === 6;
 
@@ -89,7 +95,8 @@ console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.oneTilePerTheme && r.everyTileHasCanvas && r.noEmojiSpans && r.everyTileNamed &&
   r.allPainted && r.allDistinct && r.everyBandRight && r.swatchUsesSixColours &&
-  r.oneBundlePerTheme && r.bundlesPainted && r.bundlesDistinct && r.bundleIsNotThePalette &&
+  r.oneBundlePerTheme && r.hasCustomTile && r.customPainted &&
+  r.bundlesPainted && r.bundlesDistinct && r.bundleIsNotThePalette &&
   r.paletteAloneIsCustom &&
   r.clickSwitches && r.selectedTileMarked && r.stillPaintedAfterSwitch && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));

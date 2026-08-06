@@ -5,7 +5,24 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0430PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0630PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🎥 Goal camera
+- [x] **Pushes in to 0.2× the view** (5× magnification) on whoever last touched the ball, and
+  lerps the centre onto them. Eases back when the celebration ends.
+- [x] Render layer only, and proven so: same seed, 300 steps, bit-identical world.
+- [x] ⚠️ Step-locked like the trails, so a 144Hz screen can't run it fast — and the goal
+  slow-mo stretches it for free. Stands down while a replay owns the framing.
+
+## 🎛 HUD + Custom theme tile
+- [x] **Fullscreen top right, scorebug centred, pause left.** A 3-column grid, so the
+  scorebug is centred on the SCREEN rather than among whatever buttons happen to be showing.
+- [x] **Settings moved into the pause menu.** The HUD gear was one mis-tap from the ball
+  while the match was live.
+- [x] **A Custom tile in the Theme bundle row** — selected whenever the slots match no bundle,
+  painted from the mix you actually built, and pressing it restores that mix.
 
 ---
 
