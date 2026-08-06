@@ -5,7 +5,24 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0830PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.1030PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 👁 A screenshot should explain the last 3 seconds
+- [x] **Trails are measured in TIME now**, not world units or dot count. Measured at top speed
+  the old ones covered 0.47s (player) and 0.17s (ball) — the caps meant the faster you moved
+  the LESS time your trail showed. A player tail is now 2.95s / 660 units.
+- [x] **Player tells are dashes** along the heading, growing with speed. At a crawl they
+  overlap into a clump, which is the look worth keeping.
+- [x] **The ball streak lingers** for `BALL_HOLD` after the shot instead of blinking off, and
+  its length is a share of the PITCH so a big court scales.
+- [ ] ⚠️ **Three seconds is impossible for the ball** — 7.6 pitch lengths at the speed cap.
+  Asserted in `trail3s` so it does not get "fixed" later.
+
+## 🔺 Videoball is themed like Videoball
+- [x] Cream banded court, arrowhead players pointing where they FACE (so a still frame shows
+  intent), on the existing theme-slot mechanism.
 
 ---
 

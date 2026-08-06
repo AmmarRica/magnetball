@@ -57,6 +57,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
   `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
+- **Motion tells — THE 3-SECOND RULE:** a screenshot should say what happened in the last
+  `TRAIL_SECS`. That makes trails a claim about **time**, not world units or dot count.
+  ⚠️ They used to be capped both ways (12 dots × 9 units; 320 units of ball streak), so the
+  faster you moved the **less time** your trail covered — measured at top speed, 0.47s for a
+  player and 0.17s for the ball. Players are now DASHES sampled every `DOT_EVERY` steps and
+  aged out at `TRAIL_STEPS`, drawn along the heading recorded **with the sample** (deriving it
+  from neighbours gets the ends wrong and everything wrong once a dash ages out).
+  ⚠️ **Sample spacing and dash length are one decision** — a dash longer than the gap merges
+  into a solid line, which is what the first build drew. At a crawl the gap collapses and they
+  overlap into a clump, which is the "hovering here" read.
+  ⚠️ **Three seconds is impossible for the ball**: at the speed cap that is 7.6 pitch lengths.
+  It keeps a 3s *history*, a streak capped at `BALL_LEN_PITCH` of the pitch **length** (so a
+  big court scales), and `BALL_HOLD` seconds of linger so a saved shot is still legible.
+  `tests/trail3s.mjs` asserts the impossibility too, so nobody "fixes" it later.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -81,7 +95,9 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `tests/themeslots.mjs`.
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
-  with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes.
+  with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
+  `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
+  still frame shows intent as well as position.
   ⚠️ Field state advances in `advanceDynField()` next to `step()`, **never in a paint**
   (same rule as the trails), and off its own seeded PRNG so it can't touch `w.rng`.
   A monochrome palette *must* be paired with a disc skin — player colour comes from `profile`,

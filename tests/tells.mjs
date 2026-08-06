@@ -134,11 +134,15 @@ const r = await p.evaluate(async ()=>{
   //    rather than expecting an empty array we'd never catch.
   M.resetTrails();
   me.vx=0; me.vy=-3.6;
-  for(let i=0;i<40;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }   // dots need travel
+  // ⚠️ Dashes are sampled every DOT_EVERY steps, so the number of steps needed to
+  // build a history is derived, not a number. Forty steps was ten dots at the old
+  // rate and six at the new one, which failed a check about CLEARING them.
+  const want = 20, steps = want * M.DOT_EVERY + 4;
+  for(let i=0;i<steps;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }
   o.longHistoryBefore = Math.max(...M.discTrails.map(h=>h.length));
   M.startMatch();                       // synchronous: check before a frame can regrow it
   o.historyAfterStart = M.discTrails.reduce((n,h)=>n+(h?h.length:0), 0);
-  o.trailsClearedOnStart = o.longHistoryBefore >= 10 && o.historyAfterStart === 0;
+  o.trailsClearedOnStart = o.longHistoryBefore >= want*0.7 && o.historyAfterStart === 0;
   // 7) Both tells must read on EVERY theme, not just the one we eyeballed.
   //    (CLAUDE.md: verify across themes.) Probe travels THROUGH the sample point.
   const perTheme = {};
@@ -150,7 +154,7 @@ const r = await p.evaluate(async ()=>{
     M.drawPitch(w);
     const probes=[]; for(let j=-3;j<=3;j++) probes.push([0, 160+me.r*2.2+j*2]);
     const ref=probes.map(([x,y])=>px(M.wx(x),M.wy(y)));
-    for(let i=0;i<14;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }
+    for(let i=0;i<M.DOT_EVERY*4;i++){ M.advanceTrails(w); me.x+=me.vx; me.y+=me.vy; }
     M.drawPitch(w); M.drawDiscTrails(w);
     let dots=0; probes.forEach(([x,y],j)=>{ dots=Math.max(dots, diff(ref[j], px(M.wx(x),M.wy(y)))); });
     M.resetTrails();
