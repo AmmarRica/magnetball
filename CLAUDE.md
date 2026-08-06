@@ -65,6 +65,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   came from*, not what the whole possession looked like. Advanced in `advanceTrails`
   next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
   streak instead of 190.
+- **Body size floor:** `cam.body` (`MIN_BODY_PX`). On the huge courts the whole pitch must fit
+  on screen, so `cam.s` falls until a player disc is **2.25px** — every disc the same dot. Discs
+  and the ball are drawn at `MIN_BODY_PX` or their true size, whichever is larger, through ONE
+  shared multiplier so they stay in proportion. ⚠️ **Render only** — physics, kick range, hit
+  tests and bots all read `p.r`, and `tests/bigcourt.mjs` steps the same seed with the floor on
+  and forced to 1 and requires the world bit-identical. Exactly `1` on any ordinary court.
+- **Audio:** ⚠️ **one pre-generated noise buffer**, windowed with `start(when, offset, duration)`.
+  `noise()` used to fill a fresh `AudioBuffer` with `Math.random` on every call, and the loudest
+  sounds call it most — the Ovation cheer is 27 calls, costing 2.2ms median on the main thread at
+  exactly the moment a goal goes in (0.2ms now). It is filled from a seeded PRNG, not
+  `Math.random`, because `noise` is reachable from inside `step()`.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -150,9 +161,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Bots may write **only** `inX/inY/faceX/faceY/kick` and their own `ai*` scratch fields; the
   kick impulse runs along player→ball, so a bot aims by *where it stands*, not by facing.
   `tests/botai.mjs` enforces both by diffing the whole player object.
-- **Determinism:** AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
-  outside the sim at `startMatch`). **Never call `Math.random` from inside `step()`.**
-  `setMatchSeed(n)` pins a match for tests. See `docs/DETERMINISM-AUDIT.md`.
+- **Determinism:** the bar is **same-engine reproducibility** and the audit is CLOSED at it
+  (`docs/DETERMINISM-AUDIT.md`) — a pinned seed reproduces a match bit-exactly in one browser;
+  cross-engine equality is explicitly not a goal, so the fixed-point work is parked. What still
+  binds: **never call `Math.random` from inside `step()`**. ⚠️ That rule is literal, and three
+  streams exist so it can stay literal — `w.rng` for the sim, `fxRnd` for particles (spawned
+  from `step()` but render-only; drawing from `w.rng` would make how many sparks flew perturb
+  every later bot decision), `audRnd` for sound jitter (a wall bounce plays a sound from inside
+  `step()`), plus `w.lobby.rng` and the pitch-wear LCG. `tests/determinism.mjs` traps a
+  violation with a **throwing** stub and hashes the whole world at frame 3,600 across two runs.
+  AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
+  outside the sim at `startMatch`). `setMatchSeed(n)` pins a match for tests.
 - **Map votes:** a thumbs up/down after each match, keyed on **(field, players per side)** —
   `mapVoteKey(w)` — because a map plays nothing alike 1v1 and 6v6. The size comes from the
   bodies actually FIELDED, not `mode.per`, since the lobby can put six a side on a 4v4.

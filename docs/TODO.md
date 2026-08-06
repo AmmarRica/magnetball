@@ -5,9 +5,35 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0330AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0510AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🔒 Determinism audit closed, and the rule made literal
+- [x] **Decision: same-engine reproducibility.** A pinned seed reproduces a match bit-exactly in
+  one browser; cross-engine equality is not a goal. Fixed-point work (Phases 2–3) parked, not
+  pending. All eight §8 questions answered and recorded.
+- [x] `tests/determinism.mjs` turns Checkpoint 1 into a permanent guard: the whole world hashed
+  at frame 3,600 across two runs on one seed, in 4v4 and Killer Queen.
+- [x] ⚠️ It immediately found two leaks, which is the point of a throwing stub over a counter:
+  `spawnKickFx` and the audio noise fill both reached `Math.random` from inside `step()`. Both
+  now have their own seeded stream (`fxRnd`, `audRnd`) — not `w.rng`, or how many sparks flew
+  would perturb every bot decision after it. The rule is now literally true.
+
+## 🔊 The noise() main-thread stall
+- [x] **Fixed.** `noise()` filled a fresh `AudioBuffer` with `Math.random` on every call, and the
+  loudest sounds call it most: the Ovation cheer is 27 calls. One pre-generated 3-second buffer,
+  windowed with `start(when, offset, duration)`. **2.2ms → 0.2ms** median for the cheer's buffer
+  work, with a different window each call so two noises in a row are not the same noise.
+
+## 🐉 Leviathan, and courts you can actually see
+- [x] **Leviathan** — 2640 × 4640, four times Colossus and sixteen times Giant. 20.3s to run its
+  length. Zero ball escapes over 90 seconds.
+- [x] **`cam.body` size floor.** At that scale the whole pitch still has to fit on screen, so a
+  player disc came out **2.25 pixels** — every disc the same dot, nobody able to find their own
+  player. Discs and the ball now floor at `MIN_BODY_PX` through one shared multiplier.
+  ⚠️ Render only, and proven so: same seed, floor on vs forced to 1, world bit-identical.
+  Exactly 1 on any ordinary court. Colossus benefits too (1.57×).
 
 ## 🫐 Killer Queen berries and the hive
 - [x] **Six floaty purple berries** you shepherd into the end you attack. Light (`invMass 2.6`)

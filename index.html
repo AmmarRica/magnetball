@@ -1495,9 +1495,14 @@ const FIELDS = {
   tiny:    { name:'Tiny',     emoji:'🔬', W:300, L:460,  goal:150, corner:0,   net:48 },
   giant:   { name:'Giant',    emoji:'🦣', W:660, L:1160, goal:220, corner:0,   net:82 },
   // Four times the AREA of Giant, which was the biggest — every dimension doubled.
-  // (Quadrupling the dimensions instead would be sixteen times the area: six times
-  // Classic end to end, which nobody could cross before the whistle.)
   colossus:{ name:'Colossus', emoji:'🐋', W:1320, L:2320, goal:440, corner:0,   net:164 },
+  // ...and Colossus doubled again: sixteen times Giant's area, the largest court there
+  // is. Measured, so nobody has to guess at it: a player at top speed (216 units a
+  // second) needs 20 seconds to run its length, so a 5-minute match is about fourteen
+  // lengths of the pitch. It is a novelty and it is meant to be
+  // one — the goal stays W/3 like every other court, so the shape is familiar even
+  // though nothing else about it is. Measured: 20.3s end to end, 11.6s across.
+  leviathan:{name:'Leviathan',emoji:'🐉', W:2640, L:4640, goal:880, corner:0,   net:328 },
   ultra:   { name:'Ultrawide',emoji:'📺', W:660, L:560,  goal:210, corner:0,   net:64 },
   marathon:{ name:'Marathon', emoji:'🏃', W:340, L:1200, goal:150, corner:0,   net:66 },
   pancake: { name:'Pancake',  emoji:'🥞', W:600, L:480,  goal:200, corner:40,  net:60 },
@@ -2407,6 +2412,14 @@ function rgba(col, a){
 // ============================================================
 //  AUDIO — everything synthesised at runtime (Web Audio, no files)
 // ============================================================
+// Audio jitter — noise windows, crowd-cheer timings — draws from HERE, never from
+// Math.random and never from w.rng. Sound is reachable from inside step() (a wall
+// bounce plays a sound), and the one rule the sim rests on is that nothing inside
+// step() calls Math.random; drawing from w.rng instead would be worse still, since
+// how many times the crowd cheered would then change every bot decision after it.
+// Same shape as w.lobby.rng and the pitch-wear LCG. mulberry32 is a function
+// declaration, so it is hoisted and safe to call from here.
+let audRnd = mulberry32(0x5EED0A17);
 const Aud = (function(){
   let AC=null, master=null, sfxBus=null, mainMix=null;
   // ⚠️ With VJ Mode off this chain must be INAUDIBLY identical to the single gain it
@@ -2436,15 +2449,38 @@ const Aud = (function(){
     let last=osc; if(o.lp){ const fl=AC.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=o.lp; osc.connect(fl); last=fl; }
     last.connect(g); g.connect(sfxBus); osc.start(t); osc.stop(t+dur+0.03);
   }
+  // ⚠️ ONE noise buffer, generated once and windowed. This used to fill a fresh
+  // AudioBuffer with Math.random on EVERY call, and the loudest sounds are the ones
+  // that call it most: the Ovation cheer is 27 calls, and the fill cost 13.8ms median
+  // and 25.9ms worst on the main thread — a dropped frame at exactly the moment a
+  // goal goes in. A BufferSource can play a WINDOW of a shared buffer via
+  // start(when, offset, duration), so both the allocation and the fill go away.
+  // ⚠️ Filled from a seeded PRNG, not Math.random. `noise` is reachable from inside
+  // step() (ballSounds -> playSfx), and nothing reachable from step() may call
+  // Math.random — tests/determinism.mjs traps it with a throwing stub. Seeding also
+  // makes the buffer identical run to run, which is one less thing to wonder about.
+  const NOISE_SECS = 3;                 // longest single call is 2.6s
+  let nbuf = null;
+  function noiseBuf(){
+    if (nbuf) return nbuf;
+    const n = Math.floor(AC.sampleRate * NOISE_SECS);
+    nbuf = AC.createBuffer(1, n, AC.sampleRate);
+    const d = nbuf.getChannelData(0), rnd = mulberry32(0x9E3779B9);
+    for (let i=0;i<n;i++) d[i] = rnd()*2-1;
+    return nbuf;
+  }
   function noise(dur,o){ if(!ensure()||!on())return; o=o||{}; const t=AC.currentTime+(o.delay||0);
-    const n=Math.max(1,Math.floor(AC.sampleRate*dur)); const buf=AC.createBuffer(1,n,AC.sampleRate);
-    const d=buf.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+    const buf=noiseBuf();
+    // A different window each time, so two noises in a row are not the same noise.
+    const room=Math.max(0, NOISE_SECS - Math.min(dur, NOISE_SECS));
+    const off=audRnd()*room;
     const src=AC.createBufferSource(); src.buffer=buf; const g=AC.createGain(); const v=o.vol!=null?o.vol:0.3;
     g.gain.setValueAtTime(o.swell?0.0001:v,t); if(o.swell) g.gain.exponentialRampToValueAtTime(v,t+dur*0.35);
     g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     let last=src; const bt=o.bp?'bandpass':o.hp?'highpass':o.lp?'lowpass':null;
     if(bt){ const f=AC.createBiquadFilter(); f.type=bt; f.frequency.value=o.bp||o.hp||o.lp; if(o.Q)f.Q.value=o.Q; src.connect(f); last=f; }
-    last.connect(g); g.connect(sfxBus); src.start(t); src.stop(t+dur+0.03);
+    last.connect(g); g.connect(sfxBus);
+    src.start(t, off, Math.min(dur, NOISE_SECS)); src.stop(t+dur+0.03);
   }
   return { ensure, tone, noise, setVol:(v)=>{ if(master) master.gain.value=v/100; },
            gain:()=>master?master.gain.value:null,
@@ -2523,8 +2559,8 @@ const SFX = {
                                 Aud.tone(150,0.15,'square',{to:110,vol:0.10,delay:0.18+i*0.30}); } },
     // Ovation — scattered claps thickening into a long roar that outlasts them.
     ()=>{ Aud.noise(2.6,{bp:700,Q:0.45,vol:0.40,swell:true});
-          for(let i=0;i<26;i++) Aud.noise(0.035,{hp:1900,vol:0.10+Math.random()*0.13,
-                                                 delay:0.05+i*0.062+Math.random()*0.03});
+          for(let i=0;i<26;i++) Aud.noise(0.035,{hp:1900,vol:0.10+audRnd()*0.13,
+                                                 delay:0.05+i*0.062+audRnd()*0.03});
           Aud.tone(240,2.0,'sawtooth',{to:420,vol:0.06,delay:0.15}); },
     // Hall — a few pairs of hands in a quiet room, not a stadium. Deliberately thin.
     ()=>{ for(let i=0;i<11;i++) Aud.noise(0.03,{hp:1500,vol:0.13,delay:0.04+i*0.085});
@@ -6641,6 +6677,7 @@ function startMatch(){
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
   resetTrails();       // no motion tails streaking in from the previous match
+  resetFx(world.seed); // ...and a fresh, seeded particle stream
   resetWear();         // ...and a fresh pitch: last match's churn isn't this match's
   // Idle demo (quiet): don't disturb whatever menu page is docked — just bring the
   // pitch to life on the right. A real match takes over the screen normally.
@@ -9432,7 +9469,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 // ============================================================
 //  RENDER
 // ============================================================
-let cam = { s:1, ox:0, oy:0 };
+let cam = { s:1, ox:0, oy:0, body:1 };   // body = render-only size floor, see MIN_BODY_PX
 // ---------- Goal camera ------------------------------------------------------
 // On a goal the view pushes in on whoever last touched the ball and eases back out
 // when the celebration ends. Render layer only — it moves `cam`, which no physics,
@@ -9535,7 +9572,20 @@ function computeCam(){
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
   applyGoalCam();
+  // ⚠️ RENDER ONLY. On the huge courts the whole pitch still has to fit on screen, so
+  // cam.s falls far enough that a player disc is 2 pixels across — measured 2.1px on
+  // Leviathan, which is a dot you cannot tell from any other dot. Bodies get a floor:
+  // discs and the ball are drawn at MIN_BODY_PX or their true size, whichever is
+  // bigger, by ONE shared multiplier so their sizes stay in proportion to each other.
+  // Nothing else uses it — the physics radius, the kick range, the hit tests and the
+  // bots all read p.r, so a Leviathan match plays exactly as it would if you could
+  // not see it. On any normal court the multiplier is exactly 1.
+  const pr = (world.players && world.players[0] ? world.players[0].r : 14) * cam.s;
+  cam.body = pr > 0 ? Math.max(1, MIN_BODY_PX / pr) : 1;
 }
+// Smallest a player disc may be drawn. Below this the faceplate, the shirt number
+// and the team colour are all unreadable, and every disc reads as the same dot.
+const MIN_BODY_PX = 7;
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
 // Draw screen-upright content at a point inside the rotated pitch (name plates,
@@ -10921,7 +10971,7 @@ function drawDiscs(w){
   if (w.bench && w.bench.length){
     ctx.globalAlpha = 0.45;
     for (const p of w.bench){
-      const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s;
+      const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
       uprightAt(x, y, (px, py) => {
         ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
         ctx.fillStyle = TH.discRim; ctx.fill();
@@ -10936,7 +10986,7 @@ function drawDiscs(w){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
     // plates lie on their side in deck view. Callback x/y are the upright frame.
-    uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
+    uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s*cam.body, s, i));
   }
 }
 function drawOneDisc(w, p, x, y, r, s, idx){
@@ -11084,7 +11134,7 @@ function drawDiscTrails(w){
     for (let k = 0; k < hist.length; k++){
       const d = hist[k], f = (k+1) / hist.length;     // older dots smaller + fainter
       ctx.beginPath();
-      ctx.arc(wx(d.x), wy(d.y), p.r*s*(0.15 + 0.19*f), 0, 2*Math.PI);
+      ctx.arc(wx(d.x), wy(d.y), p.r*s*cam.body*(0.15 + 0.19*f), 0, 2*Math.PI);
       ctx.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
       ctx.fill();
     }
@@ -11131,7 +11181,7 @@ function drawBallTrail(w){
   ctx.restore();
 }
 function drawBall(w){
-  const s=cam.s, b=w.ball, r=b.r*s;
+  const s=cam.s, b=w.ball, r=b.r*s*cam.body;
   // Upright like the discs, so the drop shadow and 3D highlight keep falling the
   // same way on screen no matter which way the pitch is turned.
   uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
@@ -11307,21 +11357,28 @@ function ballSquash(b, nx, ny, amt){
 }
 
 // ---------- FX (kick sparks, confetti)
+// Particles are RENDER state, but they are spawned from inside step() — a kick, a
+// goal — so their randomness cannot come from Math.random without breaking the one
+// rule the sim rests on (tests/determinism.mjs traps it with a throwing stub). Nor
+// may it come from w.rng: how many sparks flew would then perturb every bot decision
+// after it. Their own stream, reseeded per match so a replay throws the same sparks.
 let fx = [];
+let fxRnd = mulberry32(0xF00DFACE);
+function resetFx(seed){ fx.length = 0; fxRnd = mulberry32(((seed|0) ^ 0x2545F491) >>> 0); }
 function spawnKickFx(x,y,nx,ny,pow){
   pow = pow || 5;
   const n = Math.min(16, 5 + Math.round(pow*0.9));
   for (let i=0;i<n;i++){
-    const a = Math.atan2(ny,nx) + (Math.random()-0.5)*1.2;
-    const sp = 1.5 + Math.random()*2.5*(0.6+pow*0.09);
+    const a = Math.atan2(ny,nx) + (fxRnd()-0.5)*1.2;
+    const sp = 1.5 + fxRnd()*2.5*(0.6+pow*0.09);
     fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:0.3, max:0.3, c:'#fff', r:2.5});
   }
   addShake(Math.min(5, pow*0.5));   // a stronger kick shakes more
 }
 function spawnConfetti(x,y){
   const cols=['#e05a5a','#5a7de0','#f5d547','#46d17a','#fff','#f07a5a'];
-  const a=Math.random()*Math.PI*2, sp=1+Math.random()*4;
-  fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1.2, max:1.2, c:cols[(Math.random()*cols.length)|0], r:2+Math.random()*2.5, grav:0.06});
+  const a=fxRnd()*Math.PI*2, sp=1+fxRnd()*4;
+  fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1.2, max:1.2, c:cols[(fxRnd()*cols.length)|0], r:2+fxRnd()*2.5, grav:0.06});
 }
 // A quick expanding ring — used for first-touch / clean-control feedback.
 function spawnTouchFx(x,y,col,r1){
@@ -11724,7 +11781,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0330AM';
+const VERSION = '20260806.0510AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11800,6 +11857,7 @@ if (window.__MAGNETDEBUG) {
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
+    MIN_BODY_PX,
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
     teamTint, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
