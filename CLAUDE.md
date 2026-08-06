@@ -104,6 +104,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   is. ⚠️ **Two tones**, hugging `r` from either side: a single-colour ring is invisible whenever
   the skin under it happens to be that colour, and Mono's white team-1 disc ate a white ring on
   7 of 24 arcs. `tests/discskins.mjs` pixel-checks every entry in the registry, both teams.
+- **Two-frame leg animation** on the creature skins, driven by DISTANCE travelled
+  (`p.gait`, accumulated in `integrate`), never by a clock. ⚠️ A timer would have to be
+  advanced somewhere, and anything advanced in a draw runs 2.4× fast at 144Hz (the trails
+  rule); distance also stops dead when the player does and speeds the legs up when they
+  speed up, with no separate "am I moving" state. `legFrame(p)` returns 0 below
+  `GAIT.minSpd`, and frame 0 IS the rest pose so a standing player is never caught
+  mid-stride. Legs alternate by index and by side — all six swinging together is a star
+  jump, not a scuttle.
 - **Rotation is the PLAYER's choice, not the theme's** — `profile.spin`, a two-tile pick in
   Your Player → Colour. Direction-drawn skins (arrow, shrimp) go through the one `discFace(p)`
   helper so they cannot honour it differently; round skins (mono, pool) are unaffected, which

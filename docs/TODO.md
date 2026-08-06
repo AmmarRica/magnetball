@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0130PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0210PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -68,6 +68,11 @@ _Current build: **v20260806.0130PM** (shown under the title; bump `VERSION` in `
 - [x] ⚠️ **The ring had to become TWO tones.** The first version was one colour and Mono draws
   team 1 as a WHITE disc — a white ring on it vanished on 7 of 24 arcs. Dark outside, light
   inside, so one of the two always reads whatever the skin painted.
+- [x] **Two-frame leg animation** on both creatures, on `p.gait` — distance travelled, not a
+  clock. Stops dead when you do, speeds up when you do (16 flips slow vs 35 fast over the same
+  90 steps), and a draw cannot advance it. Frame 0 is the rest pose. ⚠️ The shrimp's
+  swimmerets first grew out of its BACK — they belong on the belly, the side the abdomen curls
+  toward. And legs alternate by index and side: all six together is a star jump.
 - [x] **Rotation is a per-player checkbox** (`profile.spin`, Your Player → Colour), not a
   property of the theme. One `discFace(p)` helper, so two skins cannot honour it differently.
 

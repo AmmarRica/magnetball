@@ -7659,6 +7659,12 @@ function integrate(w, ballFrozen, playersFrozen){
     for (const p of discs){
       p.vx *= pdamp; p.vy *= pdamp;
       p.x += p.vx; p.y += p.vy;
+      // Gait: DISTANCE travelled, not time elapsed. A walk cycle driven by a clock
+      // has to be advanced somewhere, and anything advanced in a draw runs 2.4x fast
+      // on a 144Hz screen (the trails rule). Distance needs no tick at all — it stops
+      // dead when you stop, and the legs go faster because you are going faster,
+      // which is the whole reason a walk cycle reads as walking.
+      p.gait = (p.gait || 0) + Math.hypot(p.vx, p.vy);
     }
   }
 
@@ -11417,6 +11423,14 @@ DYN_FIELDS.vbcourt = {
 // on it vanished on 7 of 24 arcs. Dark outside, light inside, so one of the two
 // always reads whatever the skin painted.
 const DISC_GUIDE = { w: 0.05, a: 0.45, dark: 'rgba(0,0,0,0.55)', light: 'rgba(255,255,255,0.55)' };
+// Two-frame leg animation for the creature skins. Frame 0 is also the REST pose, so
+// a standing player is not caught mid-stride — and the threshold is a real speed,
+// not "is gait changing", because a player being nudged by a collision is not walking.
+const GAIT = { stride: 7, minSpd: 0.35 };   // world units of travel per frame flip
+function legFrame(p){
+  if (Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd) return 0;
+  return (((p.gait || 0) / GAIT.stride) | 0) & 1;
+}
 function strokeDiscGuide(c, x, y, r){
   const lw = Math.max(1, r * DISC_GUIDE.w);
   c.lineWidth = lw;
@@ -11538,6 +11552,11 @@ const SHRIMP = {
   curl: 0.30,        // how far the abdomen swings off the axis
   fan: 0.30,         // tail fan half-spread
   eye: 0.10,
+  // ⚠️ Swimmerets go on the BELLY, which is the side the abdomen curls TOWARD
+  // (positive across). The first pass put them at negative across — the shrimp's
+  // back — so it had legs growing out of its shell.
+  legs: [[0.16, 0.30, 0.56], [0.00, 0.32, 0.58], [-0.16, 0.30, 0.55]],   // [along, inner, outer]
+  swing: 0.15,
 };
 // The other half of the theme. A crab is WIDE where a shrimp is long, so the two
 // sides are told apart by silhouette and not only by colour — which is the same
@@ -11553,6 +11572,7 @@ const CRAB = {
   clawR: 0.15,
   legs:  [[0.02, 0.50], [-0.24, 0.46], [-0.46, 0.34]],   // [along, across] per leg
   legLen: 0.22,
+  swing: 0.13,      // how far a leg swings between the two frames
   eye:   [0.24, 0.19],
   eyeR:  0.085,
 };
@@ -11573,10 +11593,17 @@ DISC_SKINS.shrimp = {
     c.lineCap = 'round'; c.lineJoin = 'round';
     // Legs first, so the carapace sits on top of where they meet the body.
     c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.09);
-    for (const [along, across] of CRAB.legs){
+    // ⚠️ Alternating legs, not all six together. Every leg swinging the same way is a
+    // creature doing a star jump; a crab moves its two sides out of phase, and at this
+    // size that difference is most of what makes it read as scuttling.
+    const fr = legFrame(p);
+    for (let i=0;i<CRAB.legs.length;i++){
+      const [along, across] = CRAB.legs[i];
       for (const sgn of [-1, 1]){
+        // Out of phase by leg index AND by side, so the two frames are a real gait.
+        const fwd = ((i + fr + (sgn > 0 ? 0 : 1)) & 1) ? CRAB.swing : -CRAB.swing;
         const A = pt(along, across*sgn*0.55);
-        const B = pt(along - CRAB.legLen*0.5, (across + CRAB.legLen)*sgn);
+        const B = pt(along - CRAB.legLen*0.5 + fwd, (across + CRAB.legLen)*sgn);
         c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
       }
     }
@@ -11625,6 +11652,17 @@ DISC_SKINS.shrimp = {
     c.strokeStyle = rgba(col, 0.85); c.lineWidth = Math.max(1, r*0.06);
     for (const off of [-0.16, 0.10]){
       const A = pt(SHRIMP.head, off), B = pt(0.92, off*2.4);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+    }
+    // Swimmerets under the body, alternating on the same two frames as the crab's
+    // legs — the shrimp needs something that moves or only one side of the theme is
+    // alive. Drawn BEFORE the abdomen so they tuck under it.
+    const fr = legFrame(p);
+    c.strokeStyle = rgba(col, 0.9); c.lineWidth = Math.max(1, r*0.07);
+    for (let i=0;i<SHRIMP.legs.length;i++){
+      const [along, inner, outer] = SHRIMP.legs[i];
+      const fwd = ((i + fr) & 1) ? SHRIMP.swing : -SHRIMP.swing;
+      const A = pt(along, inner), B = pt(along + fwd, outer);
       c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
     }
     // Abdomen: three arcs, each narrower than the last, curling off the axis.
@@ -12643,7 +12681,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0130PM';
+const VERSION = '20260806.0210PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12683,7 +12721,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, CRAB, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
