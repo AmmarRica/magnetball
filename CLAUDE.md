@@ -194,14 +194,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `index.html` was precached, making every deploy invisible there**. `{cache:'no-cache'}` on that
   fetch is an HTTP directive and does not bypass a worker. `tests/swupdate.mjs` registers the real
   worker against a temp site, changes the file, and checks the settings route sees the new build.
-- **Goal camera:** on a goal the view pushes in to `GOALCAM.zoom` on whoever last touched
+- **Goal camera:** on a goal the view pushes in to `goalZoom()` (a player dial; `GOALCAM.zoom` is only the default) on whoever last touched
   the ball and eases back when the celebration ends. Render only — it moves `cam`, which no
   physics, hit test or bot reads, and `tests/goalcam.mjs` proves the world is bit-identical
   with it running. ⚠️ Advanced in `advanceGoalCam()` next to `decayJuice()`, **never in a
   draw** (the trails rule); being step-locked also means the goal slow-mo stretches it.
   The followed player is read through `ix`/`iy`, and the origin shift is rotated by `cam.rot`
   or deck view puts them off to one side. Stands down while a replay owns the framing, and
-  rides the Screen shake & effects dial.
+  rides the Screen shake & effects dial. Amount and speed are **sliders** —
+  `goalZoom()`/`goalZoomSecs()` clamp and default in one place, and **1.0× means off**
+  (the camera never even latches). ⚠️ `const GOALCAM` lives with the feel constants, not
+  with the camera code: the slider wiring reads it during the bootstrap, and declared
+  further down it was in the temporal dead zone there.
 - **HUD:** a 3-column grid — pause left, scorebug in the **middle column** (so it is centred
   on the screen, not among whatever buttons happen to show), fullscreen right. Settings is a
   **pause-menu** option (`ovSettings`), not a HUD gear one mis-tap from the live ball.

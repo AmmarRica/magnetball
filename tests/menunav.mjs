@@ -75,6 +75,12 @@ const r = await p.evaluate(async ()=>{
   o.allTilesKept = o.tileIds === o.expectedIds;
   o.everyTileWired = tiles.every(t => typeof t.onclick === 'function');
   o.everyTileInAGroup = tiles.every(t => !!t.closest('.navgroup'));
+  // ...and the whole block is ONE section now. It used to sit loose on the menu
+  // taking a full screen between KICK OFF and the settings cards.
+  o.tilesLiveInMore = tiles.every(t => (t.closest('.card.collapsible')||{}).dataset?.sec === 'more');
+  o.noLooseTiles = tiles.every(t => !!t.closest('.card.collapsible'));
+  o.moreHasAJumpChip = [...document.querySelectorAll('#jumpBar .jumpchip')]
+    .some(c => c.dataset.sec === 'more');
 
   // ---- 5) jump bar ---------------------------------------------------------
   const bar = document.getElementById('jumpBar');
@@ -113,6 +119,9 @@ ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);
 ok(r.everyTileWired, 'a nav tile lost its click handler');
 ok(r.everyTileInAGroup, 'a nav tile is outside every group');
+ok(r.tilesLiveInMore, 'a nav tile is not inside the More section');
+ok(r.noLooseTiles, 'a nav tile is loose on the menu instead of inside a section');
+ok(r.moreHasAJumpChip, 'the More section has no jump chip, so it is only reachable by scrolling');
 ok(r.jumpVisible, `the jump bar is not visible (height collapsed?): ${JSON.stringify(r.jumpVisible)}`);
 ok(r.jumpIsSticky, 'the jump bar is not sticky, so it scrolls away');
 ok(r.jumpCoversEverySection, `the jump bar does not match the sections:\n  bar  ${r.jumpSecs}\n  card ${r.jumpChips}`);
