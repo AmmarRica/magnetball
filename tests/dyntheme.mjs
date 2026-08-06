@@ -218,6 +218,127 @@ const r = await p.evaluate(async ()=>{
     o.pointsAtFacing = o.arrowAhead && o.tailNotched && o.turnsWithFacing;
     o.vbRadius = +R.toFixed(1);
   }
+
+  // ---- Highlighter: yellow field, black lines, white everything else --------
+  // ⚠️ "Players are white" and "two teams" are in tension — two white discs are the
+  // same disc. Hue cannot resolve it here (the palette is yellow, black and white),
+  // so the sides carry a black BAR, one horizontal and one vertical, and this checks
+  // the SHAPE rather than the colour.
+  {
+    M.applyBundle('chalk');
+    o.chalkName = M.bundleName();
+    o.chalkSlots = JSON.stringify(M.liveSlots());
+    M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.setMatchSeed(3); M.startMatch();
+    const w=M.world; w.state='play'; w.stateT=2;
+    const me=w.players[0], them=w.players.find(q=>q.team===1);
+    w.players.forEach(q=>{ q.x=1e4; q.y=1e4; });
+    me.x=-90; me.y=0; them.x=90; them.y=0;
+    w.ball.x=1e4; w.ball.y=1e4;
+    for (let i=0;i<5;i++) M.render();
+    const s3 = M.cam.s * M.cam.body;
+    // ⚠️ A WINDOW MEAN, not one pixel. The bodies are dithered now, so a single
+    // sample lands on a dot or a gap and reports whichever it hit — the question
+    // being asked is how dark that patch of the disc is, which is a density.
+    const at = (px,py,span) => { const [sx,sy]=M.screenPt(M.wx(px), M.wy(py));
+      // Kept narrow on purpose: the bar is only ~0.26r thick, so a wide window would
+      // average the white either side of it back in and report the bar as absent.
+      const S = Math.max(1, Math.round((span||3)*DPR));
+      const d=c2.getImageData(Math.round(sx*DPR)-(S>>1), Math.round(sy*DPR)-(S>>1), S, S).data;
+      let a=0,b=0,g=0,n=0; for (let i=0;i<d.length;i+=4){ a+=d[i]; b+=d[i+1]; g+=d[i+2]; n++; }
+      return [a/n, b/n, g/n]; };
+    const dark = c3 => c3[0]<90 && c3[1]<90 && c3[2]<90;
+    // The pale bar has to allow for the shading dots: at the rim the dither is 80%
+    // dense, so "white body" means mostly white, not every pixel white.
+    const pale = c3 => c3[0]>150 && c3[1]>150 && c3[2]>150;
+    const R = me.r * s3;
+    // The field is yellow: green-ish channel high, blue low.
+    o.chalkCourt = at(0, w.field.L*0.30);
+    o.courtIsYellow = o.chalkCourt[0] > 120 && o.chalkCourt[1] > 140 && o.chalkCourt[2] < 110;
+    // Both bodies are WHITE...
+    o.body0 = at(me.x + R*0.62, me.y);         // clear of team 0's horizontal bar
+    o.body1 = at(them.x + R*0.62, them.y);     // ...ON team 1's, so this one is dark
+    o.discsArePale = pale(at(me.x, me.y - R*0.62)) && pale(at(them.x + R*0.62, them.y - R*0.4));
+    // ...and the bars run different ways. Team 0 horizontal, team 1 vertical.
+    o.t0Across  = dark(at(me.x - R*0.5, me.y)) && dark(at(me.x + R*0.5, me.y));
+    o.t0NotDown = pale(at(me.x, me.y - R*0.55)) && pale(at(me.x, me.y + R*0.55));
+    o.t1Down    = dark(at(them.x, them.y - R*0.5)) && dark(at(them.x, them.y + R*0.5));
+    o.t1NotAcross = pale(at(them.x - R*0.55, them.y)) && pale(at(them.x + R*0.55, them.y));
+    o.sidesDifferByShape = o.t0Across && o.t0NotDown && o.t1Down && o.t1NotAcross;
+
+    // ---- the dither is a SURFACE, not a wall ------------------------------
+    // Built once and cached; rebuilt only when the ink changes. And it must be
+    // denser at the ends than at halfway, or it is not a ramp.
+    const f = M.DYN_FIELDS.dither;
+    const st = {}; f.reset && f.reset(st);
+    const cv2 = document.createElement('canvas'); cv2.width = cv2.height = 300;
+    const cc = cv2.getContext('2d');
+    cc.fillStyle = '#ffffff'; cc.fillRect(0,0,300,300);
+    f.paint(cc, st, 0, 0, 300, 300);
+    o.ditherCached = !!st.cv;
+    const inkAt = (yFrac) => {
+      const d = cc.getImageData(0, Math.round(yFrac*299), 300, 1).data;
+      let n=0; for (let i=0;i<d.length;i+=4) if (d[i] < 160) n++;
+      return n;
+    };
+    o.ditherEnd = inkAt(0.02); o.ditherMid = inkAt(0.5);
+    o.ditherRamps = o.ditherEnd > o.ditherMid + 20;
+    o.ditherClearsAtHalfway = o.ditherMid < 30;
+    o.ditherNotSolid = o.ditherEnd < 260;
+    // ...and it rebuilds when the INK changes, because slots mix across palettes.
+    const firstCv = st.cv;
+    st.ink = '#123456';
+    f.paint(cc, st, 0, 0, 300, 300);
+    o.ditherRebuildsOnInk = st.cv !== firstCv;
+    M.applyBundle('classic');
+  }
+
+  // ---- Bootleg: a printed sleeve, dots against bars ------------------------
+  // ⚠️ Red against green is the one pair a colour-blind player cannot separate, so
+  // this checks the SHAPE — a circle is covered all the way round at 0.9r, a square
+  // inscribed in the same ring is covered on its diagonals and short on its axes.
+  // ⚠️ And it checks the DECOY: the court prints big red dots, so a team drawn as a
+  // bright red circle only reads if the printed ones are muted and larger.
+  {
+    M.applyBundle('sleeve');
+    o.sleeveName = M.bundleName();
+    o.sleeveSlots = JSON.stringify(M.liveSlots());
+    // Coverage round the rim, off a flat field of its own — the same measurement the
+    // guide-ring suite uses, and one the drawing code cannot talk its way out of.
+    const R = 60, CX = 150, CY = 150;
+    const cv3 = document.createElement('canvas'); cv3.width = cv3.height = 300;
+    const cc3 = cv3.getContext('2d');
+    const cover = (team) => {
+      cc3.fillStyle = '#7f7f7f'; cc3.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.sleeve.paint(cc3, q, CX, CY, R, { players:[q] });
+      let n = 0;
+      for (let deg=0; deg<360; deg+=15){
+        const a = deg*Math.PI/180;
+        const d = cc3.getImageData(Math.round(CX + Math.cos(a)*R*0.9),
+                                   Math.round(CY + Math.sin(a)*R*0.9), 1, 1).data;
+        // Anything but the flat grey background counts as covered.
+        if (Math.abs(d[0]-127) + Math.abs(d[1]-127) + Math.abs(d[2]-127) > 40) n++;
+      }
+      return n;
+    };
+    o.sleeveRound = cover(0);
+    o.sleeveBar = cover(1);
+    o.roundIsRound = o.sleeveRound === 24;
+    o.barHasCorners = o.sleeveBar >= 4 && o.sleeveBar <= 18;
+    // The printed dots are MUTED against the team that is drawn as one of them.
+    const lum = h => { cc3.fillStyle = h; cc3.fillRect(0,0,2,2);
+      const d = cc3.getImageData(0,0,1,1).data; return d[0]*0.3 + d[1]*0.6 + d[2]*0.1; };
+    o.printLum = lum(M.TH.dynMark); o.teamLum = lum(M.TH.teamRed);
+    o.printIsMuted = o.printLum < o.teamLum - 20;
+    // A print does not move: no step, or the sleeve drifts under the players.
+    o.sleeveStill = !M.DYN_FIELDS.sleeve.step;
+    // It falls back through a palette that has never heard of it — slots mix.
+    const st2 = {}; M.DYN_FIELDS.sleeve.reset(st2);
+    M.applyBundle('classic');
+    let threw = null;
+    try { M.DYN_FIELDS.sleeve.paint(cc3, st2, 0, 0, 200, 200); } catch(e){ threw = e.message; }
+    o.sleeveFallsBack = threw;
+  }
   return o;
 });
 
@@ -252,6 +373,21 @@ ok(r.oldWingNowClear, 'the arrowhead wings still reach past the body radius');
 ok(r.arrowAhead, 'the arrowhead vanished — the skin is now just a ring');
 ok(r.pointsAtFacing, 'the arrowhead does not point along the facing');
 ok(r.turnsWithFacing, 'the arrowhead did not turn when the player did');
+ok(r.chalkName === 'Highlighter', `the Highlighter bundle does not resolve: ${r.chalkName}`);
+ok(r.courtIsYellow, `the Highlighter court is not yellow: ${r.chalkCourt}`);
+ok(r.discsArePale, 'the Highlighter discs are not white');
+ok(r.sidesDifferByShape, `the two white discs are not separated by a black bar: across ${r.t0Across}/${r.t0NotDown}, down ${r.t1Down}/${r.t1NotAcross} — two white discs with no mark are the same disc`);
+ok(r.ditherCached, 'the dither is not cached — it would rebuild 17,500 rects a frame');
+ok(r.ditherRamps, `the dither does not ramp: ${r.ditherEnd} ink at the end vs ${r.ditherMid} at halfway`);
+ok(r.ditherClearsAtHalfway, `the dither never clears (${r.ditherMid} ink at halfway) — a surface has to lose to the ball`);
+ok(r.ditherNotSolid, `the dither goes solid at the ends (${r.ditherEnd}), which buries the goal box`);
+ok(r.ditherRebuildsOnInk, 'the dither does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
+ok(r.sleeveName === 'Bootleg', `the Bootleg bundle does not resolve: ${r.sleeveName}`);
+ok(r.roundIsRound, `Bootleg's team 0 is not covered all the way round at 0.9r (${r.sleeveRound}/24) — it is meant to be the dot`);
+ok(r.barHasCorners, `Bootleg's two sides do not differ by SHAPE: ${r.sleeveBar}/24 covered at 0.9r, which is either a circle too or nothing at all. Red vs green is exactly what a colour-blind player cannot use`);
+ok(r.printIsMuted, `the printed court dots (${Math.round(r.printLum)}) are as bright as the team drawn as one (${Math.round(r.teamLum)}) — the field is a set of decoys`);
+ok(r.sleeveStill, 'the sleeve field has a step — print does not move, and a drifting grid under the players reads as lag');
+ok(!r.sleeveFallsBack, `the sleeve field threw over a palette that does not declare its inks: ${r.sleeveFallsBack}`);
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

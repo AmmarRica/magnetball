@@ -135,6 +135,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `normalizeLook()` folds the old single-skin key `shrimp` → `crablobster` as a **pure string
   swap with no `DISC_SKINS` lookup**: it runs during the bootstrap and `DISC_SKINS` is declared
   with the renderer far below, so reading it there took the whole page down.
+  `chalk` (shown as **Highlighter**) = an acid-yellow court, black lines, white everywhere
+  else, dithered. ⚠️ Its two demands fight: "players are white" and "two teams" make one disc.
+  Hue cannot settle it — the palette is yellow, black and white — so the sides carry a black
+  BAR, horizontal against vertical, and the suite checks the SHAPE. Same argument as Pool.
+  ⚠️ `DYN_FIELDS.dither` is an ordered Bayer ramp built ONCE into an offscreen canvas and
+  stretched, never per frame: at a 4px cell a 400×700 pitch is 17,500 rects a frame. Cached on
+  the INK, because slots mix and it can be asked for over another palette. And the threshold is
+  `(B + 0.5)/16` — the lowest Bayer value is ZERO, so a raw `B/16` fills one cell in sixteen
+  even where the ramp says clear, and the pitch stayed stippled at halfway. The grid is 192
+  cells, so the dots land ~2px; written as **ImageData**, because 37,000 `fillRect`s is a
+  visible hitch even once. The discs carry the same dither ramped the other way — clear in the
+  middle where the bar lives, dense at the rim — off ONE cached mask per ink (`chalkMask`),
+  one `drawImage` a disc.
+  `sleeve` (shown as **Bootleg**) = a printed record sleeve: black card, a grid of big red
+  dots, green bars punched through, acid-yellow markings. Players are the sleeve's own two
+  marks — a red DOT against a green BAR. ⚠️ Red vs green is the one pair a colour-blind player
+  cannot separate, so the difference is the SILHOUETTE and the colour rides on top; the square
+  is **inscribed** in the guide ring (`SLEEVE.sq`), never circumscribed — a square drawn to `r`
+  puts its corners at 1.41`r`, which is the Videoball arrowhead mistake with a different shape.
+  ⚠️ The court dots are a **muted maroon** and twice a body across: a field of bright red
+  circles under a team drawn as a bright red circle is a field of decoys. `tests/dyntheme.mjs`
+  measures both — coverage at 0.9`r` all the way round for the dot, only on the diagonals for
+  the bar, and the print's luminance against the team's.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
@@ -258,6 +281,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   are pushed in for real.
 - **Replays:** rolling `repBuf`; `repOnGoal` freezes it; `playReplay` re-renders (skippable);
   `saveClip` records via `MediaRecorder`.
+- **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
+  ⚠️ Start used to be bound to a gamepad button or the Enter key and nothing else, so in
+  cocktail — which forces the lobby whatever is connected — a touch-only player could not
+  leave it: the idle auto-start resets on movement, and an engaged player sat there for 90
+  simulated seconds. The button is **opt-in** (`sel.lobby === 'touch'`); the default
+  `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
+  the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
+  `tests/touchstart.mjs`.
 - **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
@@ -278,6 +309,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   result screen starts the next match on the same config after 30s (`stepResultClock`, any input
   resets it). ⚠️ The result clock is counted on **wall-clock in `loop()`'s paused branch** —
   the result screen is a paused state, so `step()` isn't running. `tests/autoadvance.mjs`.
+- **Help text is PROGRESSIVE:** `buildHintToggles()` walks every `.hint` and folds it behind
+  an info toggle on its label — one component, applied by walking the DOM, because per-card
+  markup means 27 places to keep in step and a new setting arrives without a toggle. The
+  paragraph is folded VERBATIM, never rewritten or dropped. ⚠️ Also called at the END of
+  `buildSettings()`, which creates six of the paragraphs itself — a one-shot pass at boot left
+  those permanently expanded. ⚠️ `class="hint always"` keeps gameplay-affecting help open;
+  whether a match is comparable is not a detail to hide. Never persisted: every visit starts
+  collapsed. `tests/hints.mjs`.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress

@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0345PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0620PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -51,6 +51,38 @@ _Current build: **v20260806.0345PM** (shown under the title; bump `VERSION` in `
   input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
   blocks kenney.nl, so it could not be fetched. Commit
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
+
+## 🟨 Highlighter theme
+- [x] Acid-yellow court, black lines, white surround, dithered — from a reference image.
+- [x] ⚠️ "Players are white" and "two teams" are in tension: two white discs are the same disc,
+  and hue cannot settle it in a yellow/black/white palette. The sides carry a black BAR,
+  horizontal against vertical — a shape, which also survives 12 pixels and colour blindness.
+- [x] `DYN_FIELDS.dither` — an ordered Bayer ramp, dense at the ends, clear at halfway. Built
+  once into an offscreen canvas and stretched; per frame at a 4px cell it would be 17,500
+  rects. Cached on the ink, since slots mix across palettes.
+- [x] ⚠️ Tuned down from the first pass, which made the ends nearly solid and put a wall of
+  texture between the player and the ball. A dither is a surface: it must lose every contest
+  against a disc, the ball and the lines.
+- [x] ⚠️ Bayer bug: the lowest matrix value is ZERO, so `dens > B/16` is true for one cell in
+  sixteen at ANY density — the pitch stayed stippled at halfway where the ramp says clear.
+  The threshold is `(B + 0.5)/16`.
+
+## 🧭 UI/UX pass (approved plan, one change at a time)
+- [x] **4. Help text is progressive.** One component (`buildHintToggles`) folds every help
+  paragraph behind an info toggle on its label. No copy deleted or rewritten — folded verbatim,
+  3,963 characters still in the DOM. Gameplay-affecting help (`hint always`) stays open.
+  Never persisted. ⚠️ Wired into `buildSettings()` too: six paragraphs are created there and a
+  boot-only pass left them permanently expanded.
+- [x] **1. Touch players can start a match.** ⚠️ Confirmed a HARD block first, not assumed:
+  in cocktail an engaged touch player never left the lobby in 90 simulated seconds, because
+  the idle auto-start resets on movement. On-screen START, opt-in via a third Warm-up lobby
+  option (`Controllers` / `Everyone` / `Skip`); the default is the old behaviour exactly.
+  Routes through `lobbyStart()`, so it cannot disagree with the on-screen side preview.
+- [ ] 2. Dead controls · 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
+- [ ] 7. Search: help text, synonyms, fuzzy · 8. Reduce motion · 10. Polish batch
+- [ ] 9. Match flow timers. Owner's answers: post-match timer STAYS wall-clock (the stats
+  screen is a paused state, so stepping the sim behind it is risk with no determinism gain);
+  post-match goes to DEMO, with a flashing DEMO tag bottom-right, keeping court and theme.
 
 ## 🦐 Shrimp theme, and a ring on every player
 - [x] **Rockpool** — full bundle: a sand seabed with ripples and shells, an underwater palette,

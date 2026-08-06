@@ -203,6 +203,27 @@
        full list below still reads as the real list. */
     .recentlab { opacity: .72; margin-bottom: 4px; }
     .recentrow { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--edge); }
+    /* Progressive disclosure for help text. The paragraph is kept VERBATIM — it is
+       folded away, never rewritten or dropped — and the toggle sits on the label so
+       the row still reads as one control. */
+    .infobtn { display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; margin-left: 6px; padding: 0; vertical-align: -4px;
+      background: none; border: 0; border-radius: 50%; cursor: pointer;
+      color: var(--muted); opacity: .8; }
+    .infobtn:hover { color: var(--cyan); opacity: 1; }
+    .infobtn.on { color: var(--cyan); opacity: 1; background: rgba(33,230,255,.12); }
+    .infobtn .ic { width: 15px; height: 15px; }
+    .hint.folded { display: none; }
+    /* Lobby Start. Sits above the thumbstick band so it is never under a thumb that
+       is busy steering, and centred so it reads as the one thing to press. */
+    #lobbyStartBtn { position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(70px + 78px); z-index: 9;
+      font-family: var(--pix); font-size: 15px; letter-spacing: 1px;
+      color: var(--green); background: rgba(53,255,135,0.12);
+      border: 2px solid var(--green); border-radius: 12px; padding: 13px 30px;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+    #lobbyStartBtn:active { transform: translateX(-50%) translateY(1px); }
+    #lobbyStartBtn.hidden { display: none; }
     #searchWrap { position: relative; width: 100%; max-width: 460px; margin: 0 0 6px; }
     #menuSearch { width: 100%; box-sizing: border-box; font-family: var(--pix); font-size: 12px;
       color: var(--text); background: rgba(127,127,127,.10); border: 1px solid var(--edge);
@@ -986,6 +1007,13 @@
     <div class="hudside" id="hudRight">
       <button id="fsHudBtn" aria-label="Full screen">⛶</button>
     </div>
+    <!-- The lobby's Start, on screen. Start was bound to a gamepad button or the
+         Enter key, so a touch-only player in a warm-up lobby had no way out at all —
+         confirmed: 90 simulated seconds of an engaged touch player never left it,
+         because the idle auto-start resets on movement. Fixed position so it is
+         reachable in every layout, cocktail included, where the PITCH turns but the
+         screen does not. -->
+    <button id="lobbyStartBtn" class="hidden">START ▶</button>
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
       <button id="clipBtn">⇪ Save clip</button>
@@ -1088,9 +1116,9 @@
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
       <div style="height:14px"></div>
-      <label class="field">Warm-up lobby <small style="color:var(--muted)">(controllers only)</small></label>
+      <label class="field">Warm-up lobby</label>
       <div class="opts" id="lobbyPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up. <b>Controllers</b> warms up only when a pad is connected; <b>Everyone</b> warms up on touch and keyboard too, with an on-screen Start. A controller can still join at any point by pressing a button.</div>
       <div id="coopRow" class="hidden">
         <div style="height:14px"></div>
         <label class="field">Extra controllers <small id="coopInfo" style="color:var(--muted)"></small></label>
@@ -1107,15 +1135,15 @@
       <div class="subpane" data-pane="rules">
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
       <div style="height:14px"></div>
       <label class="field">Goal box crowding <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="boxRule"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
       <div style="height:14px"></div>
       <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="kickPushPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">KICK stops being ball-only: a wall or a body in range takes the hit and you take the reaction. A wall has nothing to give, so kicking one <b>launches you off it</b>. Applies to everyone, bots included.</div>
       <div style="height:14px"></div>
       <label class="field">Party modifiers <small style="color:var(--muted)">(tap to toggle)</small></label>
       <div class="opts" id="partyMods"></div>
@@ -2147,6 +2175,7 @@ const ICONS = {
   bag:       'M5.4 8h13.2l1 12H4.4Z M8.6 10V6.9a3.4 3.4 0 0 1 6.8 0V10',
   phone:     'M7.4 3h9.2a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6V4.6A1.6 1.6 0 0 1 7.4 3Z M10.4 5.6h3.2 M12 17.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
   gear:      'M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z M12 3.4v1.9 M12 18.7v1.9 M20.6 12h-1.9 M5.3 12H3.4 M18.1 5.9l-1.4 1.4 M7.3 16.7l-1.4 1.4 M18.1 18.1l-1.4-1.4 M7.3 7.3 5.9 5.9',
+  info:      'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 10.8v5.6 M12 7.4a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
   question:  'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M9.4 9.4a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.2-2.6 4 M12 17.2a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z',
   // --- match length
   bolt:      'M13.4 2.6 5.6 13.4h5.4l-.8 8 7.8-10.8h-5.4Z',
@@ -2342,11 +2371,64 @@ const THEMES = {
       hudText:'#ffffff', hudSub:'#c8c8c8', accent:'#ffffff', padRing:'rgba(255,255,255,0.7)',
       dynMark:'#000000' },   // the stars themselves — black, so they read on the white field
   },
+  // Limoncello (#f3e65a) field, black lines, WHITE everywhere else, dithered — and
+  // Klein Wave (#315dce) as the second team, both taken from a supplied swatch.
+  // ⚠️ The page background being white is the whole reason the pitch colours are
+  // picked the way they are: every mark that lives outside the court has to read on
+  // white, so teamRed is black rather than a colour (Warp does the same for the same
+  // reason). The discs are white and are separated by a black MARK, not by hue — see
+  // DISC_SKINS.chalk.
+  chalk: {
+    name: 'Highlighter', emoji: '🟨',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #ffffff 0%, #f7f7f2 55%, #eeeeea 100%)',
+      bg:'#ffffff', panel:'rgba(0,0,0,0.05)', edge:'#c9c9c0', text:'#101010', muted:'#5f5f58',
+      red:'#111111', blue:'#315dce', cyan:'#315dce', magenta:'#315dce', green:'#111111',
+      yellow:'#b0a412', accent:'#315dce', go:'#315dce', field:'#f3e65a', onAccent:'#ffffff' },
+    pitch: { glow:false, fieldBg:'#ffffff', court:'#f3e65a', stripeA:'#f3e65a', stripeB:'#eddf50',
+      netPocket:'rgba(0,0,0,0.06)', line:'#000000', centerDot:'#000000',
+      netMesh:'rgba(0,0,0,0.42)', post:'#000000', teamRed:'#111111', teamBlue:'#315dce',
+      discRim:'#000000', kickRing:'#000000', kickText:'#ffffff', cbRing:'#000000',
+      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#000000', nameText:'#ffffff',
+      shadow:'rgba(0,0,0,0.18)', ballRim:'#000000', ball:'#ffffff', ballSpot:'#000000',
+      trailRGB:'17,17,17',
+      obstacle:'#000000', good:'#315dce', warn:'#6a6a60', dim:'#9a9a92', cone:'#111111',
+      hudText:'#101010', hudSub:'#5f5f58', accent:'#315dce', padRing:'rgba(49,93,206,0.6)',
+      // The guide ring on a WHITE disc: the light tone has nothing to read against, so
+      // the dark one carries it. That is exactly why the ring is two-tone.
+      discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
+  },
+  // A record sleeve: black card, a grid of red dots printed over it, green bars
+  // punched through and acid-yellow type. ⚠️ Red against green is the one pair a
+  // colour-blind player cannot separate, so the sleeve's own vocabulary does the work
+  // instead — the reds are CIRCLES and the greens are RECTANGLES (DISC_SKINS.sleeve),
+  // and the colour is a bonus rather than the signal.
+  // ⚠️ The court dots are a MUTED maroon, not the team red. A field of bright red
+  // circles under a team drawn as a bright red circle is a field of decoys; the dots
+  // are also twice a body across, so scale separates them as well as tone.
+  sleeve: {
+    name: 'Bootleg', emoji: '🟥',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #4a1010 0%, #260909 55%, #120404 100%)',
+      bg:'#120404', panel:'rgba(239,232,63,0.07)', edge:'#5a1c1c', text:'#f4efe0', muted:'#c39c9c',
+      red:'#ef2b2b', blue:'#33d13a', cyan:'#33d13a', magenta:'#ef2b2b', green:'#33d13a',
+      yellow:'#efe83f', accent:'#efe83f', go:'#33d13a', field:'#1a0808', onAccent:'#120404' },
+    pitch: { glow:false, fieldBg:'#150707', court:'#0d0606', stripeA:'#0d0606', stripeB:'#120808',
+      netPocket:'rgba(239,232,63,0.10)', line:'#efe83f', centerDot:'#efe83f',
+      netMesh:'rgba(239,232,63,0.35)', post:'#efe83f', teamRed:'#ef2b2b', teamBlue:'#33d13a',
+      discRim:'#0d0606', kickRing:'#efe83f', kickText:'#0d0606', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#0d0606', nameBg:'#0d0606', nameText:'#efe83f',
+      shadow:'rgba(0,0,0,0.38)', ballRim:'#0d0606', ball:'#f5f2e8', ballSpot:'#ef2b2b',
+      trailRGB:'239,232,63',
+      obstacle:'#ef2b2b', good:'#33d13a', warn:'#efe83f', dim:'#7a4f4f', cone:'#ef2b2b',
+      hudText:'#efe83f', hudSub:'#c39c9c', accent:'#efe83f', padRing:'rgba(239,232,63,0.6)',
+      dynMark:'#8d1414', dynAlt:'#1b7a22' },
+  },
   // Underwater. Warm sand under blue-green water, crabs against lobsters — a theme
   // that owns the FIELD (seabed) and what a player IS, the same mechanism as Pool.
   // The shrimp is still in the registry and still pickable; the Players slot offers
-  // all three pairings. ⚠️ Lines are a deep teal rather than white: white ripples over pale sand
-  // gave the pitch markings nothing to hold against.
+  // all three pairings. ⚠️ Lines are a deep teal rather than white: white ripples
+  // over pale sand gave the pitch markings nothing to hold against.
   shrimp: {
     name: 'Rockpool', emoji: '🦞',
     ui: { scan:false,
@@ -2891,6 +2973,8 @@ const THEME_BUNDLES = {
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
+  chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
+  sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -5257,6 +5341,52 @@ function buildSubTabs(){
   }
 }
 // Built from the cards themselves so it can never offer a section that isn't there.
+// ---------- Progressive disclosure for help text ----------------------------
+// Nearly every control carried a paragraph. The writing is the problem: it is good
+// enough that nothing gets skipped and everything gets scrolled past. Label plus an
+// info toggle, and the paragraph expands VERBATIM — no copy is deleted or rewritten,
+// it only moves behind an affordance.
+//
+// ⚠️ ONE component, applied by walking the DOM. Per-card bespoke markup would mean
+// 27 places to keep in step, and a new setting would arrive without a toggle.
+//
+// ⚠️ GAMEPLAY-AFFECTING HELP STAYS OPEN — `class="hint always"`. Whether a match is
+// comparable is not a detail to hide behind a disclosure triangle. Cosmetic and
+// presentation help folds.
+//
+// ⚠️ Not persisted, by decision: every visit starts collapsed.
+//
+// ⚠️ A hint with no label before it is a NOTE, not help for a control (the panel
+// status line, the record readout). Those are left exactly as they are — attaching a
+// toggle to the nearest label above would fold text that belongs to nothing.
+const HINT_SKIP = new Set(['recLine']);      // a data readout that borrows .hint styling
+function buildHintToggles(root){
+  const scope = root || document;
+  for (const h of scope.querySelectorAll('.hint')){
+    if (h.dataset.hint) continue;                       // already wired
+    // Marked, not just skipped: an unclassified hint should mean 'the component
+    // never saw this', which is a bug, rather than 'we chose to leave it'.
+    if (h.id && HINT_SKIP.has(h.id)){ h.dataset.hint = 'readout'; continue; }
+    if (h.classList.contains('always')){ h.dataset.hint = 'always'; continue; }
+    let lab = h.previousElementSibling;
+    while (lab && !lab.classList.contains('field')) lab = lab.previousElementSibling;
+    if (!lab){ h.dataset.hint = 'note'; continue; }
+    h.dataset.hint = 'fold';
+    h.classList.add('folded');
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.className = 'infobtn';
+    bt.setAttribute('aria-label', 'What this does');
+    bt.setAttribute('aria-expanded', 'false');
+    bt.innerHTML = iconSvg('info') || 'i';
+    bt.onclick = e => {
+      e.preventDefault(); e.stopPropagation();
+      const open = !h.classList.toggle('folded');
+      bt.classList.toggle('on', open);
+      bt.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    lab.appendChild(bt);
+  }
+}
 function buildJumpBar(){
   const host = $('jumpBar'); if (!host) return;
   host.innerHTML = '';
@@ -5496,7 +5626,7 @@ async function startPhotoCam(){
   if (f) f.onchange = () => { photoFromFile(f.files && f.files[0]); f.value = ''; }; }
 buildPhotoPane();
 
-buildSubTabs(); buildJumpBar(); buildMenuSearch();
+buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
 
 $('playBtn').onclick = startMatch;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
@@ -5831,6 +5961,7 @@ $('settingsBtn').onclick = () => {
   openLook('theme');
 };
 { const ob=$('openPanelBtn'); if (ob) ob.onclick = () => window.open(settingsUrl(), 'magnetball-settings'); }
+{ const lb=$('lobbyStartBtn'); if (lb) lb.onclick = onLobbyStartPress; }
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
@@ -6095,7 +6226,7 @@ function buildSettings(){
   }
   const lp=$('lobbyPick');
   if (lp){ lp.innerHTML='';
-    [['on','🧍 On'],['off','⏭ Skip']].forEach(([k,lab])=>{
+    [['on','Controllers'],['touch','Everyone'],['off','Skip']].forEach(([k,lab])=>{
       const on=(sel.lobby||'on')===k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{ sel.lobby=k; saveSel(); buildSettings(); };
@@ -6189,6 +6320,10 @@ function buildSettings(){
   }
   buildFeelPresets();
   buildFeelSliders();
+  // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
+  // created by this function, so a one-shot pass at startup left them unclassified
+  // and permanently expanded — the exact clutter the component exists to remove.
+  buildHintToggles();
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
@@ -7772,6 +7907,9 @@ function lobbyWanted(w){
   if (!w || w.train || w.tutorial || w.drillMode || w.demo || w.watch) return false;
   if (sel.lobby === 'off') return false;
   if (sel.display === 'cocktail') return true;
+  // OPT-IN for touch and keyboard. Default is 'controllers', which is exactly the
+  // old behaviour — a pad has to be present or the lobby is skipped entirely.
+  if (sel.lobby === 'touch') return true;
   return w.players.some(p => p.ctrl === 'gamepad');
 }
 // Everyone a human is driving, in seat order. The FIRST one is the host.
@@ -8058,6 +8196,33 @@ function padFor(p){
 // them ready (which is only ever a display — nobody is blocked by someone idling).
 const START_BTN = 9;                       // standard mapping: Start / Options / +
 let _startPrev = {};
+// The on-screen Start, and the one place that decides whether it is showing.
+// ⚠️ It goes through lobbyStart() — the SAME path the gamepad Start and the idle
+// auto-start use — so a touch player gets the plan lobbyPlan drew, not a second
+// implementation of "who is on which side" that could disagree with the preview.
+// ⚠️ Cocktail seats calibrate first, exactly as the pad path does: pressing Start
+// before you have told the game which way is up would start a match you cannot steer.
+function lobbyStartVisible(){
+  return !!(world && world.state === 'warmup' && world.lobby && !world.lobby.calib &&
+            !PANEL && running);
+}
+function syncLobbyStartBtn(){
+  const bt = $('lobbyStartBtn'); if (!bt) return;
+  const show = lobbyStartVisible();
+  if (bt.classList.contains('hidden') === show) bt.classList.toggle('hidden', !show);
+  if (show){
+    const host = lobbyHost(world);
+    const needCal = sel.display === 'cocktail' && host && !host.calibrated;
+    const want = needCal ? 'SET UP ▶' : 'START ▶';
+    if (bt.textContent !== want) bt.textContent = want;
+  }
+}
+function onLobbyStartPress(){
+  if (!lobbyStartVisible()) return;
+  const w = world, host = lobbyHost(w);
+  if (sel.display === 'cocktail' && host && !host.calibrated){ beginCalibration(w, host); return; }
+  lobbyStart(w);
+}
 function pollLobbyStart(w){
   if (!w || w.state !== 'warmup' || !w.lobby) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
@@ -10581,6 +10746,7 @@ function render(){
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
+  syncLobbyStartBtn();     // idempotent: only touches the DOM when the state changes
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
@@ -11223,6 +11389,113 @@ function surfaceTexture(w){
 const DYN_FIELDS = {
   // Flying through starfall: stars stream out from the centre spot with perspective,
   // so the pitch reads as the view out of the front of something moving fast.
+  // An ordered Bayer dither over whatever court it is given: dense at the two ends,
+  // clearing to nothing at halfway. Overlays rather than fills, so it works on any
+  // palette — on Highlighter that is black dots on acid yellow.
+  // ⚠️ Built ONCE into an offscreen canvas and stretched, never per frame: at a
+  // 4-pixel cell a 400x700 pitch is 17,500 rects a frame. The tile is 192x192 cells,
+  // built once and cached, and rebuilt only when the INK changes — slots mix freely,
+  // so the same field can be asked for over a different palette.
+  // ⚠️ imageSmoothing is off globally, so stretching the tile keeps hard edges. That
+  // is the look, not an accident.
+  // ⚠️ Written as ImageData, not as fills. The grid was widened from 64 cells to 192
+  // so the dots land around two pixels rather than six — 37,000 fillRect calls even
+  // once is a visible hitch on the frame that first asks for the field.
+  dither: {
+    name: 'Dither', cells: 192, cell: 2,
+    // ⚠️ Tuned DOWN from 1.6/0.78, which made the two ends nearly solid black and put
+    // a wall of texture between the player and the ball. A dither is a surface, not an
+    // obstacle: it has to lose every contest against a disc, the ball and the lines.
+    ramp: 2.4,          // how fast the dots thin out toward halfway
+    peak: 0.46,         // densest the ends get
+    alpha: 0.62,        // ...and it never draws at full strength
+    build(st, ink){
+      const n = this.cells, C = this.cell, N = n * C;
+      const cv = document.createElement('canvas'); cv.width = cv.height = N;
+      const c2 = cv.getContext('2d');
+      // Resolve the ink to bytes by asking the canvas for it: a palette may hand over
+      // a hex or an rgba(), and the tile is written pixel by pixel.
+      c2.fillStyle = ink; c2.fillRect(0, 0, 1, 1);
+      const px = c2.getImageData(0, 0, 1, 1).data;
+      const R = px[0], G = px[1], Bl = px[2], A = px[3];
+      c2.clearRect(0, 0, 1, 1);
+      const img = c2.createImageData(N, N), d = img.data;
+      // 4x4 ordered (Bayer) matrix: the thresholds that make a dither read as an
+      // even texture rather than as clumps.
+      const B = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+      for (let gy=0; gy<n; gy++){
+        const fy = (gy + 0.5) / n;
+        const dd = Math.abs(fy - 0.5) * 2;                // 0 at halfway, 1 at the ends
+        const dens = Math.pow(dd, this.ramp) * this.peak;
+        for (let gx=0; gx<n; gx++){
+          // ⚠️ (B + 0.5)/16, not B/16. The lowest Bayer value is ZERO, so a raw
+          // threshold makes `dens > 0` true for one cell in sixteen — and the pitch
+          // stayed stippled at halfway where the ramp says clear.
+          if (dens <= (B[(gy & 3)*4 + (gx & 3)] + 0.5) / 16) continue;
+          for (let sy=0; sy<C; sy++){
+            let i = ((gy*C + sy) * N + gx*C) * 4;
+            for (let sx=0; sx<C; sx++, i+=4){ d[i]=R; d[i+1]=G; d[i+2]=Bl; d[i+3]=A; }
+          }
+        }
+      }
+      c2.putImageData(img, 0, 0);
+      st.cv = cv; st.ink = ink;
+    },
+    paint(c, st, L, T, W, H){
+      const ink = TH.dynMark || TH.line || '#000000';
+      if (!st.cv || st.ink !== ink) this.build(st, ink);
+      const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+      c.drawImage(st.cv, L, T, W, H);
+      c.globalAlpha = a;
+    },
+  },
+  // A printed record sleeve: a grid of big dots over black card, green bars punched
+  // through it, and the press's own streaks across the whole thing. Still — no step —
+  // because print does not move, and a drifting grid under the players reads as lag.
+  // ⚠️ The scatter is rolled ONCE in reset() off its own fixed PRNG, never in paint
+  // (which would re-scatter every frame) and never off w.rng (which would make where
+  // a bar sits change every bot decision after it).
+  // ⚠️ Everything here is clipped to the pitch rect, which is the point of the grid:
+  // the outer rows come out as half-dots the way a cropped sleeve does, and nothing
+  // can print over the touchline.
+  sleeve: {
+    name: 'Sleeve', cols: 5, dot: 0.33, bars: 13, streaks: 20,
+    // Dots at a third of the column gap are two bodies across — big enough that a
+    // player is never mistaken for one, which tone alone would not settle.
+    reset(st){
+      const rnd = mulberry32(0x51EE7E);        // fixed: the same press every match
+      st.b = [];
+      for (let i=0;i<this.bars;i++)
+        st.b.push([rnd(), rnd(), 0.02 + rnd()*0.05, 0.03 + rnd()*0.10]);
+      st.k = [];
+      for (let i=0;i<this.streaks;i++) st.k.push([rnd(), 0.15 + rnd()*0.85]);
+    },
+    paint(c, st, L, T, W, H){
+      // Falls back through the palette it is handed: slots mix, so this can be asked
+      // for over Grass, where dynMark does not exist.
+      const red = TH.dynMark || TH.teamRed || '#8d1414';
+      const grn = TH.dynAlt  || TH.teamBlue || '#33d13a';
+      c.save(); c.beginPath(); c.rect(L, T, W, H); c.clip();
+      c.strokeStyle = rgba(red, 0.5); c.lineWidth = Math.max(1, H*0.0022);
+      for (const [fy, wd] of (st.k || [])){
+        const py = T + fy*H;
+        c.beginPath(); c.moveTo(L, py); c.lineTo(L + wd*W, py); c.stroke();
+      }
+      const gap = W / this.cols, rr = gap * this.dot;
+      const rows = Math.ceil(H / gap) + 2;
+      c.fillStyle = red;
+      for (let ry=-1; ry<rows; ry++){
+        const py = T + (ry + 0.5) * gap;
+        const off = (ry & 1) ? gap*0.5 : 0;           // staggered, so it is a print not a table
+        for (let cx=-1; cx<=this.cols; cx++){
+          c.beginPath(); c.arc(L + off + (cx + 0.5)*gap, py, rr, 0, 2*Math.PI); c.fill();
+        }
+      }
+      c.fillStyle = grn;
+      for (const [fx, fy, bw, bh] of (st.b || [])) c.fillRect(L + fx*W, T + fy*H, bw*W, bh*H);
+      c.restore();
+    },
+  },
   // Seabed: sand, ripples and a scatter of shells. Still — no step — because the
   // shrimp are the thing that moves and a drifting floor under them reads as lag.
   // ⚠️ The scatter is generated ONCE in reset() off its own fixed PRNG and read from
@@ -11799,6 +12072,88 @@ const SEA = {
 
 // A pairing: which creature each side draws. The skin key is what `sel.look.discs`
 // stores, so it is stable across renames of the display name.
+// Both sides WHITE, told apart by a black BAR — horizontal for team 0, vertical for
+// team 1. ⚠️ "Players are white" and "two teams" are in tension: two white discs are
+// the same disc. Hue cannot do the work here (the whole theme is yellow, black and
+// white, and hue is what a colour-blind player cannot use anyway), so the mark is a
+// SHAPE, and one that survives 12 pixels — a bar either way up is legible when a
+// number is not. Same argument as Pool's solids vs stripes.
+// The body carries the same dither as the court, ramped the other way round: clear
+// in the middle where the bar lives, densest at the rim, so it shades the disc into a
+// ball instead of flattening the mark that tells the sides apart.
+// ⚠️ One cached MASK per ink, stretched to 2r with imageSmoothing off — one drawImage
+// a disc. Rolling the Bayer grid per disc per frame is 576 rects × ten bodies.
+const CHALK = { bar: 0.62, thick: 0.26, rim: 0.13,
+                tile: 64, cell: 2, inner: 0.42, ramp: 1.5, peak: 0.8 };
+const CHALK_MASK = Object.create(null);
+function chalkMask(ink){
+  let cv = CHALK_MASK[ink];
+  if (cv) return cv;
+  const N = CHALK.tile, C = CHALK.cell, n = N / C;
+  cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const c2 = cv.getContext('2d'); c2.fillStyle = ink;
+  const B = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+  for (let gy=0; gy<n; gy++) for (let gx=0; gx<n; gx++){
+    const fx = (gx + 0.5)/n*2 - 1, fy = (gy + 0.5)/n*2 - 1;
+    const rad = Math.hypot(fx, fy);
+    const t = (rad - CHALK.inner) / (1 - CHALK.inner);
+    if (t <= 0 || rad > 1) continue;
+    const dens = Math.pow(t, CHALK.ramp) * CHALK.peak;
+    // ⚠️ (B + 0.5)/16 — the same zero-threshold trap as DYN_FIELDS.dither.
+    if (dens > (B[(gy & 3)*4 + (gx & 3)] + 0.5) / 16) c2.fillRect(gx*C, gy*C, C, C);
+  }
+  CHALK_MASK[ink] = cv;
+  return cv;
+}
+DISC_SKINS.chalk = {
+  name: 'Chalk discs',
+  paint(c, p, x, y, r, w){
+    c.beginPath(); c.arc(x, y, r + Math.max(1.5, r*CHALK.rim), 0, 2*Math.PI);
+    c.fillStyle = '#000000'; c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = '#ffffff'; c.fill();
+    // Both the shading and the bar are clipped to the disc, so they read as markings
+    // ON the body rather than laid across it — and neither can cross the guide ring.
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+    // Team 1 shades in the palette's blue: a second cue on top of the bar, never
+    // instead of it — the bar is what survives twelve pixels and colour blindness.
+    c.drawImage(chalkMask(p.team === 0 ? '#000000' : (TH.teamBlue || '#315dce')),
+                x - r, y - r, 2*r, 2*r);
+    c.fillStyle = '#000000';
+    const L = r*CHALK.bar, T = r*CHALK.thick;
+    if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
+    else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
+// The sleeve's own two marks: a red DOT against a green BAR. ⚠️ Red vs green is the
+// one pair a colour-blind player cannot separate, so the difference is carried by the
+// silhouette — round against square-with-corners — and the colour rides on top.
+// ⚠️ The square is INSCRIBED, not circumscribed. A player is a circle of radius r and
+// that circle is what collides; a square drawn to r would put its corners 1.41r out,
+// which is the Videoball arrowhead mistake with a different shape.
+const SLEEVE = { sq: 0.70, speck: 0.22 };
+DISC_SKINS.sleeve = {
+  name: 'Dots vs bars',
+  paint(c, p, x, y, r, w){
+    const dot = p.team === 0;
+    c.fillStyle = dot ? (TH.teamRed || '#ef2b2b') : (TH.teamBlue || '#33d13a');
+    if (dot){ c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fill(); }
+    else { const h = r*SLEEVE.sq; c.fillRect(x - h, y - h, h*2, h*2); }
+    // Print speckle: the sleeve's shapes are flecked rather than flat. Reuses the
+    // chalk mask so there is one dither builder rather than two that can drift.
+    c.save();
+    c.beginPath();
+    if (dot) c.arc(x, y, r, 0, 2*Math.PI);
+    else { const h = r*SLEEVE.sq; c.rect(x - h, y - h, h*2, h*2); }
+    c.clip();
+    const a = c.globalAlpha; c.globalAlpha = a * SLEEVE.speck;
+    c.drawImage(chalkMask('#000000'), x - r, y - r, 2*r, 2*r);
+    c.globalAlpha = a;
+    c.restore();
+  },
+};
 function seaPair(name, t0, t1){
   return {
     name,
@@ -12800,7 +13155,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0345PM';
+const VERSION = '20260806.0620PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12836,6 +13191,7 @@ if (window.__MAGNETDEBUG) {
     EYE_KEYS, ANIMAL_KEYS,
     buildAnimalPicker, buildEyesPicker, buildTilePicker,
     RECENT_KEEP, RECENT_MIN_GRID, get recents(){ return recents; }, noteRecent, recentKeys, buildRecentRow, loadRecents,
+    buildHintToggles, HINT_SKIP,
     menuSearchIndex, menuSearchRank, menuSearchGo, menuSearchDraw, menuSearchClose, buildMenuSearch, SEARCH_MAX,
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
@@ -12843,6 +13199,7 @@ if (window.__MAGNETDEBUG) {
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
+    lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
@@ -12865,7 +13222,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
