@@ -2398,6 +2398,35 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // A vector monitor: everything is a thin stroked line on black, the way an
+  // XY-deflection tube actually drew. Deep space behind a faint grid, a scatter of
+  // drifting rocks, magenta markings, a cyan dart against a lime saucer.
+  // ⚠️ Nothing here is FILLED, and that is the whole theme — including the ball,
+  // which is why `ball` is the court colour and `ballRim` is the bright one: the rim
+  // ring paintBall already draws IS the asteroid's outline. A filled ball on a line
+  // court is the only solid object on screen and it looks like a bug.
+  // ⚠️ The court and the surround are both near-black, so the pitch would have no
+  // edge at all — the boundary is magenta and loud on purpose, because on this
+  // palette it is the only thing separating play from space.
+  vector: {
+    name: 'Asteroids', emoji: '☄️',
+    ui: { scan:true,
+      grad:'radial-gradient(120% 90% at 50% -12%, #16123a 0%, #0a0820 55%, #04030c 100%)',
+      bg:'#04030c', panel:'rgba(120,220,255,0.07)', edge:'#3a2f6b', text:'#dff2ff', muted:'#93a8c4',
+      red:'#4de3ff', blue:'#b4ff3d', cyan:'#4de3ff', magenta:'#ff4df2', green:'#b4ff3d',
+      yellow:'#ffd54d', accent:'#ff4df2', go:'#b4ff3d', field:'#0a0820', onAccent:'#04030c' },
+    pitch: { glow:true, fieldBg:'#04030c', court:'#07050f', stripeA:'#07050f', stripeB:'#08060f',
+      netPocket:'rgba(255,77,242,0.08)', line:'#ff4df2', centerDot:'#ff4df2',
+      netMesh:'rgba(255,77,242,0.42)', post:'#ff4df2', teamRed:'#4de3ff', teamBlue:'#b4ff3d',
+      discRim:'#07050f', kickRing:'#ff4df2', kickText:'#04030c', cbRing:'#ffffff',
+      eyeWhite:'#dff2ff', eyePupil:'#07050f', nameBg:'#07050f', nameText:'#dff2ff',
+      shadow:'rgba(0,0,0,0.5)', ballRim:'#e8f4ff', ball:'#07050f', ballSpot:'#8fa6c0',
+      trailRGB:'255,77,242',
+      obstacle:'#ff4df2', good:'#b4ff3d', warn:'#ffd54d', dim:'#6b7a93', cone:'#4de3ff',
+      hudText:'#dff2ff', hudSub:'#93a8c4', accent:'#ff4df2', padRing:'rgba(255,77,242,0.6)',
+      dynMark:'#cfe6ff',        // the rocks — bone white, the phosphor's own colour
+      dynAlt:'#5a4bb8' },       // the grid behind them
+  },
   // Night in a fenced pasture with something overhead. 70s abduction poster: avocado
   // grass, harvest gold, burnt orange, and a beam-lime that only exists because
   // something is shining it. The players ARE the craft and the ball is a sheep.
@@ -3031,6 +3060,7 @@ const THEME_BUNDLES = {
   sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
   board:     { field:'boardtrack',discs:'pawn',        ball:'plain',   sfx:'classic' },
   ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space'   },
+  vector:    { field:'voidgrid',  discs:'vector',      ball:'asteroid',sfx:'space'   },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11793,6 +11823,113 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// Deep space on a vector monitor: a nebula wash, a faint grid over it, a star field
+// and a drift of stroked asteroids. Everything is a THIN LINE — no fills — because
+// that is what an XY tube could draw, and it is the whole read of the theme.
+// ⚠️ The nebula is built ONCE into a small offscreen canvas and stretched, never per
+// frame: four radial gradients a frame is four gradient objects a frame, and it is
+// the same four blobs every time. Rebuilt only when the INK changes, because slots
+// mix and this can be asked for over another palette.
+// ⚠️ Everything that moves — the drift, the spin, the twinkle — advances in step(),
+// which advanceDynField() calls next to step(world). Advanced in the paint instead,
+// a 144Hz screen runs the whole sky 2.4x fast. Same rule as the motion trails.
+// ⚠️ ...and it advances off its OWN fixed PRNG, rolled once in reset(). Touching
+// w.rng would make where a rock sits change every bot decision after it.
+DYN_FIELDS.voidgrid = {
+  name: 'Vector space', cells: 9, stars: 150, rocks: 11,
+  drift: 0.00022,     // pitch-fractions per step: a rock crosses in about a match
+  grid: 0.16, neb: 0.5, rockA: 0.34,
+  reset(st){
+    const rnd = mulberry32(0xA57E01);        // fixed: the same sky every match
+    st.t = 0;
+    st.s = [];
+    for (let i=0;i<this.stars;i++)
+      st.s.push([rnd(), rnd(), 0.35 + rnd()*1.5, (rnd()*3)|0, rnd()*6.283]);
+    st.r = [];
+    for (let i=0;i<this.rocks;i++){
+      const n = 8 + ((rnd()*4)|0), p = [];
+      for (let k=0;k<n;k++) p.push(0.62 + rnd()*0.44);
+      st.r.push({ x:rnd(), y:rnd(), sc:0.45 + rnd()*1.3, rot:rnd()*6.283,
+                  spin:(rnd()-0.5)*0.0035,
+                  vx:(rnd()-0.5)*this.drift, vy:(rnd()-0.5)*this.drift, p,
+                  cr:[[rnd()*0.8-0.4, rnd()*0.8-0.4, 0.12+rnd()*0.16],
+                      [rnd()*0.8-0.4, rnd()*0.8-0.4, 0.09+rnd()*0.12]] });
+    }
+    st.n = [];
+    for (let i=0;i<4;i++) st.n.push([rnd(), rnd(), 0.42 + rnd()*0.55, (rnd()*3)|0]);
+  },
+  step(st){
+    st.t++;
+    for (const k of (st.r || [])){
+      k.x = (k.x + k.vx + 1) % 1;
+      k.y = (k.y + k.vy + 1) % 1;
+      k.rot += k.spin;
+    }
+  },
+  buildNeb(st, key, tints){
+    const N = 128, cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const c2 = cv.getContext('2d');
+    for (const [fx, fy, sc, ti] of (st.n || [])){
+      const px = fx*N, py = fy*N, rr = N*0.42*sc;
+      const g = c2.createRadialGradient(px, py, 0, px, py, rr);
+      g.addColorStop(0, rgba(tints[ti % tints.length], 0.34));
+      g.addColorStop(1, rgba(tints[ti % tints.length], 0));
+      c2.fillStyle = g; c2.fillRect(px-rr, py-rr, rr*2, rr*2);
+    }
+    st.nebCv = cv; st.nebKey = key;
+  },
+  paint(c, st, L, T, W, H){
+    // Falls back through whatever palette it is handed — slots mix freely.
+    const bone = TH.dynMark || TH.line || '#cfe6ff';
+    const wire = TH.dynAlt || TH.line || '#5a4bb8';
+    const tints = [TH.teamRed || '#4de3ff', TH.teamBlue || '#b4ff3d', TH.accent || '#ff4df2'];
+    const key = tints.join('|');
+    if (!st.nebCv || st.nebKey !== key) this.buildNeb(st, key, tints);
+    c.save();
+    c.beginPath(); c.rect(L, T, W, H); c.clip();
+    const a0 = c.globalAlpha;
+    c.globalAlpha = a0 * this.neb;
+    c.drawImage(st.nebCv, L, T, W, H);
+    c.globalAlpha = a0;
+    // The grid: square cells, counted off the SHORT side so a long pitch gets more
+    // of them rather than stretched ones.
+    const gap = Math.min(W, H) / this.cells;
+    c.strokeStyle = rgba(wire, this.grid); c.lineWidth = 1;
+    c.beginPath();
+    for (let gx = L + gap; gx < L + W; gx += gap){ c.moveTo(gx, T); c.lineTo(gx, T + H); }
+    for (let gy = T + gap; gy < T + H; gy += gap){ c.moveTo(L, gy); c.lineTo(L + W, gy); }
+    c.stroke();
+    // Stars, twinkling off the step counter rather than a clock.
+    for (const [fx, fy, sz, ti, ph] of (st.s || [])){
+      const tw = 0.45 + 0.55 * Math.sin(st.t * 0.035 + ph);
+      c.fillStyle = rgba(ti === 2 ? bone : tints[ti], 0.35 + tw*0.5);
+      c.fillRect(L + fx*W, T + fy*H, sz, sz);
+    }
+    // The rocks: stroked outlines with a crater or two, and never filled.
+    const base = Math.min(W, H) * 0.055;
+    c.strokeStyle = rgba(bone, this.rockA);
+    c.lineWidth = Math.max(1, base*0.055);
+    c.lineJoin = 'round';
+    for (const k of (st.r || [])){
+      const px = L + k.x*W, py = T + k.y*H, rr = base * k.sc, n = k.p.length;
+      c.save(); c.translate(px, py); c.rotate(k.rot);
+      c.beginPath();
+      for (let i=0;i<n;i++){
+        const a = i * (2*Math.PI/n), d = rr * k.p[i];
+        const vx = Math.cos(a)*d, vy = Math.sin(a)*d;
+        i ? c.lineTo(vx, vy) : c.moveTo(vx, vy);
+      }
+      c.closePath(); c.stroke();
+      for (const [cx2, cy2, cr2] of k.cr){
+        c.beginPath(); c.ellipse(cx2*rr, cy2*rr, cr2*rr, cr2*rr*0.72, 0.4, 0, 2*Math.PI);
+        c.stroke();
+      }
+      c.restore();
+    }
+    c.restore();
+  },
+};
 // A fenced pasture at night, with the marks something left in it. Post-and-rail all
 // the way round, crop circles flattened into the grass.
 // ⚠️ `bleed`, and the fence rides the pool table's own boundary path — a fence has to
@@ -12291,6 +12428,57 @@ DISC_SKINS.chalk = {
     const L = r*CHALK.bar, T = r*CHALK.thick;
     if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
     else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
+// A vector monitor's two shapes: the player's dart against the saucer that came for
+// it. Stroked, never filled — a solid body on a line court is the only solid thing
+// on screen and it reads as a bug.
+// ⚠️ The RING is drawn by the skin as well as by strokeDiscGuide, in the team colour
+// and at exactly r. A player is a circle and that circle is what collides; on a black
+// court with a thin dart inside it, the guide ring alone is a hairline and the body
+// you are about to challenge is a guess.
+// ⚠️ The saucer does NOT turn, and the dart does. In Asteroids the saucer flies level
+// whatever it is doing, and a saucer rotated ninety degrees is a lens nobody can name
+// — the same reason `pool` and `mono` ignore the rotation control. The dart goes
+// through discFace like every other direction-drawn skin.
+const VEC = { ring: 0.055, wash: 0.10,
+              dart: { nose: 0.80, back: 0.56, wing: 0.54, notch: 0.26 },
+              sauc: { w: 0.82, h: 0.19, dome: 0.34 } };
+DISC_SKINS.vector = {
+  name: 'Vector ships',
+  paint(c, p, x, y, r, w){
+    const dart = p.team === 0;
+    const col = dart ? (TH.teamRed || '#4de3ff') : (TH.teamBlue || '#b4ff3d');
+    c.save(); c.translate(x, y);
+    c.beginPath(); c.arc(0, 0, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, VEC.wash); c.fill();
+    c.lineWidth = Math.max(1.2, r*VEC.ring); c.strokeStyle = col; c.stroke();
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    if (dart){
+      const { ux, uy } = discFace(p);
+      c.rotate(Math.atan2(uy, ux));                 // +x is now the way it points
+      const D = VEC.dart;
+      c.beginPath();
+      c.moveTo(r*D.nose, 0);
+      c.lineTo(-r*D.back, r*D.wing);
+      c.lineTo(-r*D.notch, 0);
+      c.lineTo(-r*D.back, -r*D.wing);
+      c.closePath(); c.stroke();
+    } else {
+      const S = VEC.sauc;
+      c.beginPath(); c.ellipse(0, r*0.06, r*S.w, r*S.h, 0, 0, 2*Math.PI); c.stroke();
+      c.beginPath(); c.moveTo(-r*S.w*0.62, r*0.06); c.lineTo(r*S.w*0.62, r*0.06); c.stroke();
+      c.beginPath(); c.ellipse(0, r*0.02, r*S.dome, r*S.dome*0.92, 0, Math.PI, 0); c.stroke();
+      // The ribs down the hull — three short strokes, which is what the arcade saucer
+      // actually is once you take the fill away.
+      for (const t of [-0.5, 0, 0.5]){
+        c.beginPath();
+        c.moveTo(r*S.w*t*0.66, r*0.06 - r*S.dome*0.72*Math.cos(t*1.4));
+        c.lineTo(r*S.w*t*0.86, r*0.06 + r*S.h*0.85);
+        c.stroke();
+      }
+    }
     c.restore();
   },
 };
@@ -12898,6 +13086,22 @@ const BALL_LOOKS = {
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
       ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
   plain:   { name:'Plain', draw:()=>{} },
+  // A rock, drawn the way the arcade drew one: craters and chips, no fill. ⚠️ It is
+  // only hollow because the Asteroids palette sets `ball` to the court colour and
+  // `ballRim` to the bright one, so the rim ring paintBall already draws IS the
+  // outline. On any other palette this is craters on a solid ball, which still works.
+  asteroid:{ name:'Asteroid', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.strokeStyle = c.fillStyle; c.lineWidth = Math.max(1, r*0.10); c.lineCap='round';
+    for (const [cx,cy,cr] of [[-0.34,-0.22,0.26],[0.30,-0.30,0.17],[0.12,0.36,0.22]]){
+      c.beginPath(); c.ellipse(cx*r, cy*r, cr*r, cr*r*0.74, 0.5, 0, 2*Math.PI); c.stroke(); }
+    // Two chips off the edge: the tell that it has already been shot at least once.
+    for (const a of [2.1, 5.0]){
+      c.beginPath();
+      c.moveTo(Math.cos(a)*r*0.62, Math.sin(a)*r*0.62);
+      c.lineTo(Math.cos(a+0.5)*r*0.94, Math.sin(a+0.5)*r*0.94);
+      c.stroke(); }
+    c.restore(); } },
   // The thing the beam is aimed at. ⚠️ A look gets ONE colour, clipped to the ball,
   // so the fleece is the ball itself and the spot ink draws only what is not fleece:
   // the scalloped edge, the head and the legs. Trying to draw a whole sheep in one

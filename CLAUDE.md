@@ -169,6 +169,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
+  `vector` (shown as **Asteroids**) = a vector monitor: a nebula wash, a faint grid, a star
+  field and a drift of stroked rocks, with a cyan dart against a lime saucer. ⚠️ **Nothing
+  is filled**, and that is measured, not asserted in a comment — the middle of a ship and
+  the middle of the ball both have to still be the court. The ball is hollow because the
+  palette sets `ball` to the court colour and `ballRim` to the bright one, so the rim ring
+  `paintBall` already draws IS the rock's outline. ⚠️ The silhouette check is an **extent**,
+  not a pixel count: these are outlines, so a scan line crosses two strokes whether the
+  shape is a hand's width or a pitch across — and it stops short of 0.8`r`, because the
+  hull ring is at `r` and crosses every column, which makes both sides measure 1.73`r`.
+  ⚠️ The saucer does **not** turn (the arcade's flew level, and rotated ninety degrees it
+  is a lens nobody can name); the dart goes through `discFace` like every other
+  direction-drawn skin. The nebula is four radial gradients baked ONCE into a 128px canvas
+  and stretched, cached on the ink.
   `ufo` (shown as **Abduction**) = a fenced night pasture with crop circles, craft for players
   and a sheep for a ball. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
   rather than copying it: a fence has to stand ON the boundary the ball bounces off, follow a
