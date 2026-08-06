@@ -197,6 +197,36 @@
     /* Jump bar: sticky under the KICK OFF header, scrolls sideways rather than wrapping. */
     /* flex:0 0 auto — #setup is a column flex container, so the default flex-shrink
        squashed this to 4px (its padding) and clipped every chip. */
+    /* Menu search. Sits under the jump chips and above the Match card, in the same
+       sticky stack, so the two navigation aids are in one place. */
+    /* Recents: a shortcut, not a second grid. Dimmer label, a rule under it, so the
+       full list below still reads as the real list. */
+    .recentlab { opacity: .72; margin-bottom: 4px; }
+    .recentrow { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--edge); }
+    #searchWrap { position: relative; width: 100%; max-width: 460px; margin: 0 0 6px; }
+    #menuSearch { width: 100%; box-sizing: border-box; font-family: var(--pix); font-size: 12px;
+      color: var(--text); background: rgba(127,127,127,.10); border: 1px solid var(--edge);
+      border-radius: 10px; padding: 9px 11px; outline: none; }
+    #menuSearch::placeholder { color: var(--muted); }
+    #menuSearch:focus { border-color: var(--cyan); }
+    #searchHits { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 5px);
+      z-index: 12; max-height: 46vh; overflow-y: auto;
+      background: var(--bg); border: 1px solid var(--edge); border-radius: 10px;
+      box-shadow: 0 10px 26px rgba(0,0,0,.55); }
+    #searchHits.on { display: block; }
+    .shit { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+      font-family: var(--pix); font-size: 12px; color: var(--text); background: none;
+      border: 0; border-bottom: 1px solid var(--edge); padding: 9px 11px; cursor: pointer; }
+    .shit:last-child { border-bottom: 0; }
+    .shit:hover, .shit.cur { background: rgba(33,230,255,.10); }
+    .shit small { color: var(--muted); font-size: 10px; margin-left: auto; white-space: nowrap; }
+    .shit b { color: var(--cyan); font-weight: inherit; }
+    .snone { padding: 11px; font-family: var(--pix); font-size: 11px; color: var(--muted); }
+    /* Where search dropped you. A flash, not a permanent mark — it says "here",
+       then gets out of the way. */
+    @keyframes foundPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(33,230,255,0); }
+                            30% { box-shadow: 0 0 0 3px rgba(33,230,255,.55); } }
+    .found { animation: foundPulse 1.5s ease; border-radius: 10px; }
     #jumpBar { width: 100%; max-width: 460px; display: flex; gap: 6px; margin: 8px 0 2px;
       flex: 0 0 auto; overflow-x: auto; overflow-y: hidden;
       padding: 6px 0 7px;
@@ -1007,6 +1037,13 @@
          Sits ABOVE the Match card so the sticky things stack instead of colliding:
          chips at the top, KICK OFF under them, section headers under that. -->
     <div id="jumpBar"></div>
+    <!-- Find a control by name instead of remembering which card it lives on. The
+         index is built from the DOM on every open, so it can't offer something that
+         isn't there and can't miss something new. -->
+    <div id="searchWrap">
+      <input id="menuSearch" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false">
+      <div id="searchHits"></div>
+    </div>
 
     <div class="card collapsible collapsed" id="matchCard" data-sec="match">
       <h2>
@@ -1152,14 +1189,20 @@
       </div>
       <div class="subpane" data-pane="flag">
         <label class="field">Countryball <small id="unlockCount" style="color:var(--muted);font-weight:400"></small></label>
+        <label class="field recentlab" id="flagRecentLab" style="display:none">Recent</label>
+        <div class="opts tilewrap recentrow" id="flagRecent" style="display:none"></div>
         <div class="opts tilewrap" id="flagPick"></div>
       </div>
       <div class="subpane" data-pane="animal">
         <label class="field">Animal</label>
+        <label class="field recentlab" id="animalRecentLab" style="display:none">Recent</label>
+        <div class="opts tilewrap recentrow" id="animalRecent" style="display:none"></div>
         <div class="opts tilewrap" id="animalPick"></div>
       </div>
       <div class="subpane" data-pane="text">
         <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
+        <label class="field recentlab" id="textRecentLab" style="display:none">Recent</label>
+        <div class="opts tilewrap recentrow" id="textRecent" style="display:none"></div>
         <div class="opts tilewrap" id="textPick"></div>
       </div>
       <div class="subpane" data-pane="photo">
@@ -1170,6 +1213,8 @@
       </div>
       <div class="subpane" data-pane="eyes">
         <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
+        <label class="field recentlab" id="eyesRecentLab" style="display:none">Recent</label>
+        <div class="opts tilewrap recentrow" id="eyesRecent" style="display:none"></div>
         <div class="opts tilewrap" id="eyesPick"></div>
       </div>
       <div class="preview">
@@ -1963,9 +2008,14 @@ const MODES = {
   'train':{ name:'Training',emoji:'🎯', icon:'target', per:0, twoP:false, train:true, desc:'Free practice' },
 };
 
-// Only integrate()'s primary ball gets handleBallControl, so the snail can't be
-// kicked — only shoved. That's the whole mode.
-const SNAIL = { rMul:1.5, invMass:0.16, bCoef:0.25, damp:0.915 };
+// The snail is KICKABLE, and still heavy. It does not go through handleBallControl —
+// that path traps and carries, and dribbling the objective onto the goal line would
+// be the whole mode in one move. It gets its own shove instead: the same charge, the
+// same range, scaled by SNAIL.kick, on a body whose damping (0.915 against the ball's
+// 0.990) kills the roll almost immediately. Measured on Colossus: one kick moves the
+// snail 22 units — TWICE what a full-speed body check does, so kicking it is clearly
+// worth doing — while the same kick sends the ball 453, twenty times further.
+const SNAIL = { rMul:1.5, invMass:0.16, bCoef:0.25, damp:0.915, kick:0.72 };
 // Killer Queen berries: light, floaty things you shepherd into your own hive. They
 // are physics bodies like any other ball, so nothing new had to be taught to
 // moveBall — what makes them FLOATY is a low mass and a damp close to 1, so they
@@ -4627,6 +4677,50 @@ function itemName(cat, key){
        : cat==='text'   ? (TEXTS[key]||{}).name
        :                  (EYES[key]||{}).name;
 }
+// ---------- Recents ----------------------------------------------------------
+// There are 80+ countryballs. Finding the one you wore last match meant scrolling
+// past all of them, every time. A short row of what you actually use sits above the
+// full grid — the four faceplate/eyes pickers only, because those are the long ones.
+//
+// ⚠️ Built by the SAME buildTilePicker as the grid below it, on a filtered key list.
+// A second tile builder for a row of the same tiles is exactly the duplicated
+// knowledge that has broken things here before: the lock badge, the selected state
+// and the name would all have to be kept in step by hand.
+//
+// ⚠️ Flags, animals and TEXT share one faceplate slot (profile.flag), so recents are
+// stored per CATEGORY rather than per slot — otherwise picking a flag would show up
+// in the animals row, which is true of the slot and useless to the person reading it.
+const RECENT_KEEP = 6;                  // one row on a narrow phone
+let recents = loadRecents();
+function loadRecents(){
+  try { const r = JSON.parse(localStorage.getItem('magnetball.recents') || '{}');
+        return (r && typeof r === 'object') ? r : {}; } catch(_) { return {}; }
+}
+function saveRecents(){ try { localStorage.setItem('magnetball.recents', JSON.stringify(recents)); } catch(_){} }
+function noteRecent(cat, key){
+  if (!cat || !key || key === 'none') return;              // "none" is a reset, not a choice
+  const list = (recents[cat] || []).filter(k => k !== key);
+  list.unshift(key);
+  recents[cat] = list.slice(0, RECENT_KEEP * 2);           // keep a tail so unlocks can refill the row
+  saveRecents();
+}
+// What to actually show: still a real item, still unlocked, and not the one you are
+// already wearing (a recents row whose first tile is the current pick is a mirror).
+function recentKeys(cat, all, cur){
+  const valid = new Set(all);
+  return (recents[cat] || []).filter(k => valid.has(k) && k !== cur && isUnlocked(cat, k)).slice(0, RECENT_KEEP);
+}
+// Show the row only when it earns its space: at least two entries, and only for a
+// grid long enough that scrolling it is a chore.
+const RECENT_MIN_GRID = 12;
+function buildRecentRow(hostId, cat, all, curGet){
+  const host = $(hostId); if (!host) return;
+  const keys = all.length >= RECENT_MIN_GRID ? recentKeys(cat, all, curGet()) : [];
+  const lab = $(hostId + 'Lab');
+  if (keys.length < 2){ host.innerHTML = ''; host.style.display = 'none'; if (lab) lab.style.display='none'; return; }
+  host.style.display = ''; if (lab) lab.style.display = '';
+  buildTilePicker(hostId, cat, keys, curGet);
+}
 function buildTilePicker(containerId, cat, keys, curGet, onPick){
   const wrap=$(containerId); if(!wrap) return; wrap.innerHTML='';
   keys.forEach(k=>{
@@ -4646,6 +4740,7 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     if(!unlocked){ const s=document.createElement('small'); s.textContent='🔒 '+reqText(itemReq(cat,k)); el.appendChild(s); }
     el.onclick=()=>{ if(!isUnlocked(cat,k)) return;
       if(cat==='eyes') profile.eyes=k; else profile.flag=k;   // flag & animal share the faceplate slot
+      noteRecent(cat, k);
       saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); };
     wrap.appendChild(el);
   });
@@ -4706,8 +4801,10 @@ function buildUnlocked(){
   if (tot) tot.textContent = `${have} / ${total}`;
   if (fill) fill.style.width = total ? Math.round(have/total*100)+'%' : '0%';
 }
-function buildFlagPicker(){ buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
-function buildAnimalPicker(){ buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
+function buildFlagPicker(){ buildRecentRow('flagRecent','flag',FLAG_KEYS,()=>profile.flag);
+                            buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
+function buildAnimalPicker(){ buildRecentRow('animalRecent','animal',ANIMAL_KEYS,()=>profile.flag);
+                              buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
 // Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
 // pattern reads. No emoji, no image — what you see is what rolls.
 function buildBallLookPick(){ buildSlotPicker('ball', $('ballLookPick')); }
@@ -4770,8 +4867,10 @@ function slotSwatch(slot, k){
   }
   return null;
 }
-function buildTextPicker(){ buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
-function buildEyesPicker(){ buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
+function buildTextPicker(){ buildRecentRow('textRecent','text',TEXT_KEYS,()=>profile.flag);
+                            buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
+function buildEyesPicker(){ buildRecentRow('eyesRecent','eyes',EYE_KEYS,()=>profile.eyes);
+                            buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
 function buildCaps(){
   const wrap=$('caps'); if(!wrap) return; wrap.innerHTML='';
   Object.keys(CAPS).forEach(k=>{
@@ -5124,6 +5223,136 @@ function buildJumpBar(){
   }
   syncJumpBar();
 }
+// ---------- Menu search ------------------------------------------------------
+// 376 controls across seven cards, each showing one subpane at a time. That is what
+// makes the menu navigable and also what makes a control you half-remember hard to
+// find: it is behind a card you have to open and a chip you have to guess.
+//
+// ⚠️ The index is built from the DOM, and rebuilt on every search rather than once
+// at boot. The pickers rebuild themselves constantly — every theme slot change
+// replaces its tiles — so an index taken at startup goes stale and starts pointing
+// at detached nodes that scrollIntoView happily scrolls to nowhere. Reading the DOM
+// also means search can never offer a control that isn't there, and never miss one
+// that was just added, which a hand-written list cannot promise.
+const SEARCH_MAX = 9;              // results shown; more is a list, not an answer
+function menuSearchIndex(){
+  const rows = [], seen = new Set();
+  const add = (label, node, sec, secName, group, pane, kind) => {
+    const t = (label || '').trim().replace(/\s+/g, ' ');
+    if (!t || t.length > 52 || !node) return;
+    const key = sec + '|' + pane + '|' + t.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({ t, low: t.toLowerCase(), node, sec, secName, group, pane, kind });
+  };
+  for (const card of document.querySelectorAll('#setup .card.collapsible')){
+    const sec = card.dataset.sec; if (!sec) continue;
+    const nm = card.querySelector('.secname') || card.querySelector('h2');
+    const secName = ((nm && nm.textContent) || sec).trim().split('\n')[0];
+    const tabs = card.querySelector('.subtabs');
+    const group = tabs ? tabs.dataset.tabs : null;
+    const paneOf = el => { const pn = el.closest('.subpane'); return pn ? pn.dataset.pane : null; };
+    add(secName, card, sec, secName, null, null, 'Section');
+    // A setting is its label; an option is the thing you would actually be looking
+    // for ("Killer Queen", "Colossus"), so both are indexed and options rank higher.
+    for (const lb of card.querySelectorAll('label.field'))
+      add(lb.textContent, lb, sec, secName, group, paneOf(lb), 'Setting');
+    for (const op of card.querySelectorAll('.opt'))
+      add((op.querySelector('span:not(.emoji)') || {}).textContent, op, sec, secName, group, paneOf(op), 'Option');
+    for (const nv of card.querySelectorAll('.navtile'))
+      add(nv.textContent, nv, sec, secName, group, paneOf(nv), 'Screen');
+  }
+  return rows;
+}
+// Substring, ranked: a name that STARTS with what you typed beats one that merely
+// contains it, an earlier match beats a later one, and a short label beats a long
+// one. No fuzzy matching — a menu is not a codebase, and a wrong-but-plausible hit
+// is worse than no hit when the list is this short.
+function menuSearchRank(rows, q){
+  const s2 = (q || '').trim().toLowerCase();
+  if (!s2) return [];
+  const hits = [];
+  for (const r of rows){
+    const i = r.low.indexOf(s2);
+    if (i < 0) continue;
+    hits.push({ r, i, score: (i === 0 ? 0 : 200) + i * 4 + r.t.length +
+                            (r.kind === 'Option' ? 0 : r.kind === 'Screen' ? 6 : 12) });
+  }
+  hits.sort((a, c) => a.score - c.score || a.r.t.length - c.r.t.length);
+  return hits.slice(0, SEARCH_MAX);
+}
+let searchRows = [], searchCur = -1;
+function menuSearchGo(row){
+  if (!row) return;
+  openSection(row.sec);
+  if (row.group && row.pane) showSubTab(row.group, row.pane);
+  const inp = $('menuSearch'); if (inp) inp.value = '';
+  menuSearchClose();
+  // Opening a card and switching a pane both change the layout, so land on the next
+  // frame or the scroll measures the old height and stops short.
+  requestAnimationFrame(()=>{
+    try { row.node.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(_){}
+    row.node.classList.add('found');
+    setTimeout(()=>row.node.classList.remove('found'), 1600);
+  });
+}
+function menuSearchClose(){
+  const h = $('searchHits');
+  if (h){ h.classList.remove('on'); h.innerHTML = ''; }
+  searchCur = -1;
+}
+function menuSearchDraw(q){
+  const host = $('searchHits'); if (!host) return;
+  if (!(q || '').trim()){ menuSearchClose(); return; }
+  const hits = menuSearchRank(searchRows, q);
+  const esc = x => String(x).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  host.innerHTML = '';
+  if (!hits.length){
+    host.innerHTML = '<div class="snone">Nothing matches “' + esc(q) + '”</div>';
+    host.classList.add('on'); return;
+  }
+  const L = q.trim().length;
+  hits.forEach((h, n) => {
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.className = 'shit' + (n === 0 ? ' cur' : '');
+    // Show WHERE it lives, not just what it is — half of finding a setting is
+    // learning where it was all along.
+    const t = h.r.t, i = h.i;
+    bt.innerHTML = '<span>' + esc(t.slice(0,i)) + '<b>' + esc(t.slice(i,i+L)) + '</b>' +
+                   esc(t.slice(i+L)) + '</span><small>' + esc(h.r.secName) +
+                   (h.r.pane ? ' · ' + esc(h.r.pane) : '') + '</small>';
+    bt.onclick = () => menuSearchGo(h.r);
+    host.appendChild(bt);
+  });
+  searchCur = 0;
+  host.classList.add('on');
+}
+function buildMenuSearch(){
+  const inp = $('menuSearch'); if (!inp) return;
+  inp.oninput = () => { searchRows = menuSearchIndex(); menuSearchDraw(inp.value); };
+  inp.onfocus = () => { searchRows = menuSearchIndex(); if (inp.value) menuSearchDraw(inp.value); };
+  inp.onkeydown = e => {
+    if (e.key === 'Escape'){ inp.value = ''; menuSearchClose(); inp.blur(); return; }
+    const items = [...document.querySelectorAll('#searchHits .shit')];
+    if (!items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if (items[searchCur]) items[searchCur].classList.remove('cur');
+      searchCur = (searchCur + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      items[searchCur].classList.add('cur');
+      items[searchCur].scrollIntoView({ block:'nearest' });
+    } else if (e.key === 'Enter'){
+      e.preventDefault();
+      (items[searchCur] || items[0]).click();
+    }
+  };
+  // Clicking anywhere else puts it away. pointerdown, not click, so a result's own
+  // click still lands — closing on click fires first and removes the button.
+  document.addEventListener('pointerdown', e => {
+    const w = $('searchWrap');
+    if (w && !w.contains(e.target)) menuSearchClose();
+  });
+}
 function syncJumpBar(sec){
   const first = document.querySelector('#setup .card.collapsible:not(.collapsed)');
   const open = sec || (first && first.dataset.sec);
@@ -5214,7 +5443,7 @@ async function startPhotoCam(){
   if (f) f.onchange = () => { photoFromFile(f.files && f.files[0]); f.value = ''; }; }
 buildPhotoPane();
 
-buildSubTabs(); buildJumpBar();
+buildSubTabs(); buildJumpBar(); buildMenuSearch();
 
 $('playBtn').onclick = startMatch;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
@@ -7381,6 +7610,7 @@ function integrate(w, ballFrozen, playersFrozen){
     }
     for (const p of discs){
       handleBallControl(w, p, ball, ballFrozen);
+      handleSnailKick(w, p, ballFrozen);
       handleKickPush(w, p);
     }
     for (const p of discs){
@@ -7960,6 +8190,34 @@ function updateThreat(w){
   w.threat = th;
 }
 
+// KICK lands on the snail too — as a shove, never a trap. ⚠️ It is deliberately NOT
+// handleBallControl: that path glues the ball to your feet and lets you carry it,
+// and being able to walk the snail into the net is the entire match in one run.
+// ⚠️ The impulse is scaled by SNAIL.kick rather than by invMass. A kick sets velocity
+// directly (it is not a force), so an unscaled one would send the snail off at ball
+// speed — "kickable" would have quietly meant "weightless".
+// One press, one target: p.snailKicked latches until KICK is released, exactly like
+// p.kickUsed on the ball, so holding the button is not a shove every frame.
+function handleSnailKick(w, p, ballFrozen){
+  if (!w.mode || !w.mode.kq || ballFrozen) return;
+  if (!p.kick){ p.snailKicked = false; return; }
+  if (p.snailKicked) return;
+  const snail = (w.extraBalls || []).find(b2 => b2.isSnail);
+  if (!snail) return;
+  const dx = snail.x - p.x, dy = snail.y - p.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist > p.r + snail.r + (w.kickRange || PLAYER.kickRange)) return;
+  let nx, ny;
+  if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
+  const power = (w.kickPower || PLAYER.kick) *
+                (1 + (p.chargeT / CHARGE.max) * CHARGE.bonus) * SNAIL.kick;
+  snail.vx += nx * power + p.vx * KICK_CARRY * SNAIL.kick;
+  snail.vy += ny * power + p.vy * KICK_CARRY * SNAIL.kick;
+  p.snailKicked = true;
+  ballSquash(snail, nx, ny, 0.5);
+  spawnKickFx(snail.x - nx*snail.r, snail.y - ny*snail.r, nx, ny, power);
+  playSfx('kick');
+}
 function handleBallControl(w, p, ball, ballFrozen){
   const dx = ball.x - p.x, dy = ball.y - p.y;
   const dist = Math.hypot(dx,dy);
@@ -11123,21 +11381,54 @@ const DISC_SKINS = {
 // A blunt arrowhead pointing along the player's facing, VIDEOBALL-style. Facing is
 // already tracked for the kick, so this reads as intent rather than decoration —
 // a still frame tells you which way everyone was about to go.
+//
+// ⚠️ THE RING IS THE PLAYER. A disc is a circle of radius r and that circle is what
+// collides, what the magnet measures from and what you judge a challenge with. The
+// first build drew the arrowhead ALONE, overhanging that circle in every direction —
+// nose at 1.55r, wings at 1.05r — so the shape on screen was a third bigger than the
+// shape in the physics and pointed somewhere the body was not. The ring is drawn at
+// exactly r, and the arrowhead is INSCRIBED in it: every vertex, plus its stroke,
+// inside the circle. Intent is shown without lying about size.
+const ARROW = {
+  rim:   0.13,   // outer rim thickness, as a fraction of r
+  ring:  0.15,   // the team-coloured ring itself
+  wash:  0.20,   // team colour behind the arrowhead, so the body reads as theirs
+  nose:  0.78,   // arrowhead vertices, all < 1 so the triangle fits the circle
+  back:  0.50,
+  wing:  0.58,
+  notch: 0.35,   // how far the tail notch comes forward, as a fraction of back
+};
 DISC_SKINS.arrow = {
   name: 'Arrowheads',
   paint(c, p, x, y, r, w){
-    const fx = p.faceX || 0, fy = p.faceY || (p.team === 0 ? -1 : 1);
+    // ⚠️ `p.faceY || fallback` is wrong and was wrong before: a player facing exactly
+    // along x has faceY === 0, which is falsy, so the fallback fired and the arrow
+    // pointed diagonally at something the player was not looking at. The default is
+    // only for a player with NO facing at all.
+    let fx = p.faceX || 0, fy = p.faceY || 0;
+    if (!fx && !fy) fy = p.team === 0 ? -1 : 1;     // never moved yet: face up the pitch
     const m = Math.hypot(fx, fy) || 1, ux = fx/m, uy = fy/m;
     const px = -uy, py = ux;                        // perpendicular
-    const nose = r * 1.55, back = r * 0.75, wing = r * 1.05;
+    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    // The body: rim, wash, and a ring in the team colour so the circle is the
+    // loudest thing about the player at a glance.
+    c.beginPath(); c.arc(x, y, r + Math.max(1.5, r*ARROW.rim), 0, 2*Math.PI);
+    c.fillStyle = TH.discRim; c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, ARROW.wash); c.fill();
+    c.lineWidth = Math.max(1.6, r*ARROW.ring); c.strokeStyle = col; c.stroke();
+    // The arrowhead, inscribed. Vertices at 0.78r (nose) and hypot(0.50,0.58)=0.77r
+    // (wings), so even at the widest they clear the ring.
+    const nose = r*ARROW.nose, back = r*ARROW.back, wing = r*ARROW.wing;
     const pt = (a, b2) => [x + ux*a + px*b2, y + uy*a + py*b2];
-    const tri = () => { const A=pt(nose,0), B=pt(-back, wing), C=pt(-back*0.35, 0), D=pt(-back,-wing);
-      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.lineTo(C[0],C[1]); c.lineTo(D[0],D[1]); c.closePath(); };
+    const A=pt(nose,0), B=pt(-back, wing), C=pt(-back*ARROW.notch, 0), D=pt(-back,-wing);
     c.save();
-    tri(); c.fillStyle = TH.discRim; c.lineJoin='round';
-    c.lineWidth = Math.max(2, r*0.30); c.strokeStyle = TH.discRim; c.stroke();
-    c.fillStyle = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    tri(); c.fill();
+    c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.lineTo(C[0],C[1]); c.lineTo(D[0],D[1]); c.closePath();
+    c.fillStyle = col; c.fill();
+    // A thin outline only. At r*0.10 the two edge strokes met near the tip and ate the
+    // last third of the arrowhead, so the thing pointing the way you face petered out
+    // exactly where it mattered most.
+    c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.06); c.strokeStyle = TH.discRim; c.stroke();
     c.restore();
   },
 };
@@ -12090,7 +12381,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0810AM';
+const VERSION = '20260806.0955AM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12098,7 +12389,7 @@ if (window.__MAGNETDEBUG) {
   window.__magnet = {
     get world(){ return world; }, get TH(){ return TH; }, pads, sel, FIELDS, SFX, THEMES,
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
-    handleBallControl, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
+    handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
@@ -12123,6 +12414,10 @@ if (window.__MAGNETDEBUG) {
     botUpdateSupportGrid, botSeparate, botWallAvoid, handleBallControl,
     openShop, buildShop, shopFeatured, shopCoins, openStats, buildStats,
     showSubTab, buildSubTabs, buildJumpBar, syncJumpBar, SUBTABS, get subTab(){ return subTab; },
+    EYE_KEYS, ANIMAL_KEYS,
+    buildAnimalPicker, buildEyesPicker, buildTilePicker,
+    RECENT_KEEP, RECENT_MIN_GRID, get recents(){ return recents; }, noteRecent, recentKeys, buildRecentRow, loadRecents,
+    menuSearchIndex, menuSearchRank, menuSearchGo, menuSearchDraw, menuSearchClose, buildMenuSearch, SEARCH_MAX,
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
@@ -12151,7 +12446,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,

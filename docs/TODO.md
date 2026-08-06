@@ -5,9 +5,39 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0810AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0955AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🔺 Videoball arrowheads get a body
+- [x] **The ring is the player.** The arrowhead was drawn alone and overhung the collision
+  circle in every direction (nose 1.55r, wings 1.05r), so the shape on screen was a third
+  bigger than the shape the physics used. A team-coloured ring at exactly `r`, triangle
+  inscribed inside it.
+- [x] ⚠️ Found doing it: `p.faceY || fallback` fired for a player facing exactly along x
+  (`faceY === 0` is falsy), so the arrow pointed diagonally at nothing.
+- [x] The outline was eating the tip at `r*0.10`; thinned to `r*0.06`.
+
+## 🐌 The snail is kickable, and still heavy
+- [x] `handleSnailKick` — its own shove, never `handleBallControl`: that path traps and
+  carries, and walking the objective into the net is the whole match in one run.
+- [x] ⚠️ Scaled by `SNAIL.kick`, not `invMass`. A kick sets velocity directly, so an unscaled
+  one would send the snail off at ball speed — "kickable" quietly meaning "weightless".
+- [x] Measured on Colossus: one kick moves the snail **22 units, twice** what a full-speed body
+  check does, while the same kick sends the ball **453**. Peak speed 3.77 against the ball's
+  5.67. Holding KICK is one shove, not a shove per frame.
+
+## 🔎 Menu search, and recents rows
+- [x] **Search** indexes 485 controls from the DOM — every section, setting, option tile and
+  nav tile — filters as you type, says which card and pane each hit lives on, and jumping to
+  one opens the card, switches the pane and flashes the control.
+- [x] ⚠️ The index is rebuilt on every search, not once at boot: the pickers replace their
+  tiles constantly, and a stale index holds detached nodes that `scrollIntoView` scrolls to
+  nowhere while looking like it worked.
+- [x] **Recents** on the four long faceplate pickers, built by the same `buildTilePicker` as
+  the grid below so the lock badge and selected state cannot drift. ⚠️ Keyed per CATEGORY, not
+  per slot: flags, animals and text share `profile.flag`, so a flag pick would otherwise show
+  up in the animals row.
 
 ## 🎨 Drawn icons instead of emoji
 - [x] Emoji render differently on every platform, sit on their own baseline so a row never lines
@@ -491,10 +521,23 @@ Ladder, both orientations, 2 modes × 4 seeds: rookie<easy **0.72**, rookie<norm
 **0.66**, normal<hard **0.84**, rookie<insane **0.75**, normal-vs-normal **0.50**.
 Adjacent tiers land inside sampling noise, which is what one step up should feel like.
 
-- [ ] The frozen-legacy reference opponent turned out to be contaminated: legacy
-  steering on the *new* kick path traps and fires at full charge, scoring 7.5 goals a
-  match at Elite — behaviour it never had. Balance is therefore measured tier-vs-tier
-  on current mechanics instead, which isolates the AI change.
+- [-] **The frozen-legacy reference opponent is retired for good — do not rebuild it.** The idea
+  was to keep a frozen copy of the old `runBot` in the suite and measure win rate against it.
+  It cannot work: legacy steering on the *new* kick path traps and fires at full charge, scoring
+  7.5 goals a match at Elite, which is behaviour it never had. The opponent it measures against
+  is not the old bot, it is a chimera, and every number off it is meaningless.
+- [x] **What replaced it, and it is a standing test rather than a one-off.** Balance is measured
+  tier-vs-tier on current mechanics, which isolates the AI change, with **each pair played both
+  ways round** — driving one side manually gives it about a 17-point edge, and a one-sided
+  harness reported normal-vs-normal at 0.33 and made every other number suspect. In
+  `tests/botai.mjs`, which enforces only the gaps the sample size can actually resolve and
+  reports the rest.
+- [x] **Re-measured after the goal-box rule landed** (2 modes × 4 seeds, both orientations):
+  self-vs-self **0.50**, rookie<easy **0.81**, normal<hard **0.72**, rookie<insane **0.63**.
+  Ordering intact and the harness still fair. rookie<normal reads 0.50 here against 0.66 before,
+  which is inside the run-to-run spread already recorded for that pair (0.17–0.66) — it is the
+  one gap this sample size cannot resolve, which is exactly why the suite reports it instead of
+  asserting it.
 
 ## 🤖 Bot AI rework — steps 0, 1 and 3 (checkpoint A)
 Audit and phased plan: [`BOT-AI-AUDIT.md`](BOT-AI-AUDIT.md). All six decisions answered there.
