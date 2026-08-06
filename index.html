@@ -4184,13 +4184,35 @@ function paintFace(c, x, y, r, o){
   }
   if (o.eyes!==false) (EYES[o.eyes] || EYES.googly).draw(c,x,y,r);
 }
+// The one place a cap is drawn. ⚠️ There were two — the pitch used -0.48r at 0.78r
+// type, the menu preview -0.5r at 0.72r — so the thing you picked and the thing you
+// played with were never quite the same mark, and moving one left the other behind.
+// CENTRED: pinned near the top edge it read as something floating above the player
+// rather than something they wear.
+function paintCap(c, x, y, r, capKey, color){
+  const cap = capKey && CAPS[capKey] && CAPS[capKey].emoji;
+  if (!cap) return;
+  c.save();
+  c.font = `${Math.round(r*0.78)}px sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.globalAlpha = 0.92;
+  // Centred means it lands ON the faceplate — a crown over a shirt number, a star
+  // over a flag. Outline it in the opposite ink so it reads as a mark worn on top
+  // rather than two symbols fighting for the same pixels.
+  const ink = pickTextColor(color || '#46d17a');
+  c.lineJoin = 'round';
+  c.lineWidth = Math.max(1.5, r*0.17);
+  c.strokeStyle = ink === '#ffffff' || ink === '#fff' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
+  c.strokeText(cap, x, y);
+  c.fillStyle = ink;
+  c.fillText(cap, x, y);
+  c.restore();
+}
 function drawDisc(c, cx, cy, r, o){
   c.beginPath(); c.arc(cx,cy,r+Math.max(2,r*0.16),0,7); c.fillStyle='#0a0d16'; c.fill();
   c.beginPath(); c.arc(cx,cy,r,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
   paintFace(c, cx, cy, r, o);
-  const cap = o.cap && CAPS[o.cap] && CAPS[o.cap].emoji;
-  if (cap){ c.font=`${Math.round(r*0.72)}px sans-serif`; c.textAlign='center'; c.textBaseline='middle';
-    c.fillStyle=pickTextColor(o.color||'#46d17a'); c.fillText(cap, cx, cy - r*0.5); }
+  paintCap(c, cx, cy, r, o.cap, o.color);
 }
 // On the pitch the two mow tones sit a few percent apart on purpose — at tile size
 // that reads as no pattern at all. Picker tiles push the lighter tone further from
@@ -6356,11 +6378,11 @@ function startMatch(){
     const t0 = [you];
     const t0names = pickNames(per-1, used);
     for(let i=0;i<per-1;i++)
-      t0.push(mkPlayer(0, t0names[i], teamTint(0, i+1), randCap(i), 'bot', shirtNo(i+2), randEyes(i)));
+      t0.push(mkPlayer(0, t0names[i], teamTint(0, i+1), BOT_CAP, 'bot', shirtNo(i+2), randEyes(i)));
     const t1 = [];
     const t1names = pickNames(per, used);
     for(let i=0;i<per;i++)
-      t1.push(mkPlayer(1, t1names[i], teamTint(1, i), randCap(i+per), 'bot', shirtNo(i+1), randEyes(i+per)));
+      t1.push(mkPlayer(1, t1names[i], teamTint(1, i), BOT_CAP, 'bot', shirtNo(i+1), randEyes(i+per)));
 
     // Duo mode: you steer BOTH of your players at once (same joystick + KICK).
     if (mode.duo){ for (const pl of t0){ pl.ctrl = 'human1'; pl.color = profile.color; } }
@@ -6520,7 +6542,11 @@ function teamTint(team, idx){
   const base = team===0 ? ['#e05a5a','#f07a5a','#e0805a'] : ['#5a7de0','#5aa0e0','#6b6be0'];
   return base[idx % base.length];
 }
-function randCap(i){ const k = Object.keys(CAPS); return k[(i+1)%k.length]; }
+// Bots wear NO cap. They used to cycle through the whole CAPS table, which put a
+// different hat on every disc on the pitch — busy, and it made a cap read as
+// decoration rather than as YOUR mark. Colour, shirt number and eyes still vary per
+// bot, so they remain individuals; the headgear is the player's alone.
+const BOT_CAP = 'none';
 // Names typed in settings, one per line, applied in seat order: your side first
 // (you, then team-mates), then the opposition. A blank line keeps whatever the
 // seat already had, so you can rename just the third bot if that's all you want.
@@ -7307,7 +7333,7 @@ function lobbyPlan(w){
 // A bot built to order when the mode's roster can't cover the side people chose.
 function spawnLobbyBot(w, team, seat, used){
   const nm = pickNames(1, used)[0] || ('Bot' + (seat+1));
-  return mkPlayer(team, nm, teamTint(team, seat), randCap(seat), 'bot', shirtNo(seat+1), randEyes(seat));
+  return mkPlayer(team, nm, teamTint(team, seat), BOT_CAP, 'bot', shirtNo(seat+1), randEyes(seat));
 }
 // Resolve the sides people picked, balance them with bots, and kick off.
 function lobbyStart(w){
@@ -10599,13 +10625,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // eyes — shared with the menu preview via paintFace().
     paintFace(ctx, x, y, r, p);
     // Cap marking pinned at the top of the head.
-    const cap = CAPS[p.cap] && CAPS[p.cap].emoji;
-    if (cap && r>7){
-      ctx.font = `${Math.round(r*0.78)}px sans-serif`;
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.globalAlpha = 0.92; ctx.fillStyle = pickTextColor(p.color);
-      ctx.fillText(cap, x, y - r*0.48); ctx.globalAlpha = 1;
-    }
+    if (r > 7) paintCap(ctx, x, y, r, p.cap, p.color);
     }
     // Colour-blind aid: distinguish teams by shape — team 0 solid white ring,
     // team 1 dashed white ring (readable regardless of hue).
@@ -10883,14 +10903,34 @@ function paintBallLook(c, x, y, r, rot, key, spot){
   look.draw(c, r, rot || 0);
   c.restore();
 }
+// ⚠️ The pattern has to be visible ON the ball, and a palette can pair the two badly.
+// Pool's cue ball is #f7f4ec with a #e8e2d2 spot — a contrast ratio of 1.18:1 — because
+// the cue ball look is PLAIN and the spot was never exercised by it. Pick any other
+// look on that palette and every pattern vanished: the ball, and every picker tile,
+// rendered as plain white with only the 3D shading showing. Every other palette is
+// 10.6:1 or better, which is why it went unnoticed.
+//
+// Same rule the themed inks already follow — measured, not eyeballed. The declared
+// ballSpot is kept when it is readable and nudged toward contrast when it isn't, so a
+// palette still looks like itself and Pool's plain cue ball is untouched.
+const BALL_SPOT_CONTRAST = 4.5;
+const ballInkCache = new Map();
+function ballSpotInk(P){
+  const k = (P.ball||'') + '|' + (P.ballSpot||'');
+  let v = ballInkCache.get(k);
+  if (v == null){ v = rgbToHex(readableInk(P.ballSpot, P.ball, BALL_SPOT_CONTRAST));
+                  ballInkCache.set(k, v); }
+  return v;
+}
 // One ball, start to finish, on any context — rim, body, pattern, 3D shade. The
 // picker tiles call this too, so they are the ball rather than a picture of it.
 function paintBall(c, x, y, r, rot, key, pal){
   const P = pal || TH;
+  const spot = ballSpotInk(P);
   c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
-  if (r >= 5) paintBallLook(c, x, y, r, rot, key, P.ballSpot);
-  else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=P.ballSpot; c.fill(); }
+  if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot);
+  else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=spot; c.fill(); }
   const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
   g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
   g.addColorStop(1, 'rgba(0,0,0,0.30)');
@@ -11326,7 +11366,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0300PM';
+const VERSION = '20260805.0430PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11370,7 +11410,7 @@ if (window.__MAGNETDEBUG) {
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
-    paintBall, buildBallLookPick,
+    paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     resetKickoff, MODES,
@@ -11399,7 +11439,7 @@ if (window.__MAGNETDEBUG) {
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
-    teamTint, randCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
+    teamTint, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,

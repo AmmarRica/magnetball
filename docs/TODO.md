@@ -5,7 +5,26 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.0300PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260805.0430PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## ⚪ Every ball looked white on the Pool theme
+- [x] **1.18:1.** Pool pairs a `#f7f4ec` cue ball with a `#e8e2d2` spot, so every pattern was
+  invisible and the ball — and every picker tile — read as plain white with only the 3D
+  shading showing. The cue ball look is *plain*, so the spot was never exercised by the
+  bundle that ships it. Every other palette is 10.6:1 or better.
+- [x] The pattern colour is now **measured against the ball** through the same `readableInk`
+  the themed text already uses. A readable spot is left alone; Pool goes 1.18 → 5.23.
+
+## 🎩 Caps
+- [x] **Bots don't wear them.** Cycling the whole CAPS table put a different hat on every
+  disc — busy, and it made a cap read as decoration rather than as YOUR mark.
+- [x] **Centred on the player**, not riding the top edge, and outlined in the opposite ink so
+  it reads over a flag or a shirt number.
+- [x] ⚠️ There were **two** cap draws with different offsets and different type scales — the
+  pitch and the menu preview — so the mark you picked was never quite the one you played
+  with. One `paintCap()` now.
 
 ---
 
