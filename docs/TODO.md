@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0430PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0505PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -58,10 +58,16 @@ _Current build: **v20260806.0430PM** (shown under the title; bump `VERSION` in `
   3,963 characters still in the DOM. Gameplay-affecting help (`hint always`) stays open.
   Never persisted. ⚠️ Wired into `buildSettings()` too: six paragraphs are created there and a
   boot-only pass left them permanently expanded.
-- [ ] 1. Touch players cannot start a match (confirmed hard block in cocktail).
+- [x] **1. Touch players can start a match.** ⚠️ Confirmed a HARD block first, not assumed:
+  in cocktail an engaged touch player never left the lobby in 90 simulated seconds, because
+  the idle auto-start resets on movement. On-screen START, opt-in via a third Warm-up lobby
+  option (`Controllers` / `Everyone` / `Skip`); the default is the old behaviour exactly.
+  Routes through `lobbyStart()`, so it cannot disagree with the on-screen side preview.
 - [ ] 2. Dead controls · 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
 - [ ] 7. Search: help text, synonyms, fuzzy · 8. Reduce motion · 10. Polish batch
-- [ ] 9. Match flow timers — two questions outstanding for the owner.
+- [ ] 9. Match flow timers. Owner's answers: post-match timer STAYS wall-clock (the stats
+  screen is a paused state, so stepping the sim behind it is risk with no determinism gain);
+  post-match goes to DEMO, with a flashing DEMO tag bottom-right, keeping court and theme.
 
 ## 🦐 Shrimp theme, and a ring on every player
 - [x] **Rockpool** — full bundle: a sand seabed with ripples and shells, an underwater palette,

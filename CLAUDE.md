@@ -258,6 +258,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   are pushed in for real.
 - **Replays:** rolling `repBuf`; `repOnGoal` freezes it; `playReplay` re-renders (skippable);
   `saveClip` records via `MediaRecorder`.
+- **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
+  ⚠️ Start used to be bound to a gamepad button or the Enter key and nothing else, so in
+  cocktail — which forces the lobby whatever is connected — a touch-only player could not
+  leave it: the idle auto-start resets on movement, and an engaged player sat there for 90
+  simulated seconds. The button is **opt-in** (`sel.lobby === 'touch'`); the default
+  `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
+  the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
+  `tests/touchstart.mjs`.
 - **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that

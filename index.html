@@ -214,6 +214,16 @@
     .infobtn.on { color: var(--cyan); opacity: 1; background: rgba(33,230,255,.12); }
     .infobtn .ic { width: 15px; height: 15px; }
     .hint.folded { display: none; }
+    /* Lobby Start. Sits above the thumbstick band so it is never under a thumb that
+       is busy steering, and centred so it reads as the one thing to press. */
+    #lobbyStartBtn { position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(70px + 78px); z-index: 9;
+      font-family: var(--pix); font-size: 15px; letter-spacing: 1px;
+      color: var(--green); background: rgba(53,255,135,0.12);
+      border: 2px solid var(--green); border-radius: 12px; padding: 13px 30px;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+    #lobbyStartBtn:active { transform: translateX(-50%) translateY(1px); }
+    #lobbyStartBtn.hidden { display: none; }
     #searchWrap { position: relative; width: 100%; max-width: 460px; margin: 0 0 6px; }
     #menuSearch { width: 100%; box-sizing: border-box; font-family: var(--pix); font-size: 12px;
       color: var(--text); background: rgba(127,127,127,.10); border: 1px solid var(--edge);
@@ -997,6 +1007,13 @@
     <div class="hudside" id="hudRight">
       <button id="fsHudBtn" aria-label="Full screen">⛶</button>
     </div>
+    <!-- The lobby's Start, on screen. Start was bound to a gamepad button or the
+         Enter key, so a touch-only player in a warm-up lobby had no way out at all —
+         confirmed: 90 simulated seconds of an engaged touch player never left it,
+         because the idle auto-start resets on movement. Fixed position so it is
+         reachable in every layout, cocktail included, where the PITCH turns but the
+         screen does not. -->
+    <button id="lobbyStartBtn" class="hidden">START ▶</button>
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
       <button id="clipBtn">⇪ Save clip</button>
@@ -1099,9 +1116,9 @@
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
       <div style="height:14px"></div>
-      <label class="field">Warm-up lobby <small style="color:var(--muted)">(controllers only)</small></label>
+      <label class="field">Warm-up lobby</label>
       <div class="opts" id="lobbyPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up. <b>Controllers</b> warms up only when a pad is connected; <b>Everyone</b> warms up on touch and keyboard too, with an on-screen Start. A controller can still join at any point by pressing a button.</div>
       <div id="coopRow" class="hidden">
         <div style="height:14px"></div>
         <label class="field">Extra controllers <small id="coopInfo" style="color:var(--muted)"></small></label>
@@ -5889,6 +5906,7 @@ $('settingsBtn').onclick = () => {
   openLook('theme');
 };
 { const ob=$('openPanelBtn'); if (ob) ob.onclick = () => window.open(settingsUrl(), 'magnetball-settings'); }
+{ const lb=$('lobbyStartBtn'); if (lb) lb.onclick = onLobbyStartPress; }
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
@@ -6153,7 +6171,7 @@ function buildSettings(){
   }
   const lp=$('lobbyPick');
   if (lp){ lp.innerHTML='';
-    [['on','🧍 On'],['off','⏭ Skip']].forEach(([k,lab])=>{
+    [['on','Controllers'],['touch','Everyone'],['off','Skip']].forEach(([k,lab])=>{
       const on=(sel.lobby||'on')===k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{ sel.lobby=k; saveSel(); buildSettings(); };
@@ -7834,6 +7852,9 @@ function lobbyWanted(w){
   if (!w || w.train || w.tutorial || w.drillMode || w.demo || w.watch) return false;
   if (sel.lobby === 'off') return false;
   if (sel.display === 'cocktail') return true;
+  // OPT-IN for touch and keyboard. Default is 'controllers', which is exactly the
+  // old behaviour — a pad has to be present or the lobby is skipped entirely.
+  if (sel.lobby === 'touch') return true;
   return w.players.some(p => p.ctrl === 'gamepad');
 }
 // Everyone a human is driving, in seat order. The FIRST one is the host.
@@ -8120,6 +8141,33 @@ function padFor(p){
 // them ready (which is only ever a display — nobody is blocked by someone idling).
 const START_BTN = 9;                       // standard mapping: Start / Options / +
 let _startPrev = {};
+// The on-screen Start, and the one place that decides whether it is showing.
+// ⚠️ It goes through lobbyStart() — the SAME path the gamepad Start and the idle
+// auto-start use — so a touch player gets the plan lobbyPlan drew, not a second
+// implementation of "who is on which side" that could disagree with the preview.
+// ⚠️ Cocktail seats calibrate first, exactly as the pad path does: pressing Start
+// before you have told the game which way is up would start a match you cannot steer.
+function lobbyStartVisible(){
+  return !!(world && world.state === 'warmup' && world.lobby && !world.lobby.calib &&
+            !PANEL && running);
+}
+function syncLobbyStartBtn(){
+  const bt = $('lobbyStartBtn'); if (!bt) return;
+  const show = lobbyStartVisible();
+  if (bt.classList.contains('hidden') === show) bt.classList.toggle('hidden', !show);
+  if (show){
+    const host = lobbyHost(world);
+    const needCal = sel.display === 'cocktail' && host && !host.calibrated;
+    const want = needCal ? 'SET UP ▶' : 'START ▶';
+    if (bt.textContent !== want) bt.textContent = want;
+  }
+}
+function onLobbyStartPress(){
+  if (!lobbyStartVisible()) return;
+  const w = world, host = lobbyHost(w);
+  if (sel.display === 'cocktail' && host && !host.calibrated){ beginCalibration(w, host); return; }
+  lobbyStart(w);
+}
 function pollLobbyStart(w){
   if (!w || w.state !== 'warmup' || !w.lobby) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
@@ -10643,6 +10691,7 @@ function render(){
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
+  syncLobbyStartBtn();     // idempotent: only touches the DOM when the state changes
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
@@ -12862,7 +12911,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0430PM';
+const VERSION = '20260806.0505PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12906,6 +12955,7 @@ if (window.__MAGNETDEBUG) {
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
+    lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
