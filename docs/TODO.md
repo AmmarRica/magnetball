@@ -5,9 +5,70 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0330AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0640AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🧤 Goal box: one keeper, one attacker
+- [x] A team could park its whole defence on its own line, and the attack could bury the keeper
+  under a scrum from the other side. One of each inside a goal box now (`sel.boxRule`, on by
+  default, off-able like the kickoff rule). Eased out with the same shove-and-backstop shape as
+  `applyKickoffLine` — being turned back reads as something acting on you.
+- [x] The box is the region the pitch already **draws**, read from `w.bounds`. A rule enforced
+  anywhere else is worse than no rule: you would be pushed off a line that is not there.
+- [x] ⚠️ The slot is sticky. Recomputing "who is deepest" every step made two defenders trade it
+  and shove each other out on alternate frames.
+- [x] Measured effect on scoring: **22 goals vs 19** across eight 3-minute bot 4v4s, on vs off —
+  it slightly *helps* scoring, because the goalmouth stops being a car park.
+
+## 🐛 A lone player's side pick was thrown away
+- [x] **Reported and fixed.** `lobbyPlan` auto-assigned team 0 whenever there was exactly one
+  human, so a solo player could never end up on team 1 however far they walked into that half.
+  Standing **on** the halfway line is not a pick (`LOBBY.neutral`) — walking into a half is.
+- [x] And the on-screen preview was computed separately from `lobbySideOf`, so it happily showed
+  the player on the half they were standing in while Start put them on the other. It reads
+  `lobbyPlan` now, which is what CLAUDE.md already claimed. The old test had encoded the bug.
+
+## 🫐 Bots contest the berries
+- [x] At most one runner a side, never the chaser or the goalie, never while defending, and only
+  finishing a berry already within `BOT.berryLastLeg` of the hive.
+- [x] ⚠️ **Three tunings to get the balance right**, recorded so it is not relitigated. Ungated,
+  bots drove berries the length of the pitch and **7 of 8 matches ended on a full hive inside 90
+  seconds**. A phase gate barely moved it. Raising the cell count only made the same foregone
+  race longer. What worked was restricting bots to the LAST LEG and spawning berries in the
+  middle third. Final: `BERRY.cells` 12 (two rows of 6), **4 of 8** matches decided on the hive
+  at the default 5-minute length, all after 220 seconds, with goals per match **up** to 3.75.
+- [x] ⚠️ A bot given the spot *behind* a berry walks up, stops one radius short and admires it —
+  `botArrive` decelerates into its target. The target flips to the far side once lined up, which
+  is exactly how the ball's strike waypoint works.
+- [x] ⚠️ A runner promoted to chaser kept its berry and was invisible to the cap, so the side
+  assigned a second. Counted across the whole squad now.
+
+## 🔒 Determinism audit closed, and the rule made literal
+- [x] **Decision: same-engine reproducibility.** A pinned seed reproduces a match bit-exactly in
+  one browser; cross-engine equality is not a goal. Fixed-point work (Phases 2–3) parked, not
+  pending. All eight §8 questions answered and recorded.
+- [x] `tests/determinism.mjs` turns Checkpoint 1 into a permanent guard: the whole world hashed
+  at frame 3,600 across two runs on one seed, in 4v4 and Killer Queen.
+- [x] ⚠️ It immediately found two leaks, which is the point of a throwing stub over a counter:
+  `spawnKickFx` and the audio noise fill both reached `Math.random` from inside `step()`. Both
+  now have their own seeded stream (`fxRnd`, `audRnd`) — not `w.rng`, or how many sparks flew
+  would perturb every bot decision after it. The rule is now literally true.
+
+## 🔊 The noise() main-thread stall
+- [x] **Fixed.** `noise()` filled a fresh `AudioBuffer` with `Math.random` on every call, and the
+  loudest sounds call it most: the Ovation cheer is 27 calls. One pre-generated 3-second buffer,
+  windowed with `start(when, offset, duration)`. **2.2ms → 0.2ms** median for the cheer's buffer
+  work, with a different window each call so two noises in a row are not the same noise.
+
+## 🐉 Leviathan, and courts you can actually see
+- [x] **Leviathan** — 2640 × 4640, four times Colossus and sixteen times Giant. 20.3s to run its
+  length. Zero ball escapes over 90 seconds.
+- [x] **`cam.body` size floor.** At that scale the whole pitch still has to fit on screen, so a
+  player disc came out **2.25 pixels** — every disc the same dot, nobody able to find their own
+  player. Discs and the ball now floor at `MIN_BODY_PX` through one shared multiplier.
+  ⚠️ Render only, and proven so: same seed, floor on vs forced to 1, world bit-identical.
+  Exactly 1 on any ordinary court. Colossus benefits too (1.57×).
 
 ## 🫐 Killer Queen berries and the hive
 - [x] **Six floaty purple berries** you shepherd into the end you attack. Light (`invMass 2.6`)

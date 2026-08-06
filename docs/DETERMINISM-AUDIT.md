@@ -8,13 +8,32 @@ Nothing has been refactored — this is the report only.
 
 ---
 
-> **Status (updated).** Phase 1's headline item is **done**: the bot AI's `rand()` was
-> `Math.random()` and is now `w.rng` — `mulberry32`, seeded per match from `w.seed`, set outside
-> the sim at `startMatch` and pinnable with `setMatchSeed(n)`. `tests/botai.mjs` proves it by
-> monkey-patching `Math.random` during a match and asserting the AI never reaches for it, and by
-> replaying a pinned seed to a bit-identical input trace. **Everything else below still stands** —
-> in particular §3b (transcendental math) is untouched, so this is *reproducible on one engine*,
-> not yet bit-exact across engines. The eight decisions in §8 are still open.
+> ## ✅ CLOSED — the bar is **same-engine reproducibility**, and it is met.
+>
+> The owner's decision (2026-08-06): replays and matches must reproduce **exactly on one
+> browser engine**. Cross-engine bit-equality is explicitly **not** a goal, so §6's fixed-point
+> work and Phases 2–3 below are **parked, not pending**. They are kept as a record of what the
+> job would involve if peer-to-peer lockstep is ever wanted; nothing in the codebase is waiting
+> on them.
+>
+> **What that buys, concretely.** A pinned seed plus the same inputs produce a bit-identical
+> match in the same browser: that is what replays, the idle demo, saved clips and every
+> determinism-sensitive test rely on, and all of them are single-engine by construction.
+>
+> **What it does not buy.** A match seed shared between Chrome and Firefox — or between Chrome
+> on Android and Chrome on Linux — may diverge, because §3b's transcendentals are
+> implementation-approximated. Do not build a feature that assumes otherwise. If P2P lockstep
+> is ever on the table, this decision is the first thing to revisit.
+>
+> **What still binds, and is enforced by tests.** The seeded-PRNG rule: AI randomness goes
+> through `w.rng`, and `Math.random` is never called from inside `step()`. `tests/botai.mjs`
+> monkey-patches `Math.random` during a match and asserts the AI never reaches for it;
+> `tests/determinism.mjs` hashes the whole world at frame 3,600 across two runs on one seed and
+> requires them identical — Checkpoint 1 below, standing as a permanent regression guard rather
+> than a one-off milestone. `tests/kqberry.mjs` holds the same line for berry spawns.
+>
+> Everything below §1 is the original Phase 0 report, unedited. It is still an accurate
+> description of the engine; only the *plan* changed.
 
 ## 1. Is the simulation separated from rendering?
 
@@ -227,7 +246,7 @@ damping compounds it 60 times a second.
 
 ## 7. Phased plan with independently verifiable checkpoints
 
-### Phase 1 — cheap wins (safe to do now, no netcode)
+### Phase 1 — cheap wins (safe to do now, no netcode)  — item 1 done, 2–5 parked with Phase 2
 1. ✅ **Done.** Seeded PRNG: `mulberry32` promoted to the sim, `w.rng` threaded through `runBot`
    and match setup. Record the seed at kickoff.
 2. Pull the side effects out of `step()`: it emits an **event list** (`goal`, `wall`,
@@ -245,7 +264,7 @@ damping compounds it 60 times a second.
 > test run stays green. Verifiable by you: `node tests/run.mjs` plus a new
 > `determinism` suite printing the frame-3600 hash.
 
-### Phase 2 — fixed-point core
+### Phase 2 — fixed-point core  ⏸ PARKED (see §8.1)
 6. Fixed-point primitives module (add/sub/mul/div/sqrt/sin/cos/atan2/clamp/vec).
 7. Convert state to `Int32Array` SoA; convert integrator, collisions, magnet/trap,
    bot AI. Rendering converts at the boundary only.
@@ -255,7 +274,7 @@ damping compounds it 60 times a second.
 > Chrome Android and Firefox**, at frames 600 / 3,600 / 18,000. This is the one that
 > actually proves cross-machine determinism.
 
-### Phase 3 — lockstep readiness
+### Phase 3 — lockstep readiness  ⏸ PARKED (see §8.1)
 9. Per-frame input struct, frame-numbered, bit-packed (dx/dy quantised to 8 bits
    each + button bits ≈ 3 bytes/frame/player).
 10. Configurable input delay buffer, default 2 frames.
@@ -266,7 +285,7 @@ damping compounds it 60 times a second.
 > deliberately corrupting one peer's state is detected within N frames and names the
 > exact frame.
 
-### Phase 4 — replay
+### Phase 4 — replay  ⏸ PARKED (see §8.5)
 12. Match log: `{seed, config, inputs[], snapshots[]}` with a full snapshot every
     ~2s for seeking and drift safety.
 13. Headless entry point running the sim with no DOM, so frames can be piped to a
@@ -280,25 +299,30 @@ snapshots is exactly the shape rollback wants later.
 
 ---
 
-## 8. Decisions needed from you
+## 8. Decisions taken
 
-1. **Determinism bar.** Bit-exact across *engines* (Chrome + Firefox + Safari) means
-   Phase 2 is mandatory. If every peer is Chromium you *might* survive on floats —
-   but not reliably, because V8 delegates some transcendentals to the platform libm,
-   so Android and Linux can still differ. My recommendation is to do Phase 2.
-2. **Juice in netplay.** Slow-mo, hit-stop and `matchSpeed` currently change how many
-   sim steps run per second. Make them render-only, or disable them in multiplayer?
-3. **Bots in P2P matches.** They're deterministic once seeded — do you want them in
-   netplay at all, or humans only?
-4. **The wear layer** (mud churn / ice cuts) is stamped from `integrate()` into a
-   canvas. It's purely cosmetic — I'd move it to the render side and drive it from
-   the emitted event list. Confirm that's fine.
-5. **Existing replays.** `repBuf` currently records rendered *snapshots*. Keep it as
-   the "instant replay" feature and add the input-log format alongside, or replace
-   it outright?
-6. **Input delay default.** 2 frames (~33ms) as you suggested — fixed, or exposed as
-   a per-match setting?
-7. **Q16.16** — confirm, or say if you'd rather trade resolution for range.
-8. **Scope of the sim boundary.** Does the sim own match state only (score, clock,
-   state machine), or also progression side effects like `recordResult`? I'd keep
-   progression strictly outside.
+Settled 2026-08-06. Recorded here so the next person does not reopen them by accident.
+
+1. **Determinism bar → same engine only.** Not bit-exact across Chrome / Firefox / Safari, and
+   not across platforms within Chromium. Phase 2 is parked. This is the decision every other
+   one below follows from.
+2. **Juice in netplay → moot.** Slow-mo, hit-stop and `matchSpeed` change how many sim steps
+   run per second, which would matter in lockstep. There is no lockstep, so they stay exactly
+   as they are. If netplay ever happens, this is the second thing to fix after §3b.
+3. **Bots in P2P → moot.** No P2P. Bots stay seeded and deterministic regardless, because
+   replays and tests depend on it.
+4. **The wear layer stays in `integrate()`.** It is cosmetic and stamping it from the sim costs
+   nothing without netcode. Moving it would be pure churn.
+5. **Replays stay snapshot-based.** `repBuf` records rendered snapshots and keeps doing so. An
+   input-log format only pays for itself with lockstep or with cross-engine playback, and
+   neither is a goal.
+6. **Input delay → moot.** No rollback, no delay to configure.
+7. **Q16.16 → moot.** No fixed-point conversion.
+8. **The sim boundary holds where it is:** match state inside, progression (`recordResult`,
+   RP, MMR, unlocks) strictly outside. That was already true and is worth keeping true.
+
+### The one rule that survived all of this
+
+**Never call `Math.random` from inside `step()`.** Everything the single-engine guarantee is
+worth rests on that one line, and it is the only part of this document that is enforced rather
+than merely written down.

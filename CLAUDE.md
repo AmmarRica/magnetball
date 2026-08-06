@@ -65,6 +65,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   came from*, not what the whole possession looked like. Advanced in `advanceTrails`
   next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
   streak instead of 190.
+- **Body size floor:** `cam.body` (`MIN_BODY_PX`). On the huge courts the whole pitch must fit
+  on screen, so `cam.s` falls until a player disc is **2.25px** — every disc the same dot. Discs
+  and the ball are drawn at `MIN_BODY_PX` or their true size, whichever is larger, through ONE
+  shared multiplier so they stay in proportion. ⚠️ **Render only** — physics, kick range, hit
+  tests and bots all read `p.r`, and `tests/bigcourt.mjs` steps the same seed with the floor on
+  and forced to 1 and requires the world bit-identical. Exactly `1` on any ordinary court.
+- **Audio:** ⚠️ **one pre-generated noise buffer**, windowed with `start(when, offset, duration)`.
+  `noise()` used to fill a fresh `AudioBuffer` with `Math.random` on every call, and the loudest
+  sounds call it most — the Ovation cheer is 27 calls, costing 2.2ms median on the main thread at
+  exactly the moment a goal goes in (0.2ms now). It is filled from a seeded PRNG, not
+  `Math.random`, because `noise` is reachable from inside `step()`.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -141,7 +152,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `integrate`, the ball-vs-ball pass, `checkGoal` and the draw.
   ⚠️ **Spawn after `botInit`** — that is where `w.rng` is seeded, and `placeBerry` has no
   `Math.random` fallback on purpose: a fallback would go non-deterministic silently.
-  The float bob advances in `stepBerries`, never in a draw (the trails rule). `tests/kqberry.mjs`.
+  The float bob advances in `stepBerries`, never in a draw (the trails rule).
+  ⚠️ **Bots finish berry runs, they do not courier them.** `botAssignBerry` gives at most
+  `BOT.berryRunners` (1) bot a side a berry, never the chaser or the goalie, never while
+  defending, and only one already inside `BOT.berryLastLeg` of the hive. Ungated they drove
+  berries the length of the pitch and **7 of 8 bot matches ended on a full hive inside 90
+  seconds** with the ball barely involved; raising the cell count only made the same foregone
+  race longer. A runner targets the far side of the berry once lined up — targeting the spot
+  *behind* it makes `botArrive` decelerate and the bot stands there admiring it.
+  `tests/kqberry.mjs`.
+- **Goal box occupancy (`sel.boxRule`):** one defender and one attacker inside a goal box at a
+  time, so nobody parks a wall in front of their keeper. The box is the region the pitch already
+  draws — net pocket plus its mirror — read from `w.bounds`, never re-derived, so the line you
+  are pushed off is the line on the grass. ⚠️ The slot is **sticky**: the holder keeps it until
+  they leave. Recomputing "who is deepest" every step made two defenders trade it and shove each
+  other out on alternate frames. Eased out like `applyKickoffLine`, with the same hard backstop.
+  `tests/boxrule.mjs`.
 - **Bots (AI-only layer):** `runBot(w,p)` in four layers — `botPhase` (attack/defend/transition)
   → `botAssignRoles` (chaser/support/defender/goalie, every `BOT.roleTicks` with a switch margin)
   → the per-bot decision → Layer-0 steering (`botArrive`, `botSeparate`, `botArcPoint`,
@@ -150,9 +176,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Bots may write **only** `inX/inY/faceX/faceY/kick` and their own `ai*` scratch fields; the
   kick impulse runs along player→ball, so a bot aims by *where it stands*, not by facing.
   `tests/botai.mjs` enforces both by diffing the whole player object.
-- **Determinism:** AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
-  outside the sim at `startMatch`). **Never call `Math.random` from inside `step()`.**
-  `setMatchSeed(n)` pins a match for tests. See `docs/DETERMINISM-AUDIT.md`.
+- **Determinism:** the bar is **same-engine reproducibility** and the audit is CLOSED at it
+  (`docs/DETERMINISM-AUDIT.md`) — a pinned seed reproduces a match bit-exactly in one browser;
+  cross-engine equality is explicitly not a goal, so the fixed-point work is parked. What still
+  binds: **never call `Math.random` from inside `step()`**. ⚠️ That rule is literal, and three
+  streams exist so it can stay literal — `w.rng` for the sim, `fxRnd` for particles (spawned
+  from `step()` but render-only; drawing from `w.rng` would make how many sparks flew perturb
+  every later bot decision), `audRnd` for sound jitter (a wall bounce plays a sound from inside
+  `step()`), plus `w.lobby.rng` and the pitch-wear LCG. `tests/determinism.mjs` traps a
+  violation with a **throwing** stub and hashes the whole world at frame 3,600 across two runs.
+  AI randomness goes through `w.rng` (`mulberry32`, seeded from `w.seed`, set
+  outside the sim at `startMatch`). `setMatchSeed(n)` pins a match for tests.
 - **Map votes:** a thumbs up/down after each match, keyed on **(field, players per side)** —
   `mapVoteKey(w)` — because a map plays nothing alike 1v1 and 6v6. The size comes from the
   bodies actually FIELDED, not `mode.per`, since the lobby can put six a side on a 4v4.
@@ -171,7 +205,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
   team *including when everyone picks the same one* (six pads on one half = 6v6 vs bots);
-  `spawnLobbyBot` builds bots to order when the mode's roster runs short. Bots the plan
+  `spawnLobbyBot` builds bots to order when the mode's roster runs short.
+  ⚠️ Standing **on** the halfway line is not a side pick — it is where everyone spawns
+  (`LOBBY.neutral`). Walking into a half is one. Without that distinction a lone player was
+  auto-assigned team 0 however far they walked, and the on-screen preview — computed separately
+  from `lobbySideOf` — happily showed them on the other half. The preview reads `lobbyPlan` now,
+  so it cannot disagree with what Start does. Bots the plan
   needs **walk on** to a random spot in the middle of their half and surplus ones walk off
   (`stepLobbyBots`, leaving faster than arriving), so the lobby shows the match you'd get
   rather than a row on the touchline — off `w.lobby.rng`, never `w.rng`, or how long someone

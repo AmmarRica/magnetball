@@ -90,9 +90,15 @@ const r = await p.evaluate(async ()=>{
   w.players.forEach(q=>{ q.x=1e4; q.y=1e4; });        // nothing in front of the goal
   w.ball.x=1e4; w.ball.y=1e4;
   berries(w).forEach(q=>{ q.x=1e4; q.y=1e4; });
-  const gh = w.field.goal/2, gap = (gh*2)/M.BERRY.cells;
-  const cellX = i => -gh + gap*(i+0.5);
-  const cellY = -w.bounds.halfL - w.bounds.net*0.5;   // top pocket, mid depth
+  // Mirror the draw's row layout rather than assuming one row — the hive is 12 cells
+  // in rows of BERRY.cellRow, and a probe that assumes a single row samples the grass.
+  const gh = w.field.goal/2;
+  const per = Math.min(M.BERRY.cellRow, M.BERRY.cells);
+  const rows = Math.ceil(M.BERRY.cells / per);
+  const gap = (gh*2)/per, rowGap = w.bounds.net/(rows+1);
+  const cellX = i => -gh + gap*((i % per)+0.5);
+  const cellRowY = i => -(w.bounds.halfL + rowGap*(((i/per)|0)+1));   // top pocket
+  const cellY = cellRowY(0);
   // ⚠️ Settle the camera first. computeCam() eases toward its target on every draw,
   // so the first render after a startMatch is a subpixel or two off where the next
   // one lands — enough to move a sample of a mark this small.
@@ -177,6 +183,43 @@ const r = await p.evaluate(async ()=>{
   M.step(w);
   o.stepDoesBob = bb.bob !== bobStart;
 
+  // ---- bots contest berries, without the mode becoming a delivery job -------
+  // ⚠️ THE BALANCE TRAP, recorded because three tunings went past it. An ungated
+  // runner drove berries the length of the pitch uncontested and 7 of 8 bot matches
+  // ended on a full hive inside 90 seconds with the ball barely involved. Raising
+  // the cell count only made the same foregone race longer; what fixed it was
+  // restricting a bot to FINISHING a berry already near the hive (BOT.berryLastLeg)
+  // and spawning them in the middle third. So this checks both directions: bots must
+  // bank berries at all, and a full hive must not be a formality.
+  const kqRun = (seed, secs) => {
+    const ww = start(seed); ww.players.forEach(q=>{ q.ctrl='bot'; });
+    let i = 0;
+    for (; i<60*secs && ww.forceWin == null && ww.state !== 'over'; i++) M.step(ww);
+    return { hive: ww.hive.slice(), goals: ww.score[0]+ww.score[1],
+             by: ww.forceWinBy || null, secs: Math.round(i/60) };
+  };
+  const runs = [1,2,3,4].map(s2 => kqRun(s2, 300));
+  o.botRuns = runs;
+  o.botsBankBerries = runs.some(x => x.hive[0] + x.hive[1] >= 6);
+  o.hiveNotAFormality = runs.every(x => x.by !== 'hive' || x.secs > 120);
+  o.footballStillHappens = runs.reduce((a,x)=>a+x.goals,0) >= runs.length;
+  // Only one runner a side, or the football collapses.
+  const ww = start(9); ww.players.forEach(q=>{ q.ctrl='bot'; });
+  let maxRunners = 0;
+  for (let i=0;i<60*60;i++){
+    M.step(ww);
+    for (const t of [0,1]) maxRunners = Math.max(maxRunners,
+      ww.players.filter(q=>q.team===t && q.aiBerry).length);
+  }
+  o.maxRunners = maxRunners;
+  o.oneRunnerASide = maxRunners <= M.BOT.berryRunners;
+  // ...and never the chaser or the goalie: the chaser IS the match, and pulling the
+  // goalie for an errand left an empty net every time a berry drifted goalward.
+  o.neverChaserOrGoalie = ww.players.every(q => !q.aiBerry ||
+    (q.aiRole !== 'chaser' && q.aiRole !== 'goalie'));
+  // A dead berry must not stay latched, or a bot escorts a hole in the pitch.
+  o.noStaleTargets = ww.players.every(q => !q.aiBerry || M.berryLive(ww, q.aiBerry));
+
   // ---- and none of this leaks into a normal match ---------------------------
   M.sel.mode='1v1'; M.setMatchSeed(3); M.startMatch();
   const nw = M.world; nw.state='play'; nw.stateT=2;
@@ -218,6 +261,12 @@ ok(r.farGoalUntouched, `filling one goal's hive lit the other one up: ${r.emptyB
 ok(r.botFills, `the far goal has no hive drawn: ${r.filledBot} vs empty ${r.emptyBot}`);
 ok(r.drawsDontBob, 'a DRAW advanced the berry bob — a 144Hz screen would wobble it fast');
 ok(r.stepDoesBob, 'the berry bob does not advance in step() at all, so it never floats');
+ok(r.botsBankBerries, `bots never banked a berry in four 5-minute matches: ${JSON.stringify(r.botRuns)}`);
+ok(r.hiveNotAFormality, `a bot filled a hive inside two minutes — the mode is a delivery job again: ${JSON.stringify(r.botRuns)}`);
+ok(r.footballStillHappens, `four matches produced almost no goals — the berries have eaten the football: ${JSON.stringify(r.botRuns)}`);
+ok(r.oneRunnerASide, `${r.maxRunners} bots on berry duty at once, cap is ${'BOT.berryRunners'}`);
+ok(r.neverChaserOrGoalie, 'the chaser or the goalie was sent on a berry errand');
+ok(r.noStaleTargets, 'a bot is still escorting a berry that has been banked or removed');
 ok(r.noBerriesInNormal, 'berries showed up in a normal 1v1');
 ok(r.noHiveInNormal, 'a normal match built a hive');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
