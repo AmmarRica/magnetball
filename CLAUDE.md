@@ -112,7 +112,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
-  `shrimp` = a sand seabed with ripples and shells, played by curled prawns;
+  `shrimp` = a sand seabed with ripples and shells, **shrimp vs crabs** — team 0 draws a
+  curled prawn, team 1 a wide crab, so the sides differ by SILHOUETTE and not only by colour
+  (which is what a colour-blind player cannot use, and what 12 pixels cannot carry). Same trick
+  as Pool's solids vs stripes. ⚠️ Every vertex is checked against `r` **including its own
+  stroke half-width** — the crab's first legs reached 0.88 across with a 0.09 stroke and crossed
+  the guide ring, which is the one thing a skin may not do;
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead

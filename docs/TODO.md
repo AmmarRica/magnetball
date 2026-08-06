@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.1245PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0130PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -53,9 +53,14 @@ _Current build: **v20260806.1245PM** (shown under the title; bump `VERSION` in `
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
 
 ## 🦐 Shrimp theme, and a ring on every player
-- [x] **Shrimp** — full bundle: a sand seabed with ripples and shells, curled prawns for
-  players (thorax, three tapering abdomen segments, tail fan, rostrum, antennae, eye), an
-  underwater palette. Segments are three arcs of decreasing width because canvas cannot taper
+- [x] **Shrimp vs Crab** — full bundle: a sand seabed with ripples and shells, an underwater
+  palette, and two different creatures. Team 0 is a curled prawn (thorax, three tapering
+  abdomen segments, tail fan, rostrum, antennae, eye); team 1 is a wide crab (carapace, six
+  legs, two pincers, two eyes). The sides differ by SILHOUETTE — long vs wide, measured off
+  covered pixels in the suite — not only by colour, which is what a colour-blind player cannot
+  use. ⚠️ The crab's first legs reached 0.88 across with a 0.09 stroke and crossed the guide
+  ring; every vertex is now checked against r including its own stroke half-width. And the
+  pincer gap is a LINE, not a dark disc over the claw — that version made every crab grey. Segments are three arcs of decreasing width because canvas cannot taper
   a stroke — and the steps read as segments, which is what a shrimp looks like anyway.
 - [x] **THE RULE, made structural: every skin gets a guide ring.** `drawOneDisc` strokes it
   after the skin paints, so a new skin cannot forget one. A player is a circle and that circle
