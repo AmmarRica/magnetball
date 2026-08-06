@@ -113,9 +113,11 @@ const r = await p.evaluate(async ()=>{
   // players cannot use. A shrimp is LONG along its facing; a crab is WIDE across it.
   // Measured off covered pixels rather than the drawing code, so a redraw that
   // quietly makes them the same shape fails here.
-  const extent = (team) => {
+  const extent = (team, frame) => {
     c.fillStyle = '#7f7f7f'; c.fillRect(0,0,300,300);
-    const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+    // vx set so legFrame reports a walking creature; gait picks which of the two.
+    const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a',
+                vx: frame == null ? 0 : 3, vy: 0, gait: (frame || 0) * M.GAIT.stride };
     M.DISC_SKINS.shrimp.paint(c, q, CX, CY, R, { players:[q] });
     const d = c.getImageData(CX-R-4, CY-R-4, (R+4)*2, (R+4)*2).data;
     const wide = (R+4)*2;
@@ -134,12 +136,67 @@ const r = await p.evaluate(async ()=>{
     return { along: maxA-minA, across: maxB-minB, n };
   };
   const shr = extent(0), crb = extent(1);
+  // Both frames must stay inside the body, not just the resting one.
+  const shr1 = extent(0, 1), crb1 = extent(1, 1);
+  o.walkExtents = { shr1, crb1 };
   o.shrimpExtent = shr; o.crabExtent = crb;
   o.shrimpIsLong  = shr.along > shr.across;
   o.crabIsWide    = crb.across > crb.along;
   o.sidesDifferInShape = o.shrimpIsLong && o.crabIsWide;
   // ...and neither one breaks out of the body. The ring IS the player.
-  o.bothInsideTheRing = Math.max(shr.along, shr.across, crb.along, crb.across) <= R*2 + 2;
+  o.bothInsideTheRing = Math.max(shr.along, shr.across, crb.along, crb.across,
+                                 shr1.along, shr1.across, crb1.along, crb1.across) <= R*2 + 2;
+
+  // ---- the two-frame leg animation ------------------------------------------
+  // ⚠️ Driven by DISTANCE TRAVELLED, not by a clock. Anything advanced on a timer has
+  // to be advanced somewhere, and anything advanced in a draw runs 2.4x fast on a
+  // 144Hz screen — the same rule that governs the trails and the berry bob. Distance
+  // also stops dead when the player does, with no separate "am I moving" state.
+  M.sel.mode='1v1'; M.sel.kickoffRule='off'; M.setMatchSeed(5); M.startMatch();
+  const gw = M.world; gw.state='play'; gw.stateT=2;
+  const me = gw.players[0];
+  gw.players.slice(1).forEach(q=>{ q.x=1e4; q.y=1e4; });
+  gw.ball.x=1e4; gw.ball.y=1e4;
+  // Walking: the gait accumulates and the frame flips.
+  me.x=0; me.y=200; me.vx=0; me.vy=0; me.gait=0;
+  M.pads.p1.dx=0; M.pads.p1.dy=-1;
+  const frames = new Set();
+  let gaitGrew = 0;
+  for (let i=0;i<120;i++){ const g0 = me.gait||0; M.step(gw);
+    if ((me.gait||0) > g0) gaitGrew++; frames.add(M.legFrame(me)); }
+  M.pads.p1.dy=0;
+  o.framesSeenWalking = [...frames].sort().join(',');
+  o.gaitGrewWhileWalking = gaitGrew > 100;
+  o.bothFramesUsed = frames.has(0) && frames.has(1);
+  // ⚠️ A DRAW must not advance it.
+  const gBefore = me.gait;
+  M.render(); M.render(); M.render();
+  o.drawsDontWalk = me.gait === gBefore;
+  // Standing still: frame 0, the rest pose, and the gait stops growing.
+  for (let i=0;i<90;i++) M.step(gw);          // coast to a halt
+  const gStop = me.gait;
+  for (let i=0;i<60;i++) M.step(gw);
+  o.stoppedFrame = M.legFrame(me);
+  o.gaitStopsWhenStopped = Math.abs(me.gait - gStop) < 0.5;
+  o.restIsFrameZero = o.stoppedFrame === 0;
+  // Faster travel means faster legs: the same number of steps covers more flips.
+  const flips = (speedMul) => {
+    me.x=0; me.y=200; me.vx=0; me.vy=0; me.gait=0;
+    let last = M.legFrame(me), n = 0;
+    M.pads.p1.dy = -1;
+    for (let i=0;i<90;i++){
+      M.step(gw);
+      // Hold a fixed speed so this measures the GAIT, not the acceleration curve.
+      const sp = Math.hypot(me.vx, me.vy) || 1;
+      me.vx = me.vx/sp * speedMul; me.vy = me.vy/sp * speedMul;
+      const f2 = M.legFrame(me); if (f2 !== last){ n++; last = f2; }
+    }
+    M.pads.p1.dy = 0;
+    return n;
+  };
+  o.flipsSlow = flips(1);
+  o.flipsFast = flips(3);
+  o.fasterLegsWhenFaster = o.flipsFast > o.flipsSlow;
 
   // ---- the Shrimp theme is a real bundle -------------------------------------
   o.isBundle = !!M.bundleSlots('shrimp');
@@ -184,6 +241,12 @@ ok(r.zeroFaceYIsNotFalsy, 'a player facing exactly along x got the fallback faci
 ok(r.noFacingIsSane, 'a player with no facing at all does not point anywhere sensible');
 ok(r.shrimpTurns && r.arrowTurns, `a direction-drawn skin ignored the rotation setting: shrimp ${r.shrimpTurns}, arrow ${r.arrowTurns}`);
 ok(r.poolIgnores && r.monoIgnores, 'a ROUND skin changed with the rotation setting — the control promises it only affects themes whose players have a front');
+ok(r.bothFramesUsed, `the leg animation never used both frames while walking: saw ${r.framesSeenWalking}`);
+ok(r.gaitGrewWhileWalking, 'the gait did not accumulate while walking');
+ok(r.drawsDontWalk, 'a DRAW advanced the walk cycle — on a 144Hz screen the legs would run 2.4x fast');
+ok(r.gaitStopsWhenStopped, 'the gait kept accumulating with the player stood still');
+ok(r.restIsFrameZero, `a stopped player is frozen mid-stride on frame ${r.stoppedFrame}`);
+ok(r.fasterLegsWhenFaster, `the legs do not speed up with the player: ${r.flipsSlow} flips slow vs ${r.flipsFast} fast`);
 ok(r.sidesDifferInShape, `shrimp and crab are not different SHAPES: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)} — colour alone is what colour-blind players cannot use`);
 ok(r.bothInsideTheRing, `a body draws outside its own guide ring: shrimp ${JSON.stringify(r.shrimpExtent)}, crab ${JSON.stringify(r.crabExtent)}`);
 ok(r.isBundle && r.named === 'Shrimp', `the Shrimp bundle does not resolve: ${r.named}`);
