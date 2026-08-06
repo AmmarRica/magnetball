@@ -85,6 +85,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   which no palette can reach. Because slots mix freely, a field painter must fall back through
   the palette it's given (`TH.dynMark || TH.line`) or a starfield over Grass paints black on
   black. `tests/dyntheme.mjs` holds all of it by pixel sampling.
+- **Ball look:** `BALL_LOOKS` + `paintBall`. ⚠️ The pattern colour is **measured against the
+  ball**, not taken raw: `ballSpotInk()` runs the palette's `ballSpot` through `readableInk`
+  at `BALL_SPOT_CONTRAST`. Pool pairs a `#f7f4ec` cue ball with a `#e8e2d2` spot — **1.18:1** —
+  because the cue ball look is *plain* and never exercised the spot, so every other look
+  rendered as a plain white ball. Every other palette is 10.6:1+, which is why it hid.
+  A readable spot is left untouched; this is a floor, not a repaint. `tests/balllook.mjs`.
+- **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
+  so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
+  at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
+  never quite the mark you played with. **Bots wear `BOT_CAP` ('none')**: cycling the whole
+  CAPS table put a different hat on every disc and made a cap read as decoration rather than
+  as yours. Bots still vary by colour, shirt number and eyes.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one

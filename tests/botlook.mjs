@@ -27,7 +27,12 @@ const r = await p.evaluate(async ()=>{
   o.noBotCopiesYou = bots.every(q=>look(q) !== look(you));
   o.botsDifferFromEachOther = new Set(bots.map(look)).size === bots.length;
   o.botFacesVary = new Set(bots.map(q=>q.flag)).size > 1;
-  o.botCapsVary  = new Set(bots.map(q=>q.cap)).size > 1;
+  // ⚠️ Bots wear NO cap now. They used to cycle the whole CAPS table, which put a
+  // different hat on every disc and made a cap read as decoration rather than as
+  // YOUR mark. What must still hold is that bots are individuals — colour, shirt
+  // number and eyes vary — and that your own cap is untouched by any of it.
+  o.botCaps      = [...new Set(bots.map(q=>q.cap))];
+  o.botsWearNoCap = bots.every(q=>q.cap === 'none' || q.cap == null);
   // Teams still read as teams: bot colours sit in their side's family.
   o.teamColoursSplit = new Set(ps.filter(q=>q.team===0).map(q=>q.color)).size >= 1 &&
     ps.filter(q=>q.team===1).every(q=>q.color !== you.color);
@@ -65,7 +70,7 @@ const r = await p.evaluate(async ()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.seats===4 && r.youKeepYourLook && r.noBotCopiesYou && r.botsDifferFromEachOther &&
-  r.botFacesVary && r.botCapsVary && r.teamColoursSplit && r.stableAcrossRestarts &&
+  r.botFacesVary && r.botsWearNoCap && r.teamColoursSplit && r.stableAcrossRestarts &&
   r.bigLooksVary && r.demoOneFlagPerTeam && r.demoNotYourCap && r.rendersClean &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));

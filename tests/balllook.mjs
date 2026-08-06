@@ -78,6 +78,43 @@ const r = await p.evaluate(async ()=>{
   o.noEmojiTiles = tiles.every(t=>!t.querySelector('.emoji'));
   o.noDisabledTiles = tiles.every(t=>!t.classList.contains('disabled'));   // nothing "needs art"
 
+  // ---- The PATTERN has to be visible on the ball, under every palette ------
+  // ⚠️ Pool pairs a #f7f4ec cue ball with a #e8e2d2 spot — 1.18:1 — because the cue
+  // ball look is PLAIN and never exercised the spot. Pick any other look on that
+  // palette and the pattern vanished: the ball, and every picker tile, rendered as
+  // plain white with only the 3D shading showing. Every other palette is 10.6:1 or
+  // better, which is exactly why it went unnoticed.
+  const lum = h => { let c=(h||'').trim();
+    if (c.length===4) c='#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+    const n=parseInt(c.slice(1),16);
+    const f2=v=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+    return 0.2126*f2((n>>16)&255) + 0.7152*f2((n>>8)&255) + 0.0722*f2(n&255); };
+  const ratio = (a,b2) => { const l1=lum(a), l2=lum(b2);
+    return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05); };
+  o.spotContrast = {};
+  o.weakPalettes = [];
+  for (const [k,t] of Object.entries(M.THEMES)){
+    const used = M.ballSpotInk(t.pitch);
+    const c2 = +ratio(t.pitch.ball, used).toFixed(2);
+    o.spotContrast[k] = { declared:t.pitch.ballSpot, used, ratio:c2 };
+    if (c2 < M.BALL_SPOT_CONTRAST - 0.05) o.weakPalettes.push(k + ':' + c2);
+  }
+  // A readable spot must be left ALONE — the guard is a floor, not a repaint.
+  o.neonUntouched = M.ballSpotInk(M.THEMES.neon.pitch) === M.THEMES.neon.pitch.ballSpot;
+  o.poolWasFixed  = M.ballSpotInk(M.THEMES.pool.pitch) !== M.THEMES.pool.pitch.ballSpot;
+  // ...and it shows up in real pixels, not just in the arithmetic. Under Pool, a
+  // patterned ball must differ from a plain one.
+  M.applyBundle('pool');
+  const shot = look => { const cv=document.createElement('canvas'); cv.width=cv.height=64;
+    const c3=cv.getContext('2d'); M.paintBall(c3, 32, 32, 26, 0, look);
+    const d=c3.getImageData(6,6,52,52).data;
+    let dark=0; for(let i=0;i<d.length;i+=4) if (d[i+3]>128 && d[i]<200) dark++;
+    return dark; };
+  o.poolPlainDark = shot('plain');
+  o.poolClassicDark = shot('classic');
+  o.patternVisibleOnPool = o.poolClassicDark > o.poolPlainDark * 1.5;
+  M.applyBundle('neon');
+
   // ---- Picking one sticks, persists, and reaches the pitch
   const pick = M.BALL_LOOK_KEYS.indexOf('eight');
   tiles[pick].click(); await wait(60);
@@ -109,6 +146,8 @@ const pitch = await p.evaluate(async (looks)=>{
   M.sel.look.ball='classic'; M.saveSel(); M.setMatchSeed(null);
   return out;
 }, ['classic','plain','eight','beach']);
+for (const [k,c] of Object.entries(r.spotContrast||{}))
+  if (c.ratio < 4.45) console.log('WEAK SPOT', k, JSON.stringify(c));
 const vals = Object.values(pitch);
 const r2 = { pitchShowsLook: new Set(vals).size === vals.length };
 
@@ -120,9 +159,12 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must = ['skinsCardGone','noSkinSettings','ballCardExists','ballLookDefault','allPaint',
   'allDistinct','plainIsStillABall','patternedDiffersFromPlain','staysInsideTheBall',
   'rotationChangesIt','plainIgnoresRotation','oneTilePerLook','tilesArePainted','noEmojiTiles',
-  'noDisabledTiles','pickWrites','pickPersists','pickMarksTile','pitchShowsLook'];
+  'noDisabledTiles','pickWrites','pickPersists','pickMarksTile','pitchShowsLook',
+  'neonUntouched','poolWasFixed','patternVisibleOnPool'];
 const all = { ...r, ...r2 };
 const bad = must.filter(k => all[k] !== true);
+if (all.weakPalettes && all.weakPalettes.length)
+  bad.push('weakPalettes:' + all.weakPalettes.join(','));
 const ok = bad.length === 0 && errors.length === 0 && skinFetches.length === 0;
 if (bad.length) console.log('FAILED:', bad);
 if (skinFetches.length) console.log('FAILED: still fetching sprite art', skinFetches);
