@@ -2246,7 +2246,10 @@ const THEMES = {
       eyeWhite:'#ffffff', eyePupil:'#0a2c2b', nameBg:'#062018', nameText:'#ffffff',
       shadow:'rgba(0,0,0,0.22)', ballRim:'#062018', ball:'#ffffff', ballSpot:'#0a2c2b', trailRGB:'255,255,255',
       obstacle:'#ff4da6', good:'#3ddc84', warn:'#ffd23d', dim:'#2f6f6d', cone:'#ff7a1a',
-      hudText:'#eafcfb', hudSub:'#a9e6e4', accent:'#ff7a1a', padRing:'rgba(255,255,255,0.6)' },
+      hudText:'#eafcfb', hudSub:'#a9e6e4', accent:'#ff7a1a', padRing:'rgba(255,255,255,0.6)',
+      // A touch darker than the reference art, because the markings here are white
+      // and a paler cream washed the centre circle out.
+      dynCourtA:'#e9d5a6', dynCourtB:'#dec791', dynMark:'#bb9a5c' },
   },
   light: {
     name: 'Paper', emoji: '📄',
@@ -2616,8 +2619,9 @@ const SLOTS = {
 const SLOT_KEYS = Object.keys(SLOTS);
 // Every palette is a bundle; only the ones that own more than colour say so here.
 const THEME_BUNDLES = {
-  warp: { field:'starfield', discs:'mono', ball:'plain', sfx:'space' },
-  pool: { field:'pooltable', discs:'pool', ball:'plain', sfx:'pool'  },
+  warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
+  pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
+  videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -10570,6 +10574,18 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// The VIDEOBALL court: warm cream bands running goal-to-goal on a teal table. The
+// bands are the whole read — they give the eye a ruler for how far the ball moved.
+DYN_FIELDS.vbcourt = {
+  name: 'Videoball court',
+  paint(c, st, L, T, W, H, w){
+    const base = TH.dynCourtA || '#f2e0b8', alt = TH.dynCourtB || '#e8d19b';
+    c.fillStyle = base; c.fillRect(L, T, W, H);
+    const bands = 11, bw = W / bands;
+    c.fillStyle = alt;
+    for (let i = 1; i < bands; i += 2) c.fillRect(L + i*bw, T, bw, H);
+  },
+};
 // ---------- Theme-owned player looks ----------------------------------------
 // `THEMES.<key>.discs` names an entry here and takes over drawOneDisc's body, so a
 // theme can change what a player IS, not just what colour they are. Everything
@@ -10636,6 +10652,27 @@ const DISC_SKINS = {
         c.fillText(String(this.num(p, w)), x, y + r*0.03);
       }
     },
+  },
+};
+// A blunt arrowhead pointing along the player's facing, VIDEOBALL-style. Facing is
+// already tracked for the kick, so this reads as intent rather than decoration —
+// a still frame tells you which way everyone was about to go.
+DISC_SKINS.arrow = {
+  name: 'Arrowheads',
+  paint(c, p, x, y, r, w){
+    const fx = p.faceX || 0, fy = p.faceY || (p.team === 0 ? -1 : 1);
+    const m = Math.hypot(fx, fy) || 1, ux = fx/m, uy = fy/m;
+    const px = -uy, py = ux;                        // perpendicular
+    const nose = r * 1.55, back = r * 0.75, wing = r * 1.05;
+    const pt = (a, b2) => [x + ux*a + px*b2, y + uy*a + py*b2];
+    const tri = () => { const A=pt(nose,0), B=pt(-back, wing), C=pt(-back*0.35, 0), D=pt(-back,-wing);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.lineTo(C[0],C[1]); c.lineTo(D[0],D[1]); c.closePath(); };
+    c.save();
+    tri(); c.fillStyle = TH.discRim; c.lineJoin='round';
+    c.lineWidth = Math.max(2, r*0.30); c.strokeStyle = TH.discRim; c.stroke();
+    c.fillStyle = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    tri(); c.fill();
+    c.restore();
   },
 };
 function discSkin(){ return DISC_SKINS[sel.look.discs] || null; }
@@ -10858,14 +10895,47 @@ function drawOneDisc(w, p, x, y, r, s, idx){
 // Two different shapes on purpose: dots for players, one line for the ball.
 let ballTrail = [];
 let discTrails = [];                      // per-player dot history, index-aligned to w.players
-function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; }
+let trailTick = 0;                        // step counter — dots are sampled on TIME
+let ballDrive = 0;                        // 0..1 streak strength, decays over BALL_HOLD
+function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; trailTick = 0; ballDrive = 0; }
 
-const DOT_GAP      = 9;    // world units between player dots
-const DOT_MAX      = 12;   // dots kept per player
-const DOT_FADE     = 0.93; // per-frame decay, so a stopped player's tail dies off
-const BALL_PATH    = 40;   // ball path samples retained (enough for a long streak)
-const BALL_LEN_MAX = 320;  // world units of streak at full speed (~40% of a classic pitch)
-const BALL_MIN_SPD = 0.8;  // below this the ball is coasting — no streak
+// THE RULE: a screenshot should tell you what happened in the last TRAIL_SECS.
+//
+// ⚠️ That means trails are measured in TIME, not in world units or in a dot count.
+// They used to be capped both ways — 12 dots at 9-unit spacing, and 320 units of
+// ball streak — which made the trail cover LESS time the faster you moved, exactly
+// backwards. Measured at top speed: a player's tail was 108 units, 0.47s of play,
+// and the ball's was 320 units, 0.17s. A screenshot of a sprint showed a stub.
+//
+// ⚠️ And it CANNOT be three seconds for the ball. At the 32/step cap that is
+// 5760 world units — 7.6 lengths of a classic pitch — which would wrap the pitch
+// seven times and hide the game under its own streak. The ball keeps a 3-second
+// HISTORY and a length cap tied to the pitch, and lingers as it slows so the shot
+// is still legible after the save. The players get the full three seconds.
+const TRAIL_SECS   = 3.0;  // the window a screenshot is meant to explain
+const TRAIL_STEPS  = Math.round(TRAIL_SECS * 60);
+// ⚠️ Sample spacing and dash length are ONE decision. A dash longer than the gap
+// between samples merges into a solid line — at 4-step spacing the first version
+// drew a continuous stroke, not dashes. Gap at top speed is DOT_EVERY x 3.8 units;
+// keep the dash comfortably under it and they read as dashes, while at low speed the
+// gap collapses and they overlap into a clump, which is the "hovering here" look.
+const DOT_EVERY    = 6;    // steps between candidate dashes (10/s) — 30 over 3s
+const DOT_MIN_MOVE = 2.5;  // world units; under this a dot lands on the last one
+const DOT_MAX      = Math.ceil(TRAIL_STEPS / DOT_EVERY);
+const BALL_PATH    = TRAIL_STEPS;   // 3 seconds of ball history
+const BALL_LEN_PITCH = 0.80;        // streak cap as a fraction of the pitch LENGTH,
+                                    // so a big court gets a proportionate streak
+const BALL_MIN_SPD = 0.8;  // below this the ball is coasting
+const BALL_HOLD    = 1.4;  // seconds the streak lingers after the ball slows, so a
+                           // screenshot taken after the save still shows the shot
+// Player tells are DASHES laid along the direction of travel, VIDEOBALL-style. The
+// dash grows with speed, so a sprint draws a long stroke and a walk draws a stub —
+// and at low speed consecutive stubs overlap into a thick clump, which is the look
+// that reads as "hovering here" rather than "went that way".
+const DASH_MIN     = 2.0;  // world units, half-length, near-stationary
+const DASH_MAX     = 8.0;  // world units, half-length, flat out
+const DASH_PER_SPD = 1.6;  // half-length per unit of speed-per-step. At top speed
+                           // that is a 12-unit dash in a 23-unit gap.
 
 // Motion tells are SIM state, not frame state: sampled and faded once per step()
 // from advanceTrails(), never from a draw. Doing it per frame made the same match
@@ -10874,29 +10944,43 @@ const BALL_MIN_SPD = 0.8;  // below this the ball is coasting — no streak
 // frames" dressed up as "the last stretch of play".
 function advanceTrails(w){
   if (!w) return;
+  trailTick++;
   const b = w.ball;
   if (b){
     if (ballTrail.length >= BALL_PATH) ballTrail.shift();
     ballTrail.push({x:b.x, y:b.y});
+    // Strength decays over BALL_HOLD instead of snapping to nothing the moment the
+    // ball drops under the speed floor. A shot that has just been saved still reads.
+    const sp = Math.hypot(b.vx||0, b.vy||0);
+    const drive = sp >= BALL_MIN_SPD ? Math.min(1, sp / ((w.ballCap || 32) * 0.85)) : 0;
+    ballDrive = Math.max(drive, ballDrive - STEP / BALL_HOLD);
   }
   if (!w.players) return;
   if (discTrails.length !== w.players.length) discTrails = w.players.map(()=>[]);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i], hist = discTrails[i];
-    // Drop a dot only once you've actually covered ground, so spacing is even at
-    // any speed and a fast player simply leaves more of them.
-    const last = hist[hist.length-1];
-    if (!last || Math.hypot(p.x-last.x, p.y-last.y) >= DOT_GAP){
-      if (hist.length >= DOT_MAX) hist.shift();
-      hist.push({x:p.x, y:p.y, a:1});
+    // Sampled on TIME, so the tail is the same number of seconds at any speed — a
+    // sprint simply spreads the same dots further apart. The distance gate is only
+    // there to stop a standing player stacking 45 dots on one spot.
+    if (trailTick % DOT_EVERY === 0){
+      const last = hist[hist.length-1];
+      if (!last || Math.hypot(p.x-last.x, p.y-last.y) >= DOT_MIN_MOVE){
+        if (hist.length >= DOT_MAX) hist.shift();
+        // Heading and speed are recorded WITH the sample. Deriving them from the
+        // neighbouring dots at draw time gets the first and last one wrong, and gets
+        // every one of them wrong the moment a dot ages out of the window.
+        const sp = Math.hypot(p.vx||0, p.vy||0) || 0.0001;
+        hist.push({ x:p.x, y:p.y, age:0, dx:(p.vx||0)/sp, dy:(p.vy||0)/sp, sp });
+      }
     }
-    // Fade and drop spent dots in place — a filter() per player per frame was the
-    // only steady allocation in the hot path.
+    // Age and drop in place — a filter() per player per frame was the only steady
+    // allocation in the hot path. A dot dies at exactly TRAIL_STEPS, so the tail is
+    // the last TRAIL_SECS of play by construction rather than by a tuned decay.
     let n = 0;
     for (let k = 0; k < hist.length; k++){
       const d = hist[k];
-      d.a *= DOT_FADE;
-      if (d.a > 0.04) hist[n++] = d;
+      d.age++;
+      if (d.age <= TRAIL_STEPS) hist[n++] = d;
     }
     hist.length = n;
   }
@@ -10911,11 +10995,17 @@ function drawDiscTrails(w){
     if (!hist || !hist.length) continue;
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
     for (let k = 0; k < hist.length; k++){
-      const d = hist[k], f = (k+1) / hist.length;     // older dots smaller + fainter
+      // Fade by AGE, not by position in the list: with a time window the two agree,
+      // but age is the thing that actually means "how long ago was this".
+      const d = hist[k], f = 1 - d.age / TRAIL_STEPS;
+      const half = Math.max(DASH_MIN, Math.min(DASH_MAX, d.sp * DASH_PER_SPD)) * s;
       ctx.beginPath();
-      ctx.arc(wx(d.x), wy(d.y), p.r*s*(0.15 + 0.19*f), 0, 2*Math.PI);
-      ctx.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
-      ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.5, p.r * s * (0.22 + 0.30*f));
+      ctx.strokeStyle = rgba(col, 0.72 * f * f);
+      ctx.moveTo(wx(d.x) - d.dx*half, wy(d.y) - d.dy*half);
+      ctx.lineTo(wx(d.x) + d.dx*half, wy(d.y) + d.dy*half);
+      ctx.stroke();
     }
   }
 }
@@ -10924,10 +11014,11 @@ function drawDiscTrails(w){
 // instead of drawing through a wall. Length tracks speed.
 function drawBallTrail(w){
   const b = w.ball;
-  const sp = Math.hypot(b.vx||0, b.vy||0);
-  if (sp < BALL_MIN_SPD || ballTrail.length < 2) return;
-  const drive = Math.min(1, sp / ((w.ballCap || 32) * 0.85));
-  const want  = BALL_LEN_MAX * drive;               // world units of streak
+  if (ballDrive <= 0.01 || ballTrail.length < 2) return;
+  const drive = ballDrive;                          // lingers — see BALL_HOLD
+  // Capped against the PITCH, not a fixed number, so Colossus gets a streak in
+  // proportion to the ground the ball is covering.
+  const want  = (w.field.L * BALL_LEN_PITCH) * drive;
   // Start at the INTERPOLATED ball, not the last sampled step: mid-step the two are
   // up to a full step of travel apart (9 world units at speed — most of a ball
   // diameter), which reads as the streak coming unstuck from the ball.
@@ -11531,7 +11622,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260805.0830PM';
+const VERSION = '20260805.1030PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -11575,6 +11666,10 @@ if (window.__MAGNETDEBUG) {
     benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
+    TRAIL_SECS, TRAIL_STEPS, DOT_EVERY, DOT_MAX, DOT_MIN_MOVE, BALL_PATH, BALL_LEN_PITCH, BALL_HOLD,
+    DASH_MIN, DASH_MAX, DASH_PER_SPD,
+    get ballDrive(){ return ballDrive; }, get trailTick(){ return trailTick; },
+    get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
