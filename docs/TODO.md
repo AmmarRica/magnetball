@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0210AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0330AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -28,16 +28,15 @@ _Current build: **v20260806.0210AM** (shown under the title; bump `VERSION` in `
 - [ ] Bots don't chase berries (the AI layer is untouched); they shove them around incidentally.
   Worth revisiting only if the mode feels flat in single player.
 
-## 👁 A screenshot should explain the last 3 seconds
-- [x] **Trails are measured in TIME now**, not world units or dot count. Measured at top speed
-  the old ones covered 0.47s (player) and 0.17s (ball) — the caps meant the faster you moved
-  the LESS time your trail showed. A player tail is now 2.95s / 660 units.
-- [x] **Player tells are dashes** along the heading, growing with speed. At a crawl they
-  overlap into a clump, which is the look worth keeping.
-- [x] **The ball streak lingers** for `BALL_HOLD` after the shot instead of blinking off, and
-  its length is a share of the PITCH so a big court scales.
-- [ ] ⚠️ **Three seconds is impossible for the ball** — 7.6 pitch lengths at the speed cap.
-  Asserted in `trail3s` so it does not get "fixed" later.
+## 👁 Trails: the 3-second rule, reverted
+- [-] **Reverted.** Trails were rebuilt as a claim about TIME — a 3-second window for the
+  players, a pitch-relative streak plus a `BALL_HOLD` linger for the ball — so a screenshot
+  would explain the last three seconds. On the pitch it read as a **tail**, not a tell: a
+  streak most of a pitch long hanging off a ball that had already stopped.
+- [x] Back to the short world-unit caps (`DOT_GAP` 9 × `DOT_MAX` 12, `BALL_LEN_MAX` 320) and
+  round dots rather than dashes. `tests/trail3s.mjs` deleted; `tells` restored.
+- [ ] If it's worth another go, the lesson is that the ball streak was the offender, not the
+  player tails, and the linger was worse than the length.
 
 ## 🔺 Videoball is themed like Videoball
 - [x] Cream banded court, arrowhead players pointing where they FACE (so a still frame shows
