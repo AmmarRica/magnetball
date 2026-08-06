@@ -11558,85 +11558,115 @@ const SHRIMP = {
   legs: [[0.16, 0.30, 0.56], [0.00, 0.32, 0.58], [-0.16, 0.30, 0.55]],   // [along, inner, outer]
   swing: 0.15,
 };
-// The other half of the theme. A crab is WIDE where a shrimp is long, so the two
-// sides are told apart by silhouette and not only by colour — which is the same
-// trick Pool uses (solids vs stripes) and the reason it works at 12 pixels.
-// ⚠️ Every point here is checked against 1.0 including its own stroke half-width.
-// The first version put leg tips at 0.88 across with a 0.09 stroke and they crossed
-// the guide ring — the one thing a skin is not allowed to do, since the ring IS the
-// body. Legs now reach 0.74, claws 0.66 + 0.15 radius = 0.81.
-const CRAB = {
-  bodyA: 0.40,      // carapace semi-axis along facing...
-  bodyB: 0.56,      // ...and across it. Wider than long: that IS the crab.
-  claw:  [0.42, 0.46],   // claw centre [along, across]
-  clawR: 0.15,
-  legs:  [[0.02, 0.50], [-0.24, 0.46], [-0.46, 0.34]],   // [along, across] per leg
+// The other half of the theme. Both are long, so they are told apart by what a
+// LOBSTER has and a shrimp does not: two big claws held out front, and a straight
+// fanned tail where the shrimp's abdomen curls under it. That is a silhouette
+// difference at 12 pixels, which colour alone is not — see tests/discskins.mjs,
+// which measures the claw span and the curl rather than trusting the drawing code.
+// ⚠️ Every point is checked against 1.0 INCLUDING its own stroke half-width. The
+// ring is the body and nothing may cross it.
+const LOBSTER = {
+  bodyA: 0.30, bodyB: 0.25,        // cephalothorax semi-axes
+  bodyAt: 0.12,                    // ...and where it sits along the facing
+  seg: [[-0.14, 0.23], [-0.36, 0.19], [-0.55, 0.14]],   // abdomen [along, half-width]
+  tail: [-0.68, 0.30],             // tail fan [along, half-spread]
+  // ⚠️ Held WIDE. The claws are the whole silhouette argument against the shrimp,
+  // and at 0.40 across the lobster came out only 6% wider than it — inside noise.
+  claw: [0.42, 0.47],              // claw centre [along, across]
+  clawR: 0.20,
+  legs: [[-0.04, 0.26], [-0.22, 0.24], [-0.40, 0.20]],  // [along, inner across]
   legLen: 0.22,
-  swing: 0.13,      // how far a leg swings between the two frames
-  eye:   [0.24, 0.19],
-  eyeR:  0.085,
+  swing: 0.12,
+  eye: [0.30, 0.13],
+  eyeR: 0.075,
 };
 DISC_SKINS.shrimp = {
-  name: 'Shrimp vs Crab',
+  name: 'Shrimp vs Lobster',
   paint(c, p, x, y, r, w){
     const { ux, uy } = discFace(p);                 // honours the rotation checkbox
     const px = -uy, py = ux;
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    const pt = (a, b2) => [x + ux*a*r + px*b2*r, y + uy*a*r + py*b2*r];
-    if (p.team === 1){ this.crab(c, p, x, y, r, col, ux, uy, px, py, pt); return; }
+    const pt = (a2, b2) => [x + ux*a2*r + px*b2*r, y + uy*a2*r + py*b2*r];
+    if (p.team === 1){ this.lobster(c, p, x, y, r, col, ux, uy, px, py, pt); return; }
     this.shrimp(c, p, x, y, r, col, ux, uy, px, py, pt);
   },
-  crab(c, p, x, y, r, col, ux, uy, px, py, pt){
+  lobster(c, p, x, y, r, col, ux, uy, px, py, pt){
     c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
     c.fillStyle = rgba(col, 0.16); c.fill();
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
-    // Legs first, so the carapace sits on top of where they meet the body.
-    c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.09);
-    // ⚠️ Alternating legs, not all six together. Every leg swinging the same way is a
-    // creature doing a star jump; a crab moves its two sides out of phase, and at this
-    // size that difference is most of what makes it read as scuttling.
     const fr = legFrame(p);
-    for (let i=0;i<CRAB.legs.length;i++){
-      const [along, across] = CRAB.legs[i];
+    // Antennae, long and swept forward — the first thing that says "not a ball".
+    c.strokeStyle = rgba(col, 0.8); c.lineWidth = Math.max(1, r*0.05);
+    for (const sgn of [-1, 1]){
+      const A = pt(LOBSTER.bodyAt + 0.18, 0.10*sgn), B = pt(0.90, 0.34*sgn);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+    }
+    // Walking legs, alternating by index and by side — see the crab note that was
+    // here before: all of them swinging together is a star jump, not a scuttle.
+    c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.075);
+    for (let i=0;i<LOBSTER.legs.length;i++){
+      const [along, across] = LOBSTER.legs[i];
       for (const sgn of [-1, 1]){
-        // Out of phase by leg index AND by side, so the two frames are a real gait.
-        const fwd = ((i + fr + (sgn > 0 ? 0 : 1)) & 1) ? CRAB.swing : -CRAB.swing;
-        const A = pt(along, across*sgn*0.55);
-        const B = pt(along - CRAB.legLen*0.5 + fwd, (across + CRAB.legLen)*sgn);
+        const fwd = ((i + fr + (sgn > 0 ? 0 : 1)) & 1) ? LOBSTER.swing : -LOBSTER.swing;
+        const A = pt(along, across*sgn);
+        const B = pt(along + fwd, (across + LOBSTER.legLen)*sgn);
         c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
       }
     }
-    // Claws: an arm out to a solid pincer, split by a thin gap. ⚠️ The gap is a LINE,
-    // not a dark disc laid over the claw — that version covered most of the claw and
-    // every crab came out grey instead of its team colour.
+    // Tail fan, then the abdomen over it: straight down the axis, not curled.
+    const T0 = pt(LOBSTER.seg[2][0], 0);
+    const T1 = pt(LOBSTER.tail[0], LOBSTER.tail[1]);
+    const T2 = pt(LOBSTER.tail[0], -LOBSTER.tail[1]);
+    c.beginPath(); c.moveTo(T0[0],T0[1]); c.lineTo(T1[0],T1[1]); c.lineTo(T2[0],T2[1]); c.closePath();
+    c.fillStyle = col; c.fill();
+    // ⚠️ ONE tapered body, not three wide strokes. Stroking each segment along the
+    // axis with a width bigger than its length draws a bar ACROSS the lobster, and
+    // three of them made it a ladder rather than a tail.
+    const F = LOBSTER.seg[0], K = LOBSTER.seg[LOBSTER.seg.length-1];
+    const P1 = pt(F[0] + 0.30,  F[1]), P2 = pt(K[0] - 0.06,  K[1]);
+    const P3 = pt(K[0] - 0.06, -K[1]), P4 = pt(F[0] + 0.30, -F[1]);
+    c.beginPath(); c.moveTo(P1[0],P1[1]); c.lineTo(P2[0],P2[1]);
+    c.lineTo(P3[0],P3[1]); c.lineTo(P4[0],P4[1]); c.closePath();
+    c.fillStyle = col; c.fill();
+    // ...and thin creases across it, which is what actually reads as segments.
+    c.strokeStyle = rgba(TH.discRim || '#101010', 0.35);
+    c.lineWidth = Math.max(1, r*0.045);
+    for (const [along, halfW] of LOBSTER.seg){
+      const A = pt(along, halfW*0.92), B = pt(along, -halfW*0.92);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+    }
+    // Claws: an arm out to a big pincer, split by a thin gap. ⚠️ The gap is a LINE,
+    // not a dark disc over the claw — that covered the claw and greyed the whole body.
     c.lineWidth = Math.max(1, r*0.10);
     for (const sgn of [-1, 1]){
-      const A = pt(0.10, 0.30*sgn), C = pt(CRAB.claw[0], CRAB.claw[1]*sgn);
+      const A = pt(LOBSTER.bodyAt + 0.06, 0.16*sgn), C = pt(LOBSTER.claw[0], LOBSTER.claw[1]*sgn);
       c.strokeStyle = col;
       c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(C[0],C[1]); c.stroke();
-      c.beginPath(); c.arc(C[0], C[1], CRAB.clawR*r, 0, 2*Math.PI);
+      c.save();
+      c.translate(C[0], C[1]); c.rotate(Math.atan2(uy, ux));
+      c.beginPath(); c.ellipse(0, 0, LOBSTER.clawR*r*1.10, LOBSTER.clawR*r*0.95, 0, 0, 2*Math.PI);
       c.fillStyle = col; c.fill();
+      c.restore();
       if (r > 7){
-        const G0 = pt(CRAB.claw[0] + 0.04, (CRAB.claw[1] - 0.04)*sgn);
-        const G1 = pt(CRAB.claw[0] + 0.19, (CRAB.claw[1] + 0.07)*sgn);
-        c.strokeStyle = TH.discRim || '#101010';
-        c.lineWidth = Math.max(1, r*0.06);
+        const G0 = pt(LOBSTER.claw[0] + 0.02, (LOBSTER.claw[1] - 0.02)*sgn);
+        const G1 = pt(LOBSTER.claw[0] + 0.21, (LOBSTER.claw[1] + 0.03)*sgn);
+        c.strokeStyle = TH.discRim || '#101010'; c.lineWidth = Math.max(1, r*0.055);
         c.beginPath(); c.moveTo(G0[0],G0[1]); c.lineTo(G1[0],G1[1]); c.stroke();
         c.lineWidth = Math.max(1, r*0.10);
       }
     }
-    // Carapace — wider than it is long.
+    // Cephalothorax over the arm joints, then the eyes on its front edge.
     c.save();
     c.translate(x, y); c.rotate(Math.atan2(uy, ux));
-    c.beginPath(); c.ellipse(0, 0, CRAB.bodyA*r, CRAB.bodyB*r, 0, 0, 2*Math.PI);
+    c.translate(ux === 0 && uy === 0 ? 0 : LOBSTER.bodyAt*r, 0);
+    c.beginPath(); c.ellipse(0, 0, LOBSTER.bodyA*r, LOBSTER.bodyB*r, 0, 0, 2*Math.PI);
     c.fillStyle = col; c.fill();
     c.restore();
-    // Eyes on the front edge, close together, which is the crab tell.
     if (r > 5){
       for (const sgn of [-1, 1]){
-        const E = pt(CRAB.eye[0], CRAB.eye[1]*sgn);
-        c.beginPath(); c.arc(E[0], E[1], CRAB.eyeR*r, 0, 2*Math.PI);
+        const E = pt(LOBSTER.eye[0], LOBSTER.eye[1]*sgn);
+        c.beginPath(); c.arc(E[0], E[1], LOBSTER.eyeR*r, 0, 2*Math.PI);
         c.fillStyle = TH.discRim || '#101010'; c.fill();
       }
     }
@@ -12681,7 +12711,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0210PM';
+const VERSION = '20260806.0250PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12721,7 +12751,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, CRAB, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },

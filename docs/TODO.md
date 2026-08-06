@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0210PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0250PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -53,14 +53,19 @@ _Current build: **v20260806.0210PM** (shown under the title; bump `VERSION` in `
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
 
 ## 🦐 Shrimp theme, and a ring on every player
-- [x] **Shrimp vs Crab** — full bundle: a sand seabed with ripples and shells, an underwater
+- [x] **Shrimp vs Lobster** — full bundle: a sand seabed with ripples and shells, an underwater
   palette, and two different creatures. Team 0 is a curled prawn (thorax, three tapering
-  abdomen segments, tail fan, rostrum, antennae, eye); team 1 is a wide crab (carapace, six
-  legs, two pincers, two eyes). The sides differ by SILHOUETTE — long vs wide, measured off
-  covered pixels in the suite — not only by colour, which is what a colour-blind player cannot
-  use. ⚠️ The crab's first legs reached 0.88 across with a 0.09 stroke and crossed the guide
-  ring; every vertex is now checked against r including its own stroke half-width. And the
-  pincer gap is a LINE, not a dark disc over the claw — that version made every crab grey. Segments are three arcs of decreasing width because canvas cannot taper
+  abdomen segments, tail fan, rostrum, antennae, swimmerets, eye); team 1 is a lobster (big
+  claws held wide, cephalothorax, a straight tapered abdomen with creases, tail fan, six
+  walking legs, antennae, eyes).
+- [x] The sides differ by SILHOUETTE, measured off covered pixels in the suite rather than
+  trusted from the drawing code. ⚠️ Both are LONG — the crab this replaced was wide, so
+  "one is wider" stopped being the discriminator. It is now the lobster's claw span and the
+  shrimp's curl (6.0 off-axis against the lobster's -0.5). Claws at 0.40 across left the
+  lobster only 6% wider than the shrimp, inside noise; they are held at 0.47 now.
+- [x] ⚠️ The abdomen was three wide strokes along the axis, which draws bars ACROSS the body —
+  three of them made a ladder, not a tail. One tapered polygon with thin creases instead.
+  And the pincer gap is a LINE, not a dark disc over the claw, which greyed the whole body. Segments are three arcs of decreasing width because canvas cannot taper
   a stroke — and the steps read as segments, which is what a shrimp looks like anyway.
 - [x] **THE RULE, made structural: every skin gets a guide ring.** `drawOneDisc` strokes it
   after the skin paints, so a new skin cannot forget one. A player is a circle and that circle
