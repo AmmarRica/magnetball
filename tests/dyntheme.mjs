@@ -292,6 +292,7 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
+  let cover = null;                 // filled by the Bootleg block, reused by Sorry!
   // ---- Bootleg: a printed sleeve, dots against bars ------------------------
   // ⚠️ Red against green is the one pair a colour-blind player cannot separate, so
   // this checks the SHAPE — a circle is covered all the way round at 0.9r, a square
@@ -307,10 +308,12 @@ const r = await p.evaluate(async ()=>{
     const R = 60, CX = 150, CY = 150;
     const cv3 = document.createElement('canvas'); cv3.width = cv3.height = 300;
     const cc3 = cv3.getContext('2d');
-    const cover = (team) => {
+    // Shared with the Sorry! block below: two themes now settle their sides on the
+    // same round-against-square distinction, and one measurement covers both.
+    cover = (skinKey, team) => {
       cc3.fillStyle = '#7f7f7f'; cc3.fillRect(0,0,300,300);
       const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
-      M.DISC_SKINS.sleeve.paint(cc3, q, CX, CY, R, { players:[q] });
+      M.DISC_SKINS[skinKey].paint(cc3, q, CX, CY, R, { players:[q] });
       let n = 0;
       for (let deg=0; deg<360; deg+=15){
         const a = deg*Math.PI/180;
@@ -321,8 +324,8 @@ const r = await p.evaluate(async ()=>{
       }
       return n;
     };
-    o.sleeveRound = cover(0);
-    o.sleeveBar = cover(1);
+    o.sleeveRound = cover('sleeve', 0);
+    o.sleeveBar = cover('sleeve', 1);
     o.roundIsRound = o.sleeveRound === 24;
     o.barHasCorners = o.sleeveBar >= 4 && o.sleeveBar <= 18;
     // The printed dots are MUTED against the team that is drawn as one of them.
@@ -338,6 +341,43 @@ const r = await p.evaluate(async ()=>{
     let threw = null;
     try { M.DYN_FIELDS.sleeve.paint(cc3, st2, 0, 0, 200, 200); } catch(e){ threw = e.message; }
     o.sleeveFallsBack = threw;
+  }
+
+  // ---- Sorry!: a board, and pawns standing on their own plates -------------
+  // ⚠️ Both sides are pawns, so the piece cannot tell them apart — the PLATE does,
+  // a start circle against a track square, measured the same way as Bootleg.
+  // ⚠️ And the DECOY again, the other way round from Bootleg: here the field's lane
+  // is drawn in the TEAM's own colour, so it only works because it is tinted.
+  {
+    M.applyBundle('board');
+    o.boardName = M.bundleName();
+    o.boardSlots = JSON.stringify(M.liveSlots());
+    o.pawnRound = cover('pawn', 0);
+    o.pawnSquare = cover('pawn', 1);
+    o.pawnRoundIsRound = o.pawnRound === 24;
+    o.pawnSquareHasCorners = o.pawnSquare >= 4 && o.pawnSquare <= 18;
+    // The safety lane, painted for real over the palette's own court, sampled on the
+    // first lane cell — which the geometry puts at the middle of the top edge.
+    const cv4 = document.createElement('canvas'); cv4.width = cv4.height = 300;
+    const cc4 = cv4.getContext('2d');
+    cc4.fillStyle = M.TH.court; cc4.fillRect(0,0,300,300);
+    const f2 = M.DYN_FIELDS.boardtrack;
+    const st3 = {}; f2.reset && f2.reset(st3);
+    f2.paint(cc4, st3, 0, 0, 300, 300);
+    const s4 = 300 * f2.sq, step4 = s4 * f2.gap;
+    const d4 = cc4.getImageData(150, Math.round(s4*1.05 + step4), 1, 1).data;
+    const lum4 = c3 => c3[0]*0.3 + c3[1]*0.6 + c3[2]*0.1;
+    cc4.fillStyle = M.TH.teamRed; cc4.fillRect(0,0,2,2);
+    const dt = cc4.getImageData(0,0,1,1).data;
+    o.laneLum = lum4(d4); o.laneTeamLum = lum4(dt);
+    o.laneIsRed = d4[0] > d4[1] && d4[1] > d4[2];      // sampling the lane, not the board
+    o.laneIsTinted = o.laneLum > o.laneTeamLum + 40;
+    o.boardStill = !f2.step;
+    // Over a palette that never heard of it — slots mix, and it reads TH.dynMark.
+    M.applyBundle('classic');
+    let threw2 = null;
+    try { f2.paint(cc4, st3, 0, 0, 200, 200); } catch(e){ threw2 = e.message; }
+    o.boardFallsBack = threw2;
   }
   return o;
 });
@@ -388,6 +428,13 @@ ok(r.barHasCorners, `Bootleg's two sides do not differ by SHAPE: ${r.sleeveBar}/
 ok(r.printIsMuted, `the printed court dots (${Math.round(r.printLum)}) are as bright as the team drawn as one (${Math.round(r.teamLum)}) — the field is a set of decoys`);
 ok(r.sleeveStill, 'the sleeve field has a step — print does not move, and a drifting grid under the players reads as lag');
 ok(!r.sleeveFallsBack, `the sleeve field threw over a palette that does not declare its inks: ${r.sleeveFallsBack}`);
+ok(r.boardName === 'Sorry!', `the Sorry! bundle does not resolve: ${r.boardName}`);
+ok(r.pawnRoundIsRound, `the Sorry! start-circle plate is not covered all the way round at 0.9r (${r.pawnRound}/24)`);
+ok(r.pawnSquareHasCorners, `Sorry!'s two sides do not differ by SHAPE: ${r.pawnSquare}/24 covered at 0.9r. Both sides are pawns, so the plate is the only thing that can tell them apart`);
+ok(r.laneIsRed, `the lane probe is not on the lane at all: ${JSON.stringify(r.laneLum)} — the geometry moved and this check now measures the board`);
+ok(r.laneIsTinted, `the safety lane (${Math.round(r.laneLum)}) is as saturated as the team drawn on top of it (${Math.round(r.laneTeamLum)}) — a column of five team-coloured squares is a column of five decoys`);
+ok(r.boardStill, 'the board field has a step — a printed board does not move');
+ok(!r.boardFallsBack, `the board field threw over a palette that does not declare its inks: ${r.boardFallsBack}`);
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

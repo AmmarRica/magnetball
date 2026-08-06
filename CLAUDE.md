@@ -158,6 +158,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   circles under a team drawn as a bright red circle is a field of decoys. `tests/dyntheme.mjs`
   measures both — coverage at 0.9`r` all the way round for the dot, only on the diagonals for
   the bar, and the print's luminance against the team's.
+  `board` (shown as **Sorry!**) = a butter-yellow board, a white track of rounded squares
+  round the outside, and a tinted safety lane running into each end — which on a pitch is
+  the lane into the goal. ⚠️ Both sides are PAWNS, because that is what the game is, so the
+  piece cannot carry the difference: each pawn stands on its own plate, a start CIRCLE
+  against a track SQUARE, and the plate carries the COLOUR while the pawn is white on top
+  (a white plate with a coloured pawn put the team's only colour in a glyph a few pixels
+  across and every disc read as white). ⚠️ The lane squares are **tinted**, not the team
+  colour — a saturated blue rounded square is exactly what a team-1 player is drawn as, and
+  a column of five is five decoys; Home is a wide slot rather than a circle for the same
+  reason against the ball. The track is a grid computed off the pitch rect, so a wider field
+  gets more squares rather than stretched ones, and there is no PRNG at all.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead

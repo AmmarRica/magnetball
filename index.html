@@ -2398,6 +2398,32 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // The board game. Butter-yellow board, a white track of rounded squares, a red and
+  // a blue safety lane running into the two ends — see DYN_FIELDS.boardtrack.
+  // ⚠️ Both sides are PAWNS, because that is what the game is, so the silhouette has
+  // to come from somewhere other than the piece: each pawn stands on its own plate,
+  // a start CIRCLE against a track SQUARE (DISC_SKINS.pawn). Red against blue is a
+  // pair most colour-blind players can separate, but "most" is not the bar.
+  // ⚠️ The board's own butter is close to the ball's cream, so the ball is white with
+  // a red spot and a dark rim — a cream ball on a cream board is a lost ball.
+  board: {
+    name: 'Sorry!', emoji: '♟️',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #fdf3d2 0%, #f3e3ae 55%, #e7d295 100%)',
+      bg:'#f6ead0', panel:'rgba(27,42,74,0.06)', edge:'#c9b483', text:'#1b2a4a', muted:'#5a5334',
+      red:'#d8232a', blue:'#1f5fbf', cyan:'#1f9f6f', magenta:'#d8232a', green:'#1f9f6f',
+      yellow:'#e0a51c', accent:'#c1141a', go:'#1f9f6f', field:'#f2e3b0', onAccent:'#ffffff' },
+    pitch: { glow:false, fieldBg:'#e7d295', court:'#f2e3b0', stripeA:'#f2e3b0', stripeB:'#ecdba4',
+      netPocket:'rgba(27,42,74,0.08)', line:'#1b2a4a', centerDot:'#1b2a4a',
+      netMesh:'rgba(27,42,74,0.40)', post:'#1b2a4a', teamRed:'#d8232a', teamBlue:'#1f5fbf',
+      discRim:'#1b2a4a', kickRing:'#d8232a', kickText:'#ffffff', cbRing:'#1b2a4a',
+      eyeWhite:'#ffffff', eyePupil:'#1b2a4a', nameBg:'#1b2a4a', nameText:'#f6ead0',
+      shadow:'rgba(27,42,74,0.20)', ballRim:'#1b2a4a', ball:'#ffffff', ballSpot:'#d8232a',
+      trailRGB:'27,42,74',
+      obstacle:'#1b2a4a', good:'#1f9f6f', warn:'#e0a51c', dim:'#9a8f6c', cone:'#d8232a',
+      hudText:'#1b2a4a', hudSub:'#6b6242', accent:'#d8232a', padRing:'rgba(216,35,42,0.6)',
+      dynMark:'#ffffff' },   // the track squares — white board card, not a team colour
+  },
   // A record sleeve: black card, a grid of red dots printed over it, green bars
   // punched through and acid-yellow type. ⚠️ Red against green is the one pair a
   // colour-blind player cannot separate, so the sleeve's own vocabulary does the work
@@ -2975,6 +3001,7 @@ const THEME_BUNDLES = {
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
   chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
   sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
+  board:     { field:'boardtrack',discs:'pawn',        ball:'plain',   sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11449,6 +11476,59 @@ const DYN_FIELDS = {
       c.globalAlpha = a;
     },
   },
+  // The board game: a butter-yellow board, a white track of rounded squares round the
+  // outside, and a coloured safety lane running into each end — which on a pitch is
+  // the lane into the goal, so the board's own geometry says where you are heading.
+  // ⚠️ Still, and rolled from nothing: the track is a GRID, computed off the pitch
+  // rect, so a wider field gets more squares rather than stretched ones. No PRNG at
+  // all here — a printed board has no scatter to remember.
+  boardtrack: {
+    name: 'Board', sq: 0.055, gap: 1.42, lane: 5,
+    paint(c, st, L, T, W, H){
+      // Falls back through whatever palette it is handed: slots mix freely.
+      const ink  = TH.line || '#1b2a4a';
+      const face = TH.dynMark || '#ffffff';
+      const red  = TH.teamRed || '#d8232a', blue = TH.teamBlue || '#1f5fbf';
+      const s = Math.min(W, H) * this.sq, step = s * this.gap, m = s * 1.05;
+      c.save(); c.beginPath(); c.rect(L, T, W, H); c.clip();
+      c.lineWidth = Math.max(1, s*0.11);
+      c.strokeStyle = rgba(ink, 0.55);
+      const cell = (px, py, fill) => {
+        c.beginPath(); roundRectOn(c, px - s/2, py - s/2, s, s, s*0.22);
+        c.fillStyle = fill; c.fill(); c.stroke();
+      };
+      // The track: a loop just inside the touchline. Counts are rounded so the corners
+      // land on a square rather than half of one.
+      const l = L + m, r2 = L + W - m, t = T + m, b = T + H - m;
+      const nx = Math.max(3, Math.round((r2 - l) / step));
+      const ny = Math.max(3, Math.round((b - t) / step));
+      for (let i=0; i<=nx; i++){
+        const px = l + (r2 - l) * (i/nx);
+        cell(px, t, face); cell(px, b, face);
+      }
+      for (let j=1; j<ny; j++){
+        const py = t + (b - t) * (j/ny);
+        cell(l, py, face); cell(r2, py, face);
+      }
+      // The safety lanes: one per end, in that end's colour, pointing at the goal.
+      // ⚠️ dir is INWARD, not "which end" — signed the other way the lane marched off
+      // the top of the pitch and was clipped to a single sliver at the touchline.
+      const cx = L + W/2;
+      for (const [col, dir] of [[red, 1], [blue, -1]]){
+        const edge = dir > 0 ? t : b;
+        // ⚠️ TINTED, not the team colour at full strength. A saturated blue rounded
+        // square on the grass is exactly what a team-1 player is drawn as, and a
+        // column of five of them is a column of five decoys.
+        for (let k=1; k<=this.lane; k++) cell(cx, edge + dir * k * step, rgba(col, 0.40));
+        // Home: the board's wide slot, not a circle — a tinted disc down here reads
+        // as the ball, which is the one thing on the pitch you cannot afford to double.
+        const hy = edge + dir * (this.lane + 1.25) * step;
+        c.beginPath(); roundRectOn(c, cx - s*1.5, hy - s*0.6, s*3, s*1.2, s*0.26);
+        c.fillStyle = rgba(col, 0.30); c.fill(); c.stroke();
+      }
+      c.restore();
+    },
+  },
   // A printed record sleeve: a grid of big dots over black card, green bars punched
   // through it, and the press's own streaks across the whole thing. Still — no step —
   // because print does not move, and a drifting grid under the players reads as lag.
@@ -12125,6 +12205,39 @@ DISC_SKINS.chalk = {
     if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
     else              c.fillRect(x - T/2, y - L, T, L*2);
     c.restore();
+  },
+};
+// A board pawn on the square it stands on. ⚠️ Both sides are pawns — that is what
+// the game IS — so the piece cannot carry the difference, and the PLATE does: team 0
+// stands on a start CIRCLE, team 1 on a track SQUARE, which is the board's own
+// vocabulary and survives twelve pixels the way red-against-blue does not for
+// everyone. The plate is inscribed in the guide ring, never drawn out to it.
+const PAWN = { plate: 0.70, head: 0.26, neck: 0.10, waist: 0.15, foot: 0.40, top: -0.52 };
+DISC_SKINS.pawn = {
+  name: 'Board pawns',
+  paint(c, p, x, y, r, w){
+    const round = p.team === 0;
+    // ⚠️ The PLATE carries the colour and the pawn is white on it, not the other way
+    // round. A white plate with a coloured pawn on it put the team's only colour into
+    // a glyph a few pixels across, and at match scale every disc read as white.
+    c.fillStyle = round ? (TH.teamRed || '#d8232a') : (TH.teamBlue || '#1f5fbf');
+    c.beginPath();
+    if (round) c.arc(x, y, r*0.94, 0, 2*Math.PI);
+    else { const h = r*PAWN.plate; roundRectOn(c, x - h, y - h, h*2, h*2, h*0.24); }
+    c.fill();
+    c.strokeStyle = rgba(TH.line || '#1b2a4a', 0.55);
+    c.lineWidth = Math.max(1, r*0.07); c.stroke();
+    // The pawn: bulb head over a flared skirt, drawn upright whatever the body is
+    // doing — a board piece does not lean into a tackle.
+    c.fillStyle = '#ffffff';
+    const ty = y + r*PAWN.top;
+    c.beginPath(); c.arc(x, ty + r*PAWN.head, r*PAWN.head, 0, 2*Math.PI); c.fill();
+    c.beginPath();
+    c.moveTo(x - r*PAWN.neck, ty + r*PAWN.head*1.7);
+    c.quadraticCurveTo(x - r*PAWN.waist, y + r*0.16, x - r*PAWN.foot, y + r*0.44);
+    c.lineTo(x + r*PAWN.foot, y + r*0.44);
+    c.quadraticCurveTo(x + r*PAWN.waist, y + r*0.16, x + r*PAWN.neck, ty + r*PAWN.head*1.7);
+    c.closePath(); c.fill();
   },
 };
 // The sleeve's own two marks: a red DOT against a green BAR. ⚠️ Red vs green is the
