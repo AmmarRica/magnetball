@@ -120,14 +120,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
-  `shrimp` = a sand seabed with ripples and shells, **shrimp vs lobsters** — team 0 draws a
-  curled prawn, team 1 a lobster, so the sides differ by SILHOUETTE and not only by colour
-  (which is what a colour-blind player cannot use, and what 12 pixels cannot carry). Same trick
-  as Pool's solids vs stripes. ⚠️ Both are LONG, so the discriminator is the lobster's **claws
-  held wide** and the shrimp's **curl** — measured off covered pixels, not the drawing code.
-  Claws at 0.40 across left the lobster only 6% wider than the shrimp, which is inside noise.
+  `shrimp` (theme key; shown as **Rockpool**) = a sand seabed with ripples and shells.
+  ⚠️ **Three creatures in one `SEA` registry — shrimp, crab, lobster — and `seaPair()` builds
+  the pairings**, so a pairing is a two-line entry rather than a copy of a creature and nothing
+  can drift between "the crab here" and "the crab there". The theme fields **crab vs lobster**;
+  the Players slot also offers Shrimp vs Lobster and Shrimp vs Crab.
+  The two sides must differ by SILHOUETTE, not only colour (colour is exactly what a
+  colour-blind player cannot use, and at 12 pixels it is most of what anyone has): a crab is
+  WIDE and stubby, a lobster is long with CLAWS HELD OUT, a shrimp is long and CURLED. Measured
+  off covered pixels in `tests/discskins.mjs`, never trusted from the drawing code — and the
+  discriminator has had to change with the pairing twice, which is why it is measured at all.
   ⚠️ Every vertex is checked against `r` **including its own stroke half-width** — the guide
-  ring is the one thing a skin may not cross;
+  ring is the one thing a skin may not cross.
+  ⚠️ `normalizeLook()` folds the old single-skin key `shrimp` → `crablobster` as a **pure string
+  swap with no `DISC_SKINS` lookup**: it runs during the bootstrap and `DISC_SKINS` is declared
+  with the renderer far below, so reading it there took the whole page down.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead

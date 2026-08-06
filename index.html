@@ -2342,12 +2342,13 @@ const THEMES = {
       hudText:'#ffffff', hudSub:'#c8c8c8', accent:'#ffffff', padRing:'rgba(255,255,255,0.7)',
       dynMark:'#000000' },   // the stars themselves — black, so they read on the white field
   },
-  // Underwater. Warm sand under blue-green water, and the players are shrimp — a
-  // theme that owns the FIELD (seabed) and what a player IS, the same mechanism as
-  // Pool. ⚠️ Lines are a deep teal rather than white: white ripples over pale sand
+  // Underwater. Warm sand under blue-green water, crabs against lobsters — a theme
+  // that owns the FIELD (seabed) and what a player IS, the same mechanism as Pool.
+  // The shrimp is still in the registry and still pickable; the Players slot offers
+  // all three pairings. ⚠️ Lines are a deep teal rather than white: white ripples over pale sand
   // gave the pitch markings nothing to hold against.
   shrimp: {
-    name: 'Shrimp', emoji: '🦐',
+    name: 'Rockpool', emoji: '🦞',
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #0d3b4a 0%, #072430 55%, #04151d 100%)',
       bg:'#04151d', panel:'rgba(150,220,235,0.07)', edge:'#2b6273', text:'#e8f6fa', muted:'#8fb6c2',
@@ -2889,7 +2890,7 @@ const THEME_BUNDLES = {
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
-  shrimp:    { field:'seabed',    discs:'shrimp', ball:'plain', sfx:'classic' },
+  shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -2940,6 +2941,15 @@ function normalizeLook(){
     delete sel.theme;
   }
   if (sel.ballLook){ L.ball = sel.ballLook; delete sel.ballLook; }
+  // The seabed skin was one entry that drew shrimp vs crab, then shrimp vs lobster.
+  // It is three creatures and three pairings now, so an old save naming the vanished
+  // key gets the theme's current pairing instead of no skin at all.
+  // ⚠️ A pure string swap, with NO lookup in DISC_SKINS: normalizeLook runs during
+  // the bootstrap, and `const DISC_SKINS` is declared with the renderer far below —
+  // reading it here threw "Cannot access 'DISC_SKINS' before initialization" and took
+  // the whole page down. An unrecognised key already degrades to no skin in
+  // discSkin(), so the guard was not buying anything either.
+  if (L.discs === 'shrimp') L.discs = 'crablobster';
   if (!THEMES[L.palette]) L.palette = d.palette;
 }
 
@@ -11558,13 +11568,30 @@ const SHRIMP = {
   legs: [[0.16, 0.30, 0.56], [0.00, 0.32, 0.58], [-0.16, 0.30, 0.55]],   // [along, inner, outer]
   swing: 0.15,
 };
-// The other half of the theme. Both are long, so they are told apart by what a
-// LOBSTER has and a shrimp does not: two big claws held out front, and a straight
-// fanned tail where the shrimp's abdomen curls under it. That is a silhouette
-// difference at 12 pixels, which colour alone is not — see tests/discskins.mjs,
-// which measures the claw span and the curl rather than trusting the drawing code.
-// ⚠️ Every point is checked against 1.0 INCLUDING its own stroke half-width. The
-// ring is the body and nothing may cross it.
+// ---------- The seabed creatures -------------------------------------------
+// THREE drawings, and the skins below pair them up. Keeping them in one registry is
+// the point: a pairing is then a two-line entry rather than a copy of a creature,
+// and nothing can drift between "the crab in this theme" and "the crab in that one".
+//
+// ⚠️ Two sides must differ by SILHOUETTE, not only by colour — colour is exactly what
+// a colour-blind player cannot use, and at 12 pixels it is most of what anyone has.
+// A crab is WIDE, a lobster is long with CLAWS HELD OUT, a shrimp is long and CURLED
+// with no claws. Any two of those three are told apart by shape. tests/discskins.mjs
+// measures it off covered pixels rather than trusting the drawing code.
+//
+// ⚠️ Every point in every creature is checked against 1.0 INCLUDING its own stroke
+// half-width. The guide ring is the body and nothing may cross it.
+const CRAB = {
+  bodyA: 0.40,      // carapace semi-axis along facing...
+  bodyB: 0.56,      // ...and across it. Wider than long: that IS the crab.
+  claw:  [0.42, 0.46],   // claw centre [along, across]
+  clawR: 0.15,
+  legs:  [[0.02, 0.50], [-0.24, 0.46], [-0.46, 0.34]],   // [along, across] per leg
+  legLen: 0.22,
+  eye:   [0.24, 0.19],
+  eyeR:  0.085,
+};
+
 const LOBSTER = {
   bodyA: 0.30, bodyB: 0.25,        // cephalothorax semi-axes
   bodyAt: 0.12,                    // ...and where it sits along the facing
@@ -11580,17 +11607,59 @@ const LOBSTER = {
   eye: [0.30, 0.13],
   eyeR: 0.075,
 };
-DISC_SKINS.shrimp = {
-  name: 'Shrimp vs Lobster',
-  paint(c, p, x, y, r, w){
-    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
-    const px = -uy, py = ux;
-    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    const pt = (a2, b2) => [x + ux*a2*r + px*b2*r, y + uy*a2*r + py*b2*r];
-    if (p.team === 1){ this.lobster(c, p, x, y, r, col, ux, uy, px, py, pt); return; }
-    this.shrimp(c, p, x, y, r, col, ux, uy, px, py, pt);
-  },
-  lobster(c, p, x, y, r, col, ux, uy, px, py, pt){
+const SEA = {
+  crab: { name:'Crab',
+    draw(c, p, x, y, r, col, ux, uy, px, py, pt){
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, 0.16); c.fill();
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    // Legs first, so the carapace sits on top of where they meet the body.
+    c.strokeStyle = col; c.lineWidth = Math.max(1, r*0.09);
+    for (const [along, across] of CRAB.legs){
+      for (const sgn of [-1, 1]){
+        const A = pt(along, across*sgn*0.55);
+        const B = pt(along - CRAB.legLen*0.5, (across + CRAB.legLen)*sgn);
+        c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+      }
+    }
+    // Claws: an arm out to a solid pincer, split by a thin gap. ⚠️ The gap is a LINE,
+    // not a dark disc laid over the claw — that version covered most of the claw and
+    // every crab came out grey instead of its team colour.
+    c.lineWidth = Math.max(1, r*0.10);
+    for (const sgn of [-1, 1]){
+      const A = pt(0.10, 0.30*sgn), C = pt(CRAB.claw[0], CRAB.claw[1]*sgn);
+      c.strokeStyle = col;
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(C[0],C[1]); c.stroke();
+      c.beginPath(); c.arc(C[0], C[1], CRAB.clawR*r, 0, 2*Math.PI);
+      c.fillStyle = col; c.fill();
+      if (r > 7){
+        const G0 = pt(CRAB.claw[0] + 0.04, (CRAB.claw[1] - 0.04)*sgn);
+        const G1 = pt(CRAB.claw[0] + 0.19, (CRAB.claw[1] + 0.07)*sgn);
+        c.strokeStyle = TH.discRim || '#101010';
+        c.lineWidth = Math.max(1, r*0.06);
+        c.beginPath(); c.moveTo(G0[0],G0[1]); c.lineTo(G1[0],G1[1]); c.stroke();
+        c.lineWidth = Math.max(1, r*0.10);
+      }
+    }
+    // Carapace — wider than it is long.
+    c.save();
+    c.translate(x, y); c.rotate(Math.atan2(uy, ux));
+    c.beginPath(); c.ellipse(0, 0, CRAB.bodyA*r, CRAB.bodyB*r, 0, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    c.restore();
+    // Eyes on the front edge, close together, which is the crab tell.
+    if (r > 5){
+      for (const sgn of [-1, 1]){
+        const E = pt(CRAB.eye[0], CRAB.eye[1]*sgn);
+        c.beginPath(); c.arc(E[0], E[1], CRAB.eyeR*r, 0, 2*Math.PI);
+        c.fillStyle = TH.discRim || '#101010'; c.fill();
+      }
+    }
+    c.restore();
+    } },
+  lobster: { name:'Lobster',
+    draw(c, p, x, y, r, col, ux, uy, px, py, pt){
     c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
     c.fillStyle = rgba(col, 0.16); c.fill();
     c.save();
@@ -11671,8 +11740,9 @@ DISC_SKINS.shrimp = {
       }
     }
     c.restore();
-  },
-  shrimp(c, p, x, y, r, col, ux, uy, px, py, pt){
+    } },
+  shrimp: { name:'Shrimp',
+    draw(c, p, x, y, r, col, ux, uy, px, py, pt){
     // Body plate first, so the shrimp reads against any court.
     c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
     c.fillStyle = rgba(col, 0.16); c.fill();
@@ -11724,8 +11794,27 @@ DISC_SKINS.shrimp = {
       c.fillStyle = TH.discRim || '#101010'; c.fill();
     }
     c.restore();
-  },
+    } },
 };
+
+// A pairing: which creature each side draws. The skin key is what `sel.look.discs`
+// stores, so it is stable across renames of the display name.
+function seaPair(name, t0, t1){
+  return {
+    name,
+    paint(c, p, x, y, r, w){
+      const { ux, uy } = discFace(p);              // honours the rotation checkbox
+      const px = -uy, py = ux;
+      const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+      const pt = (a2, b2) => [x + ux*a2*r + px*b2*r, y + uy*a2*r + py*b2*r];
+      SEA[p.team === 0 ? t0 : t1].draw(c, p, x, y, r, col, ux, uy, px, py, pt);
+    },
+  };
+}
+DISC_SKINS.crablobster   = seaPair('Crab vs Lobster',   'crab',   'lobster');
+DISC_SKINS.shrimplobster = seaPair('Shrimp vs Lobster', 'shrimp', 'lobster');
+DISC_SKINS.shrimpcrab    = seaPair('Shrimp vs Crab',    'shrimp', 'crab');
+
 DISC_SKINS.arrow = {
   name: 'Arrowheads',
   paint(c, p, x, y, r, w){
@@ -12711,7 +12800,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0250PM';
+const VERSION = '20260806.0345PM';
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -12751,7 +12840,7 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
-    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },

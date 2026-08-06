@@ -27,6 +27,7 @@ await p.waitForTimeout(900);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
+  const SKIN = 'crablobster';        // what the Rockpool theme actually fields
 
   // Paint each skin big on a flat field of its own, then read round the rim. Big,
   // because the ring is a fraction of r and at match scale it is one pixel.
@@ -102,7 +103,7 @@ const r = await p.evaluate(async ()=>{
     M.DISC_SKINS[skinKey].paint(c, q, CX, CY, R, { players:[q] });
     return c.getImageData(CX-R, CY-R, R*2, R*2).data.join(',');
   };
-  o.shrimpTurns = paintAt('shrimp', true) !== paintAt('shrimp', false);
+  o.shrimpTurns = paintAt(SKIN, true) !== paintAt(SKIN, false);
   o.arrowTurns  = paintAt('arrow',  true) !== paintAt('arrow',  false);
   o.poolIgnores = paintAt('pool',   true) === paintAt('pool',   false);
   o.monoIgnores = paintAt('mono',   true) === paintAt('mono',   false);
@@ -118,7 +119,7 @@ const r = await p.evaluate(async ()=>{
     // vx set so legFrame reports a walking creature; gait picks which of the two.
     const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a',
                 vx: frame == null ? 0 : 3, vy: 0, gait: (frame || 0) * M.GAIT.stride };
-    M.DISC_SKINS.shrimp.paint(c, q, CX, CY, R, { players:[q] });
+    M.DISC_SKINS[SKIN].paint(c, q, CX, CY, R, { players:[q] });
     const d = c.getImageData(CX-R-4, CY-R-4, (R+4)*2, (R+4)*2).data;
     const wide = (R+4)*2;
     let minA=1e9, maxA=-1e9, minB=1e9, maxB=-1e9, n=0, sumB=0;
@@ -136,21 +137,39 @@ const r = await p.evaluate(async ()=>{
     }
     return { along: maxA-minA, across: maxB-minB, n, curl: +(sumB/Math.max(1,n)).toFixed(1) };
   };
-  const shr = extent(0), lob = extent(1);
+  const t0 = extent(0), t1 = extent(1);
   // Both frames must stay inside the body, not just the resting one.
-  const shr1 = extent(0, 1), lob1 = extent(1, 1);
-  o.walkExtents = { shr1, lob1 };
-  o.shrimpExtent = shr; o.lobsterExtent = lob;
-  // ⚠️ Both creatures are LONG, so "one is wide" is not the discriminator any more —
-  // it was when the other side was a crab. What separates a lobster from a shrimp is
-  // the two claws held out front, and a straight tail where the shrimp's curls under.
-  // Both are measured off covered pixels, so a redraw that loses either one fails.
-  o.lobsterIsWider = lob.across > shr.across * 1.15;
-  o.shrimpIsCurled = Math.abs(shr.curl) > Math.abs(lob.curl) * 2 && Math.abs(shr.curl) > 3;
-  o.sidesDifferInShape = o.lobsterIsWider && o.shrimpIsCurled;
+  const t0w = extent(0, 1), t1w = extent(1, 1);
+  o.walkExtents = { t0w, t1w };
+  o.team0Extent = t0; o.team1Extent = t1;
+  // ⚠️ The discriminator has to match the CREATURES, and it has changed twice as the
+  // pairing did. Crab vs lobster: the crab is wide and stubby, the lobster is long.
+  // Measured off covered pixels, so a redraw that makes them the same shape fails.
+  o.crabIsStubby  = t0.across / t0.along > t1.across / t1.along * 1.25;
+  o.lobsterIsLong = t1.along > t0.along * 1.1;
+  o.sidesDifferInShape = o.crabIsStubby && o.lobsterIsLong;
+  // ...and the OTHER pairings in the registry are distinguishable too, since the
+  // Players slot offers all three. A shrimp is the curled one; a lobster is not.
+  const shrimpEx = (() => {
+    c.fillStyle = '#7f7f7f'; c.fillRect(0,0,300,300);
+    const q = { team:0, faceX:1, faceY:0, r:R, vx:0, vy:0, gait:0 };
+    M.SEA.shrimp.draw(c, q, CX, CY, R, '#ff7a1a', 1, 0, 0, 1,
+      (a2,b2)=>[CX + a2*R, CY + b2*R]);
+    const d = c.getImageData(CX-R-4, CY-R-4, (R+4)*2, (R+4)*2).data;
+    const wide = (R+4)*2; let n=0, sumB=0;
+    for (let i=0;i<d.length;i+=4){
+      if (Math.abs(d[i]-127)+Math.abs(d[i+1]-127)+Math.abs(d[i+2]-127) < 60) continue;
+      const k=(i/4)|0; sumB += ((k/wide)|0)-(R+4); n++;
+    }
+    return { curl: +(sumB/Math.max(1,n)).toFixed(1), n };
+  })();
+  o.shrimpEx = shrimpEx;
+  o.shrimpStillCurled = Math.abs(shrimpEx.curl) > 3;
+  o.threeCreatures = ['shrimp','crab','lobster'].every(k => M.SEA[k] && typeof M.SEA[k].draw === 'function');
+  o.pairings = Object.keys(M.DISC_SKINS).filter(k => /crab|lobster/.test(k)).sort();
   // ...and neither one breaks out of the body. The ring IS the player.
-  o.bothInsideTheRing = Math.max(shr.along, shr.across, lob.along, lob.across,
-                                 shr1.along, shr1.across, lob1.along, lob1.across) <= R*2 + 2;
+  o.bothInsideTheRing = Math.max(t0.along, t0.across, t1.along, t1.across,
+                                 t0w.along, t0w.across, t1w.along, t1w.across) <= R*2 + 2;
 
   // ---- the two-frame leg animation ------------------------------------------
   // ⚠️ Driven by DISTANCE TRAVELLED, not by a clock. Anything advanced on a timer has
@@ -208,7 +227,11 @@ const r = await p.evaluate(async ()=>{
   M.applyBundle('shrimp');
   o.slots = JSON.stringify(M.liveSlots());
   o.named = M.bundleName();
-  o.setsFieldAndDiscs = M.sel.look.field === 'seabed' && M.sel.look.discs === 'shrimp';
+  // A save naming the old one-entry seabed skin must land on the current pairing.
+  M.sel.look.discs = 'shrimp'; M.normalizeLook();
+  o.legacyMigrates = M.sel.look.discs === 'crablobster';
+  M.applyBundle('shrimp');
+  o.setsFieldAndDiscs = M.sel.look.field === 'seabed' && M.sel.look.discs === 'crablobster';
   // It plays: a real match on it, drawn, with no escapes and no errors.
   M.sel.mode='4v4'; M.setMatchSeed(3); M.startMatch();
   const w = M.world; w.state='play'; w.stateT=2;
@@ -237,14 +260,14 @@ const r = await p.evaluate(async ()=>{
 
 const fail=[];
 const ok=(c2,m)=>{ if(!c2) fail.push(m); };
-ok(r.skins.includes('shrimp'), `no shrimp skin: ${JSON.stringify(r.skins)}`);
+ok(r.skins.includes('crablobster'), `no crab-vs-lobster skin: ${JSON.stringify(r.skins)}`);
 ok(r.guideIsReal, 'the guide ring is configured to nothing');
 ok(r.everySkinRinged, `a skin's body is not ringed all the way round: ${JSON.stringify(r.ringPerSkin)} — a player must always be able to see the circle they collide with`);
 ok(r.turnsWhenOn, 'the body does not turn to face travel with rotation on');
 ok(r.uprightWhenOff, 'rotation off does not point the body up its OWN pitch');
 ok(r.zeroFaceYIsNotFalsy, 'a player facing exactly along x got the fallback facing — `p.faceY || fallback` is back');
 ok(r.noFacingIsSane, 'a player with no facing at all does not point anywhere sensible');
-ok(r.shrimpTurns && r.arrowTurns, `a direction-drawn skin ignored the rotation setting: shrimp ${r.shrimpTurns}, arrow ${r.arrowTurns}`);
+ok(r.shrimpTurns && r.arrowTurns, `a direction-drawn skin ignored the rotation setting: creature ${r.shrimpTurns}, arrow ${r.arrowTurns}`);
 ok(r.poolIgnores && r.monoIgnores, 'a ROUND skin changed with the rotation setting — the control promises it only affects themes whose players have a front');
 ok(r.bothFramesUsed, `the leg animation never used both frames while walking: saw ${r.framesSeenWalking}`);
 ok(r.gaitGrewWhileWalking, 'the gait did not accumulate while walking');
@@ -252,9 +275,13 @@ ok(r.drawsDontWalk, 'a DRAW advanced the walk cycle — on a 144Hz screen the le
 ok(r.gaitStopsWhenStopped, 'the gait kept accumulating with the player stood still');
 ok(r.restIsFrameZero, `a stopped player is frozen mid-stride on frame ${r.stoppedFrame}`);
 ok(r.fasterLegsWhenFaster, `the legs do not speed up with the player: ${r.flipsSlow} flips slow vs ${r.flipsFast} fast`);
-ok(r.sidesDifferInShape, `shrimp and lobster are not different SHAPES: shrimp ${JSON.stringify(r.shrimpExtent)}, lobster ${JSON.stringify(r.lobsterExtent)} — the lobster's claws must make it wider (${r.lobsterIsWider}) and the shrimp must be the curled one (${r.shrimpIsCurled}). Colour alone is what a colour-blind player cannot use`);
-ok(r.bothInsideTheRing, `a body draws outside its own guide ring: shrimp ${JSON.stringify(r.shrimpExtent)}, lobster ${JSON.stringify(r.lobsterExtent)}`);
-ok(r.isBundle && r.named === 'Shrimp', `the Shrimp bundle does not resolve: ${r.named}`);
+ok(r.sidesDifferInShape, `the two sides are not different SHAPES: team0 ${JSON.stringify(r.team0Extent)}, team1 ${JSON.stringify(r.team1Extent)} — the crab must be stubbier (${r.crabIsStubby}) and the lobster longer (${r.lobsterIsLong}). Colour alone is what a colour-blind player cannot use`);
+ok(r.threeCreatures, `the creature registry lost one: ${JSON.stringify(r.pairings)}`);
+ok(r.pairings.length >= 2, `only ${r.pairings.length} pairing(s) offered — shrimp, crab and lobster should pair up more than one way`);
+ok(r.shrimpStillCurled, `the shrimp is no longer the curled one: ${JSON.stringify(r.shrimpEx)}`);
+ok(r.bothInsideTheRing, `a body draws outside its own guide ring: team0 ${JSON.stringify(r.team0Extent)}, team1 ${JSON.stringify(r.team1Extent)}`);
+ok(r.isBundle && r.named === 'Rockpool', `the Rockpool bundle does not resolve: ${r.named}`);
+ok(r.legacyMigrates, 'a save naming the old seabed disc skin did not migrate to the current pairing');
 ok(r.setsFieldAndDiscs, `the bundle does not set both field and discs: ${r.slots}`);
 ok(r.escapes === 0, `${r.escapes} ball escapes on the shrimp theme`);
 ok(r.floorIsStill, 'the seabed re-scatters every paint — the shells crawl');
