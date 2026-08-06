@@ -2398,6 +2398,34 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // Night in a fenced pasture with something overhead. 70s abduction poster: avocado
+  // grass, harvest gold, burnt orange, and a beam-lime that only exists because
+  // something is shining it. The players ARE the craft and the ball is a sheep.
+  // ⚠️ The two sides are a SAUCER and a TRIANGLE (DISC_SKINS.ufo) rather than two
+  // saucers in different colours — at twelve pixels, over grass, at night, a tinted
+  // ellipse against a tinted ellipse is one shape.
+  // ⚠️ The fence is drawn OUTSIDE the pitch (`bleed`), so it hugs the boundary the
+  // ball actually bounces off and the goal mouths are punched out of it — see
+  // DYN_FIELDS.paddock, which borrows the pool table's boundary path for the job.
+  ufo: {
+    name: 'Abduction', emoji: '👽',
+    ui: { scan:true,
+      grad:'radial-gradient(120% 90% at 50% -12%, #2b1f4a 0%, #191331 55%, #0d0a1c 100%)',
+      bg:'#0d0a1c', panel:'rgba(180,240,140,0.08)', edge:'#3d5a34', text:'#eaf4d8', muted:'#a8bd93',
+      red:'#ff8a3d', blue:'#5fe3c8', cyan:'#5fe3c8', magenta:'#ff8a3d', green:'#b6f06a',
+      yellow:'#f2b134', accent:'#b6f06a', go:'#b6f06a', field:'#1b2c20', onAccent:'#0d0a1c' },
+    pitch: { glow:true, fieldBg:'#141026', court:'#2f4a37', stripeA:'#2f4a37', stripeB:'#2a4432',
+      netPocket:'rgba(182,240,106,0.10)', line:'#d9e8a6', centerDot:'#d9e8a6',
+      netMesh:'rgba(217,232,166,0.38)', post:'#d9e8a6', teamRed:'#ff8a3d', teamBlue:'#5fe3c8',
+      discRim:'#120f22', kickRing:'#b6f06a', kickText:'#0d0a1c', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#120f22', nameBg:'#120f22', nameText:'#eaf4d8',
+      shadow:'rgba(0,0,0,0.34)', ballRim:'#2a2320', ball:'#f2efe6', ballSpot:'#2a2320',
+      trailRGB:'182,240,106',
+      obstacle:'#8b5a2b', good:'#b6f06a', warn:'#f2b134', dim:'#7a8a6a', cone:'#ff8a3d',
+      hudText:'#eaf4d8', hudSub:'#a8bd93', accent:'#b6f06a', padRing:'rgba(182,240,106,0.6)',
+      dynMark:'#8b5a2b',        // the fence — creosoted timber, not a team colour
+      dynAlt:'#3d6046' },       // the flattened grass a crop circle leaves behind
+  },
   // The board game. Butter-yellow board, a white track of rounded squares, a red and
   // a blue safety lane running into the two ends — see DYN_FIELDS.boardtrack.
   // ⚠️ Both sides are PAWNS, because that is what the game is, so the silhouette has
@@ -3002,6 +3030,7 @@ const THEME_BUNDLES = {
   chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
   sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
   board:     { field:'boardtrack',discs:'pawn',        ball:'plain',   sfx:'classic' },
+  ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space'   },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11764,6 +11793,64 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// A fenced pasture at night, with the marks something left in it. Post-and-rail all
+// the way round, crop circles flattened into the grass.
+// ⚠️ `bleed`, and the fence rides the pool table's own boundary path — a fence has to
+// stand ON the line the ball bounces off, follow a rounded or chamfered field for
+// free, and leave the two GOAL MOUTHS open. That is the same job the cushion does, so
+// it is the same code rather than a second copy that can drift from it.
+// ⚠️ The crop circles are rolled ONCE in reset() off a fixed PRNG, never in paint and
+// never off w.rng — where a circle sits must not change a single bot decision.
+DYN_FIELDS.paddock = {
+  name: 'Paddock', bleed: true, rings: 5,
+  reset(st){
+    const rnd = mulberry32(0x0FF0A1);     // fixed: the same field every match
+    st.c = [];
+    for (let i=0;i<this.rings;i++)
+      st.c.push([0.16 + rnd()*0.68, 0.10 + rnd()*0.80, 0.30 + rnd()*0.85, rnd()*0.6]);
+  },
+  paint(c, st, L, T, W, H, w){
+    const wood = TH.dynMark || '#8b5a2b';
+    const flat = TH.dynAlt || rgba(TH.line || '#d9e8a6', 0.14);
+    const fw = Math.max(4, Math.min(W, H) * 0.035);
+    // The crop circles go INSIDE, so they need their own clip — this field bleeds.
+    c.save();
+    c.beginPath();
+    if (w) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H); else c.rect(L, T, W, H);
+    c.clip();
+    c.lineWidth = Math.max(1.5, fw*0.30);
+    for (const [fx, fy, sc, off] of (st.c || [])){
+      const px = L + fx*W, py = T + fy*H, rr = Math.min(W, H) * 0.075 * sc;
+      c.strokeStyle = rgba(flat, 0.85); c.beginPath(); c.arc(px, py, rr, 0, 2*Math.PI); c.stroke();
+      c.strokeStyle = rgba(flat, 0.5);
+      c.beginPath(); c.arc(px, py, rr*0.52, 0, 2*Math.PI); c.stroke();
+      // A satellite disc off to one side — a lone ring reads as a centre spot.
+      c.fillStyle = rgba(flat, 0.55);
+      c.beginPath(); c.arc(px + Math.cos(off*6.28)*rr*1.5, py + Math.sin(off*6.28)*rr*1.5,
+                           rr*0.22, 0, 2*Math.PI); c.fill();
+    }
+    c.restore();
+    if (!w) return;                       // a picker tile has no field to fence
+    const f = w.field, ghPx = (f.goal/2) / f.W * W, cx = L + W/2, M = fw * 3;
+    c.save();
+    c.beginPath();
+    c.rect(L - M, T - M, W + M*2, H + M*2);          // everything nearby...
+    DYN_FIELDS.pooltable.path(c, f, L, T, W, H);     // ...minus the play area...
+    c.rect(cx - ghPx, T - M, ghPx*2, M);             // ...minus the top goal mouth...
+    c.rect(cx - ghPx, T + H, ghPx*2, M);             // ...and the bottom one
+    c.clip('evenodd');
+    // The rail hugs the line: stroked centred on the boundary, so only its outer half
+    // survives the clip and the face of it lands exactly where the ball turns round.
+    c.strokeStyle = wood; c.lineWidth = fw * 1.3;
+    c.beginPath(); DYN_FIELDS.pooltable.path(c, f, L, T, W, H); c.stroke();
+    // ...and the posts cross the whole band, as a dash along the same path.
+    c.setLineDash([fw*0.42, fw*1.7]);
+    c.strokeStyle = wood; c.lineWidth = fw * 2;
+    c.beginPath(); DYN_FIELDS.pooltable.path(c, f, L, T, W, H); c.stroke();
+    c.setLineDash([]);
+    c.restore();
+  },
+};
 // The VIDEOBALL court: warm cream bands running goal-to-goal on a teal table. The
 // bands are the whole read — they give the eye a ruler for how far the ball moved.
 DYN_FIELDS.vbcourt = {
@@ -12204,6 +12291,74 @@ DISC_SKINS.chalk = {
     const L = r*CHALK.bar, T = r*CHALK.thick;
     if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
     else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
+// Two craft, seen from above and slightly behind, banking the way they are going.
+// ⚠️ The 3D is the whole point of the skin, and it is done by TILTING the hull about
+// the facing axis — leading edge down, dome pushed back — never by drawing a bigger
+// shape. A player is a circle of radius r and that circle is what collides; the hull
+// is 0.90r at its widest so the tilt cannot push a wing past the guide ring.
+// ⚠️ The sides differ by SILHOUETTE: a saucer against a triangle, both of them 70s
+// sighting-report stock. Two saucers in two colours are one shape at twelve pixels,
+// over grass, at night — which is when you most need to know who that is.
+const UFO = { hull: 0.90, thick: 0.27, tilt: 0.26, dome: 0.40,
+              tri: { nose: 0.86, back: 0.60, wing: 0.60 }, lights: 3 };
+DISC_SKINS.ufo = {
+  name: 'Craft',
+  paint(c, p, x, y, r, w){
+    const { ux, uy } = discFace(p);
+    const saucer = p.team === 0;
+    const col = saucer ? (TH.teamRed || '#ff8a3d') : (TH.teamBlue || '#5fe3c8');
+    const dark = TH.discRim || '#120f22';
+    c.save();
+    c.translate(x, y); c.rotate(Math.atan2(uy, ux));   // +x is now the way it is going
+    // The beam: a wedge of light thrown ahead and down. Under the hull, so the craft
+    // always wins — it is a tell about heading, not a second body.
+    c.fillStyle = rgba(col, 0.16);
+    c.beginPath(); c.moveTo(0, 0);
+    c.lineTo(r*0.98, r*0.52); c.lineTo(r*0.98, -r*0.10); c.closePath(); c.fill();
+    if (saucer){
+      // Belly first, offset back and down, then the hull over it: the offset is what
+      // reads as thickness rather than as an outline.
+      c.save(); c.rotate(UFO.tilt);
+      c.fillStyle = dark;
+      c.beginPath(); c.ellipse(-r*0.02, r*0.14, r*UFO.hull*0.94, r*UFO.thick, 0, 0, 2*Math.PI); c.fill();
+      c.fillStyle = col;
+      c.beginPath(); c.ellipse(0, 0, r*UFO.hull, r*UFO.thick, 0, 0, 2*Math.PI); c.fill();
+      // Dome, pushed toward the trailing edge because the nose is the low end.
+      c.fillStyle = rgba('#ffffff', 0.85);
+      c.beginPath(); c.ellipse(-r*0.14, -r*0.10, r*UFO.dome, r*UFO.dome*0.82, 0, Math.PI, 0); c.fill();
+      c.fillStyle = rgba(dark, 0.55);
+      c.beginPath(); c.ellipse(-r*0.14, -r*0.10, r*UFO.dome*0.52, r*UFO.dome*0.44, 0, Math.PI, 0); c.fill();
+      // Rim lights along the underside.
+      c.fillStyle = rgba('#ffffff', 0.9);
+      for (let k=0;k<UFO.lights;k++){
+        const t = (k - (UFO.lights-1)/2) / UFO.lights * 1.5;
+        c.beginPath(); c.arc(t*r*UFO.hull, r*UFO.thick*0.62, Math.max(0.8, r*0.075), 0, 2*Math.PI);
+        c.fill();
+      }
+      c.restore();
+    } else {
+      const T2 = UFO.tri;
+      const tri = (dx, dy) => { c.beginPath();
+        c.moveTo(r*T2.nose + dx, dy);
+        c.lineTo(-r*T2.back + dx, r*T2.wing + dy);
+        c.lineTo(-r*T2.back*0.72 + dx, dy);
+        c.lineTo(-r*T2.back + dx, -r*T2.wing + dy); c.closePath(); };
+      c.fillStyle = dark; tri(-r*0.05, r*0.12); c.fill();     // the underside, seen edge-on
+      c.fillStyle = col;  tri(0, 0); c.fill();
+      c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.06);
+      c.strokeStyle = dark; c.stroke();
+      // A light at each corner and one in the middle: the classic triangle report.
+      c.fillStyle = rgba('#ffffff', 0.92);
+      for (const [lx, ly] of [[r*T2.nose*0.66, 0], [-r*T2.back*0.72, r*T2.wing*0.62],
+                              [-r*T2.back*0.72, -r*T2.wing*0.62]]){
+        c.beginPath(); c.arc(lx, ly, Math.max(0.8, r*0.085), 0, 2*Math.PI); c.fill();
+      }
+      c.fillStyle = rgba(dark, 0.6);
+      c.beginPath(); c.arc(-r*0.06, 0, Math.max(1, r*0.17), 0, 2*Math.PI); c.fill();
+    }
     c.restore();
   },
 };
@@ -12743,6 +12898,24 @@ const BALL_LOOKS = {
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
       ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
   plain:   { name:'Plain', draw:()=>{} },
+  // The thing the beam is aimed at. ⚠️ A look gets ONE colour, clipped to the ball,
+  // so the fleece is the ball itself and the spot ink draws only what is not fleece:
+  // the scalloped edge, the head and the legs. Trying to draw a whole sheep in one
+  // ink filled the circle and it read as a blob.
+  sheep:   { name:'Sheep', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    // ⚠️ The fleece is NUBS, not scallops, and it stops short of the head. Drawn as
+    // big arcs all the way round they closed into a ring of teeth and the ball read
+    // as a cog; and anything put on the rim is lost, because ballRim is dark too.
+    for (let k=0;k<7;k++){
+      const a = -Math.PI*0.78 + k*(Math.PI*1.46/6);
+      c.beginPath(); c.arc(Math.cos(a)*r*0.82, Math.sin(a)*r*0.82, r*0.17, 0, 7); c.fill(); }
+    // Head and ear, held clear of the rim so white fleece surrounds them.
+    c.beginPath(); c.ellipse(r*0.50, -r*0.30, r*0.30, r*0.23, 0.42, 0, 2*Math.PI); c.fill();
+    c.beginPath(); c.ellipse(r*0.32, -r*0.52, r*0.15, r*0.09, -0.35, 0, 2*Math.PI); c.fill();
+    for (const lx of [-r*0.34, r*0.20]){
+      c.beginPath(); c.ellipse(lx, r*0.56, r*0.09, r*0.22, 0, 0, 2*Math.PI); c.fill(); }
+    c.restore(); } },
   stripe:  { name:'Stripe', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.fillRect(-r, -r*0.30, r*2, r*0.60);
