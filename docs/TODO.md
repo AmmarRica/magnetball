@@ -129,8 +129,8 @@ _Current build: **v20260806.0955AM** (shown under the title; bump `VERSION` in `
   fallback at all, so that failure is loud rather than silent.
 - [x] Balance-checked over eight bot-only matches: 3–4 cells typically fill in three minutes
   and one match in eight ends on a full hive — a live race, not a formality.
-- [ ] Bots don't chase berries (the AI layer is untouched); they shove them around incidentally.
-  Worth revisiting only if the mode feels flat in single player.
+- [x] **Bots contest berries now** — one runner a side, last leg only. See the tuning record
+  under "Bots contest the berries" above.
 
 ## 👁 Trails: the 3-second rule, reverted
 - [-] **Reverted.** Trails were rebuilt as a claim about TIME — a 3-second window for the
@@ -572,12 +572,16 @@ Measured, human parked, 30–60 s of self-play (baselines in the audit):
 | Ball contact at Hard/Insane | **0 – 2 %** | 8 – 76 % |
 | Bots within 70 of the ball (4v4) | up to 0.91 | ≤ 0.49 |
 
-- [ ] **Known, deferred to step 4:** non-chasers are still placed by `mates.indexOf(p) % 2`,
-  so in 4v4 two bots compute an *identical* defender spot and two an identical attacker
-  spot. Separation keeps them apart but they still hover as pairs. The ball-anchored
-  formation with distinct slots per role is what fixes it properly.
-- [ ] Steps 2, 4–9 and the `DIFF` re-tune (measured against a frozen copy of the old
-  `runBot` as reference opponent) are still to come.
+- [x] **The `mates.indexOf(p) % 2` placement is gone.** It made two bots in a 4v4 compute an
+  identical defender spot and two an identical attacker spot, so they hovered as pairs and only
+  separation kept them apart. `botFormationSpot` is ball-anchored with a distinct slot per role.
+- [x] **Steps 2 and 4–9 landed** — the four-layer AI (`botPhase` → `botAssignRoles` → the
+  per-bot decision → Layer-0 steering), `botPickAim` scoring shot/pass/bank/clear through one
+  function, `botIntercept`'s anticipation limit as a real difficulty axis, and every tuning
+  value in the one `BOT` block.
+- [-] **8a's frozen reference opponent is retired** — it cannot work, see the note under the
+  checkpoint-B section. The `DIFF` balance is measured tier-vs-tier on current mechanics in
+  `tests/botai.mjs` instead.
 
 ## 🎨 Theme picker shows the palette
 - [x] **Emoji swapped for painted swatches.** Each theme tile is a canvas showing the six
@@ -984,9 +988,10 @@ two and `tests/cocktailnopad.mjs` the third.)_
   keyboard navigation. Escape only now.
 - [x] **Four dead functions** — `teamTint`, `randCap`, `randFlag`, `randEyes` are all called now:
   the bot-look fix uses them to give every bot its own face, cap, eyes and team-family colour.
-- [ ] **`index.html` is 5,793 lines / 340 KB with ~300 functions.** The single-file rule is a
-  deliberate constraint (see `CLAUDE.md`), not an accident — but navigating it is the main tax on
-  every change. If it keeps growing, consider a documented section index at the top.
+- [ ] **`index.html` is 12,483 lines.** The single-file rule is a deliberate constraint (see
+  `CLAUDE.md`), not an accident — but navigating it is the main tax on every change, and it has
+  more than doubled since this was first written. A documented section index at the top is the
+  cheap fix; splitting the file is not on the table.
 - [ ] **Two shipped "Coming soon" stubs** — `#shopSupport` and the Online-rooms card (`#roomCode`,
   disabled). Honest, but they're dead UI in a shipped build; decide keep-or-cut.
 
