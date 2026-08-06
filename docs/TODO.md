@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260806.0955AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -51,6 +51,36 @@ _Current build: **v20260806.0955AM** (shown under the title; bump `VERSION` in `
   input-prompts / fonts / sports / mobile-controls are) and this environment's network policy
   blocks kenney.nl, so it could not be fetched. Commit
   `assets/Kenney/kenney_game-icons/Vector/` and swapping is a change to `iconSvg` alone.
+
+## 🔍 Self-review of this session's code (2026-08-06)
+Read back everything added this session looking for defects rather than for confirmation.
+Three findings, two of them real bugs that shipped.
+
+- [x] **The goal-box rule fired in the WARM-UP LOBBY and after the FULL-TIME WHISTLE.** It had
+  no state gate at all, while `applyKickoffLine` — the rule it was modelled on — has one. The
+  lobby is where you walk about, test controls and pick a side; being shoved off a spot there
+  reads as the controls breaking. Measured before the fix: 3 players moved during the wind-down
+  against 0 with the rule off. Now gated on `w.state === 'play'`.
+  A wall CAN still form at kickoff — measured 4 in the box — and is ejected to 1 the instant
+  play starts, which is the right trade: the kickoff line already restricts position there, and
+  shoving people while they take up formation would look broken.
+- [x] **`MIN_BODY_PX` was declared below `computeCam`, which reads it.** It only survived
+  because `computeCam`'s one bootstrap-time caller is guarded by `if (world)` and `world` is
+  still null there — luck, not design. Two TDZ incidents of exactly this shape are already
+  recorded in `CLAUDE.md` (VJUI, GOALCAM). Moved above its reader.
+- [x] Checked and **clean**: the new search box is a keyboard surface sitting next to a live
+  docked match, but `pollKeys` already bails on `typingInField(document.activeElement)`, so
+  typing "colossus" mid-match does not steer your player. `buildMenuSearch` runs once, so its
+  document-level `pointerdown` listener does not stack. `w.boxLock` cannot hold a player from a
+  previous roster — `discs.includes(owner)` drops it — and a new match gets a fresh world.
+- [x] Added the missing coverage the review exposed: both state gates in `boxrule`, and the
+  real click path in `menufind` (everything else drove `noteRecent` directly, which proves the
+  store and not the wiring).
+
+- [ ] ⚠️ **An unidentified flaky suite.** Two full runs this session reported 59/60 and 61/62
+  and both passed on immediate re-run, but neither run's output was captured so the suite was
+  never named. Four captured full runs since have been clean. An intermittent failure nobody
+  can name is a liability — next time a run goes red, keep the output.
 
 ## 🧤 Goal box: one keeper, one attacker
 - [x] A team could park its whole defence on its own line, and the attack could bury the keeper

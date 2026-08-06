@@ -120,6 +120,48 @@ const r = await p.evaluate(async ()=>{
   o.trainExempt = M.boxRuleOn({ boxRule:true, train:true }) === false &&
                   M.boxRuleOn({ boxRule:true, drillMode:true }) === false;
 
+  // ---- it applies DURING PLAY, and nowhere else ---------------------------
+  // ⚠️ Two states where shoving people is wrong, and the rule did both before it was
+  // gated. The warm-up LOBBY is where you walk about, test your controls and pick a
+  // side — being pushed off a spot there reads as the controls breaking. And after
+  // the FULL-TIME WHISTLE the pitch is winding down; the match is over.
+  // ⚠️ Both checks compare against rule-OFF, and space the bodies clear of each
+  // other. Two bodies 26 apart at radius 15 push each other apart, and the lobby
+  // walks its own bots on — either reads as the rule if you measure raw movement.
+  const stateRun = (rule, prep) => {
+    M.sel.mode='4v4'; M.sel.kickoffRule='off'; M.sel.boxRule = rule;
+    M.setMatchSeed(3); M.startMatch();
+    const ww = M.world;
+    // ⚠️ prep FIRST, then place. enterWarmup lines the humans up on the halfway line,
+    // so placing before it puts the bodies back where the lobby wants them and the
+    // probe measures nothing. (And with no pads connected startMatch goes straight to
+    // kickoff — there is no lobby to test unless one is asked for.)
+    prep(ww);
+    const g2 = geom(ww);
+    const side = ww.players.filter(q=>q.team===0);
+    side.forEach((q,i)=>{ q.x=(i-1.5)*60; q.y=g2.halfL-10; q.vx=0; q.vy=0; });
+    const before = side.map(q=>+q.y.toFixed(2));
+    for (let i=0;i<120;i++) M.step(ww);
+    return { state: ww.state, moved: side.filter((q,i)=>Math.abs(q.y-before[i])>3).length };
+  };
+  const lobbyOn  = stateRun('on',  ww=>M.enterWarmup(ww));
+  const lobbyOff = stateRun('off', ww=>M.enterWarmup(ww));
+  o.lobbyState = lobbyOn.state;
+  o.lobbyOn = lobbyOn.moved; o.lobbyOff = lobbyOff.moved;
+  o.leavesTheLobbyAlone = lobbyOn.state === 'warmup' && lobbyOn.moved === lobbyOff.moved;
+  const overOn  = stateRun('on',  ww=>{ ww.state='play'; ww.stateT=2;
+                                        ww.players.forEach(q=>{q.ctrl='none';}); M.endMatch(ww); });
+  const overOff = stateRun('off', ww=>{ ww.state='play'; ww.stateT=2;
+                                        ww.players.forEach(q=>{q.ctrl='none';}); M.endMatch(ww); });
+  o.overState = overOn.state;
+  o.overOn = overOn.moved; o.overOff = overOff.moved;
+  o.stopsAtTheWhistle = overOn.state === 'over' && overOn.moved === overOff.moved;
+  // ...and the predicate says so directly, for anything the states above miss.
+  o.gatedOnPlay = M.boxRuleOn({ boxRule:true, state:'play' }) === true &&
+                  M.boxRuleOn({ boxRule:true, state:'warmup' }) === false &&
+                  M.boxRuleOn({ boxRule:true, state:'over' }) === false &&
+                  M.boxRuleOn({ boxRule:true, state:'kickoff' }) === false;
+
   // ---- it does not wreck the bots ------------------------------------------
   // Bots get shoved by this the same way they get shoved by the kickoff line. What
   // matters is that matches still look like matches: goals still go in, and nobody
@@ -158,6 +200,9 @@ ok(r.topEndPoliced, 'only one end of the pitch is policed');
 ok(r.edgeIsTheDrawnEdge, `the enforced edge is not the drawn edge: outside-untouched ${r.outsideUntouched}, inside-moved ${r.insideMoved}`);
 ok(r.offKeepsTheWall, 'turning the rule off did not bring the wall back — the setting does nothing');
 ok(r.trainExempt, 'the rule applies in training and drills, which park bodies wherever they like');
+ok(r.leavesTheLobbyAlone, `the rule shoved people around in the warm-up lobby: ${r.lobbyOn} moved with it on vs ${r.lobbyOff} with it off — the lobby is where you walk about and pick a side`);
+ok(r.stopsAtTheWhistle, `the rule was still shoving people during the full-time wind-down: ${r.overOn} moved with it on vs ${r.overOff} off`);
+ok(r.gatedOnPlay, 'boxRuleOn is not gated on the play state');
 ok(r.botsStillScore, `two minutes of bots with the rule on produced no goals: ${JSON.stringify(r.botsOn)}`);
 ok(r.botsNotStuck, `bots are jammed on the box edge: ${r.botsOn.stuck} stuck samples vs ${r.botsOff.stuck} with the rule off`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));

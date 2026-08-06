@@ -183,7 +183,8 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   race longer. A runner targets the far side of the berry once lined up — targeting the spot
   *behind* it makes `botArrive` decelerate and the bot stands there admiring it.
   `tests/kqberry.mjs`.
-- **Goal box occupancy (`sel.boxRule`):** one defender and one attacker inside a goal box at a
+- **Goal box occupancy (`sel.boxRule`):** ⚠️ **during `play` only** — ungated it also fired in
+  the warm-up lobby and after the full-time whistle. One defender and one attacker inside a goal box at a
   time, so nobody parks a wall in front of their keeper. The box is the region the pitch already
   draws — net pocket plus its mirror — read from `w.bounds`, never re-derived, so the line you
   are pushed off is the line on the grass. ⚠️ The slot is **sticky**: the holder keeps it until
