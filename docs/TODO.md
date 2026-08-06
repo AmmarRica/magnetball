@@ -5,9 +5,28 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260805.1030PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260806.0210AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
+
+## 🫐 Killer Queen berries and the hive
+- [x] **Six floaty purple berries** you shepherd into the end you attack. Light (`invMass 2.6`)
+  and barely damped (`0.994`), so a shoulder barge sends one drifting a long way. Spawned
+  mirrored top and bottom in a ring off the goals and off the centre spot.
+- [x] **Each goal holds a hive** — `BERRY.cells` slots drawn in the net pocket, filling as
+  berries bank. A berry crossing the line BANKS instead of scoring; fill every cell and the
+  match is won outright, tagged `forceWinBy:'hive'` so the result screen doesn't say "snail".
+- [x] ⚠️ **Being banked is a flag, not a parking spot.** The first build parked a banked berry
+  at (99999, 99999) — how the code parks anything it wants ignored — and `clampBallInside`
+  dragged it back onto the pitch to bank again. Honoured by `integrate`, the ball-vs-ball
+  pass, `checkGoal` and the draw; sabotage-checked both ways in `kqberry`.
+- [x] ⚠️ **Spawned after `botInit`**, which is where `w.rng` is seeded. Before it they fell
+  back to `Math.random` and the opening layout differed every match. `placeBerry` now has no
+  fallback at all, so that failure is loud rather than silent.
+- [x] Balance-checked over eight bot-only matches: 3–4 cells typically fill in three minutes
+  and one match in eight ends on a full hive — a live race, not a formality.
+- [ ] Bots don't chase berries (the AI layer is untouched); they shove them around incidentally.
+  Worth revisiting only if the mode feels flat in single player.
 
 ## 👁 A screenshot should explain the last 3 seconds
 - [x] **Trails are measured in TIME now**, not world units or dot count. Measured at top speed
