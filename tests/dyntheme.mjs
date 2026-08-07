@@ -416,34 +416,40 @@ const r = await p.evaluate(async ()=>{
     o.paddockStill = !M.DYN_FIELDS.paddock.step;
 
     // ---- the two craft differ by SILHOUETTE -------------------------------
-    // ⚠️ Measured at the TAIL, across the facing. Both are long the way they point —
-    // a saucer's hull and a triangle's nose both reach ~0.9r — so a coverage-round-
-    // the-rim check would call them the same shape. Behind the middle they are not
-    // remotely alike: an ellipse has tapered to a sliver, a triangle is at its widest.
+    // ⚠️ Measured at the NOSE, across the direction of travel. Seen from above these
+    // are a disc and a triangle, and behind the middle they are both wide — the tail
+    // reading that separated the old three-quarter drawings now calls them nearly the
+    // same. Near the front they could not be less alike: the disc is still most of its
+    // width there, the triangle has come to a point.
+    // ⚠️ Counted on BRIGHT pixels only. The craft throws a ground shadow, which is
+    // darker than the flat test field and would otherwise be counted as hull — and the
+    // shadow is round under both of them.
     const R = 60, CX = 150, CY = 150;
     const cv5 = document.createElement('canvas'); cv5.width = cv5.height = 300;
     const cc5 = cv5.getContext('2d');
-    const paintUfo = (team, fx, fy) => {
+    const paintUfo = (team, vx, vy) => {
       cc5.fillStyle = '#7f7f7f'; cc5.fillRect(0,0,300,300);
-      const q = { team, faceX:fx, faceY:fy, r:R, name:'x', cap:'none', color:'#46d17a' };
+      const q = { team, faceX:1, faceY:0, vx, vy, r:R, name:'x', cap:'none', color:'#46d17a' };
       M.DISC_SKINS.ufo.paint(cc5, q, CX, CY, R, { players:[q] });
     };
-    const tailWidth = (team) => {
-      paintUfo(team, 1, 0);                       // pointing along +x, tail at -x
-      const col = Math.round(CX - R*0.5);
-      const d = cc5.getImageData(col, CY - R, 1, R*2).data;
+    const noseWidth = (team) => {
+      paintUfo(team, 0, 0);                       // still: no bank to foreshorten it
+      const col = Math.round(CX + R*0.72), top = Math.round(CY - R);
+      const d = cc5.getImageData(col, top, 1, R*2).data;
       let n = 0;
       for (let i=0;i<d.length;i+=4)
-        if (Math.abs(d[i]-127) + Math.abs(d[i+1]-127) + Math.abs(d[i+2]-127) > 40) n++;
+        if (d[i]*0.3 + d[i+1]*0.6 + d[i+2]*0.1 > 140) n++;
       return n;
     };
-    o.saucerTail = tailWidth(0); o.triangleTail = tailWidth(1);
-    o.craftDifferByShape = o.triangleTail > o.saucerTail * 1.5;
-    // It is drawn pointing where it goes, or the 3D is decoration.
-    const shot = (fx, fy) => { paintUfo(0, fx, fy);
+    o.saucerNose = noseWidth(0); o.triangleNose = noseWidth(1);
+    o.craftDifferByShape = o.saucerNose > o.triangleNose * 2.5;
+    // ⚠️ The bank is read off VELOCITY, not facing: it is how hard the thing is
+    // driving. Standing still it must be the plain top-down shape, and moving it must
+    // foreshorten — otherwise the 3D is decoration.
+    const shot = (vx, vy) => { paintUfo(0, vx, vy);
       return cc5.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
-    M.profile.spin = true;
-    o.craftTurns = shot(1,0) !== shot(0,1);
+    o.craftBanksWithSpeed = shot(0,0) !== shot(6,0);
+    o.craftTurns = shot(5,0) !== shot(0,5);
 
     // ---- and the ball is a sheep, not a plain ball ------------------------
     o.ballLookExists = !!M.BALL_LOOKS.sheep;
@@ -778,8 +784,9 @@ ok(r.mouthIsOpen, `the fence runs through the GOAL MOUTH — ${r.mouthWood}/${r.
 ok(r.fenceIsThere, `there is no fence outside the boundary at all (${r.sideWood}/${r.sideN}), so the goal-mouth check proves nothing`);
 ok(r.insideIsGrass, `fence timber is INSIDE the line, where the ball plays: ${JSON.stringify(r.justInside)}`);
 ok(r.paddockStill, 'the paddock has a step — the field is scenery, and anything that advances must do it next to step(), not in a paint');
-ok(r.craftDifferByShape, `the two craft do not differ by SILHOUETTE: tail widths ${r.saucerTail} vs ${r.triangleTail}. Both are long the way they point, so the tail is the only thing that separates them`);
-ok(r.craftTurns, 'the craft does not turn with its facing — the 3D bank is decoration if it does not say which way you are going');
+ok(r.craftDifferByShape, `the two craft do not differ by SILHOUETTE: nose widths ${r.saucerNose} vs ${r.triangleNose}. Seen from above they are both wide at the tail, so the nose is what separates them`);
+ok(r.craftTurns, 'the craft does not turn with its heading');
+ok(r.craftBanksWithSpeed, 'a moving craft looks exactly like a stationary one — the top-down 3D IS the pitch-down as it drives, so without it there is nothing saying it flies');
 ok(r.ballLookExists && r.sheepDraws, 'the sheep ball look draws nothing');
 ok(r.vectorName === 'Asteroids', `the Asteroids bundle does not resolve: ${r.vectorName}`);
 ok(r.voidStillWithoutStep, 'the vector sky advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');

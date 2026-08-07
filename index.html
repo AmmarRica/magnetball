@@ -2332,7 +2332,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             goalZoom:500, goalZoomSpd:115,      // goal camera: 5.0x over 1.15s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
-            look: { palette:'neon', field:'none', discs:'none', ball:'classic' },
+            look: { palette:'neon', field:'none', discs:'none', ball:'classic', trail:'dots' },
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
@@ -3109,6 +3109,12 @@ const SLOTS = {
   ball:    { label:'Ball', emoji:'⚽', hint:'Cosmetic only — how the ball PLAYS is Match → Ball.',
              keys:()=>BALL_LOOK_KEYS, name:k=>BALL_LOOKS[k].name,
              get:()=>sel.look.ball, set:k=>sel.look.ball = k },
+  // ⚠️ The PLAYER tell only. The ball keeps its streak whatever this says: it is the
+  // one thing on the pitch everybody is tracking, and a theme should not be able to
+  // switch off the read on it.
+  trail:   { label:'Trail', emoji:'💨', hint:'The tell behind each player. The ball keeps its streak.',
+             keys:()=>TRAIL_LOOK_KEYS, name:k=>TRAIL_LOOKS[k].name,
+             get:()=>sel.look.trail, set:k=>sel.look.trail = k },
   sfx:     { label:'Sound', emoji:'🔊', hint:'A whole set at once. Sound still picks them one at a time.',
              keys:()=>Object.keys(SFX_SETS), name:k=>SFX_SETS[k].name,
              get:()=>sfxSetKey(), set:k=>applySfxSet(k) },
@@ -3123,8 +3129,8 @@ const THEME_BUNDLES = {
   chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
   sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
   board:     { field:'boardtrack',discs:'pawn',        ball:'plain',   sfx:'classic' },
-  ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space'   },
-  vector:    { field:'voidgrid',  discs:'vector',      ball:'asteroid',sfx:'space'   },
+  ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space',   trail:'orbs' },
+  vector:    { field:'voidgrid',  discs:'vector',      ball:'asteroid',sfx:'space',   trail:'comet' },
   specimen:  { field:'specimen',  discs:'type',        ball:'period',  sfx:'classic' },
   // ⚠️ `space` rather than a set of its own: those are the synth variants, which is
   // the closest thing here to a cabinet. A key with no SFX_SETS entry would take
@@ -3137,7 +3143,7 @@ function bundleSlots(k){
   if (!THEMES[k]) return null;
   const b = THEME_BUNDLES[k] || {};
   return { palette:k, field:b.field||'none', discs:b.discs||'none',
-           ball:b.ball||'classic', sfx:b.sfx||'classic' };
+           ball:b.ball||'classic', trail:b.trail||'dots', sfx:b.sfx||'classic' };
 }
 function currentBundle(){
   for (const k of bundleKeys()){
@@ -3189,6 +3195,12 @@ function normalizeLook(){
   // the whole page down. An unrecognised key already degrades to no skin in
   // discSkin(), so the guard was not buying anything either.
   if (L.discs === 'shrimp') L.discs = 'crablobster';
+  // The trail slot is new, so a save from before it has no key at all. Object.assign
+  // above has already supplied the default; this only catches a stored key that no
+  // longer exists. ⚠️ Compared against a plain list, NOT a TRAIL_LOOKS lookup — this
+  // runs during the bootstrap and the registry is declared with the renderer far
+  // below, which is exactly what took the page down when the disc-skin fold did it.
+  if (['dots','orbs','comet','none'].indexOf(L.trail) < 0) L.trail = d.trail;
   if (!THEMES[L.palette]) L.palette = d.palette;
 }
 
@@ -5126,6 +5138,21 @@ function slotSwatch(slot, k){
     else { c.strokeStyle = TH.line || '#fff'; c.lineWidth = 1.5;
            c.beginPath(); c.moveTo(4,32); c.lineTo(60,32); c.stroke();
            c.beginPath(); c.arc(32,32,11,0,2*Math.PI); c.stroke(); }
+    return cvs;
+  }
+  if (slot === 'trail'){
+    c.fillStyle = TH.court || '#1c3a26'; c.fillRect(0,0,64,64);
+    // A stretch of travel with a body at the head, through the REAL painter — a tile
+    // that reconstructed the look would be free to show something the pitch won't.
+    const pts = [];
+    for (let k = 0; k < 9; k++){
+      const t = k/8;
+      pts.push({ x: 8 + t*42, y: 44 - Math.sin(t*2.1)*17, a: 1 });
+    }
+    (TRAIL_LOOKS[k] || TRAIL_LOOKS.dots).draw(c, pts, pts.length, TH.teamRed || '#ff3b6b', 15);
+    const h = pts[pts.length-1];
+    c.beginPath(); c.arc(h.x + 8, h.y - 4, 7, 0, 2*Math.PI);
+    c.fillStyle = TH.teamRed || '#ff3b6b'; c.fill();
     return cvs;
   }
   if (slot === 'discs'){
@@ -12786,70 +12813,91 @@ DISC_SKINS.vector = {
     c.restore();
   },
 };
-// Two craft, seen from above and slightly behind, banking the way they are going.
-// ⚠️ The 3D is the whole point of the skin, and it is done by TILTING the hull about
-// the facing axis — leading edge down, dome pushed back — never by drawing a bigger
-// shape. A player is a circle of radius r and that circle is what collides; the hull
-// is 0.90r at its widest so the tilt cannot push a wing past the guide ring.
-// ⚠️ The sides differ by SILHOUETTE: a saucer against a triangle, both of them 70s
+// Two craft seen from DIRECTLY ABOVE, the way everything else on this pitch is.
+// ⚠️ The first build drew them three-quarter, belly forward — which is a sighting
+// photograph, not a top-down game. A saucer from above is a disc, and the 3D comes
+// from what MOVING does to it: the craft pitches nose-down as it accelerates, so its
+// hull foreshortens ALONG the direction of travel and its dome slides toward the
+// trailing edge. Standing still it is a perfect circle, which is exactly right.
+// ⚠️ The bank is read off VELOCITY, not off facing. It is a physical effect — how
+// hard the thing is driving — and a player with the rotation control switched off
+// still banks when they move, because they still move.
+// ⚠️ Altitude is shown by a SHADOW on the grass, offset behind the craft. From above
+// that is the only cue that says "flying" rather than "sliding".
+// ⚠️ The sides differ by SILHOUETTE: a saucer against a triangle, both 70s
 // sighting-report stock. Two saucers in two colours are one shape at twelve pixels,
 // over grass, at night — which is when you most need to know who that is.
-const UFO = { hull: 0.90, thick: 0.27, tilt: 0.26, dome: 0.40,
-              tri: { nose: 0.86, back: 0.60, wing: 0.60 }, lights: 3 };
+const UFO = { hull: 0.90, dome: 0.34, bank: 0.62, driveAt: 5.5,
+              shadow: 0.30, shadowA: 0.30,
+              tri: { nose: 0.86, back: 0.60, wing: 0.60 }, lights: 6 };
 DISC_SKINS.ufo = {
   name: 'Craft',
   paint(c, p, x, y, r, w){
-    const { ux, uy } = discFace(p);
     const saucer = p.team === 0;
     const col = saucer ? (TH.teamRed || '#ff8a3d') : (TH.teamBlue || '#5fe3c8');
     const dark = TH.discRim || '#120f22';
+    const spd = Math.hypot(p.vx || 0, p.vy || 0);
+    const drive = Math.min(1, spd / UFO.driveAt);
+    let ux, uy;
+    if (spd > 0.05){ ux = (p.vx||0)/spd; uy = (p.vy||0)/spd; }
+    else { const f = discFace(p); ux = f.ux; uy = f.uy; }
+    const ang = Math.atan2(uy, ux);
+    // Foreshortening along travel: 1 standing still, cos(bank) at full drive.
+    const sq = Math.cos(UFO.bank * drive);
+    const lean = UFO.bank * drive;
+    // The ground shadow, thrown behind and holding its own circle — it is on the
+    // grass, so it does not foreshorten with the craft above it.
     c.save();
-    c.translate(x, y); c.rotate(Math.atan2(uy, ux));   // +x is now the way it is going
-    // The beam: a wedge of light thrown ahead and down. Under the hull, so the craft
-    // always wins — it is a tell about heading, not a second body.
-    c.fillStyle = rgba(col, 0.16);
-    c.beginPath(); c.moveTo(0, 0);
-    c.lineTo(r*0.98, r*0.52); c.lineTo(r*0.98, -r*0.10); c.closePath(); c.fill();
+    c.translate(x - ux*r*UFO.shadow*drive, y - uy*r*UFO.shadow*drive + r*0.12);
+    c.fillStyle = rgba(dark, UFO.shadowA);
+    c.beginPath(); c.arc(0, 0, r*UFO.hull*0.86, 0, 2*Math.PI); c.fill();
+    c.restore();
+    c.save();
+    c.translate(x, y); c.rotate(ang);              // +x is now the way it is going
+    c.scale(sq, 1);                                // ...and the pitch-down goes here
     if (saucer){
-      // Belly first, offset back and down, then the hull over it: the offset is what
-      // reads as thickness rather than as an outline.
-      c.save(); c.rotate(UFO.tilt);
-      c.fillStyle = dark;
-      c.beginPath(); c.ellipse(-r*0.02, r*0.14, r*UFO.hull*0.94, r*UFO.thick, 0, 0, 2*Math.PI); c.fill();
-      c.fillStyle = col;
-      c.beginPath(); c.ellipse(0, 0, r*UFO.hull, r*UFO.thick, 0, 0, 2*Math.PI); c.fill();
-      // Dome, pushed toward the trailing edge because the nose is the low end.
-      c.fillStyle = rgba('#ffffff', 0.85);
-      c.beginPath(); c.ellipse(-r*0.14, -r*0.10, r*UFO.dome, r*UFO.dome*0.82, 0, Math.PI, 0); c.fill();
-      c.fillStyle = rgba(dark, 0.55);
-      c.beginPath(); c.ellipse(-r*0.14, -r*0.10, r*UFO.dome*0.52, r*UFO.dome*0.44, 0, Math.PI, 0); c.fill();
-      // Rim lights along the underside.
+      // Hull: a plain disc from above, with a darker rim step inside it.
+      c.beginPath(); c.arc(0, 0, r*UFO.hull, 0, 2*Math.PI);
+      c.fillStyle = col; c.fill();
+      c.lineWidth = Math.max(1, r*0.08); c.strokeStyle = rgba(dark, 0.6); c.stroke();
+      c.beginPath(); c.arc(0, 0, r*UFO.hull*0.66, 0, 2*Math.PI);
+      c.strokeStyle = rgba(dark, 0.35); c.lineWidth = Math.max(1, r*0.06); c.stroke();
+      // Rim lights all the way round, because from above you can see all of them.
       c.fillStyle = rgba('#ffffff', 0.9);
       for (let k=0;k<UFO.lights;k++){
-        const t = (k - (UFO.lights-1)/2) / UFO.lights * 1.5;
-        c.beginPath(); c.arc(t*r*UFO.hull, r*UFO.thick*0.62, Math.max(0.8, r*0.075), 0, 2*Math.PI);
+        const a = k * (2*Math.PI/UFO.lights) + 0.4;
+        c.beginPath();
+        c.arc(Math.cos(a)*r*UFO.hull*0.84, Math.sin(a)*r*UFO.hull*0.84,
+              Math.max(0.7, r*0.07), 0, 2*Math.PI);
         c.fill();
       }
-      c.restore();
+      // The dome, sliding toward the TRAILING edge as the nose goes down. Drawn
+      // inside the x-scale, so it foreshortens with the hull it sits on.
+      c.beginPath();
+      c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome, r*UFO.dome, 0, 0, 2*Math.PI);
+      c.fillStyle = rgba('#ffffff', 0.88); c.fill();
+      c.beginPath();
+      c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome*0.5, r*UFO.dome*0.5, 0, 0, 2*Math.PI);
+      c.fillStyle = rgba(dark, 0.45); c.fill();
     } else {
       const T2 = UFO.tri;
-      const tri = (dx, dy) => { c.beginPath();
-        c.moveTo(r*T2.nose + dx, dy);
-        c.lineTo(-r*T2.back + dx, r*T2.wing + dy);
-        c.lineTo(-r*T2.back*0.72 + dx, dy);
-        c.lineTo(-r*T2.back + dx, -r*T2.wing + dy); c.closePath(); };
-      c.fillStyle = dark; tri(-r*0.05, r*0.12); c.fill();     // the underside, seen edge-on
-      c.fillStyle = col;  tri(0, 0); c.fill();
-      c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.06);
-      c.strokeStyle = dark; c.stroke();
-      // A light at each corner and one in the middle: the classic triangle report.
+      c.beginPath();
+      c.moveTo(r*T2.nose, 0);
+      c.lineTo(-r*T2.back, r*T2.wing);
+      c.lineTo(-r*T2.back*0.72, 0);
+      c.lineTo(-r*T2.back, -r*T2.wing);
+      c.closePath();
+      c.fillStyle = col; c.fill();
+      c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.07);
+      c.strokeStyle = rgba(dark, 0.7); c.stroke();
+      // A light at each corner and a dark port in the middle: the classic report.
       c.fillStyle = rgba('#ffffff', 0.92);
-      for (const [lx, ly] of [[r*T2.nose*0.66, 0], [-r*T2.back*0.72, r*T2.wing*0.62],
-                              [-r*T2.back*0.72, -r*T2.wing*0.62]]){
-        c.beginPath(); c.arc(lx, ly, Math.max(0.8, r*0.085), 0, 2*Math.PI); c.fill();
+      for (const [lx, ly] of [[r*T2.nose*0.66, 0], [-r*T2.back*0.74, r*T2.wing*0.6],
+                              [-r*T2.back*0.74, -r*T2.wing*0.6]]){
+        c.beginPath(); c.arc(lx, ly, Math.max(0.7, r*0.085), 0, 2*Math.PI); c.fill();
       }
-      c.fillStyle = rgba(dark, 0.6);
-      c.beginPath(); c.arc(-r*0.06, 0, Math.max(1, r*0.17), 0, 2*Math.PI); c.fill();
+      c.fillStyle = rgba(dark, 0.55);
+      c.beginPath(); c.arc(-r*0.04, 0, Math.max(1, r*0.16), 0, 2*Math.PI); c.fill();
     }
     c.restore();
   },
@@ -13257,21 +13305,74 @@ function advanceTrails(w){
   }
 }
 
+// What the tell behind a player LOOKS like — a theme slot, like the ball's pattern.
+// ⚠️ The SAMPLING is not in here. Where a dot is dropped and how fast it fades are
+// `advanceTrails`, which runs in the step loop; a look only draws what is already
+// recorded. Putting the spacing in the look would make the tell's LENGTH a cosmetic
+// choice, and length is how far someone just came — that is a read, not a decoration.
+// ⚠️ The ball's streak is deliberately not on this slot: it is the one thing everybody
+// is tracking, so no look may switch it off.
+// ⚠️ A look is handed SCREEN points, not world ones, and a COUNT rather than a
+// trimmed array — the points live in one reused scratch buffer, because a fresh array
+// per player per frame is exactly the steady allocation `advanceTrails` already went
+// out of its way to avoid. Screen space is also what lets the picker tile call the
+// real painter instead of drawing a picture of it.
+const TRAIL_LOOKS = {
+  dots:  { name:'Dots', draw(c, pts, n, col, rr){
+    for (let k = 0; k < n; k++){
+      const d = pts[k], f = (k+1) / n;                // older dots smaller + fainter
+      c.beginPath(); c.arc(d.x, d.y, rr*(0.15 + 0.19*f), 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
+      c.fill();
+    } } },
+  // Even, round and soft — the same size all the way back, so it reads as something
+  // FLYING leaving a wake rather than as a tail narrowing to a point.
+  orbs:  { name:'Orbs', draw(c, pts, n, col, rr){
+    for (let k = 0; k < n; k++){
+      const d = pts[k], f = (k+1) / n;
+      const R = rr * (0.24 + 0.06*f);
+      c.beginPath(); c.arc(d.x, d.y, R, 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.26 * d.a * (0.18 + 0.82*f));
+      c.fill();
+      // A brighter core, so a puff still reads at the size a body is drawn on the
+      // huge courts — a single flat alpha vanished there.
+      c.beginPath(); c.arc(d.x, d.y, R*0.42, 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.5 * d.a * (0.18 + 0.82*f));
+      c.fill();
+    } } },
+  // One tapered stroke through the recorded points, the way the ball's streak is
+  // drawn — for when the dots read as debris rather than as motion.
+  comet: { name:'Comet', draw(c, pts, n, col, rr){
+    if (n < 2) return;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let k = 1; k < n; k++){
+      const a = pts[k-1], b = pts[k], f = k / n;
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y);
+      c.lineWidth = Math.max(1, rr*(0.10 + 0.52*f));
+      c.strokeStyle = rgba(col, 0.55 * b.a * (0.10 + 0.90*f));
+      c.stroke();
+    } } },
+  none:  { name:'None', draw(){} },
+};
+const TRAIL_LOOK_KEYS = Object.keys(TRAIL_LOOKS);
+function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
+
 // By index, not on the player — see labelA above for why.
+let trailPts = [];                        // reused scratch — see TRAIL_LOOKS above
 function drawDiscTrails(w){
   const s = cam.s;
   if (discTrails.length !== w.players.length) return;
+  const look = trailLook();
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i], hist = discTrails[i];
     if (!hist || !hist.length) continue;
-    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    while (trailPts.length < hist.length) trailPts.push({x:0, y:0, a:1});
     for (let k = 0; k < hist.length; k++){
-      const d = hist[k], f = (k+1) / hist.length;     // older dots smaller + fainter
-      ctx.beginPath();
-      ctx.arc(wx(d.x), wy(d.y), p.r*s*cam.body*(0.15 + 0.19*f), 0, 2*Math.PI);
-      ctx.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
-      ctx.fill();
+      const t = trailPts[k], d = hist[k];
+      t.x = wx(d.x); t.y = wy(d.y); t.a = d.a;
     }
+    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+    look.draw(ctx, trailPts, hist.length, col, p.r*s*cam.body);
   }
 }
 
@@ -14015,6 +14116,7 @@ if (window.__MAGNETDEBUG) {
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     DOT_GAP, DOT_MAX, DOT_FADE, BALL_PATH, BALL_LEN_MAX, BALL_MIN_SPD,
+    TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },

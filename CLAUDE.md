@@ -79,12 +79,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
-- **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares five — `palette`
+- **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares six — `palette`
   (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
-  (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key) and `sfx` (an `SFX_SETS` key).
-  The first four live in `sel.look`; **the sound slot has no stored value at all** —
+  (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key), `trail` (a `TRAIL_LOOKS` key)
+  and `sfx` (an `SFX_SETS` key). The first five live in `sel.look`; **the sound slot has no stored value at all** —
   `sfxSetKey()` derives it from `sel.snd`, which the Sound card already owns one category
-  at a time. A **bundle** sets all five: every palette is one (`bundleSlots(k)`), and
+  at a time. A **bundle** sets all six: every palette is one (`bundleSlots(k)`), and
   `THEME_BUNDLES` only lists the two that own more than colour. Names/emoji are read from
   `THEMES`, never copied.
   ⚠️ **"Custom" is DERIVED, never stored** — `currentBundle()` matches the live slots
@@ -92,7 +92,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   lie on screen, and a stored `custom` can't go stale. Same reason `sel.theme`/`sel.ballLook`
   were dropped rather than kept alongside: `normalizeLook()` folds a legacy save in **once**,
   at load, so nothing downstream knows two shapes.
-  `buildSlotPicker(slot, host)` is the one tile builder — the Theme card stacks all five and
+  `buildSlotPicker(slot, host)` is the one tile builder — the Theme card stacks all six and
   the Ball/Sound cards each show one again, so a card can't drift from the theme.
   The bundle row also carries a **Custom** tile: selected whenever the live slots match no
   bundle, painted from the mix you actually built (`drawSlotsSwatch`), and pressing it
@@ -224,16 +224,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   direction-drawn skin. The nebula is four radial gradients baked ONCE into a 128px canvas
   and stretched, cached on the ink.
   `ufo` (shown as **Abduction**) = a fenced night pasture with crop circles, craft for players
-  and a sheep for a ball. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
+  and a sheep for a ball. ⚠️ The craft are seen from **directly above**, like everything else
+  on the pitch — the first build drew them three-quarter, belly forward, which is a sighting
+  photograph rather than a top-down game. The 3D is what MOVING does to them: the craft
+  pitches nose-down as it drives, so its hull foreshortens ALONG the direction of travel and
+  the saucer's dome slides toward the trailing edge; standing still it is a plain circle. The
+  bank is read off **velocity**, not facing — it is how hard the thing is driving, so a player
+  with rotation switched off still banks. A ground **shadow**, offset behind, is the only cue
+  from above that says flying rather than sliding. The silhouette check measures the **nose**,
+  not the tail: from above both are wide at the back. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
   rather than copying it: a fence has to stand ON the boundary the ball bounces off, follow a
   rounded or chamfered field for free, and leave both GOAL MOUTHS open — the same job the
   cushion does, so it is the same code. ⚠️ The two sides are a **saucer and a triangle**, both
   70s sighting-report stock: two saucers in two colours are one shape at twelve pixels, at
   night, over grass. The 3D is a TILT of the hull about the facing axis — leading edge down,
   dome pushed back — never a bigger shape; the hull is 0.90`r` so the bank cannot push a wing
-  past the guide ring. ⚠️ The silhouette check measures the **tail**, across the facing: both
-  craft are long the way they point, so a coverage-round-the-rim test calls them identical.
-  The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
+  past the guide ring.   The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
   is the ball itself and the ink draws only what is not fleece. Anything drawn on the rim is
   lost, because `ballRim` is dark too.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
@@ -250,6 +256,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   which no palette can reach. Because slots mix freely, a field painter must fall back through
   the palette it's given (`TH.dynMark || TH.line`) or a starfield over Grass paints black on
   black. `tests/dyntheme.mjs` holds all of it by pixel sampling.
+- **Trail look:** `TRAIL_LOOKS` + the `trail` slot. ⚠️ A look only DRAWS — where a dot is
+  dropped and how fast it fades stay in `advanceTrails` (step loop), because the LENGTH of
+  a tell is how far someone just came, which is a read and not a decoration. ⚠️ The BALL
+  keeps its streak whatever the slot says: it is the one thing everybody is tracking, so no
+  cosmetic choice may switch it off. Looks are handed **screen** points from one reused
+  scratch buffer (a fresh array per player per frame is the allocation `advanceTrails`
+  already avoided), which is also what lets the picker tile call the real painter.
+  `tests/traillook.mjs`.
 - **Ball look:** `BALL_LOOKS` + `paintBall`. ⚠️ The pattern colour is **measured against the
   ball**, not taken raw: `ballSpotInk()` runs the palette's `ballSpot` through `readableInk`
   at `BALL_SPOT_CONTRAST`. Pool pairs a `#f7f4ec` cue ball with a `#e8e2d2` spot — **1.18:1** —
