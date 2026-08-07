@@ -523,7 +523,7 @@ const r = await p.evaluate(async ()=>{
   // O has a closed counter where the X has a crossing, and the O carries paper on the
   // axes where the X carries ink there. Measured, not asserted.
   {
-    M.applyBundle('specimen');
+    const w7 = setup('specimen');
     o.specName = M.bundleName();
     const R = 60, CX = 150, CY = 150;
     const cv7 = document.createElement('canvas'); cv7.width = cv7.height = 300;
@@ -548,24 +548,64 @@ const r = await p.evaluate(async ()=>{
     // The X: paper through the middle, ink on the axes, paper on the diagonals.
     o.xIsACross = xG.mid > PAPER && xG.axes.every(v => v < INK) && xG.diag.every(v => v > PAPER);
     o.typeSidesDiffer = o.oHasCounter && o.xIsACross;
-    // ⚠️ The sheet's type is a DEEPER YELLOW, never the black the lines are set in —
-    // a field of black words is a field of decoys the size of a player.
+    // ⚠️ The margin type is an OLIVE TINT, never the line's black. The discs here are
+    // black blocks and a player may step past the touchline, so black words out there
+    // are something a stepped-out body disappears into.
     const ofHex = h => { cc7.fillStyle = h; cc7.fillRect(0,0,2,2);
       return lum(cc7.getImageData(0,0,1,1).data); };
     o.sheetLum = ofHex(M.TH.dynMark); o.lineLum = ofHex(M.TH.line);
     o.courtLum = ofHex(M.TH.court);
-    o.sheetIsTint = o.sheetLum > o.lineLum + 90 && o.sheetLum < o.courtLum - 5;
-    // Baked once and cached on the ink, like every other stretched tile here.
-    const f7 = M.DYN_FIELDS.specimen; const st7 = {};
-    f7.paint(cc7, st7, 0, 0, 200, 200);
-    o.sheetCached = !!st7.cv;
-    const firstSheet = st7.cv;
-    f7.paint(cc7, st7, 0, 0, 200, 200);
-    o.sheetReused = st7.cv === firstSheet;
+    o.sheetIsTint = o.sheetLum > o.lineLum + 60 && o.sheetLum < o.courtLum - 5;
+
+    // ---- THE LINE THIS THEME LIVES ON: no word ever lands on the court -------
+    // Painted for real over a canvas pre-filled with the court colour, then every
+    // sample well inside the boundary must be untouched — and something outside it
+    // must have changed, or the check passes on a painter that drew nothing at all.
+    const f7 = M.DYN_FIELDS.specimen;
+    const st7 = {}; f7.reset(st7);
+    for (let i=0;i<30;i++) f7.step(st7);
+    cc7.fillStyle = M.TH.court; cc7.fillRect(0,0,300,300);
+    const PL = 90, PT = 60, PW = 120, PH = 180;
+    f7.paint(cc7, st7, PL, PT, PW, PH, w7);
+    const court = ofHex(M.TH.court);
+    let onCourt = 0, inside = 0, outside = 0, offCourt = 0;
+    for (let gx=0.12; gx<=0.88; gx+=0.076) for (let gy=0.08; gy<=0.92; gy+=0.084){
+      inside++;
+      const d = cc7.getImageData(Math.round(PL+gx*PW), Math.round(PT+gy*PH), 1, 1).data;
+      if (Math.abs(lum(d) - court) > 3) onCourt++;
+    }
+    for (let sx2 of [PL-40, PL-18, PL+PW+18, PL+PW+40])
+      for (let gy=0.05; gy<=0.95; gy+=0.05){
+        outside++;
+        const d = cc7.getImageData(Math.round(sx2), Math.round(PT+gy*PH), 1, 1).data;
+        if (Math.abs(lum(d) - court) > 3) offCourt++;
+      }
+    o.courtSamples = inside; o.onCourt = onCourt;
+    o.marginSamples = outside; o.offCourt = offCourt;
+    o.courtStaysClean = onCourt === 0;
+    o.marginIsTypeset = offCourt > outside * 0.15;
+
+    // ---- it scrolls, and only on a STEP -------------------------------------
+    const shotAt = () => { cc7.fillStyle = M.TH.court; cc7.fillRect(0,0,300,300);
+      f7.paint(cc7, st7, PL, PT, PW, PH, w7);
+      return cc7.getImageData(0,0,300,300).data.join(','); };
+    const s0 = shotAt();
+    o.sheetStillWithoutStep = shotAt() === s0;
+    for (let i=0;i<24;i++) f7.step(st7);
+    o.sheetScrolls = shotAt() !== s0;
+    // Each row is a strip baked once and scrolled, not typeset per frame.
+    o.sheetCached = st7.rows.every(r => !!r.cv);
+    const firstStrip = st7.rows[0].cv;
+    shotAt();
+    o.sheetReused = st7.rows[0].cv === firstStrip;
     st7.ink = '#123456';
-    f7.paint(cc7, st7, 0, 0, 200, 200);
-    o.sheetRebuildsOnInk = st7.cv !== firstSheet;
-    o.sheetStill = !f7.step;
+    shotAt();
+    o.sheetRebuildsOnInk = st7.rows[0].cv !== firstStrip;
+    // ...and the rows are not all at one opacity, which is what makes it read as depth.
+    const alphas = st7.rows.map(r => r.a);
+    o.rowAlphas = alphas.map(v => +v.toFixed(2));
+    o.rowsVaryInOpacity = Math.max(...alphas) - Math.min(...alphas) > 0.25;
+
     // ...and the ball is a full stop, not a second counter: solid in the middle.
     cc7.fillStyle = '#7f7f7f'; cc7.fillRect(0,0,300,300);
     M.paintBall(cc7, CX, CY, R, 0, 'period', M.TH);
@@ -650,9 +690,13 @@ ok(r.oHasCounter, `Specimen's team 0 is not an O: ${JSON.stringify(r.oGlyph)} �
 ok(r.xIsACross, `Specimen's team 1 is not an X: ${JSON.stringify(r.xGlyph)} — ink on the axes, paper through the middle and on the diagonals`);
 ok(r.typeSidesDiffer, 'the two Specimen sides do not differ by GLYPH, and they cannot differ by hue: the palette is one yellow and one black');
 ok(r.sheetIsTint, `the specimen type (${Math.round(r.sheetLum)}) is not a tint between the court (${Math.round(r.courtLum)}) and the line ink (${Math.round(r.lineLum)}) — a sheet of black words is a sheet of player-sized decoys`);
-ok(r.sheetCached && r.sheetReused, 'the specimen sheet is re-typeset every frame — that is a dozen fillText calls at 80px, every frame');
-ok(r.sheetRebuildsOnInk, 'the specimen sheet does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
-ok(r.sheetStill, 'the specimen sheet has a step — a printed sheet does not move');
+ok(r.courtStaysClean, `${r.onCourt} of ${r.courtSamples} probes INSIDE the boundary were painted on by the margin type — the play area is punched out of the clip, so any hit means the punch-out is gone`);
+ok(r.marginIsTypeset, `only ${r.offCourt} of ${r.marginSamples} probes outside the boundary were typeset — the court-purity check above passes just as well on a painter that draws nothing`);
+ok(r.sheetStillWithoutStep, 'the margin type scrolled inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
+ok(r.sheetScrolls, 'the margin type never moved when stepped');
+ok(r.sheetCached && r.sheetReused, 'the strips are re-typeset every frame — that is eleven rows of 60px type, every frame');
+ok(r.sheetRebuildsOnInk, 'the strips do not rebuild when the ink changes — slots mix, so this can be asked for over another palette');
+ok(r.rowsVaryInOpacity, `every row is at the same opacity (${JSON.stringify(r.rowAlphas)}) — the varying alpha is what makes the margin read as depth rather than one sliding picture`);
 ok(r.ballIsSolidDot, `the Specimen ball is not a full stop (middle ${Math.round(r.ballMidLum)}, edge ${Math.round(r.ballRingLum)}) — drawn as a ring it is a second O and you lose it in a challenge`);
 ok(r.ballIsHollow, `the ball is not an outline (edge ${Math.round(r.ballEdge)}, middle ${Math.round(r.ballMid)}) — on this palette the rim ring IS the rock's outline`);
 ok(r.picksBack, 'a theme failed to apply');

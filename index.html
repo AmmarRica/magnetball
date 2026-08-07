@@ -2398,12 +2398,12 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
-  // A type specimen: process yellow, black grotesk, nothing else. The pitch is the
-  // sheet and the field painter sets it — see DYN_FIELDS.specimen.
-  // ⚠️ The specimen type is a DEEPER YELLOW, never black. Black is the ink this
-  // palette reserves for things that matter — the lines, the discs, the ball's rim —
-  // and a sheet of black words behind the play is a sheet of decoys the size of a
-  // player. Tint on tint is also what a printed specimen actually looks like.
+  // A type specimen: process yellow, black grotesk, nothing else. The sheet runs in
+  // the MARGINS and scrolls — see DYN_FIELDS.specimen, which punches the play area out
+  // of its own clip so a word can never land on the court.
+  // ⚠️ The type is an OLIVE TINT, never the line's black, even out there. The discs on
+  // this palette are black blocks and a player may step past the touchline, so black
+  // words in the margin are something a stepped-out body disappears into.
   // ⚠️ Both discs are black blocks with the glyph KNOCKED OUT in yellow, and the
   // sides are an O against an X (DISC_SKINS.type). Two teams and one ink is the
   // Highlighter problem again; hue cannot settle it here either, so the counter does.
@@ -2426,7 +2426,7 @@ const THEMES = {
       // The guide ring on a BLACK disc: the dark tone has nothing to read against, so
       // the light one carries it — the mirror of Highlighter, same two-tone ring.
       discGuide:'rgba(255,255,255,0.75)', discGuideDark:'rgba(0,0,0,0.55)',
-      dynMark:'#dcc900' },      // the specimen type — a deeper yellow, never black
+      dynMark:'#8a7c00' },      // the specimen type — an olive tint, never the line's black
   },
   // A vector monitor: everything is a thin stroked line on black, the way an
   // XY-deflection tube actually drew. Deep space behind a faint grid, a scatter of
@@ -11854,54 +11854,93 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
-// A type-specimen sheet: rows of grotesk set at every width and weight, running off
-// the right edge the way a specimen poster does, each on its own baseline rule.
-// ⚠️ Baked ONCE into an offscreen canvas and stretched, cached on the INK — a dozen
-// fillText calls at 80px is glyph rasterisation on the frame that asks for it, every
-// frame. Stretching it distorts the widths, which on a sheet whose whole subject is
-// compressed-against-condensed is the look rather than a defect.
-// ⚠️ No web font, and none needed: `system-ui, sans-serif` is what the rest of the
-// file already draws with. The sheet is a texture, so whichever grotesk the platform
-// hands over is the right one.
+// A type-specimen sheet running in the MARGINS: rows of grotesk of every width and
+// weight, scrolling right to left outside the pitch, each row at its own opacity and
+// its own speed so the sheet reads as depth rather than as one sliding picture.
+// ⚠️ `bleed`, and the play area is punched out of the clip with the field's OWN path
+// (the pool table's, borrowed rather than copied) — so the type CANNOT land on the
+// court. That is structural, not a margin someone has to keep tuning: a word behind
+// the ball is a word you have to look past on this palette, where the discs are black
+// blocks and the type is black-ish too.
+// ⚠️ Each row is a strip baked ONCE and scrolled by drawImage, never fillText per
+// frame: eleven rows of 60px type is glyph rasterisation on every frame that asks for
+// it. The strip WRAPS — every word is also drawn one tile-width to the left, so what
+// runs off the right re-enters on the left and the repeat has no seam.
+// ⚠️ The scroll advances in step(), which advanceDynField() calls next to step(world),
+// never in the paint: at 144Hz a paint-driven scroll runs 2.4x fast. Same rule as the
+// motion trails.
 DYN_FIELDS.specimen = {
-  name: 'Specimen', res: 512, rows: 9, alpha: 0.9,
-  words: ['Grotesk','Counter','Kerning','Ascender','Ligature','Aperture','Baseline',
-          'Terminal','Compressed','Condensed','Specimen','Stroke','Overshoot'],
+  name: 'Specimen', bleed: true, rows: 11, tileW: 1024, tileH: 64, speed: 0.5,
+  // Ipsum, because a margin is where a specimen puts filler and because real words
+  // out there would be something to read instead of something to look past.
+  words: ['lorem','ipsum','dolor','sit','amet','consectetur','adipiscing','elit',
+          'sed','eiusmod','tempor','incididunt','labore','dolore','magna','aliqua',
+          'enim','minim','veniam','quis','nostrud','exercitation','ullamco','laboris',
+          'nisi','aliquip','commodo','consequat','aute','irure','reprehenderit'],
+  reset(st){
+    const rnd = mulberry32(0x5EC1EE);        // fixed: the same margin every match
+    st.t = 0; st.rows = [];
+    for (let i=0; i<this.rows; i++)
+      st.rows.push({ wgt: [300,400,700,900][(rnd()*4)|0],
+                     ital: rnd() < 0.34,
+                     sx:  0.55 + rnd()*0.62,      // the compressed -> condensed axis
+                     a:   0.16 + rnd()*0.56,      // ...and its own opacity
+                     spd: 0.45 + rnd()*1.2,       // ...and its own speed
+                     seed: (rnd()*1e9)|0, cv: null });
+  },
+  step(st){ st.t++; },
   build(st, ink){
-    const N = this.res, HH = Math.round(N * 1.55);
-    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
-    const c2 = cv.getContext('2d');
-    const rnd = mulberry32(0x5EC1EE);      // fixed: the same sheet every match
-    c2.fillStyle = ink; c2.strokeStyle = ink; c2.textBaseline = 'alphabetic';
-    const band = HH / this.rows;
-    for (let i=0; i<this.rows; i++){
-      const base = band * (i + 0.82);
-      const size = band * (0.62 + rnd()*0.26);
-      const wgt  = [300, 400, 700, 900][(rnd()*4)|0];
-      const ital = rnd() < 0.34 ? 'italic ' : '';
-      const sx   = 0.52 + rnd()*0.66;      // the compressed → condensed axis
-      c2.font = ital + wgt + ' ' + Math.round(size) + 'px system-ui, sans-serif';
-      c2.save(); c2.scale(sx, 1);
-      let x = N * (0.02 + rnd()*0.05);
-      // Two or three words, and the last one is allowed to run off the edge.
-      for (let k=0; k<3 && x < N/sx; k++){
+    for (const r of (st.rows || [])){
+      const cv = document.createElement('canvas');
+      cv.width = this.tileW; cv.height = this.tileH;
+      const c2 = cv.getContext('2d');
+      c2.fillStyle = ink; c2.textBaseline = 'alphabetic';
+      const size = this.tileH * 0.72, span = this.tileW / r.sx;
+      c2.font = (r.ital ? 'italic ' : '') + r.wgt + ' ' +
+                Math.round(size) + 'px system-ui, sans-serif';
+      c2.save(); c2.scale(r.sx, 1);
+      const rnd = mulberry32(r.seed);
+      let x = 0;
+      while (x < span){
         const wd = this.words[(rnd()*this.words.length)|0];
-        c2.fillText(wd, x, base);
-        x += c2.measureText(wd).width + size*0.28;
+        c2.fillText(wd, x, this.tileH*0.78);
+        // ...and again one tile to the left, so the word crossing the right edge is
+        // the same word crossing the left one and the tiling has no seam.
+        c2.fillText(wd, x - span, this.tileH*0.78);
+        x += c2.measureText(wd).width + size*0.32;
       }
       c2.restore();
-      c2.globalAlpha = 0.55; c2.lineWidth = Math.max(1, band*0.012);
-      c2.beginPath(); c2.moveTo(0, base + band*0.10); c2.lineTo(N, base + band*0.10);
-      c2.stroke(); c2.globalAlpha = 1;
+      r.cv = cv;
     }
-    st.cv = cv; st.ink = ink;
+    st.ink = ink;
   },
-  paint(c, st, L, T, W, H){
-    const ink = TH.dynMark || rgba(TH.line || '#111111', 0.12);
-    if (!st.cv || st.ink !== ink) this.build(st, ink);
-    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
-    c.drawImage(st.cv, L, T, W, H);
-    c.globalAlpha = a;
+  paint(c, st, L, T, W, H, w){
+    const ink = TH.dynMark || TH.line || '#8a7c00';
+    if (!st.rows || !st.rows.length) this.reset(st);
+    if (st.ink !== ink || !st.rows[0].cv) this.build(st, ink);
+    // A generous box around the pitch: the camera fits the field on screen with
+    // margins, and this covers them without needing the canvas size, which is in
+    // device pixels and not in the space this painter is handed.
+    const MX = W * 1.05, MY = H * 0.85;
+    const bx = L - MX, by = T - MY, bw = W + MX*2, bh = H + MY*2;
+    c.save();
+    c.beginPath();
+    c.rect(bx, by, bw, bh);
+    // No world means a picker tile, and there the margin IS the tile: punching the
+    // play area out of a tile that is nothing but play area leaves it blank.
+    if (w) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
+    if (w) c.clip('evenodd'); else c.clip();
+    const band = bh / this.rows, a0 = c.globalAlpha;
+    const tw = this.tileW * (band / this.tileH);
+    for (let i=0; i<this.rows; i++){
+      const r = st.rows[i];
+      const off = (((st.t * this.speed * r.spd) % tw) + tw) % tw;
+      c.globalAlpha = a0 * r.a;
+      for (let x = bx - off; x < bx + bw; x += tw)
+        c.drawImage(r.cv, x, by + i*band, tw, band);
+    }
+    c.globalAlpha = a0;
+    c.restore();
   },
 };
 // Deep space on a vector monitor: a nebula wash, a faint grid over it, a star field
