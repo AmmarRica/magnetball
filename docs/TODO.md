@@ -141,7 +141,14 @@ Three findings, two of them real bugs that shipped.
   real click path in `menufind` (everything else drove `noteRecent` directly, which proves the
   store and not the wiring).
 
-- [ ] ⚠️ **`contrast` is the flaky suite.** Named at last. Two earlier full runs reported
+- [x] ⚠️ **`contrast`'s flakiness was a real borderline colour, not the probe.** Sorry!'s
+  `green`/`cyan` (`#1f9f6f`) rendered as `#15694a` on a selected option tile — **4.44**
+  against a 4.5 floor. Whether the scan reached that tile depended on which options
+  happened to be selected when the screen was opened, so the same build passed and failed
+  on alternating runs. Darkened to `#0f5c3f`, which needs no nudge at all. The sabotage
+  probe in the output was a red herring: it is planted on purpose and is always there.
+  Anything within a tenth of the floor will do this again — treat 4.4-4.5 as failing.
+- [ ] ⚠️ **(superseded) `contrast` is the flaky suite.** Named at last. Two earlier full runs reported
   59/60 and 61/62 with the output lost; a run on 2026-08-08 went red on `contrast` at 75.8s
   and the captured output held exactly ONE entry — the suite's own sabotage probe
   (`#3a3a3a` on `#333333`, ratio 1.11), which it plants on purpose to prove the scanner

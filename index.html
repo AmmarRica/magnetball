@@ -320,14 +320,28 @@
     /* The KICK OFF bar is the Match section's HEADER, so the sticky element is that
        header, not the button inside it — nesting a sticky button in a sticky header
        would pin it below itself. */
-    #matchCard { background: none; border: none; padding: 0; box-shadow: none; }
+    /* ⚠️ display:contents, so the sticky KICK OFF header's containing block is the
+       SCROLL COLUMN rather than the Match card. A sticky element only sticks while its
+       own parent is on screen, and with the section collapsed that parent is about a
+       hundred pixels tall — so the "sticky" hero button scrolled away almost at once
+       and there was no way to start a match from the bottom of the menu. The card
+       already had no background, border or padding of its own, so removing its box
+       costs nothing; every selector still reads `#matchCard > h2`, because the DOM is
+       unchanged and only the layout box is gone. */
+    #matchCard { display: contents; }
     #matchCard > h2 {
+      /* ⚠️ align-self:stretch, because with the card's box gone this is a flex ITEM of
+         the scroll column rather than a block inside a card — and #setup centres its
+         items, so the hero bar shrank to the width of the words on it. */
+      /* ...and it keeps the CARD's width, not the column's: every other section is a
+         460px card and a hero bar 20px wider than all of them reads as misaligned. */
+      align-self: center; width: 100%; max-width: 460px;
       top: var(--jump-h, 0px); z-index: 6; gap: 8px; padding: 0; margin-bottom: 0;
       background: linear-gradient(rgba(53,255,135,.15), rgba(53,255,135,.15)), var(--bg);
     }
     #matchCard > h2::after { content: none; }     /* the chevron here is a real control */
     /* Warm-up: full width under KICK OFF, quieter than it, never sticky. */
-    #warmupBtn { display:block; width:100%; max-width:none; margin:8px 0 0; }
+    #warmupBtn { display:block; width:100%; max-width:460px; margin:8px 0 0; align-self: center; }
     /* Label on the left, a small action on the right. */
     .fieldrow { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .ghost.mini { margin:0; padding:5px 10px; font-size:11px; width:auto; max-width:none; }
@@ -793,6 +807,15 @@
       background: var(--bg-grad) fixed; padding: 24px;
     }
     #overlay.show { display: flex; }
+    /* ⚠️ EVERY button on this overlay is the same size. Resume carried an inline
+       max-width and the ghosts sized themselves to their own text, so Settings and
+       Main Menu came out at 109x43 and 102x43 under a 260x55 Resume — three targets,
+       three sizes, and the two you reach for while a match is paused were the small
+       ones. A paused game is exactly when you are not looking carefully. */
+    #overlay > button {
+      width: 100%; max-width: 260px; min-height: 55px;
+      font-size: 15px; padding: 14px 18px;
+    }
     #overlay h2 {
       font-family: var(--pix); font-size: clamp(22px,7vw,40px); text-align: center; color: var(--cyan);
       text-shadow: 0 0 14px rgba(33,230,255,.7), 4px 4px 0 var(--magenta);
@@ -1538,7 +1561,7 @@
     <div id="ovStats"></div>
     <div id="ovVote"></div>
     <div id="ovAwards"></div>
-    <button class="primary" id="ovResume" style="max-width:260px">Resume</button>
+    <button class="primary" id="ovResume">Resume</button>
     <button class="ghost" id="ovSettings" style="display:none">⚙ Settings</button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
@@ -2587,8 +2610,8 @@ const THEMES = {
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #fdf3d2 0%, #f3e3ae 55%, #e7d295 100%)',
       bg:'#f6ead0', panel:'rgba(27,42,74,0.06)', edge:'#c9b483', text:'#1b2a4a', muted:'#5a5334',
-      red:'#d8232a', blue:'#1f5fbf', cyan:'#1f9f6f', magenta:'#d8232a', green:'#1f9f6f',
-      yellow:'#e0a51c', accent:'#c1141a', go:'#1f9f6f', field:'#f2e3b0', onAccent:'#ffffff' },
+      red:'#d8232a', blue:'#1f5fbf', cyan:'#0f5c3f', magenta:'#d8232a', green:'#0f5c3f',
+      yellow:'#e0a51c', accent:'#c1141a', go:'#15764f', field:'#f2e3b0', onAccent:'#ffffff' },
     pitch: { glow:false, fieldBg:'#e7d295', court:'#f2e3b0', stripeA:'#f2e3b0', stripeB:'#ecdba4',
       netPocket:'rgba(27,42,74,0.08)', line:'#1b2a4a', centerDot:'#1b2a4a',
       netMesh:'rgba(27,42,74,0.40)', post:'#1b2a4a', teamRed:'#d8232a', teamBlue:'#1f5fbf',

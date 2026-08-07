@@ -495,6 +495,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **HUD:** a 3-column grid — pause left, scorebug in the **middle column** (so it is centred
   on the screen, not among whatever buttons happen to show), fullscreen right. Settings is a
   **pause-menu** option (`ovSettings`), not a HUD gear one mis-tap from the live ball.
+- **KICK OFF really floats:** `#matchCard` is `display: contents`, so the sticky hero
+  header's containing block is the SCROLL COLUMN and not the card. ⚠️ A sticky element
+  only sticks while its own parent is on screen, and with the Match section collapsed that
+  parent is about a hundred pixels tall — so the hero button scrolled away almost at once
+  and there was no way to start a match from the bottom of the menu. The card already had
+  no background, border or padding, so losing its box costs nothing and every selector
+  still reads `#matchCard > h2`. With the box gone the header is a flex ITEM of `#setup`,
+  which centres its children, so it needs `align-self` and the cards' own `460px` — left
+  to itself it shrank to the width of the words, then spanned 20px wider than every card.
+- **One size on the pause overlay:** `#overlay > button` fixes width and min-height for
+  all of them. ⚠️ Resume carried an inline `max-width` and the ghosts sized to their own
+  text, so Settings and Main Menu were 109×43 and 102×43 under a 260×55 Resume — and the
+  two you reach for mid-match were the small ones.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
