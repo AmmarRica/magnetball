@@ -657,8 +657,7 @@ const r = await p.evaluate(async ()=>{
     const lum8ish = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
     const lum8 = h => { cc8.fillStyle = h; cc8.fillRect(0,0,2,2);
       return lum8ish(cc8.getImageData(0,0,1,1).data); };
-    o.floatLum = lum8(M.TH.dynMark); o.markLum = lum8(M.TH.teamBlue);
-    o.floatsAreMuted = o.floatLum < o.markLum - 40;
+    o.markLum = lum8(M.TH.teamBlue);
     const f8 = M.DYN_FIELDS.arcade, st8 = {};
     f8.reset(st8);
     for (let i=0;i<40;i++) f8.step(st8);
@@ -685,10 +684,19 @@ const r = await p.evaluate(async ()=>{
     // is outside by definition, because the check above says nothing is inside.
     {
       const all = cc8.getImageData(0, 0, 300, 300).data;
+      let peak = 0;
       for (let i=0;i<all.length;i+=4){
         outN++;
-        if (Math.abs(lum8ish([all[i],all[i+1],all[i+2]]) - court8) > 3) offPitch++;
+        const L8 = lum8ish([all[i],all[i+1],all[i+2]]);
+        if (Math.abs(L8 - court8) > 3) offPitch++;
+        if (L8 > peak) peak = L8;
       }
+      // ⚠️ Measured on the RENDERED pixels, not on the palette hex. The floaters carry
+      // the goal's neon now, and the hex says nothing about what its alpha did to it —
+      // the question is whether the brightest thing out there can be mistaken for a
+      // player who has stepped past the touchline.
+      o.floatPeak = peak;
+      o.floatsStayBack = peak < o.markLum - 25;
     }
     o.pitchProbes = inN; o.onPitch = onPitch;
     o.roomProbes = outN; o.offPitch = offPitch;
@@ -800,7 +808,7 @@ ok(errors.length===0, 'console errors: '+errors.join(' | '));
 ok(r.abariName === 'Abari', `the Abari bundle does not resolve: ${r.abariName}`);
 ok(r.marksAreMirrored, `the two Abari marks are not a triangle and its mirror: high rows ${r.upHigh} vs ${r.downHigh}, low rows ${r.upLow} vs ${r.downLow}`);
 ok(r.markStandsUp, 'the house mark turns with facing — up-against-down IS the difference between the sides, so it is gone the moment anybody moves');
-ok(r.floatsAreMuted, `the drifting shapes (${Math.round(r.floatLum)}) are as bright as the team (${Math.round(r.markLum)}) — they are triangles too, and a player may step past the touchline`);
+ok(r.floatsStayBack, `the brightest drifting shape renders at ${Math.round(r.floatPeak)} against the team's ${Math.round(r.markLum)} — they are triangles too, and a player may step past the touchline into them`);
 ok(r.pitchStaysClean, `${r.onPitch} of ${r.pitchProbes} probes INSIDE the boundary were painted on — the play area is punched out of the clip, so any hit means the punch-out is gone`);
 ok(r.roomHasShapes, `only ${r.offPitch} of ${r.roomProbes} pixels were drawn on at all — the purity check above passes just as well on a painter that draws nothing`);
 ok(r.floatsStillWithoutStep, 'the shapes drifted inside a DRAW — they must only move on a sim step, or a 144Hz screen runs them 2.4x fast');

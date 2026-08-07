@@ -184,8 +184,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   court-filled canvas and requires every probe inside the line to come back untouched,
   with an outside scan that counts **pixels, not probe points** (sparse thin outlines in
   a room several times the pitch's size hit two point-samples in a hundred, which reads
-  as "nothing drawn"). ⚠️ The shapes stay muted outlines, never the neon: a player may
-  step past the touchline. The drift advances in `step()`, never in a paint.
+  as "nothing drawn"). ⚠️ The markings are **white** and the goal's pocket is a
+  translucent purple — pink lines fought the pink team for the same read, and the pocket
+  is the one place a wash of colour helps, because no player stands there. The floaters
+  carry that neon too but held back in alpha, and the guard is measured on the **rendered
+  brightest pixel**, not the palette hex: a hex says nothing about what alpha did to it,
+  and a player may step past the touchline into them. The drift advances in `step()`,
+  never in a paint.
   The ball is a **token**, round on purpose: on a pitch of wedges the thing you chase
   should be the one thing that is not one.
   `specimen` = a type-specimen sheet running in the MARGINS: process yellow, rows of
