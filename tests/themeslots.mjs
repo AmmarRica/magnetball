@@ -180,7 +180,7 @@ const r = await p.evaluate(async ()=>{
 
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
-ok(r.slotKeys === 'palette,field,discs,ball,sfx', `wrong slots: ${r.slotKeys}`);
+ok(r.slotKeys === 'palette,field,discs,ball,trail,sfx', `wrong slots: ${r.slotKeys}`);
 ok(r.everySlotHasOptions, 'a slot has fewer than two options, so it is not a choice');
 ok(r.everySlotLabelled, 'a slot has no label or no hint');
 ok(r.everyOptionNamed, 'an option in some slot has no name');
