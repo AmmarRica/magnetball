@@ -2148,11 +2148,30 @@ const LOBBY = {
   // but still bounded, so nobody wanders off the screen.
   outMargin: 74,
 };
+// The surface, as MULTIPLIERS on your own Game Feel rather than as replacements for
+// it. ⚠️ These used to be absolute numbers, and `pAccel`/`pDamp` were taken from the
+// table on Ice and Mud and from the sliders only on Grass — so the Speed and Grip
+// dials silently did nothing on two of the three surfaces, and switching pitch threw
+// away whatever you had tuned. At the DEFAULT sliders these reproduce the old values
+// exactly (0.40/0.905 → 0.26/0.955 on ice, 0.34/0.86 on mud), so nothing about how the
+// three surfaces feel against each other has changed.
+// ⚠️ `glide` scales the per-step LOSS, not the damping factor. Damping is a multiplier
+// per step, so scaling it directly is meaningless — 0.905 × 1.05 is above 1 and the
+// players accelerate forever. What "slidey" means is that less speed is lost each
+// step, which is `1 - (1 - damp) / glide`.
 const PITCH = {
-  normal: { name:'Grass', emoji:'🟩', accel:0.40, damp:0.905 },
-  ice:    { name:'Ice',   emoji:'🧊', accel:0.26, damp:0.955 },   // slidey, floaty
-  mud:    { name:'Mud',   emoji:'🟤', accel:0.34, damp:0.86 },    // sluggish, stops fast
+  normal: { name:'Grass', emoji:'🟩', accel:1,    glide:1     },
+  ice:    { name:'Ice',   emoji:'🧊', accel:0.65, glide:2.11  },   // slidey, floaty
+  mud:    { name:'Mud',   emoji:'🟤', accel:0.85, glide:0.678 },   // sluggish, stops fast
 };
+// The one place that knows how a surface bends the feel. Everything that builds a
+// world — a match, a drill, a live slider change — goes through it, so the three can
+// no longer disagree about what Ice is.
+function surfaceFeel(v, key){
+  const pt = PITCH[key || sel.pitch] || PITCH.normal;
+  return { accel: v.accel * pt.accel,
+           damp:  Math.max(0, Math.min(0.999, 1 - (1 - v.pdamp) / pt.glide)) };
+}
 const SPECT = { play:{ name:'Play', emoji:'🎮' }, watch:{ name:'Watch', emoji:'👀' } };
 const CB    = { off:{ name:'Off', emoji:'🎨' }, on:{ name:'On', emoji:'🔶' } };
 
@@ -3401,7 +3420,9 @@ function feelVals(){ const f=sel.feel||{}; return {
   ballcap: +(f.ballcap!=null?f.ballcap:32), kick: (f.kick!=null?f.kick:55)/10, bdamp: (f.bdamp!=null?f.bdamp:990)/1000,
   trap: (f.trap!=null?f.trap:TRAP.max*100)/100 }; }
 function applyFeel(){ if(!world || world.drillMode) return; const v=feelVals();
-  if (sel.pitch==='normal'){ world.pAccel=v.accel; world.pDamp=v.pdamp; }
+  // ⚠️ Every surface, not just Grass. Gated on 'normal' the sliders moved nothing at
+  // all once you were on Ice or Mud.
+  { const sf = surfaceFeel(v); world.pAccel = sf.accel; world.pDamp = sf.damp; }
   world.ballCap=v.ballcap; world.kickPower=v.kick; if(world.ball) world.ball.damp=v.bdamp; world.magnet=sel.magnet;
   world.trapOff=!!sel.trapOff; world.trapMax=v.trap; }
 const HANDED = { right:{ name:'Right', emoji:'👉' }, left:{ name:'Left', emoji:'👈' } };
@@ -7545,9 +7566,8 @@ function startMatch(){
   applySeatRotation(players);
 
   const bp = BALLS[sel.ball] || BALLS.normal;
-  const pt = PITCH[sel.pitch] || PITCH.normal;
   const fv = feelVals();
-  const usePitchGrip = sel.pitch !== 'normal';   // Grass grip comes from the feel sliders
+  const sf = surfaceFeel(fv);      // your sliders, bent by the surface — see PITCH
   world = {
     // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
     field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : DIFF[sel.diff],
@@ -7559,8 +7579,7 @@ function startMatch(){
     train: !!mode.train,
     watch, demo: _startQuiet,   // idle background demo (desktop menu) — muted, not recorded
     cb: sel.cb==='on',
-    pAccel: usePitchGrip ? pt.accel : fv.accel,
-    pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
+    pAccel: sf.accel, pDamp: sf.damp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
     players,
     ball: { x:0, y:0, vx:0, vy:0, r:bp.r, invMass:bp.invMass, bCoef:bp.bCoef, damp:fv.bdamp, isBall:true },
@@ -7928,7 +7947,13 @@ function playReplay(speed){
       if (!replay.active){ resolve(); return; }
       if (idx > 4 && anyPadPressed()){ replay.active=false; resolve(); return; }   // controller skips too
       if (!last) last = t;
-      while (t - last >= dur){ last += dur; idx++; }
+      // ⚠️ The field advances once per REPLAYED FRAME, not once per rAF tick. A replay
+      // is not the step loop, so advanceDynField() was never called and every animated
+      // theme froze solid the moment a goal went in — the starfield stopped, the
+      // Abduction floaters stopped, the Specimen margin stopped scrolling. Tying it to
+      // frames consumed rather than to the refresh keeps it on the same clock as the
+      // action, which means it correctly runs in slow motion along with the replay.
+      while (t - last >= dur){ last += dur; idx++; advanceDynField(); }
       if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; resolve(); return; }
       drawReplayFrame(frames[idx]);
       replay.raf = requestAnimationFrame(tick);
@@ -10904,12 +10929,10 @@ function startDrill(key){
   // Use the SAME movement as a real match — your Game Feel sliders, pitch grip,
   // ball cap/kick power and magnet — so a drill controls exactly like you play.
   const fv = feelVals();
-  const pt = PITCH[sel.pitch] || PITCH.normal;
-  const usePitchGrip = sel.pitch !== 'normal';
+  const sf = surfaceFeel(fv);
   world = {
     field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
-    pAccel: usePitchGrip ? pt.accel : fv.accel,
-    pDamp:  usePitchGrip ? pt.damp  : fv.pdamp,
+    pAccel: sf.accel, pDamp: sf.damp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange, trapMax: fv.trap,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
     ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:fv.bdamp, isBall:true },
@@ -14459,7 +14482,8 @@ if (window.__MAGNETDEBUG) {
     TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
-    startDrill, stepDrill, DRILLS, zoneForTouch, get pads(){ return pads; },
+    startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
+    zoneForTouch, get pads(){ return pads; },
     updatePadInfo, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES,

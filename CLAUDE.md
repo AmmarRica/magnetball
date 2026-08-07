@@ -65,6 +65,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   came from*, not what the whole possession looked like. Advanced in `advanceTrails`
   next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
   streak instead of 190.
+- **Surface vs feel:** `PITCH` entries are **multipliers** on the Game Feel sliders, not
+  replacements — `surfaceFeel(v)` is the one place that bends one by the other, and a
+  match, a drill and a live slider change all go through it. ⚠️ They used to be absolute
+  numbers taken on Ice and Mud and ignored on Grass, so the Speed and Grip dials did
+  nothing on two of the three surfaces and switching pitch threw away your tuning.
+  ⚠️ `glide` scales the per-step **loss**, `1 - (1 - damp) / glide`, never the damping
+  factor: damping is a multiplier per step, so 0.905 × 1.05 is above 1 and the players
+  accelerate forever. At the default sliders the three surfaces reproduce the old numbers
+  exactly. `tests/surfacefeel.mjs`.
+- **A replay ticks the field itself.** `playReplay` calls `advanceDynField()` once per
+  **replayed frame** (inside the frame-consumption loop, not per rAF tick), because a
+  replay is not the step loop — without it every animated theme froze the moment a goal
+  went in. Per frame rather than per tick also means it correctly runs in slow motion
+  with the action.
 - **Body size floor:** `cam.body` (`MIN_BODY_PX`). On the huge courts the whole pitch must fit
   on screen, so `cam.s` falls until a player disc is **2.25px** — every disc the same dot. Discs
   and the ball are drawn at `MIN_BODY_PX` or their true size, whichever is larger, through ONE
