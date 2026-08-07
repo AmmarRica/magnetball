@@ -516,6 +516,64 @@ const r = await p.evaluate(async ()=>{
     o.ballIsHollow = o.ballEdge > o.ballMid + 90;
     M.applyBundle('classic');
   }
+
+  // ---- Specimen: one ink, two teams, settled by the counter -----------------
+  // ⚠️ Both discs are the same black block — hue cannot tell them apart any more than
+  // it could on Highlighter — so the glyph does, and it has to do it TWICE over: the
+  // O has a closed counter where the X has a crossing, and the O carries paper on the
+  // axes where the X carries ink there. Measured, not asserted.
+  {
+    M.applyBundle('specimen');
+    o.specName = M.bundleName();
+    const R = 60, CX = 150, CY = 150;
+    const cv7 = document.createElement('canvas'); cv7.width = cv7.height = 300;
+    const cc7 = cv7.getContext('2d');
+    const lum = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
+    const glyph = (team) => {
+      cc7.fillStyle = '#7f7f7f'; cc7.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.type.paint(cc7, q, CX, CY, R, { players:[q] });
+      const at2 = (fr, deg) => { const a = deg*Math.PI/180;
+        return lum(cc7.getImageData(Math.round(CX + Math.cos(a)*R*fr),
+                                    Math.round(CY + Math.sin(a)*R*fr), 1, 1).data); };
+      const axes = [0,90,180,270].map(d => at2(0.52, d));
+      const diag = [45,135,225,315].map(d => at2(0.52, d));
+      return { mid: at2(0, 0), axes, diag };
+    };
+    const oG = glyph(0), xG = glyph(1);
+    const INK = 90, PAPER = 140;          // black block vs process yellow
+    o.oGlyph = oG; o.xGlyph = xG;
+    // The O: solid centre, paper all the way round the counter.
+    o.oHasCounter = oG.mid < INK && oG.axes.every(v => v > PAPER) && oG.diag.every(v => v > PAPER);
+    // The X: paper through the middle, ink on the axes, paper on the diagonals.
+    o.xIsACross = xG.mid > PAPER && xG.axes.every(v => v < INK) && xG.diag.every(v => v > PAPER);
+    o.typeSidesDiffer = o.oHasCounter && o.xIsACross;
+    // ⚠️ The sheet's type is a DEEPER YELLOW, never the black the lines are set in —
+    // a field of black words is a field of decoys the size of a player.
+    const ofHex = h => { cc7.fillStyle = h; cc7.fillRect(0,0,2,2);
+      return lum(cc7.getImageData(0,0,1,1).data); };
+    o.sheetLum = ofHex(M.TH.dynMark); o.lineLum = ofHex(M.TH.line);
+    o.courtLum = ofHex(M.TH.court);
+    o.sheetIsTint = o.sheetLum > o.lineLum + 90 && o.sheetLum < o.courtLum - 5;
+    // Baked once and cached on the ink, like every other stretched tile here.
+    const f7 = M.DYN_FIELDS.specimen; const st7 = {};
+    f7.paint(cc7, st7, 0, 0, 200, 200);
+    o.sheetCached = !!st7.cv;
+    const firstSheet = st7.cv;
+    f7.paint(cc7, st7, 0, 0, 200, 200);
+    o.sheetReused = st7.cv === firstSheet;
+    st7.ink = '#123456';
+    f7.paint(cc7, st7, 0, 0, 200, 200);
+    o.sheetRebuildsOnInk = st7.cv !== firstSheet;
+    o.sheetStill = !f7.step;
+    // ...and the ball is a full stop, not a second counter: solid in the middle.
+    cc7.fillStyle = '#7f7f7f'; cc7.fillRect(0,0,300,300);
+    M.paintBall(cc7, CX, CY, R, 0, 'period', M.TH);
+    o.ballMidLum = lum(cc7.getImageData(CX, CY, 1, 1).data);
+    o.ballRingLum = lum(cc7.getImageData(CX + Math.round(R*0.72), CY, 1, 1).data);
+    o.ballIsSolidDot = o.ballMidLum < INK && o.ballRingLum > PAPER;
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -587,6 +645,15 @@ ok(r.shipIsHollow, `a vector ship is FILLED (middle ${r.shipMiddle}, ring ${r.sh
 ok(r.shipsDifferByShape, `the dart and the saucer do not differ by SILHOUETTE: tail extents ${r.dartTail} vs ${r.vecSaucerTail}`);
 ok(r.dartTurns, 'the dart does not turn with its facing');
 ok(r.saucerFliesLevel, 'the saucer turns with its facing — rotated ninety degrees it is a lens nobody can name, which is why the arcade flew it level');
+ok(r.specName === 'Specimen', `the Specimen bundle does not resolve: ${r.specName}`);
+ok(r.oHasCounter, `Specimen's team 0 is not an O: ${JSON.stringify(r.oGlyph)} — the counter has to be closed and the ring has to run all the way round`);
+ok(r.xIsACross, `Specimen's team 1 is not an X: ${JSON.stringify(r.xGlyph)} — ink on the axes, paper through the middle and on the diagonals`);
+ok(r.typeSidesDiffer, 'the two Specimen sides do not differ by GLYPH, and they cannot differ by hue: the palette is one yellow and one black');
+ok(r.sheetIsTint, `the specimen type (${Math.round(r.sheetLum)}) is not a tint between the court (${Math.round(r.courtLum)}) and the line ink (${Math.round(r.lineLum)}) — a sheet of black words is a sheet of player-sized decoys`);
+ok(r.sheetCached && r.sheetReused, 'the specimen sheet is re-typeset every frame — that is a dozen fillText calls at 80px, every frame');
+ok(r.sheetRebuildsOnInk, 'the specimen sheet does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
+ok(r.sheetStill, 'the specimen sheet has a step — a printed sheet does not move');
+ok(r.ballIsSolidDot, `the Specimen ball is not a full stop (middle ${Math.round(r.ballMidLum)}, edge ${Math.round(r.ballRingLum)}) — drawn as a ring it is a second O and you lose it in a challenge`);
 ok(r.ballIsHollow, `the ball is not an outline (edge ${Math.round(r.ballEdge)}, middle ${Math.round(r.ballMid)}) — on this palette the rim ring IS the rock's outline`);
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
