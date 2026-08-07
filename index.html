@@ -2405,10 +2405,10 @@ const THEMES = {
   // pink triangle DOWN (DISC_SKINS.wedge) — and that skin deliberately does NOT turn
   // with facing. Up-against-down IS the difference here, and a skin that rotates
   // destroys the one thing telling the sides apart the moment anybody moves.
-  // ⚠️ The floaters are muted outlines, never the neon. A player may step past the
-  // touchline, and a floater is the same shape a player is, so the gap is measured
-  // rather than eyeballed. An arcade carpet used to run UNDER the play here and it
-  // was exactly that: a floor of decoys.
+  // ⚠️ The floaters carry the goal's neon too, but held back in alpha. A player may
+  // step past the touchline and a floater is the same shape a player is, so the gap is
+  // measured on the RENDERED pixels rather than eyeballed off the hex. An arcade carpet
+  // used to run UNDER the play here and it was exactly that: a floor of decoys.
   abari: {
     name: 'Abari', emoji: '🕹️',
     ui: { scan:true,
@@ -2417,16 +2417,20 @@ const THEMES = {
       red:'#ffffff', blue:'#f0369b', cyan:'#f0369b', magenta:'#f0369b', green:'#f0369b',
       yellow:'#ffb03a', accent:'#f0369b', go:'#f0369b', field:'#1b1b1e', onAccent:'#131315' },
     pitch: { glow:true, fieldBg:'#131315', court:'#1d1d20', stripeA:'#1d1d20', stripeB:'#202024',
-      netPocket:'rgba(240,54,155,0.10)', line:'#f0369b', centerDot:'#f0369b',
-      netMesh:'rgba(240,54,155,0.42)', post:'#f0369b', teamRed:'#ffffff', teamBlue:'#f0369b',
+      // The markings are WHITE and the inside of the goal is a translucent purple —
+      // pink lines fought the pink team for the same read, and the one place a wash of
+      // colour helps rather than hurts is the pocket, where no player ever stands.
+      netPocket:'rgba(178,73,255,0.22)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.45)', post:'#ffffff', teamRed:'#ffffff', teamBlue:'#f0369b',
       discRim:'#131315', kickRing:'#f0369b', kickText:'#131315', cbRing:'#ffffff',
       eyeWhite:'#ffffff', eyePupil:'#131315', nameBg:'#131315', nameText:'#f4f2f4',
       shadow:'rgba(0,0,0,0.45)', ballRim:'#ffffff', ball:'#f0369b', ballSpot:'#ffffff',
       trailRGB:'240,54,155',
       obstacle:'#f0369b', good:'#f0369b', warn:'#ffb03a', dim:'#6f6470', cone:'#f0369b',
       hudText:'#f4f2f4', hudSub:'#b3a3ad', accent:'#f0369b', padRing:'rgba(240,54,155,0.6)',
-      dynMark:'#6b2545',        // the drifting shapes — muted, never the neon
-      dynAlt:'#3a3a40' },       // ...and their grey
+      dynMark:'#6b2545',        // the drifting shapes — a muted pink,
+      dynAlt:'#3a3a40',         // ...a grey,
+      dynNeon:'#b249ff' },      // ...and the goal's own neon purple, at low alpha
   },
   // A type specimen: process yellow, black grotesk, nothing else. The sheet runs in
   // the MARGINS and scrolls — see DYN_FIELDS.specimen, which punches the play area out
@@ -11897,8 +11901,10 @@ DYN_FIELDS.pooltable = {
 // because a floater is a triangle and so is a player — an arcade carpet used to run
 // under the play and it was a floor of decoys. The suite paints over a court-filled
 // canvas and requires every probe inside the line to come back untouched.
-// ⚠️ The shapes are mostly OUTLINES in muted ink, never the neon: a player may step
-// past the touchline, and a solid pink triangle out there is a body you lose.
+// ⚠️ The shapes are mostly OUTLINES, and the neon ones are held back to a fraction of
+// their alpha: a player may step past the touchline, and a bright shape out there is a
+// body you lose. The suite measures the RENDERED brightest pixel against the player's,
+// not the palette hex — the hex says nothing about what alpha did to it.
 // ⚠️ The drift advances in step(), which advanceDynField() calls next to step(world),
 // never in the paint: at 144Hz a paint-driven drift runs 2.4x fast. It rolls off its
 // own fixed PRNG, so where a shape sits cannot touch a single bot decision.
@@ -11911,7 +11917,8 @@ DYN_FIELDS.arcade = {
       st.f.push({ x:rnd(), y:rnd(), s:0.4 + rnd()*1.1, k:(rnd()*3)|0,
                   rot:rnd()*6.283, spin:(rnd()-0.5)*0.006,
                   vx:(rnd()-0.5)*this.drift, vy:(rnd()-0.5)*this.drift,
-                  a:0.16 + rnd()*0.4, pink: rnd() < 0.55, solid: rnd() < 0.28 });
+                  a:0.16 + rnd()*0.4, tone:(rnd() < 0.26 ? 2 : (rnd() < 0.6 ? 0 : 1)),
+                  solid: rnd() < 0.28 });
   },
   step(st){
     st.t++;
@@ -11932,6 +11939,7 @@ DYN_FIELDS.arcade = {
     // Falls back through whatever palette it is handed: slots mix freely.
     const pink = TH.dynMark || TH.line || '#6b2545';
     const grey = TH.dynAlt  || TH.dim  || '#3a3a40';
+    const neon = TH.dynNeon || TH.accent || pink;
     if (!st.f) this.reset(st);
     const MX = W * 1.05, MY = H * 0.85;
     const bx = L - MX, by = T - MY, bw = W + MX*2, bh = H + MY*2;
@@ -11948,10 +11956,13 @@ DYN_FIELDS.arcade = {
     const base = Math.min(W, H) * this.floatR * (w ? 1 : 1.6);
     c.lineJoin = 'round';
     for (const q of st.f){
-      const col = q.pink ? pink : grey, s = base * q.s;
+      const col = q.tone === 2 ? neon : (q.tone === 0 ? pink : grey), s = base * q.s;
       c.save();
       c.translate(bx + q.x*bw, by + q.y*bh); c.rotate(q.rot);
-      c.globalAlpha = a0 * q.a;
+      // ⚠️ The neon ones are held back: they are the brightest ink on the palette and
+      // a player may step past the touchline, so a bright shape out there is a body
+      // you lose. The suite measures the RENDERED brightest pixel, not the hex.
+      c.globalAlpha = a0 * q.a * (q.tone === 2 ? 0.62 : 1);
       this.shape(c, q.k, s);
       if (q.solid){ c.fillStyle = col; c.fill(); }
       else { c.strokeStyle = col; c.lineWidth = Math.max(1.2, s*0.14); c.stroke(); }
