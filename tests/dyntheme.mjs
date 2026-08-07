@@ -658,16 +658,32 @@ const r = await p.evaluate(async ()=>{
     o.carpetLum = lum8(M.TH.dynMark); o.markLum = lum8(M.TH.teamBlue);
     o.carpetIsMuted = o.carpetLum < o.markLum - 40;
     const f8 = M.DYN_FIELDS.arcade, st8 = {};
-    f8.reset && f8.reset(st8);
-    f8.paint(cc8, st8, 0, 0, 200, 200);
+    f8.reset(st8);
+    const w8 = M.world;
+    // ⚠️ THE LINE THIS FIELD LIVES ON: the floaters are triangles and so is a player,
+    // so not one of them may reach the pitch. Measured as "stepping the field changes
+    // nothing inside the boundary" — the carpet is baked and static, so any pixel that
+    // moves in there is a floater that got through the punch-out.
+    const PL = 90, PT = 60, PW = 120, PH = 180;
+    const both = () => {
+      cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
+      f8.paint(cc8, st8, PL, PT, PW, PH, w8);
+      return { in:  cc8.getImageData(PL+8, PT+8, PW-16, PH-16).data.join(','),
+               out: cc8.getImageData(PL-48, PT-48, 44, PH+96).data.join(',') };
+    };
+    const A8 = both(), B8 = both();
+    o.carpetStillWithoutStep = A8.in === B8.in && A8.out === B8.out;
+    for (let i=0;i<80;i++) f8.step(st8);
+    const C8 = both();
+    o.floatersMoveWithStep = C8.out !== A8.out;
+    o.fieldNeverChanges = C8.in === A8.in;
     o.carpetCached = !!st8.cv;
     const firstCarpet = st8.cv;
-    f8.paint(cc8, st8, 0, 0, 200, 200);
+    both();
     o.carpetReused = st8.cv === firstCarpet;
     st8.key = 'nope';
-    f8.paint(cc8, st8, 0, 0, 200, 200);
+    both();
     o.carpetRebuildsOnInk = st8.cv !== firstCarpet;
-    o.carpetStill = !f8.step;
     // The ball is the one round thing on a pitch of wedges.
     o.tokenExists = !!M.BALL_LOOKS.token;
     const tShot = (key) => { cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
@@ -770,7 +786,9 @@ ok(r.markStandsUp, 'the house mark turns with facing — up-against-down IS the 
 ok(r.carpetIsMuted, `the carpet (${Math.round(r.carpetLum)}) is as bright as the team drawn on top of it (${Math.round(r.markLum)}) — and the carpet is triangles too, so that is a floor of decoys`);
 ok(r.carpetCached && r.carpetReused, 'the arcade carpet is redrawn shape by shape every frame');
 ok(r.carpetRebuildsOnInk, 'the carpet does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
-ok(r.carpetStill, 'the arcade carpet has a step — a floor that moves reads as the camera drifting');
+ok(r.carpetStillWithoutStep, 'the arcade field advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
+ok(r.floatersMoveWithStep, 'the floating shapes never moved when stepped');
+ok(r.fieldNeverChanges, 'a floating shape reached the PITCH — stepping the field changed pixels inside the boundary, and the floaters are triangles just like the players are');
 ok(r.tokenExists && r.tokenDraws, 'the token ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));
