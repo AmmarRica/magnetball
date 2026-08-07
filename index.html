@@ -3149,6 +3149,115 @@ function applySfxSet(k){
 }
 // One slot each. `keys`/`name` are functions because the registries they read
 // (DYN_FIELDS, DISC_SKINS, BALL_LOOKS) are defined with the renderer, far below.
+// What the tell behind a player LOOKS like — a theme slot, like the ball's pattern.
+// ⚠️ The SAMPLING is not in here. Where a dot is dropped and how fast it fades are
+// `advanceTrails`, which runs in the step loop; a look only draws what is already
+// recorded. Putting the spacing in the look would make the tell's LENGTH a cosmetic
+// choice, and length is how far someone just came — that is a read, not a decoration.
+// ⚠️ The ball's streak is deliberately not on this slot: it is the one thing everybody
+// is tracking, so no look may switch it off.
+// ⚠️ A look is also handed the TEAM, so a pairing can draw the two sides differently —
+// Potions & Pixels pours one and pixelates the other. A look that does not care simply
+// ignores it; one that does sets `perTeam`, which is what makes the picker tile show
+// both runs instead of implying the sides look alike.
+// ⚠️ A look is handed SCREEN points, not world ones, and a COUNT rather than a
+// trimmed array — the points live in one reused scratch buffer, because a fresh array
+// per player per frame is exactly the steady allocation `advanceTrails` already went
+// out of its way to avoid. Screen space is also what lets the picker tile call the
+// real painter instead of drawing a picture of it.
+const TRAIL_LOOKS = {
+  dots:  { name:'Dots', draw(c, pts, n, col, rr){
+    for (let k = 0; k < n; k++){
+      const d = pts[k], f = (k+1) / n;                // older dots smaller + fainter
+      c.beginPath(); c.arc(d.x, d.y, rr*(0.15 + 0.19*f), 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
+      c.fill();
+    } } },
+  // Even, round and soft — the same size all the way back, so it reads as something
+  // FLYING leaving a wake rather than as a tail narrowing to a point.
+  orbs:  { name:'Orbs', draw(c, pts, n, col, rr){
+    for (let k = 0; k < n; k++){
+      const d = pts[k], f = (k+1) / n;
+      const R = rr * (0.24 + 0.06*f);
+      c.beginPath(); c.arc(d.x, d.y, R, 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.26 * d.a * (0.18 + 0.82*f));
+      c.fill();
+      // A brighter core, so a puff still reads at the size a body is drawn on the
+      // huge courts — a single flat alpha vanished there.
+      c.beginPath(); c.arc(d.x, d.y, R*0.42, 0, 2*Math.PI);
+      c.fillStyle = rgba(col, 0.5 * d.a * (0.18 + 0.82*f));
+      c.fill();
+    } } },
+  // One tapered stroke through the recorded points, the way the ball's streak is
+  // drawn — for when the dots read as debris rather than as motion.
+  comet: { name:'Comet', draw(c, pts, n, col, rr){
+    if (n < 2) return;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let k = 1; k < n; k++){
+      const a = pts[k-1], b = pts[k], f = k / n;
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y);
+      c.lineWidth = Math.max(1, rr*(0.10 + 0.52*f));
+      c.strokeStyle = rgba(col, 0.55 * b.a * (0.10 + 0.90*f));
+      c.stroke();
+    } } },
+  // The theme's own pairing: the flask POURS and the pixel STEPS. ⚠️ The only look
+  // that reads the team, and the only reason `team` is in the signature at all.
+  pnp:   { name:'Flask & pixel', perTeam:true, draw(c, pts, n, col, rr, team){
+    if (team === 0){
+      // Liquid: consecutive points are JOINED as well as dotted, so the tell is a
+      // continuous stream rather than a row of drips. A blob per point alone left
+      // gaps at speed, which is when a player covers most ground between samples.
+      c.lineCap = 'round'; c.lineJoin = 'round';
+      for (let k = 1; k < n; k++){
+        const a = pts[k-1], b2 = pts[k], f = k / n;
+        c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b2.x, b2.y);
+        c.lineWidth = Math.max(1, rr*(0.10 + 0.34*f));
+        c.strokeStyle = rgba(col, 0.45 * b2.a * (0.12 + 0.88*f));
+        c.stroke();
+      }
+      for (let k = 0; k < n; k++){
+        const d = pts[k], f = (k+1) / n;
+        // A wobble off the point's own coordinates, never off a clock or a PRNG: a
+        // drawn frame must not be able to change between two draws of the same step.
+        const wob = 0.82 + 0.36 * Math.abs(Math.sin(d.x*0.07 + d.y*0.11));
+        c.beginPath(); c.arc(d.x, d.y, rr*(0.07 + 0.20*f)*wob, 0, 2*Math.PI);
+        c.fillStyle = rgba(col, 0.5 * d.a * (0.12 + 0.88*f));
+        c.fill();
+      }
+    } else {
+      // Pixels: both the POSITION and the SIZE snap to one grid, so the tell reads as
+      // something quantised rather than as squares that happen to be square. Each one
+      // also bursts a few smaller blocks outward — small on purpose, one grid cell at
+      // most, so it reads as a pixel coming apart rather than as a second trail.
+      // ⚠️ The burst spreads with AGE: the newest block is whole and the oldest is
+      // scattered, which is the only way a still frame says it is dispersing.
+      // ⚠️ The scatter is derived from the point's own coordinates, never from a clock
+      // or a PRNG — a draw must not be able to differ between two draws of one step.
+      const q = Math.max(2, rr*0.34);
+      const snap = v => Math.round(v/q)*q;
+      for (let k = 0; k < n; k++){
+        const d = pts[k], f = (k+1) / n;
+        const age = 1 - f;                                  // 0 newest, 1 oldest
+        const sz = Math.max(q, Math.round((rr*(0.22 + 0.42*f))/q)*q);
+        const px = snap(d.x), py = snap(d.y);
+        c.fillStyle = rgba(col, 0.62 * d.a * (0.16 + 0.84*f));
+        c.fillRect(px - sz/2, py - sz/2, sz, sz);
+        if (age < 0.12) continue;                           // the newest is still whole
+        c.fillStyle = rgba(col, 0.34 * d.a * (0.16 + 0.84*f));
+        for (let j = 0; j < 3; j++){
+          const a = (d.x*0.31 + d.y*0.17 + j*2.094);        // stable per point + shard
+          const g = q * (0.55 + age*0.75);
+          c.fillRect(snap(d.x + Math.cos(a)*g) - q/2,
+                     snap(d.y + Math.sin(a)*g) - q/2, q, q);
+        }
+      }
+    } } },
+  none:  { name:'None', draw(){} },
+};
+const TRAIL_LOOK_KEYS = Object.keys(TRAIL_LOOKS);
+function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
+
+// By index, not on the player — see labelA above for why.
 const SLOTS = {
   palette: { label:'Background', emoji:'🎨', hint:'Page and pitch colours.',
              keys:()=>Object.keys(THEMES), name:k=>THEMES[k].name,
@@ -3192,7 +3301,7 @@ const THEME_BUNDLES = {
   // applySfxSet nowhere and leave the Sound slot showing a set that does not exist.
   abari:     { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
-  pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'dots'  },
+  pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -3254,10 +3363,12 @@ function normalizeLook(){
   if (L.discs === 'shrimp') L.discs = 'crablobster';
   // The trail slot is new, so a save from before it has no key at all. Object.assign
   // above has already supplied the default; this only catches a stored key that no
-  // longer exists. ⚠️ Compared against a plain list, NOT a TRAIL_LOOKS lookup — this
-  // runs during the bootstrap and the registry is declared with the renderer far
-  // below, which is exactly what took the page down when the disc-skin fold did it.
-  if (['dots','orbs','comet','none'].indexOf(L.trail) < 0) L.trail = d.trail;
+  // longer exists. ⚠️ TRAIL_LOOKS is declared ABOVE SLOTS for exactly this — the fold
+  // runs during the bootstrap, and a registry declared with the renderer far below
+  // would be in the temporal dead zone here, which is what took the page down when
+  // the disc-skin fold reached for DISC_SKINS. A hard-coded copy of the key list was
+  // the first fix and it was a second place to keep in step; this is the real one.
+  if (!TRAIL_LOOKS[L.trail]) L.trail = d.trail;
   if (!THEMES[L.palette]) L.palette = d.palette;
 }
 
@@ -5201,15 +5312,23 @@ function slotSwatch(slot, k){
     c.fillStyle = TH.court || '#1c3a26'; c.fillRect(0,0,64,64);
     // A stretch of travel with a body at the head, through the REAL painter — a tile
     // that reconstructed the look would be free to show something the pitch won't.
-    const pts = [];
-    for (let k = 0; k < 9; k++){
-      const t = k/8;
-      pts.push({ x: 8 + t*42, y: 44 - Math.sin(t*2.1)*17, a: 1 });
-    }
-    (TRAIL_LOOKS[k] || TRAIL_LOOKS.dots).draw(c, pts, pts.length, TH.teamRed || '#ff3b6b', 15);
-    const h = pts[pts.length-1];
-    c.beginPath(); c.arc(h.x + 8, h.y - 4, 7, 0, 2*Math.PI);
-    c.fillStyle = TH.teamRed || '#ff3b6b'; c.fill();
+    const look = TRAIL_LOOKS[k] || TRAIL_LOOKS.dots;
+    const run = (team, col, y0, amp, rr) => {
+      const pts = [];
+      for (let i = 0; i < 9; i++){
+        const t = i/8;
+        pts.push({ x: 7 + t*40, y: y0 - Math.sin(t*2.1)*amp, a: 1 });
+      }
+      look.draw(c, pts, pts.length, col, rr, team);
+      const h = pts[pts.length-1];
+      c.beginPath(); c.arc(h.x + rr*0.55, h.y - rr*0.28, rr*0.46, 0, 2*Math.PI);
+      c.fillStyle = col; c.fill();
+    };
+    // A pairing shows BOTH sides, or the tile implies they look alike.
+    if (look.perTeam){
+      run(0, TH.teamRed  || '#ff3b6b', 24, 8, 11);
+      run(1, TH.teamBlue || '#4d7bff', 52, 8, 11);
+    } else run(0, TH.teamRed || '#ff3b6b', 44, 17, 15);
     return cvs;
   }
   if (slot === 'discs'){
@@ -13548,59 +13667,6 @@ function advanceTrails(w){
   }
 }
 
-// What the tell behind a player LOOKS like — a theme slot, like the ball's pattern.
-// ⚠️ The SAMPLING is not in here. Where a dot is dropped and how fast it fades are
-// `advanceTrails`, which runs in the step loop; a look only draws what is already
-// recorded. Putting the spacing in the look would make the tell's LENGTH a cosmetic
-// choice, and length is how far someone just came — that is a read, not a decoration.
-// ⚠️ The ball's streak is deliberately not on this slot: it is the one thing everybody
-// is tracking, so no look may switch it off.
-// ⚠️ A look is handed SCREEN points, not world ones, and a COUNT rather than a
-// trimmed array — the points live in one reused scratch buffer, because a fresh array
-// per player per frame is exactly the steady allocation `advanceTrails` already went
-// out of its way to avoid. Screen space is also what lets the picker tile call the
-// real painter instead of drawing a picture of it.
-const TRAIL_LOOKS = {
-  dots:  { name:'Dots', draw(c, pts, n, col, rr){
-    for (let k = 0; k < n; k++){
-      const d = pts[k], f = (k+1) / n;                // older dots smaller + fainter
-      c.beginPath(); c.arc(d.x, d.y, rr*(0.15 + 0.19*f), 0, 2*Math.PI);
-      c.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
-      c.fill();
-    } } },
-  // Even, round and soft — the same size all the way back, so it reads as something
-  // FLYING leaving a wake rather than as a tail narrowing to a point.
-  orbs:  { name:'Orbs', draw(c, pts, n, col, rr){
-    for (let k = 0; k < n; k++){
-      const d = pts[k], f = (k+1) / n;
-      const R = rr * (0.24 + 0.06*f);
-      c.beginPath(); c.arc(d.x, d.y, R, 0, 2*Math.PI);
-      c.fillStyle = rgba(col, 0.26 * d.a * (0.18 + 0.82*f));
-      c.fill();
-      // A brighter core, so a puff still reads at the size a body is drawn on the
-      // huge courts — a single flat alpha vanished there.
-      c.beginPath(); c.arc(d.x, d.y, R*0.42, 0, 2*Math.PI);
-      c.fillStyle = rgba(col, 0.5 * d.a * (0.18 + 0.82*f));
-      c.fill();
-    } } },
-  // One tapered stroke through the recorded points, the way the ball's streak is
-  // drawn — for when the dots read as debris rather than as motion.
-  comet: { name:'Comet', draw(c, pts, n, col, rr){
-    if (n < 2) return;
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    for (let k = 1; k < n; k++){
-      const a = pts[k-1], b = pts[k], f = k / n;
-      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y);
-      c.lineWidth = Math.max(1, rr*(0.10 + 0.52*f));
-      c.strokeStyle = rgba(col, 0.55 * b.a * (0.10 + 0.90*f));
-      c.stroke();
-    } } },
-  none:  { name:'None', draw(){} },
-};
-const TRAIL_LOOK_KEYS = Object.keys(TRAIL_LOOKS);
-function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
-
-// By index, not on the player — see labelA above for why.
 let trailPts = [];                        // reused scratch — see TRAIL_LOOKS above
 function drawDiscTrails(w){
   const s = cam.s;
@@ -13615,7 +13681,7 @@ function drawDiscTrails(w){
       t.x = wx(d.x); t.y = wy(d.y); t.a = d.a;
     }
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    look.draw(ctx, trailPts, hist.length, col, p.r*s*cam.body);
+    look.draw(ctx, trailPts, hist.length, col, p.r*s*cam.body, p.team);
   }
 }
 
