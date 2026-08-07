@@ -2924,9 +2924,39 @@ let TH = THEMES.neon.pitch;
 // The HUD pills float over the pitch, so their surface is the theme's page colour
 // laid over the court. High enough alpha that the composite is predictable.
 const OVERLAY_A = 0.86;
+// ⚠️ Declared HERE, above applyTheme, not down with the pickers that use it. The
+// bootstrap calls applyTheme long before the picker code is reached, and a `const`
+// further down is in the temporal dead zone at that point — the same trap that took
+// the whole page down when normalizeLook reached for DISC_SKINS.
+// ⚠️ Rebuilding a picker is NOT free, and `buildSlotPicker` runs on every slot change.
+// The field tiles bake their real texture at full resolution for a 64px preview — a
+// 384-square dither written as ImageData, eleven strips of 60px type, a nebula — and a
+// throwaway `st = {}` per call threw the bake away every time. Measured: the field row
+// alone cost 15.6ms and the bundle row 17.3ms, so opening the Theme card dropped two
+// frames and every tap inside it dropped another. Every swatch is a canvas, so the
+// canvas is what gets cached.
+// ⚠️ Keyed on the PALETTE as well as the option, because a tile is painted against the
+// live inks — the same field over Grass and over Rockpool are different pictures. The
+// whole cache is dropped when the palette changes, which is what keeps it from growing
+// without bound as somebody cycles through the tables.
+// ⚠️ TWO maps, because only some tiles depend on the live palette. A bundle tile
+// paints with TH swapped to ITS OWN palette and a palette tile reads THEMES directly,
+// so neither can go stale — and putting them in the map that gets dropped meant
+// changing theme re-paid the whole 28ms bundle row, which is precisely the moment you
+// are looking at it.
+const swatchCache = new Map();      // painted against the LIVE inks: dropped on a change
+const swatchFixed = new Map();      // painted against its own: never stale
+function clearSwatchCache(){ swatchCache.clear(); }
+function cachedSwatch(key, make, fixed){
+  const m = fixed ? swatchFixed : swatchCache;
+  let cv = m.get(key);
+  if (cv === undefined){ cv = make() || null; m.set(key, cv); }
+  return cv;
+}
 function applyTheme(key){
   const t = THEMES[key] || THEMES.neon;
   TH = t.pitch;
+  clearSwatchCache();          // every cached tile was painted against the old inks
   const r = document.documentElement.style, u = t.ui;
   r.setProperty('--bg-grad', u.grad);
   for (const k of ['bg','panel','edge'])
@@ -5095,7 +5125,15 @@ function drawThemeSwatch(c, t, cw, ch){
 // which taught nothing about what a bundle actually is.
 // ⚠️ TH is swapped for the duration: the skins and the ball painter read the LIVE
 // palette, so a preview of another bundle would otherwise wear the current one.
-function drawBundleSwatch(c, key, cw, ch){ drawSlotsSwatch(c, bundleSlots(key), cw, ch); }
+function drawBundleSwatch(c, key, cw, ch){
+  const cv = cachedSwatch('bundle|' + key + '|' + cw + 'x' + ch, () => {
+    const s = bundleSlots(key); if (!s) return null;
+    const t = document.createElement('canvas'); t.width = cw; t.height = ch;
+    drawSlotsSwatch(t.getContext('2d'), s, cw, ch);
+    return t;
+  }, true);
+  if (cv) c.drawImage(cv, 0, 0, cw, ch);
+}
 // Paints any SET of slots, so the Custom tile shows the mix you actually built
 // rather than a question mark.
 function drawSlotsSwatch(c, s, cw, ch){
@@ -5371,6 +5409,21 @@ function buildSlotPicker(slot, host){
 // What a slot's option looks like, drawn rather than described. Null for sound.
 function slotSwatch(slot, k){
   if (slot === 'sfx') return null;
+  // A palette tile draws THEMES[k] and nothing else, so it is fixed too.
+  const src = cachedSwatch('slot|' + slot + '|' + k + '|' + (slot === 'palette' ? '' : sel.look.palette),
+                           () => buildSlotSwatch(slot, k), slot === 'palette');
+  if (!src) return null;
+  // ⚠️ A COPY, never the cached canvas itself. The caller appends what it gets to the
+  // DOM, and the Theme card stacks all six slots while the Ball and Sound cards show
+  // one of them AGAIN — so two tiles on screen ask for the same swatch, and handing
+  // both the same node makes the second append MOVE it out of the first. One 64px
+  // blit against a full texture bake is a rounding error.
+  const out = document.createElement('canvas');
+  out.width = src.width; out.height = src.height;
+  out.getContext('2d').drawImage(src, 0, 0);
+  return out;
+}
+function buildSlotSwatch(slot, k){
   const cvs = document.createElement('canvas');
   cvs.width = 64; cvs.height = slot==='palette' ? 41 : 64;
   const c = cvs.getContext('2d');
@@ -14678,6 +14731,8 @@ if (window.__MAGNETDEBUG) {
     bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
     liveSlots, applySlots, drawSlotsSwatch,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
+    get swatchCache(){ return swatchCache; }, get swatchFixed(){ return swatchFixed; },
+    clearSwatchCache,
     finishMatch, FINAL_SLOW, awardRow,
     mapVoteKey, mapVoteLabel, mapVoteTable, loadMapVotes, saveMapVotes, castMapVote, renderMapVote, buildMapVotes,
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
