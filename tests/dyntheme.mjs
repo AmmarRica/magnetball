@@ -846,6 +846,24 @@ const r = await p.evaluate(async ()=>{
     o.printStillWithoutStep = printShot() === pA;
     for (let i=0;i<60;i++) fA.step(stA);
     o.printMovesWithStep = printShot() !== pA;
+    // ⚠️ The blocks POP and fade rather than breathing: full strength the instant they
+    // arrive, a straight fade down, then a dark gap. Measured as the shape of one
+    // block's alpha over a whole cycle — a sine would rise as gently as it falls, and
+    // "it changed over time" passes just as well for that.
+    {
+      const q = stA.b[0];
+      const at = (ph) => { const p2 = ((ph % 1) + 1) % 1;
+        return p2 >= q.hold ? 0 : q.amp * (1 - p2 / q.hold); };
+      const onset = at(0.001), quarter = at(q.hold*0.25), late = at(q.hold*0.92);
+      o.popShape = [ +onset.toFixed(3), +quarter.toFixed(3), +late.toFixed(3), at(0.999) ];
+      o.popsThenFades = onset > quarter && quarter > late && late > 0 && at(0.999) === 0;
+    }
+    // ...and they stay in the corners: nothing is drawn near the centre spot.
+    {
+      const g2 = M.DYN_FIELDS.pixelfade.grid, R2 = M.DYN_FIELDS.pixelfade.reach;
+      o.blockGrid = g2; o.blockReach = R2;
+      o.blocksKeepOffCentre = stA.b.every(q => q.gx + q.gy <= R2 - 1) && R2 * 2 < g2;
+    }
     // The ball is the ampersand, which is the only coloured part of that wordmark.
     o.ampExists = !!M.BALL_LOOKS.amp;
     const aShot = (key) => { ccA.fillStyle = '#7f7f7f'; ccA.fillRect(0,0,300,300);
@@ -968,6 +986,8 @@ ok(r.printCached && r.printReused, 'the pixel print is rebuilt every frame');
 ok(r.printRebuildsOnInk, 'the pixel print does not rebuild when the ink changes');
 ok(r.printStillWithoutStep, 'the pixel print advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
 ok(r.printMovesWithStep, 'the pixel print never moved when stepped');
+ok(r.popsThenFades, `the blocks do not pop and fade — alpha over one cycle is ${JSON.stringify(r.popShape)}, which rises as gently as it falls. That is a light on a dimmer, not a pixel switching on`);
+ok(r.blocksKeepOffCentre, `the blocks reach past their corners (${r.blockReach} of ${r.blockGrid} cells) — the middle of the pitch is the one place nothing decorative belongs`);
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));

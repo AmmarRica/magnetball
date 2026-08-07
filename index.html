@@ -12248,21 +12248,32 @@ DYN_FIELDS.pooltable = {
 // ⚠️ Baked ONCE and stretched, cached on the INK — a gradient object and a few dozen
 // blocks a frame is a few dozen too many, and it is the same print every time.
 DYN_FIELDS.pixelfade = {
-  name: 'Pixel print', res: 384, blocks: 7, alpha: 0.5,
-  // The blocks breathe on a diagonal wave — a print does not move, but a PIXEL print
-  // is made of things that can switch on and off, which is the one motion this card's
-  // artwork implies. ⚠️ The gradient stays baked; only the blocks are drawn live, and
-  // there are a couple of dozen of them. The wave advances in step(), which
-  // advanceDynField() calls next to step(world) — in a paint it would run 2.4x fast on
-  // a 144Hz screen, and freeze on every replay.
-  wave: 0.021, live: 26,
+  // ⚠️ `grid` is cells ACROSS, so one block is W/56 — a quarter of what it was. At the
+  // old size they read as panels rather than as pixels, and a print made of things
+  // that big is a pattern you look at instead of a surface you look past.
+  // ⚠️ `reach` keeps them in the two corners. It is counted in cells from the corner,
+  // so shrinking the cell without shrinking this would have crept them into the middle
+  // of the pitch, which is the one place nothing decorative belongs.
+  name: 'Pixel print', res: 512, grid: 56, reach: 19, alpha: 0.5,
+  // The live blocks POP: full strength the instant they arrive, then a straight fade
+  // to nothing and a dark gap before the next one. ⚠️ A sine wave was the first go and
+  // it read as breathing — smooth in as well as smooth out — which is a light on a
+  // dimmer, not a pixel switching on. The sawtooth is the whole difference.
+  live: 90, rate: 0.0042,
   reset(st){
     const rnd = mulberry32(0x9146E2);        // its own stream, never w.rng
     st.t = 0; st.b = [];
-    const n = this.blocks;
-    for (let i=0;i<this.live;i++)
-      st.b.push({ gx:(rnd()*n)|0, gy:(rnd()*n)|0, corner: rnd() < 0.5 ? 0 : 1,
-                  ph: rnd()*6.283, amp: 0.06 + rnd()*0.16 });
+    const R = this.reach;
+    for (let i=0;i<this.live;i++){
+      // Inside the same triangular crop the baked ones use, so the two read as one
+      // print rather than as a layer over it.
+      let gx, gy;
+      do { gx = (rnd()*R)|0; gy = (rnd()*R)|0; } while (gx + gy > R - 1);
+      st.b.push({ gx, gy, corner: rnd() < 0.5 ? 0 : 1,
+                  ph: rnd(),                    // where in its own cycle it starts
+                  hold: 0.30 + rnd()*0.42,      // ...how long the fade takes
+                  amp: 0.22 + rnd()*0.5 });
+    }
   },
   step(st){ st.t++; },
   build(st, key, a1, a2, a3){
@@ -12275,14 +12286,13 @@ DYN_FIELDS.pixelfade = {
     // Pixel blocks cropping two corners, like the card. A fixed PRNG, so the print is
     // the same every match and nothing here can reach w.rng.
     const rnd = mulberry32(0x9146E1);
-    const cell = N / (this.blocks * 2);
+    const cw = N / this.grid, chh = HH / this.grid;
     for (const [ox, oy, dx, dy] of [[0, 0, 1, 1], [N, HH, -1, -1]]){
-      for (let i=0;i<this.blocks;i++) for (let j=0;j<this.blocks;j++){
-        if (i + j > this.blocks - 1) continue;             // a triangular crop
-        if (rnd() < 0.42) continue;
+      for (let i=0;i<this.reach;i++) for (let j=0;j<this.reach;j++){
+        if (i + j > this.reach - 1) continue;              // a triangular crop
+        if (rnd() < 0.55) continue;
         c2.fillStyle = rgba('#ffffff', 0.05 + rnd()*0.13);
-        c2.fillRect(ox + dx*i*cell - (dx<0?cell:0), oy + dy*j*cell - (dy<0?cell:0),
-                    cell, cell);
+        c2.fillRect(ox + dx*i*cw - (dx<0?cw:0), oy + dy*j*chh - (dy<0?chh:0), cw, chh);
       }
     }
     st.cv = cv; st.key = key;
@@ -12297,14 +12307,16 @@ DYN_FIELDS.pixelfade = {
     if (!st.b) this.reset(st);
     const a0 = c.globalAlpha; c.globalAlpha = a0 * this.alpha;
     c.drawImage(st.cv, L, T, W, H);
-    // The live blocks, on the same grid the baked ones use so they read as part of
-    // the same print rather than as a second layer over it.
+    // The live blocks, on the same grid the baked ones use.
     c.save(); c.beginPath(); c.rect(L, T, W, H); c.clip();
-    const cw = W / (this.blocks * 2), chh = H / (this.blocks * 2);
+    c.fillStyle = '#ffffff';
+    const cw = W / this.grid, chh = H / this.grid;
     for (const q of st.b){
-      const k = 0.5 + 0.5*Math.sin(st.t*this.wave + q.ph);
-      c.globalAlpha = a0 * this.alpha * q.amp * k * 3;
-      c.fillStyle = '#ffffff';
+      // Sawtooth: 1 the instant it wraps, straight down to 0 over `hold`, then dark
+      // for the rest of the cycle. `% 1` on a rising counter, so nothing accumulates.
+      const ph = (st.t * this.rate + q.ph) % 1;
+      if (ph >= q.hold) continue;
+      c.globalAlpha = a0 * this.alpha * q.amp * (1 - ph / q.hold);
       const px = q.corner ? W - (q.gx + 1)*cw : q.gx*cw;
       const py = q.corner ? H - (q.gy + 1)*chh : q.gy*chh;
       c.fillRect(L + px, T + py, cw, chh);

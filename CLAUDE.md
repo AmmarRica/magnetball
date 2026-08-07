@@ -198,6 +198,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   flask is the only one with ink straight up (it has a neck), the block the only one on
   the diagonals (it has corners). ⚠️ The print is held well back and the guard is the
   **rendered** peak against the gold team, not the alpha it was asked to draw at. The
+  print's blocks are a **quarter** of the size they were (one cell is W/56) and held to
+  the two corners by `reach`, so nothing decorative reaches the middle of the pitch;
+  they **pop** at full strength and fade straight down, because the sine wave they
+  started as rose as gently as it fell and read as a dimmer rather than a pixel
+  switching on. The
   ball is the ampersand — the only coloured part of that wordmark, and the trail is the
   only **per-team** one in the file: the flask POURS (points joined as well as dotted, or
   a fast player leaves gaps) and the pixel BURSTS (position and size snapped to one grid,
