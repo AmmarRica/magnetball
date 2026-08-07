@@ -12247,6 +12247,16 @@ DYN_FIELDS.pooltable = {
 // measures the rendered field against the team rather than trusting the alpha.
 // ⚠️ Baked ONCE and stretched, cached on the INK — a gradient object and a few dozen
 // blocks a frame is a few dozen too many, and it is the same print every time.
+// A stable integer hash, 0..1. ⚠️ This is what lets a block's blink be RANDOM without
+// a PRNG call in the paint: it is rolled from (which block, which cycle), so it looks
+// unpredictable, differs every cycle, and is byte-identical across two draws of the
+// same step. A Math.random here would make the field flicker at the refresh rate and
+// differ between the two draws a paused frame does.
+function hash01(n){
+  n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15);
+  return (n >>> 0) / 4294967296;
+}
 DYN_FIELDS.pixelfade = {
   // ⚠️ `grid` is cells ACROSS, so one block is W/56 — a quarter of what it was. At the
   // old size they read as panels rather than as pixels, and a print made of things
@@ -12255,24 +12265,34 @@ DYN_FIELDS.pixelfade = {
   // so shrinking the cell without shrinking this would have crept them into the middle
   // of the pitch, which is the one place nothing decorative belongs.
   name: 'Pixel print', res: 512, grid: 56, reach: 19, alpha: 0.5,
-  // The live blocks POP: full strength the instant they arrive, then a straight fade
-  // to nothing and a dark gap before the next one. ⚠️ A sine wave was the first go and
-  // it read as breathing — smooth in as well as smooth out — which is a light on a
-  // dimmer, not a pixel switching on. The sawtooth is the whole difference.
-  live: 90, rate: 0.0042,
+  // The live blocks BLINK: full strength the instant they arrive, a fast fade to
+  // nothing, then dark until their next cycle — and most cycles they sit out.
+  // ⚠️ A sine wave was the first go and it read as breathing: smooth in as well as
+  // smooth out, which is a light on a dimmer rather than a pixel switching on.
+  // ⚠️ Whether a given block fires in a given cycle is ROLLED, per cycle, from a hash
+  // of (block, cycle) — never from Math.random, which cannot be called from a paint.
+  // The chance rises toward the BOTTOM-RIGHT, so the print is quiet where the gradient
+  // starts and busy where it ends.
+  live: 140, rate: 0.0062, chanceLo: 0.10, chanceHi: 0.92,
   reset(st){
     const rnd = mulberry32(0x9146E2);        // its own stream, never w.rng
     st.t = 0; st.b = [];
-    const R = this.reach;
+    const R = this.reach, G = this.grid;
     for (let i=0;i<this.live;i++){
       // Inside the same triangular crop the baked ones use, so the two read as one
       // print rather than as a layer over it.
       let gx, gy;
       do { gx = (rnd()*R)|0; gy = (rnd()*R)|0; } while (gx + gy > R - 1);
-      st.b.push({ gx, gy, corner: rnd() < 0.5 ? 0 : 1,
-                  ph: rnd(),                    // where in its own cycle it starts
-                  hold: 0.30 + rnd()*0.42,      // ...how long the fade takes
-                  amp: 0.22 + rnd()*0.5 });
+      const corner = rnd() < 0.5 ? 0 : 1;
+      // Where this actually lands on the pitch, 0 at top-left and 1 at bottom-right.
+      const fx = corner ? 1 - (gx + 1)/G : gx/G;
+      const fy = corner ? 1 - (gy + 1)/G : gy/G;
+      const bias = (fx + fy) / 2;
+      st.b.push({ gx, gy, corner, id: i,
+                  ph: rnd(),                                   // its own cycle offset
+                  hold: 0.05 + rnd()*0.11,                     // ...and a FAST fade
+                  amp: 0.24 + rnd()*0.52,
+                  chance: this.chanceLo + (this.chanceHi - this.chanceLo) * bias });
     }
   },
   step(st){ st.t++; },
@@ -12312,10 +12332,12 @@ DYN_FIELDS.pixelfade = {
     c.fillStyle = '#ffffff';
     const cw = W / this.grid, chh = H / this.grid;
     for (const q of st.b){
-      // Sawtooth: 1 the instant it wraps, straight down to 0 over `hold`, then dark
-      // for the rest of the cycle. `% 1` on a rising counter, so nothing accumulates.
-      const ph = (st.t * this.rate + q.ph) % 1;
-      if (ph >= q.hold) continue;
+      const at = st.t * this.rate + q.ph;
+      const cyc = Math.floor(at), ph = at - cyc;
+      if (ph >= q.hold) continue;                     // dark for most of the cycle
+      // ...and it only fires at all on the cycles it rolls for. Bottom-right blocks
+      // roll far more often than top-left ones.
+      if (hash01((q.id * 0x9E3779B1) ^ (cyc * 0x85EBCA6B)) > q.chance) continue;
       c.globalAlpha = a0 * this.alpha * q.amp * (1 - ph / q.hold);
       const px = q.corner ? W - (q.gx + 1)*cw : q.gx*cw;
       const py = q.corner ? H - (q.gy + 1)*chh : q.gy*chh;

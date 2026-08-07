@@ -200,9 +200,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   **rendered** peak against the gold team, not the alpha it was asked to draw at. The
   print's blocks are a **quarter** of the size they were (one cell is W/56) and held to
   the two corners by `reach`, so nothing decorative reaches the middle of the pitch;
-  they **pop** at full strength and fade straight down, because the sine wave they
-  started as rose as gently as it fell and read as a dimmer rather than a pixel
-  switching on. The
+  they **blink** — full strength on arrival, a fast fade, then dark — because the sine
+  wave they started as rose as gently as it fell and read as a dimmer rather than a
+  pixel switching on. ⚠️ Whether one fires in a given cycle is ROLLED from a hash of
+  (block, cycle), never `Math.random`: a paint must give the same frame twice for one
+  step, or a paused screen flickers at the refresh rate. The chance rises toward the
+  **bottom-right**, so the print is quiet where the gradient starts and busy where it
+  ends. The
   ball is the ampersand — the only coloured part of that wordmark, and the trail is the
   only **per-team** one in the file: the flask POURS (points joined as well as dotted, or
   a fast player leaves gaps) and the pixel BURSTS (position and size snapped to one grid,
