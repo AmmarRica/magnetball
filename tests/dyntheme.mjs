@@ -651,39 +651,56 @@ const r = await p.evaluate(async ()=>{
       return cc8.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
     M.profile.spin = true;
     o.markStandsUp = wShot(0,1,0) === wShot(0,0,1);
-    // ⚠️ THE DECOY: the carpet is triangles too. It only works because they are
-    // outlines in a muted ink and the players are solid and bright.
+    // ⚠️ THE DECOY: the floaters are triangles too, and a player may step past the
+    // touchline. It only works because they are muted outlines and the players are
+    // solid and bright.
+    const lum8ish = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
     const lum8 = h => { cc8.fillStyle = h; cc8.fillRect(0,0,2,2);
-      const d = cc8.getImageData(0,0,1,1).data; return d[0]*0.3 + d[1]*0.6 + d[2]*0.1; };
-    o.carpetLum = lum8(M.TH.dynMark); o.markLum = lum8(M.TH.teamBlue);
-    o.carpetIsMuted = o.carpetLum < o.markLum - 40;
+      return lum8ish(cc8.getImageData(0,0,1,1).data); };
+    o.floatLum = lum8(M.TH.dynMark); o.markLum = lum8(M.TH.teamBlue);
+    o.floatsAreMuted = o.floatLum < o.markLum - 40;
     const f8 = M.DYN_FIELDS.arcade, st8 = {};
     f8.reset(st8);
+    for (let i=0;i<40;i++) f8.step(st8);
     const w8 = M.world;
-    // ⚠️ THE LINE THIS FIELD LIVES ON: the floaters are triangles and so is a player,
-    // so not one of them may reach the pitch. Measured as "stepping the field changes
-    // nothing inside the boundary" — the carpet is baked and static, so any pixel that
-    // moves in there is a floater that got through the punch-out.
+    // ⚠️ THE LINE THIS FIELD LIVES ON: not one shape may reach the pitch. Painted for
+    // real over a canvas pre-filled with the court colour, then every probe well
+    // inside the boundary must come back untouched — with a second scan outside it,
+    // because the purity check passes just as well on a painter that draws nothing.
     const PL = 90, PT = 60, PW = 120, PH = 180;
-    const both = () => {
-      cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
-      f8.paint(cc8, st8, PL, PT, PW, PH, w8);
-      return { in:  cc8.getImageData(PL+8, PT+8, PW-16, PH-16).data.join(','),
-               out: cc8.getImageData(PL-48, PT-48, 44, PH+96).data.join(',') };
-    };
-    const A8 = both(), B8 = both();
-    o.carpetStillWithoutStep = A8.in === B8.in && A8.out === B8.out;
+    const court8 = lum8(M.TH.court);
+    const paintBox = () => { cc8.fillStyle = M.TH.court; cc8.fillRect(0,0,300,300);
+      f8.paint(cc8, st8, PL, PT, PW, PH, w8); };
+    paintBox();
+    let onPitch = 0, inN = 0, offPitch = 0, outN = 0;
+    for (let gx=0.1; gx<=0.9; gx+=0.08) for (let gy=0.06; gy<=0.94; gy+=0.08){
+      inN++;
+      const d = cc8.getImageData(Math.round(PL+gx*PW), Math.round(PT+gy*PH), 1, 1).data;
+      if (Math.abs(lum8ish(d) - court8) > 3) onPitch++;
+    }
+    // ⚠️ The outside scan counts PIXELS over the WHOLE canvas, not probe points in a
+    // strip. These are sparse thin outlines scattered through a room several times
+    // the size of the pitch: a grid of point samples lands on two hits in a hundred
+    // and reads as "nearly nothing drawn" when the room is full of shapes. Every hit
+    // is outside by definition, because the check above says nothing is inside.
+    {
+      const all = cc8.getImageData(0, 0, 300, 300).data;
+      for (let i=0;i<all.length;i+=4){
+        outN++;
+        if (Math.abs(lum8ish([all[i],all[i+1],all[i+2]]) - court8) > 3) offPitch++;
+      }
+    }
+    o.pitchProbes = inN; o.onPitch = onPitch;
+    o.roomProbes = outN; o.offPitch = offPitch;
+    o.pitchStaysClean = onPitch === 0;
+    o.roomHasShapes = offPitch > 300;
+    // ...and they move only on a step.
+    const boxShot = () => { paintBox();
+      return cc8.getImageData(PL-48, PT-48, 44, PH+96).data.join(','); };
+    const A8 = boxShot();
+    o.floatsStillWithoutStep = boxShot() === A8;
     for (let i=0;i<80;i++) f8.step(st8);
-    const C8 = both();
-    o.floatersMoveWithStep = C8.out !== A8.out;
-    o.fieldNeverChanges = C8.in === A8.in;
-    o.carpetCached = !!st8.cv;
-    const firstCarpet = st8.cv;
-    both();
-    o.carpetReused = st8.cv === firstCarpet;
-    st8.key = 'nope';
-    both();
-    o.carpetRebuildsOnInk = st8.cv !== firstCarpet;
+    o.floatsMoveWithStep = boxShot() !== A8;
     // The ball is the one round thing on a pitch of wedges.
     o.tokenExists = !!M.BALL_LOOKS.token;
     const tShot = (key) => { cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
@@ -783,12 +800,11 @@ ok(errors.length===0, 'console errors: '+errors.join(' | '));
 ok(r.abariName === 'Abari', `the Abari bundle does not resolve: ${r.abariName}`);
 ok(r.marksAreMirrored, `the two Abari marks are not a triangle and its mirror: high rows ${r.upHigh} vs ${r.downHigh}, low rows ${r.upLow} vs ${r.downLow}`);
 ok(r.markStandsUp, 'the house mark turns with facing — up-against-down IS the difference between the sides, so it is gone the moment anybody moves');
-ok(r.carpetIsMuted, `the carpet (${Math.round(r.carpetLum)}) is as bright as the team drawn on top of it (${Math.round(r.markLum)}) — and the carpet is triangles too, so that is a floor of decoys`);
-ok(r.carpetCached && r.carpetReused, 'the arcade carpet is redrawn shape by shape every frame');
-ok(r.carpetRebuildsOnInk, 'the carpet does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
-ok(r.carpetStillWithoutStep, 'the arcade field advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
-ok(r.floatersMoveWithStep, 'the floating shapes never moved when stepped');
-ok(r.fieldNeverChanges, 'a floating shape reached the PITCH — stepping the field changed pixels inside the boundary, and the floaters are triangles just like the players are');
+ok(r.floatsAreMuted, `the drifting shapes (${Math.round(r.floatLum)}) are as bright as the team (${Math.round(r.markLum)}) — they are triangles too, and a player may step past the touchline`);
+ok(r.pitchStaysClean, `${r.onPitch} of ${r.pitchProbes} probes INSIDE the boundary were painted on — the play area is punched out of the clip, so any hit means the punch-out is gone`);
+ok(r.roomHasShapes, `only ${r.offPitch} of ${r.roomProbes} pixels were drawn on at all — the purity check above passes just as well on a painter that draws nothing`);
+ok(r.floatsStillWithoutStep, 'the shapes drifted inside a DRAW — they must only move on a sim step, or a 144Hz screen runs them 2.4x fast');
+ok(r.floatsMoveWithStep, 'the floating shapes never moved when stepped');
 ok(r.tokenExists && r.tokenDraws, 'the token ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));
