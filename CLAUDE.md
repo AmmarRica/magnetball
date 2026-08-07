@@ -79,12 +79,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
-- **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares five — `palette`
+- **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares six — `palette`
   (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
-  (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key) and `sfx` (an `SFX_SETS` key).
-  The first four live in `sel.look`; **the sound slot has no stored value at all** —
+  (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key), `trail` (a `TRAIL_LOOKS` key)
+  and `sfx` (an `SFX_SETS` key). The first five live in `sel.look`; **the sound slot has no stored value at all** —
   `sfxSetKey()` derives it from `sel.snd`, which the Sound card already owns one category
-  at a time. A **bundle** sets all five: every palette is one (`bundleSlots(k)`), and
+  at a time. A **bundle** sets all six: every palette is one (`bundleSlots(k)`), and
   `THEME_BUNDLES` only lists the two that own more than colour. Names/emoji are read from
   `THEMES`, never copied.
   ⚠️ **"Custom" is DERIVED, never stored** — `currentBundle()` matches the live slots
@@ -92,7 +92,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   lie on screen, and a stored `custom` can't go stale. Same reason `sel.theme`/`sel.ballLook`
   were dropped rather than kept alongside: `normalizeLook()` folds a legacy save in **once**,
   at load, so nothing downstream knows two shapes.
-  `buildSlotPicker(slot, host)` is the one tile builder — the Theme card stacks all five and
+  `buildSlotPicker(slot, host)` is the one tile builder — the Theme card stacks all six and
   the Ball/Sound cards each show one again, so a card can't drift from the theme.
   The bundle row also carries a **Custom** tile: selected whenever the live slots match no
   bundle, painted from the mix you actually built (`drawSlotsSwatch`), and pressing it
