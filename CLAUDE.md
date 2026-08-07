@@ -177,7 +177,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the WIDTH of ink at a high row against a low one — a triangle and its mirror cover the
   same area, so a pixel count calls them identical. ⚠️ The carpet is triangles too, so it
   only works because its shapes are **outlines in a muted ink** while the players are
-  solid and bright; the luminance gap is measured. Baked once, cached on the ink, no step.
+  solid and bright; the luminance gap is measured. Baked once, cached on the ink.
+  ⚠️ It also `bleed`s and owns BOTH clips: the carpet is clipped to the field's own path,
+  and the drifting triangles/squares/circles to everything BUT it — a floater cannot reach
+  the pitch, which matters more here than anywhere, because they are the same shape as a
+  player. The suite holds that by stepping the field and requiring **not one pixel inside
+  the boundary changed** (the carpet is static, so anything that moves in there got
+  through). The drift advances in `step()`, never in a paint.
   The ball is a **token**, round on purpose: on a pitch of wedges the thing you chase
   should be the one thing that is not one.
   `specimen` = a type-specimen sheet running in the MARGINS: process yellow, rows of

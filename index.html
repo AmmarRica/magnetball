@@ -11886,18 +11886,42 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
-// Arcade carpet: bold geometry scattered over a dark floor, the way every game bar's
-// carpet has looked since 1991. Still — a floor does not move, and one that did would
-// read as the camera drifting.
+// Arcade carpet on the floor, and shapes floating in the room beyond it. The carpet
+// is the way every game bar's has looked since 1991; the floaters are the same three
+// marks the sign is built from, drifting out in the dark.
 // ⚠️ The shapes are OUTLINES in a muted ink, never solid and never the neon. The
 // players on this palette are solid bright triangles, so a carpet of solid pink
 // triangles is a floor of decoys; `tests/dyntheme.mjs` measures the luminance gap
 // rather than trusting the drawing code.
-// ⚠️ Baked ONCE into an offscreen tile and stretched, cached on the INK — a few
-// hundred small paths a frame is a few hundred too many, and it is the same floor
-// every frame. Slots mix, so it can be asked for over another palette.
+// ⚠️ `bleed`, so this painter owns BOTH clips: the carpet is clipped to the field's
+// own path and the floaters to everything BUT it. A floater cannot reach the pitch,
+// which matters more here than anywhere — they are triangles, and so is a player.
+// The suite holds it by stepping the field and requiring that not one pixel inside
+// the boundary changed.
+// ⚠️ The carpet is baked ONCE and cached on the INK; the floaters turn, so they are
+// drawn live — a few dozen small paths, against a few hundred for the floor.
+// ⚠️ The drift advances in step(), which advanceDynField() calls next to step(world),
+// never in the paint: at 144Hz a paint-driven drift runs 2.4x fast.
 DYN_FIELDS.arcade = {
-  name: 'Arcade carpet', res: 512, cols: 8, rows: 12, alpha: 0.7,
+  name: 'Arcade carpet', bleed: true, res: 512, cols: 8, rows: 12, alpha: 0.7,
+  floats: 34, drift: 0.00035, floatR: 0.055,
+  reset(st){
+    const rnd = mulberry32(0xABA21F);        // fixed: the same room every match
+    st.t = 0; st.f = [];
+    for (let i=0; i<this.floats; i++)
+      st.f.push({ x:rnd(), y:rnd(), s:0.4 + rnd()*1.1, k:(rnd()*3)|0,
+                  rot:rnd()*6.283, spin:(rnd()-0.5)*0.006,
+                  vx:(rnd()-0.5)*this.drift, vy:(rnd()-0.5)*this.drift,
+                  a:0.16 + rnd()*0.4, pink: rnd() < 0.55, solid: rnd() < 0.28 });
+  },
+  step(st){
+    st.t++;
+    for (const q of (st.f || [])){
+      q.x = (q.x + q.vx + 1) % 1;
+      q.y = (q.y + q.vy + 1) % 1;
+      q.rot += q.spin;
+    }
+  },
   build(st, key, pink, grey){
     const N = this.res, HH = Math.round(N * this.rows / this.cols);
     const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
@@ -11930,15 +11954,55 @@ DYN_FIELDS.arcade = {
     }
     st.cv = cv; st.key = key;
   },
-  paint(c, st, L, T, W, H){
+  // Triangle, square, circle — the three marks, turned and drifting.
+  shape(c, k, s){
+    c.beginPath();
+    if (k === 0){ c.moveTo(0, -s); c.lineTo(s*0.88, s*0.72); c.lineTo(-s*0.88, s*0.72); c.closePath(); }
+    else if (k === 1){ c.rect(-s*0.78, -s*0.78, s*1.56, s*1.56); }
+    else c.arc(0, 0, s*0.84, 0, 2*Math.PI);
+  },
+  paint(c, st, L, T, W, H, w){
     // Falls back through whatever palette it is handed: slots mix freely.
     const pink = TH.dynMark || TH.line || '#6b2545';
     const grey = TH.dynAlt  || TH.dim  || '#3a3a40';
     const key = pink + '|' + grey;
     if (!st.cv || st.key !== key) this.build(st, key, pink, grey);
-    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+    if (!st.f) this.reset(st);
+    const a0 = c.globalAlpha;
+    // ---- the carpet, clipped to the field's own shape ----------------------
+    c.save();
+    c.beginPath();
+    if (w) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H); else c.rect(L, T, W, H);
+    c.clip();
+    c.globalAlpha = a0 * this.alpha;
     c.drawImage(st.cv, L, T, W, H);
-    c.globalAlpha = a;
+    c.globalAlpha = a0;
+    c.restore();
+    // ---- and the room, clipped to everything BUT it ------------------------
+    // No world means a picker tile, and a tile is nothing but play area: punching it
+    // out would leave the floaters nowhere to go, so there they are simply skipped.
+    if (!w) return;
+    const MX = W * 1.05, MY = H * 0.85;
+    const bx = L - MX, by = T - MY, bw = W + MX*2, bh = H + MY*2;
+    c.save();
+    c.beginPath();
+    c.rect(bx, by, bw, bh);
+    DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
+    c.clip('evenodd');
+    const base = Math.min(W, H) * this.floatR;
+    c.lineJoin = 'round';
+    for (const q of st.f){
+      const col = q.pink ? pink : grey, s = base * q.s;
+      c.save();
+      c.translate(bx + q.x*bw, by + q.y*bh); c.rotate(q.rot);
+      c.globalAlpha = a0 * q.a;
+      this.shape(c, q.k, s);
+      if (q.solid){ c.fillStyle = col; c.fill(); }
+      else { c.strokeStyle = col; c.lineWidth = Math.max(1.2, s*0.14); c.stroke(); }
+      c.restore();
+    }
+    c.globalAlpha = a0;
+    c.restore();
   },
 };
 // A type-specimen sheet running in the MARGINS: rows of grotesk of every width and
