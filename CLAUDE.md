@@ -169,6 +169,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
+  `synth` (shown as **Retrowave**) = a black room, a magenta floor grid whose rungs
+  crowd toward a horizon at EACH end (mirrored, not one-point — a pitch is seen from
+  above and both halves are the same size), hot red against electric blue.
+  ⚠️ Red vs blue is what protanopia flattens toward the same dark, so the sides also
+  carry a mark: a slitted SUN against a stack of CHEVRONS. The check is the one thing a
+  slit does and a chevron cannot — run **all the way across** — so it counts full-width
+  gap rows rather than pixels. ⚠️ The markings are pale chrome, not a neon: both neons
+  are already spoken for by the teams.
+  `pnp` (shown as **Potions & Pixels**) = the wordmark's black, GOLD and GREY over the
+  magenta-blue-teal pixel print the events go out on. ⚠️ Gold vs grey is a
+  saturation-and-lightness pair rather than a hue one, and the sides carry a shape too —
+  a potion FLASK against a PIXEL block, measured on **different axes** at 0.82`r`: the
+  flask is the only one with ink straight up (it has a neck), the block the only one on
+  the diagonals (it has corners). ⚠️ The print is held well back and the guard is the
+  **rendered** peak against the gold team, not the alpha it was asked to draw at. The
+  ball is the ampersand — the only coloured part of that wordmark.
   `abari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
   built from — triangle, square, circle — drifting in the room BEYOND the pitch.
   ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink
