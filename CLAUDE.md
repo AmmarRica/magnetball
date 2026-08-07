@@ -549,6 +549,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   all of them. ⚠️ Resume carried an inline `max-width` and the ghosts sized to their own
   text, so Settings and Main Menu were 109×43 and 102×43 under a 260×55 Resume — and the
   two you reach for mid-match were the small ones.
+- **Picker swatches are cached** (`cachedSwatch`), in **two** maps: `swatchCache` for
+  tiles painted against the live inks, dropped by `applyTheme`, and `swatchFixed` for
+  bundle and palette tiles, which paint against their own palette and can never go
+  stale. ⚠️ A field tile bakes its real texture at full resolution for a 64px preview
+  and `buildSlotPicker` runs on every slot change — measured at **15.6ms** for the field
+  row and **17.3ms** for the bundle row, so opening the Theme card dropped two frames and
+  every tap inside it dropped another (now 0.5ms / 0.9ms). ⚠️ `slotSwatch` returns a
+  **copy**: the Theme card stacks all six slots while the Ball and Sound cards show one
+  again, so two tiles ask for the same swatch and one shared node would be MOVED out of
+  the first row on append. ⚠️ The cache is declared **above `applyTheme`** — the
+  bootstrap calls it long before the picker code, and a `const` further down is in the
+  temporal dead zone there (the fourth time this file has been bitten by that).
+  `tests/swatchcache.mjs`.
 - **Menu shell:** the setup screen is an **accordion** — `openSection`/`collapseAllSections`,
   at most one card open. The **KICK OFF button is the Match card's `<h2>`**: pressing it starts a
   match, only the chevron beside it toggles the section, and `syncSticky()` measures that header
