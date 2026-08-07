@@ -864,6 +864,36 @@ const r = await p.evaluate(async ()=>{
       o.blockGrid = g2; o.blockReach = R2;
       o.blocksKeepOffCentre = stA.b.every(q => q.gx + q.gy <= R2 - 1) && R2 * 2 < g2;
     }
+    // ⚠️ The blink chance rises toward the BOTTOM-RIGHT. Read off the blocks' own
+    // corner rather than off a constant, so moving the gradient moves the check too.
+    {
+      const tl = stA.b.filter(q => q.corner === 0).map(q => q.chance);
+      const br = stA.b.filter(q => q.corner === 1).map(q => q.chance);
+      const mean = a => a.reduce((x,y)=>x+y, 0) / Math.max(1, a.length);
+      o.chanceTL = +mean(tl).toFixed(3); o.chanceBR = +mean(br).toFixed(3);
+      o.blinkFavoursBottomRight = tl.length > 8 && br.length > 8 &&
+                                  o.chanceBR > o.chanceTL * 2;
+      // ...and it VARIES within a corner, or "more likely" is a two-value switch.
+      o.chanceSpread = +(Math.max(...br) - Math.min(...br)).toFixed(3);
+      o.chanceIsAGradient = o.chanceSpread > 0.1;
+    }
+    // ⚠️ The roll is per (block, cycle) and deterministic: a paused frame drawn twice
+    // must be identical, which is the whole reason it is a hash and not Math.random.
+    // Checked across a run of cycles, because two draws inside ONE cycle would agree
+    // even if the roll were random per call.
+    {
+      const one = () => { ccA.fillStyle = M.TH.court; ccA.fillRect(0,0,300,300);
+        fA.paint(ccA, stA, 0, 0, 300, 300);
+        return ccA.getImageData(0,0,300,300).data.join(','); };
+      const seen = [];
+      for (let k=0;k<6;k++){ const a2 = one(); const b3 = one();
+        seen.push(a2 === b3); for (let i=0;i<45;i++) fA.step(stA); }
+      o.rollIsStable = seen.every(Boolean);
+      // ...and it really does change from cycle to cycle, or "random" is a constant.
+      const frames = new Set();
+      for (let k=0;k<8;k++){ frames.add(one()); for (let i=0;i<200;i++) fA.step(stA); }
+      o.rollVariesByCycle = frames.size >= 5;
+    }
     // The ball is the ampersand, which is the only coloured part of that wordmark.
     o.ampExists = !!M.BALL_LOOKS.amp;
     const aShot = (key) => { ccA.fillStyle = '#7f7f7f'; ccA.fillRect(0,0,300,300);
@@ -987,6 +1017,10 @@ ok(r.printRebuildsOnInk, 'the pixel print does not rebuild when the ink changes'
 ok(r.printStillWithoutStep, 'the pixel print advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
 ok(r.printMovesWithStep, 'the pixel print never moved when stepped');
 ok(r.popsThenFades, `the blocks do not pop and fade — alpha over one cycle is ${JSON.stringify(r.popShape)}, which rises as gently as it falls. That is a light on a dimmer, not a pixel switching on`);
+ok(r.blinkFavoursBottomRight, `the blink chance does not rise toward the bottom-right: top-left mean ${r.chanceTL}, bottom-right mean ${r.chanceBR}`);
+ok(r.chanceIsAGradient, `every block in a corner has the same blink chance (spread ${r.chanceSpread}) — that is a switch, not a gradient`);
+ok(r.rollIsStable, 'the same step drawn twice gave different frames — the blink roll must be a hash of (block, cycle), never Math.random, or a paused frame flickers at the refresh rate');
+ok(r.rollVariesByCycle, 'the blink pattern is identical from cycle to cycle, so nothing is actually being rolled');
 ok(r.blocksKeepOffCentre, `the blocks reach past their corners (${r.blockReach} of ${r.blockGrid} cells) — the middle of the pitch is the one place nothing decorative belongs`);
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
 
