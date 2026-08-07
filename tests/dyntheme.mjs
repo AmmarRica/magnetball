@@ -738,6 +738,113 @@ const r = await p.evaluate(async ()=>{
     o.tokenDraws = tShot('token') !== tShot('plain');
     M.applyBundle('classic');
   }
+
+  // ---- Retrowave: a sun with slits against a stack of chevrons --------------
+  // ⚠️ Red against blue is the pair protanopia flattens toward the same dark, so hue
+  // cannot carry the sides. The difference measured here is the one thing a slit does
+  // and a chevron cannot: run ALL THE WAY ACROSS. A scan line through a slit is
+  // nothing but court; a chevron line is never more than two thin crossings.
+  {
+    M.applyBundle('synth');
+    o.synthName = M.bundleName();
+    const R = 60, CX = 150, CY = 150;
+    const cv9 = document.createElement('canvas'); cv9.width = cv9.height = 300;
+    const cc9 = cv9.getContext('2d');
+    const lum9 = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
+    const gapRows = (team) => {
+      cc9.fillStyle = '#7f7f7f'; cc9.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.synth.paint(cc9, q, CX, CY, R, { players:[q] });
+      const court = (() => { cc9.fillStyle = M.TH.court; })();
+      let rows = 0;
+      for (let dy = -Math.round(R*0.75); dy <= Math.round(R*0.75); dy += 2){
+        const line = cc9.getImageData(CX - Math.round(R*0.5), CY + dy, Math.round(R), 1).data;
+        let dark = 0, n = 0;
+        for (let i=0;i<line.length;i+=4){ n++;
+          if (lum9([line[i],line[i+1],line[i+2]]) < 40) dark++; }
+        if (dark > n * 0.9) rows++;
+      }
+      return rows;
+    };
+    o.sunGapRows = gapRows(0); o.chevGapRows = gapRows(1);
+    o.synthSidesDiffer = o.sunGapRows >= 3 && o.chevGapRows === 0;
+    const f9 = M.DYN_FIELDS.synthgrid, st9 = {};
+    f9.paint(cc9, st9, 0, 0, 200, 200);
+    o.gridCached = !!st9.cv;
+    const firstGrid = st9.cv;
+    f9.paint(cc9, st9, 0, 0, 200, 200);
+    o.gridReused = st9.cv === firstGrid;
+    st9.key = 'nope';
+    f9.paint(cc9, st9, 0, 0, 200, 200);
+    o.gridRebuildsOnInk = st9.cv !== firstGrid;
+    o.gridStill = !f9.step;
+    M.applyBundle('classic');
+  }
+
+  // ---- Potions & Pixels: a flask against a pixel block ----------------------
+  // ⚠️ Gold against grey is a saturation-and-lightness pair, not a hue one, and the
+  // sides carry a SHAPE as well. The two are measured on different axes at 0.82r: the
+  // flask has a neck, so it is the only one with ink straight UP there; the block has
+  // corners, so it is the only one with ink on the DIAGONALS.
+  {
+    M.applyBundle('pnp');
+    o.pnpName = M.bundleName();
+    const R = 60, CX = 150, CY = 150;
+    const cvA = document.createElement('canvas'); cvA.width = cvA.height = 300;
+    const ccA = cvA.getContext('2d');
+    const lumA = d => d[0]*0.3 + d[1]*0.6 + d[2]*0.1;
+    const satA = d => Math.max(d[0],d[1],d[2]) - Math.min(d[0],d[1],d[2]);
+    const inkAtA = (team, fr, deg) => {
+      ccA.fillStyle = '#7f7f7f'; ccA.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.pnp.paint(ccA, q, CX, CY, R, { players:[q] });
+      const a = deg*Math.PI/180;
+      const d = ccA.getImageData(Math.round(CX + Math.cos(a)*R*fr),
+                                 Math.round(CY + Math.sin(a)*R*fr), 1, 1).data;
+      return Math.abs(d[0]-127) + Math.abs(d[1]-127) + Math.abs(d[2]-127) > 60;
+    };
+    const diag = [45,135,225,315];
+    o.flaskUp   = inkAtA(0, 0.82, 270);
+    o.flaskDiag = diag.filter(dg => inkAtA(0, 0.82, dg)).length;
+    o.pixUp     = inkAtA(1, 0.82, 270);
+    o.pixDiag   = diag.filter(dg => inkAtA(1, 0.82, dg)).length;
+    o.pnpSidesDiffer = o.flaskUp && o.flaskDiag === 0 && !o.pixUp && o.pixDiag >= 3;
+    // ...and the two inks are separable without hue, the same guard Abduction carries.
+    const hexA = h => { ccA.fillStyle = h; ccA.fillRect(0,0,2,2);
+      return ccA.getImageData(0,0,1,1).data; };
+    const G = hexA(M.TH.teamRed), S = hexA(M.TH.teamBlue);
+    o.pnpLightGap = Math.abs(lumA(G) - lumA(S));
+    o.pnpSatGap   = Math.abs(satA(G) - satA(S));
+    o.pnpInksSeparable = o.pnpLightGap > 20 && o.pnpSatGap > 60;
+    // ⚠️ THE DECOY: a saturated print under gold and grey players. Measured on the
+    // RENDERED field, not on the alpha it was asked to draw at.
+    const fA = M.DYN_FIELDS.pixelfade, stA = {};
+    ccA.fillStyle = M.TH.court; ccA.fillRect(0,0,300,300);
+    fA.paint(ccA, stA, 0, 0, 300, 300);
+    let peak = 0;
+    const all = ccA.getImageData(0,0,300,300).data;
+    for (let i=0;i<all.length;i+=4){
+      const L = lumA([all[i],all[i+1],all[i+2]]);
+      if (L > peak) peak = L;
+    }
+    o.printPeak = peak; o.goldLum = lumA(G);
+    o.printStaysBack = peak < o.goldLum - 25;
+    o.printCached = !!stA.cv;
+    const firstPrint = stA.cv;
+    fA.paint(ccA, stA, 0, 0, 300, 300);
+    o.printReused = stA.cv === firstPrint;
+    stA.key = 'nope';
+    fA.paint(ccA, stA, 0, 0, 300, 300);
+    o.printRebuildsOnInk = stA.cv !== firstPrint;
+    o.printStill = !fA.step;
+    // The ball is the ampersand, which is the only coloured part of that wordmark.
+    o.ampExists = !!M.BALL_LOOKS.amp;
+    const aShot = (key) => { ccA.fillStyle = '#7f7f7f'; ccA.fillRect(0,0,300,300);
+      M.paintBall(ccA, CX, CY, R, 0, key, M.TH);
+      return ccA.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
+    o.ampDraws = aShot('amp') !== aShot('plain');
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -838,6 +945,20 @@ ok(r.roomHasShapes, `only ${r.offPitch} of ${r.roomProbes} pixels were drawn on 
 ok(r.floatsStillWithoutStep, 'the shapes drifted inside a DRAW — they must only move on a sim step, or a 144Hz screen runs them 2.4x fast');
 ok(r.floatsMoveWithStep, 'the floating shapes never moved when stepped');
 ok(r.tokenExists && r.tokenDraws, 'the token ball look draws nothing');
+
+ok(r.synthName === 'Retrowave', `the Retrowave bundle does not resolve: ${r.synthName}`);
+ok(r.synthSidesDiffer, `Retrowave's sides do not differ by SHAPE: full-width gap rows ${r.sunGapRows} (sun) vs ${r.chevGapRows} (chevrons) — red against blue is exactly what protanopia flattens`);
+ok(r.gridCached && r.gridReused, 'the neon grid is redrawn line by line every frame');
+ok(r.gridRebuildsOnInk, 'the neon grid does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
+ok(r.gridStill, 'the neon grid has a step — a floor that scrolls reads as the camera drifting');
+ok(r.pnpName === 'Potions & Pixels', `the Potions & Pixels bundle does not resolve: ${r.pnpName}`);
+ok(r.pnpSidesDiffer, `the flask and the block do not differ by SHAPE at 0.82r: flask up=${r.flaskUp} diag=${r.flaskDiag}, block up=${r.pixUp} diag=${r.pixDiag}`);
+ok(r.pnpInksSeparable, `gold and grey are told apart by hue alone: lightness gap ${Math.round(r.pnpLightGap)}, saturation gap ${Math.round(r.pnpSatGap)}`);
+ok(r.printStaysBack, `the pixel print renders at ${Math.round(r.printPeak)} against the gold team's ${Math.round(r.goldLum)} — a saturated gradient is the one thing on this palette that can out-shout a body`);
+ok(r.printCached && r.printReused, 'the pixel print is rebuilt every frame');
+ok(r.printRebuildsOnInk, 'the pixel print does not rebuild when the ink changes');
+ok(r.printStill, 'the pixel print has a step — it is a print');
+ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));
 await b.close();

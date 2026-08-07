@@ -2398,6 +2398,61 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // Potions & Pixels: the wordmark's own three colours — black, a warm GOLD and a
+  // neutral GREY — over the pixel gradient the events are printed on.
+  // ⚠️ Gold against grey is a saturation-and-lightness pair, not a hue one, which is
+  // the safe half of what a colour-blind player has. The sides ALSO differ by shape,
+  // and the shape is the name: a potion FLASK against a PIXEL block (DISC_SKINS.pnp).
+  // ⚠️ The markings are white and the field's magenta/blue/teal is held well back —
+  // gold on a bright magenta gradient is two saturated colours fighting, and the one
+  // that has to win is the player.
+  pnp: {
+    name: 'Potions & Pixels', emoji: '🧪',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #241a2e 0%, #121016 55%, #050506 100%)',
+      bg:'#050506', panel:'rgba(240,179,35,0.09)', edge:'#4a4030', text:'#f2f2f2', muted:'#a7a7ad',
+      red:'#f0b323', blue:'#9aa0a6', cyan:'#2fd6c0', magenta:'#c04ad0', green:'#2fd6c0',
+      yellow:'#f0b323', accent:'#f0b323', go:'#2fd6c0', field:'#121016', onAccent:'#050506' },
+    pitch: { glow:true, fieldBg:'#050506', court:'#0c0c10', stripeA:'#0c0c10', stripeB:'#101016',
+      netPocket:'rgba(240,179,35,0.12)', line:'#f2f2f2', centerDot:'#f2f2f2',
+      netMesh:'rgba(242,242,242,0.40)', post:'#f2f2f2', teamRed:'#f0b323', teamBlue:'#9aa0a6',
+      discRim:'#050506', kickRing:'#f0b323', kickText:'#050506', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#050506', nameBg:'#050506', nameText:'#f2f2f2',
+      shadow:'rgba(0,0,0,0.45)', ballRim:'#050506', ball:'#f2f2f2', ballSpot:'#f0b323',
+      trailRGB:'240,179,35',
+      obstacle:'#f0b323', good:'#2fd6c0', warn:'#f0b323', dim:'#6e6e76', cone:'#f0b323',
+      hudText:'#f2f2f2', hudSub:'#a7a7ad', accent:'#f0b323', padRing:'rgba(240,179,35,0.6)',
+      dynMark:'#8e2fa8',        // the print's magenta...
+      dynNeon:'#2a4fb8',        // ...its blue...
+      dynAlt:'#1f8f86' },       // ...and its teal, all held back behind the players
+  },
+  // Retrowave: a black room, a magenta floor grid running to a horizon at each end,
+  // and the two inks that sleeve is printed in — hot RED against electric BLUE.
+  // ⚠️ The pitch markings are a pale chrome rather than a neon, because both neons on
+  // this palette are already spoken for by the two teams; magenta lines over a magenta
+  // grid would leave the boundary as the least legible thing on the pitch.
+  // ⚠️ Red against blue is a pair protanopia flattens toward the same dark, so the
+  // sides also carry a MARK — a slitted sun against a stack of chevrons
+  // (DISC_SKINS.synth), and the suite measures the shape rather than the hue.
+  synth: {
+    name: 'Retrowave', emoji: '🌆',
+    ui: { scan:true,
+      grad:'radial-gradient(120% 90% at 50% -12%, #2a1046 0%, #140a26 55%, #06040e 100%)',
+      bg:'#06040e', panel:'rgba(255,79,216,0.09)', edge:'#4a2a63', text:'#e6ecff', muted:'#a2aed6',
+      red:'#ff5347', blue:'#5b93ff', cyan:'#4fe3ff', magenta:'#ff4fd8', green:'#4fe3ff',
+      yellow:'#ffb03a', accent:'#ff4fd8', go:'#4fe3ff', field:'#140a26', onAccent:'#06040e' },
+    pitch: { glow:true, fieldBg:'#06040e', court:'#0d0a1c', stripeA:'#0d0a1c', stripeB:'#100c22',
+      netPocket:'rgba(255,79,216,0.12)', line:'#dfe8ff', centerDot:'#dfe8ff',
+      netMesh:'rgba(223,232,255,0.40)', post:'#dfe8ff', teamRed:'#ff3b2f', teamBlue:'#3b7bff',
+      discRim:'#06040e', kickRing:'#ff4fd8', kickText:'#06040e', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#06040e', nameBg:'#06040e', nameText:'#e6ecff',
+      shadow:'rgba(0,0,0,0.45)', ballRim:'#06040e', ball:'#e8ecff', ballSpot:'#ff4fd8',
+      trailRGB:'255,79,216',
+      obstacle:'#ff4fd8', good:'#4fe3ff', warn:'#ffb03a', dim:'#6a6f96', cone:'#ff3b2f',
+      hudText:'#e6ecff', hudSub:'#a2aed6', accent:'#ff4fd8', padRing:'rgba(255,79,216,0.6)',
+      dynMark:'#7c2a72',        // the floor grid — a MUTED magenta, never the kick ring's
+      dynAlt:'#2b2f7a' },       // ...and the haze behind it
+  },
   // A game bar: charcoal walls, hot pink neon, white marks, and the three marks the
   // sign is built from drifting in the room BEYOND the pitch — see DYN_FIELDS.arcade,
   // which punches the play area out of its own clip so nothing lands on the court.
@@ -3136,6 +3191,8 @@ const THEME_BUNDLES = {
   // the closest thing here to a cabinet. A key with no SFX_SETS entry would take
   // applySfxSet nowhere and leave the Sound slot showing a set that does not exist.
   abari:     { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
+  synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
+  pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'dots'  },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11919,6 +11976,98 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// The print the events are put out on: a magenta-through-blue-to-teal wash with the
+// pixel blocks that crop its corners.
+// ⚠️ Held back hard. The players here are gold and grey, and a saturated gradient
+// under them is the one thing on this palette that can out-shout a body; the suite
+// measures the rendered field against the team rather than trusting the alpha.
+// ⚠️ Baked ONCE and stretched, cached on the INK — a gradient object and a few dozen
+// blocks a frame is a few dozen too many, and it is the same print every time.
+DYN_FIELDS.pixelfade = {
+  name: 'Pixel print', res: 384, blocks: 7, alpha: 0.5,
+  build(st, key, a1, a2, a3){
+    const N = this.res, HH = Math.round(N * 1.5);
+    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
+    const c2 = cv.getContext('2d');
+    const g = c2.createLinearGradient(0, 0, N, HH);
+    g.addColorStop(0, a1); g.addColorStop(0.52, a2); g.addColorStop(1, a3);
+    c2.fillStyle = g; c2.fillRect(0, 0, N, HH);
+    // Pixel blocks cropping two corners, like the card. A fixed PRNG, so the print is
+    // the same every match and nothing here can reach w.rng.
+    const rnd = mulberry32(0x9146E1);
+    const cell = N / (this.blocks * 2);
+    for (const [ox, oy, dx, dy] of [[0, 0, 1, 1], [N, HH, -1, -1]]){
+      for (let i=0;i<this.blocks;i++) for (let j=0;j<this.blocks;j++){
+        if (i + j > this.blocks - 1) continue;             // a triangular crop
+        if (rnd() < 0.42) continue;
+        c2.fillStyle = rgba('#ffffff', 0.05 + rnd()*0.13);
+        c2.fillRect(ox + dx*i*cell - (dx<0?cell:0), oy + dy*j*cell - (dy<0?cell:0),
+                    cell, cell);
+      }
+    }
+    st.cv = cv; st.key = key;
+  },
+  paint(c, st, L, T, W, H){
+    // Falls back through whatever palette it is handed: slots mix freely.
+    const a1 = TH.dynMark || TH.accent || '#8e2fa8';
+    const a2 = TH.dynNeon || TH.line   || '#2a4fb8';
+    const a3 = TH.dynAlt  || TH.good   || '#1f8f86';
+    const key = a1 + '|' + a2 + '|' + a3;
+    if (!st.cv || st.key !== key) this.build(st, key, a1, a2, a3);
+    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+    c.drawImage(st.cv, L, T, W, H);
+    c.globalAlpha = a;
+  },
+};
+// A synthwave floor: a grid whose rungs bunch up toward a HORIZON at each end, with
+// the glow of whatever is below that horizon washing back onto the court.
+// ⚠️ Mirrored rather than one-point. A pitch is seen from above and both ends matter
+// equally, so a single vanishing point would make one half of the court read as
+// "further away" than the other — which is a lie about a game where the two halves
+// are the same size.
+// ⚠️ Baked ONCE into an offscreen tile and stretched, cached on the INK. Slots mix, so
+// this can be asked for over another palette; it falls back through whatever it is
+// handed. Still — a floor that scrolled would read as the camera drifting.
+DYN_FIELDS.synthgrid = {
+  name: 'Neon grid', res: 512, cols: 14, rungs: 11, power: 2.3, alpha: 0.85,
+  build(st, key, mark, haze){
+    const N = this.res, HH = Math.round(N * 1.5);
+    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
+    const c2 = cv.getContext('2d');
+    // The haze at each end: what is glowing just past the horizon.
+    for (const top of [true, false]){
+      const g = c2.createLinearGradient(0, top ? 0 : HH, 0, top ? HH*0.42 : HH*0.58);
+      g.addColorStop(0, rgba(haze, 0.55));
+      g.addColorStop(1, rgba(haze, 0));
+      c2.fillStyle = g; c2.fillRect(0, top ? 0 : HH*0.58, N, HH*0.42);
+    }
+    c2.strokeStyle = mark; c2.lineWidth = Math.max(1, N*0.004);
+    c2.beginPath();
+    for (let i=1; i<this.cols; i++){
+      const x = N * i / this.cols;
+      c2.moveTo(x, 0); c2.lineTo(x, HH);
+    }
+    // Rungs: evenly spaced in the middle, crowding as they approach either end. The
+    // power curve is what makes a flat grid read as a floor running away from you.
+    for (let i=1; i<=this.rungs; i++){
+      const t = i / (this.rungs + 1);
+      const e = Math.pow(t, this.power) * 0.5;        // 0 at the end, 0.5 at halfway
+      c2.moveTo(0, HH*e);        c2.lineTo(N, HH*e);
+      c2.moveTo(0, HH*(1 - e));  c2.lineTo(N, HH*(1 - e));
+    }
+    c2.stroke();
+    st.cv = cv; st.key = key;
+  },
+  paint(c, st, L, T, W, H){
+    const mark = TH.dynMark || TH.line || '#7c2a72';
+    const haze = TH.dynAlt  || TH.accent || '#2b2f7a';
+    const key = mark + '|' + haze;
+    if (!st.cv || st.key !== key) this.build(st, key, mark, haze);
+    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+    c.drawImage(st.cv, L, T, W, H);
+    c.globalAlpha = a;
+  },
+};
 // The room beyond the pitch: triangles, squares and circles — the three marks the
 // sign is built from — drifting and turning out in the dark.
 // ⚠️ NOTHING is drawn inside the boundary, and that is structural rather than a margin
@@ -12693,6 +12842,86 @@ DISC_SKINS.chalk = {
     const L = r*CHALK.bar, T = r*CHALK.thick;
     if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
     else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
+// The name, drawn: a potion FLASK against a PIXEL block.
+// ⚠️ Gold against grey is a saturation-and-lightness pair rather than a hue one, which
+// is the half of colour a colour-blind player keeps — but it is still only colour, so
+// the sides carry a shape too. The two are measured on different axes: the flask has a
+// NECK, so it is the only one with ink straight up at 0.82r, and the block has CORNERS,
+// so it is the only one with ink on the diagonals there.
+const PNP = { neck: 0.13, neckTop: -0.92, neckBot: -0.30, lip: 0.21,
+              body: 0.62, bodyY: 0.16, px: 0.70, gap: 0.075 };
+DISC_SKINS.pnp = {
+  name: 'Flask vs pixel',
+  paint(c, p, x, y, r, w){
+    const flask = p.team === 0;
+    const col = flask ? (TH.teamRed || '#f0b323') : (TH.teamBlue || '#9aa0a6');
+    const cut = TH.court || '#0c0c10';
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+    c.fillStyle = col;
+    if (flask){
+      c.beginPath(); c.arc(x, y + r*PNP.bodyY, r*PNP.body, 0, 2*Math.PI); c.fill();
+      c.fillRect(x - r*PNP.neck, y + r*PNP.neckTop, r*PNP.neck*2,
+                 r*(PNP.neckBot - PNP.neckTop));
+      c.fillRect(x - r*PNP.lip, y + r*PNP.neckTop, r*PNP.lip*2, r*0.13);
+      // The level in it, knocked out at the top of the body — a flask you can see is
+      // full is a flask rather than a lightbulb.
+      c.fillStyle = cut;
+      c.fillRect(x - r*PNP.body*0.92, y + r*(PNP.bodyY - 0.30), r*PNP.body*1.84, r*0.09);
+    } else {
+      const h = r*PNP.px, g = r*PNP.gap;
+      c.fillRect(x - h, y - h, h*2, h*2);
+      // A 2x2 of pixels rather than one slab: the gap is what says "pixel" at the size
+      // a body is actually drawn.
+      c.fillStyle = cut;
+      c.fillRect(x - g/2, y - h, g, h*2);
+      c.fillRect(x - h, y - g/2, h*2, g);
+    }
+    c.restore();
+  },
+};
+// The sleeve's two marks: a slitted SUN against a stack of CHEVRONS.
+// ⚠️ Red against blue is exactly the pair protanopia flattens toward the same dark, so
+// hue cannot carry the sides on its own here any more than it could on Highlighter.
+// The difference is measurable and it is a shape: the sun's slits run ALL THE WAY
+// ACROSS, so a scan line through one of them is nothing but court, while a chevron
+// scan line is never more than two thin crossings. `tests/dyntheme.mjs` counts the
+// full-width gaps rather than trusting the drawing code.
+const SYNTH = { slits: 4, slitH: 0.13, chev: 3, chevW: 0.14 };
+DISC_SKINS.synth = {
+  name: 'Sun vs chevrons',
+  paint(c, p, x, y, r, w){
+    const col = p.team === 0 ? (TH.teamRed || '#ff3b2f') : (TH.teamBlue || '#3b7bff');
+    const cut = TH.court || '#0d0a1c';
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    c.clip();
+    c.fillStyle = cut;
+    if (p.team === 0){
+      // The slits widen downward, which is what makes it read as a setting sun rather
+      // than as a barcode: the gaps grow as the disc does not.
+      for (let k=0;k<SYNTH.slits;k++){
+        const t = (k + 1) / (SYNTH.slits + 1);
+        const cy = y + r*(t*1.6 - 0.35);
+        const h  = r*SYNTH.slitH*(0.45 + t*1.3);
+        c.fillRect(x - r, cy - h/2, r*2, h);
+      }
+    } else {
+      c.lineWidth = r*SYNTH.chevW; c.lineJoin = 'round'; c.lineCap = 'butt';
+      c.strokeStyle = cut;
+      for (let k=0;k<SYNTH.chev;k++){
+        const cy = y + r*(0.52 - k*0.42);
+        c.beginPath();
+        c.moveTo(x - r*0.74, cy + r*0.30);
+        c.lineTo(x,          cy - r*0.22);
+        c.lineTo(x + r*0.74, cy + r*0.30);
+        c.stroke();
+      }
+    }
     c.restore();
   },
 };
@@ -13505,6 +13734,14 @@ const BALL_LOOKS = {
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
       ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
   plain:   { name:'Plain', draw:()=>{} },
+  // The ampersand, which is the only part of that wordmark with a colour in it.
+  // ⚠️ system-ui, like the 8-ball look — no web font is ever required to play.
+  amp:     { name:'Ampersand', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.font = 'bold ' + Math.round(r*1.55) + 'px system-ui, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('&', 0, r*0.04);
+    c.restore(); } },
   // A game token: a rim ring and the slot it drops through. ⚠️ ROUND on purpose —
   // on the Abari carpet both teams are triangles, so the one thing on the pitch that
   // is not a wedge should be the thing you are chasing.
