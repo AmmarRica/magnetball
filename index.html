@@ -2398,6 +2398,36 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // A type specimen: process yellow, black grotesk, nothing else. The pitch is the
+  // sheet and the field painter sets it — see DYN_FIELDS.specimen.
+  // ⚠️ The specimen type is a DEEPER YELLOW, never black. Black is the ink this
+  // palette reserves for things that matter — the lines, the discs, the ball's rim —
+  // and a sheet of black words behind the play is a sheet of decoys the size of a
+  // player. Tint on tint is also what a printed specimen actually looks like.
+  // ⚠️ Both discs are black blocks with the glyph KNOCKED OUT in yellow, and the
+  // sides are an O against an X (DISC_SKINS.type). Two teams and one ink is the
+  // Highlighter problem again; hue cannot settle it here either, so the counter does.
+  specimen: {
+    name: 'Specimen', emoji: '🔠',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #fff45c 0%, #f7e600 55%, #e6d600 100%)',
+      bg:'#f7e600', panel:'rgba(17,17,17,0.08)', edge:'#b9ab00', text:'#111111', muted:'#4a4400',
+      red:'#111111', blue:'#5a5200', cyan:'#111111', magenta:'#111111', green:'#111111',
+      yellow:'#8a7c00', accent:'#111111', go:'#111111', field:'#f7e600', onAccent:'#f7e600' },
+    pitch: { glow:false, fieldBg:'#f0df00', court:'#f7e600', stripeA:'#f7e600', stripeB:'#f2e100',
+      netPocket:'rgba(17,17,17,0.07)', line:'#111111', centerDot:'#111111',
+      netMesh:'rgba(17,17,17,0.42)', post:'#111111', teamRed:'#111111', teamBlue:'#5a5200',
+      discRim:'#111111', kickRing:'#111111', kickText:'#f7e600', cbRing:'#111111',
+      eyeWhite:'#f7e600', eyePupil:'#111111', nameBg:'#111111', nameText:'#f7e600',
+      shadow:'rgba(0,0,0,0.16)', ballRim:'#111111', ball:'#f7e600', ballSpot:'#111111',
+      trailRGB:'17,17,17',
+      obstacle:'#111111', good:'#111111', warn:'#5a5200', dim:'#8a7c00', cone:'#111111',
+      hudText:'#111111', hudSub:'#4a4400', accent:'#111111', padRing:'rgba(17,17,17,0.55)',
+      // The guide ring on a BLACK disc: the dark tone has nothing to read against, so
+      // the light one carries it — the mirror of Highlighter, same two-tone ring.
+      discGuide:'rgba(255,255,255,0.75)', discGuideDark:'rgba(0,0,0,0.55)',
+      dynMark:'#dcc900' },      // the specimen type — a deeper yellow, never black
+  },
   // A vector monitor: everything is a thin stroked line on black, the way an
   // XY-deflection tube actually drew. Deep space behind a faint grid, a scatter of
   // drifting rocks, magenta markings, a cyan dart against a lime saucer.
@@ -3061,6 +3091,7 @@ const THEME_BUNDLES = {
   board:     { field:'boardtrack',discs:'pawn',        ball:'plain',   sfx:'classic' },
   ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space'   },
   vector:    { field:'voidgrid',  discs:'vector',      ball:'asteroid',sfx:'space'   },
+  specimen:  { field:'specimen',  discs:'type',        ball:'period',  sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11823,6 +11854,56 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// A type-specimen sheet: rows of grotesk set at every width and weight, running off
+// the right edge the way a specimen poster does, each on its own baseline rule.
+// ⚠️ Baked ONCE into an offscreen canvas and stretched, cached on the INK — a dozen
+// fillText calls at 80px is glyph rasterisation on the frame that asks for it, every
+// frame. Stretching it distorts the widths, which on a sheet whose whole subject is
+// compressed-against-condensed is the look rather than a defect.
+// ⚠️ No web font, and none needed: `system-ui, sans-serif` is what the rest of the
+// file already draws with. The sheet is a texture, so whichever grotesk the platform
+// hands over is the right one.
+DYN_FIELDS.specimen = {
+  name: 'Specimen', res: 512, rows: 9, alpha: 0.9,
+  words: ['Grotesk','Counter','Kerning','Ascender','Ligature','Aperture','Baseline',
+          'Terminal','Compressed','Condensed','Specimen','Stroke','Overshoot'],
+  build(st, ink){
+    const N = this.res, HH = Math.round(N * 1.55);
+    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
+    const c2 = cv.getContext('2d');
+    const rnd = mulberry32(0x5EC1EE);      // fixed: the same sheet every match
+    c2.fillStyle = ink; c2.strokeStyle = ink; c2.textBaseline = 'alphabetic';
+    const band = HH / this.rows;
+    for (let i=0; i<this.rows; i++){
+      const base = band * (i + 0.82);
+      const size = band * (0.62 + rnd()*0.26);
+      const wgt  = [300, 400, 700, 900][(rnd()*4)|0];
+      const ital = rnd() < 0.34 ? 'italic ' : '';
+      const sx   = 0.52 + rnd()*0.66;      // the compressed → condensed axis
+      c2.font = ital + wgt + ' ' + Math.round(size) + 'px system-ui, sans-serif';
+      c2.save(); c2.scale(sx, 1);
+      let x = N * (0.02 + rnd()*0.05);
+      // Two or three words, and the last one is allowed to run off the edge.
+      for (let k=0; k<3 && x < N/sx; k++){
+        const wd = this.words[(rnd()*this.words.length)|0];
+        c2.fillText(wd, x, base);
+        x += c2.measureText(wd).width + size*0.28;
+      }
+      c2.restore();
+      c2.globalAlpha = 0.55; c2.lineWidth = Math.max(1, band*0.012);
+      c2.beginPath(); c2.moveTo(0, base + band*0.10); c2.lineTo(N, base + band*0.10);
+      c2.stroke(); c2.globalAlpha = 1;
+    }
+    st.cv = cv; st.ink = ink;
+  },
+  paint(c, st, L, T, W, H){
+    const ink = TH.dynMark || rgba(TH.line || '#111111', 0.12);
+    if (!st.cv || st.ink !== ink) this.build(st, ink);
+    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+    c.drawImage(st.cv, L, T, W, H);
+    c.globalAlpha = a;
+  },
+};
 // Deep space on a vector monitor: a nebula wash, a faint grid over it, a star field
 // and a drift of stroked asteroids. Everything is a THIN LINE — no fills — because
 // that is what an XY tube could draw, and it is the whole read of the theme.
@@ -12428,6 +12509,39 @@ DISC_SKINS.chalk = {
     const L = r*CHALK.bar, T = r*CHALK.thick;
     if (p.team === 0) c.fillRect(x - L, y - T/2, L*2, T);
     else              c.fillRect(x - T/2, y - L, T, L*2);
+    c.restore();
+  },
+};
+// A specimen sheet's two settings of the same face: a black block with the glyph
+// KNOCKED OUT in the paper colour. ⚠️ One ink and two teams is the Highlighter
+// problem, and hue cannot settle it here either — the palette is yellow and black.
+// The sides are an O against an X, which differ twice over: the O has a closed
+// COUNTER where the X has a crossing, and the O carries ink on the axes where the X
+// carries it only on the diagonals. Both hold at twelve pixels; a weight or a width
+// difference, which is what a specimen is really about, would not.
+const TYPESET = { block: 0.98, ring: 0.52, ringW: 0.30, bar: 0.26, arm: 0.74 };
+DISC_SKINS.type = {
+  name: 'Type',
+  paint(c, p, x, y, r, w){
+    const ink = TH.discRim || '#111111';
+    const paper = TH.court || '#f7e600';
+    c.save();
+    c.beginPath(); c.arc(x, y, r*TYPESET.block, 0, 2*Math.PI);
+    c.fillStyle = ink; c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+    c.strokeStyle = paper; c.fillStyle = paper;
+    c.lineCap = 'butt';
+    if (p.team === 0){
+      c.lineWidth = r*TYPESET.ringW;
+      c.beginPath(); c.arc(x, y, r*TYPESET.ring, 0, 2*Math.PI); c.stroke();
+    } else {
+      c.lineWidth = r*TYPESET.bar; c.lineCap = 'round';
+      const a = r*TYPESET.arm*Math.SQRT1_2;
+      c.beginPath();
+      c.moveTo(x-a, y-a); c.lineTo(x+a, y+a);
+      c.moveTo(x+a, y-a); c.lineTo(x-a, y+a);
+      c.stroke();
+    }
     c.restore();
   },
 };
@@ -13086,6 +13200,10 @@ const BALL_LOOKS = {
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
       ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
   plain:   { name:'Plain', draw:()=>{} },
+  // A full stop. ⚠️ Deliberately NOT a ring: on the Specimen sheet team 0 is an O,
+  // and a ball drawn as a second counter is a ball you lose in a challenge.
+  period:  { name:'Full stop', draw:(c,r)=>{
+    c.beginPath(); c.arc(0, 0, r*0.42, 0, 7); c.fill(); } },
   // A rock, drawn the way the arcade drew one: craters and chips, no fill. ⚠️ It is
   // only hollow because the Asteroids palette sets `ball` to the court colour and
   // `ballRim` to the bright one, so the rim ring paintBall already draws IS the

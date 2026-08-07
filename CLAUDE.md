@@ -169,6 +169,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
+  `specimen` = a type-specimen sheet: process yellow, black grotesk, rows set at every
+  width and weight running off the right edge. ⚠️ The specimen type is a **deeper yellow**,
+  never black — black is what this palette reserves for the lines, the discs and the ball's
+  rim, and a sheet of black words behind the play is a sheet of player-sized decoys (tint
+  on tint is also what a printed specimen looks like). Baked ONCE into an offscreen canvas
+  and cached on the ink, because a dozen `fillText`s at 80px is glyph rasterisation every
+  frame; no web font, `system-ui` is a texture here. ⚠️ Both discs are the same black block
+  with the glyph knocked out in paper, so hue cannot tell the sides apart any more than it
+  could on Highlighter — it is an **O against an X**, which differ twice over (closed
+  counter vs crossing; ink on the axes vs only on the diagonals), and `tests/dyntheme.mjs`
+  measures both. The ball is a **full stop**, deliberately not a ring: a second counter is
+  a ball you lose in a challenge.
   `vector` (shown as **Asteroids**) = a vector monitor: a nebula wash, a faint grid, a star
   field and a drift of stroked rocks, with a cyan dart against a lime saucer. ⚠️ **Nothing
   is filled**, and that is measured, not asserted in a comment — the middle of a ship and
