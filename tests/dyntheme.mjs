@@ -415,25 +415,40 @@ const r = await p.evaluate(async ()=>{
     o.insideIsGrass = !near(o.justInside, timber, 44);
     o.paddockStill = !M.DYN_FIELDS.paddock.step;
 
-    // ---- the two craft differ by SILHOUETTE -------------------------------
-    // ⚠️ Measured at the NOSE, across the direction of travel. Seen from above these
-    // are a disc and a triangle, and behind the middle they are both wide — the tail
-    // reading that separated the old three-quarter drawings now calls them nearly the
-    // same. Near the front they could not be less alike: the disc is still most of its
-    // width there, the triangle has come to a point.
-    // ⚠️ Counted on BRIGHT pixels only. The craft throws a ground shadow, which is
-    // darker than the flat test field and would otherwise be counted as hull — and the
-    // shadow is round under both of them.
+    // ---- the two craft ------------------------------------------------------
+    // ⚠️ THIS THEME IS THE ONE EXCEPTION to the silhouette rule, and it is deliberate:
+    // both sides are saucers, asked for that way. Silhouette being off the table, the
+    // two inks have to be separable WITHOUT hue — so this measures the LIGHTNESS gap
+    // and the SATURATION gap, which is what a colour-blind player is actually left
+    // with, rather than an overall RGB distance that a red/green pair would also pass.
+    // The saucer-vs-triangle pairing is still in the Players slot, and its silhouette
+    // is measured below so that code cannot quietly rot.
     const R = 60, CX = 150, CY = 150;
     const cv5 = document.createElement('canvas'); cv5.width = cv5.height = 300;
     const cc5 = cv5.getContext('2d');
-    const paintUfo = (team, vx, vy) => {
+    const paintCraft = (skin, team, vx, vy) => {
       cc5.fillStyle = '#7f7f7f'; cc5.fillRect(0,0,300,300);
       const q = { team, faceX:1, faceY:0, vx, vy, r:R, name:'x', cap:'none', color:'#46d17a' };
-      M.DISC_SKINS.ufo.paint(cc5, q, CX, CY, R, { players:[q] });
+      M.DISC_SKINS[skin].paint(cc5, q, CX, CY, R, { players:[q] });
     };
+    // Read the hull between the rim ring and the dome, clear of both.
+    const hullOf = (team) => { paintCraft('ufo', team, 0, 0);
+      const d = cc5.getImageData(CX + Math.round(R*0.52), CY, 1, 1).data;
+      return [d[0], d[1], d[2]]; };
+    const H0 = hullOf(0), H1 = hullOf(1);
+    const light = c3 => c3[0]*0.3 + c3[1]*0.6 + c3[2]*0.1;
+    const sat   = c3 => Math.max(...c3) - Math.min(...c3);
+    o.hull0 = H0; o.hull1 = H1;
+    o.hullLightGap = Math.abs(light(H0) - light(H1));
+    o.hullSatGap   = Math.abs(sat(H0) - sat(H1));
+    o.bothAreSaucers = M.DISC_SKINS.ufo.name === 'Saucers';
+    o.hullsSeparableWithoutHue = o.hullLightGap > 30 && o.hullSatGap > 60;
+    // ...and the pairing that DOES carry a silhouette still does. Measured at the
+    // NOSE: seen from above both craft are wide at the back, so a tail reading calls
+    // them nearly the same. Bright pixels only — the ground shadow is darker than the
+    // test field and is round under both of them.
     const noseWidth = (team) => {
-      paintUfo(team, 0, 0);                       // still: no bank to foreshorten it
+      paintCraft('ufotri', team, 0, 0);          // still: no bank to foreshorten it
       const col = Math.round(CX + R*0.72), top = Math.round(CY - R);
       const d = cc5.getImageData(col, top, 1, R*2).data;
       let n = 0;
@@ -442,11 +457,11 @@ const r = await p.evaluate(async ()=>{
       return n;
     };
     o.saucerNose = noseWidth(0); o.triangleNose = noseWidth(1);
-    o.craftDifferByShape = o.saucerNose > o.triangleNose * 2.5;
+    o.triPairDiffersByShape = o.saucerNose > o.triangleNose * 2.5;
     // ⚠️ The bank is read off VELOCITY, not facing: it is how hard the thing is
     // driving. Standing still it must be the plain top-down shape, and moving it must
     // foreshorten — otherwise the 3D is decoration.
-    const shot = (vx, vy) => { paintUfo(0, vx, vy);
+    const shot = (vx, vy) => { paintCraft('ufo', 0, vx, vy);
       return cc5.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
     o.craftBanksWithSpeed = shot(0,0) !== shot(6,0);
     o.craftTurns = shot(5,0) !== shot(0,5);
@@ -784,7 +799,9 @@ ok(r.mouthIsOpen, `the fence runs through the GOAL MOUTH — ${r.mouthWood}/${r.
 ok(r.fenceIsThere, `there is no fence outside the boundary at all (${r.sideWood}/${r.sideN}), so the goal-mouth check proves nothing`);
 ok(r.insideIsGrass, `fence timber is INSIDE the line, where the ball plays: ${JSON.stringify(r.justInside)}`);
 ok(r.paddockStill, 'the paddock has a step — the field is scenery, and anything that advances must do it next to step(), not in a paint');
-ok(r.craftDifferByShape, `the two craft do not differ by SILHOUETTE: nose widths ${r.saucerNose} vs ${r.triangleNose}. Seen from above they are both wide at the tail, so the nose is what separates them`);
+ok(r.bothAreSaucers, `Abduction is not fielding two saucers any more (${r.ufoName}) — if the pairing changed, the hue-free check below is measuring the wrong thing`);
+ok(r.hullsSeparableWithoutHue, `the two saucers are told apart by HUE alone: lightness gap ${Math.round(r.hullLightGap)}, saturation gap ${Math.round(r.hullSatGap)} — same shape and same tone is one craft in two colours`);
+ok(r.triPairDiffersByShape, `the saucer-vs-triangle pairing lost its SILHOUETTE: nose widths ${r.saucerNose} vs ${r.triangleNose}. Seen from above they are both wide at the tail, so the nose is what separates them`);
 ok(r.craftTurns, 'the craft does not turn with its heading');
 ok(r.craftBanksWithSpeed, 'a moving craft looks exactly like a stationary one — the top-down 3D IS the pitch-down as it drives, so without it there is nothing saying it flies');
 ok(r.ballLookExists && r.sheepDraws, 'the sheep ball look draws nothing');

@@ -2509,7 +2509,7 @@ const THEMES = {
       yellow:'#f2b134', accent:'#b6f06a', go:'#b6f06a', field:'#1b2c20', onAccent:'#0d0a1c' },
     pitch: { glow:true, fieldBg:'#141026', court:'#2f4a37', stripeA:'#2f4a37', stripeB:'#2a4432',
       netPocket:'rgba(182,240,106,0.10)', line:'#d9e8a6', centerDot:'#d9e8a6',
-      netMesh:'rgba(217,232,166,0.38)', post:'#d9e8a6', teamRed:'#ff8a3d', teamBlue:'#5fe3c8',
+      netMesh:'rgba(217,232,166,0.38)', post:'#d9e8a6', teamRed:'#ff8a3d', teamBlue:'#dbe0e4',
       discRim:'#120f22', kickRing:'#b6f06a', kickText:'#0d0a1c', cbRing:'#ffffff',
       eyeWhite:'#ffffff', eyePupil:'#120f22', nameBg:'#120f22', nameText:'#eaf4d8',
       shadow:'rgba(0,0,0,0.34)', ballRim:'#2a2320', ball:'#f2efe6', ballSpot:'#2a2320',
@@ -12813,7 +12813,7 @@ DISC_SKINS.vector = {
     c.restore();
   },
 };
-// Two craft seen from DIRECTLY ABOVE, the way everything else on this pitch is.
+// Craft seen from DIRECTLY ABOVE, the way everything else on this pitch is.
 // ⚠️ The first build drew them three-quarter, belly forward — which is a sighting
 // photograph, not a top-down game. A saucer from above is a disc, and the 3D comes
 // from what MOVING does to it: the craft pitches nose-down as it accelerates, so its
@@ -12824,84 +12824,98 @@ DISC_SKINS.vector = {
 // still banks when they move, because they still move.
 // ⚠️ Altitude is shown by a SHADOW on the grass, offset behind the craft. From above
 // that is the only cue that says "flying" rather than "sliding".
-// ⚠️ The sides differ by SILHOUETTE: a saucer against a triangle, both 70s
-// sighting-report stock. Two saucers in two colours are one shape at twelve pixels,
-// over grass, at night — which is when you most need to know who that is.
 const UFO = { hull: 0.90, dome: 0.34, bank: 0.62, driveAt: 5.5,
               shadow: 0.30, shadowA: 0.30,
               tri: { nose: 0.86, back: 0.60, wing: 0.60 }, lights: 6 };
-DISC_SKINS.ufo = {
-  name: 'Craft',
-  paint(c, p, x, y, r, w){
-    const saucer = p.team === 0;
-    const col = saucer ? (TH.teamRed || '#ff8a3d') : (TH.teamBlue || '#5fe3c8');
-    const dark = TH.discRim || '#120f22';
-    const spd = Math.hypot(p.vx || 0, p.vy || 0);
-    const drive = Math.min(1, spd / UFO.driveAt);
-    let ux, uy;
-    if (spd > 0.05){ ux = (p.vx||0)/spd; uy = (p.vy||0)/spd; }
-    else { const f = discFace(p); ux = f.ux; uy = f.uy; }
-    const ang = Math.atan2(uy, ux);
-    // Foreshortening along travel: 1 standing still, cos(bank) at full drive.
-    const sq = Math.cos(UFO.bank * drive);
-    const lean = UFO.bank * drive;
-    // The ground shadow, thrown behind and holding its own circle — it is on the
-    // grass, so it does not foreshorten with the craft above it.
-    c.save();
-    c.translate(x - ux*r*UFO.shadow*drive, y - uy*r*UFO.shadow*drive + r*0.12);
-    c.fillStyle = rgba(dark, UFO.shadowA);
-    c.beginPath(); c.arc(0, 0, r*UFO.hull*0.86, 0, 2*Math.PI); c.fill();
-    c.restore();
-    c.save();
-    c.translate(x, y); c.rotate(ang);              // +x is now the way it is going
-    c.scale(sq, 1);                                // ...and the pitch-down goes here
-    if (saucer){
-      // Hull: a plain disc from above, with a darker rim step inside it.
-      c.beginPath(); c.arc(0, 0, r*UFO.hull, 0, 2*Math.PI);
-      c.fillStyle = col; c.fill();
-      c.lineWidth = Math.max(1, r*0.08); c.strokeStyle = rgba(dark, 0.6); c.stroke();
-      c.beginPath(); c.arc(0, 0, r*UFO.hull*0.66, 0, 2*Math.PI);
-      c.strokeStyle = rgba(dark, 0.35); c.lineWidth = Math.max(1, r*0.06); c.stroke();
-      // Rim lights all the way round, because from above you can see all of them.
-      c.fillStyle = rgba('#ffffff', 0.9);
-      for (let k=0;k<UFO.lights;k++){
-        const a = k * (2*Math.PI/UFO.lights) + 0.4;
-        c.beginPath();
-        c.arc(Math.cos(a)*r*UFO.hull*0.84, Math.sin(a)*r*UFO.hull*0.84,
-              Math.max(0.7, r*0.07), 0, 2*Math.PI);
-        c.fill();
-      }
-      // The dome, sliding toward the TRAILING edge as the nose goes down. Drawn
-      // inside the x-scale, so it foreshortens with the hull it sits on.
+// One drawing of each craft, so a pairing is a two-line entry and nothing can drift
+// between "the saucer here" and "the saucer there" — same shape as SEA/seaPair.
+const CRAFT = {
+  // ⚠️ `ink` rather than a hard-coded white for the lights and the dome. A silver
+  // hull ate both of them — the theme fields an ORANGE against a near-white now, so
+  // the detail has to be picked against the hull it is drawn on, not against the
+  // night the first version assumed.
+  saucer(c, r, col, dark, lean, ink){
+    c.beginPath(); c.arc(0, 0, r*UFO.hull, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    c.lineWidth = Math.max(1, r*0.08); c.strokeStyle = rgba(dark, 0.6); c.stroke();
+    c.beginPath(); c.arc(0, 0, r*UFO.hull*0.66, 0, 2*Math.PI);
+    c.strokeStyle = rgba(dark, 0.35); c.lineWidth = Math.max(1, r*0.06); c.stroke();
+    // Rim lights all the way round, because from above you can see all of them.
+    c.fillStyle = rgba(ink, 0.9);
+    for (let k=0;k<UFO.lights;k++){
+      const a = k * (2*Math.PI/UFO.lights) + 0.4;
       c.beginPath();
-      c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome, r*UFO.dome, 0, 0, 2*Math.PI);
-      c.fillStyle = rgba('#ffffff', 0.88); c.fill();
-      c.beginPath();
-      c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome*0.5, r*UFO.dome*0.5, 0, 0, 2*Math.PI);
-      c.fillStyle = rgba(dark, 0.45); c.fill();
-    } else {
-      const T2 = UFO.tri;
-      c.beginPath();
-      c.moveTo(r*T2.nose, 0);
-      c.lineTo(-r*T2.back, r*T2.wing);
-      c.lineTo(-r*T2.back*0.72, 0);
-      c.lineTo(-r*T2.back, -r*T2.wing);
-      c.closePath();
-      c.fillStyle = col; c.fill();
-      c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.07);
-      c.strokeStyle = rgba(dark, 0.7); c.stroke();
-      // A light at each corner and a dark port in the middle: the classic report.
-      c.fillStyle = rgba('#ffffff', 0.92);
-      for (const [lx, ly] of [[r*T2.nose*0.66, 0], [-r*T2.back*0.74, r*T2.wing*0.6],
-                              [-r*T2.back*0.74, -r*T2.wing*0.6]]){
-        c.beginPath(); c.arc(lx, ly, Math.max(0.7, r*0.085), 0, 2*Math.PI); c.fill();
-      }
-      c.fillStyle = rgba(dark, 0.55);
-      c.beginPath(); c.arc(-r*0.04, 0, Math.max(1, r*0.16), 0, 2*Math.PI); c.fill();
+      c.arc(Math.cos(a)*r*UFO.hull*0.84, Math.sin(a)*r*UFO.hull*0.84,
+            Math.max(0.7, r*0.07), 0, 2*Math.PI);
+      c.fill();
     }
-    c.restore();
+    // The dome, sliding toward the TRAILING edge as the nose goes down. Drawn inside
+    // the x-scale, so it foreshortens with the hull it sits on.
+    c.beginPath();
+    c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome, r*UFO.dome, 0, 0, 2*Math.PI);
+    c.fillStyle = rgba(ink, 0.88); c.fill();
+    c.beginPath();
+    c.ellipse(-r*0.42*Math.sin(lean), 0, r*UFO.dome*0.5, r*UFO.dome*0.5, 0, 0, 2*Math.PI);
+    c.fillStyle = rgba(ink === '#ffffff' ? dark : col, 0.55); c.fill();
+  },
+  triangle(c, r, col, dark, lean, ink){
+    const T2 = UFO.tri;
+    c.beginPath();
+    c.moveTo(r*T2.nose, 0);
+    c.lineTo(-r*T2.back, r*T2.wing);
+    c.lineTo(-r*T2.back*0.72, 0);
+    c.lineTo(-r*T2.back, -r*T2.wing);
+    c.closePath();
+    c.fillStyle = col; c.fill();
+    c.lineJoin = 'round'; c.lineWidth = Math.max(1, r*0.07);
+    c.strokeStyle = rgba(dark, 0.7); c.stroke();
+    // A light at each corner and a dark port in the middle: the classic report.
+    c.fillStyle = rgba(ink, 0.92);
+    for (const [lx, ly] of [[r*T2.nose*0.66, 0], [-r*T2.back*0.74, r*T2.wing*0.6],
+                            [-r*T2.back*0.74, -r*T2.wing*0.6]]){
+      c.beginPath(); c.arc(lx, ly, Math.max(0.7, r*0.085), 0, 2*Math.PI); c.fill();
+    }
+    c.fillStyle = rgba(dark, 0.55);
+    c.beginPath(); c.arc(-r*0.04, 0, Math.max(1, r*0.16), 0, 2*Math.PI); c.fill();
   },
 };
+function craftPair(name, t0, t1){
+  return {
+    name,
+    paint(c, p, x, y, r, w){
+      const col = p.team === 0 ? (TH.teamRed || '#ff8a3d') : (TH.teamBlue || '#dbe0e4');
+      const dark = TH.discRim || '#120f22';
+      const spd = Math.hypot(p.vx || 0, p.vy || 0);
+      const drive = Math.min(1, spd / UFO.driveAt);
+      let ux, uy;
+      if (spd > 0.05){ ux = (p.vx||0)/spd; uy = (p.vy||0)/spd; }
+      else { const f = discFace(p); ux = f.ux; uy = f.uy; }
+      const lean = UFO.bank * drive;
+      // The ground shadow, thrown behind and holding its own circle — it is on the
+      // grass, so it does not foreshorten with the craft above it.
+      c.save();
+      c.translate(x - ux*r*UFO.shadow*drive, y - uy*r*UFO.shadow*drive + r*0.12);
+      c.fillStyle = rgba(dark, UFO.shadowA);
+      c.beginPath(); c.arc(0, 0, r*UFO.hull*0.86, 0, 2*Math.PI); c.fill();
+      c.restore();
+      c.save();
+      c.translate(x, y); c.rotate(Math.atan2(uy, ux));   // +x is the way it is going
+      c.scale(Math.cos(lean), 1);                        // ...and the pitch-down here
+      // White detail on a dark hull, the rim ink on a light one.
+      const ink = relLum(col) > 0.45 ? dark : '#ffffff';
+      CRAFT[p.team === 0 ? t0 : t1](c, r, col, dark, lean, ink);
+      c.restore();
+    },
+  };
+}
+// ⚠️ Two saucers in two COLOURS, which is the one thing every other pairing in this
+// file refuses to do — and it is a deliberate exception, asked for. Silhouette is off
+// the table here, so the two inks have to be separable without hue: orange against a
+// near-achromatic silver differs in SATURATION and in LIGHTNESS as well, which is what
+// a colour-blind player is left with. `tests/dyntheme.mjs` measures both gaps, and the
+// saucer-vs-triangle pairing is still in the Players slot for anyone who wants shape.
+DISC_SKINS.ufo    = craftPair('Saucers', 'saucer', 'saucer');
+DISC_SKINS.ufotri = craftPair('Saucer vs triangle', 'saucer', 'triangle');
 // A board pawn on the square it stands on. ⚠️ Both sides are pawns — that is what
 // the game IS — so the piece cannot carry the difference, and the PLATE does: team 0
 // stands on a start CIRCLE, team 1 on a track SQUARE, which is the board's own

@@ -231,13 +231,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the saucer's dome slides toward the trailing edge; standing still it is a plain circle. The
   bank is read off **velocity**, not facing — it is how hard the thing is driving, so a player
   with rotation switched off still banks. A ground **shadow**, offset behind, is the only cue
-  from above that says flying rather than sliding. The silhouette check measures the **nose**,
-  not the tail: from above both are wide at the back. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
+  from above that says flying rather than sliding. The silhouette check on that pairing measures the **nose**, not
+  the tail: from above both are wide at the back. ⚠️ The fence uses `bleed` and borrows **`DYN_FIELDS.pooltable.path`**
   rather than copying it: a fence has to stand ON the boundary the ball bounces off, follow a
   rounded or chamfered field for free, and leave both GOAL MOUTHS open — the same job the
-  cushion does, so it is the same code. ⚠️ The two sides are a **saucer and a triangle**, both
-  70s sighting-report stock: two saucers in two colours are one shape at twelve pixels, at
-  night, over grass. The 3D is a TILT of the hull about the facing axis — leading edge down,
+  cushion does, so it is the same code. ⚠️ Both sides are **saucers**, an ORANGE against a near-achromatic
+  silver — the one deliberate exception to the silhouette rule in the whole file, asked
+  for. Silhouette being off the table, the two inks have to be separable without hue, so
+  the suite measures the **lightness gap and the saturation gap** rather than an overall
+  RGB distance (which a red/green pair would also pass). `DISC_SKINS.ufotri` keeps the
+  saucer-vs-triangle pairing in the Players slot and its silhouette is still measured, so
+  that code cannot quietly rot. ⚠️ The rim lights and the dome are drawn in an ink PICKED
+  against the hull (`relLum(col) > 0.45`), not a hard-coded white — a silver hull ate both.
+  ⚠️ One drawing per craft in a `CRAFT` registry with `craftPair()` building the pairings,
+  so nothing can drift between "the saucer here" and "the saucer there" (same shape as
+  `SEA`/`seaPair`). The 3D is a TILT of the hull about the facing axis — leading edge down,
   dome pushed back — never a bigger shape; the hull is 0.90`r` so the bank cannot push a wing
   past the guide ring.   The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
   is the ball itself and the ink draws only what is not fleece. Anything drawn on the rim is
