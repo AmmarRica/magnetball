@@ -169,13 +169,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
-  `specimen` = a type-specimen sheet: process yellow, black grotesk, rows set at every
-  width and weight running off the right edge. ⚠️ The specimen type is a **deeper yellow**,
-  never black — black is what this palette reserves for the lines, the discs and the ball's
-  rim, and a sheet of black words behind the play is a sheet of player-sized decoys (tint
-  on tint is also what a printed specimen looks like). Baked ONCE into an offscreen canvas
-  and cached on the ink, because a dozen `fillText`s at 80px is glyph rasterisation every
-  frame; no web font, `system-ui` is a texture here. ⚠️ Both discs are the same black block
+  `specimen` = a type-specimen sheet running in the MARGINS: process yellow, rows of
+  grotesk at every width and weight, scrolling right to left outside the pitch, each row
+  at its own opacity and its own speed. ⚠️ It `bleed`s and punches the play area out of
+  its own clip with the field's own path (the pool table's, borrowed not copied), so a
+  word **cannot** land on the court — structural, not a margin someone keeps tuning.
+  ⚠️ The type is an **olive tint**, never the line's black, even out there: the discs are
+  black blocks and a player may step past the touchline, so black words in the margin are
+  something a stepped-out body disappears into. Each row is a strip baked ONCE and
+  scrolled by `drawImage`, cached on the ink — eleven rows of 60px type is glyph
+  rasterisation every frame otherwise — and the strip **wraps** (every word is drawn again
+  one tile-width left) so the repeat has no seam. No web font; `system-ui` is a texture
+  here. The scroll advances in `step()`, never in the paint. ⚠️ Both discs are the same black block
   with the glyph knocked out in paper, so hue cannot tell the sides apart any more than it
   could on Highlighter — it is an **O against an X**, which differ twice over (closed
   counter vs crossing; ink on the axes vs only on the diagonals), and `tests/dyntheme.mjs`
