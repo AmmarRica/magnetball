@@ -61,9 +61,14 @@ const r = await p.evaluate(()=>{
   const wc=M.world; wc.state='kickoff'; wc.stateT=0.1;
   const mec=wc.players.find(x=>x.ctrl==='human1');
   const foec=wc.players.find(x=>x.team===1); foec.x=300; foec.y=300;
-  // The circle is the gate: standing in it is enough, with or without the ball.
-  // (It used to also require touching the ball — the rule changed on purpose, so
-  // these assertions were rewritten rather than the code bent back to fit them.)
+  // The circle is the gate: standing in it is enough, with or without the ball —
+  // but only for the side actually KICKING OFF. (Both rules changed on purpose at
+  // different times, so these assertions were rewritten rather than the code bent
+  // back to fit them.)
+  // ⚠️ w.kickTeam is what says who that is. It was written on every goal and read by
+  // nothing, so the gate stood open to both teams and the kickoff was a race for a
+  // loose ball — which in practice the same side won every time.
+  wc.kickTeam = mec.team;
   wc.ball.x=0; wc.ball.y=0; wc.ball.vx=0; wc.ball.vy=0;
   mec.x=0; mec.y=-14; mec.vx=0; mec.vy=0;
   o.onBallInCircleExempt = M.kickoffFreePass(wc, mec) === true;
@@ -75,6 +80,23 @@ const r = await p.evaluate(()=>{
   o.offBallInCircleExempt = M.kickoffFreePass(wc, mec) === true;
   for(let i=0;i<20;i++) M.step(wc);
   o.offBallCanCross = mec.y < 0.5;
+  // ...and the OTHER side gets nothing from the same spot. This is the whole point of
+  // a kickoff: one team restarts play, the other waits.
+  const otherc = wc.players.find(x=>x.team !== mec.team);
+  // ⚠️ Own half is +y for team 0 and -y for team 1, so "held back" is signed. The
+  // first version asserted `y > 0` for a team-1 body, which is the half it was being
+  // pushed OUT of — it read the shove working as the shove failing.
+  const own = otherc.team === 0 ? 1 : -1;
+  otherc.x=0; otherc.y=-own*14; otherc.vx=0; otherc.vy=0;   // 14 units the wrong side
+  o.otherSideNotExempt = M.kickoffFreePass(wc, otherc) === false;
+  for(let i=0;i<20;i++) M.step(wc);
+  o.otherSideY = Math.round(own * otherc.y * 10) / 10;
+  o.otherSideHeldBack = o.otherSideY > -14;      // driven back toward its own half
+  // ...and it swaps with the restart, so conceding really does hand the ball over.
+  wc.kickTeam = otherc.team;
+  o.gateFollowsKickTeam = M.kickoffFreePass(wc, mec) === false &&
+                          M.kickoffFreePass(wc, { team: otherc.team, x:0, y:0, r:15 }) === true;
+  wc.kickTeam = mec.team;
   // Outside the circle -> no exemption, ball or not.
   wc.ball.x=200; wc.ball.y=-14; mec.x=200; mec.y=-14; mec.vx=0; mec.vy=0;
   o.outsideCircleNoExempt = M.kickoffFreePass(wc, mec) === false;
@@ -113,6 +135,7 @@ console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.defaultOn&&r.startsInKickoff&&r.blockedDuringKickoff&&r.foeHeldInOwnHalf&&
   r.onBallInCircleExempt&&r.onBallCanCross&&r.offBallInCircleExempt&&r.offBallCanCross&&
+  r.otherSideNotExempt&&r.otherSideHeldBack&&r.gateFollowsKickTeam&&
   r.outsideCircleNoExempt&&r.neverPastBackstop&&r.turnedAround&&r.endsInOwnHalf&&
   r.freeAfterKickoff&&r.noPossessionState&&r.roamsBothHalves&&r.freeWhenRuleOff&&
   r.resetHoldsAgain&&r.clearsInPlay&&errors.length===0;

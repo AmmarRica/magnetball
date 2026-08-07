@@ -836,7 +836,16 @@ const r = await p.evaluate(async ()=>{
     stA.key = 'nope';
     fA.paint(ccA, stA, 0, 0, 300, 300);
     o.printRebuildsOnInk = stA.cv !== firstPrint;
-    o.printStill = !fA.step;
+    // ⚠️ The print BREATHES now, and the rule is the same as everywhere else: only on
+    // a sim step. Advanced in the paint it would run 2.4x fast at 144Hz and freeze on
+    // every replay.
+    const printShot = () => { ccA.fillStyle = M.TH.court; ccA.fillRect(0,0,300,300);
+      fA.paint(ccA, stA, 0, 0, 300, 300);
+      return ccA.getImageData(0,0,300,300).data.join(','); };
+    const pA = printShot();
+    o.printStillWithoutStep = printShot() === pA;
+    for (let i=0;i<60;i++) fA.step(stA);
+    o.printMovesWithStep = printShot() !== pA;
     // The ball is the ampersand, which is the only coloured part of that wordmark.
     o.ampExists = !!M.BALL_LOOKS.amp;
     const aShot = (key) => { ccA.fillStyle = '#7f7f7f'; ccA.fillRect(0,0,300,300);
@@ -957,7 +966,8 @@ ok(r.pnpInksSeparable, `gold and grey are told apart by hue alone: lightness gap
 ok(r.printStaysBack, `the pixel print renders at ${Math.round(r.printPeak)} against the gold team's ${Math.round(r.goldLum)} — a saturated gradient is the one thing on this palette that can out-shout a body`);
 ok(r.printCached && r.printReused, 'the pixel print is rebuilt every frame');
 ok(r.printRebuildsOnInk, 'the pixel print does not rebuild when the ink changes');
-ok(r.printStill, 'the pixel print has a step — it is a print');
+ok(r.printStillWithoutStep, 'the pixel print advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
+ok(r.printMovesWithStep, 'the pixel print never moved when stepped');
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));

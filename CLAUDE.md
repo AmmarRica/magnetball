@@ -325,6 +325,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   never quite the mark you played with. **Bots wear `BOT_CAP` ('none')**: cycling the whole
   CAPS table put a different hat on every disc and made a cap read as decoration rather than
   as yours. Bots still vary by colour, shirt number and eyes.
+- **Kickoff possession:** `kickoffFreePass` gates the centre circle on `w.kickTeam` — the
+  side that CONCEDED. ⚠️ `kickTeam` was written on every goal and **read by nothing**, so
+  the gate stood open to both teams and a restart was a race for a loose ball, which in
+  practice the same side won every time. `tests/kickoff.mjs`.
+- **Slow-mo is for the LAST goal only** (`w.finalGoal`, set where a goal ends the match,
+  cleared in `resetKickoff`). ⚠️ A 0.45× celebration on every goal is most of a minute of
+  slow motion in a five-goal match, and it stopped the winner reading as special. The
+  full-time ramp and the replay have their own clocks and are untouched.
+- **The grass is clipped to the FIELD'S SHAPE**, not its bounding box — `drawGrass`
+  borrows `DYN_FIELDS.pooltable.path`. ⚠️ A rect clip left pitch colour stranded in the
+  cut corners of every rounded and chamfered court: outside the line, unreachable by any
+  ball, and reading as playable.
+- **Add to home screen:** `#installBtn` appears only while `beforeinstallprompt` is
+  live and hides on `appinstalled` or in standalone. ⚠️ The prompt cannot be asked for —
+  it arrives once, as an event — so an always-on button is dead on iOS and after install,
+  and a dead button in a menu is worse than no button.
 - **Icons:** `ICONS` (one 24×24 grid, one stroke weight, `currentColor`) → `iconSvg(name)` →
   `optGlyph(entry)`, which every option tile and nav tile goes through. ⚠️ **Opting in is an
   `icon:` FIELD, never a lookup by emoji** — emoji are not unique across tables (⚡ is both the
@@ -332,7 +348,9 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   difficulty tile. ⚠️ **Cosmetic tables are deliberately NOT converted**: in `CAPS`, `EYES`,
   `ANIMALS` and `TEXTS` the emoji IS the item — `paintCap` draws that exact glyph on the disc —
   so an icon there would show a picture of something other than what you picked. Anything with
-  no `icon:` keeps its emoji. Difficulty is drawn as a **ramp** (`tierNofM`, filled pips) rather
+  no `icon:` keeps its emoji. The result screen goes through the same path — award
+  ribbons, the map vote's thumbs, Warm-up, Settings and the save toast are all drawn
+  now, with the emoji as the fallback. Difficulty is drawn as a **ramp** (`tierNofM`, filled pips) rather
   than seven unrelated pictures, generated from `DIFF`'s own length. `tests/icons.mjs`.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
