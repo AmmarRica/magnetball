@@ -614,6 +614,68 @@ const r = await p.evaluate(async ()=>{
     o.ballIsSolidDot = o.ballMidLum < INK && o.ballRingLum > PAPER;
     M.applyBundle('classic');
   }
+
+  // ---- Abari: the house mark, and the mark upside down ----------------------
+  // ⚠️ Up-against-down IS the difference between the sides, so the skin must not
+  // turn with facing — and the measurement is the WIDTH of ink at a high row against
+  // a low one, because a triangle and its mirror cover the same total area and a
+  // pixel count would call them identical.
+  {
+    M.applyBundle('abari');
+    o.abariName = M.bundleName();
+    const R = 60, CX = 150, CY = 150;
+    const cv8 = document.createElement('canvas'); cv8.width = cv8.height = 300;
+    const cc8 = cv8.getContext('2d');
+    const paintW = (team, fx, fy) => {
+      cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
+      const q = { team, faceX:fx, faceY:fy, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.wedge.paint(cc8, q, CX, CY, R, { players:[q] });
+    };
+    // ⚠️ Stops short of 0.85r either side: the hull ring is at r and would be counted
+    // on every row, which adds the same two hits to both sides and flattens the test.
+    const rowWidth = (team, fy) => {
+      paintW(team, 1, 0);
+      const half = Math.round(R*0.85);
+      const d = cc8.getImageData(CX-half, Math.round(CY + fy*R), half*2, 1).data;
+      let n = 0;
+      for (let i=0;i<d.length;i+=4)
+        if (Math.abs(d[i]-127) + Math.abs(d[i+1]-127) + Math.abs(d[i+2]-127) > 90) n++;
+      return n;
+    };
+    o.upHigh = rowWidth(0, -0.42); o.downHigh = rowWidth(1, -0.42);
+    o.upLow  = rowWidth(0,  0.42); o.downLow  = rowWidth(1,  0.42);
+    o.marksAreMirrored = o.upHigh < o.downHigh*0.6 && o.upLow > o.downLow*1.6;
+    // ...and it does not turn, or the one thing telling the sides apart is gone the
+    // moment anybody moves.
+    const wShot = (team, fx, fy) => { paintW(team, fx, fy);
+      return cc8.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
+    M.profile.spin = true;
+    o.markStandsUp = wShot(0,1,0) === wShot(0,0,1);
+    // ⚠️ THE DECOY: the carpet is triangles too. It only works because they are
+    // outlines in a muted ink and the players are solid and bright.
+    const lum8 = h => { cc8.fillStyle = h; cc8.fillRect(0,0,2,2);
+      const d = cc8.getImageData(0,0,1,1).data; return d[0]*0.3 + d[1]*0.6 + d[2]*0.1; };
+    o.carpetLum = lum8(M.TH.dynMark); o.markLum = lum8(M.TH.teamBlue);
+    o.carpetIsMuted = o.carpetLum < o.markLum - 40;
+    const f8 = M.DYN_FIELDS.arcade, st8 = {};
+    f8.reset && f8.reset(st8);
+    f8.paint(cc8, st8, 0, 0, 200, 200);
+    o.carpetCached = !!st8.cv;
+    const firstCarpet = st8.cv;
+    f8.paint(cc8, st8, 0, 0, 200, 200);
+    o.carpetReused = st8.cv === firstCarpet;
+    st8.key = 'nope';
+    f8.paint(cc8, st8, 0, 0, 200, 200);
+    o.carpetRebuildsOnInk = st8.cv !== firstCarpet;
+    o.carpetStill = !f8.step;
+    // The ball is the one round thing on a pitch of wedges.
+    o.tokenExists = !!M.BALL_LOOKS.token;
+    const tShot = (key) => { cc8.fillStyle = '#7f7f7f'; cc8.fillRect(0,0,300,300);
+      M.paintBall(cc8, CX, CY, R, 0.3, key, M.TH);
+      return cc8.getImageData(CX-R, CY-R, R*2, R*2).data.join(','); };
+    o.tokenDraws = tShot('token') !== tShot('plain');
+    M.applyBundle('classic');
+  }
   return o;
 });
 
@@ -701,6 +763,15 @@ ok(r.ballIsSolidDot, `the Specimen ball is not a full stop (middle ${Math.round(
 ok(r.ballIsHollow, `the ball is not an outline (edge ${Math.round(r.ballEdge)}, middle ${Math.round(r.ballMid)}) — on this palette the rim ring IS the rock's outline`);
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
+
+ok(r.abariName === 'Abari', `the Abari bundle does not resolve: ${r.abariName}`);
+ok(r.marksAreMirrored, `the two Abari marks are not a triangle and its mirror: high rows ${r.upHigh} vs ${r.downHigh}, low rows ${r.upLow} vs ${r.downLow}`);
+ok(r.markStandsUp, 'the house mark turns with facing — up-against-down IS the difference between the sides, so it is gone the moment anybody moves');
+ok(r.carpetIsMuted, `the carpet (${Math.round(r.carpetLum)}) is as bright as the team drawn on top of it (${Math.round(r.markLum)}) — and the carpet is triangles too, so that is a floor of decoys`);
+ok(r.carpetCached && r.carpetReused, 'the arcade carpet is redrawn shape by shape every frame');
+ok(r.carpetRebuildsOnInk, 'the carpet does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
+ok(r.carpetStill, 'the arcade carpet has a step — a floor that moves reads as the camera drifting');
+ok(r.tokenExists && r.tokenDraws, 'the token ball look draws nothing');
 
 console.log(JSON.stringify(r, null, 1));
 await b.close();

@@ -2398,6 +2398,34 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
+  // A game bar: charcoal walls, hot pink neon, white marks, and the floor is the
+  // arcade CARPET — see DYN_FIELDS.arcade.
+  // ⚠️ The two sides are the house mark and its mirror — a white triangle UP against a
+  // pink triangle DOWN (DISC_SKINS.wedge) — and that skin deliberately does NOT turn
+  // with facing. Up-against-down IS the difference here, and a skin that rotates
+  // destroys the one thing telling the sides apart the moment anybody moves.
+  // ⚠️ The carpet's shapes are OUTLINES in muted ink; the players are solid and
+  // bright. A carpet of pink triangles under a team drawn as a pink triangle is a
+  // floor full of decoys, so the gap is measured rather than eyeballed.
+  abari: {
+    name: 'Abari', emoji: '🕹️',
+    ui: { scan:true,
+      grad:'radial-gradient(120% 90% at 50% -12%, #2a2130 0%, #1a1a1c 55%, #0f0f11 100%)',
+      bg:'#131315', panel:'rgba(240,54,155,0.09)', edge:'#4a2b3d', text:'#f4f2f4', muted:'#b3a3ad',
+      red:'#ffffff', blue:'#f0369b', cyan:'#f0369b', magenta:'#f0369b', green:'#f0369b',
+      yellow:'#ffb03a', accent:'#f0369b', go:'#f0369b', field:'#1b1b1e', onAccent:'#131315' },
+    pitch: { glow:true, fieldBg:'#131315', court:'#1d1d20', stripeA:'#1d1d20', stripeB:'#202024',
+      netPocket:'rgba(240,54,155,0.10)', line:'#f0369b', centerDot:'#f0369b',
+      netMesh:'rgba(240,54,155,0.42)', post:'#f0369b', teamRed:'#ffffff', teamBlue:'#f0369b',
+      discRim:'#131315', kickRing:'#f0369b', kickText:'#131315', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#131315', nameBg:'#131315', nameText:'#f4f2f4',
+      shadow:'rgba(0,0,0,0.45)', ballRim:'#ffffff', ball:'#f0369b', ballSpot:'#ffffff',
+      trailRGB:'240,54,155',
+      obstacle:'#f0369b', good:'#f0369b', warn:'#ffb03a', dim:'#6f6470', cone:'#f0369b',
+      hudText:'#f4f2f4', hudSub:'#b3a3ad', accent:'#f0369b', padRing:'rgba(240,54,155,0.6)',
+      dynMark:'#6b2545',        // carpet pink — muted, never the neon
+      dynAlt:'#3a3a40' },       // carpet grey
+  },
   // A type specimen: process yellow, black grotesk, nothing else. The sheet runs in
   // the MARGINS and scrolls — see DYN_FIELDS.specimen, which punches the play area out
   // of its own clip so a word can never land on the court.
@@ -3092,6 +3120,10 @@ const THEME_BUNDLES = {
   ufo:       { field:'paddock',   discs:'ufo',         ball:'sheep',   sfx:'space'   },
   vector:    { field:'voidgrid',  discs:'vector',      ball:'asteroid',sfx:'space'   },
   specimen:  { field:'specimen',  discs:'type',        ball:'period',  sfx:'classic' },
+  // ⚠️ `space` rather than a set of its own: those are the synth variants, which is
+  // the closest thing here to a cabinet. A key with no SFX_SETS entry would take
+  // applySfxSet nowhere and leave the Sound slot showing a set that does not exist.
+  abari:     { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -11854,6 +11886,61 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
+// Arcade carpet: bold geometry scattered over a dark floor, the way every game bar's
+// carpet has looked since 1991. Still — a floor does not move, and one that did would
+// read as the camera drifting.
+// ⚠️ The shapes are OUTLINES in a muted ink, never solid and never the neon. The
+// players on this palette are solid bright triangles, so a carpet of solid pink
+// triangles is a floor of decoys; `tests/dyntheme.mjs` measures the luminance gap
+// rather than trusting the drawing code.
+// ⚠️ Baked ONCE into an offscreen tile and stretched, cached on the INK — a few
+// hundred small paths a frame is a few hundred too many, and it is the same floor
+// every frame. Slots mix, so it can be asked for over another palette.
+DYN_FIELDS.arcade = {
+  name: 'Arcade carpet', res: 512, cols: 8, rows: 12, alpha: 0.7,
+  build(st, key, pink, grey){
+    const N = this.res, HH = Math.round(N * this.rows / this.cols);
+    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
+    const c2 = cv.getContext('2d');
+    const rnd = mulberry32(0xABA21C);        // fixed: the same carpet every match
+    const cw = N / this.cols, ch = HH / this.rows;
+    c2.lineJoin = 'round'; c2.lineCap = 'round';
+    for (let gy=0; gy<this.rows; gy++) for (let gx=0; gx<this.cols; gx++){
+      if (rnd() < 0.18) continue;                        // some cells stay empty floor
+      const px = (gx + 0.5 + (rnd()-0.5)*0.34) * cw;
+      const py = (gy + 0.5 + (rnd()-0.5)*0.34) * ch;
+      const s  = Math.min(cw, ch) * (0.18 + rnd()*0.22);
+      const rot = rnd() * Math.PI * 2;
+      c2.strokeStyle = rnd() < 0.55 ? pink : grey;
+      c2.lineWidth = Math.max(1.2, s*0.16);
+      c2.save(); c2.translate(px, py); c2.rotate(rot);
+      const kind = (rnd()*4)|0;
+      c2.beginPath();
+      if (kind === 0){                                    // the house mark, outlined
+        c2.moveTo(0, -s); c2.lineTo(s*0.88, s*0.72); c2.lineTo(-s*0.88, s*0.72); c2.closePath();
+      } else if (kind === 1){                              // a ring
+        c2.arc(0, 0, s*0.72, 0, 2*Math.PI);
+      } else if (kind === 2){                              // a chevron
+        c2.moveTo(-s*0.8, s*0.4); c2.lineTo(0, -s*0.5); c2.lineTo(s*0.8, s*0.4);
+      } else {                                             // a dash
+        c2.moveTo(-s*0.9, 0); c2.lineTo(s*0.9, 0);
+      }
+      c2.stroke();
+      c2.restore();
+    }
+    st.cv = cv; st.key = key;
+  },
+  paint(c, st, L, T, W, H){
+    // Falls back through whatever palette it is handed: slots mix freely.
+    const pink = TH.dynMark || TH.line || '#6b2545';
+    const grey = TH.dynAlt  || TH.dim  || '#3a3a40';
+    const key = pink + '|' + grey;
+    if (!st.cv || st.key !== key) this.build(st, key, pink, grey);
+    const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
+    c.drawImage(st.cv, L, T, W, H);
+    c.globalAlpha = a;
+  },
+};
 // A type-specimen sheet running in the MARGINS: rows of grotesk of every width and
 // weight, scrolling right to left outside the pitch, each row at its own opacity and
 // its own speed so the sheet reads as depth rather than as one sliding picture.
@@ -12551,6 +12638,39 @@ DISC_SKINS.chalk = {
     c.restore();
   },
 };
+// The house mark and its mirror: a triangle UP against a triangle DOWN, each with the
+// bar the logo's letterform carries. ⚠️ This skin deliberately does NOT go through
+// discFace. Up-against-down IS the difference between the sides here, and a mark that
+// turns with facing destroys it the moment anybody moves — the same reason `pool` and
+// `mono` ignore the rotation control, and the arcade saucer on Asteroids flies level.
+// ⚠️ Inscribed, like every other angular skin: a triangle drawn out to r puts its
+// vertices ON the guide ring, and the ring is the thing that actually collides.
+const WEDGE = { tri: 0.80, bar: 0.30, barW: 0.15 };
+DISC_SKINS.wedge = {
+  name: 'House marks',
+  paint(c, p, x, y, r, w){
+    const up = p.team === 0 ? -1 : 1;                 // team 1 is the mark upside down
+    const col = p.team === 0 ? (TH.teamRed || '#ffffff') : (TH.teamBlue || '#f0369b');
+    const k = r * WEDGE.tri;
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+    c.fillStyle = rgba(col, 0.13); c.fill();
+    c.lineWidth = Math.max(1.2, r*0.055); c.strokeStyle = col; c.stroke();
+    c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+    // Vertices at hypot(0.88, 0.72) * 0.80r = 0.91r, inside the ring at its widest.
+    c.fillStyle = col;
+    c.beginPath();
+    c.moveTo(x, y + up*k);
+    c.lineTo(x + k*0.88, y - up*k*0.72);
+    c.lineTo(x - k*0.88, y - up*k*0.72);
+    c.closePath(); c.fill();
+    // The crossbar, knocked out in the court so the mark reads as a letter rather
+    // than as a plain wedge — and it is what makes the two orientations obvious.
+    c.fillStyle = TH.court || '#1d1d20';
+    c.fillRect(x - k*0.52, y - up*k*WEDGE.bar - r*WEDGE.barW/2, k*1.04, r*WEDGE.barW);
+    c.restore();
+  },
+};
 // A specimen sheet's two settings of the same face: a black block with the glyph
 // KNOCKED OUT in the paper colour. ⚠️ One ink and two teams is the Highlighter
 // problem, and hue cannot settle it here either — the palette is yellow and black.
@@ -13239,6 +13359,16 @@ const BALL_LOOKS = {
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
       ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
   plain:   { name:'Plain', draw:()=>{} },
+  // A game token: a rim ring and the slot it drops through. ⚠️ ROUND on purpose —
+  // on the Abari carpet both teams are triangles, so the one thing on the pitch that
+  // is not a wedge should be the thing you are chasing.
+  token:   { name:'Token', draw:(c,r,rot)=>{
+    c.save(); c.rotate(rot);
+    c.strokeStyle = c.fillStyle; c.lineWidth = Math.max(1, r*0.13);
+    c.beginPath(); c.arc(0, 0, r*0.66, 0, 7); c.stroke();
+    c.lineCap = 'round'; c.lineWidth = Math.max(1, r*0.20);
+    c.beginPath(); c.moveTo(0, -r*0.34); c.lineTo(0, r*0.34); c.stroke();
+    c.restore(); } },
   // A full stop. ⚠️ Deliberately NOT a ring: on the Specimen sheet team 0 is an O,
   // and a ball drawn as a second counter is a ball you lose in a challenge.
   period:  { name:'Full stop', draw:(c,r)=>{

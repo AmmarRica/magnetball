@@ -169,6 +169,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
+  `abari` = a game bar: charcoal walls, hot pink neon, and an arcade CARPET for a floor.
+  ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink
+  triangle DOWN — and that skin deliberately does **not** go through `discFace`:
+  up-against-down IS the difference, so a mark that turns destroys it the moment anybody
+  moves (same argument as Asteroids' level-flying saucer). The silhouette check measures
+  the WIDTH of ink at a high row against a low one — a triangle and its mirror cover the
+  same area, so a pixel count calls them identical. ⚠️ The carpet is triangles too, so it
+  only works because its shapes are **outlines in a muted ink** while the players are
+  solid and bright; the luminance gap is measured. Baked once, cached on the ink, no step.
+  The ball is a **token**, round on purpose: on a pitch of wedges the thing you chase
+  should be the one thing that is not one.
   `specimen` = a type-specimen sheet running in the MARGINS: process yellow, rows of
   grotesk at every width and weight, scrolling right to left outside the pitch, each row
   at its own opacity and its own speed. ⚠️ It `bleed`s and punches the play area out of
