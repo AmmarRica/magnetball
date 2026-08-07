@@ -169,21 +169,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   a column of five is five decoys; Home is a wide slot rather than a circle for the same
   reason against the ball. The track is a grid computed off the pitch rect, so a wider field
   gets more squares rather than stretched ones, and there is no PRNG at all.
-  `abari` = a game bar: charcoal walls, hot pink neon, and an arcade CARPET for a floor.
+  `abari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
+  built from — triangle, square, circle — drifting in the room BEYOND the pitch.
   ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink
   triangle DOWN — and that skin deliberately does **not** go through `discFace`:
   up-against-down IS the difference, so a mark that turns destroys it the moment anybody
   moves (same argument as Asteroids' level-flying saucer). The silhouette check measures
   the WIDTH of ink at a high row against a low one — a triangle and its mirror cover the
-  same area, so a pixel count calls them identical. ⚠️ The carpet is triangles too, so it
-  only works because its shapes are **outlines in a muted ink** while the players are
-  solid and bright; the luminance gap is measured. Baked once, cached on the ink.
-  ⚠️ It also `bleed`s and owns BOTH clips: the carpet is clipped to the field's own path,
-  and the drifting triangles/squares/circles to everything BUT it — a floater cannot reach
-  the pitch, which matters more here than anywhere, because they are the same shape as a
-  player. The suite holds that by stepping the field and requiring **not one pixel inside
-  the boundary changed** (the carpet is static, so anything that moves in there got
-  through). The drift advances in `step()`, never in a paint.
+  same area, so a pixel count calls them identical. ⚠️ **Nothing is drawn inside the
+  boundary.** It `bleed`s and punches the play area out of its own clip with the field's
+  own path (the pool table's, borrowed not copied), so it follows a rounded or chamfered
+  field for free. An arcade carpet used to run UNDER the play here and it was a floor of
+  decoys — a floater is a triangle and so is a player. The suite paints over a
+  court-filled canvas and requires every probe inside the line to come back untouched,
+  with an outside scan that counts **pixels, not probe points** (sparse thin outlines in
+  a room several times the pitch's size hit two point-samples in a hundred, which reads
+  as "nothing drawn"). ⚠️ The shapes stay muted outlines, never the neon: a player may
+  step past the touchline. The drift advances in `step()`, never in a paint.
   The ball is a **token**, round on purpose: on a pitch of wedges the thing you chase
   should be the one thing that is not one.
   `specimen` = a type-specimen sheet running in the MARGINS: process yellow, rows of

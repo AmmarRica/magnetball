@@ -2398,15 +2398,17 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
-  // A game bar: charcoal walls, hot pink neon, white marks, and the floor is the
-  // arcade CARPET — see DYN_FIELDS.arcade.
+  // A game bar: charcoal walls, hot pink neon, white marks, and the three marks the
+  // sign is built from drifting in the room BEYOND the pitch — see DYN_FIELDS.arcade,
+  // which punches the play area out of its own clip so nothing lands on the court.
   // ⚠️ The two sides are the house mark and its mirror — a white triangle UP against a
   // pink triangle DOWN (DISC_SKINS.wedge) — and that skin deliberately does NOT turn
   // with facing. Up-against-down IS the difference here, and a skin that rotates
   // destroys the one thing telling the sides apart the moment anybody moves.
-  // ⚠️ The carpet's shapes are OUTLINES in muted ink; the players are solid and
-  // bright. A carpet of pink triangles under a team drawn as a pink triangle is a
-  // floor full of decoys, so the gap is measured rather than eyeballed.
+  // ⚠️ The floaters are muted outlines, never the neon. A player may step past the
+  // touchline, and a floater is the same shape a player is, so the gap is measured
+  // rather than eyeballed. An arcade carpet used to run UNDER the play here and it
+  // was exactly that: a floor of decoys.
   abari: {
     name: 'Abari', emoji: '🕹️',
     ui: { scan:true,
@@ -2423,8 +2425,8 @@ const THEMES = {
       trailRGB:'240,54,155',
       obstacle:'#f0369b', good:'#f0369b', warn:'#ffb03a', dim:'#6f6470', cone:'#f0369b',
       hudText:'#f4f2f4', hudSub:'#b3a3ad', accent:'#f0369b', padRing:'rgba(240,54,155,0.6)',
-      dynMark:'#6b2545',        // carpet pink — muted, never the neon
-      dynAlt:'#3a3a40' },       // carpet grey
+      dynMark:'#6b2545',        // the drifting shapes — muted, never the neon
+      dynAlt:'#3a3a40' },       // ...and their grey
   },
   // A type specimen: process yellow, black grotesk, nothing else. The sheet runs in
   // the MARGINS and scrolls — see DYN_FIELDS.specimen, which punches the play area out
@@ -11886,25 +11888,22 @@ DYN_FIELDS.pooltable = {
     }
   },
 };
-// Arcade carpet on the floor, and shapes floating in the room beyond it. The carpet
-// is the way every game bar's has looked since 1991; the floaters are the same three
-// marks the sign is built from, drifting out in the dark.
-// ⚠️ The shapes are OUTLINES in a muted ink, never solid and never the neon. The
-// players on this palette are solid bright triangles, so a carpet of solid pink
-// triangles is a floor of decoys; `tests/dyntheme.mjs` measures the luminance gap
-// rather than trusting the drawing code.
-// ⚠️ `bleed`, so this painter owns BOTH clips: the carpet is clipped to the field's
-// own path and the floaters to everything BUT it. A floater cannot reach the pitch,
-// which matters more here than anywhere — they are triangles, and so is a player.
-// The suite holds it by stepping the field and requiring that not one pixel inside
-// the boundary changed.
-// ⚠️ The carpet is baked ONCE and cached on the INK; the floaters turn, so they are
-// drawn live — a few dozen small paths, against a few hundred for the floor.
+// The room beyond the pitch: triangles, squares and circles — the three marks the
+// sign is built from — drifting and turning out in the dark.
+// ⚠️ NOTHING is drawn inside the boundary, and that is structural rather than a margin
+// someone keeps tuning: this `bleed`s and punches the play area out of its own clip
+// with the field's own path (the pool table's, borrowed rather than copied), so it
+// follows a rounded or chamfered field for free. It matters more here than anywhere,
+// because a floater is a triangle and so is a player — an arcade carpet used to run
+// under the play and it was a floor of decoys. The suite paints over a court-filled
+// canvas and requires every probe inside the line to come back untouched.
+// ⚠️ The shapes are mostly OUTLINES in muted ink, never the neon: a player may step
+// past the touchline, and a solid pink triangle out there is a body you lose.
 // ⚠️ The drift advances in step(), which advanceDynField() calls next to step(world),
-// never in the paint: at 144Hz a paint-driven drift runs 2.4x fast.
+// never in the paint: at 144Hz a paint-driven drift runs 2.4x fast. It rolls off its
+// own fixed PRNG, so where a shape sits cannot touch a single bot decision.
 DYN_FIELDS.arcade = {
-  name: 'Arcade carpet', bleed: true, res: 512, cols: 8, rows: 12, alpha: 0.7,
-  floats: 34, drift: 0.00035, floatR: 0.055,
+  name: 'Game bar', bleed: true, floats: 34, drift: 0.00035, floatR: 0.055,
   reset(st){
     const rnd = mulberry32(0xABA21F);        // fixed: the same room every match
     st.t = 0; st.f = [];
@@ -11922,38 +11921,6 @@ DYN_FIELDS.arcade = {
       q.rot += q.spin;
     }
   },
-  build(st, key, pink, grey){
-    const N = this.res, HH = Math.round(N * this.rows / this.cols);
-    const cv = document.createElement('canvas'); cv.width = N; cv.height = HH;
-    const c2 = cv.getContext('2d');
-    const rnd = mulberry32(0xABA21C);        // fixed: the same carpet every match
-    const cw = N / this.cols, ch = HH / this.rows;
-    c2.lineJoin = 'round'; c2.lineCap = 'round';
-    for (let gy=0; gy<this.rows; gy++) for (let gx=0; gx<this.cols; gx++){
-      if (rnd() < 0.18) continue;                        // some cells stay empty floor
-      const px = (gx + 0.5 + (rnd()-0.5)*0.34) * cw;
-      const py = (gy + 0.5 + (rnd()-0.5)*0.34) * ch;
-      const s  = Math.min(cw, ch) * (0.18 + rnd()*0.22);
-      const rot = rnd() * Math.PI * 2;
-      c2.strokeStyle = rnd() < 0.55 ? pink : grey;
-      c2.lineWidth = Math.max(1.2, s*0.16);
-      c2.save(); c2.translate(px, py); c2.rotate(rot);
-      const kind = (rnd()*4)|0;
-      c2.beginPath();
-      if (kind === 0){                                    // the house mark, outlined
-        c2.moveTo(0, -s); c2.lineTo(s*0.88, s*0.72); c2.lineTo(-s*0.88, s*0.72); c2.closePath();
-      } else if (kind === 1){                              // a ring
-        c2.arc(0, 0, s*0.72, 0, 2*Math.PI);
-      } else if (kind === 2){                              // a chevron
-        c2.moveTo(-s*0.8, s*0.4); c2.lineTo(0, -s*0.5); c2.lineTo(s*0.8, s*0.4);
-      } else {                                             // a dash
-        c2.moveTo(-s*0.9, 0); c2.lineTo(s*0.9, 0);
-      }
-      c2.stroke();
-      c2.restore();
-    }
-    st.cv = cv; st.key = key;
-  },
   // Triangle, square, circle — the three marks, turned and drifting.
   shape(c, k, s){
     c.beginPath();
@@ -11965,31 +11932,20 @@ DYN_FIELDS.arcade = {
     // Falls back through whatever palette it is handed: slots mix freely.
     const pink = TH.dynMark || TH.line || '#6b2545';
     const grey = TH.dynAlt  || TH.dim  || '#3a3a40';
-    const key = pink + '|' + grey;
-    if (!st.cv || st.key !== key) this.build(st, key, pink, grey);
     if (!st.f) this.reset(st);
-    const a0 = c.globalAlpha;
-    // ---- the carpet, clipped to the field's own shape ----------------------
-    c.save();
-    c.beginPath();
-    if (w) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H); else c.rect(L, T, W, H);
-    c.clip();
-    c.globalAlpha = a0 * this.alpha;
-    c.drawImage(st.cv, L, T, W, H);
-    c.globalAlpha = a0;
-    c.restore();
-    // ---- and the room, clipped to everything BUT it ------------------------
-    // No world means a picker tile, and a tile is nothing but play area: punching it
-    // out would leave the floaters nowhere to go, so there they are simply skipped.
-    if (!w) return;
     const MX = W * 1.05, MY = H * 0.85;
     const bx = L - MX, by = T - MY, bw = W + MX*2, bh = H + MY*2;
+    const a0 = c.globalAlpha;
     c.save();
     c.beginPath();
-    c.rect(bx, by, bw, bh);
-    DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
-    c.clip('evenodd');
-    const base = Math.min(W, H) * this.floatR;
+    // No world means a picker tile, and a tile is nothing but play area: punching it
+    // out would leave the shapes nowhere to go, so there they fill the tile instead.
+    if (w){
+      c.rect(bx, by, bw, bh);
+      DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
+      c.clip('evenodd');
+    } else { c.rect(L, T, W, H); c.clip(); }
+    const base = Math.min(W, H) * this.floatR * (w ? 1 : 1.6);
     c.lineJoin = 'round';
     for (const q of st.f){
       const col = q.pink ? pink : grey, s = base * q.s;
