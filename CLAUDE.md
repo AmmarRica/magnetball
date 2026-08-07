@@ -184,7 +184,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   flask is the only one with ink straight up (it has a neck), the block the only one on
   the diagonals (it has corners). ⚠️ The print is held well back and the guard is the
   **rendered** peak against the gold team, not the alpha it was asked to draw at. The
-  ball is the ampersand — the only coloured part of that wordmark.
+  ball is the ampersand — the only coloured part of that wordmark, and the trail is the
+  only **per-team** one in the file: the flask POURS (points joined as well as dotted, or
+  a fast player leaves gaps) and the pixel BURSTS (position and size snapped to one grid,
+  with a few shards scattering more as the block ages). Both scatters are derived from the
+  point's own coordinates, never a clock or a PRNG — a draw must not differ between two
+  draws of one step.
   `abari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
   built from — triangle, square, circle — drifting in the room BEYOND the pitch.
   ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink
@@ -280,7 +285,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   which no palette can reach. Because slots mix freely, a field painter must fall back through
   the palette it's given (`TH.dynMark || TH.line`) or a starfield over Grass paints black on
   black. `tests/dyntheme.mjs` holds all of it by pixel sampling.
-- **Trail look:** `TRAIL_LOOKS` + the `trail` slot. ⚠️ A look only DRAWS — where a dot is
+- **Trail look:** `TRAIL_LOOKS` + the `trail` slot, declared **above `SLOTS`** so
+  `normalizeLook()` can ask the registry rather than repeat its key list (a hard-coded copy
+  was the first fix and it was a second place to keep in step; the reason a copy was
+  reached for at all is the `DISC_SKINS` TDZ). A look is handed the **team**, so a pairing
+  can draw the two sides differently — Potions & Pixels pours one and pixelates the other —
+  and a look that branches must set `perTeam`, which is what makes the picker tile show both
+  runs instead of implying they look alike. ⚠️ A look only DRAWS — where a dot is
   dropped and how fast it fades stay in `advanceTrails` (step loop), because the LENGTH of
   a tell is how far someone just came, which is a read and not a decoration. ⚠️ The BALL
   keeps its streak whatever the slot says: it is the one thing everybody is tracking, so no

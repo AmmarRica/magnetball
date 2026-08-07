@@ -56,6 +56,20 @@ const r = await p.evaluate(()=>{
   }
   o.looksDiffer = new Set(Object.values(shots)).size === o.keys.length;
 
+  // ---- a look may draw the two sides DIFFERENTLY, and must say so ---------
+  // ⚠️ Potions & Pixels pours one side and pixelates the other, which is the only
+  // reason `team` is in the signature. A look that branches on it without setting
+  // `perTeam` would render two different tells behind a picker tile that shows one.
+  const teamShot = (key, team) => {
+    c.fillStyle = '#7f7f7f'; c.fillRect(0,0,240,240);
+    M.TRAIL_LOOKS[key].draw(c, pts, pts.length, '#ff3b6b', 15, team);
+    return c.getImageData(0,0,240,240).data.join(',');
+  };
+  o.branching = o.keys.filter(k => teamShot(k, 0) !== teamShot(k, 1));
+  o.declared  = o.keys.filter(k => !!M.TRAIL_LOOKS[k].perTeam);
+  o.perTeamDeclared = JSON.stringify(o.branching.sort()) === JSON.stringify(o.declared.sort());
+  o.hasAPairing = o.declared.length > 0;
+
   // ---- every look has a picker swatch, through the real painter ------------
   o.noSwatch = o.keys.filter(k => M.slotSwatch('trail', k) === null);
 
@@ -149,6 +163,8 @@ ok(r.hasNone, 'there is no way to turn the player tell off');
 ok(r.named, 'a trail look has no name, so its tile has no label');
 ok(r.everyLookDraws, `a look drew nothing, or "none" drew something: ${JSON.stringify(r.ink)}`);
 ok(r.looksDiffer, 'two trail looks render identically — the slot is a list of one thing wearing several names');
+ok(r.hasAPairing, 'no trail look draws the two sides differently, so the team argument in the signature is dead weight');
+ok(r.perTeamDeclared, `a look branches on the team without declaring perTeam (or the other way round): branching ${JSON.stringify(r.branching)}, declared ${JSON.stringify(r.declared)} — the picker tile shows one run unless it is told there are two`);
 ok(r.noSwatch.length === 0, `trail looks with no picker swatch: ${JSON.stringify(r.noSwatch)}`);
 ok(r.recorded > 20, `only ${r.recorded} dots were ever recorded — the sampling check below is comparing two empty lists`);
 ok(r.samplingIsShared, 'changing the LOOK changed what was recorded — spacing and fade belong to advanceTrails, which runs in the step loop, and the length of a tell is a read rather than a decoration');

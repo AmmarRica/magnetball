@@ -141,10 +141,15 @@ Three findings, two of them real bugs that shipped.
   real click path in `menufind` (everything else drove `noteRecent` directly, which proves the
   store and not the wiring).
 
-- [ ] ⚠️ **An unidentified flaky suite.** Two full runs this session reported 59/60 and 61/62
-  and both passed on immediate re-run, but neither run's output was captured so the suite was
-  never named. Four captured full runs since have been clean. An intermittent failure nobody
-  can name is a liability — next time a run goes red, keep the output.
+- [ ] ⚠️ **`contrast` is the flaky suite.** Named at last. Two earlier full runs reported
+  59/60 and 61/62 with the output lost; a run on 2026-08-08 went red on `contrast` at 75.8s
+  and the captured output held exactly ONE entry — the suite's own sabotage probe
+  (`#3a3a3a` on `#333333`, ratio 1.11), which it plants on purpose to prove the scanner
+  catches a low-contrast label. Standalone and on the very next full run it reported ALL
+  PASS with the same probe present. So the probe is being counted as a real finding
+  sometimes and not others, which points at the probe's cleanup racing the scan rather
+  than at any theme's colours. It is now the slowest suite (19 themes) and the only one
+  that plants a control it must then exclude — look there first.
 
 ## 🧤 Goal box: one keeper, one attacker
 - [x] A team could park its whole defence on its own line, and the attack could bury the keeper
