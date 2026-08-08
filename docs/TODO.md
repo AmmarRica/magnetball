@@ -67,6 +67,59 @@ _Current build: **v20260806.0620PM** (shown under the title; bump `VERSION` in `
   sixteen at ANY density — the pitch stayed stippled at halfway where the ramp says clear.
   The threshold is `(B + 0.5)/16`.
 
+## 🔍 UX review — measured, not guessed (390×844 phone unless stated)
+
+Everything below was measured on the shipped page, not eyeballed. Ranked by how many
+people it affects and how badly.
+
+### A. Tap targets under the 44px floor — 6 kinds
+The accessibility floor for a touch target is 44px. Measured heights:
+- [ ] **`infobtn` — 20px**, and there are 14 of them. The worst by a distance, and it is the
+  control that reveals the help text, so the thing a confused player reaches for is the
+  hardest thing on the page to hit. Fix by padding the hit area, not the glyph.
+- [ ] **`jumpchip` — 27px** (the section nav row) and **`subchip` — 30px** (the sub-tabs).
+  Both are primary navigation and both are used constantly.
+- [ ] **Map-vote thumbs — 47×31** on the result screen.
+- [ ] **`#resetLook` — 26px.**
+- [ ] **HUD pause / fullscreen — 40×40**, just under, and they sit next to a live ball.
+- [ ] ⚠️ Check the range **sliders** separately: the element box measures 6px tall, but the
+  browser gives the thumb its own hit area — measure the THUMB before changing anything, or
+  this is a fix for a problem that isn't there.
+
+### B. Two cards are still long enough to need tabs
+Card height when open, in screenfuls: **Game Feel 1.9**, **Sound 1.8**, theme 1.1, player 0.8,
+everything else ≤ 0.7. Player and Theme were fixed by tabbing them and the machinery already
+exists (`SUBTABS`, `showSubTab`, sticky chip row).
+- [ ] **Game Feel → tabs.** Natural groups already exist as subheads: Ball · Player controls ·
+  Presentation.
+- [ ] **Sound → tabs.** 40 controls, one long list.
+
+### C. Landscape phone is the worst layout in the app
+At 844×390 the entire first screen is logo + version + "right thumb moves" + the Record card —
+**KICK OFF is below the fold**, on the screen whose whole job is starting a match.
+- [ ] **Collapse the logo block in a short viewport.** The wordmark, the version line and the
+  controls hint are ~200px of a 390px-tall screen.
+- [ ] ⚠️ And once you scroll, the sticky stack (KICK OFF + chips) takes **31% of the height**.
+  It is sized for a tall screen; it needs to shrink or drop the chips when the viewport is short.
+
+### D. A brand-new player's first interaction is a retention modal
+- [ ] Fresh storage, first ever load: the **Daily Reward** modal is up before the player has
+  touched the ball — "Day 1 · 1-day streak · keep logging in!" over a menu they have not seen.
+  It should wait until after the first match, or at least until the second visit: a streak
+  counter means nothing to someone with nothing to keep.
+
+### E. Still shipping two dead controls
+- [ ] The Online card's **Host / Join** tiles both read "soon". Already listed further down;
+  repeated here because it is the only thing in the menu that cannot be pressed.
+
+### What the review found NOT to be a problem
+Worth recording so nobody re-checks: **no horizontal overflow** anywhere in the menu; the pause
+and result buttons are a uniform **260×55**; the result screen fits **one screen**; total
+control count is 551 (player 226, theme 106, match 95) but all of it is now behind accordions,
+tabs or search.
+
+---
+
 ## 🧭 UI/UX pass (approved plan, one change at a time)
 - [x] **4. Help text is progressive.** One component (`buildHintToggles`) folds every help
   paragraph behind an info toggle on its label. No copy deleted or rewritten — folded verbatim,
@@ -79,7 +132,10 @@ _Current build: **v20260806.0620PM** (shown under the title; bump `VERSION` in `
   option (`Controllers` / `Everyone` / `Skip`); the default is the old behaviour exactly.
   Routes through `lobbyStart()`, so it cannot disagree with the on-screen side preview.
 - [ ] 2. Dead controls · 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
-- [ ] 7. Search: help text, synonyms, fuzzy · 8. Reduce motion · 10. Polish batch
+- [ ] 7. Search: help text, synonyms, fuzzy · 10. Polish batch
+- [ ] 8. Reduce motion — ⚠️ PARTLY DONE. `prefers-reduced-motion` switches the tilt parallax
+  off, but nothing else honours it: screen shake, the goal camera, hit stop, the goal slow-mo,
+  auto-replay and every animated field all still run. One helper the whole lot reads.
 - [ ] 9. Match flow timers. Owner's answers: post-match timer STAYS wall-clock (the stats
   screen is a paused state, so stepping the sim behind it is risk with no determinism gain);
   post-match goes to DEMO, with a flashing DEMO tag bottom-right, keeping court and theme.
