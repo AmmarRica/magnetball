@@ -1396,10 +1396,10 @@
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
       <div style="height:10px"></div>
       <label class="field">Goal zoom <small id="goalZoomVal" style="color:var(--accent)"></small></label>
-      <input id="goalZoom" class="slider" type="range" min="100" max="800" step="10" />
+      <input id="goalZoom" class="slider" type="range" min="100" max="800" step="5" />
       <div style="height:6px"></div>
       <label class="field">Goal zoom speed <small id="goalZoomSpdVal" style="color:var(--accent)"></small></label>
-      <input id="goalZoomSpd" class="slider" type="range" min="20" max="300" step="5" />
+      <input id="goalZoomSpd" class="slider" type="range" min="5" max="300" step="5" />
       <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes — lower is slower. Both ride the Screen shake &amp; effects toggle.</div>
       <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
@@ -2489,7 +2489,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
-            goalZoom:500, goalZoomSpd:115,      // goal camera: 5.0x over 1.15s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            goalZoom:105, goalZoomSpd:10,       // goal camera: 1.05x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             look: { palette:'neon', field:'none', discs:'none', ball:'classic', trail:'dots' },
@@ -3568,6 +3568,7 @@ function normalizeLook(){
   if (!TRAIL_LOOKS[L.trail]) L.trail = d.trail;
   if (!THEMES[L.palette]) L.palette = d.palette;
   normalizePad();
+  normalizeGoalCam();
 }
 // ⚠️ The shipped default for kick used to be the literal index 0, which is A only
 // under the STANDARD Gamepad mapping — on a pad that reports something else it pointed
@@ -3576,6 +3577,15 @@ function normalizeLook(){
 // is folded to it. That is safe rather than presumptuous: 0 is in the fallback set, so
 // A still kicks on every standard pad, and nobody deliberately binds kick to the button
 // it was already bound to by default.
+// ⚠️ The old shipped goal camera was 5.0x over 1.15s, which is most of the pitch gone
+// and most of the celebration spent travelling. A save carrying exactly those two
+// values gets the new defaults; anything else the player has chosen is left alone.
+function normalizeGoalCam(){
+  const d = defaultSel();
+  if (sel.goalZoom === 500 && sel.goalZoomSpd === 115){
+    sel.goalZoom = d.goalZoom; sel.goalZoomSpd = d.goalZoomSpd;
+  }
+}
 function normalizePad(){
   const p = sel.pad = Object.assign({}, defaultSel().pad, sel.pad || {});
   if (p.kick === 0 && !p.kickBound) p.kick = null;
@@ -3607,11 +3617,16 @@ const TRAP = { max:0.5 };                // ball stays stuck for at most half a 
 // down the file is still in the temporal dead zone at that point — which took the
 // whole page down with "Cannot access 'GOALCAM' before initialization".
 const GOALCAM = {
-  zoom:    5.0,    // DEFAULT magnification: the view covers 0.2x of what it did
-  inSecs:  1.15,   // DEFAULT sim-seconds to get there. The goal state lasts 1.8.
+  // ⚠️ A 5% push, arriving in a tenth of a second. It used to be 5.0x over 1.15s,
+  // which is two different mistakes: 5x is most of the pitch gone, and 1.15s of a
+  // 1.8s goal state is spent travelling, so the thing that reads is the MOVE rather
+  // than the moment. A goal camera should register the instant the ball crosses and
+  // then hold — the slider still goes to 8x for anyone who wants the old behaviour.
+  zoom:    1.05,   // DEFAULT magnification: 5% closer
+  inSecs:  0.10,   // DEFAULT sim-seconds to get there — six frames, so it lands at once
   outSecs: 0.5,    // sim-seconds to ease back once the celebration is over
   zoomMin: 1.0, zoomMax: 8.0,      // slider range — 1.0x is "no push at all"
-  spdMin:  0.2, spdMax:  3.0,      // slider range, in sim-seconds for the push in
+  spdMin:  0.05, spdMax: 3.0,      // slider range, in sim-seconds for the push in
 };
 // Both are player dials. Stored as ints so the sliders stay integer-friendly, the
 // same shape the feel sliders use.
@@ -5750,8 +5765,12 @@ if (mspeedEl){
 // The goal camera's two dials, wired the same way. Read through goalZoom() /
 // goalZoomSecs() rather than off sel directly, so the clamp and the default live in
 // one place and a synced value from /settings can't push the camera out of range.
+// ⚠️ A percentage below 1.5x. "1.1×" for a 5% push is a rounding error presented as
+// a setting — at this end of the range the number the player cares about is the
+// percent, and at the other end it is the multiple.
 function goalZoomLabel(){ const z = goalZoom();
-  return z <= 1.0001 ? 'off' : z.toFixed(1) + '×'; }
+  if (z <= 1.0001) return 'off';
+  return z < 1.5 ? '+' + Math.round((z - 1) * 100) + '%' : z.toFixed(1) + '×'; }
 function goalSpeedLabel(){ return goalZoomSecs().toFixed(2) + 's'; }
 function syncGoalCamSliders(){
   const z=$('goalZoom'), zv=$('goalZoomVal'), sp=$('goalZoomSpd'), sv=$('goalZoomSpdVal');
@@ -8166,11 +8185,21 @@ function drawReplayFrame(f){
     players: world.players.map((pl,i)=>({ ...pl, x:f.p[i].x, y:f.p[i].y, kick:f.p[i].k, trap:false, chargeT:0 })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
+  // ⚠️ The SAME rotation render() applies. Deck view turns the pitch a quarter-turn,
+  // and this drew it un-rotated — so on a Steam Deck the replay came back at ninety
+  // degrees to the match it was a replay OF. The transform belongs here rather than
+  // inside drawPitch, because drawPitch is called from both paths and render() already
+  // owns its own copy.
+  ctx.save();
+  if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
   drawPitch(fake); drawBall(fake); drawDiscs(fake);
+  ctx.restore();
   // Big, centred REPLAY label + skip hint so it's clear what's happening.
   // Centre on the PITCH (wx/wy(0)), not the raw canvas — a docked desktop panel
   // insets the pitch to the right, so cw/2 would sit left of the play area.
-  const cx = wx(0), cy = wy(0);
+  // ⚠️ Outside the rotation, and placed through screenPt: the label is UI, so it stays
+  // the right way up while the pitch behind it turns.
+  const [cx, cy] = screenPt(wx(0), wy(0));
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.save();
   ctx.shadowColor='rgba(0,0,0,.85)'; ctx.shadowBlur=14;

@@ -456,6 +456,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   are pushed in for real.
 - **Replays:** rolling `repBuf`; `repOnGoal` freezes it; `playReplay` re-renders (skippable);
   `saveClip` records via `MediaRecorder`.
+  ⚠️ `drawReplayFrame` applies **the same `cam.rot` transform `render()` does**. Deck view turns
+  the pitch a quarter-turn and the replay drew it un-rotated, so on a Steam Deck the replay came
+  back at ninety degrees to the match it was a replay OF. The transform lives at the two call
+  sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
+  **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
+  up while the pitch behind it turns.
 - **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
   ⚠️ Start used to be bound to a gamepad button or the Enter key and nothing else, so in
   cocktail — which forces the lobby whatever is connected — a touch-only player could not
@@ -529,7 +535,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   fetch is an HTTP directive and does not bypass a worker. `tests/swupdate.mjs` registers the real
   worker against a temp site, changes the file, and checks the settings route sees the new build.
 - **Goal camera:** on a goal the view pushes in to `goalZoom()` (a player dial; `GOALCAM.zoom` is only the default) on whoever last touched
-  the ball and eases back when the celebration ends. Render only — it moves `cam`, which no
+  the ball and eases back when the celebration ends. ⚠️ The default is a **5% push arriving in
+  0.10s** — six frames, so it lands as the ball crosses. It was 5.0× over 1.15s, which is two
+  mistakes at once: 5× is most of the pitch gone, and 1.15s of a 1.8s goal state is spent
+  travelling, so what read was the MOVE rather than the moment. The slider still goes to 8× for
+  anyone who wants the old behaviour, `goalZoomLabel()` says `+5%` below 1.5× (a "1.1×" label for
+  a 5% push is a rounding error presented as a setting), and `normalizeGoalCam()` folds a save
+  still holding exactly the old 500/115 to the new defaults. Render only — it moves `cam`, which no
   physics, hit test or bot reads, and `tests/goalcam.mjs` proves the world is bit-identical
   with it running. ⚠️ Advanced in `advanceGoalCam()` next to `decayJuice()`, **never in a
   draw** (the trails rule); being step-locked also means the goal slow-mo stretches it.
