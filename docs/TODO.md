@@ -328,6 +328,52 @@ Three findings, two of them real bugs that shipped.
 
 ---
 
+## 🧭 Four reported items
+- [x] **"The kick off button is still under other tabs."** Literal: the jump-to chip row sat
+  ABOVE the Match card, so once both pinned, KICK OFF was underneath a row of nav chips. The
+  stack is **KICK OFF → chips → section headers** now.
+- [x] ⚠️ And `top:0` alone was not enough. Sticky is measured from the scroll container's
+  PADDING box, so `.screen`'s 26px of top padding left a band above the pinned bar that every
+  tile and chip scrolled through — the same bug wearing a different hat. The bar is pulled up by
+  that padding and carries it itself, and `syncSticky` subtracts it when measuring or a 26px gap
+  opens between the bar and the chips.
+- [x] **Frame rate above the version**, while the debug readout is on. ⚠️ The one timer in the
+  file that is deliberately NOT step-locked: the sim rate is pinned at 1/60 by design, so a
+  step-locked counter would read a flat 60 on every machine and answer nothing. Drawn as the last
+  row of the debug panel, because `drawDebug` runs after `drawBuildTag` and its plate would
+  otherwise be painted straight over the line.
+- [x] **The Theme card is tabbed.** Six slot pickers stacked meant scrolling past five to reach
+  the one you wanted, and the tiles are big. ⚠️ Both the chips and the panes come from
+  `SLOT_KEYS`, so a new slot cannot arrive with a pane and no chip. ⚠️ `buildSubTabs()` runs at
+  the end of `buildSettings()` too — that function rebuilds the panes on every slot change, so
+  the fresh ones have no `.on` class and the card showed nothing at all.
+- [x] **Warp is inverted: black court, white surround.** It shipped the other way round, which
+  put the tunnel's stars on a white court — a starfield reads as a night sky, and a night sky is
+  not white. The HUD and the thumb pads are the exception that goes dark, because they are the
+  only marks over the white now.
+- [x] **Sparks reverse colour across the touchline** (`flipFx` + `invertInk`). On a two-tone
+  palette a spark keeps its colour and vanishes into whichever side matches it; drawing it as its
+  own negative outside the court makes the crossing the effect. Opt-in per palette — turning an
+  orange spark cyan on a full-colour theme is a bug, not an effect.
+- [x] ⚠️ Which surfaced `padInk()`: the thumb markers were hardcoded WHITE, and Highlighter,
+  Sorry!, Specimen and now Warp all letterbox in a light colour. A white ring at 0.16 alpha on a
+  white surround is nothing at all — the resting controls were not there on four palettes.
+
+---
+
+## 🪤 Three test traps found while doing the above
+- [x] **`applyBundle('classic')` does nothing** — there is no `classic` palette. Several suites
+  call it believing it resets the theme, and it silently leaves the last one applied. Recorded in
+  `tests/README.md`; new code uses a real key.
+- [x] **`spawnKickFx` adds SHAKE**, and shake makes `render()` non-idempotent — so a block that
+  spawns sparks has to decay it afterwards as well as before. Three unrelated blocks failed on
+  this, none of whose messages pointed anywhere near the cause.
+- [x] **`getImageData` outside the canvas returns zeros**, which reads as "that area is black".
+  A world point past the touchline lands off the bitmap at some viewports; sample in screen space
+  and clamp.
+
+---
+
 ## 🥅 Goal box: half a second of grace
 - [x] **Nothing touches you for the first half second.** Being shoved the instant you clipped
   the corner of the box made a run past the goal feel like the pitch was fighting you. No

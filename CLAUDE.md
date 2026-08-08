@@ -612,6 +612,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   those permanently expanded. ⚠️ `class="hint always"` keeps gameplay-affecting help open;
   whether a match is comparable is not a detail to hide. Never persisted: every visit starts
   collapsed. `tests/hints.mjs`.
+- **Theme card is TABBED** — `SUBTABS.theme` is derived from `SLOT_KEYS`, so the chips and the
+  `.subpane`s come from one list and a new slot can't arrive with a pane and no chip (which
+  would hide its controls while `audit` and the menu search still found them). ⚠️ `buildSubTabs()`
+  is called at the END of `buildSettings()` as well as at boot: `buildSettings` rebuilds those
+  panes from scratch on every slot change, so the fresh panes have no `.on` class and the card
+  showed nothing at all.
+- **FPS readout:** `fps` / `trackFps(dt)`, the last row of `drawDebug`'s panel so it lands
+  directly above the version tag. ⚠️ The one timer here that is deliberately **not step-locked**
+  — it is counted in `loop()` off wall-clock, because the sim rate is pinned at 1/60 by design
+  and a step-locked counter would read a flat 60 on every machine. Smoothed; a raw per-frame
+  reciprocal jitters ±8. Inside the panel rather than beside it because `drawDebug` runs after
+  `drawBuildTag` and its plate would paint over the line.
+- **`padInk()`** picks the thumb-marker ink from `TH.fieldBg`'s lightness. ⚠️ They were
+  hardcoded white, and Highlighter, Sorry!, Specimen and now Warp all letterbox in a light
+  colour — a white ring at 0.16 alpha on a white surround is nothing at all, so the resting
+  controls simply were not there on four palettes.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress
