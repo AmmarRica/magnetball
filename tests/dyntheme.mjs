@@ -27,6 +27,20 @@ const r = await p.evaluate(async ()=>{
     let h=0; for(let i=0;i<d.length;i+=97) h=(h*31+d[i])|0; return h; };
   const at = (wxv,wyv) => { const [sx,sy]=M.screenPt(M.wx(wxv), M.wy(wyv));
     const d=c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data; return [d[0],d[1],d[2]]; };
+  // ⚠️ SCREEN space, clamped into the canvas. A world point "60 units past the touchline" can
+  // land off the bitmap depending on the viewport and cam.s, and getImageData outside the
+  // canvas returns zeros — which reads as "that area is black" and is the most convincing
+  // wrong answer available. Two checks were failing on exactly this.
+  const atScreen = (sx, sy) => {
+    const x = Math.max(1, Math.min(cv.width - 2, Math.round(sx*DPR)));
+    const y = Math.max(1, Math.min(cv.height - 2, Math.round(sy*DPR)));
+    const d = c2.getImageData(x, y, 1, 1).data; return [d[0],d[1],d[2]];
+  };
+  // Just outside the touchline, on the surround, guaranteed on the bitmap.
+  const atSurround = (w2) => {
+    const [px, py] = M.screenPt(M.wx(w2.bounds.halfW), M.wy(0));
+    return atScreen(px + 10, py);
+  };
 
   const setup = th => {
     M.applyBundle(th);
@@ -62,9 +76,75 @@ const r = await p.evaluate(async ()=>{
   o.samples = gs.length;
   o.allGrey = gs.every(([R,G,B]) => R===G && G===B);
   o.offenders = gs.filter(([R,G,B]) => !(R===G && G===B)).slice(0,3);
-  o.fieldIsLight = at(f.W*0.42, f.L*0.42)[0] > 200;    // white field, away from the lines
-  // The boundary line, sampled ON it, is black.
-  o.lineIsBlack = at(0, -f.L/2)[0] < 70;
+  // ⚠️ INVERTED: the COURT is black and the SURROUND is white. It shipped the other way
+  // round, which put the tunnel's stars on a white court — a starfield reads as a night sky,
+  // and a night sky is not white.
+  o.courtIsDark    = at(f.W*0.42, f.L*0.42)[0] < 60;   // black court, away from the lines
+  o.surroundSample = atSurround(w);
+  o.surroundIsLight = o.surroundSample[0] > 200;       // ...and white past the touchline
+  // The boundary line, sampled ON it, is light so it reads on the black court.
+  o.lineIsLight = at(0, -f.L/2)[0] > 180;
+
+  // ---- sparks reverse colour across the touchline --------------------------
+  // ⚠️ On a two-tone palette a spark keeps its colour over the line and vanishes into
+  // whichever side matches it. Measured as the SAME burst on both sides of the touchline: one
+  // inside the black court, one out on the white surround, both asked for in one ink.
+  o.invSamples = ['#ffffff', '#000000', '#e05a5a'].map(c => [c, M.invertInk(c)]);
+  o.invertIsAnInverse = M.invertInk('#ffffff') === '#000000' &&
+                        M.invertInk('#000000') === '#ffffff' &&
+                        M.invertInk(M.invertInk('#e05a5a')) === '#e05a5a';
+  {
+    const hw = w.bounds.halfW;
+    for (let i=0;i<200;i++) M.decayJuice();          // shake makes render non-idempotent
+    M.resetFx(3);
+    M.spawnKickFx(0, 0, 1, 0, 9);                    // inside the court
+    M.spawnKickFx(hw + 22, 0, 1, 0, 9);              // outside, past the touchline
+    const inks = new Set(M.fx.map(q=>q.c));
+    o.fxSameInk = inks.size === 1;                   // one ink asked for, both bursts
+    M.computeCam(); M.render();
+    // The brightest and darkest pixel each burst actually painted.
+    // A window around a screen point, clamped onto the bitmap for the same reason as above.
+    const scan = (sx, sy) => {
+      const n = Math.round(26*DPR);
+      const x = Math.max(0, Math.min(cv.width - n, Math.round(sx*DPR) - n/2));
+      const y = Math.max(0, Math.min(cv.height - n, Math.round(sy*DPR) - n/2));
+      const d = c2.getImageData(x, y, n, n).data;
+      let lo=999, hi=-1;
+      for (let k=0;k<d.length;k+=4){ const l=d[k]; if(l<lo) lo=l; if(l>hi) hi=l; }
+      return [lo, hi];
+    };
+    const [ix0, iy0] = M.screenPt(M.wx(0), M.wy(0));
+    const [ox0, oy0] = M.screenPt(M.wx(hw), M.wy(0));
+    o.fxInside  = scan(ix0, iy0);                    // white sparks on a black court
+    o.fxOutside = scan(ox0 + 22, oy0);               // ...black sparks on a white surround
+    // Inside: something much brighter than the court. Outside: something much darker
+    // than the surround. Neither is possible without the flip.
+    o.fxFlips = o.fxInside[1] > 180 && o.fxOutside[0] < 80;
+    // ...and a palette that never asked for it is left alone.
+    // ⚠️ 'grass' and NOT 'classic'. There is no `classic` palette — `applyBundle('classic')` is
+    // a silent no-op, so this block was still running on warp and reported that a flip happened
+    // where none was asked for. Several suites use that call believing it resets the theme.
+    M.applyBundle('grass');
+    o.plainFlip = !!M.TH.flipFx;
+    for (let i=0;i<200;i++) M.decayJuice();
+    M.resetFx(3);
+    M.spawnKickFx(w.bounds.halfW + 22, 0, 1, 0, 9);
+    M.computeCam(); M.render();
+    // Measured on PIXELS, not on the particle's own `c`: the flip happens at DRAW time, so
+    // comparing the spawned colours would pass whatever the renderer did.
+    const [px0, py0] = M.screenPt(M.wx(w.bounds.halfW), M.wy(0));
+    o.fxPlain = scan(px0 + 22, py0);
+    o.fxOnlyWhenAsked = !o.plainFlip && o.fxPlain[1] > 180;   // still a WHITE spark out there
+    // ⚠️ CLEAN UP AFTER THE SPARKS, both ways round. They only age in `advanceFx`, which lives
+    // in the step loop, so anything left alive is drawn over every later pixel check — AND
+    // `spawnKickFx` calls `addShake`, which leaves render() jittering by Math.random() on every
+    // frame and therefore no longer idempotent. That second one broke three unrelated blocks
+    // (Highlighter's discs, Abduction's fence, Asteroids' still-frame check) and none of the
+    // messages pointed anywhere near here.
+    M.fx.length = 0;
+    for (let i=0;i<200;i++) M.decayJuice();
+    M.applyBundle('warp');
+  }
 
   // ...including the players. Put one of each side on the pitch and read them.
   w.players[0].x=-60; w.players[0].y=60; w.players[0].team=0;
@@ -917,8 +997,13 @@ ok(r.cutCornerIsNotCourt, `court colour is stranded in a chamfered field's cut c
 ok(r.stillWithoutStep, 'the field advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it fast');
 ok(r.movesWithStep, 'the starfield never moved when stepped');
 ok(r.samples >= 60, `too few samples to mean anything: ${r.samples}`);
-ok(r.fieldIsLight, 'the warp field is not light, so black lines could not read on it');
-ok(r.lineIsBlack, 'the warp pitch lines are not black');
+ok(r.courtIsDark, 'the warp COURT is not black — a starfield reads as a night sky, and a night sky is not white');
+ok(r.surroundIsLight, `the area OUTSIDE the warp pitch is not white (${JSON.stringify(r.surroundSample)}), so the inversion is only half done`);
+ok(r.lineIsLight, 'the warp pitch lines are not light, so they cannot read on a black court');
+ok(r.fxFlips, `a spark did not reverse colour across the touchline: inside ${JSON.stringify(r.fxInside)} vs outside ${JSON.stringify(r.fxOutside)} — on a two-tone palette a spark keeps its colour and vanishes into whichever side matches it`);
+ok(r.fxSameInk, 'the two spark bursts were not asked for in the same ink, so the comparison proves nothing');
+ok(r.fxOnlyWhenAsked, `sparks did not stay their own colour on a palette that never asked to flip (${JSON.stringify(r.fxPlain)}) — inverting an orange spark to cyan on a full-colour theme is a bug, not an effect`);
+ok(r.invertIsAnInverse, `invertInk is not an inverse: ${JSON.stringify(r.invSamples)}`);
 ok(r.allGrey, `warp is not black and white — coloured pixels found: ${JSON.stringify(r.offenders)}`);
 ok(r.discsGrey, 'warp players are still coloured — the profile colour leaked through');
 ok(r.sidesDiffer, 'the two sides are indistinguishable in warp');

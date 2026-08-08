@@ -254,7 +254,7 @@
       /* Pins directly under the KICK OFF bar, ABOVE the section headers — which is
          why syncSticky folds this height into --sticky-top. Opaque: content scrolls
          underneath it, and a see-through bar over a grid of tiles reads as a bug. */
-      position: sticky; top: 0; z-index: 7;
+      position: sticky; top: var(--kick-h, 0px); z-index: 6;
       background: var(--bg); border-bottom: 1px solid var(--edge);
       scrollbar-width: none; }
     #jumpBar::-webkit-scrollbar { display: none; }
@@ -336,7 +336,16 @@
       /* ...and it keeps the CARD's width, not the column's: every other section is a
          460px card and a hero bar 20px wider than all of them reads as misaligned. */
       align-self: center; width: 100%; max-width: 460px;
-      top: var(--jump-h, 0px); z-index: 6; gap: 8px; padding: 0; margin-bottom: 0;
+      /* ⚠️ Topmost sticky layer, and pulled UP by the scroll container's own top padding.
+         It used to pin below the jump bar, which put the one button everything else is in
+         service of underneath a row of nav chips. And `top:0` alone is not enough: sticky is
+         measured from the container's PADDING box, so `.screen`'s 26px of top padding left a
+         band above the pinned bar that every tile and chip scrolled through — which reads as
+         exactly the same bug. The negative top closes it, and the padding is added back as
+         the bar's own so it does not sit flush against the notch. */
+      top: calc(-1 * max(26px, env(safe-area-inset-top)));
+      padding-top: max(26px, env(safe-area-inset-top));
+      z-index: 7; gap: 8px; padding-bottom: 0; margin-bottom: 0;
       background: linear-gradient(rgba(53,255,135,.15), rgba(53,255,135,.15)), var(--bg);
     }
     #matchCard > h2::after { content: none; }     /* the chevron here is a real control */
@@ -1118,11 +1127,6 @@
     <!-- The Match section's header IS the KICK OFF button: collapsed it is just the
          green bar you press to play, and the chevron on its right opens the match
          options underneath (mode, field, difficulty, …). -->
-    <!-- Jump straight to a section instead of scrolling past the ones you don't want.
-         Built from the cards themselves, so it can't list a section that isn't there.
-         Sits ABOVE the Match card so the sticky things stack instead of colliding:
-         chips at the top, KICK OFF under them, section headers under that. -->
-    <div id="jumpBar"></div>
     <!-- Find a control by name instead of remembering which card it lives on. The
          index is built from the DOM on every open, so it can't offer something that
          isn't there and can't miss something new. -->
@@ -1230,6 +1234,13 @@
          section like everything else, so the main menu is the match and a short stack
          of cards. The three groups inside it stay — "play something else" and "look at
          a number" should not cost the same glance. -->
+    <!-- Jump straight to a section instead of scrolling past the ones you don't want.
+         Built from the cards themselves, so it can't list a section that isn't there.
+         ⚠️ BELOW the Match card, not above it. It shipped above, so once both pinned the
+         KICK OFF bar sat UNDERNEATH the chip row — which is exactly how it was reported:
+         "the kick off button is still under other tabs". The primary action is the topmost
+         sticky thing now, and the sticky stack reads KICK OFF → chips → section headers. -->
+    <div id="jumpBar"></div>
     <div class="card collapsible collapsed" data-sec="more">
       <h2>More</h2>
     <div class="navgroup">
@@ -1353,6 +1364,11 @@
       <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
       <div class="opts tilewrap" id="themePick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every slot below in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them.</div>
+      <!-- ⚠️ One slot at a time behind a chip row. Six pickers stacked meant scrolling past
+           five of them to reach the one you wanted, and the tiles are big. Both the chips and
+           the panes are generated from SLOT_KEYS, so a new slot cannot arrive with a pane and
+           no chip — which would hide its controls while querySelectorAll still found them. -->
+      <div class="subtabs" data-tabs="theme"></div>
       <div id="slotRows"></div>
     </div>
 
@@ -2600,15 +2616,29 @@ const THEMES = {
       bg:'#000000', panel:'rgba(255,255,255,0.07)', edge:'#5a5a5a', text:'#ffffff', muted:'#b4b4b4',
       red:'#ffffff', blue:'#9a9a9a', cyan:'#ffffff', magenta:'#d0d0d0', green:'#ffffff', yellow:'#e6e6e6',
       accent:'#ffffff', go:'#d8d8d8', field:'#101010', onAccent:'#000000' },
-    pitch: { glow:false, fieldBg:'#000000', court:'#ffffff', stripeA:'#ffffff', stripeB:'#ffffff',
-      netPocket:'rgba(0,0,0,0.12)', line:'#000000', centerDot:'#000000',
-      netMesh:'rgba(0,0,0,0.45)', post:'#000000', teamRed:'#000000', teamBlue:'#8c8c8c',
-      discRim:'#000000', kickRing:'#000000', kickText:'#ffffff', cbRing:'#000000',
-      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#000000', nameText:'#ffffff',
-      shadow:'rgba(0,0,0,0.22)', ballRim:'#000000', ball:'#000000', ballSpot:'#ffffff', trailRGB:'0,0,0',
-      obstacle:'#000000', good:'#000000', warn:'#4d4d4d', dim:'#9a9a9a', cone:'#000000',
-      hudText:'#ffffff', hudSub:'#c8c8c8', accent:'#ffffff', padRing:'rgba(255,255,255,0.7)',
-      dynMark:'#000000' },   // the stars themselves — black, so they read on the white field
+    // ⚠️ INVERTED: the PITCH is black and everything OUTSIDE it is white. It shipped the other
+    // way round, which put the tunnel's stars on a white court — a starfield reads as a night
+    // sky, and a night sky is not white. Every ink below follows from that one decision: marks
+    // on the court are light, and marks that live on the SURROUND (the HUD, the touch pads)
+    // are dark, because they are the only things over the white now.
+    pitch: { glow:false, fieldBg:'#ffffff', court:'#000000', stripeA:'#000000', stripeB:'#000000',
+      netPocket:'rgba(255,255,255,0.12)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.45)', post:'#ffffff', teamRed:'#ffffff', teamBlue:'#8c8c8c',
+      discRim:'#000000', kickRing:'#ffffff', kickText:'#000000', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#ffffff', nameText:'#000000',
+      // ⚠️ A LIGHT shadow. On a black court a black shadow is not a subtle shadow, it is no
+      // shadow at all — and the gap between body and shadow is the tilt parallax's height cue.
+      shadow:'rgba(255,255,255,0.20)', ballRim:'#ffffff', ball:'#ffffff', ballSpot:'#000000',
+      trailRGB:'255,255,255',
+      obstacle:'#ffffff', good:'#ffffff', warn:'#b4b4b4', dim:'#6a6a6a', cone:'#ffffff',
+      // ⚠️ The HUD and the thumb pads sit on the SURROUND, which is white now, so these two
+      // are the exception that has to go dark.
+      hudText:'#101010', hudSub:'#4a4a4a', accent:'#ffffff', padRing:'rgba(0,0,0,0.55)',
+      dynMark:'#ffffff',    // the stars themselves — white, on the black court
+      // ⚠️ Sparks flip to their opposite the moment they leave the court. See drawFx: on a
+      // two-tone theme a white spark is invisible the instant it crosses the touchline, and
+      // the crossing itself becomes the effect.
+      flipFx:true },
   },
   // Limoncello (#f3e65a) field, black lines, WHITE everywhere else, dithered — and
   // Klein Wave (#315dce) as the second team, both taken from a supplied swatch.
@@ -3162,6 +3192,20 @@ function applyTheme(key){
   r.setProperty('--overlay-yellow', rgbToHex(readableInk(u.yellow, pill)));
 }
 // Turn a #hex colour into an rgba() string at the given alpha (for fills/tints).
+// ⚠️ Photographic negative of an ink, used by the particle flip. Hex only, and anything
+// else is handed straight back: every fx colour in the file is a hex literal or a hex from
+// the palette, and guessing at an rgba() string would be a silent wrong answer rather than a
+// visible no-op. `#rgb` is expanded first, like rgba() does.
+function invertInk(col){
+  let c = (col || '').trim();
+  if (c[0] !== '#') return col;
+  if (c.length === 4) c = '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+  if (c.length !== 7) return col;
+  const n = parseInt(c.slice(1), 16);
+  if (!isFinite(n)) return col;
+  const inv = (~n) & 0xffffff;
+  return '#' + inv.toString(16).padStart(6, '0');
+}
 function rgba(col, a){
   let c = (col||'').trim();
   if (c[0] === '#'){
@@ -6156,6 +6200,10 @@ const SUBTABS = {
            ['animal','🐻 Animals'], ['text','🔢 Text'], ['photo','📷 Photo'], ['eyes','👀 Eyes']],
   match:  [['game','Game','ball'], ['pitch','Pitch','stadium'],
            ['players','Players','gamepad'], ['rules','Rules','clipboard']],
+  // ⚠️ Built from SLOT_KEYS, never a hand-written copy of it: the chips and the panes have to
+  // come from the same list or a new slot arrives with a pane and no chip, and its controls
+  // are then hidden while `audit` and the menu search still find them.
+  theme:  SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label]),
 };
 const subTab = {};                                  // which pane each group is showing
 function showSubTab(group, pane){
@@ -6494,13 +6542,20 @@ function syncSticky(){
   // the other headers overlapping it by the header's own padding.
   const head = document.querySelector('#matchCard > h2'), su = $('setup');
   if (!head || !su) return;
-  // The jump bar pins above the section headers, so they have to start below BOTH
-  // it and the KICK OFF bar — otherwise two sticky things land on the same line.
+  // ⚠️ The stack is KICK OFF → chips → section headers, so the chips start below the KICK
+  // OFF bar and the headers below BOTH. It used to be chips → KICK OFF, which put the one
+  // button everything else serves underneath a row of nav chips.
   const jump = $('jumpBar');
   const jh = jump && jump.offsetParent !== null ? jump.offsetHeight : 0;
+  // ⚠️ The KICK OFF bar is pulled UP by the scroll container's top padding (so nothing can
+  // scroll through a band above it) and carries that padding itself — so its offsetHeight is
+  // that much taller than the space it actually occupies once pinned. Subtracting it is what
+  // stops a 26px gap opening between the bar and the chips below it.
+  const kpad = parseFloat(getComputedStyle(head).paddingTop) || 0;
+  const kh = head.offsetHeight - kpad;
   su.style.setProperty('--jump-h', jh + 'px');
-  su.style.setProperty('--kick-h', head.offsetHeight + 'px');
-  su.style.setProperty('--sticky-top', (head.offsetHeight + jh) + 'px');
+  su.style.setProperty('--kick-h', kh + 'px');
+  su.style.setProperty('--sticky-top', (kh + jh) + 'px');
 }
 syncSticky();
 window.addEventListener('resize', syncSticky);
@@ -7048,14 +7103,18 @@ function buildSettings(){
       // Sound is the one slot that can hold a value no set describes — the Sound
       // card picks categories one at a time. Say Custom rather than throwing on it.
       const curName = S.keys().includes(cur) ? S.name(cur) : 'Custom';
-      const lab=document.createElement('label'); lab.className='field'; lab.style.marginTop='14px';
+      // One PANE per slot, so the chip row above switches between them instead of the
+      // whole lot being stacked six deep.
+      const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.pane=slot;
+      const lab=document.createElement('label'); lab.className='field';
       lab.innerHTML = `${S.emoji} ${S.label} <small style="color:var(--accent);font-weight:400">· ${curName}</small>`;
-      sr.appendChild(lab);
+      pane.appendChild(lab);
       const row=document.createElement('div'); row.className='opts tilewrap'; row.id='slot_'+slot;
-      sr.appendChild(row);
+      pane.appendChild(row);
       buildSlotPicker(slot, row);
       const h=document.createElement('div'); h.className='hint'; h.style.textAlign='left'; h.textContent=S.hint;
-      sr.appendChild(h);
+      pane.appendChild(h);
+      sr.appendChild(pane);
     }
   }
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
@@ -7206,6 +7265,11 @@ function buildSettings(){
   // created by this function, so a one-shot pass at startup left them unclassified
   // and permanently expanded — the exact clutter the component exists to remove.
   buildHintToggles();
+  // ⚠️ Same argument for the sub-tabs: this function REBUILDS the Theme card's panes from
+  // scratch on every slot change, so the freshly made panes have no `.on` class and the card
+  // would show nothing at all. buildSubTabs re-selects the remembered pane (`subTab`), so
+  // changing a ball look leaves you looking at the ball tab rather than at a blank card.
+  buildSubTabs();
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
@@ -8364,6 +8428,18 @@ function decayJuice(){
   flash = flash > 0.01 ? flash * 0.88 : 0;
 }
 
+// ⚠️ FRAME RATE IS A WALL-CLOCK MEASUREMENT, so unlike everything else it is counted in
+// loop() off real time and NOT step-locked — the sim rate is fixed at 1/60 by design, so a
+// step-locked counter would read a flat 60 on every machine and answer nothing. Smoothed,
+// because a raw per-frame reciprocal jitters by ±8 and is unreadable.
+let fps = 0, _fpsT = 0;
+function trackFps(dt){
+  if (dt <= 0) return;
+  const now = 1 / dt;
+  fps = fps ? fps + (now - fps) * 0.09 : now;
+  _fpsT = 0;
+}
+
 // ============================================================
 //  DROP-IN — a controller joins a match already in progress
 // ============================================================
@@ -8437,6 +8513,7 @@ function loop(t){
   if (!lastT) lastT = t;
   let dt = (t - lastT) / 1000; lastT = t;
   if (dt > 0.1) dt = 0.1;               // clamp big gaps
+  trackFps(dt);                         // wall-clock, deliberately not step-locked
   // The result screen is a paused state, so its pad chooser has to poll from here.
   if (paused){ pollOverOptions(); stepResultClock(dt); render(); return; }
   if (hitStop > 0){ hitStop--; render(); return; }   // brief freeze-frame for impact
@@ -12319,6 +12396,11 @@ function drawDebug(w){
     `bcap  ${f.ballcap!=null?f.ballcap:32}   kick ${f.kick!=null?f.kick:55}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
     `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':`trap ${(w.trapMax||TRAP.max).toFixed(2)}s`}   sens ${(sel.sens||1).toFixed(2)}${sel.oneHand?'   1-hand':''}`,
     `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
+    // ⚠️ LAST row, so it lands directly above the version tag — the two together are what you
+    // quote when reporting something, so they belong next to each other rather than at
+    // opposite corners. Inside this panel rather than beside it because drawDebug runs AFTER
+    // drawBuildTag, so its background plate would otherwise be painted over the line.
+    `${Math.round(fps)} fps   ${(1000/Math.max(1,fps)).toFixed(1)}ms`,
   ];
   ctx.save();
   ctx.font = `10px 'Kenney', system-ui, -apple-system, sans-serif`;
@@ -15096,17 +15178,25 @@ function advanceFx(){
 }
 function drawFx(){
   const s=cam.s;
+  // ⚠️ On a two-tone palette a spark keeps its colour across the touchline and vanishes into
+  // whichever side matches it — so `flipFx` themes draw it as its own NEGATIVE once it is off
+  // the court, and the crossing becomes the effect rather than the bug. Opt-in per palette:
+  // inverting a spark on a full-colour theme turns an orange spark cyan for no reason.
+  const flip = !!(TH.flipFx && world && world.bounds);
+  const hw = flip ? world.bounds.halfW : 0, hl = flip ? world.bounds.halfL : 0;
+  const ink = (p) => (flip && (Math.abs(p.x) > hw || Math.abs(p.y) > hl))
+    ? (p._inv || (p._inv = invertInk(p.c))) : p.c;
   for (let i=0;i<fx.length;i++){
     const p=fx[i];
     const a=p.life/p.max;
     if (p.ring){
       const rr = (p.r0 + (p.r1-p.r0)*(1-a)) * Math.max(s,0.6);
-      ctx.globalAlpha=a*0.9; ctx.strokeStyle=p.c; ctx.lineWidth=Math.max(1.5, 2.4*s);
+      ctx.globalAlpha=a*0.9; ctx.strokeStyle=ink(p); ctx.lineWidth=Math.max(1.5, 2.4*s);
       ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), rr, 0, 2*Math.PI); ctx.stroke();
       ctx.globalAlpha=1; continue;
     }
     ctx.globalAlpha=a;
-    ctx.fillStyle=p.c;
+    ctx.fillStyle=ink(p);
     ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), p.r*Math.max(s,0.6)*0.8, 0, 2*Math.PI); ctx.fill();
     ctx.globalAlpha=1;
   }
@@ -15276,9 +15366,9 @@ function drawPad(pad, isP2){
     const rest = restingJoyPos(isP2), [ux, uy] = tiltUI();
     const jx = rest.jx + ux, jy = rest.jy + uy;
     ctx.globalAlpha = 0.16;
-    ring(jx, jy, JOY_R, '#fff', 2);
+    ring(jx, jy, JOY_R, padInk(), 2);
     ctx.globalAlpha = 0.10;
-    dot(jx, jy, JOY_R*0.42, '#fff');
+    dot(jx, jy, JOY_R*0.42, padInk());
     ctx.globalAlpha = 1;
     return;
   }
@@ -15288,6 +15378,12 @@ function drawPad(pad, isP2){
   const kx = bx + pad.dx*JOY_R, ky = by + pad.dy*JOY_R;
   dot(kx,ky,JOY_R*0.42,TH.padRing);
 }
+// ⚠️ The thumb markers sit on the SURROUND, not on the court, so their ink is picked from the
+// surround's lightness instead of being hardcoded white. Highlighter, Sorry! and Specimen all
+// letterbox in a light colour — and a white ring at 0.16 alpha on a white surround is nothing
+// at all, so on those palettes the resting controls simply were not there. Same shape as the
+// UFO craft's detail ink: ask the background, don't assume.
+function padInk(){ return relLum(TH.fieldBg || '#000000') > 0.5 ? '#000000' : '#ffffff'; }
 function restingJoyPos(isP2){
   const m = 70;
   if (isP2) return { jx: m, jy: m };                   // p2 top-left (their right)
@@ -15305,9 +15401,9 @@ function drawKickMarker(pad, isP2){
   // Same neutral treatment as the resting joystick opposite it — a coloured pad
   // read as a live indicator rather than a control you rest a thumb on.
   ctx.globalAlpha = pad.kick ? 0.26 : 0.10;
-  dot(kx, ky, KICK_R, '#ffffff');
+  dot(kx, ky, KICK_R, padInk());
   ctx.globalAlpha = pad.kick ? 0.42 : 0.16;
-  ring(kx, ky, KICK_R, '#ffffff', 2);
+  ring(kx, ky, KICK_R, padInk(), 2);
   ctx.globalAlpha = 1;
   // Charge ring: the WHOLE circle flashes while you hold KICK, faster and brighter
   // as it charges — the same tell the disc wears. This pad was still sweeping round
@@ -15722,7 +15818,8 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
-    advanceFx, get fx(){ return fx; }, resetFx,
+    advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
+    spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
     onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,
     tiltTurf, tiltUI, syncTiltUI, restingJoyPos,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,

@@ -150,6 +150,48 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ---- the FPS readout ---------------------------------------------------------
+// ⚠️ Frame rate is the ONE thing here that is deliberately NOT step-locked. Everything else in
+// this suite exists because a draw-driven timer runs fast on a fast screen — but the sim rate
+// is pinned at 1/60 by design, so a step-locked frame counter would read a flat 60 on every
+// machine and answer nothing at all. It is fed wall-clock deltas and must follow them.
+const fpsR = await p.evaluate(()=>{
+  const M=window.__magnet; const o={};
+  const feed = (hz, n) => { for (let i=0;i<n;i++) M.trackFps(1/hz); return M.fps; };
+  feed(100, 400); o.at100 = Math.round(M.fps);
+  feed(30, 400);  o.at30  = Math.round(M.fps);
+  o.tracksWallClock = o.at100 > 90 && o.at100 < 110 && o.at30 > 27 && o.at30 < 33;
+  // Smoothed: a run of identical frames must not swing the reading about.
+  feed(60, 400);
+  const seen = [];
+  for (let i=0;i<30;i++){ M.trackFps(1/60); seen.push(M.fps); }
+  o.jitter = +(Math.max(...seen) - Math.min(...seen)).toFixed(3);
+  o.smoothed = o.jitter < 1;
+  // ...and it is drawn directly above the version tag, only while the debug readout is on.
+  M.sel.mode='1v1'; M.setMatchSeed(5); M.startMatch();
+  const w=M.world; w.state='play'; w.stateT=2;
+  const cv=document.getElementById('game'), cc=cv.getContext('2d');
+  const DPR=cv.width/cv.clientWidth;
+  // The version line's own row, and the row one line above it.
+  const rowInk = (dy) => {
+    const y = Math.round((cv.clientHeight - M.debugFloor() - 4 + dy) * DPR);
+    const d = cc.getImageData(0, Math.max(0, Math.min(cv.height-1, y)), Math.round(200*DPR), 1).data;
+    let n=0; for (let k=0;k<d.length;k+=4) if (d[k]+d[k+1]+d[k+2] > 90) n++;
+    return n;
+  };
+  M.sel.debug = false; M.computeCam(); M.render();
+  const offAbove = rowInk(-16);
+  M.sel.debug = true;  M.computeCam(); M.render();
+  const onAbove = rowInk(-16);
+  o.hiddenWithoutDebug = offAbove === 0;
+  o.shownWithDebug = onAbove > 6;
+  // The fps row sits ABOVE the version, i.e. at a smaller y.
+  o.fpsBottom = -16; o.verTop = 0;
+  o.aboveVersion = o.fpsBottom < o.verTop && o.shownWithDebug;
+  M.sel.debug = false;
+  return o;
+});
+
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(r.frameCountsDiffer, `the four runs rendered the same number of frames — nothing was varied: ${JSON.stringify(r.byHz.map(x=>x.frames))}`);
@@ -167,9 +209,14 @@ ok(r.inkBehind > 12, `no streak drawn behind the ball (ink ${r.inkBehind}) — t
 ok(r.streakStartsAtDrawnBall, `streak overshoots the drawn ball: ink ${r.inkAhead} at the sim position, ${r.stepTravel} units ahead of where the ball is drawn`);
 ok(r.interpSmoother, `interpolation is not smoothing on-screen motion: judder ${r.judder144} vs raw ${r.judder144Raw}`);
 ok(r.interpNoFreeze, `interpolated frames froze: ${r.frozen144}/${r.frozen144Raw} raw`);
+ok(fpsR.tracksWallClock, `the FPS meter does not follow wall-clock: fed 100Hz it read ${fpsR.at100}, fed 30Hz ${fpsR.at30} — the SIM rate is fixed at 1/60 by design, so a step-locked counter would read a flat 60 on every machine and answer nothing`);
+ok(fpsR.smoothed, `the FPS meter is not smoothed (${fpsR.jitter} spread over steady frames) — a raw per-frame reciprocal jitters by ±8 and is unreadable`);
+ok(fpsR.shownWithDebug, 'the frame rate is not drawn while the debug readout is on');
+ok(fpsR.hiddenWithoutDebug, 'the frame rate is drawn with the debug readout off');
+ok(fpsR.aboveVersion, `the frame rate is not above the version tag (fps row bottom ${fpsR.fpsBottom} vs version top ${fpsR.verTop})`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-console.log(JSON.stringify(r, null, 1));
+console.log(JSON.stringify({ ...r, ...fpsR }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\nsmooth OK');

@@ -18,6 +18,25 @@ node tests/deck.mjs          # a single suite
 
 If you have a browser already on disk, point at it instead of downloading one:
 
+## Three traps that bite every new suite
+
+⚠️ **`applyBundle('classic')` does NOTHING.** There is no `classic` palette — the keys are
+`warp, chalk, pnp, synth, abari, specimen, vector, ufo, board, sleeve, shrimp, pool, gba, neon,
+flat, grass, mono, videoball, light`. Several suites call it believing it resets the theme, and
+it silently leaves whatever was applied last in place. Use a real key (`grass`, `neon`).
+
+⚠️ **`render()` is only idempotent once SCREEN SHAKE has decayed.** Shake jitters the whole
+pitch by `Math.random()` on every draw, so with any left over, two shots of one state differ
+everywhere. `decayJuice` is step-locked, so a block that never steps must wind it down by hand —
+and note `spawnKickFx` ADDS shake, so a block that spawns sparks has to decay it *afterwards*
+too. Leftover sparks are the same hazard: they only age in `advanceFx`, so anything alive is
+drawn over every later pixel check. Both have broken blocks in suites that never mention fx.
+
+⚠️ **`getImageData` outside the canvas returns zeros**, which reads as "that area is black" —
+the most convincing wrong answer available. A world point "60 units past the touchline" lands
+off the bitmap at some viewports; sample in screen space and clamp.
+
+
 ```bash
 CHROME_PATH=/path/to/chrome node tests/run.mjs
 ```

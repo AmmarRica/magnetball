@@ -24,12 +24,15 @@ const r = await p.evaluate(async ()=>{
 
   // ---- 2) sub-tabs: one pane at a time, and every pane reachable -----------
   o.groups = Object.keys(M.SUBTABS).sort().join(',');
-  const panesOf = g => [...card(g==='player'?'player':'match').querySelectorAll('.subpane')];
+  // ⚠️ Group name IS the card's data-sec, for every group. This used to read
+  // `g==='player' ? 'player' : 'match'`, so when a third group arrived it looked for its panes
+  // in the MATCH card and reported a mismatch that was entirely the test's own doing.
+  const panesOf = g => [...card(g).querySelectorAll('.subpane')];
   const chipsOf = g => [...document.querySelectorAll(`.subtabs[data-tabs="${g}"] .subchip`)];
   o.chipCounts = {}; o.paneCounts = {}; o.everyPaneHasAChip = true;
   o.oneOpenAtATime = true; o.everyPaneShowable = true;
   for (const g of Object.keys(M.SUBTABS)){
-    card(g==='player'?'player':'match').classList.remove('collapsed');
+    card(g).classList.remove('collapsed');
     const panes = panesOf(g), chips = chipsOf(g);
     o.chipCounts[g] = chips.length; o.paneCounts[g] = panes.length;
     // Chips and panes must match one-for-one — an extra chip shows nothing, an
@@ -101,13 +104,22 @@ const r = await p.evaluate(async ()=>{
   o.jumpOpensSection = JSON.stringify(open) === '["sound"]';
   o.jumpMarksItself = target.classList.contains('sel') &&
                       chips.filter(c=>c.classList.contains('sel')).length === 1;
+  // ⚠️ Six theme pickers stacked meant scrolling past five to reach the one you wanted. The
+  // chips and the panes are both generated from SLOT_KEYS, checked here so they cannot drift.
+  o.slotKeys = M.SLOT_KEYS.slice();
+  o.themeChips = chipsOf('theme').map(x=>x.dataset.pane);
+  o.themeTabsFromSlots = JSON.stringify(o.themeChips) === JSON.stringify(o.slotKeys);
   M.collapseAllSections();
   return o;
 });
 
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
-ok(r.groups === 'match,player', `expected sub-tabs on match and player, got ${r.groups}`);
+ok(r.groups === 'match,player,theme', `expected sub-tabs on match, player and theme, got ${r.groups}`);
+// ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
+// to come from one list, or a new slot arrives with a pane and no chip and its controls are
+// hidden while the audit and the menu search still find them.
+ok(r.themeTabsFromSlots, `the Theme chips are not the slot list: ${JSON.stringify(r.themeChips)} vs ${JSON.stringify(r.slotKeys)}`);
 ok(r.everyPaneHasAChip, `panes and chips do not match one-for-one: ${JSON.stringify(r.paneCounts)} vs ${JSON.stringify(r.chipCounts)}`);
 ok(r.oneOpenAtATime, 'more than one pane was visible at once');
 ok(r.everyPaneShowable, 'a pane stayed invisible even when its own chip was pressed');
