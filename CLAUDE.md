@@ -476,7 +476,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   race longer. A runner targets the far side of the berry once lined up — targeting the spot
   *behind* it makes `botArrive` decelerate and the bot stands there admiring it.
   `tests/kqberry.mjs`.
-- **Goal box occupancy (`sel.boxRule`):** ⚠️ **during `play` only** — ungated it also fired in
+- **Goal box occupancy (`sel.boxRule`):** ⚠️ **HALF A SECOND OF GRACE** (`GOALBOX.grace`)
+  before anything touches you — no shove, no clamp, and no visual tell either, since a tell in
+  the free window says you are being stopped when you are not. Long enough to run *through* the
+  box, nowhere near long enough to camp. `p.boxT` counts only while a body is being pushed and
+  is wound back to zero in `applyGoalBox` for everyone who is not, because `easeOutOfBox` only
+  ever hears about the players it pushes and so can never be where a timer resets.
+  ⚠️ The hard backstop clamps to **how deep you already were** (`p.boxCap`, ratcheting inward),
+  never to a fixed line: half a second at pace puts a player ~98 units in on Classic against a
+  backstop of 16, so clamping to `GOALBOX.hard` teleported them 80 units back the frame the
+  clock expired. `tests/boxrule.mjs` measures the free window as a **differential against the
+  rule switched off** — `integrate` damps every player every step, so a velocity threshold
+  reads ordinary damping as a shove.
+  ⚠️ **during `play` only** — ungated it also fired in
   the warm-up lobby and after the full-time whistle. One defender and one attacker inside a goal box at a
   time, so nobody parks a wall in front of their keeper. The box is the region the pitch already
   draws — net pocket plus its mirror — read from `w.bounds`, never re-derived, so the line you

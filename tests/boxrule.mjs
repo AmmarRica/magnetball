@@ -53,6 +53,76 @@ const r = await p.evaluate(async ()=>{
   const keeper = def.find(q=>inBox(q,1,g));
   o.keeperOnThePitch = !!keeper && Math.abs(keeper.x) < g.gh + 40 && keeper.y <= g.halfL + w.bounds.net;
 
+  // ---- HALF A SECOND OF GRACE before anything touches you ------------------
+  // ⚠️ Being shoved the instant you clip the corner made a run past the goal feel like the
+  // pitch was fighting you. Nothing at all may happen for GOALBOX.grace: no shove, no clamp
+  // and no tell — a tell in the free window says you are being stopped when you are not.
+  //
+  // ⚠️ MEASURED AS A DIFFERENTIAL against the rule switched OFF, not against a velocity
+  // threshold. `integrate` damps every player every step, so the first version of this check
+  // read the runner's vy dropping from 3.2 to 2.9 and called ordinary damping a shove. Two
+  // identical runs, rule on and rule off: during the free window the traces must match
+  // EXACTLY, and after it they must part.
+  const graceSteps = Math.round(M.GOALBOX.grace / (1/60));
+  o.graceSecs = M.GOALBOX.grace;
+  {
+    // ⚠️ `pickIdx` is how the two runs stay comparable. With the rule OFF there is no
+    // `w.boxLock` at all — it is never created, because applyGoalBox returns before it — so
+    // the off-run cannot find "the non-holder" and has to be told which body to follow.
+    const run = (rule, drive, pickIdx) => {
+      const w2 = start(rule); freeze(w2); const g2 = geom(w2);
+      const d2 = pack(w2, 0, 1, g2);
+      w2.players.filter(q=>q.team===1).forEach(q=>{ q.x=0; q.y=-g2.halfL+40; });
+      M.step(w2);                                 // one step: the slot gets claimed
+      // ⚠️ The SECOND defender is the one under test. The first holds the slot and is never
+      // pushed, so measuring it would report the rule working whatever grace did.
+      const lock = w2.boxLock || {};
+      const holder = d2.find(q => lock['1:0'] === q) || null;
+      const idx = pickIdx != null ? pickIdx
+                : d2.findIndex(q => q !== holder && inBox(q,1,g2));
+      const runner = d2[idx >= 0 ? idx : 0];
+      const trace = [];
+      for (let i=0;i<graceSteps + 90;i++){
+        if (drive && i < graceSteps + 20) runner.vy = 3.2;   // still running in
+        M.step(w2);
+        trace.push(+runner.y.toFixed(4));
+      }
+      return { trace, runner, holder, w2, g2, idx,
+               depth: trace.map(y => +(y - (g2.front - runner.r)).toFixed(3)) };
+    };
+    const on  = run('on',  true);
+    const off = run('off', true, on.idx);         // the same body, so the traces compare
+    o.haveTwoInBox = !!on.holder && on.runner !== on.holder;
+    // Identical while the clock is running...
+    const win = graceSteps - 1;
+    o.graceTraceMatches = on.trace.slice(0, win).every((y, i) => y === off.trace[i]);
+    o.wentDeeperDuringGrace = on.depth[win-1] > on.depth[0] + 20;
+    // ...and parted after it, or the rule never engages at all.
+    o.partsAfterGrace = on.trace.slice(graceSteps + 10)
+      .some((y, i) => Math.abs(y - off.trace[graceSteps + 10 + i]) > 1);
+    // ⚠️ NO TELEPORT. Clamping straight to GOALBOX.hard the frame the clock expired yanked the
+    // player ~80 units back on Classic, because half a second at pace puts them far deeper
+    // than the backstop. No single step may move them more than a step of travel.
+    let worst = 0;
+    for (let i=1;i<on.trace.length;i++) worst = Math.max(worst, Math.abs(on.trace[i]-on.trace[i-1]));
+    o.biggestJump = +worst.toFixed(2);
+    o.noTeleport = worst < 12;
+    // ⚠️ And grace is a DELAY, not a bypass: once the clock is up the runner may not get any
+    // deeper, and letting go of the stick has them carried out. Compared against the rule-off
+    // run, which keeps sinking to the back of the net.
+    const late = on.depth.slice(graceSteps + 20);
+    o.deepestAfterGrace = Math.max(...late);
+    o.cappedAfterGrace = late[late.length-1] <= o.deepestAfterGrace + 0.01;
+    o.carriedOutOnRelease = on.depth[on.depth.length-1] < on.depth[graceSteps + 20] - 5;
+    o.offRunSinksDeeper = off.depth[off.depth.length-1] > on.depth[on.depth.length-1] + 10;
+    // The clock resets once clear, so a second run in gets its own free window.
+    on.runner.x = 0; on.runner.y = 0; on.runner.vy = 0;
+    M.step(on.w2);
+    o.clockResets = (on.runner.boxT || 0) === 0;
+    // And the HOLDER is never on a clock at all — they are not being pushed.
+    o.holderNeverOnAClock = (on.holder.boxT || 0) === 0;
+  }
+
   // ---- an attacker may join, and only one ----------------------------------
   let atk = pack(w, 1, 1, g);
   for (let i=0;i<180;i++) M.step(w);
@@ -203,6 +273,16 @@ ok(r.trainExempt, 'the rule applies in training and drills, which park bodies wh
 ok(r.leavesTheLobbyAlone, `the rule shoved people around in the warm-up lobby: ${r.lobbyOn} moved with it on vs ${r.lobbyOff} with it off — the lobby is where you walk about and pick a side`);
 ok(r.stopsAtTheWhistle, `the rule was still shoving people during the full-time wind-down: ${r.overOn} moved with it on vs ${r.overOff} off`);
 ok(r.gatedOnPlay, 'boxRuleOn is not gated on the play state');
+ok(r.haveTwoInBox, 'the grace fixture never got a holder AND a second body into the box, so nothing below is testing the free window');
+ok(r.graceTraceMatches, `the rule-on and rule-off runs differ INSIDE the ${r.graceSecs}s free window — nothing may touch you there, and a velocity threshold cannot see this because integrate damps every player every step (that is what the first version of this check mistook for a shove)`);
+ok(r.wentDeeperDuringGrace, 'the runner did not actually get deeper during the free window, so it was idled away rather than used');
+ok(r.partsAfterGrace, 'the two runs never parted after the free window expired — grace would then be a permanent exemption');
+ok(r.noTeleport, `a single step moved the runner ${r.biggestJump} units — clamping straight to GOALBOX.hard the frame the clock expires YANKS them back, because half a second at pace puts a player far deeper than the backstop (~98 units against 16 on Classic)`);
+ok(r.cappedAfterGrace, `the runner kept getting deeper after the free window (peak ${r.deepestAfterGrace}) — the shove has to hold the line once it engages`);
+ok(r.carriedOutOnRelease, 'letting go of the stick did not have the runner carried out, so the free window is a bypass rather than a delay');
+ok(r.offRunSinksDeeper, 'with the rule OFF the runner did not end up deeper than with it on, so the whole comparison is measuring nothing');
+ok(r.clockResets, `the grace clock did not reset once the runner was clear (${r.graceSecs}s) — a second run in has to get its own free window`);
+ok(r.holderNeverOnAClock, 'the slot HOLDER was put on a grace clock, which only applies to bodies being pushed');
 ok(r.botsStillScore, `two minutes of bots with the rule on produced no goals: ${JSON.stringify(r.botsOn)}`);
 ok(r.botsNotStuck, `bots are jammed on the box edge: ${r.botsOn.stuck} stuck samples vs ${r.botsOff.stuck} with the rule off`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));

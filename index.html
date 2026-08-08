@@ -1213,7 +1213,7 @@
       <div style="height:14px"></div>
       <label class="field">Goal box crowding <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="boxRule"></div>
-      <div class="hint always" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else is eased back out. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">One keeper and one attacker inside a goal box at a time — the net and the marked rectangle in front of it. Whoever gets there first holds the spot; anyone else gets <b>half a second</b> inside and is then eased back out, so you can run straight through without the pitch fighting you. Stops a team parking three bodies on their own line, and stops the attack burying the keeper under a scrum.</div>
       <div style="height:14px"></div>
       <label class="field">Kick off walls &amp; players <small style="color:var(--muted)">(changes play)</small></label>
       <div class="opts" id="kickPushPick"></div>
@@ -2479,6 +2479,10 @@ const GOALBOX = {
   push: 0.62,     // per-step shove back out, for whoever does not hold the slot
   hard: 16,       // world units inside the box before the hard backstop clamps
   bleed: 0.86,    // how fast the momentum carrying you in bleeds off
+  // ⚠️ HALF A SECOND OF GRACE before anything touches you. Being shoved the instant you clip
+  // the corner of the box made a run past the goal feel like the pitch was fighting you —
+  // long enough to run THROUGH, nowhere near long enough to camp.
+  grace: 0.5,
 };
 
 const LENGTHS = {
@@ -9572,6 +9576,13 @@ function applyGoalBox(w, discs){
   // inside — so a player cannot dodge the rule by standing in the net itself.
   const front = b.halfL - b.net;
   w.boxLock = w.boxLock || {};
+  // ⚠️ Everyone NOT turned back this step has their grace clock wound back to zero — done
+  // here, once, because easeOutOfBox only ever hears about the players it pushes and so can
+  // never be the place a timer is reset. Collected first, applied after both ends are done:
+  // one player is only ever in one box, but resetting mid-loop would clear a clock the other
+  // end had just advanced.
+  const held = new Set();
+  const turnBack = (p, sign) => { held.add(p); easeOutOfBox(p, sign, front); };
   for (const sign of [-1, 1]){
     const inside = p => Math.abs(p.x) < gh + p.r && sign*p.y > front - p.r;
     for (let role = 0; role < 2; role++){          // 0 = defends this end, 1 = attacks it
@@ -9583,27 +9594,41 @@ function applyGoalBox(w, discs){
       let best = null;
       for (const p of discs){
         if (p.team !== team || !inside(p)) continue;
-        if (owner){ if (p !== owner) easeOutOfBox(p, sign, front); continue; }
+        if (owner){ if (p !== owner) turnBack(p, sign); continue; }
         // Nobody holds it: the deepest player takes it, which is the keeper on their
         // line rather than whoever happens to be scanned first.
         if (!best || sign*p.y > sign*best.y) best = p;
       }
       if (!owner && best){
         owner = best;
-        for (const p of discs){ if (p.team===team && p!==best && inside(p)) easeOutOfBox(p, sign, front); }
+        for (const p of discs){ if (p.team===team && p!==best && inside(p)) turnBack(p, sign); }
       }
       w.boxLock[key] = owner;
     }
   }
+  for (const p of discs) if (!held.has(p)){ p.boxT = 0; p.boxCap = 0; }
 }
 // Eased out, not teleported — same shape as the kickoff line, so being turned back
 // reads as something acting on you rather than the controls going vague.
 function easeOutOfBox(p, sign, front){
+  const depth = sign*p.y - (front - p.r);          // how far past the edge you are
+  // ⚠️ GRACE FIRST. Nothing at all happens for the first GOALBOX.grace seconds — no shove, no
+  // clamp, and no visual tell either, because a tell during the free window would say you are
+  // being stopped when you are not.
+  p.boxT = (p.boxT || 0) + STEP;
+  if (p.boxT < GOALBOX.grace) return;
   p.vy -= sign * GOALBOX.push;
   if (sign * p.vy > 0) p.vy *= GOALBOX.bleed;
-  const depth = sign*p.y - (front - p.r);          // how far past the edge you are
-  if (depth > GOALBOX.hard){                       // backstop — the shove is never a bypass
-    p.y = sign * (front - p.r + GOALBOX.hard);
+  // ⚠️ THE BACKSTOP CLAMPS TO HOW DEEP YOU ALREADY WERE, never to a fixed line. Half a second
+  // at full pace puts a player far deeper than GOALBOX.hard — on Classic the box plus the
+  // step-out margin is ~98 units against a backstop of 16 — so clamping straight to `hard`
+  // TELEPORTED them 80 units back the frame the grace expired. The cap is set from where they
+  // actually are, then ratchets inward as the shove carries them out, so it is never a
+  // bypass and never a jerk.
+  if (!p.boxCap) p.boxCap = Math.max(GOALBOX.hard, depth);
+  else p.boxCap = Math.min(p.boxCap, Math.max(GOALBOX.hard, depth));
+  if (depth > p.boxCap){
+    p.y = sign * (front - p.r + p.boxCap);
     if (sign * p.vy > 0) p.vy = 0;
   }
   p._boxFx = (p._boxFx || 0) - STEP;
@@ -10142,6 +10167,11 @@ function kqBerry(w, berry, team){
   // drag it straight back onto the field the very next step.
   berry.vx = 0; berry.vy = 0;
   berry.banked = true; berry.bankT = BERRY.respawn;
+  // ⚠️ Cleared HERE, at the moment the berry stops existing. botAssignBerry drops stale
+  // targets too, but it only runs on the role tick — so between a bank and that tick a runner
+  // was still escorting a hole in the pitch, driving at a berry that had already been
+  // delivered. The event that kills the target is the right place to unlatch it.
+  for (const q of w.players) if (q.aiBerry === berry) q.aiBerry = null;
   playSfx('net');
   if (sel.juice){ addShake(5); for (let i=0;i<10;i++) spawnConfetti(berry.x, berry.y); }
   updateScoreUI();
