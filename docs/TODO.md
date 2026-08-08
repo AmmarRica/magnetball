@@ -329,10 +329,24 @@ Three findings, two of them real bugs that shipped.
 ---
 
 ## 📐 Tilt parallax on phones
-- [x] **Two layers, opposite ways.** Tilt the handset and the GROUND plane shifts one way
-  while everything standing on it shifts the other — about 11px combined at full tilt. Two
-  layers moving by different amounts is what a parallax IS, and it is the only depth cue a
-  top-down pitch has short of redrawing the game in perspective.
+- [x] **Four depths.** Turf, then the pitch MARKINGS, then the bodies, then the on-screen
+  controls and the HUD nearest your eye — each shifting by a different amount. Layers moving
+  by different amounts is what a parallax IS, and it is the only depth cue a top-down pitch
+  has short of redrawing the game in perspective.
+- [x] ⚠️ The stack has to stay **monotonic in depth** or it is not a parallax, it is four
+  things sliding about. Checked as an ORDER rather than four magic numbers, so retuning the
+  constants cannot quietly break the thing the constants are for.
+- [x] ⚠️ The turf/markings gap is deliberately **tiny** (2.5px): the touchline is a marking
+  and the grass is the turf beneath it, so a real gap between them stops reading as a bevel
+  and starts reading as a misaligned pitch.
+- [x] **The HUD is DOM**, so it moves by a CSS transform — which carries its BUTTONS' hit
+  areas along with it. That is why a transform is right and redrawing at an offset would be
+  wrong: a pause button drawn 9px from where it can be pressed is worse than one that does
+  not move at all. Written only when the rounded value changes, because it runs every frame.
+- [x] **The RESTING thumbstick marker and the KICK pad move; a LIVE thumbstick does not.** A
+  control being touched is attached to your thumb and must not float away from it, while one
+  at rest is ambient decoration. Both are indicators either way — the real hit area is a whole
+  screen zone (`zoneForTouch`), which is what makes moving them safe at all.
 - [x] ⚠️ **The shadow subtracts the lift**, so it stays where the player actually stands. A
   shadow that travels with the body is a sticker; the gap opening and closing between the two
   is the entire reason the effect reads as height.

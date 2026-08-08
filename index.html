@@ -3689,6 +3689,15 @@ const TILT = {
   // not catch. Anything bigger stops reading as depth and starts reading as drift.
   body: 7,
   ground: 4,
+  // ⚠️ The TURF sits a little further back than the MARKINGS, so the pitch has depth of its
+  // own rather than sliding about as one flat picture. Deliberately tiny: the touchline is a
+  // marking and the grass is the turf under it, so any real gap between them stops reading as
+  // a bevel and starts reading as a misaligned pitch.
+  turf: 2.5,
+  // The nearest layer — the thumbstick markers, the KICK pad and the HUD. Furthest from the
+  // pitch in depth, so it moves most; they sit in the corners with nothing to line up
+  // against, which is what lets them move more than anything else without looking loose.
+  ui: 9,
   // Per-step approach to the sensor's number. Step-locked (see advanceTilt), so it is the
   // same speed on a 60Hz and a 144Hz screen.
   ease: 0.14,
@@ -3724,6 +3733,28 @@ function tiltLift(){
 function tiltGround(){
   if (!tiltOn()) return [0, 0];
   return [-tilt.x * TILT.ground, -tilt.y * TILT.ground];
+}
+// The TURF's extra offset, on top of the ground layer the markings sit on.
+function tiltTurf(){
+  if (!tiltOn()) return [0, 0];
+  return [-tilt.x * TILT.turf, -tilt.y * TILT.turf];
+}
+// The nearest layer: on-screen controls and the HUD. Same direction as the bodies and
+// further again, because they are the things closest to your eye.
+function tiltUI(){
+  if (!tiltOn()) return [0, 0];
+  return [tilt.x * TILT.ui, tilt.y * TILT.ui];
+}
+// ⚠️ The HUD is DOM, not canvas, so it moves by a CSS transform — which also carries its
+// BUTTONS' hit areas with it, so the pause and fullscreen targets stay exactly under what is
+// drawn. Written only when the rounded value actually changes: this runs every frame, and a
+// style write per frame on an element with children is not free.
+let _hudShift = '';
+function syncTiltUI(){
+  const h = $('hud'); if (!h) return;
+  const [ux, uy] = tiltUI();
+  const want = (ux || uy) ? `translate(${ux.toFixed(1)}px,${uy.toFixed(1)}px)` : '';
+  if (want !== _hudShift){ _hudShift = want; h.style.transform = want; }
 }
 // ⚠️ Advanced next to step(world), NEVER in a draw — the trails rule. Both the smoothing
 // and the recentring are per-step decays, so a draw-driven version would run 2.4× fast on
@@ -11974,6 +12005,7 @@ function render(){
   else drawSubPrompts(world);   // ...and the touchline, for anybody waiting to come on
   syncLobbyStartBtn();     // idempotent: only touches the DOM when the state changes
   drawControls();
+  syncTiltUI();               // the HUD is DOM: it moves by transform — see syncTiltUI
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
   drawPadFlairs();
@@ -12238,13 +12270,20 @@ function drawPitch(w){
   const f = w.field, s = cam.s;
   const b = w.bounds;
   const L = wx(-b.halfW), R = wx(b.halfW), T = wy(-b.halfL), B = wy(b.halfL);
-  drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
-  // ⚠️ THE VJ SEAM. Video composites here — over the pitch SURFACE, under the
-  // MARKINGS, and therefore under the trails, discs and ball, which draw later in
-  // render(). That ordering is what makes "players always full opacity" a
-  // structural guarantee instead of a slider nobody may touch: there is no value
+  // ⚠️ The TURF is its own depth, a hair behind the MARKINGS — so the pitch itself has a
+  // parallax rather than sliding about as one flat picture. Its own save/restore rather than
+  // a reuse of one further down: getting a translate on the wrong side of an existing
+  // restore corrupts everything drawn after it. Both offsets are exactly zero with tilt off.
+  // ⚠️ The VJ SEAM stays inside this pass with the surface it belongs to. Video composites
+  // here — over the pitch SURFACE, under the MARKINGS, and therefore under the trails, discs
+  // and ball, which draw later in render(). That ordering is what makes "players always full
+  // opacity" a structural guarantee instead of a slider nobody may touch: there is no value
   // any deck can hold that puts video in front of a player. Off, it is a no-op.
+  const [tux, tuy] = tiltTurf();
+  ctx.save(); ctx.translate(tux, tuy);
+  drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
   vjPaintVideo(L, T, R-L, B-T);
+  ctx.restore();
   // Markings are dimmed as a group so heavy video doesn't bury the pitch, floored
   // at VJ.lineFloor so they can never vanish. vjMarkA() is exactly 1 with VJ off.
   const _mA = vjMarkA();
@@ -15165,7 +15204,12 @@ function drawControls(){
 function drawPad(pad, isP2){
   if (pad.move.id === null) {
     // resting joystick marker in its corner
-    const {jx, jy} = restingJoyPos(isP2);
+    // ⚠️ The RESTING marker rides the UI layer; the LIVE one below does NOT. A control being
+    // touched is attached to your thumb and must not float away from it, while one at rest is
+    // ambient decoration — and these are indicators either way, because the actual hit area
+    // is a whole screen zone (see zoneForTouch), so moving them cannot move a touch target.
+    const rest = restingJoyPos(isP2), [ux, uy] = tiltUI();
+    const jx = rest.jx + ux, jy = rest.jy + uy;
     ctx.globalAlpha = 0.16;
     ring(jx, jy, JOY_R, '#fff', 2);
     ctx.globalAlpha = 0.10;
@@ -15191,6 +15235,8 @@ function drawKickMarker(pad, isP2){
   if (isP2){ kx = cw - m; ky = m; }                     // p2 top-right
   else if (sel.handed==='left'){ kx = cw - m; ky = ch - m; }  // p1 left-handed → kick bottom-right
   else { kx = m; ky = ch - m; }                         // p1 bottom-left
+  // Nearest layer, like the resting thumbstick opposite it — see drawPad.
+  const [ux, uy] = tiltUI(); kx += ux; ky += uy;
   // Same neutral treatment as the resting joystick opposite it — a coloured pad
   // read as a live indicator rather than a control you rest a thumb on.
   ctx.globalAlpha = pad.kick ? 0.26 : 0.10;
@@ -15492,6 +15538,7 @@ if (window.__MAGNETDEBUG) {
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
     advanceFx, get fx(){ return fx; }, resetFx,
     onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,
+    tiltTurf, tiltUI, syncTiltUI, restingJoyPos,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
     openSection, collapseAllSections, initCollapsibles, openLook, drawThemeSwatch, themeSwatchColors,
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
