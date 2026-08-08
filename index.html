@@ -1403,6 +1403,10 @@
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
+      <label class="field">Tilt parallax <small style="color:var(--muted)">(phones)</small></label>
+      <div class="opts" id="tiltPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
+      <div style="height:10px"></div>
       <label class="field">Hit stop <small id="hitStopVal" style="color:var(--accent)"></small></label>
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
@@ -1413,10 +1417,6 @@
       <label class="field">Goal zoom speed <small id="goalZoomSpdVal" style="color:var(--accent)"></small></label>
       <input id="goalZoomSpd" class="slider" type="range" min="5" max="300" step="5" />
       <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes — lower is slower. Both ride the Screen shake &amp; effects toggle.</div>
-      <div style="height:10px"></div>
-      <label class="field">Tilt parallax <small style="color:var(--muted)">(phones)</small></label>
-      <div class="opts" id="tiltPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
       <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>

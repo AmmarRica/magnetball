@@ -329,6 +329,12 @@ Three findings, two of them real bugs that shipped.
 ---
 
 ## 📐 Tilt parallax on phones
+- [x] ⚠️ **The on/off was too buried to find.** It was there from the start, in Game Feel,
+  searchable by "parallax", "tilt" and "3d" — but 16th of 19 fields in that card, below two
+  sliders, and it got reported as a MISSING feature. It sits directly under **Screen shake &
+  effects** now: the two visual on/offs together, above the ranges, because a reader scanning
+  a long card finds toggles grouped rather than scattered between sliders. The position is
+  asserted, so it cannot drift back down.
 - [x] **Four depths.** Turf, then the pitch MARKINGS, then the bodies, then the on-screen
   controls and the HUD nearest your eye — each shifting by a different amount. Layers moving
   by different amounts is what a parallax IS, and it is the only depth cue a top-down pitch

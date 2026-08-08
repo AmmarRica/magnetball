@@ -78,7 +78,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
   `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
-- **Tilt parallax (`sel.tilt`, phones):** tilt the handset and **FOUR depths** shift by
+- **Tilt parallax (`sel.tilt`, phones):** the on/off lives in **Game Feel → Presentation,
+  directly under Screen shake & effects** — ⚠️ deliberately *above* the sliders. It shipped
+  16th of 19 fields in that card, below two ranges, and was reported as a missing feature;
+  `tests/tilt.mjs` pins the position and the search terms so it cannot drift back down.
+  Tilt the handset and **FOUR depths** shift by
   different amounts — turf (`tiltGround() + tiltTurf()`), then the pitch MARKINGS
   (`tiltGround()`), then the bodies (`tiltLift()`), then the on-screen controls and HUD
   (`tiltUI()`), nearest your eye. `render()` draws the ground and the bodies as two passes;
