@@ -484,18 +484,47 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
   the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
   `tests/touchstart.mjs`.
-- **Drop-in (`sel.dropIn`, default on):** a pad that presses a button MID-MATCH takes over a
-  bot (`pollDropIn`, called next to `step(world)` — never in a draw). ⚠️ Seats used to be
-  handed out exactly once in `startMatch`, so a pad woken up after the whistle did nothing
-  for the rest of the match — while the lobby's own help text promised "a controller can
-  still join at any point". ⚠️ On a **button press**, never on `gamepadconnected`: a pad
-  waking in a bag, or a browser re-enumerating one, would otherwise walk a stranger onto the
-  pitch. The seat comes from **`padSeatOrder()`, the same list the kickoff assignment uses**,
-  so a late joiner lands where it would have at the whistle (Versus → the opposition, Co-op →
-  your side) and the two cannot drift. Unplugging hands the body back to the AI **keeping its
-  name and stats** — renaming mid-match means the award ribbon credits a name nobody saw
-  playing. It writes only `ctrl`/`padIndex`/`name`/`rotQuarter` and does no randomness at
-  all; `tests/dropin.mjs` hashes the world with the poll firing and without it.
+- **Drop-in / substitutions (`sel.dropIn`, default on):** plug a controller in mid-match and
+  a body walks out to the **touchline**; walk to the half you want, press START, and you come
+  on **at the next goal**. ⚠️ Seats used to be handed out exactly once in `startMatch`, so a
+  pad woken after the whistle did nothing for the rest of the match — and the first fix
+  over-corrected, taking a bot over the instant any button went down, mid-play, with no side
+  pick and no say in when.
+  - **On CONNECTION, not a press.** The waiting body is outside the pitch and not in
+    `w.players`, so it cannot touch the ball or anybody else — which is exactly what makes
+    connection enough. The press that matters is the START asking to come on (`pollSubReady`,
+    edge-triggered, and pressing it again cancels).
+  - **ONE gate** (`subGate`), on the touchline beside the halfway line — where substitutions
+    happen in the real game, and the only place a body can cross without walking through the
+    play. Everything crossing uses it: the joiner, the bot added to even up, and anyone
+    leaving. Derived from the field, never stored — courts differ in width threefold.
+  - **The side is where you stand.** `subSideOf` reads the half a *waiting* body is beside —
+    deliberately **not** `lobbySideOf`, which answers −1 for anything outside the touchline and
+    so answers −1 for every body out here. Undecided is a real third answer and falls to
+    `subDefaultTeam`, which reads the **Extra controllers** setting that already means this
+    question (Versus → against you, Co-op → alongside).
+  - **The match GROWS to fit.** A 3v3 that gains a player is a 4v4 — arriving never costs a
+    body its place. ⚠️ `evenUpSides` is the **one owner** of "both sides field the same number,
+    never fewer than the size it kicked off at"; a join, an unplug and a swap all go through it,
+    so a 4v3 can't survive long enough to look like a bug in the bots. Only ever a **bot** is
+    taken off. `subPer` moves only when a *person* arrives or leaves — never off a bot count, or
+    one dropped bot ratchets the match smaller for good — and ⚠️ `subFloorOf` is captured **at
+    the whistle**, because the lobby can field six a side on a 4v4 and a floor of `mode.per`
+    would quietly strip two bots off each side.
+  - **Substitutions fire from ONE hook** in `step`'s goal branch, latched on `w._subDone`, not
+    from the five places that set `w.state='goal'` — one of those five is always the one
+    somebody forgets.
+  - **Walking on:** `stepSubWalk` + `_subTo` for bodies coming on, `_subPath` (gate, then bench
+    slot) for bodies going off, both through the lobby's own `walkTo`. ⚠️ `_subTo` also
+    suppresses the AI at the `runBot` call site — `walkTo` sets position directly, so a thinking
+    bot fights it and jitters on the touchline.
+  - **Unplugging** hands the body back through the gate keeping its name and stats, and a pad
+    that hiccups and returns **reclaims its own body** (`_padWas`) rather than minting a P3 and
+    stranding a half-match on the bench. ⚠️ `matchRoster()` is what the result screen reads, so
+    a player who left still appears — `w.players` alone drops the half they played.
+  - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
+    inside the canvas (the body is outside the touchline, so a centred label loses its last
+    words — which are the side). `tests/dropin.mjs`.
 - **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that

@@ -275,26 +275,56 @@ Three findings, two of them real bugs that shipped.
   whistle did nothing at all for the rest of the match — while the warm-up lobby's own
   help text had been promising "a controller can still join at any point by pressing a
   button" the whole time. It couldn't; that hint was describing the lobby.
-- [x] `pollDropIn` next to `step(world)` — never in a draw. Press any button on a spare
-  pad and you take over a bot straight away. `sel.dropIn`, default on, with **At kickoff**
-  keeping the old behaviour.
-- [x] ⚠️ On a **button press**, never on `gamepadconnected`. A pad waking up in a bag, or a
-  browser re-enumerating one, would otherwise walk a stranger onto the pitch mid-play.
-  Pressing something is the one signal that means a person is holding it.
-- [x] ⚠️ The seat comes from **`padSeatOrder()`, the same list the kickoff assignment
-  uses** — so a late joiner lands where it would have at the whistle: Versus on the
-  opposition, Co-op alongside you. Two copies of that ordering would let "the seat a late
-  joiner gets" drift from "the seat a pad gets", and neither would look wrong on its own.
-- [x] Unplugging hands the body back to the AI, **keeping its name and its stats**. A body
-  nobody is driving stands still in the middle of the pitch, and renaming it mid-match
-  means the award ribbon at the end credits a name nobody saw playing. A pad coming back
-  gets the seat name it already had rather than climbing to P3 forever.
-- [x] It writes only `ctrl`/`padIndex`/`name`/`rotQuarter` and does no randomness at all —
-  `w.rng` belongs to the sim, and a join is caused by a person rather than by the match.
-  `tests/dropin.mjs` hashes the whole world over 600 steps with the poll firing and
-  without it.
-- [x] ⚠️ Its own settings row, not folded into **Extra controllers** — that one hides on
-  1v1, and a 1v1 has an opposition bot to take over like any other match.
+- [x] ⚠️ **And the first fix was too blunt.** It took a bot over the instant any button
+  went down, mid-play, with no way to pick a side and no say in when — a body appearing
+  in the middle of a live ball.
+- [x] **A touchline instead.** Plug a controller in and a body walks out beside the pitch.
+  Walk to the half you want, press START, and you come on at the next goal, on that side.
+  ⚠️ On CONNECTION, no press needed, because the waiting body is not in `w.players` and so
+  cannot touch the ball or anybody else — that is exactly what makes connection enough.
+  The press that matters is the START, and pressing it again cancels.
+- [x] **ONE gate**, on the touchline beside the halfway line — where substitutions happen
+  in the real game, and the only place a body can cross without walking through the play.
+  The joiner, the bot added to even up and anyone leaving all use it, so a swap reads as a
+  swap. Derived from the field, never stored: courts differ in width by a factor of three.
+- [x] **The side is where you stand.** ⚠️ Deliberately not `lobbySideOf`, which answers −1
+  for anything outside the touchline and so answers −1 for every single body out here.
+  Undecided is a real third answer — it is what standing by the gate means — and it falls
+  to what **Extra controllers** already means (Versus against you, Co-op alongside).
+- [x] **The match GROWS to fit.** A 3v3 that gains a player is a 4v4, with a bot added to
+  the other side. Arriving must never cost a body its place.
+- [x] ⚠️ **`evenUpSides` is the ONE owner** of "both sides field the same number, and never
+  fewer than the size it kicked off at". A join, an unplug and a swap all go through it, so
+  a 4v3 cannot survive long enough to look like a bug in the bots. Only ever a **bot** is
+  taken off — a human pulled off the pitch by a roster count is a controller that stops
+  working for no reason its holder can see.
+- [x] ⚠️ `subPer` moves only when a PERSON arrives or leaves, never off a bot count —
+  otherwise "how big is this match" is answered by the very thing evenUpSides is fixing,
+  and one dropped bot ratchets the match smaller for good.
+- [x] ⚠️ The floor is the size the match KICKED OFF at, not `mode.per`: the lobby can put
+  six a side on a 4v4, and a floor of 4 would have had evenUpSides quietly take two bots
+  off each side the first time anybody's controller hiccupped. Captured once, at the
+  whistle — by the time a substitution runs, the roster has already changed.
+- [x] **Substitutions fire from ONE hook** in the goal branch of `step`, latched per goal,
+  rather than a call at each of the five places that set the state. One of those five is
+  always the one somebody forgets.
+- [x] **Walking on and off** through the lobby's own `walkTo` — `_subTo` for bodies coming
+  on, a two-hop `_subPath` (gate, then bench slot) for bodies going off. ⚠️ `_subTo` also
+  suppresses the AI at the `runBot` call site: `walkTo` sets position directly, so a
+  thinking bot fights it and jitters on the touchline.
+- [x] **Unplugging** sends the body out through the same gate, keeping its name and stats.
+  A pad that hiccups and comes back **reclaims its own body** rather than minting a P3 and
+  stranding its half-match on the bench.
+- [x] ⚠️ `matchRoster()` is what the result screen reads now. A controller unplugged at half
+  time puts its body on the bench, and reading only `w.players` dropped that player's goals
+  off the scoresheet and their name out of the awards, as though the half never happened.
+- [x] An on-screen prompt per waiting body: which pad, which side it would get, what to
+  press. ⚠️ Clamped inside the canvas — the body is outside the touchline by definition, so
+  a label centred on it hangs off the edge and loses its last few words, which are the side.
+- [x] Nothing about it may perturb the sim: `tests/dropin.mjs` hashes the whole world over
+  600 steps with the machinery running and without it, and holds the cap, the floor, the
+  gates and the timing (armed is not on — it must still be waiting through a stretch of
+  play, or "they join between goals" is really "they join immediately").
 
 ---
 
