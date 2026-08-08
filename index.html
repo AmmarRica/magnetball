@@ -1167,11 +1167,19 @@
       <div style="height:14px"></div>
       <label class="field">Warm-up lobby</label>
       <div class="opts" id="lobbyPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up. <b>Controllers</b> warms up only when a pad is connected; <b>Everyone</b> warms up on touch and keyboard too, with an on-screen Start. A controller can still join at any point by pressing a button.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Before the whistle: test your stick, stand on the side you want, and let bots fill the rest. Press <b>Start</b> to kick off. Cocktail always warms up so each seat can set which way is up. <b>Controllers</b> warms up only when a pad is connected; <b>Everyone</b> warms up on touch and keyboard too, with an on-screen Start. A controller can join a match already under way by pressing a button — see <b>Joining late</b>.</div>
       <div id="coopRow" class="hidden">
         <div style="height:14px"></div>
         <label class="field">Extra controllers <small id="coopInfo" style="color:var(--muted)"></small></label>
         <div class="opts" id="coop"></div>
+      </div>
+      <!-- Its own row, not part of Extra controllers: that one hides on 1v1, and a
+           1v1 has an opposition bot to take over like any other match. -->
+      <div id="dropInRow" class="hidden">
+        <div style="height:14px"></div>
+        <label class="field">Joining late <small style="color:var(--muted)">(changes play)</small></label>
+        <div class="opts" id="dropIn"></div>
+        <div class="hint always" style="text-align:left; margin-top:4px">Press any button on a spare controller and you take over a bot straight away, without waiting for the next kickoff. You land in the seat you'd have got at the whistle — so <b>Versus</b> puts you on the opposition and <b>Co-op</b> puts you alongside. Unplug and the AI takes the body back, keeping the name and the stats. <b>At kickoff</b> is the old behaviour: seats are handed out once and a pad that wakes up mid-match waits.</div>
       </div>
       <div style="height:14px"></div>
       <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
@@ -1659,6 +1667,8 @@
    Physics integration         "PHYSICS INTEGRATION"
    Human input                 "Human input mapping from a pad"
    Gamepads                    "Gamepad polling (Gamepad API)"
+   Pad seats                   "PAD SEATS — who a controller gets to drive"
+   Drop-in (join mid-match)    "DROP-IN — a controller joins a match already in progress"
    Warm-up lobby               "WARM-UP LOBBY — team sides"
    Kickoff line rule           "Kickoff line rule"
    Goal box occupancy          "Goal box occupancy: one keeper"
@@ -2297,6 +2307,15 @@ const COOP = {
   off: { name:'Versus',  emoji:'⚔️' },
   on:  { name:'Co-op',   emoji:'🤝' },
 };
+// Drop-in: a controller that presses a button MID-MATCH takes over a bot, instead of
+// waiting for the next kickoff. ⚠️ Seats used to be handed out exactly once, in
+// startMatch, so a pad woken up after the whistle did nothing at all for the rest of
+// the match — while the lobby hint had been promising "a controller can still join at
+// any point" the whole time.
+const DROPIN = {
+  on:  { name:'Join any time', emoji:'🤝', icon:'people' },
+  off: { name:'At kickoff',    emoji:'🚧', icon:'barrier' },
+};
 // Kickoff rule: both sides hold their own half until the ball is played.
 // ============================================================
 //  ICONS — drawn, not typed
@@ -2489,7 +2508,7 @@ function detectPanel(){
 }
 const PANEL = detectPanel();
 
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
@@ -5669,6 +5688,7 @@ function buildMatchOpts(){
   buildOpts('lengths', LENGTHS, 'length');
   buildOpts('controllers', CONTROLLERS, 'controllers');
   buildOpts('coop', COOP, 'coop');
+  buildOpts('dropIn', DROPIN, 'dropIn');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -5916,6 +5936,11 @@ function updatePadInfo(){
         : '(fills the opponent first)';
     }
   }
+  // Drop-in only needs a pad and a bot to take over, so it shows on 1v1 too — and it
+  // is meaningless in the modes that have no bots to replace.
+  const dr = $('dropInRow');
+  if (dr) dr.classList.toggle('hidden',
+    !(sel.controllers==='on' && !(MODES[sel.mode]||{}).twoP && !(MODES[sel.mode]||{}).train));
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 window.addEventListener('gamepaddisconnected', updatePadInfo);
@@ -7740,6 +7765,30 @@ function padResetMap(){ sel.pad = Object.assign({}, defaultSel().pad); saveSel()
                         padBind.active=false; buildPadRows(); }
 
 // ============================================================
+//  PAD SEATS — who a controller gets to drive
+// ============================================================
+// Cocktail hands seats to pads whether or not you flipped the toggle; the lobby, the
+// kickoff assignment and mid-match drop-in all ask this same question.
+function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail'; }
+// ⚠️ The ONE order controllers take seats in: Co-op fills your side first (N humans vs
+// N AI), Versus interleaves you → opponent → teammate. Used by the kickoff assignment
+// AND by drop-in, so a pad that joins at minute three lands in exactly the seat it
+// would have had if it had been awake at the whistle — two copies of this would let
+// "the seat a late joiner gets" drift from "the seat a pad gets" and neither would
+// look wrong on its own.
+function padSeatOrder(t0, t1){
+  const order = [];
+  if (sel.coop === 'on'){
+    for (const pl of t0) order.push(pl);            // you + your teammates
+    for (const pl of t1) order.push(pl);            // only once your side is full
+  } else {
+    for (let i=0;i<Math.max(t0.length,t1.length);i++){
+      if (t0[i]) order.push(t0[i]); if (t1[i]) order.push(t1[i]); }
+  }
+  return order;
+}
+
+// ============================================================
 //  NAME POOL for bots
 // ============================================================
 const BOT_NAMES = ['Nico','Vega','Blaze','Kai','Rush','Zed','Milo','Ivy','Rex','Juno','Ace','Fox','Neo','Sol','Wren','Dex','Pip','Rio','Sy','Bolt','Onyx','Ash','Koda','Lex'];
@@ -7798,15 +7847,9 @@ function startMatch(){
     // giving N pads = N humans vs N AI. Padless seats stay bots.
     // Cocktail hands seats to pads whether or not you flipped the toggle. With no
     // pad connected this is a no-op and the keyboard stays live (see keyboardDrivesGame).
-    if (sel.controllers==='on' || sel.display==='cocktail'){
+    if (padsTakeSeats()){
       const gpads = connectedGamepadIndices();
-      const order = [];
-      if (sel.coop==='on'){
-        for (const pl of t0) order.push(pl);          // you + your teammates
-        for (const pl of t1) order.push(pl);          // only once your side is full
-      } else {
-        for (let i=0;i<Math.max(t0.length,t1.length);i++){ if (t0[i]) order.push(t0[i]); if (t1[i]) order.push(t1[i]); }
-      }
+      const order = padSeatOrder(t0, t1);
       let gi=0, pn=2;
       for (const pl of order){
         if (gi >= gpads.length) break;
@@ -8119,6 +8162,77 @@ function decayJuice(){
   flash = flash > 0.01 ? flash * 0.88 : 0;
 }
 
+// ============================================================
+//  DROP-IN — a controller joins a match already in progress
+// ============================================================
+// Seats used to be handed out exactly once, in startMatch, so a pad woken up after the
+// whistle did nothing for the rest of the match. Press a button and you take over a
+// bot; unplug and the AI takes the body back.
+//
+// ⚠️ On a BUTTON PRESS, never on `gamepadconnected`. A pad waking up in a bag, or a
+// browser re-enumerating one, would otherwise walk a stranger onto the pitch mid-play.
+// Pressing something is the one signal that means a person is holding it.
+//
+// ⚠️ Called next to step(world), NEVER in a draw (the trails rule) — it polls pad state
+// and mutates the world, and on a 144Hz screen a draw-driven version would run 2.4× as
+// often as the sim it is joining. It writes only `ctrl`/`padIndex`/`name`/`rotQuarter`,
+// so it cannot perturb physics, and it does no randomness at all: `w.rng` belongs to
+// the sim, and a join is caused by a person rather than by the match.
+function dropInBlocked(w){
+  if (!w || sel.dropIn === 'off' || !padsTakeSeats()) return true;
+  // The attract-mode demo behind the menu is not a match to join, and pressing a button
+  // there is how you navigate the menu.
+  if (w.demo || w.drillMode || w.tutorial || w.train) return true;
+  // Warm-up already hands seats to pads (that is what it is for), and after the whistle
+  // there is nothing left to play.
+  return w.state === 'warmup' || w.state === 'over' || w.endRamp != null;
+}
+// The next seat a joining pad should take: the first bot in the shared seat order, so
+// Versus gives the opposition a body and Co-op fills your side. Null when every player
+// is already human.
+function dropInSeat(w){
+  return padSeatOrder(w.players.filter(p => p.team === 0),
+                      w.players.filter(p => p.team === 1)).find(p => p.ctrl === 'bot') || null;
+}
+// ⚠️ A rejoining pad keeps a name it already had. Renaming the body mid-match means the
+// award ribbon at the end credits a name nobody saw playing.
+function dropInName(w, p){
+  if (/^P\d+$/.test(p.name)) return p.name;
+  const taken = new Set(w.players.map(q => q.name));
+  let n = 2; while (taken.has('P' + n)) n++;
+  return 'P' + n;
+}
+function pollDropIn(w){
+  if (dropInBlocked(w)) return;
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  // ⚠️ A pad handed BACK to the AI first, so a seat freed this step can be claimed by a
+  // different pad in the same step rather than sitting idle until the next one.
+  for (const p of w.players){
+    if (p.ctrl !== 'gamepad') continue;
+    const g = gps[p.padIndex];
+    if (g && g.connected) continue;
+    p.ctrl = 'bot';                     // ...but it keeps its name and its stats
+    p.inX = p.inY = 0; p.kick = false; p.rotQuarter = 0;
+    toast(p.name + ' left — bot took over', 'err', 'gamepad');
+  }
+  const held = new Set(w.players.filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
+  for (const i of connectedGamepadIndices()){
+    if (held.has(i)) continue;
+    const g = gps[i];
+    if (!g.buttons.some((_, bi) => btn(g, bi))) continue;
+    const seat = dropInSeat(w);
+    if (!seat) return;                  // every body on the pitch is human already
+    seat.ctrl = 'gamepad'; seat.padIndex = i;
+    seat.name = dropInName(w, seat);
+    seat.inX = seat.inY = 0; seat.kick = false;
+    // Seat rotation is per-seat-ordinal among the humans, so it has to be recomputed
+    // for everyone rather than guessed for the joiner.
+    applySeatRotation(w.players);
+    toast(seat.name + ' joined', 'ok', 'gamepad');
+    return;                             // one join per step; the next pad gets the next
+  }
+}
+
 function loop(t){
   pumpTelemetry();
   if (!running){ return; }
@@ -8152,6 +8266,7 @@ function loop(t){
     advanceDynField();      // ...and so does an animated theme's field
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
+    pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -14941,6 +15056,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
+    pollDropIn, dropInSeat, dropInBlocked, padSeatOrder, padsTakeSeats, DROPIN,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
     openSection, collapseAllSections, initCollapsibles, openLook, drawThemeSwatch, themeSwatchColors,
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,

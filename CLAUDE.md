@@ -484,6 +484,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
   the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
   `tests/touchstart.mjs`.
+- **Drop-in (`sel.dropIn`, default on):** a pad that presses a button MID-MATCH takes over a
+  bot (`pollDropIn`, called next to `step(world)` — never in a draw). ⚠️ Seats used to be
+  handed out exactly once in `startMatch`, so a pad woken up after the whistle did nothing
+  for the rest of the match — while the lobby's own help text promised "a controller can
+  still join at any point". ⚠️ On a **button press**, never on `gamepadconnected`: a pad
+  waking in a bag, or a browser re-enumerating one, would otherwise walk a stranger onto the
+  pitch. The seat comes from **`padSeatOrder()`, the same list the kickoff assignment uses**,
+  so a late joiner lands where it would have at the whistle (Versus → the opposition, Co-op →
+  your side) and the two cannot drift. Unplugging hands the body back to the AI **keeping its
+  name and stats** — renaming mid-match means the award ribbon credits a name nobody saw
+  playing. It writes only `ctrl`/`padIndex`/`name`/`rotQuarter` and does no randomness at
+  all; `tests/dropin.mjs` hashes the world with the poll firing and without it.
 - **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
@@ -624,7 +636,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 73 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 74 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

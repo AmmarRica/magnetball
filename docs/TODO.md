@@ -270,6 +270,34 @@ Three findings, two of them real bugs that shipped.
 
 ---
 
+## 🎮 Joining a match already under way
+- [x] **Seats were handed out exactly once**, in `startMatch`. A pad woken up after the
+  whistle did nothing at all for the rest of the match — while the warm-up lobby's own
+  help text had been promising "a controller can still join at any point by pressing a
+  button" the whole time. It couldn't; that hint was describing the lobby.
+- [x] `pollDropIn` next to `step(world)` — never in a draw. Press any button on a spare
+  pad and you take over a bot straight away. `sel.dropIn`, default on, with **At kickoff**
+  keeping the old behaviour.
+- [x] ⚠️ On a **button press**, never on `gamepadconnected`. A pad waking up in a bag, or a
+  browser re-enumerating one, would otherwise walk a stranger onto the pitch mid-play.
+  Pressing something is the one signal that means a person is holding it.
+- [x] ⚠️ The seat comes from **`padSeatOrder()`, the same list the kickoff assignment
+  uses** — so a late joiner lands where it would have at the whistle: Versus on the
+  opposition, Co-op alongside you. Two copies of that ordering would let "the seat a late
+  joiner gets" drift from "the seat a pad gets", and neither would look wrong on its own.
+- [x] Unplugging hands the body back to the AI, **keeping its name and its stats**. A body
+  nobody is driving stands still in the middle of the pitch, and renaming it mid-match
+  means the award ribbon at the end credits a name nobody saw playing. A pad coming back
+  gets the seat name it already had rather than climbing to P3 forever.
+- [x] It writes only `ctrl`/`padIndex`/`name`/`rotQuarter` and does no randomness at all —
+  `w.rng` belongs to the sim, and a join is caused by a person rather than by the match.
+  `tests/dropin.mjs` hashes the whole world over 600 steps with the poll firing and
+  without it.
+- [x] ⚠️ Its own settings row, not folded into **Extra controllers** — that one hides on
+  1v1, and a 1v1 has an opposition bot to take over like any other match.
+
+---
+
 ## 🎥 Goal camera
 - [x] **A 5% push, arriving in 0.10s** on whoever last touched the ball, and lerps the centre
   onto them. Eases back when the celebration ends.
