@@ -612,12 +612,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   those permanently expanded. ⚠️ `class="hint always"` keeps gameplay-affecting help open;
   whether a match is comparable is not a detail to hide. Never persisted: every visit starts
   collapsed. `tests/hints.mjs`.
-- **Theme card is TABBED** — `SUBTABS.theme` is derived from `SLOT_KEYS`, so the chips and the
-  `.subpane`s come from one list and a new slot can't arrive with a pane and no chip (which
-  would hide its controls while `audit` and the menu search still found them). ⚠️ `buildSubTabs()`
-  is called at the END of `buildSettings()` as well as at boot: `buildSettings` rebuilds those
-  panes from scratch on every slot change, so the fresh panes have no `.on` class and the card
-  showed nothing at all.
+- **Theme card is TABBED — the bundle grid included.** `SUBTABS.theme` is `['bundle']` plus
+  `SLOT_KEYS`, so the chips and the `.subpane`s come from one list and a new slot can't arrive
+  with a pane and no chip (which would hide its controls while `audit` and the menu search still
+  found them). Seven tile grids stacked is most of a phone screen each, and the bundle row is the
+  tallest at 19 tiles — leaving it outside the tabs meant scrolling past it to reach anything.
+  ⚠️ `buildSubTabs()` is called at the END of `buildSettings()` as well as at boot:
+  `buildSettings` rebuilds those panes from scratch on every slot change, so the fresh panes have
+  no `.on` class and the card showed nothing at all.
+- **`.subtabs` is STICKY**, pinned under its own card's header at
+  `--sticky-top + --sec-h` (measured by `syncSticky`). ⚠️ A chip row that scrolls away with the
+  grid is only half a fix — you still have to scroll back up to change tab, which is the vertical
+  scrolling it exists to remove. ⚠️ And it must be ONE row (`flex-wrap: nowrap`, scrolling
+  sideways like `#jumpBar`): two pinned rows put half the chips behind the section header and let
+  the pane's tiles through the gap.
 - **FPS readout:** `fps` / `trackFps(dt)`, the last row of `drawDebug`'s panel so it lands
   directly above the version tag. ⚠️ The one timer here that is deliberately **not step-locked**
   — it is counted in `loop()` off wall-clock, because the sim rate is pinned at 1/60 by design

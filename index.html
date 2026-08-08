@@ -265,8 +265,24 @@
     .jumpchip:hover { border-color: var(--cyan); color: var(--text); }
     .jumpchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
     /* Sub-tabs inside a card: one pane visible at a time. */
-    .subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
-    .subchip { font-family: var(--pix); font-size: 11px; color: var(--muted);
+    /* ⚠️ STICKY, under the section header. A chip row that scrolls away with the grid is only
+       half a fix: you still have to scroll back up to change tab, which is the vertical
+       scrolling it exists to remove. Opaque, or the tiles show through it — the same lesson
+       #jumpBar records. z-index 3 keeps it UNDER the section header (4) and over the panes. */
+    /* ⚠️ STICKY, under the section header, and ONE row that scrolls SIDEWAYS. A chip row that
+       scrolls away with the grid is only half a fix — you still have to scroll back up to
+       change tab, which is the vertical scrolling it exists to remove. And it must not WRAP:
+       two pinned rows put half the chips behind the header and the pane's tiles came through
+       the gap. Same idiom as #jumpBar, for the same reason. Opaque, or the tiles show through.
+       z-index 3 keeps it UNDER the section header (4) and over the panes. */
+    .subtabs { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0 0 12px;
+      position: sticky; top: calc(var(--sticky-top, 58px) + var(--sec-h, 40px)); z-index: 3;
+      background: var(--panel-solid, var(--panel)); padding: 7px 0 8px;
+      border-bottom: 1px solid var(--edge);
+      overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+    .subtabs::-webkit-scrollbar { display: none; }
+    .subchip { flex: 0 0 auto;   /* one row that scrolls, never a second row — see .subtabs */
+      font-family: var(--pix); font-size: 11px; color: var(--muted);
       background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 9px;
       padding: 7px 11px; cursor: pointer;
       display: inline-flex; align-items: center; gap: 6px; }
@@ -1361,14 +1377,18 @@
 
     <div class="card collapsible collapsed" data-sec="theme">
       <h2>Theme</h2>
-      <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
-      <div class="opts tilewrap" id="themePick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every slot below in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them.</div>
-      <!-- ⚠️ One slot at a time behind a chip row. Six pickers stacked meant scrolling past
-           five of them to reach the one you wanted, and the tiles are big. Both the chips and
-           the panes are generated from SLOT_KEYS, so a new slot cannot arrive with a pane and
-           no chip — which would hide its controls while querySelectorAll still found them. -->
+      <!-- ⚠️ EVERYTHING in this card is behind the chip row, the bundle grid included. Seven
+           tile grids stacked is most of a phone screen each, so reaching Trail meant scrolling
+           past six of them — and the bundle row is the tallest of the lot at 19 tiles. The
+           chips are generated from SLOT_KEYS (plus this one Bundle entry) and so are the panes,
+           so a new slot cannot arrive with a pane and no chip — which would hide its controls
+           while `audit` and the menu search still found them. -->
       <div class="subtabs" data-tabs="theme"></div>
+      <div class="subpane" data-pane="bundle">
+        <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
+        <div class="opts tilewrap" id="themePick"></div>
+        <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every other tab in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them.</div>
+      </div>
       <div id="slotRows"></div>
     </div>
 
@@ -6203,7 +6223,8 @@ const SUBTABS = {
   // ⚠️ Built from SLOT_KEYS, never a hand-written copy of it: the chips and the panes have to
   // come from the same list or a new slot arrives with a pane and no chip, and its controls
   // are then hidden while `audit` and the menu search still find them.
-  theme:  SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label]),
+  theme:  [['bundle', '✨ Bundle']].concat(
+            SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
 const subTab = {};                                  // which pane each group is showing
 function showSubTab(group, pane){
@@ -6556,6 +6577,10 @@ function syncSticky(){
   su.style.setProperty('--jump-h', jh + 'px');
   su.style.setProperty('--kick-h', kh + 'px');
   su.style.setProperty('--sticky-top', (kh + jh) + 'px');
+  // A card's own sub-tab row pins under that card's header, so it needs the header's height
+  // too. Any section header will do — they are all the same box.
+  const sec = document.querySelector('#setup .card.collapsible:not(#matchCard) > h2');
+  if (sec) su.style.setProperty('--sec-h', sec.offsetHeight + 'px');
 }
 syncSticky();
 window.addEventListener('resize', syncSticky);

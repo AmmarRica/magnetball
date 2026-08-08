@@ -104,11 +104,31 @@ const r = await p.evaluate(async ()=>{
   o.jumpOpensSection = JSON.stringify(open) === '["sound"]';
   o.jumpMarksItself = target.classList.contains('sel') &&
                       chips.filter(c=>c.classList.contains('sel')).length === 1;
-  // ⚠️ Six theme pickers stacked meant scrolling past five to reach the one you wanted. The
-  // chips and the panes are both generated from SLOT_KEYS, checked here so they cannot drift.
+  // ⚠️ EVERYTHING in the Theme card is behind a chip, the bundle grid included — seven tile
+  // grids stacked is most of a phone screen each, and the bundle row is the tallest at 19
+  // tiles. The chips are Bundle plus SLOT_KEYS, and the panes are generated from the same
+  // list, checked here so the two cannot drift.
   o.slotKeys = M.SLOT_KEYS.slice();
   o.themeChips = chipsOf('theme').map(x=>x.dataset.pane);
-  o.themeTabsFromSlots = JSON.stringify(o.themeChips) === JSON.stringify(o.slotKeys);
+  o.themeTabsFromSlots = JSON.stringify(o.themeChips) === JSON.stringify(['bundle'].concat(o.slotKeys));
+  o.bundleIsATab = o.themeChips[0] === 'bundle' &&
+    !!card('theme').querySelector('.subpane[data-pane="bundle"] #themePick');
+  // ⚠️ The chip row STAYS PUT while a grid scrolls. A row that scrolls away with the tiles is
+  // only half a fix — you still have to scroll back up to change tab, which is the vertical
+  // scrolling it exists to remove. And it must be ONE row: two pinned rows put half the chips
+  // behind the section header and the pane's tiles came through the gap.
+  const tabs = document.querySelector('.subtabs[data-tabs="theme"]');
+  o.tabsSticky = getComputedStyle(tabs).position === 'sticky';
+  o.tabsOneRow = getComputedStyle(tabs).flexWrap === 'nowrap';
+  M.openSection('theme'); M.showSubTab('theme','bundle');
+  const su2 = document.getElementById('setup');
+  const hdr2 = card('theme').querySelector('h2');
+  su2.scrollTop = 0; su2.scrollTop += 1150;
+  const tb = tabs.getBoundingClientRect(), hb2 = hdr2.getBoundingClientRect();
+  o.tabsPinned = tb.top > 0 && tb.bottom < window.innerHeight &&
+                 Math.abs(tb.top - hb2.bottom) < 3;      // flush under its own header
+  o.tabsRect = [Math.round(tb.top), Math.round(tb.bottom)];
+  su2.scrollTop = 0;
   M.collapseAllSections();
   return o;
 });
@@ -119,7 +139,11 @@ ok(r.groups === 'match,player,theme', `expected sub-tabs on match, player and th
 // ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
 // to come from one list, or a new slot arrives with a pane and no chip and its controls are
 // hidden while the audit and the menu search still find them.
-ok(r.themeTabsFromSlots, `the Theme chips are not the slot list: ${JSON.stringify(r.themeChips)} vs ${JSON.stringify(r.slotKeys)}`);
+ok(r.themeTabsFromSlots, `the Theme chips are not Bundle + the slot list: ${JSON.stringify(r.themeChips)} vs ${JSON.stringify(['bundle'].concat(r.slotKeys))}`);
+ok(r.bundleIsATab, 'the bundle grid is not behind a chip — it is the tallest grid in the card at 19 tiles, so leaving it stacked means scrolling past it to reach anything else');
+ok(r.tabsSticky, 'the sub-tab row is not sticky, so it scrolls away with the grid and you have to scroll back up to change tab');
+ok(r.tabsOneRow, 'the sub-tab row can WRAP — two pinned rows put half the chips behind the section header and let the pane\'s tiles through the gap');
+ok(r.tabsPinned, `the chip row did not pin flush under its own section header while a grid scrolled: ${JSON.stringify(r.tabsRect)}`);
 ok(r.everyPaneHasAChip, `panes and chips do not match one-for-one: ${JSON.stringify(r.paneCounts)} vs ${JSON.stringify(r.chipCounts)}`);
 ok(r.oneOpenAtATime, 'more than one pane was visible at once');
 ok(r.everyPaneShowable, 'a pane stayed invisible even when its own chip was pressed');
