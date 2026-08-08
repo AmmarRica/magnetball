@@ -371,14 +371,40 @@ const desk = await p.evaluate(()=>{
   return { touch: M.isTouchLayout(), lift: M.tiltLift(), tiles: document.querySelectorAll('#tiltPick .opt').length };
 });
 
-// ...and the setting survives a reload.
+// ---- WHERE the control is, not just that it exists -------------------------
+// ⚠️ It shipped 16th of 19 fields in the Game Feel card, below two sliders, and was reported
+// as a MISSING feature — so the position is part of the feature. It belongs in Game Feel,
+// directly under the other visual on/off and ABOVE the sliders: a reader scanning a long card
+// finds toggles grouped together, not scattered between range inputs.
 await p.setViewportSize({ width: 390, height: 844 });
+const place = await p.evaluate(()=>{
+  const M=window.__magnet; const o={};
+  const pick = document.getElementById('tiltPick');
+  const card = pick && pick.closest('.card');
+  o.inGameFeel = !!card && card.dataset.sec === 'feel';
+  const fields = card ? [...card.querySelectorAll('label.field')].map(l=>l.textContent.trim()) : [];
+  o.fieldCount = fields.length;
+  o.tiltAt  = fields.findIndex(t=>/Tilt parallax/.test(t));
+  o.shakeAt = fields.findIndex(t=>/Screen shake/.test(t));
+  o.firstSliderAt = fields.findIndex(t=>/Hit stop|Goal zoom|Match speed/.test(t));
+  o.sitsWithTheOtherToggle = o.shakeAt >= 0 && o.tiltAt === o.shakeAt + 1;
+  o.aboveTheSliders = o.firstSliderAt >= 0 && o.tiltAt >= 0 && o.tiltAt < o.firstSliderAt;
+  // ...and it is reachable by SEARCH, by the words somebody would actually type. Ranked
+  // through the real index, so a label rename that breaks findability fails here.
+  const rows = M.menuSearchIndex();
+  const finds = (q) => M.menuSearchRank(rows, q).some(h => /tilt/i.test(h.r.t));
+  o.searchTerms = { parallax: finds('parallax'), tilt: finds('tilt'), threeD: finds('3d') };
+  o.findableBySearch = o.searchTerms.parallax && o.searchTerms.tilt && o.searchTerms.threeD;
+  return o;
+});
+
+// ...and the setting survives a reload.
 await p.evaluate(()=>{ const M=window.__magnet; M.sel.tilt='off'; M.saveSel(); });
 await p.reload();
 await p.waitForTimeout(900);
 const after = await p.evaluate(()=> window.__magnet.sel.tilt);
 
-const all = { ...r, ...shad, ...ui, ...pads, ...off, ...reduced, deskTouch: desk.touch, deskLift: desk.lift,
+const all = { ...r, ...shad, ...ui, ...pads, ...off, ...reduced, ...place, deskTouch: desk.touch, deskLift: desk.lift,
               tiles: desk.tiles, afterReload: after };
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
@@ -416,6 +442,10 @@ ok(JSON.stringify(all.lift) === '[0,0]', `Reduce Motion did not switch the effec
 ok(all.deskTouch === false, 'the desktop viewport still reports the phone layout, so the check below proves nothing');
 ok(JSON.stringify(all.deskLift) === '[0,0]', `the effect engaged on a desktop-width window (${JSON.stringify(all.deskLift)}), which has no tilt sensor and no reason to move`);
 ok(all.tiles === 2, `the Tilt parallax control has ${all.tiles} tiles`);
+ok(all.inGameFeel, 'the Tilt parallax control is not in the Game Feel card');
+ok(all.sitsWithTheOtherToggle, `it is field ${all.tiltAt} of ${all.fieldCount} with Screen shake at ${all.shakeAt} — the two visual on/offs belong together, and this shipped 16th of 19 below two sliders and got reported as a MISSING feature`);
+ok(all.aboveTheSliders, `it sits below a slider (first slider at ${all.firstSliderAt}, this at ${all.tiltAt}) — toggles above ranges, or a reader scanning a long card never finds it`);
+ok(all.findableBySearch, `menu search does not reach it by the words somebody would type: ${JSON.stringify(all.searchTerms)}`);
 ok(all.afterReload === 'off', `the choice did not survive a reload: ${all.afterReload}`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
