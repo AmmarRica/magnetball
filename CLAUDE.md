@@ -41,6 +41,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Result screen:** one panel per team (`renderMatchStats` → `.tpanel`), each reading players →
   score → that team's awards. `computeAwards` stays the one source of who won what; `awardRow`
   is the one place a ribbon is built. `renderAwards` now only holds the replay/clip footer.
+  ⚠️ **Three SPELLED columns, and the rest is prose.** `STAT_COLS` is Goals / Assists / Saves;
+  `STAT_MORE` + `statLine()` put everything else under the name as words, **only when non-zero**.
+  It shipped as eight acronym columns — `G A SH SV CL KP PST TCH` — with the key that decodes
+  them at the *bottom* of the screen, which on a phone stacks the panels and leaves the legend
+  two screens below the headings it explains. And most of the grid was noughts: a 4v4 is
+  8 players × 8 columns and **52 of those 64 cells read `0`**, so twelve real numbers hid among
+  fifty-two zeros. Nothing was lost — the five cut columns moved into the prose — so there is no
+  acronym key any more, because there is no jargon left to decode. A player who did nothing gets
+  **no line at all** (five spelled zeros is longer *and* says less than silence), and a `0` in a
+  column is classed `.z` so it recedes. ⚠️ **Touches is in neither list**: "5 touches" answers
+  nothing anybody asks after a match, and being the one stat every player always has, it put a
+  prose line on every single row. It still feeds `mvpScore`. `tests/matchstats.mjs` holds all
+  three sides of this — headings are words, nothing non-zero is lost, and the row fits a 360px
+  phone without overflowing its panel.
 - **Physics:** `integrate(w, ballFrozen, playersFrozen)` moves players then balls. `moveBall(w,ball,discs)`
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
   containment backstop (the ball must NEVER leave the pitch except through the goal mouth — verify on

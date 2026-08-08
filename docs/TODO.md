@@ -492,10 +492,28 @@ cocktail is on). Keyboard-only matches skip it entirely.
 - [x] Skippable from Match → Warm-up lobby.
 
 ## 📊 Match stats on the result screen
-- [x] **A full scoresheet under the awards** — goals, assists, shots, saves,
-  clearances, key passes, posts, touches, per player, both teams, sorted by the same
+- [x] **A full scoresheet under the awards** — per player, both teams, sorted by the same
   MVP score the awards use so the two panels can't disagree. Awards say who was best
   at one thing; this says what everyone actually did.
+- [x] **It was unreadable on a phone, and reported as such.** Three faults compounding:
+  eight ACRONYM columns (`G A SH SV CL KP PST TCH`); the key that decodes them at the
+  very BOTTOM of the screen, which on a phone stacks the two panels and leaves the legend
+  two screens below the headings it explains; and a grid that was mostly noughts — a 4v4
+  is 8 players × 8 columns and **52 of those 64 cells read `0`**, so twelve real numbers
+  hid among fifty-two zeros.
+- [x] **Three spelled columns and a line of prose.** `STAT_COLS` is Goals / Assists /
+  Saves; `STAT_MORE` + `statLine()` put the rest under the name in words, and **only when
+  non-zero** — "5 shots · 2 clearances". Nothing was lost, so the acronym key is gone
+  rather than left stale: there is no jargon left to decode.
+- [x] A player who did nothing gets **no line at all** — five spelled zeros is longer
+  *and* says less than silence. A `0` in a column is classed so it recedes.
+- [x] ⚠️ **Touches is in neither list.** "5 touches" answers nothing anybody asks after a
+  match, and being the one stat every player always has, it put a prose line on every
+  single row — including the rows whose whole story is that nothing happened. It still
+  feeds `mvpScore`; it just isn't worth a line.
+- [x] `tests/matchstats.mjs` holds the three sides against each other: headings are words
+  (checked on LENGTH), nothing non-zero is lost (number AND word, so "less info" can't
+  become "lost info"), and a full 4v4 row fits **360px** without overflowing its panel.
 
 ## 🐞 Two reported bugs
 - [x] **The KICK pad still swept like a loading bar.** The charge tell was changed to a flash on
