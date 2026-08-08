@@ -1414,6 +1414,10 @@
       <input id="goalZoomSpd" class="slider" type="range" min="5" max="300" step="5" />
       <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes — lower is slower. Both ride the Screen shake &amp; effects toggle.</div>
       <div style="height:10px"></div>
+      <label class="field">Tilt parallax <small style="color:var(--muted)">(phones)</small></label>
+      <div class="opts" id="tiltPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
+      <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
       <div style="height:10px"></div>
@@ -1668,6 +1672,7 @@
    Human input                 "Human input mapping from a pad"
    Gamepads                    "Gamepad polling (Gamepad API)"
    Pad seats                   "PAD SEATS — who a controller gets to drive"
+   Device tilt parallax       "DEVICE TILT — a light parallax"
    Drop-in (join mid-match)    "DROP-IN — a controller joins a match already in progress"
    Substitutions              "SUBSTITUTIONS — the touchline gate"
    Touchline prompt           "Waiting on the touchline"
@@ -2309,6 +2314,12 @@ const COOP = {
   off: { name:'Versus',  emoji:'⚔️' },
   on:  { name:'Co-op',   emoji:'🤝' },
 };
+// Phone parallax: tilt the handset and the pitch and the bodies shift by different
+// amounts. See TILT for why the two layers go opposite ways.
+const TILTOPT = {
+  on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
+  off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
+};
 // Drop-in: a controller that presses a button MID-MATCH takes over a bot, instead of
 // waiting for the next kickoff. ⚠️ Seats used to be handed out exactly once, in
 // startMatch, so a pad woken up after the whistle did nothing at all for the rest of
@@ -2510,7 +2521,7 @@ function detectPanel(){
 }
 const PANEL = detectPanel();
 
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
@@ -3657,6 +3668,116 @@ const GOALCAM = {
 // same shape the feel sliders use.
 function goalZoom(){ const v = sel.goalZoom; return v == null ? GOALCAM.zoom : Math.max(GOALCAM.zoomMin, Math.min(GOALCAM.zoomMax, v/100)); }
 function goalZoomSecs(){ const v = sel.goalZoomSpd; return v == null ? GOALCAM.inSecs : Math.max(GOALCAM.spdMin, Math.min(GOALCAM.spdMax, v/100)); }
+// ============================================================
+//  DEVICE TILT — a light parallax so a phone reads as looking INTO the pitch
+// ============================================================
+// Tilt the phone and the ground plane slides one way while the bodies slide the other.
+// That difference is the whole effect: two layers moving by different amounts is what a
+// parallax IS, and it is the only depth cue available on a top-down pitch that does not
+// mean redrawing the game in perspective.
+//
+// ⚠️ RENDER ONLY, and the same argument as the goal camera: it moves where things are
+// DRAWN and nothing else. No physics, no hit test, no bot and no kick range reads it, so
+// a match played on a phone being waved about plays exactly like one on a desk.
+// `tests/tilt.mjs` hashes the whole world with it swinging to prove it.
+const TILT = {
+  // Degrees away from however you are holding the phone that reach full effect. Small,
+  // because this is meant to answer a hand moving rather than a hand waving.
+  span: 20,
+  // Screen pixels at full tilt. ⚠️ The ground and the bodies go OPPOSITE ways, so the
+  // parallax you actually see is the sum — about 11px, which is a shift you feel and do
+  // not catch. Anything bigger stops reading as depth and starts reading as drift.
+  body: 7,
+  ground: 4,
+  // Per-step approach to the sensor's number. Step-locked (see advanceTilt), so it is the
+  // same speed on a 60Hz and a 144Hz screen.
+  ease: 0.14,
+  // ⚠️ Per-step drift of the NEUTRAL position toward however you are actually holding the
+  // phone. Without it, "level" means flat on a table: play lying down, or with the phone
+  // at the angle every person actually holds one, and the effect sits pinned at full
+  // deflection forever — which is not a parallax, it is a crooked picture. ~4s to settle.
+  recentre: 0.004,
+};
+// x/y are what the renderer reads, tx/ty the sensor's latest, bx/by the drifting neutral.
+// ⚠️ `bx` starts null rather than 0 so the FIRST reading becomes the neutral outright —
+// easing up from a hard zero means the effect lurches on when the sensor wakes.
+const tilt = { x:0, y:0, tx:0, ty:0, bx:null, by:null, live:false };
+function tiltOn(){
+  // ⚠️ Phones only, and off under Reduce Motion. A picture that swims when your hand moves
+  // is exactly what that setting is asking not to happen, and it is not a preference this
+  // has any business overriding.
+  return sel.tilt !== 'off' && tilt.live && isTouchLayout() && !prefersReducedMotion();
+}
+// ⚠️ The query object is made ONCE. tiltLift() is called for every disc and every ball on
+// every frame, so building a fresh MediaQueryList in there put a new object and a style
+// question on each body on the pitch — 11 of them a frame at 4v4, for an answer that
+// changes about never.
+const _reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+function prefersReducedMotion(){ return !!(_reduceMQ && _reduceMQ.matches); }
+// The screen-space offset for the two layers. ⚠️ ONE function, so "which way is the
+// parallax" cannot come to mean two different things in the ground pass and the body pass
+// — and so the shadow can cancel the body's lift exactly (see drawOneDisc).
+function tiltLift(){
+  if (!tiltOn()) return [0, 0];
+  return [tilt.x * TILT.body, tilt.y * TILT.body];
+}
+function tiltGround(){
+  if (!tiltOn()) return [0, 0];
+  return [-tilt.x * TILT.ground, -tilt.y * TILT.ground];
+}
+// ⚠️ Advanced next to step(world), NEVER in a draw — the trails rule. Both the smoothing
+// and the recentring are per-step decays, so a draw-driven version would run 2.4× fast on
+// a 144Hz screen and the effect would feel different on different phones.
+function advanceTilt(){
+  if (!tilt.live) return;
+  tilt.x += (tilt.tx - tilt.x) * TILT.ease;
+  tilt.y += (tilt.ty - tilt.y) * TILT.ease;
+}
+// ⚠️ The handler stores a RAW reading and does no time-based maths at all: the sensor
+// fires at its own rate, which is not the sim's, so anything that decays has to happen in
+// advanceTilt. Only the clamp and the axis-swap live here.
+function onDeviceTilt(e){
+  if (e.beta == null && e.gamma == null) return;
+  let gx = e.gamma || 0, gy = e.beta || 0;
+  // ⚠️ Rotate the reading by the SCREEN's own angle. beta/gamma are fixed to the device,
+  // not to what you are looking at, so in landscape — which is where this game is often
+  // held, and always in deck view — an unrotated reading tilts the pitch sideways when
+  // you lean it forwards.
+  const ang = ((screen.orientation && screen.orientation.angle) || window.orientation || 0) * Math.PI/180;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const rx = gx*c + gy*s, ry = -gx*s + gy*c;
+  if (tilt.bx == null){ tilt.bx = rx; tilt.by = ry; }
+  tilt.bx += (rx - tilt.bx) * TILT.recentre;
+  tilt.by += (ry - tilt.by) * TILT.recentre;
+  const cl = (v) => Math.max(-1, Math.min(1, v / TILT.span));
+  tilt.tx = cl(rx - tilt.bx);
+  tilt.ty = cl(ry - tilt.by);
+  tilt.live = true;
+}
+// ⚠️ iOS 13+ will not deliver a single reading until asked, and will only be asked from
+// inside a user gesture — so this hangs off the first tap rather than off boot, where the
+// request is rejected outright and the sensor stays silent for the whole session.
+function tiltNeedsAsk(){
+  return typeof DeviceOrientationEvent !== 'undefined' &&
+         typeof DeviceOrientationEvent.requestPermission === 'function';
+}
+let _tiltAsked = false;
+function tiltListen(){
+  if (_tiltAsked) return; _tiltAsked = true;
+  window.addEventListener('deviceorientation', onDeviceTilt, { passive: true });
+}
+function tiltAsk(){
+  if (_tiltAsked || sel.tilt === 'off' || !isTouchLayout()) return;
+  if (!tiltNeedsAsk()){ tiltListen(); return; }
+  _tiltAsked = true;
+  DeviceOrientationEvent.requestPermission()
+    .then(st => { if (st === 'granted') window.addEventListener('deviceorientation', onDeviceTilt, { passive:true }); })
+    .catch(()=>{});      // refused, or not available: the effect simply never starts
+}
+// ⚠️ Re-asking has to be possible: turning the setting back on after it was off must be
+// able to reach the sensor, and _tiltAsked would otherwise have latched it shut forever.
+function tiltReset(){ if (sel.tilt === 'off'){ tilt.live = false; tilt.x = tilt.y = 0; } else tiltAsk(); }
+
 const TAP_HOLD = 0.14;                    // press shorter than this near the ball = instant pass; longer = trap
 
 let cv = document.getElementById('game');
@@ -5095,6 +5216,9 @@ function buildOpts(containerId, obj, key, extra){
       if (key==='field' || key==='grass' || key==='pitch') refreshPitchTiles();
       updatePreview();
       if (key==='controllers' || key==='mode' || key==='coop') updatePadInfo();
+      // ⚠️ Asked HERE, inside the tap that turned it on: iOS only grants the sensor from a
+      // user gesture, and a request made at boot is refused outright.
+      if (key==='tilt') tiltReset();
     };
     wrap.appendChild(el);
   });
@@ -5691,6 +5815,7 @@ function buildMatchOpts(){
   buildOpts('controllers', CONTROLLERS, 'controllers');
   buildOpts('coop', COOP, 'coop');
   buildOpts('dropIn', DROPIN, 'dropIn');
+  buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -8271,6 +8396,8 @@ function loop(t){
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
     pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
+    advanceTilt();          // phone parallax: a per-step decay, so never in a draw
+    advanceFx();            // ...and the sparks, for exactly the same reason
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -8308,15 +8435,14 @@ function drawReplayFrame(f){
     players: world.players.map((pl,i)=>({ ...pl, x:f.p[i].x, y:f.p[i].y, kick:f.p[i].k, trap:false, chargeT:0 })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
-  // ⚠️ The SAME rotation render() applies. Deck view turns the pitch a quarter-turn,
-  // and this drew it un-rotated — so on a Steam Deck the replay came back at ninety
-  // degrees to the match it was a replay OF. The transform belongs here rather than
-  // inside drawPitch, because drawPitch is called from both paths and render() already
-  // owns its own copy.
-  ctx.save();
-  if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
-  drawPitch(fake); drawBall(fake); drawDiscs(fake);
-  ctx.restore();
+  // ⚠️ The SAME transform render() applies, through the same `pitchXform` — deck view
+  // turns the pitch a quarter-turn, and this drew it un-rotated, so on a Steam Deck the
+  // replay came back at ninety degrees to the match it was a replay OF. It is two passes
+  // for the same reason render() is: the ground and the bodies carry different offsets,
+  // and a replay of a tilted pitch has to be tilted the same way or the shadows detach.
+  const [rgx, rgy] = tiltGround(), [rbx, rby] = tiltLift();
+  ctx.save(); pitchXform(rgx, rgy); drawPitch(fake); ctx.restore();
+  ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore();
   // Big, centred REPLAY label + skip hint so it's clear what's happening.
   // Centre on the PITCH (wx/wy(0)), not the raw canvas — a docked desktop panel
   // insets the pitch to the right, so cw/2 would sit left of the play area.
@@ -11807,6 +11933,14 @@ function renderDrill(){
   drawControls();
 }
 
+// The pitch transform: an offset, then deck view's quarter-turn about the camera origin.
+// ⚠️ ONE place. render() draws the ground and the bodies as two passes so they can carry
+// different offsets, and drawReplayFrame needs the same turn — three hand-written copies
+// of it is how the replay came to be drawn at ninety degrees to the match it replayed.
+function pitchXform(dx, dy){
+  ctx.translate(dx, dy);
+  if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
+}
 function render(){
   if (!world) return;
   if (world.drillMode){ renderDrill(); return; }
@@ -11816,10 +11950,16 @@ function render(){
   // Screen shake — jitter only the pitch/players, never the touch controls.
   let sx=0, sy=0;
   if (shake > 0.3){ sx=(Math.random()*2-1)*shake; sy=(Math.random()*2-1)*shake; }   // decay is step-locked, see decayJuice
-  ctx.save(); ctx.translate(sx, sy);
-  if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
+  // ⚠️ TWO passes, and that is the parallax: the GROUND plane and everything standing on
+  // it are offset by different amounts (opposite ways, see TILT), which is the only depth
+  // cue a top-down pitch has short of redrawing the game in perspective. With tilt off or
+  // on a desktop both offsets are exactly zero and this is the single pass it used to be.
+  const [gx, gy] = tiltGround(), [bx, by] = tiltLift();
+  ctx.save(); pitchXform(sx + gx, sy + gy);
   drawPitch(world);
-  drawFx();
+  ctx.restore();
+  ctx.save(); pitchXform(sx + bx, sy + by);
+  drawFx();                   // sparks happen at body height, so they ride the body layer
   drawBallTrail(world);
   drawDiscTrails(world);      // under the discs: motion reads, clutter doesn't
   drawDiscs(world);
@@ -14363,8 +14503,13 @@ function drawDiscs(w){
 }
 function drawOneDisc(w, p, x, y, r, s, idx){
   {
-    // shadow
-    ctx.beginPath(); ctx.arc(x, y+r*0.28, r*0.95, 0, 2*Math.PI);
+    // Shadow. ⚠️ The body layer is lifted off the ground by the tilt parallax (see
+    // render), so the shadow subtracts that lift to land back where the player actually
+    // STANDS — a shadow that travels with the body is a sticker, and the gap opening and
+    // closing between the two is the whole reason the effect reads as height.
+    // The offset is screen-space because uprightAt has already cancelled the pitch turn.
+    const [slx, sly] = tiltLift();
+    ctx.beginPath(); ctx.arc(x - slx, y + r*0.28 - sly, r*0.95, 0, 2*Math.PI);
     ctx.fillStyle=TH.shadow; ctx.fill();
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
     // A theme can own what a player LOOKS like, not just what colour they are.
@@ -14464,8 +14609,15 @@ function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; }
 const DOT_GAP      = 9;    // world units between player dots
 const DOT_MAX      = 12;   // dots kept per player
 const DOT_FADE     = 0.93; // per-frame decay, so a stopped player's tail dies off
-const BALL_PATH    = 40;   // ball path samples retained (enough for a long streak)
-const BALL_LEN_MAX = 320;  // world units of streak at full speed (~40% of a classic pitch)
+// ⚠️ Enough SAMPLES to draw the longest streak at a moderate speed, not just at the cap.
+// The streak walks back along recorded positions, so a buffer sized for a full-speed ball
+// runs out of path on a ball ambling at a third of that — and the streak silently comes up
+// short exactly when there is most of it to see. 90 covers BALL_LEN_MAX at ~6 units a step.
+const BALL_PATH    = 90;   // ball path samples retained
+// ⚠️ Length is SPEED-driven (`drive` below), which is what makes a longer one safe: at rest
+// it is still zero. The three-second, TIME-measured version that was reverted drew most of a
+// pitch hanging off a stationary ball — that was the bug, not the length.
+const BALL_LEN_MAX = 520;  // world units of streak at full speed (~65% of a classic pitch)
 const BALL_MIN_SPD = 0.8;  // below this the ball is coasting — no streak
 
 // Motion tells are SIM state, not frame state: sampled and faded once per step()
@@ -14567,7 +14719,9 @@ function drawBall(w){
   uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
 }
 function drawOneBall(b, x, y, r, s){
-  ctx.beginPath(); ctx.arc(x, y+r*0.3, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  // Anchored to the ground, exactly as the discs' is — see drawOneDisc.
+  const [slx, sly] = tiltLift();
+  ctx.beginPath(); ctx.arc(x - slx, y + r*0.3 - sly, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
   // The snail must never be mistaken for the scoring ball — it's the sudden-death
   // objective. Amber shell with a spiral, deliberately unlike the white ball.
   if (b.isSnail){
@@ -14821,12 +14975,25 @@ function spawnTouchFx(x,y,col,r1){
   if (!sel.juice) return;
   fx.push({ring:true, x,y, life:0.34, max:0.34, r0:6, r1:r1||28, c:col||'#ffffff'});
 }
-function drawFx(){
-  const s=cam.s;
+// ⚠️ THE PARTICLES AGE HERE, next to step(world) — not in drawFx, where all of this used
+// to live. `p.life -= STEP` and `p.x += p.vx` inside a draw is the trails bug wearing a
+// different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the
+// time it was given, so a kick looked punchier on a slow monitor. It also made two draws of
+// one frame produce two different pictures, which is what a paused screen and a pixel test
+// both rely on not happening.
+function advanceFx(){
   for (let i=fx.length-1;i>=0;i--){
     const p=fx[i];
-    p.life-=STEP;
-    if (p.life<=0){ fx.splice(i,1); continue; }
+    p.life -= STEP;
+    if (p.life <= 0){ fx.splice(i,1); continue; }
+    if (p.ring) continue;                       // rings grow off their own life, below
+    p.x += p.vx; p.y += p.vy; if (p.grav) p.vy += p.grav;
+  }
+}
+function drawFx(){
+  const s=cam.s;
+  for (let i=0;i<fx.length;i++){
+    const p=fx[i];
     const a=p.life/p.max;
     if (p.ring){
       const rr = (p.r0 + (p.r1-p.r0)*(1-a)) * Math.max(s,0.6);
@@ -14834,7 +15001,6 @@ function drawFx(){
       ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), rr, 0, 2*Math.PI); ctx.stroke();
       ctx.globalAlpha=1; continue;
     }
-    p.x+=p.vx; p.y+=p.vy; if(p.grav) p.vy+=p.grav;
     ctx.globalAlpha=a;
     ctx.fillStyle=p.c;
     ctx.beginPath(); ctx.arc(wx(ix(p)), wy(iy(p)), p.r*Math.max(s,0.6)*0.8, 0, 2*Math.PI); ctx.fill();
@@ -15151,6 +15317,12 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize,120));
 buildSettings();          // populate the inline Theme/Display/Ball/Sound/Feel cards on the menu
 resize();
+// ⚠️ The tilt sensor is asked for on the FIRST TAP, once, and never at boot: iOS 13+ only
+// grants device orientation from inside a user gesture and refuses a request made outside
+// one — which would leave the sensor silent for the whole session with nothing to say so.
+// `once` because tiltAsk latches anyway and a live listener per tap is pure waste.
+window.addEventListener('pointerdown', tiltAsk, { once: true, passive: true });
+window.addEventListener('keydown', tiltAsk, { once: true });
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
@@ -15317,6 +15489,9 @@ if (window.__MAGNETDEBUG) {
     SUB, subGate, subOnSpot, subSideOf, subDefaultTeam, subPer, subFloorOf, evenUpSides,
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
+    TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
+    advanceFx, get fx(){ return fx; }, resetFx,
+    onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
     openSection, collapseAllSections, initCollapsibles, openLook, drawThemeSwatch, themeSwatchColors,
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,

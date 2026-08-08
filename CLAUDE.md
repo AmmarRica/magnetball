@@ -78,6 +78,36 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
   `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
+- **Tilt parallax (`sel.tilt`, phones):** tilt the handset and the GROUND plane shifts one
+  way while everything standing on it shifts the other — `tiltGround()` / `tiltLift()`, read
+  by `render()`'s **two passes**. That difference is the whole effect; two layers moving by
+  different amounts is what a parallax is, and it is the only depth cue a top-down pitch has
+  short of redrawing the game in perspective. About 11px combined at full tilt.
+  ⚠️ **Render only**, same argument as the goal camera — `tests/tilt.mjs` hashes the world
+  over 600 steps with the tilt swinging hard and flat. ⚠️ Advanced in `advanceTilt()` next to
+  `decayJuice()`, **never in a draw**: both the smoothing and the recentring are per-step
+  decays. ⚠️ The handler stores a RAW reading and does no time-based maths — the sensor fires
+  at its own rate, not the sim's. ⚠️ **The neutral position DRIFTS** toward however you are
+  actually holding the phone (`TILT.recentre`), and the first reading is adopted outright:
+  without that, "level" means flat on a table, so playing lying down pins the effect at full
+  deflection forever, which is a crooked picture rather than a parallax. ⚠️ The reading is
+  rotated by `screen.orientation.angle` — beta/gamma are fixed to the device, not to what you
+  are looking at, so in landscape an unrotated reading tilts the pitch sideways when you lean
+  it forwards. ⚠️ The **shadow subtracts the lift** in `drawOneDisc`/`drawOneBall` so it stays
+  on the ground: a shadow that travels with the body is a sticker, and the gap opening between
+  the two is what reads as height. ⚠️ iOS 13+ only grants the sensor **from a user gesture**,
+  so `tiltAsk` hangs off the first `pointerdown`, not off boot. Off on desktop, and off under
+  `prefers-reduced-motion` — whose query object is built **once**, because `tiltLift()` is
+  called for every body on every frame.
+- **`pitchXform(dx, dy)` is the ONE pitch transform** — an offset then deck view's
+  quarter-turn. `render()` uses it twice (ground, then bodies) and `drawReplayFrame` once;
+  three hand-written copies is how the replay came to be drawn at ninety degrees to the match
+  it was a replay of.
+- **Particles age in `advanceFx()`, next to `decayJuice()`** — never in `drawFx`, where
+  `p.life -= STEP` and `p.x += p.vx` used to live. ⚠️ That is the trails bug wearing a
+  different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the time
+  it was given, so a kick looked punchier on a slow monitor. It also meant two draws of one
+  frame produced two different pictures.
 - **Motion tells:** short dot tails behind the players and one streak behind the ball,
   both capped in world units (`DOT_GAP`/`DOT_MAX`, `BALL_LEN_MAX`). ⚠️ A three-second,
   time-measured version of these was built and **reverted**: at the speed cap it drew a
@@ -665,7 +695,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 74 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 75 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
