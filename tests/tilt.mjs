@@ -104,6 +104,30 @@ const r = await p.evaluate(()=>{
   o.total = +(Math.abs(lift[0]) + Math.abs(grnd[0])).toFixed(2);
   o.staysLight = o.total <= 16;
 
+  // ---- 2 (cont). FOUR depths, ordered ------------------------------------
+  // ⚠️ The stack has to be monotonic in depth or it is not a parallax, it is four things
+  // sliding about: turf furthest back, then the markings, then the bodies, then the UI
+  // nearest your eye. Checked as an ORDER rather than four magic numbers, so retuning the
+  // constants cannot quietly break the thing the constants are for.
+  M.tilt.x = 1; M.tilt.y = 0;
+  const layers = { turf: M.tiltGround()[0] + M.tiltTurf()[0],
+                   mark: M.tiltGround()[0],
+                   body: M.tiltLift()[0],
+                   ui:   M.tiltUI()[0] };
+  o.layers = layers;
+  o.depthOrdered = layers.turf < layers.mark && layers.mark < layers.body && layers.body < layers.ui;
+  o.fourDistinct = new Set(Object.values(layers)).size === 4;
+  // ⚠️ The turf/markings gap is DELIBERATELY tiny: the touchline is a marking and the grass
+  // is the turf beneath it, so a real gap between them stops reading as a bevel and starts
+  // reading as a misaligned pitch.
+  o.turfGap = +(layers.mark - layers.turf).toFixed(2);
+  o.turfGapSubtle = o.turfGap > 0 && o.turfGap <= 4;
+  // ...and every layer is flat again with the effect off, or "off" is not off.
+  M.sel.tilt = 'off';
+  o.allFlatWhenOff = [M.tiltGround(), M.tiltTurf(), M.tiltLift(), M.tiltUI()]
+    .every(v => v[0] === 0 && v[1] === 0);
+  M.sel.tilt = 'on';
+
   // ---- 1. render only ----------------------------------------------------
   const hash = (ww) => { let h = 2166136261;
     const s = JSON.stringify(ww.players.map(q=>[q.x,q.y,q.vx,q.vy,q.faceX,q.faceY,q.gait,q.inX,q.inY]))
@@ -221,6 +245,96 @@ const shad = await p.evaluate(()=>{
   return o;
 });
 
+// ---- the UI layer: the HUD really moves, and its BUTTONS move with it -------
+// ⚠️ The HUD is DOM, so it moves by a CSS transform — which carries its buttons' hit areas
+// along with it. That is the whole reason a transform is right here and redrawing at an
+// offset would be wrong: a pause button drawn 9px from where it can be pressed is worse than
+// one that does not move at all.
+const ui = await p.evaluate(()=>{
+  const M=window.__magnet; const o={};
+  M.sel.tilt='on'; M.sel.mode='1v1'; M.setMatchSeed(2); M.startMatch();
+  const hud = document.getElementById('hud');
+  hud.classList.remove('hidden');
+  M.tilt.live = true; M.tilt.x = 0; M.tilt.y = 0;
+  M.computeCam(); M.render(); M.syncTiltUI();
+  const flat = document.getElementById('ovResume') ? null : null;
+  const btn = hud.querySelector('button');
+  const boxFlat = btn ? btn.getBoundingClientRect() : null;
+  o.hudFlat = hud.style.transform || '';
+  M.tilt.x = 1; M.tilt.y = 0.5;
+  M.computeCam(); M.render(); M.syncTiltUI();
+  o.hudOver = hud.style.transform || '';
+  const boxOver = btn ? btn.getBoundingClientRect() : null;
+  o.hudMoved = o.hudOver !== '' && o.hudOver !== o.hudFlat;
+  // ⚠️ The BUTTON's own box moved, not just the wrapper's style string — that is what says
+  // the tap target went with the picture.
+  o.btnMoved = !!(boxFlat && boxOver) && Math.abs(boxOver.left - boxFlat.left) > 3;
+  o.btnShift = (boxFlat && boxOver) ? +(boxOver.left - boxFlat.left).toFixed(1) : null;
+  o.uiOff = M.tiltUI().map(v=>+v.toFixed(2));
+  o.btnMatchesLayer = o.btnShift != null && Math.abs(o.btnShift - o.uiOff[0]) < 1.5;
+  // ...and it is cleared again when the effect goes off, rather than left stuck over.
+  M.sel.tilt='off'; M.syncTiltUI();
+  o.hudCleared = (hud.style.transform || '') === '';
+  M.sel.tilt='on'; M.tilt.x = 0; M.tilt.y = 0; M.syncTiltUI();
+  return o;
+});
+
+// ---- the resting thumbstick and KICK markers move; a LIVE stick does not -----
+// ⚠️ Measured off pixels in the corner where the marker lives. A control being touched is
+// attached to your thumb and must not float away from it; one at rest is decoration.
+const pads = await p.evaluate(()=>{
+  const M=window.__magnet; const o={};
+  M.sel.tilt='on'; M.sel.handed='right'; M.sel.mode='1v1';
+  M.setMatchSeed(2); M.startMatch();
+  const w=M.world; w.state='play'; w.stateT=2;
+  for (let i=0;i<200;i++) M.decayJuice();          // see the shake trap above
+  M.resetFx(1);
+  const cv=document.getElementById('game'), cc=cv.getContext('2d');
+  const DPR = cv.width / cv.clientWidth;
+  M.tilt.live = true;
+  // Centroid of the marker's own ink in its corner, against the flat background there.
+  const markerAt = () => {
+    M.computeCam(); M.render();
+    const rest = M.restingJoyPos(false);
+    const x0 = Math.round((rest.jx - 80)*DPR), y0 = Math.round((rest.jy - 80)*DPR);
+    const n = Math.round(160*DPR);
+    const d = cc.getImageData(Math.max(0,x0), Math.max(0,y0),
+                              Math.min(n, cv.width-Math.max(0,x0)),
+                              Math.min(n, cv.height-Math.max(0,y0)));
+    let sum=0, sx=0;
+    for (let py=0; py<d.height; py++) for (let px=0; px<d.width; px++){
+      const i=(py*d.width+px)*4;
+      const l = d.data[i]+d.data[i+1]+d.data[i+2];
+      if (l > 90){ sum++; sx+=px; }                 // the marker is drawn in white
+    }
+    return { n: sum, x: sum ? sx/sum : 0 };
+  };
+  M.tilt.x = 0; M.tilt.y = 0; const flat = markerAt();
+  M.tilt.x = 1; M.tilt.y = 0; const over = markerAt();
+  o.markerInk = flat.n;
+  o.markerFound = flat.n > 60 && over.n > 60;
+  o.markerMoved = +(over.x - flat.x).toFixed(2);
+  o.uiPx = +(M.tiltUI()[0] * DPR).toFixed(2);
+  o.markerRidesUI = Math.abs(o.markerMoved - o.uiPx) < Math.max(2, o.uiPx*0.4);
+  // ⚠️ A LIVE thumbstick is anchored where the thumb is and must NOT float.
+  M.pads.p1.move.id = 1; M.pads.p1.move.cx = 200; M.pads.p1.move.cy = 600;
+  M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+  const liveAt = () => { M.computeCam(); M.render();
+    const d = cc.getImageData(Math.round(120*DPR), Math.round(596*DPR), Math.round(160*DPR), Math.round(8*DPR));
+    let sum=0, sx=0;
+    for (let i=0;i<d.data.length;i+=4){ const l=d.data[i]+d.data[i+1]+d.data[i+2];
+      if (l>90){ sum++; sx += (i/4) % d.width; } }
+    return { n:sum, x: sum ? sx/sum : 0 }; };
+  M.tilt.x = 0; const lFlat = liveAt();
+  M.tilt.x = 1; const lOver = liveAt();
+  o.liveInk = lFlat.n;
+  o.liveFound = lFlat.n > 20 && lOver.n > 20;
+  o.liveMoved = +Math.abs(lOver.x - lFlat.x).toFixed(2);
+  o.liveStaysUnderThumb = o.liveMoved < 2;
+  M.pads.p1.move.id = null; M.tilt.x = 0; M.tilt.y = 0;
+  return o;
+});
+
 // ---- desktop and Reduce Motion both switch it off --------------------------
 const off = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
@@ -264,7 +378,7 @@ await p.reload();
 await p.waitForTimeout(900);
 const after = await p.evaluate(()=> window.__magnet.sel.tilt);
 
-const all = { ...r, ...shad, ...off, ...reduced, deskTouch: desk.touch, deskLift: desk.lift,
+const all = { ...r, ...shad, ...ui, ...pads, ...off, ...reduced, deskTouch: desk.touch, deskLift: desk.lift,
               tiles: desk.tiles, afterReload: after };
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
@@ -283,6 +397,18 @@ ok(all.renderOnly, `the world differs with the tilt swinging (${all.hashSwinging
 ok(all.found, 'the difference probe found no body at all, so the shadow check below proves nothing');
 ok(all.shadowOnGround, `the body+shadow footprint went ${all.flatW}px → ${all.overW}px wide (grew ${all.widthGrew}) for a ${all.liftPx}px lift — it has to widen by about the lift, because the body moves and the shadow stays; a shadow that travelled with the body would leave the footprint exactly as it was, and that is a sticker rather than a height cue`);
 ok(all.heightSame, `the footprint's HEIGHT changed too (${all.widthGrew} wider but height moved as well) — the growth has to be the sideways lift, not the body layer being drawn bigger`);
+ok(all.depthOrdered, `the four layers are not ordered by depth: ${JSON.stringify(all.layers)} — turf behind markings behind bodies behind UI, or it is four things sliding about rather than a parallax`);
+ok(all.fourDistinct, `two layers share an offset: ${JSON.stringify(all.layers)} — a layer that moves with its neighbour is not a layer`);
+ok(all.turfGapSubtle, `the turf sits ${all.turfGap}px off the markings — the touchline is a marking and the grass is the turf beneath it, so a real gap stops reading as a bevel and reads as a misaligned pitch`);
+ok(all.allFlatWhenOff, 'some layer still had an offset with the setting off');
+ok(all.hudMoved, `the HUD did not move (${JSON.stringify(all.hudFlat)} → ${JSON.stringify(all.hudOver)})`);
+ok(all.btnMoved, 'the HUD moved but a BUTTON inside it did not, so what you press is not where it is drawn');
+ok(all.btnMatchesLayer, `a HUD button shifted ${all.btnShift}px against a UI layer of ${all.uiOff && all.uiOff[0]}px — the transform is what carries the hit area, so the two cannot disagree`);
+ok(all.hudCleared, 'the HUD transform was left stuck on after the effect was switched off');
+ok(all.markerFound, `the resting thumbstick marker was not found in its corner (${all.markerInk} lit pixels), so the check below proves nothing`);
+ok(all.markerRidesUI, `the resting marker moved ${all.markerMoved}px against a UI layer of ${all.uiPx}px`);
+ok(all.liveFound, `no live thumbstick ring was found (${all.liveInk} lit pixels), so the check below proves nothing`);
+ok(all.liveStaysUnderThumb, `a LIVE thumbstick floated ${all.liveMoved}px away from the thumb holding it — a control being touched is attached to your finger; only one at rest is decoration`);
 ok(all.onPhone, 'the effect does nothing on a phone with the setting on, so the off-switches below prove nothing');
 ok(all.settingOff, 'turning the setting off left the effect running');
 ok(all.reduced === true, 'Reduce Motion was not detected under emulation, so the check below proves nothing');

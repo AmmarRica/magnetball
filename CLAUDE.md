@@ -78,11 +78,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
   `tests/goalbox.mjs` checks the mirror is exact on all 30 fields by pixel sampling.
-- **Tilt parallax (`sel.tilt`, phones):** tilt the handset and the GROUND plane shifts one
-  way while everything standing on it shifts the other — `tiltGround()` / `tiltLift()`, read
-  by `render()`'s **two passes**. That difference is the whole effect; two layers moving by
+- **Tilt parallax (`sel.tilt`, phones):** tilt the handset and **FOUR depths** shift by
+  different amounts — turf (`tiltGround() + tiltTurf()`), then the pitch MARKINGS
+  (`tiltGround()`), then the bodies (`tiltLift()`), then the on-screen controls and HUD
+  (`tiltUI()`), nearest your eye. `render()` draws the ground and the bodies as two passes;
+  the turf gets its own translate inside `drawPitch` and the UI its own. Layers moving by
   different amounts is what a parallax is, and it is the only depth cue a top-down pitch has
-  short of redrawing the game in perspective. About 11px combined at full tilt.
+  short of redrawing the game in perspective. ⚠️ The stack must stay **monotonic in depth** —
+  `tests/tilt.mjs` checks the ORDER rather than four magic numbers, so retuning `TILT` cannot
+  quietly break the thing the constants are for. ⚠️ `TILT.turf` is deliberately tiny (2.5px):
+  the touchline is a *marking* and the grass is the turf *beneath* it, so a real gap between
+  them stops reading as a bevel and reads as a misaligned pitch.
+  ⚠️ The **HUD is DOM**, so it moves by a CSS transform (`syncTiltUI`) — which carries its
+  buttons' hit areas with it, so a pause button is never drawn 9px from where it can be
+  pressed. Written only when the rounded value changes, because that runs every frame.
+  ⚠️ The **RESTING** thumbstick marker and the KICK pad ride the UI layer; a **LIVE**
+  thumbstick does not — a control being touched is attached to your thumb and must not float
+  away from it. Both are only indicators anyway: the real hit area is a whole screen zone
+  (`zoneForTouch`), which is what makes moving them safe at all.
   ⚠️ **Render only**, same argument as the goal camera — `tests/tilt.mjs` hashes the world
   over 600 steps with the tilt swinging hard and flat. ⚠️ Advanced in `advanceTilt()` next to
   `decayJuice()`, **never in a draw**: both the smoothing and the recentring are per-step
