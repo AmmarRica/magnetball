@@ -629,6 +629,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
+- **Update screen (`#updModal`, `updCheck`):** ⚠️ it compares **`VERSION`, not the service
+  worker**. A deploy here is a new `index.html` and `sw.js` barely ever changes, so
+  `registration.update()` fires `updatefound` for almost none of them — an SW-based check
+  reports "up to date" through every real release. It fetches the page and reads its VERSION,
+  which is exactly the thing that changes. ⚠️ The regex must not match **its own source**: this
+  file fetches itself, so the pattern's text is in the reply *before* the real declaration —
+  requiring a digit after the quote is what stops `\s*` being read as a version number.
+  ⚠️ `cache:'reload'` rather than a `?v=` cache-buster: the worker caches whatever URL it
+  fetched, so a query string adds a junk entry per check, and fetching the clean URL also
+  **refreshes the cached page**, which is what makes the reload reliable. ⚠️ **Never shown over
+  a live match** (`updCanShow`) — held until the menu, the pause screen or the result; the
+  attract demo counts as the menu. Declining silences the **automatic** checks only, because a
+  player pressing "Check for updates" is asking. ⚠️ Gated on `updPossible()`: `http(s)` only
+  and not in `/settings` — on a `file://` page the fetch throws into the console rather than
+  failing quietly, and two windows prompting for one update is one too many. ⚠️ **Offline it
+  answers from the worker's CACHE**, which is correct rather than a hole: a reload falls back
+  to that same copy, so a version found offline really is installable. `tests/updatecheck.mjs`
+  serves the real page and edits the version under it.
 - **Service worker:** network-first for HTML, cache-first for everything else — and
   ⚠️ **HTML is decided by the URL, not just `request.mode`.** `/settings` pulls the real page
   in with `fetch('../index.html')`, which is not a navigation and sends `Accept: */*`; classified
@@ -712,7 +730,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 75 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 76 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
