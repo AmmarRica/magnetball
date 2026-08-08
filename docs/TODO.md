@@ -328,6 +328,36 @@ Three findings, two of them real bugs that shipped.
 
 ---
 
+## 🥅 Goal box: half a second of grace
+- [x] **Nothing touches you for the first half second.** Being shoved the instant you clipped
+  the corner of the box made a run past the goal feel like the pitch was fighting you. No
+  shove, no clamp, and no visual tell either — a tell in the free window says you are being
+  stopped when you are not. Long enough to run THROUGH, nowhere near long enough to camp.
+- [x] ⚠️ The clock is wound back to zero in `applyGoalBox` for everyone NOT being pushed, not
+  in `easeOutOfBox` — that only ever hears about the players it pushes, so it can never be the
+  place a timer resets.
+- [x] ⚠️ **The hard backstop clamps to how deep you already were**, not to a fixed line. Half a
+  second at pace puts a player ~98 units into the box on Classic (measured: 98.4) against a
+  backstop of 16 — so clamping to `GOALBOX.hard` TELEPORTED them 80 units back the frame the
+  clock expired. The cap is set from where they actually are and ratchets inward as the shove
+  carries them out, so it is never a bypass and never a jerk.
+- [x] ⚠️ The suite measures the free window as a **differential against the rule switched
+  off**. `integrate` damps every player every step, so the first version of the check read vy
+  falling from 3.2 to 2.9 and called ordinary damping a shove.
+
+---
+
+## 🫐 A stale berry latch, surfaced by the above
+- [x] **A bot could escort a hole in the pitch.** `botAssignBerry` drops dead targets, but it
+  only runs on the role tick — so between a berry banking and that tick a runner was still
+  driving at a berry that had already been delivered. Cleared in `kqBerry` now, at the moment
+  the berry stops existing, which is the event that invalidates the latch.
+- [x] ⚠️ Found because the grace change perturbs every position slightly, and a 60-second bot
+  simulation downstream of that hit a window the old timing never landed in. Worth recording:
+  a physics change is a new random seed for every bot decision in the match.
+
+---
+
 ## ⬆️ "Update available"
 - [x] **An installed PWA has no reload button and no address bar**, so a player looking at the
   app had no way to pick up a new build except killing it from the app switcher.
