@@ -1179,7 +1179,7 @@
         <div style="height:14px"></div>
         <label class="field">Joining late <small style="color:var(--muted)">(changes play)</small></label>
         <div class="opts" id="dropIn"></div>
-        <div class="hint always" style="text-align:left; margin-top:4px">Press any button on a spare controller and you take over a bot straight away, without waiting for the next kickoff. You land in the seat you'd have got at the whistle — so <b>Versus</b> puts you on the opposition and <b>Co-op</b> puts you alongside. Unplug and the AI takes the body back, keeping the name and the stats. <b>At kickoff</b> is the old behaviour: seats are handed out once and a pad that wakes up mid-match waits.</div>
+        <div class="hint always" style="text-align:left; margin-top:4px">Plug a controller in during a match and a player walks out to the touchline. Walk up or down to the half you want, then press <b>START</b> — you come on at the next goal, on that side. The match grows to fit: a 3v3 that gains a player becomes a 4v4, with a bot added to the other side. Stand near the halfway line and you'll be put wherever <b>Extra controllers</b> says (opposite you for Versus, alongside for Co-op). Unplug and your body leaves by the same touchline gate, the sides even up again, and your goals stay on the scoresheet. <b>At kickoff</b> turns all of this off: seats are handed out once and a controller that wakes up mid-match waits for the next match.</div>
       </div>
       <div style="height:14px"></div>
       <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
@@ -1669,6 +1669,8 @@
    Gamepads                    "Gamepad polling (Gamepad API)"
    Pad seats                   "PAD SEATS — who a controller gets to drive"
    Drop-in (join mid-match)    "DROP-IN — a controller joins a match already in progress"
+   Substitutions              "SUBSTITUTIONS — the touchline gate"
+   Touchline prompt           "Waiting on the touchline"
    Warm-up lobby               "WARM-UP LOBBY — team sides"
    Kickoff line rule           "Kickoff line rule"
    Goal box occupancy          "Goal box occupancy: one keeper"
@@ -8096,6 +8098,9 @@ function buildGeometry(w){
 
 function resetKickoff(w, initial){
   const f = w.field, halfL = f.L/2;
+  // ⚠️ The one moment the match's own size is known for certain: this roster, before
+  // anybody has joined or left it. See subFloorOf.
+  if (initial){ w.subFloor = null; w.subPer = null; subPer(w); }
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0; w.ball.sqT = 0;
   if (w.extraBalls && w.extraBalls.length){   // multiball: park the extra balls out to the sides
     const spread = Math.min(f.W*0.28, 150);
@@ -8117,6 +8122,11 @@ function resetKickoff(w, initial){
 
   for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
   w.finalGoal = false;              // ...and the slow-mo flag never survives a restart
+  // The substitution window closes with the goal that opened it, and layTeam has just
+  // put everybody on their mark — so a walk-on that was still in progress is finished
+  // by definition rather than left steering a body away from its kickoff position.
+  w._subDone = false;
+  for (const p of w.players) p._subTo = null;
   w.state = 'kickoff'; w.stateT = 0;
   w.kickedOff = false;
   resetTrails();       // players teleport to their marks — don't smear a tail across the pitch
@@ -8187,50 +8197,44 @@ function dropInBlocked(w){
   // there is nothing left to play.
   return w.state === 'warmup' || w.state === 'over' || w.endRamp != null;
 }
-// The next seat a joining pad should take: the first bot in the shared seat order, so
-// Versus gives the opposition a body and Co-op fills your side. Null when every player
-// is already human.
-function dropInSeat(w){
-  return padSeatOrder(w.players.filter(p => p.team === 0),
-                      w.players.filter(p => p.team === 1)).find(p => p.ctrl === 'bot') || null;
+// A controller that has gone away. Its body leaves through the gate and the sides even
+// up again — a body nobody is driving stands still in the middle of the pitch, and a
+// side left a player short reads as the bots having given up.
+function dropOut(w, p){
+  const wasOn = w.players.includes(p);
+  p.ctrl = 'bot';                        // ...keeping its name and its stats
+  p._padWas = p.padIndex;                // so the same controller reclaims this body
+  p.padIndex = -1; p.rotQuarter = 0;
+  p.inX = 0; p.inY = 0; p.kick = false;
+  if (!wasOn){                           // never made it on: just clear the touchline
+    w.bench = (w.bench || []).filter(q => q !== p);
+    toast(p.name + ' unplugged', 'err', 'gamepad');
+    return;
+  }
+  // ⚠️ Down one a side, floored at the mode's own size. A 3v3 that grew to 4v4 for a
+  // guest goes back to 3v3 when they leave; a 4v4 that was always a 4v4 stays one and
+  // a bot takes the empty shirt instead. Which of those happens is decided by the
+  // floor in subPer, not by two branches here that could drift apart.
+  w.subPer = subPer(w) - 1;
+  subOff(w, p);
+  evenUpSides(w);
+  toast(p.name + ' left — sides evened up', 'err', 'gamepad');
 }
-// ⚠️ A rejoining pad keeps a name it already had. Renaming the body mid-match means the
-// award ribbon at the end credits a name nobody saw playing.
-function dropInName(w, p){
-  if (/^P\d+$/.test(p.name)) return p.name;
-  const taken = new Set(w.players.map(q => q.name));
-  let n = 2; while (taken.has('P' + n)) n++;
-  return 'P' + n;
-}
+// ⚠️ On CONNECTION, not on a button press. The old build took a bot over the instant any
+// button went down, so it had to insist on a press — a pad waking up in a bag would
+// otherwise have walked a stranger straight into the play. A new pad gets a body on the
+// TOUCHLINE now, where it can touch nothing, so connection is signal enough; the press
+// that matters is the START which asks to come on.
 function pollDropIn(w){
   if (dropInBlocked(w)) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
-  // ⚠️ A pad handed BACK to the AI first, so a seat freed this step can be claimed by a
-  // different pad in the same step rather than sitting idle until the next one.
-  for (const p of w.players){
-    if (p.ctrl !== 'gamepad') continue;
-    const g = gps[p.padIndex];
-    if (g && g.connected) continue;
-    p.ctrl = 'bot';                     // ...but it keeps its name and its stats
-    p.inX = p.inY = 0; p.kick = false; p.rotQuarter = 0;
-    toast(p.name + ' left — bot took over', 'err', 'gamepad');
-  }
-  const held = new Set(w.players.filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
-  for (const i of connectedGamepadIndices()){
-    if (held.has(i)) continue;
-    const g = gps[i];
-    if (!g.buttons.some((_, bi) => btn(g, bi))) continue;
-    const seat = dropInSeat(w);
-    if (!seat) return;                  // every body on the pitch is human already
-    seat.ctrl = 'gamepad'; seat.padIndex = i;
-    seat.name = dropInName(w, seat);
-    seat.inX = seat.inY = 0; seat.kick = false;
-    // Seat rotation is per-seat-ordinal among the humans, so it has to be recomputed
-    // for everyone rather than guessed for the joiner.
-    applySeatRotation(w.players);
-    toast(seat.name + ' joined', 'ok', 'gamepad');
-    return;                             // one join per step; the next pad gets the next
-  }
+  const alive = (i) => { const g = gps[i]; return !!(g && g.connected && g.buttons && g.buttons.length); };
+  // Leavers first, so a pad unplugged and replugged in one step is not two bodies.
+  for (const p of allBodies(w).slice())
+    if (p.ctrl === 'gamepad' && !alive(p.padIndex)) dropOut(w, p);
+  const held = new Set(allBodies(w).filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
+  for (const i of connectedGamepadIndices()) if (!held.has(i)) subWaitFor(w, i);
+  pollSubReady(w);
 }
 
 function loop(t){
@@ -8423,6 +8427,10 @@ function step(w){
   w.stateT += STEP;
 
   if (w.state === 'goal'){
+    // ⚠️ Substitutions happen HERE and only here — one hook in the goal state rather than
+    // a call at each of the five places that set it, because one of those five is always
+    // the one somebody forgets. Latched so a 1.8s celebration is one substitution window.
+    if (!w._subDone){ w._subDone = true; runSubs(w); }
     if (w.stateT > 1.8){
       const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
       if (w.overtime) endMatch(w);                 // golden goal — first goal in OT wins
@@ -8484,7 +8492,9 @@ function step(w){
       else if (p.ctrl==='human2') applyHumanInput(p, menu ? null : pads.p2);
       else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null : gamepadPad(p.padIndex));
       // Waiting bots don't play — they're stood off the touchline until the whistle.
-      else if (p.ctrl==='bot' && w.state!=='warmup') runBot(w, p);
+      // ⚠️ `_subTo` suppresses the AI while a bot walks on through the gate — walkTo sets
+      // the position directly, so a thinking bot would fight it and jitter on the touchline.
+      else if (p.ctrl==='bot' && w.state!=='warmup' && !p._subTo) runBot(w, p);
       else { p.inX=0; p.inY=0; p.kick=false; }
     }
     // Kick charge: holding KICK winds up power; released or idle resets.
@@ -8501,7 +8511,7 @@ function step(w){
   if (w.state==='play'){ w.matchT += STEP; updateThreat(w); } else w.threat = null;
   if (w.ball.sqT) w.ball.sqT *= 0.72;
 
-  if (active) stepBench(w);
+  if (active){ stepBench(w); stepSubWalk(w); }   // touchline traffic — see SUB
   if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, true, false); }
   else if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
@@ -9099,6 +9109,204 @@ function stepBench(w){
     }
     p.x = clamp(p.x, -(halfW+M), halfW+M);
     p.y = clamp(p.y, -(halfL+M), halfL+M);
+    // A body walking off after a substitution isn't steering itself. Two hops — out to
+    // the gate, then along to its slot in the row — so it leaves the way it came in.
+    if (p._subPath && p._subPath.length){
+      if (walkTo(p, p._subPath[0], LOBBY_WALK.off)) p._subPath.shift();
+    }
+  }
+}
+
+// ============================================================
+//  SUBSTITUTIONS — the touchline gate, and evening the sides up
+// ============================================================
+// Plug a controller in mid-match and a body walks out to the touchline. Press START and
+// it comes on at the next goal, on whichever side it is standing beside. Unplug and it
+// leaves the same way.
+//
+// ⚠️ ONE GATE, beside the halfway line, used by everything that crosses — the joiner
+// coming on, the bot added to even the sides up, and anybody leaving. That is where
+// substitutions happen in the real game, and more to the point it is the only place a
+// body can cross the line without walking through the play.
+const SUB = {
+  // Which touchline the gate is on, and how far out the waiting body stands. Matched to
+  // the bench so a waiting body and the gate are the same distance out.
+  side: 1,
+  // ⚠️ Beside the halfway line, not on it: a body sitting exactly on y=0 is level with
+  // the centre spot, and at kickoff that reads as somebody standing in the circle.
+  gateY: 0,
+  // How far into a half you must stand for it to count as a side pick. The lobby's own
+  // band, because it is the same question asked in the same place — and reusing it means
+  // "walking into a half is a choice" cannot come to mean two different distances.
+  neutral: LOBBY.neutral,
+};
+// Where a body crosses the line. ⚠️ Derived from the field, never stored: courts differ
+// in width by a factor of three, and a remembered gate would be off the grass on most.
+function subGate(w){
+  return { x: SUB.side * (w.field.W/2 + LOBBY.benchGap), y: SUB.gateY };
+}
+// Just inside the line, level with the gate — where a body that has just come on stands
+// before the kickoff lays everyone out properly.
+function subOnSpot(w, team){
+  return { x: SUB.side * (w.field.W/2 - PLAYER.r*2), y: (team === 0 ? 1 : -1) * SUB.neutral };
+}
+function benchHumans(w){ return (w.bench || []).filter(p => p.ctrl !== 'bot'); }
+// Every body this match knows about, on the pitch or waiting. Used wherever a question
+// is about the PAD rather than about the play — "is this controller already driving
+// something" has to see the touchline too, or a waiting pad gets a second body.
+function allBodies(w){ return w.players.concat(w.bench || []); }
+// ⚠️ Which half a WAITING body is beside — deliberately not `lobbySideOf`, which answers
+// -1 for anything outside the touchline and so answers -1 for every single body out
+// here. Undecided is a real third answer: it is what "standing by the gate" means, and
+// it is why the neutral band exists at all.
+function subSideOf(w, p){
+  if (p.y >= SUB.neutral) return 0;            // team 0 defends the +y half (see layTeam)
+  if (p.y <= -SUB.neutral) return 1;
+  return -1;
+}
+// The side an undecided joiner lands on. ⚠️ Read off the Extra controllers setting that
+// already means exactly this — Versus puts a spare pad against you, Co-op alongside —
+// rather than inventing a second rule for the same question.
+function subDefaultTeam(w){
+  return sel.coop === 'on' ? 0 : 1;
+}
+// The size this match is currently played at, per side. ⚠️ It moves only when a PERSON
+// arrives or leaves, never as a side effect of counting bots — otherwise "how big is
+// this match" is answered by the very thing evenUpSides is trying to fix, and one
+// dropped bot would ratchet the match smaller for good.
+function subPer(w){
+  if (w.subPer == null) w.subPer = subFloorOf(w);
+  return w.subPer = Math.max(subFloorOf(w), Math.min(LOBBY.maxPerSide, w.subPer));
+}
+// ⚠️ The floor is the size the match KICKED OFF at, not `mode.per`: the warm-up lobby can
+// put six a side on a 4v4, and a floor of 4 there would have evenUpSides quietly take two
+// bots off each side the first time anybody's controller hiccupped. Captured once, at the
+// whistle (see resetKickoff's `initial`), because by the time a substitution runs the
+// roster has already changed and reading it then captures the wrong number.
+function subFloorOf(w){
+  if (w.subFloor == null)
+    w.subFloor = Math.max(1, (w.mode && w.mode.per) || 1,
+                          w.players.filter(p => p.team === 0).length,
+                          w.players.filter(p => p.team === 1).length);
+  return w.subFloor;
+}
+// ⚠️ THE ONE OWNER of "both sides field the same number, and never fewer than the mode
+// asked for". A join, an unplug and a swap all come through here, so the three cannot
+// disagree about what a balanced pitch is — which is exactly how a 4v3 would survive
+// long enough to look like a bug in the bots.
+function evenUpSides(w){
+  const want = subPer(w);
+  const used = new Set(allBodies(w).map(p => p.name));
+  for (const t of [0, 1]){
+    const side = () => w.players.filter(p => p.team === t);
+    while (side().length < want){
+      // A bot walks on through the gate, so an even-up reads as a substitution rather
+      // than a body appearing out of nowhere in the middle of the pitch.
+      const bot = spawnLobbyBot(w, t, side().length, used);
+      const g = subGate(w);
+      bot.x = g.x; bot.y = g.y; bot.vx = 0; bot.vy = 0;
+      bot.ms = freshMs();
+      bot._subTo = subOnSpot(w, t);
+      w.players.push(bot);
+      botInitPlayer(bot, w.players.length - 1);
+    }
+    // ⚠️ Only ever a BOT is taken off. Nobody is substituted for having arrived, and a
+    // human pulled off the pitch by a roster count is a controller that stops working
+    // mid-match for no reason its holder can see.
+    while (side().length > want){
+      const list = side().filter(p => p.ctrl === 'bot');
+      const bot = list[list.length - 1];
+      if (!bot) break;
+      subOff(w, bot);
+    }
+  }
+  applySeatRotation(w.players);
+}
+// Take a body off: onto the bench, walking out through the gate and along to the row.
+function subOff(w, p){
+  w.players = w.players.filter(q => q !== p);
+  (w.bench = w.bench || []).push(p);
+  p.sittingOut = true;
+  p.inX = 0; p.inY = 0; p.kick = false; p.vx = 0; p.vy = 0;
+  p._subTo = null; p._subIn = false;
+  const slots = benchSlots(w, (w.bench || []).filter(q => q.ctrl === 'bot'));
+  p._subPath = [subGate(w), slots.get(p) || subGate(w)];
+}
+// A pad nobody has seen yet gets a body on the touchline. ⚠️ Placed OUTSIDE the pitch on
+// connection alone, with no button press asked for: out here it cannot touch the ball or
+// anybody else, and a body on the touchline is the one thing that tells you the pad is
+// actually working before you commit it to a match.
+function subWaitFor(w, padIndex){
+  // ⚠️ A controller that hiccups and comes back reclaims ITS OWN body, name, stats and
+  // all. Minting a fresh P3 instead would leave P2's half-match stranded on the bench and
+  // put a second body on the touchline for one person.
+  const mine = (w.bench || []).find(p => p._padWas === padIndex);
+  if (mine){
+    mine.ctrl = 'gamepad'; mine.padIndex = padIndex; mine._padWas = null;
+    mine.sittingOut = true; mine._subIn = false;
+    toast(mine.name + ' back — walk to a side, then START', 'ok', 'gamepad');
+    return mine;
+  }
+  if (benchHumans(w).length + w.players.length >= LOBBY.maxPerSide * 2) return null;
+  const used = new Set(allBodies(w).map(p => p.name));
+  let n = 2; while (used.has('P' + n)) n++;
+  const team = subDefaultTeam(w);
+  const p = mkPlayer(team, 'P' + n, teamTint(team, n), BOT_CAP, 'gamepad',
+                     shirtNo(n), randEyes(n));
+  p.padIndex = padIndex; p.sittingOut = true; p.ms = freshMs();
+  const g = subGate(w);
+  p.x = g.x; p.y = g.y;
+  (w.bench = w.bench || []).push(p);
+  toast(p.name + ' — walk to a side, then START', 'ok', 'gamepad');
+  return p;
+}
+// START while waiting, edge-triggered per pad, arms you for the next goal. Pressing it
+// again cancels — the wait can be long, and a decision you cannot take back is worse
+// than no decision.
+function pollSubReady(w){
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  for (const p of benchHumans(w)){
+    if (p.ctrl !== 'gamepad') continue;
+    const g = gps[p.padIndex];
+    const pressed = !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
+    const key = 'sub' + p.padIndex, was = _startPrev[key];
+    _startPrev[key] = pressed;
+    if (!pressed || was) continue;
+    p._subIn = !p._subIn;
+    toast(p.name + (p._subIn ? ' on at the next goal' : ' waiting'), p._subIn ? 'ok' : '', 'gamepad');
+  }
+}
+// A goal has gone in: bring on anybody who asked, then even the sides up. ⚠️ Called from
+// the goal state exactly once per goal (`w._subDone`), not from the five places that set
+// the state — one hook cannot be the one somebody forgets to add.
+function runSubs(w){
+  const coming = benchHumans(w).filter(p => p._subIn);
+  if (!coming.length) return;
+  for (const p of coming){
+    const pick = subSideOf(w, p);
+    const team = pick >= 0 ? pick : subDefaultTeam(w);
+    w.bench = (w.bench || []).filter(q => q !== p);
+    p.team = team; p.sittingOut = false; p._subIn = false; p._subPath = null;
+    p.color = teamTint(team, w.players.filter(q => q.team === team).length);
+    p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+    const on = subOnSpot(w, team);
+    p.x = on.x; p.y = on.y;
+    w.players.push(p);
+    // ⚠️ The match GROWS by one a side. A 3v3 that gains a player is a 4v4, not a 4v3
+    // and not a 3v3 with somebody dropped — arriving must never cost a body its place.
+    w.subPer = Math.max(subPer(w), w.players.filter(q => q.team === team).length);
+    toast(p.name + ' joined ' + (team === 0 ? 'HOME' : 'AWAY'), 'ok', 'gamepad');
+  }
+  evenUpSides(w);
+}
+// A body that has just come on, or a bot walking on to even things up, walks to its spot
+// instead of appearing there. ⚠️ Position is set directly and velocity held at zero, the
+// way the lobby's staging already does it, so `integrate` has nothing to fight — and the
+// AI is suppressed for a bot mid-walk at the one place runBot is called.
+function stepSubWalk(w){
+  for (const p of w.players){
+    if (!p._subTo) continue;
+    if (walkTo(p, p._subTo, LOBBY_WALK.on)) p._subTo = null;
   }
 }
 
@@ -10004,8 +10212,19 @@ function topBy(ps, val, minv){
 // "Most Saves" without the number is just a name — say how many. Every award's note
 // carries the figure that won it, so the board reads as a scoreline, not a rosette.
 function plural(n, one, many){ return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+// ⚠️ Everyone who took part — the bodies on the pitch PLUS anyone on the bench who
+// actually played before they left. A controller unplugged at half time puts its body on
+// the bench, and reading only `w.players` drops that player's goals off the scoresheet
+// and their name out of the awards, as though the half they played never happened.
+// A reserve who never got on has an untouched sheet, so it says nothing and appears not
+// at all — which is the same rule the prose stat line follows.
+function matchRoster(w){
+  const played = (p) => p.ms && (p.ms.goals || p.ms.assists || p.ms.saves || p.ms.shots ||
+                                 p.ms.clears || p.ms.passKey || p.ms.posts || p.ms.touches);
+  return w.players.concat((w.bench || []).filter(played));
+}
 function computeAwards(w){
-  const ps = w.players; ps.forEach(p=>{ p._hero = isHero(w,p); });
+  const ps = matchRoster(w); ps.forEach(p=>{ p._hero = isHero(w,p); });
   const out = [];
   // `note` is a function of the winning value, so the count comes from the same
   // number that picked the winner and can't drift from it.
@@ -10094,9 +10313,10 @@ function renderMatchStats(w){
   for (const team of [0, 1]){
     // Sorted by the same MVP score the awards use, so the panel and its award
     // list can't disagree about who had the better match.
-    const side = w.players.filter(p => p.team === team)
+    const roster = matchRoster(w);
+    const side = roster.filter(p => p.team === team)
       .sort((a,b) => mvpScore(b.ms) - mvpScore(a.ms) ||
-                     w.players.indexOf(a) - w.players.indexOf(b));
+                     roster.indexOf(a) - roster.indexOf(b));
     if (!side.length) continue;
     const panel = document.createElement('div');
     panel.className = 'tpanel' + (team === won ? ' twin' : '');
@@ -11611,12 +11831,49 @@ function render(){
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
+  else drawSubPrompts(world);   // ...and the touchline, for anybody waiting to come on
   syncLobbyStartBtn();     // idempotent: only touches the DOM when the state changes
   drawControls();
   if (world.demo) drawDemoTag();      // idle background match — say so
   drawBuildTag();
   drawPadFlairs();
   if (sel.debug) drawDebug(world);
+}
+
+// ---------- Waiting on the touchline ----------------------------------------
+// A body out here is somebody holding a controller who has not been told anything yet.
+// ⚠️ Three things have to be on screen or the feature is invisible: WHICH controller it
+// is, which side it would get, and what to press. The lobby learned the same lesson —
+// see its per-player prompt, whose shape this borrows.
+//
+// ⚠️ Drawn in SCREEN space through `screenPt`, and through `uprightAt` like every other
+// label: it is UI, so deck view and cocktail must not turn the words on their side.
+function drawSubPrompts(w){
+  if (!w || !w.bench || !w.bench.length) return;
+  const T = TH;
+  for (const p of benchHumans(w)){
+    const [sx, sy] = screenPt(wx(ix(p)), wy(iy(p)));
+    const pick = subSideOf(w, p);
+    // The side it would ACTUALLY get, undecided included — read through the same two
+    // functions runSubs uses, so the label cannot promise a side the goal won't give.
+    const team = pick >= 0 ? pick : subDefaultTeam(w);
+    const where = (team === 0 ? 'HOME' : 'AWAY') + (pick < 0 ? '?' : '');
+    const txt = p._subIn ? 'ON AT NEXT GOAL · ' + where : 'START = JOIN ' + where;
+    // ⚠️ Held inside the canvas. The body is OUTSIDE the touchline by definition, so a
+    // label centred on it hangs off the edge of the screen and loses its last few words —
+    // which on this label are the side you are about to be given.
+    ctx.font = `9px ${LOBBY_FONT}`;
+    const half = ctx.measureText(txt).width/2 + 8;
+    uprightAt(clamp(sx, half, cw - half), sy - p.r*cam.s - 30, (x, y) => {
+      ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      const wd = ctx.measureText(txt).width + 12;
+      ctx.fillStyle = T.nameBg; ctx.fillRect(x - wd/2, y - 8, wd, 16);
+      ctx.fillStyle = p._subIn ? readableInk(T.good || '#3ec06a', T.nameBg) : T.nameText;
+      ctx.fillText(txt, x, y);
+      ctx.font = `8px ${LOBBY_FONT}`; ctx.fillStyle = T.hudSub || T.nameText;
+      ctx.fillText(p.name, x, y - 16);
+    });
+  }
 }
 
 // ---------- Warm-up lobby overlay -------------------------------------------
@@ -15056,7 +15313,10 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
-    pollDropIn, dropInSeat, dropInBlocked, padSeatOrder, padsTakeSeats, DROPIN,
+    pollDropIn, dropInBlocked, dropOut, padSeatOrder, padsTakeSeats, DROPIN,
+    SUB, subGate, subOnSpot, subSideOf, subDefaultTeam, subPer, subFloorOf, evenUpSides,
+    subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
+    matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     drawPadFlairs, padAnyPressed, flairTinted, FLAIR_SRC,
     openSection, collapseAllSections, initCollapsibles, openLook, drawThemeSwatch, themeSwatchColors,
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
