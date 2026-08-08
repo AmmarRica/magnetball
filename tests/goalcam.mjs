@@ -78,7 +78,13 @@ const r = await p.evaluate(async ()=>{
     o.centredOnScorer = Math.abs(o.scorerOffCentre[0]) < 24 && Math.abs(o.scorerOffCentre[1]) < 24;
   }
   // The push has to be a ZOOM, not just a pan — the pitch must genuinely be bigger.
-  o.zoomedNotJustPanned = M.cam.s > base * 2;
+  // ⚠️ Measured against the DIAL, not a magic multiple. This read `cam.s > base * 2`,
+  // which was only ever true because the shipped default happened to be 5x: the moment
+  // the default became a 5% push it failed a camera that was working perfectly. What
+  // "it zoomed" means is that the scale grew by most of what the dial asked for — and
+  // that a bigger dial gives a bigger push is `dialChangesPeak` further down.
+  o.zoomGrowth = +(M.cam.s / base).toFixed(4);
+  o.zoomedNotJustPanned = M.cam.s > base * (1 + (M.goalZoom() - 1) * 0.9);
 
   // ---- it always lets go ----------------------------------------------------
   w.state = 'kickoff';
@@ -152,7 +158,7 @@ const r = await p.evaluate(async ()=>{
   o.fastPeak = +(M.cam.s/dBase).toFixed(2);
   o.fastStepsToFull = hitFullAt;
   o.dialChangesPeak = Math.abs(o.fastPeak - 2.5) < 0.05;
-  // 0.40s at 60Hz is 24 steps; the 1.15s default would take 69.
+  // 0.40s at 60Hz is 24 steps; the 0.10s default takes 6.
   o.dialChangesSpeed = hitFullAt >= 0 && hitFullAt < 40;
   // ...and 1.0x is genuinely OFF — the camera must not even latch.
   dial(100, 115);
@@ -166,7 +172,7 @@ const r = await p.evaluate(async ()=>{
   M.sel.goalZoom = 99999; M.sel.goalZoomSpd = -5;
   o.clamped = [M.goalZoom(), M.goalZoomSecs()];
   o.clampsWildValues = M.goalZoom() === M.GOALCAM.zoomMax && M.goalZoomSecs() === M.GOALCAM.spdMin;
-  dial(500, 115);
+  dial(105, 10);            // back to the shipped defaults
 
   M.goalCamReset(); M.setMatchSeed(null);
   return o;
@@ -181,7 +187,7 @@ ok(r.movesWithStep, `the push never moved when stepped: ${JSON.stringify(r.ramp)
 ok(r.stillCelebrating, 'the goal state ended before the push finished, so the peak measured the ease-back');
 ok(r.rampIsMonotonic, `the push in is not smooth: ${JSON.stringify(r.ramp)}`);
 ok(r.reachesTheZoom, `peaked at ${r.peak}x, expected ${r.declaredZoom}x`);
-ok(r.zoomedNotJustPanned, 'the camera panned but never actually zoomed');
+ok(r.zoomedNotJustPanned, `the camera panned but never actually zoomed: scale grew ${r.zoomGrowth}x against a dial of ${r.declaredZoom}x`);
 ok(r.centredOnScorer, `the scorer is not centred: off by ${JSON.stringify(r.scorerOffCentre)}px`);
 ok(r.letsGo, `the camera stayed pushed in after the celebration: scale ${r.releasedScale}x`);
 ok(r.releasedOx, 'the camera let go of the zoom but not of the pan');

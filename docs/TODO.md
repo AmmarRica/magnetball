@@ -254,7 +254,11 @@ Three findings, two of them real bugs that shipped.
 - [x] **Colossus court** — 1320 × 2320, four times the AREA of Giant (every dimension
   doubled). Quadrupling the dimensions instead would be sixteen times the area: six times
   Classic end to end, which nobody could cross before the whistle.
-- [x] **Goal zoom sliders** — amount (1.0×–8.0×) and speed (0.20s–3.00s), under Game Feel →
+- [x] **Replay came back sideways on a Steam Deck.** `render()` applies `cam.rot` and deck view
+  turns the pitch a quarter-turn, but `drawReplayFrame` drew it un-rotated — so the replay was
+  at ninety degrees to the match it was a replay OF. It applies the same transform now, with the
+  REPLAY label outside it and placed through `screenPt` so the text stays upright.
+- [x] **Goal zoom sliders** — amount (1.0×–8.0×) and speed (0.05s–3.00s), under Game Feel →
   Presentation. **1.0× is off** and the camera never latches. Clamped in one place, so a
   value synced across from /settings can't push it out of range.
 - [x] **The Match chevron rotates its GLYPH, not the button.** Rotating the button spun its
@@ -267,8 +271,17 @@ Three findings, two of them real bugs that shipped.
 ---
 
 ## 🎥 Goal camera
-- [x] **Pushes in to 0.2× the view** (5× magnification) on whoever last touched the ball, and
-  lerps the centre onto them. Eases back when the celebration ends.
+- [x] **A 5% push, arriving in 0.10s** on whoever last touched the ball, and lerps the centre
+  onto them. Eases back when the celebration ends.
+- [x] ⚠️ It shipped as **5.0× over 1.15s**, which is two mistakes at once: 5× is most of the
+  pitch gone, and 1.15s of a 1.8s goal state is spent travelling — so what read was the MOVE
+  rather than the moment the ball crossed. 0.10s is six frames, so it lands at once. The
+  slider still goes to 8× for anyone who wants the old behaviour, the label says `+5%` below
+  1.5× (a "1.1×" label for a 5% push is a rounding error presented as a setting), and a save
+  still holding exactly the old 500/115 is folded to the new defaults.
+- [x] ⚠️ The suite's "it zoomed rather than panned" check was `cam.s > base * 2` — true only
+  because the shipped default happened to be 5×, so it failed a camera working perfectly the
+  moment the default changed. Measured against the DIAL now.
 - [x] Render layer only, and proven so: same seed, 300 steps, bit-identical world.
 - [x] ⚠️ Step-locked like the trails, so a 144Hz screen can't run it fast — and the goal
   slow-mo stretches it for free. Stands down while a replay owns the framing.
