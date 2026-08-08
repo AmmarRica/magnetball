@@ -1604,6 +1604,90 @@
 
 <script>
 "use strict";
+/* ────────────────────────────────────────────────────────────────────────────
+   SECTION INDEX
+
+   One file, one IIFE, and it is long. ⚠️ This index lists MARKER TEXT, never
+   line numbers: a line number is wrong the moment anybody edits above it, and a
+   stale map is worse than none. Every quoted string below appears verbatim
+   exactly once in this file — search for it to land on the section.
+
+   ── data & tables ────────────────────────────────────────────────────────
+   Fields (courts)             "Fields (vertical)"
+   Modes / difficulty / length "const MODES"
+   Flags, animals, text        "COUNTRYBALLS"
+   Eyes                        "EYE STYLES"
+   Caps                        "const CAPS"
+   Daily rewards               "DAILY LOGIN REWARDS"
+   Warm-up lobby tuning        "Warm-up lobby ---"
+   Drawn icon set              "ICONS — drawn, not typed"
+   Physics + feel constants    "Physics constants (per fixed"
+   Palettes                    "THEMES — palettes that drive"
+   Theme slots + bundles       "THEME SLOTS — a theme is a COLLECTION"
+   Trail looks                 "const TRAIL_LOOKS"
+   Sound sets                  "const SFX_SETS"
+
+   ── systems ──────────────────────────────────────────────────────────────
+   Panel mode / tab sync       "PANEL MODE + CROSS-WINDOW SYNC"
+   Audio (synthesised)         "AUDIO — everything synthesised"
+   Progression + rank          "Stats & rank (ELO"
+   VJ mode                     "VJ MODE — two video decks"
+   Setup UI                    "SETUP UI"
+   Menu search                 "Menu search ---"
+   Progressive help            "Progressive disclosure for help text ---"
+   Picker swatch cache         "const swatchCache"
+   Deck UI (controller menu)   "DECK UI — drive the whole menu"
+   Tutorial                    "ONBOARDING TUTORIAL"
+   Season / cup                "SINGLE-PLAYER SEASON"
+   Gauntlet (roguelike)        "ROGUELIKE / GAUNTLET — a run"
+   Leaderboard                 "GLOBAL LEADERBOARD"
+   Shop                        "SHOP — cosmetics only"
+   Social feed                 "SOCIAL / WATCH — an Instagram"
+   Pad binding                 "CONTROLLER BUTTON MAPPING"
+   Map votes                   "MAP VOTES"
+   Practice drills             "PRACTICE DRILLS"
+
+   ── the match ────────────────────────────────────────────────────────────
+   Match setup (startMatch)    "MATCH SETUP"
+   Geometry / camera           "//  GEOMETRY"
+   Main loop                   "//  MAIN LOOP"
+   Replay + clip share         "GOAL REPLAY + CLIP SHARE"
+   Physics integration         "PHYSICS INTEGRATION"
+   Human input                 "Human input mapping from a pad"
+   Gamepads                    "Gamepad polling (Gamepad API)"
+   Warm-up lobby               "WARM-UP LOBBY — team sides"
+   Kickoff line rule           "Kickoff line rule"
+   Goal box occupancy          "Goal box occupancy: one keeper"
+   Hit stop                    "Predicted-goal hit stop"
+   Awards                      "End-of-match awards (Towerfall"
+
+   ── bots ─────────────────────────────────────────────────────────────────
+   Tuning block                "EVERY tuning value the AI uses"
+   Steering (layer 0)          "LAYER 0 — STEERING"
+   Ball prediction             "PREDICTION — where the ball WILL be"
+   Aim scoring                 "AIM — every candidate kick"
+   Phase + roles               "LAYER 3 — TEAM STRATEGY"
+   Support grid                "SUPPORT-SPOT GRID"
+   Per-bot decision            "LAYER 1 — the per-bot decision"
+
+   ── drawing ──────────────────────────────────────────────────────────────
+   Render entry                "let cam = { s:1, ox:0"
+   Goal camera                 "Goal camera ---"
+   Pitch surfaces              "Pitch surfaces ---"
+   Pitch wear                  "Wear that accumulates"
+   Dynamic fields              "Dynamic visual themes"
+   Disc skins                  "Theme-owned player looks"
+   Sea creatures               "The seabed creatures"
+   Motion tells                "Motion tells (VIDEOBALL)"
+   Ball looks                  "Ball looks. Every one is DRAWN"
+   Squash & stretch            "Ball squash & stretch"
+   Particles                   "FX (kick sparks, confetti)"
+   Touch controls              "TOUCH CONTROLS (dual thumb"
+   HUD / overlay               "HUD / OVERLAY"
+
+   Tests: `tests/README.md` says what each of the suites covers, and records the
+   measurement traps that have produced false passes here before.
+   ──────────────────────────────────────────────────────────────────────── */
 (function () {
 
 /* ============================================================
@@ -2412,7 +2496,14 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
-            pad: { up:12, down:13, left:14, right:15, kick:0 },
+            // ⚠️ kick is NULL by default, not 0. `0` is A under the STANDARD Gamepad
+            // mapping, but a pad that reports a non-standard mapping (Steam Deck in
+            // some browsers, plenty of third-party pads) numbers its buttons however
+            // it likes — and with an exact index the kick button then does nothing at
+            // all, with no way to tell why. Null means "any of the usual fire
+            // buttons", which is A on every standard pad and at least SOMETHING on the
+            // rest. Binding one in Controls stores a real index and is honoured exactly.
+            pad: { up:12, down:13, left:14, right:15, kick:null },
             snd: { muted:false, vol:40, whistle:0, crowd:0, kick:0, wall:0, net:0 },
             // "Game feel" — adjustable physics (defaults mirror the current tuning).
             feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 } }; }
@@ -3476,6 +3567,18 @@ function normalizeLook(){
   // the first fix and it was a second place to keep in step; this is the real one.
   if (!TRAIL_LOOKS[L.trail]) L.trail = d.trail;
   if (!THEMES[L.palette]) L.palette = d.palette;
+  normalizePad();
+}
+// ⚠️ The shipped default for kick used to be the literal index 0, which is A only
+// under the STANDARD Gamepad mapping — on a pad that reports something else it pointed
+// at whatever button happens to be numbered 0, and the kick silently never fired. The
+// default is null now ("any of the usual fire buttons"), and a save carrying the old 0
+// is folded to it. That is safe rather than presumptuous: 0 is in the fallback set, so
+// A still kicks on every standard pad, and nobody deliberately binds kick to the button
+// it was already bound to by default.
+function normalizePad(){
+  const p = sel.pad = Object.assign({}, defaultSel().pad, sel.pad || {});
+  if (p.kick === 0 && !p.kickBound) p.kick = null;
 }
 
 // ---- Game feel: adjustable physics from the sliders. Stored as ints (slider-friendly).
@@ -5765,7 +5868,16 @@ function updatePadInfo(){
   const n = connectedGamepadIndices().length;
   if (el){
     if (sel.controllers!=='on') el.textContent = '(tap to steer)';
-    else el.textContent = n ? `(${n} controller${n>1?'s':''} detected)` : '(no controllers — connect & press a button)';
+    else if (!n) el.textContent = '(no controllers — connect & press a button)';
+    else {
+      // ⚠️ Surface a NON-STANDARD mapping. Its button numbers are whatever the pad
+      // felt like, so the defaults may land somewhere unexpected and the only fix is
+      // to bind them — which the player cannot know to do unless told.
+      const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+      const odd = connectedGamepadIndices().some(i => gps[i] && gps[i].mapping !== 'standard');
+      el.textContent = `(${n} controller${n>1?'s':''} detected` +
+        (odd ? ' · non-standard layout, bind your buttons below)' : ')');
+    }
   }
   // The co-op row only matters with controllers on and a team bigger than one.
   const row = $('coopRow'), info = $('coopInfo');
@@ -7562,7 +7674,9 @@ function buildPadRows(){
     const active = padBind.active && padBind.slot===slot;
     const el=document.createElement('div'); el.className='opt'+(active?' sel':'');
     el.style.flexDirection='row'; el.style.justifyContent='space-between'; el.style.alignItems='center'; el.style.gap='10px';
-    const cur=(sel.pad&&sel.pad[slot]!=null)?padBtnName(sel.pad[slot]):'—';
+    // Unbound KICK is not "nothing" — it is any of the usual fire buttons, so say so.
+    const cur=(sel.pad&&sel.pad[slot]!=null) ? padBtnName(sel.pad[slot])
+                                             : (slot==='kick' ? 'A / X / RB / RT / B' : '—');
     el.innerHTML=`<span>${lab}</span><small>${active?'press a button…':cur}</small>`;
     el.onclick=()=>startBind([slot]);
     wrap.appendChild(el);
@@ -7587,14 +7701,20 @@ function padConfigLoop(){
     else {
       for(let i=0;i<g.buttons.length;i++){
         const pressed=!!(g.buttons[i]&&(g.buttons[i].pressed||g.buttons[i].value>0.5));
-        if(pressed && !padBind.prev[i]){ sel.pad=sel.pad||{}; sel.pad[padBind.slot]=i; saveSel(); advanceBind(); return; }
+        if(pressed && !padBind.prev[i]){ sel.pad=sel.pad||{}; sel.pad[padBind.slot]=i;
+          // ⚠️ Record that kick was bound ON PURPOSE. Without it, binding kick to A
+          // stores a 0 that normalizePad would fold back to "any fire button" on the
+          // next load — quietly undoing a choice the player just made.
+          if(padBind.slot==='kick') sel.pad.kickBound = true;
+          saveSel(); advanceBind(); return; }
         padBind.prev[i]=pressed;
       }
     }
   }
   requestAnimationFrame(padConfigLoop);
 }
-function padResetMap(){ sel.pad={up:12,down:13,left:14,right:15,kick:0}; saveSel(); padBind.active=false; buildPadRows(); }
+function padResetMap(){ sel.pad = Object.assign({}, defaultSel().pad); saveSel();
+                        padBind.active=false; buildPadRows(); }
 
 // ============================================================
 //  NAME POOL for bots
@@ -8312,9 +8432,19 @@ function gamepadPad(index){
   }
   const dead = 0.22, mag = Math.hypot(dx,dy);
   if (mag < dead){ dx=0; dy=0; }
-  // Kick: the bound button, or (if unbound) the usual set of fire buttons.
-  const kick = (pm.kick!=null) ? btn(g,pm.kick) : (btn(g,0)||btn(g,2)||btn(g,5)||btn(g,7)||btn(g,1));
-  return { dx, dy, kick, invert:false };
+  return { dx, dy, kick: padKickHeld(g), invert:false };
+}
+// The one place that knows which button kicks. ⚠️ Unbound means A plus the usual fire
+// set rather than "nothing": on a pad that reports a non-standard mapping an exact
+// index can point at a button that does not exist, and the kick then silently never
+// fires. A bound button is honoured exactly, because that is what binding is for.
+const KICK_FALLBACK = [0, 2, 5, 7, 1];       // A, X, RB, RT, B under standard mapping
+function padKickHeld(g){
+  if (!g) return false;
+  const k = (sel.pad || {}).kick;
+  if (k != null) return btn(g, k);
+  for (const i of KICK_FALLBACK) if (btn(g, i)) return true;
+  return false;
 }
 function btn(g,i){ const b=g.buttons[i]; return !!(b && (b.pressed || b.value>0.4)); }
 
@@ -8773,7 +8903,11 @@ function pollLobbyStart(w){
     let pressed = false, key = p.ctrl;
     if (p.ctrl === 'gamepad'){
       const g = gps[p.padIndex];
-      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8)));
+      // ⚠️ A (or whatever kick is bound to) as well as Start/Select. Start was the
+      // only way out of the lobby, which is a button plenty of pads put somewhere
+      // awkward and the Steam Deck puts under a menu — and A is already the button
+      // every other screen takes as "yes".
+      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
@@ -14672,6 +14806,7 @@ if (window.__MAGNETDEBUG) {
     get flash(){ return flash; }, set flash(v){ flash=v; },
     addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
+    buildPadRows, padResetMap, normalizePad,
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
     ANIMALS, TEXTS, TEXT_KEYS, buildTextPicker, itemName, shirtNo, defaultProfile, saveProfile,
     unlockCounts, UNL_CATS, isUnlocked, drawDisc, updatePreview,
@@ -14708,7 +14843,7 @@ if (window.__MAGNETDEBUG) {
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
     zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
