@@ -328,6 +328,66 @@ Three findings, two of them real bugs that shipped.
 
 ---
 
+## 📐 Tilt parallax on phones
+- [x] **Two layers, opposite ways.** Tilt the handset and the GROUND plane shifts one way
+  while everything standing on it shifts the other — about 11px combined at full tilt. Two
+  layers moving by different amounts is what a parallax IS, and it is the only depth cue a
+  top-down pitch has short of redrawing the game in perspective.
+- [x] ⚠️ **The shadow subtracts the lift**, so it stays where the player actually stands. A
+  shadow that travels with the body is a sticker; the gap opening and closing between the two
+  is the entire reason the effect reads as height.
+- [x] ⚠️ **Render only**, the same argument the goal camera has to satisfy — nothing physical
+  reads it, so a match played on a phone being waved about plays exactly like one on a desk.
+  `tests/tilt.mjs` hashes the whole world over 600 steps with the tilt swinging.
+- [x] ⚠️ **Step-locked** (`advanceTilt`, next to `decayJuice`). Both the smoothing and the
+  recentring are per-step decays, so a draw-driven version would run 2.4× fast on a 144Hz
+  screen and the effect would feel like a different setting on a different phone. The event
+  handler stores a RAW reading and does no time-based maths at all — the sensor fires at its
+  own rate, which is not the sim's.
+- [x] ⚠️ **Neutral is wherever you are actually holding the phone.** The baseline drifts
+  (~4s), and the first reading is adopted outright. Without that, "level" means flat on a
+  table: play lying down and the effect sits pinned at full deflection forever, which is a
+  crooked picture rather than a parallax.
+- [x] ⚠️ The reading is rotated by the SCREEN's own angle. `beta`/`gamma` are fixed to the
+  device, not to what you are looking at, so in landscape — which is where this game is often
+  held, and always in deck view — an unrotated reading tilts the pitch sideways when you lean
+  it forwards.
+- [x] ⚠️ iOS 13+ will not deliver a single reading until asked, and will only be asked from
+  inside a **user gesture** — so the request hangs off the first tap rather than off boot,
+  where it is refused outright and the sensor stays silent for the whole session.
+- [x] Off on desktop, off under **Reduce Motion** (a picture that swims when your hand moves
+  is exactly what that setting asks not to happen), and off when the setting says so. ⚠️ The
+  media query object is built ONCE — `tiltLift()` is called for every body on every frame, so
+  a fresh `matchMedia` in there put a new object and a style question on each disc.
+
+---
+
+## 🧹 Two render-layer bugs found while building it
+- [x] **The sparks aged inside `drawFx`.** `p.life -= STEP` and `p.x += p.vx` in a draw is the
+  trails bug wearing a different hat: on a 144Hz screen every spark ran 2.4× fast and died in
+  a third of the time it was given, so a kick looked punchier on a slow monitor. Moved to
+  `advanceFx()` next to `decayJuice()`. It also meant two draws of one frame produced two
+  different pictures — which is what a paused screen and every pixel test rely on not
+  happening, and it is what made the tilt measurement impossible to take until it was fixed.
+- [x] **`pitchXform(dx, dy)` is now the one pitch transform.** `render()` needs it twice (the
+  ground pass and the body pass) and `drawReplayFrame` once; three hand-written copies of a
+  translate-rotate-translate is how the replay came to be drawn at ninety degrees to the match
+  it was a replay of in the first place.
+
+---
+
+## 〰️ Ball streak
+- [x] **Longer** — 320 → 520 world units at full speed (~65% of a classic pitch), with the
+  path buffer raised 40 → 90 samples. ⚠️ The buffer matters: the streak walks BACK along
+  recorded positions, so one sized for a full-speed ball runs out of path on a ball ambling at
+  a third of that, and the streak silently comes up short exactly when there is most of it to
+  see.
+- [x] ⚠️ Length is SPEED-driven, which is what makes a longer one safe: at rest it is still
+  zero. The three-second, TIME-measured version that was reverted drew most of a pitch hanging
+  off a **stationary** ball — that was the bug, not the length.
+
+---
+
 ## 🎥 Goal camera
 - [x] **A 5% push, arriving in 0.10s** on whoever last touched the ball, and lerps the centre
   onto them. Eases back when the celebration ends.
