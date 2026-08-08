@@ -148,15 +148,11 @@ Three findings, two of them real bugs that shipped.
   on alternating runs. Darkened to `#0f5c3f`, which needs no nudge at all. The sabotage
   probe in the output was a red herring: it is planted on purpose and is always there.
   Anything within a tenth of the floor will do this again — treat 4.4-4.5 as failing.
-- [ ] ⚠️ **(superseded) `contrast` is the flaky suite.** Named at last. Two earlier full runs reported
-  59/60 and 61/62 with the output lost; a run on 2026-08-08 went red on `contrast` at 75.8s
-  and the captured output held exactly ONE entry — the suite's own sabotage probe
-  (`#3a3a3a` on `#333333`, ratio 1.11), which it plants on purpose to prove the scanner
-  catches a low-contrast label. Standalone and on the very next full run it reported ALL
-  PASS with the same probe present. So the probe is being counted as a real finding
-  sometimes and not others, which points at the probe's cleanup racing the scan rather
-  than at any theme's colours. It is now the slowest suite (19 themes) and the only one
-  that plants a control it must then exclude — look there first.
+- [-] ⚠️ **First diagnosis of the flaky `contrast` suite, kept because it was WRONG.** A red
+  run's captured output held exactly one entry — the suite's own sabotage probe — and the
+  conclusion drawn was that the probe's exclusion was racing the scan. It was not: the probe
+  is planted on purpose and is present on the passing runs too. The real cause is the entry
+  above. The lesson is that "the only thing in the output" is not the same as "the cause".
 
 ## 🧤 Goal box: one keeper, one attacker
 - [x] A team could park its whole defence on its own line, and the attack could bury the keeper
@@ -393,7 +389,7 @@ Three findings, two of them real bugs that shipped.
 ---
 
 ## 🎨 Themes are a collection of slots
-- [x] **A theme is five slots, not one key.** `SLOTS` declares Background (palette),
+- [x] **A theme is a set of slots, not one key.** `SLOTS` declares Background (palette),
   Field, Players, Ball and Sound. The first four live in `sel.look`; the sound slot has
   **no stored value at all** — `sfxSetKey()` derives it from `sel.snd`, which the Sound
   card already owns one category at a time.
@@ -773,9 +769,11 @@ each was shipped at some point and each is a class of mistake worth watching for
   frames, so a disc has to cover real ground to leave anything and the cost is nothing when
   nobody's moving. One crossing marks the pitch at alpha 10/255; six crossings reach 48. Cleared
   on a new match, kept across a kickoff, never applied to grass.
-- [ ] **Three ids exist in markup that nothing reads** — `rankLine` (a layout wrapper, fine),
-  `roomCode` (the disabled Online stub) and `shopPledge` (the "Coming soon" support card). The
-  latter two are the known dead-UI stubs below; nothing else is orphaned.
+- [x] **Three ids exist in markup that nothing reads, and all three are accounted for** —
+  `rankLine` is a layout wrapper (fine, kept), and `roomCode` / `shopPledge` belong to the two
+  known "Coming soon" stubs below. Nothing else is orphaned; re-checked 2026-08-08. There is nothing
+  to delete here until the keep-or-cut on those two stubs is decided, which is an owner call
+  rather than housekeeping.
 
 ## 🪗 Settings sections are an accordion
 - [x] **Only one section open at a time.** Opening one closes the rest, clicking the open one
@@ -1094,10 +1092,14 @@ two and `tests/cocktailnopad.mjs` the third.)_
   keyboard navigation. Escape only now.
 - [x] **Four dead functions** — `teamTint`, `randCap`, `randFlag`, `randEyes` are all called now:
   the bot-look fix uses them to give every bot its own face, cap, eyes and team-family colour.
-- [ ] **`index.html` is 12,483 lines.** The single-file rule is a deliberate constraint (see
-  `CLAUDE.md`), not an accident — but navigating it is the main tax on every change, and it has
-  more than doubled since this was first written. A documented section index at the top is the
-  cheap fix; splitting the file is not on the table.
+- [x] **`index.html` is 14844 lines, and there is a SECTION INDEX at the top of the script.**
+  The single-file rule is a deliberate constraint (see `CLAUDE.md`), not an accident, but
+  navigating the file was the main tax on every change. ⚠️ The index lists MARKER STRINGS,
+  never line numbers: a line number is wrong the moment anybody edits above it, and wrong
+  *silently*, which is worse than no map at all. 63 entries, and `tests/sectionindex.mjs`
+  checks every one still resolves to exactly one place — plus that the index has not quietly
+  grown a line number, which is the failure a reviewer would wave through. Splitting the file
+  is still not on the table.
 - [ ] **Two shipped "Coming soon" stubs** — `#shopSupport` and the Online-rooms card (`#roomCode`,
   disabled). Honest, but they're dead UI in a shipped build; decide keep-or-cut.
 

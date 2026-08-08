@@ -51,6 +51,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `integrate`'s clamp to `halfL/halfW + 20`, never a wall. `tests/netpass.mjs`.
 - **Input:** touch pads (`pads.p1/p2`, `onDown/onMove/onUp`), keyboard (`pollKeys`), gamepads
   (`gamepadPad`). `applyHumanInput(p, pad)` maps a pad to a player and applies cocktail rotation.
+  **KICK is `padKickHeld(g)`, the one place that knows which button kicks.** ⚠️ `sel.pad.kick`
+  defaults to **null**, meaning A plus the usual fire set (`KICK_FALLBACK`) — *not* the literal
+  `0` it used to be. `0` is A only under the **standard** Gamepad mapping; a pad reporting a
+  non-standard one numbers its buttons however it likes, so an exact index pointed at whatever
+  happened to be numbered 0 and the kick silently never fired. A button bound in Controls is
+  honoured exactly and sets `kickBound`, so `normalizePad()`'s legacy fold of `0 → null` can't
+  undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
 - **Goal box:** the net pocket mirrored onto the pitch in front of each goal line — same
@@ -591,12 +598,18 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 60 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 73 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
 ball containment on all fields after physics changes, (3) check the console for errors, (4) assert
 the thing you mean — several suites here have passed for the wrong reason.
+
+## Finding things in `index.html`
+There is a **SECTION INDEX** at the top of the script (search `SECTION INDEX`). ⚠️ It lists
+MARKER STRINGS, never line numbers — a line number is wrong the moment anybody edits above
+it, and wrong *silently*. `tests/sectionindex.mjs` checks every marker still resolves to
+exactly one place, and fails if the index ever starts quoting line numbers.
 
 ## Gotchas
 - `step(w)` takes the world (fixed internal STEP), not a dt.
