@@ -550,6 +550,19 @@
     .dm-rwlabel { font-family: var(--pix); font-size: 12px; color: var(--text); line-height: 1.3; }
     .dm-got { font-family: var(--pix); font-size: 12px; color: var(--go); margin-top: 8px; }
 
+    /* Update-available screen. Same shape as the daily modal — one modal idiom, not two. */
+    #updModal {
+      position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+      background: rgba(2,3,8,.78); backdrop-filter: blur(3px); padding: 18px;
+    }
+    #updModal.hidden { display: none; }
+    #updModal .dm-card { max-width: 380px; }
+    #updVers { font-family: var(--pix); font-size: 12px; color: var(--muted);
+      margin: 10px 0 4px; line-height: 1.9; }
+    #updVers b { color: var(--accent); font-weight: 400; }
+    #updModal .updrow { display: flex; gap: 8px; margin-top: 16px; }
+    #updModal .updrow button { flex: 1 1 0; min-height: 46px; }
+
     /* Collapsible menu sections (accordion) */
     .card.collapsible > h2 {
       cursor: pointer; user-select: none; display: flex; align-items: center;
@@ -1121,6 +1134,10 @@
          again once installed — a dead button on a platform that never fires the
          prompt is worse than no button. -->
     <button class="ghost" id="installBtn" type="button" style="display:none">Install on phone</button>
+    <!-- ⚠️ An installed PWA has no reload button and no address bar, so "check now" is the
+         only way a player can ASK. Always visible: unlike the install prompt, this one is
+         never dead — offline it simply reports that it could not reach the server. -->
+    <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
 
     <div class="card collapsible collapsed" id="matchCard" data-sec="match">
       <h2>
@@ -1607,6 +1624,20 @@
   </div>
 
   <!-- ===================== DAILY REWARD MODAL ===================== -->
+  <!-- Update available. Shown only when a fetched index.html reports a different VERSION
+       than the one running, and never over a live match — see updMaybeShow. -->
+  <div id="updModal" class="hidden">
+    <div class="dm-card">
+      <h2>UPDATE AVAILABLE</h2>
+      <p id="updVers"></p>
+      <p class="hint always" style="text-align:left">Updating reloads the game. Your settings, player and career are stored on this device and are not touched.</p>
+      <div class="updrow">
+        <button class="primary" id="updNow" type="button">Update now</button>
+        <button class="ghost" id="updLater" type="button">Later</button>
+      </div>
+    </div>
+  </div>
+
   <div id="dailyModal" class="hidden">
     <div class="dm-card">
       <h2>DAILY REWARD 🎁</h2>
@@ -1673,6 +1704,7 @@
    Gamepads                    "Gamepad polling (Gamepad API)"
    Pad seats                   "PAD SEATS — who a controller gets to drive"
    Device tilt parallax       "DEVICE TILT — a light parallax"
+   Update check               "UPDATE CHECK"
    Drop-in (join mid-match)    "DROP-IN — a controller joins a match already in progress"
    Substitutions              "SUBSTITUTIONS — the touchline gate"
    Touchline prompt           "Waiting on the touchline"
@@ -10353,6 +10385,9 @@ function finishMatch(w){
     hint.style.display = '';
     resultIdle = AUTO.result;          // fresh screen, fresh clock
   }
+  // ⚠️ Deferred to the next tick so the result screen is up first: the update panel sits over
+  // it, and putting it up before the thing it covers reads as the match never finishing.
+  setTimeout(updMaybeShow, 0);
 }
 
 // ---------- End-of-match awards (Towerfall/CoD style): everyone gets something.
@@ -15336,6 +15371,7 @@ function showResult(title, sub){
 }
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
+  setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
   // Desktop shell: the main menu is just the left dock — the match on the right
   // keeps playing. If nothing is live (or it just ended) fall back to the idle demo.
   if (dockCapable()){
@@ -15436,6 +15472,122 @@ if (PANEL){
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
 const VERSION = '20260806.0620PM';
+
+// ============================================================
+//  UPDATE CHECK — "a new build is live, do you want it?"
+// ============================================================
+// ⚠️ IT COMPARES `VERSION`, NOT THE SERVICE WORKER. A deploy here is a new index.html and
+// `sw.js` barely ever changes, so `registration.update()` fires `updatefound` for almost none
+// of them — an SW-based check would cheerfully report "up to date" through every real
+// release. Fetching the page and reading its VERSION detects exactly the thing that changes.
+//
+// ⚠️ And an installed PWA is the whole reason this exists: it has no reload button and no
+// address bar, so a player who is already looking at the app has no way to pick up a new
+// build except by killing it from the app switcher.
+const UPD = {
+  bootDelay: 4,     // seconds after load before the first check — starting up comes first
+  minGap: 60,       // seconds between automatic checks, however often you switch back
+};
+let updSeen = null;      // a version already offered and declined: never offer it twice
+let updFound = null;     // a new build found while a match was live, waiting for a good moment
+let _updLast = 0;
+// ⚠️ The version is pulled out with a regex that must not match ITS OWN SOURCE. This file
+// fetches itself, so the pattern's text appears in the reply BEFORE the real declaration —
+// requiring a digit right after the quote is what keeps `\s*` in the pattern from being read
+// as a version number. `tests/updatecheck.mjs` has a page read its own version for this.
+function updParseVersion(html){
+  const m = String(html || '').match(/VERSION\s*=\s*'([0-9][^']*)'/);
+  return m ? m[1] : null;
+}
+// ⚠️ Only where there is actually a server to ask. On a `file://` page the fetch cannot even
+// be ATTEMPTED — it throws "URL scheme file is not supported" straight into the console
+// rather than failing quietly — and there is no deploy to discover anyway. The /settings
+// window is excluded too: it is the same document with the game switched off, and two windows
+// both prompting for one update is one prompt too many.
+function updPossible(){ return /^https?:$/.test(location.protocol) && !PANEL; }
+// Returns the version found on the server, or null if it could not be reached.
+async function updCheck(manual){
+  if (!updPossible()){
+    if (manual) toast('No server to check', 'err', 'info');
+    return null;
+  }
+  const now = Date.now();
+  if (!manual && now - _updLast < UPD.minGap * 1000) return null;
+  _updLast = now;
+  let v = null;
+  try {
+    // ⚠️ `cache:'reload'` so the browser's own HTTP cache cannot answer with the very build
+    // we are running. Deliberately NOT a `?v=` cache-buster: the service worker caches
+    // whatever URL it fetched, so a query string would add a junk entry per check. Fetching
+    // the CLEAN url also has a bonus — the worker is network-first for HTML, so this same
+    // request refreshes the cached page, which is what makes the reload below reliable.
+    const r = await fetch('./index.html', { cache: 'reload' });
+    if (r.ok) v = updParseVersion(await r.text());
+    // ⚠️ OFFLINE THIS ANSWERS FROM THE SERVICE WORKER'S CACHE, not the server — the worker is
+    // network-first for HTML and falls back to its cached page. That is correct rather than a
+    // hole: a reload would fall back to the very same cached copy, so a version found this way
+    // is genuinely available to install. With nothing newer cached it equals VERSION and this
+    // stays silent, which is the ordinary offline case.
+  } catch (_) { v = null; }          // nothing cached either: say nothing at all
+  if (manual){
+    if (!v) toast('Could not reach the server', 'err', 'info');
+    else if (v === VERSION) toast('Up to date · v' + VERSION, 'ok', 'save');
+  }
+  if (!v || v === VERSION) return v;
+  // ⚠️ Declining silences the AUTOMATIC checks only. Being asked twice about one build is what
+  // teaches people to dismiss update prompts unread — but a player who has just PRESSED
+  // "check for updates" is asking, and a button that knowingly answers nothing is worse.
+  if (v === updSeen && !manual) return v;
+  updFound = v;
+  updMaybeShow();
+  return v;
+}
+// ⚠️ NEVER over a live match. A modal that lands mid-play steals the ball out of your hands;
+// the news costs nothing to hold until you are somewhere it does no harm — the menu, the
+// pause screen, or the result. The menu's own attract demo counts as the menu.
+function updCanShow(){
+  if (!running) return true;
+  if (paused) return true;
+  if (!world) return true;
+  return !!world.demo || world.state === 'over';
+}
+function updMaybeShow(){
+  if (!updFound || !updCanShow()) return;
+  const el = $('updModal'); if (!el) return;
+  const vs = $('updVers');
+  if (vs) vs.innerHTML = 'New: <b>v' + updFound + '</b><br>You have: v' + VERSION;
+  el.classList.remove('hidden');
+}
+function updHide(){ const el = $('updModal'); if (el) el.classList.add('hidden'); }
+async function updApply(){
+  const bt = $('updNow'); if (bt){ bt.disabled = true; bt.textContent = 'Updating…'; }
+  // ⚠️ Ask the worker to re-check too. The page is what changed, and the check above has
+  // already refreshed its cache entry — but if THIS deploy also changed sw.js, `update()` is
+  // what picks that up, and `skipWaiting` in the worker means it takes over without waiting
+  // for every tab to close.
+  try {
+    if (navigator.serviceWorker){
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    }
+  } catch (_) {}
+  location.reload();
+}
+function updLater(){ updSeen = updFound; updFound = null; updHide(); }
+(function wireUpd(){
+  const now = $('updNow'), later = $('updLater'), chk = $('updCheckBtn');
+  if (now) now.onclick = updApply;
+  if (later) later.onclick = updLater;
+  if (chk) chk.onclick = () => { chk.disabled = true; chk.textContent = 'Checking…';
+    updCheck(true).finally(() => { chk.disabled = false; chk.textContent = 'Check for updates'; }); };
+  // First check a few seconds in, then whenever the app is brought back to the front —
+  // which is the closest thing a standalone PWA has to being relaunched. Throttled by
+  // UPD.minGap, so flicking between apps does not hammer the server.
+  if (chk) chk.style.display = updPossible() ? '' : 'none';   // no server, no button
+  if (!updPossible()) return;
+  setTimeout(() => updCheck(), UPD.bootDelay * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) updCheck(); });
+})();
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
 
@@ -15532,6 +15684,10 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     pollDropIn, dropInBlocked, dropOut, padSeatOrder, padsTakeSeats, DROPIN,
+    UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
+    get updFound(){ return updFound; }, get updSeen(){ return updSeen; },
+    set updLast(v){ _updLast = v; },
+    set updSeen(v){ updSeen = v; }, set updFound(v){ updFound = v; },
     SUB, subGate, subOnSpot, subSideOf, subDefaultTeam, subPer, subFloorOf, evenUpSides,
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,

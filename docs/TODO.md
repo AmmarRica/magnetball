@@ -328,6 +328,34 @@ Three findings, two of them real bugs that shipped.
 
 ---
 
+## ⬆️ "Update available"
+- [x] **An installed PWA has no reload button and no address bar**, so a player looking at the
+  app had no way to pick up a new build except killing it from the app switcher.
+- [x] ⚠️ **It compares `VERSION`, not the service worker.** A deploy here is a new index.html
+  and sw.js barely ever changes, so `registration.update()` fires `updatefound` for almost none
+  of them — an SW-based check would report "up to date" through every real release.
+- [x] ⚠️ The regex must not match **its own source**: the page fetches itself, so the pattern's
+  text is in the reply *before* the real declaration. Requiring a digit after the quote is what
+  stops `\s*` being read as a version number.
+- [x] ⚠️ `cache:'reload'`, not a `?v=` cache-buster — the worker caches whatever URL it
+  fetched, so a query string adds a junk entry per check. Fetching the clean URL also refreshes
+  the cached page, which is what makes the reload reliable.
+- [x] **Never over a live match.** A modal landing mid-play steals the ball out of your hands;
+  it waits for the menu, the pause screen or the result. The attract demo counts as the menu.
+- [x] Declining silences the **automatic** checks only. Being asked twice about one build is
+  what teaches people to dismiss update prompts unread — but a player pressing "Check for
+  updates" is asking, and a button that knowingly answers nothing is worse.
+- [x] A manual **Check for updates** button, always visible, because it is the only way to ASK
+  inside an installed app.
+- [x] ⚠️ Gated to `http(s)` and out of `/settings`: on a `file://` page the fetch throws "URL
+  scheme file is not supported" into the console — which broke two unrelated suites that assert
+  a clean console — and two windows prompting for one update is one too many.
+- [x] ⚠️ **Offline it answers from the worker's CACHE.** That is correct rather than a hole: a
+  reload falls back to the same copy, so a version found offline really is installable. The
+  honest property is "never offers what a reload cannot deliver", not "says nothing".
+
+---
+
 ## 📐 Tilt parallax on phones
 - [x] ⚠️ **The on/off was too buried to find.** It was there from the start, in Game Feel,
   searchable by "parallax", "tilt" and "3d" — but 16th of 19 fields in that card, below two
