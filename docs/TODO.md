@@ -342,11 +342,20 @@ Three findings, two of them real bugs that shipped.
   step-locked counter would read a flat 60 on every machine and answer nothing. Drawn as the last
   row of the debug panel, because `drawDebug` runs after `drawBuildTag` and its plate would
   otherwise be painted straight over the line.
-- [x] **The Theme card is tabbed.** Six slot pickers stacked meant scrolling past five to reach
-  the one you wanted, and the tiles are big. ⚠️ Both the chips and the panes come from
-  `SLOT_KEYS`, so a new slot cannot arrive with a pane and no chip. ⚠️ `buildSubTabs()` runs at
-  the end of `buildSettings()` too — that function rebuilds the panes on every slot change, so
-  the fresh ones have no `.on` class and the card showed nothing at all.
+- [x] **The Theme card is tabbed — the bundle grid included.** Seven tile grids stacked is most
+  of a phone screen each, and the bundle row is the tallest at 19 tiles, so leaving it outside
+  the tabs meant scrolling past it to reach anything else. Card height on a phone: 1621px → 963.
+  ⚠️ Both the chips and the panes come from one list (`['bundle']` + `SLOT_KEYS`), so a new slot
+  cannot arrive with a pane and no chip. ⚠️ `buildSubTabs()` runs at the end of `buildSettings()`
+  too — that function rebuilds the panes on every slot change, so the fresh ones have no `.on`
+  class and the card showed nothing at all.
+- [x] ⚠️ **And the chip row had to be made STICKY.** The first pass tabbed the slots but left the
+  row scrolling away with the grid, which is only half a fix: you still had to scroll back up to
+  change tab, so the vertical scrolling it exists to remove was still there. It pins under its
+  own card's header now (`--sticky-top + --sec-h`).
+- [x] ⚠️ **One row, scrolling sideways**, not wrapping. Two pinned rows put half the chips behind
+  the section header and let the pane's tiles through the gap between them. Same idiom as
+  `#jumpBar`, for the same reason.
 - [x] **Warp is inverted: black court, white surround.** It shipped the other way round, which
   put the tunnel's stars on a white court — a starfield reads as a night sky, and a night sky is
   not white. The HUD and the thumb pads are the exception that goes dark, because they are the
