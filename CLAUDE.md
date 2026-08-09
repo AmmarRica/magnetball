@@ -55,6 +55,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   prose line on every single row. It still feeds `mvpScore`. `tests/matchstats.mjs` holds all
   three sides of this — headings are words, nothing non-zero is lost, and the row fits a 360px
   phone without overflowing its panel.
+  ⚠️ **`#overlay` MUST SCROLL, and `safe center` is what makes that true.** A 3v3 result on a
+  390×844 phone is 1087px of content; with plain `justify-content: center` an overflowing flex
+  column pushes its first child *out of the box* — the title sat at **y = −271**, unreachable —
+  and `overflow: visible` meant Restart / Warm-up / Main Menu at y = 845…1046 could not be
+  pressed either. A touch-only player who finished a match was **stuck** until the 30s
+  auto-advance. `safe center` centres while it fits and falls back to flex-start the moment it
+  doesn't, so nothing is ever parked off the top; it is listed *after* the plain `center` so an
+  older browser drops the line instead of the rule. Also `overflow-y: auto`,
+  `overscroll-behavior: contain`, and `#overlay > * { flex: 0 0 auto }` — flex children shrink
+  before they overflow, which squashed the panels instead of letting the screen scroll.
+  ⚠️ **A ribbon cap per PLAYER** (`AWARD_PER_PLAYER`, 2). Every award is a `topBy`, so one
+  player who ran the match takes **all eight** — half a phone screen saying one thing eight
+  times. The dropped ones are *not* handed down to the runner-up: "Most Saves" belongs to
+  whoever made the most saves, and filling the row with second place would be a lie.
+  ⚠️ **Hat Trick REPLACES Most Goals**, it is not a second ribbon — same stat, same `topBy`,
+  same note, so a 3-goal scorer collected "Most Goals · 3 goals" *and* "Hat Trick · 3 goals".
+  ⚠️ **The per-player table FOLDS on a phone** (`statsOpen`, `STATS_WIDE`, `#ovStats.lean`):
+  the heading is the control and a 44px target, the score and the ribbons stay because they
+  are the result rather than a breakdown of it, rows are hidden and never deleted, and the
+  choice is sticky for the session. Wide screens start open — the fold is a phone answer to a
+  phone problem. `tests/resultfit.mjs`, which measures "pressable" by scrolling to a button and
+  hit-testing its centre, never by whether it happens to be on screen.
 - **Physics:** `integrate(w, ballFrozen, playersFrozen)` moves players then balls. `moveBall(w,ball,discs)`
   sub-steps a ball and collides vs players/posts/walls/arcs; `clampBallInside(w,ball)` is the hard
   containment backstop (the ball must NEVER leave the pitch except through the goal mouth — verify on
@@ -766,7 +788,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 76 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 77 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
