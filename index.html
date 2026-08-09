@@ -986,7 +986,19 @@
       background: rgba(128,128,128,.08); }
     .voteq { font-family: var(--pix); font-size:11px; color: var(--muted); }
     .votemap { font-family: var(--pix); font-size:11px; font-weight:400; color: var(--accent); }
-    .votetally { font-family: var(--pix); font-size:11px; color: var(--text); }
+    /* ⚠️ The tally has to size and INLINE its own icons. Without a rule of its own it
+       fell through to the base `.ic { width:21px; height:21px; display:block }` — and
+       `display:block` inside a line of text is what stacked the thumbs vertically and
+       pushed the counts onto their own lines, so "👍 2 · 👎 0" came out as a column of
+       four things. Every other place that puts an icon in running text (.mvup, .mvdown,
+       .awrow) already carries this override; this one was simply missed.
+       A flex row rather than inline-block so the count sits on the icon's centre line
+       instead of on a font baseline that no glyph here shares. */
+    .votetally { display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+      font-family: var(--pix); font-size:11px; color: var(--text); }
+    .votetally svg.ic { width:14px; height:14px; display:block; flex:0 0 auto; }
+    .votetally .voten { line-height:1; }
+    .votetally .votedot { color: var(--muted); margin:0 2px; }
     .votebtn { font-size:17px; line-height:1; padding:5px 13px; cursor:pointer;
       border-radius:9px; border:1px solid var(--edge); background: rgba(128,128,128,.14); }
     .votebtn:active { transform: translateY(1px); }
@@ -1137,6 +1149,9 @@
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
       <button id="clipBtn">⇪ Save clip</button>
+      <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at
+           your screen's size in your theme, and can be watched again from Watch. -->
+      <button id="repSaveBtn">⤓ Save replay</button>
     </div>
   </div>
 
@@ -1646,6 +1661,11 @@
       <div class="socfilters" id="socFilters"></div>
     </div>
     <div id="feed"></div>
+    <!-- Watch is where you go to watch things, so it is where a saved .mbr is opened
+         from. Deliberately NOT on the result screen: loading a file is something you
+         do between matches, not with one frozen behind the overlay. -->
+    <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.mbr)</button>
+    <div class="hint" style="text-align:left; margin-top:6px">Opens a replay saved with <b>Save replay</b>. It is the match data rather than a video, so it plays at your screen’s size and in whatever theme you are using now.</div>
     <button class="ghost" id="socialBack" style="margin-top:12px">← Back</button>
   </div>
 
@@ -6687,6 +6707,10 @@ $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
 $('cocktailBack').onclick = () => openLook('display');
 $('socialBack').onclick = closeSocial;
+// ⚠️ Closes Watch first. A replay draws to the game canvas, and the Watch screen is a
+// full-bleed overlay on top of it — left open, the file loads, plays to the end and you
+// see none of it.
+$('repLoadBtn').onclick = () => { closeSocial(); openReplayFile(); };
 $('rogueBack').onclick = toMenu;
 $('shopSupport').onclick = () => { const b=$('shopSupport'); b.textContent='💛 Thank you! Have fun out there.'; };
 $('padCfgBtn').onclick = openPadConfig;
@@ -6970,6 +6994,14 @@ $('settingsBtn').onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 $('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
+// ⚠️ Says what happened on the button itself rather than through a toast: this one
+// writes a file, and a download that produces no visible response reads as a dead
+// button on any browser that saves without asking.
+$('repSaveBtn').onclick = (e) => {
+  const b = e.currentTarget, was = b.textContent;
+  b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
+  setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2200);
+};
 $('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
   if (!confirm('Reset all settings (theme, display, ball, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
@@ -7764,15 +7796,34 @@ async function lbSubmit(){
 // Compact, re-simulatable replay payload for the sheet (NOT the video — a Sheet
 // can't hold binary). Positions are rounded and frames downsampled to ~120 so
 // the whole thing fits comfortably in one cell.
-function replayPayload(){
-  if(!lastReplay || !lastReplay.frames || !lastReplay.frames.length) return null;
-  const src=lastReplay.frames, step=Math.max(1, Math.ceil(src.length/120)), frames=[];
-  for(let i=0;i<src.length;i+=step){
-    const f=src[i], row=[Math.round(f.bx), Math.round(f.by)];
-    for(const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), pl.k?1:0);
+// ⚠️ ONE frame encoder, used by the sheet payload AND by the downloadable file.
+// Positions are rounded and the whole thing is flat arrays rather than objects —
+// `{"bx":123,"by":45}` costs four times what `[123,45]` does over 360 frames.
+// `cap` downsamples: the sheet has to fit one cell, a file on disk does not, so the
+// file passes Infinity and keeps every frame at the full 60fps.
+// Two copies of this drifted apart the moment the file format wanted more frames than
+// the sheet could hold, which is exactly the duplication this repo keeps paying for.
+function repEncodeFrames(src, cap){
+  const step = Math.max(1, Math.ceil(src.length / (cap || Infinity))), frames = [];
+  for (let i=0; i<src.length; i+=step){
+    const f = src[i], row = [Math.round(f.bx), Math.round(f.by)];
+    for (const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), pl.k?1:0);
     frames.push(row);
   }
-  const data=JSON.stringify({ v:1, field:sel.field, players:lastReplay.players, fps:Math.round(60/step), frames });
+  return { frames, fps: Math.round(60/step) };
+}
+// The inverse: flat rows back into the {bx,by,p:[{x,y,k}]} shape playReplay wants.
+function repDecodeFrames(rows, players){
+  return rows.map(r => {
+    const p = [];
+    for (let i=0; i<players; i++) p.push({ x:r[2+i*3], y:r[3+i*3], k:!!r[4+i*3] });
+    return { bx:r[0], by:r[1], p };
+  });
+}
+function replayPayload(){
+  if(!lastReplay || !lastReplay.frames || !lastReplay.frames.length) return null;
+  const { frames, fps } = repEncodeFrames(lastReplay.frames, 120);
+  const data=JSON.stringify({ v:1, field:sel.field, players:lastReplay.players, fps, frames });
   return { data, frames:frames.length, players:lastReplay.players, field:sel.field };
 }
 // Post the last goal's replay data to the Replays sheet. Needs LB.endpoint
@@ -8744,6 +8795,151 @@ function playReplay(speed){
     }
     replay.raf = requestAnimationFrame(tick);
   });
+}
+
+// ============================================================
+//  .mbr — REPLAY FILES ON DISK
+// ============================================================
+// "Save clip" writes a VIDEO, which is the right thing to send someone and the wrong
+// thing to keep: it is large, it is baked at whatever resolution the window happened
+// to be, and nothing can ever be done with it again. A `.mbr` is the replay ITSELF —
+// the positions — so it re-renders at your screen's size, in your theme, at any speed,
+// and it is a few tens of KB of plain JSON.
+//
+// ⚠️ THE FILE IS SELF-CONTAINED, and that is the whole design constraint. Frames alone
+// are useless: `drawReplayFrame` reads the field geometry and every player's colour,
+// flag and eyes off the live world, so a file carrying only positions could be watched
+// back in the match it came from and nowhere else — which is to say, never, because by
+// then you have the replay in memory anyway. So the file carries the field key and a
+// full look for every player, and loading one rebuilds a world from that.
+//
+// ⚠️ VERSIONED AND MAGIC-STAMPED. `v` is checked on load and `format` proves the file
+// is ours before we start indexing into arrays — a JSON file that happens to parse is
+// not a replay, and the failure mode without the check is a stack trace on a menu.
+const MBR = { ext:'mbr', format:'magnetball-replay', v:1 };
+// Everything a player needs to be DRAWN, and nothing else. Deliberately not the whole
+// object: velocities, AI scratch and match stats are all mid-play state that means
+// nothing in a recording, and `ms` alone would double the file.
+function mbrPlayer(p){
+  return { team:p.team, name:p.name, color:p.color, cap:p.cap,
+           flag:p.flag||'none', eyes:p.eyes||'googly', r:p.r };
+}
+function mbrBuild(){
+  if (!lastReplay || !lastReplay.frames || !lastReplay.frames.length || !world) return null;
+  const { frames, fps } = repEncodeFrames(lastReplay.frames, Infinity);
+  return {
+    format: MBR.format, v: MBR.v,
+    build: VERSION, saved: new Date().toISOString(),
+    field: world.fieldKey || sel.field,
+    mode: sel.mode,
+    // ⚠️ Recorded but NOT applied on playback: you watch a replay in the theme you are
+    // sitting in, not the one it was taped in. Storing it costs five strings and means
+    // a later "watch as recorded" needs no format change.
+    look: { ...(sel.look||{}) },
+    score: world.score ? world.score.slice() : [0,0],
+    fps,
+    players: world.players.map(mbrPlayer),
+    frames,
+  };
+}
+function mbrFilename(){
+  // Colons are illegal in filenames on Windows and awkward everywhere else.
+  const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  return `magnetball-${(world && world.fieldKey) || sel.field}-${t}.${MBR.ext}`;
+}
+// One download helper — Save clip builds its own Blob from MediaRecorder, but the
+// anchor-click dance is the same and there is no reason for two of them.
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  // Revoked on a timer, not immediately: Safari has not finished reading the blob
+  // when click() returns, and a revoked URL there downloads a zero-byte file.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+function saveReplayFile(){
+  const doc = mbrBuild();
+  if (!doc) return false;
+  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), mbrFilename());
+  return true;
+}
+// Parse + validate. Returns the document or throws with a reason a human can act on.
+function mbrParse(text){
+  let doc;
+  try { doc = JSON.parse(text); } catch(_){ throw new Error('not a replay file'); }
+  if (!doc || doc.format !== MBR.format) throw new Error('not a Magnetball replay');
+  if (doc.v > MBR.v) throw new Error('saved by a newer build — update the game');
+  if (!Array.isArray(doc.frames) || !doc.frames.length) throw new Error('no frames in it');
+  if (!Array.isArray(doc.players) || !doc.players.length) throw new Error('no players in it');
+  if (!FIELDS[doc.field]) throw new Error('unknown field "' + doc.field + '"');
+  // ⚠️ Every row must be long enough for the player count it claims, checked BEFORE
+  // playback rather than during: a short row indexes past the end and `drawDiscs`
+  // takes an undefined x into the canvas, which fails as a blank screen rather than
+  // as an error anybody can read.
+  const need = 2 + doc.players.length*3;
+  if (doc.frames.some(r => !Array.isArray(r) || r.length < need)) throw new Error('frames do not match the player count');
+  return doc;
+}
+// Build just enough world for drawReplayFrame / drawPitch / computeCam to work off.
+// ⚠️ Through buildGeometry rather than a hand-copied bounds object — the walls, arcs
+// and posts are what drawPitch paints the court from, and a court drawn from a second
+// implementation of the geometry is how the replay would come back subtly the wrong
+// shape on the rounded fields.
+function mbrWorld(doc){
+  const w = {
+    field: FIELDS[doc.field], fieldKey: doc.field,
+    state: 'over', stateT: 0, magnet: 0,
+    score: doc.score || [0,0], extraBalls: [], fx: [],
+    players: doc.players.map((p,i) => Object.assign(mkPlayer(p.team, p.name, p.color, p.cap, 'bot', p.flag, p.eyes),
+                                                   { r: p.r || PLAYER.r, seat:i })),
+    ball: { x:0, y:0, vx:0, vy:0, r:BALL.r, spin:0, rot:0 },
+  };
+  buildGeometry(w);
+  w.cb = w.bounds;
+  return w;
+}
+// Watch a `.mbr`. ⚠️ It swaps the GLOBAL `world` for the duration rather than threading
+// a source argument through drawReplayFrame → drawPitch → wx/wy/cam, because the camera
+// and both of those readers all take the live world implicitly. That is safe precisely
+// because `loop()` returns immediately while `replay.active` is set — nothing steps or
+// renders the swapped world — and everything is put back in a `finally` so a throw
+// mid-playback cannot strand the game holding a replay's world.
+async function playReplayFile(doc, speed){
+  if (replay.active) return;
+  const prevWorld = world, prevLast = lastReplay;
+  try {
+    world = mbrWorld(doc);
+    lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length) };
+    computeCam();
+    await playReplay(speed || 0.6);
+  } finally {
+    world = prevWorld; lastReplay = prevLast;
+    if (world) computeCam();
+    render();
+  }
+}
+// The file picker. One hidden input, reused — a fresh one per click leaks a node per
+// press, and `value=''` is what makes picking the SAME file twice fire `change` again.
+let _mbrInput = null;
+function openReplayFile(){
+  if (!_mbrInput){
+    _mbrInput = document.createElement('input');
+    _mbrInput.type = 'file'; _mbrInput.accept = '.' + MBR.ext + ',application/json';
+    _mbrInput.style.display = 'none';
+    _mbrInput.onchange = async () => {
+      const f = _mbrInput.files && _mbrInput.files[0];
+      _mbrInput.value = '';
+      if (!f) return;
+      let doc;
+      try { doc = mbrParse(await f.text()); }
+      catch(e){ toast('⚠ ' + e.message); return; }
+      toast('▶ ' + (FIELDS[doc.field].name || doc.field) + ' · ' + doc.players.length + ' players');
+      await playReplayFile(doc);
+    };
+    document.body.appendChild(_mbrInput);
+  }
+  _mbrInput.click();
 }
 function repMime(){
   const cands = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
@@ -10912,7 +11108,14 @@ function renderMapVote(w){
     wrap.append(q, nm);
     if (voted){
       const tally = document.createElement('span'); tally.className='votetally';
-      tally.innerHTML = `${iconSvg('thumbup')||''} ${voted.up} · ${iconSvg('thumbdown')||''} ${voted.down}`;
+      // ⚠️ Each count in its OWN element, and the middle dot in one too. `.votetally`
+      // is a flex row, and bare text between the icons becomes an anonymous flex item
+      // that carries the separator along with the number ("2 ·"), so the gap lands in
+      // the wrong place. Emoji stay as the fallback, same rule as every other icon.
+      tally.innerHTML =
+        `${iconSvg('thumbup')||'👍'}<span class="voten">${voted.up}</span>` +
+        `<span class="votedot">·</span>` +
+        `${iconSvg('thumbdown')||'👎'}<span class="voten">${voted.down}</span>`;
       wrap.appendChild(tally);
       return;
     }
@@ -10962,6 +11165,16 @@ function renderAwards(w){
       const sh=document.createElement('button'); sh.textContent='⬇ Save clip';
       sh.onclick=()=>saveClip(); foot.appendChild(sh);
     }
+    // ⚠️ Offered next to Save clip, because they are not the same thing and the
+    // difference is worth a button: the clip is a video to send someone, this is the
+    // match data to keep and watch again from Watch → Load replay.
+    const rf=document.createElement('button'); rf.textContent='⤓ Save replay';
+    rf.onclick=(e)=>{
+      const b=e.currentTarget, was=b.textContent;
+      b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
+      setTimeout(()=>{ if (b.textContent!==was) b.textContent=was; }, 2200);
+    };
+    foot.appendChild(rf);
     host.appendChild(foot);
   }
 }
@@ -15761,7 +15974,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260809.0525PM';
+const VERSION = '20260809.0705PM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -15887,6 +16100,9 @@ if (window.__MAGNETDEBUG) {
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
+    MBR, mbrBuild, mbrParse, mbrWorld, mbrFilename, saveReplayFile, playReplayFile, openReplayFile,
+    drawReplayFrame,
+    repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
     get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal,

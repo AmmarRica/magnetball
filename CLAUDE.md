@@ -557,6 +557,34 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
+- **`.mbr` replay files** (`MBR`, `mbrBuild`/`mbrParse`/`mbrWorld`, `saveReplayFile`,
+  `playReplayFile`, `openReplayFile`). Save clip writes a **video** — right for sending
+  someone, wrong for keeping: large, baked at whatever size the window was, and never
+  usable again. A `.mbr` is the replay **itself**, so it re-renders at your screen's size,
+  in your theme, at any speed, in a few tens of KB of JSON. Saved from the replay bar and
+  the result footer; opened from **Watch → Load replay**, which closes Watch first because
+  a replay draws to the game canvas that screen is covering.
+  ⚠️ **SELF-CONTAINED, and that is the whole design constraint.** `drawReplayFrame` reads
+  the field geometry and every player's colour/flag/eyes off the **live world**, so a file
+  of positions alone can only be watched in the match it came from — i.e. never, since the
+  replay is already in memory by then. It carries the field key and a full look per player,
+  and `mbrWorld` rebuilds a world through **`buildGeometry`**, never a hand-copied bounds
+  object (the walls and posts are what `drawPitch` paints the court from). `look` is stored
+  but deliberately **not applied** — you watch in the theme you are sitting in.
+  ⚠️ `playReplayFile` swaps the **global `world`** rather than threading a source through
+  `drawReplayFrame` → `drawPitch` → `wx`/`wy`/`cam`, which all take the live world
+  implicitly. Safe only because `loop()` returns immediately while `replay.active` is set,
+  and restored in a `finally` so a throw can't strand the game holding a replay's world.
+  ⚠️ **One frame encoder** (`repEncodeFrames`/`repDecodeFrames`) shared with the sheet
+  payload — the sheet caps at 120 frames to fit a cell, the file passes `Infinity`; two
+  copies drifted the moment the file wanted more frames than the sheet could hold.
+  ⚠️ Magic-stamped and versioned, and **every row is length-checked before playback**: a
+  short row indexes past the end and fails as a **blank screen**, not as an error anybody
+  can read. `tests/replayfile.mjs` loads a file into a page that has never played that
+  match — different field, different mode — which is the only place a missing field shows.
+  ⚠️ Its render check measures **coverage over a known fill**, and varies the players and
+  the ball **independently**: "two frames look different" passed with the players pinned at
+  the origin, because the ball alone moved.
 - **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
   ⚠️ Start used to be bound to a gamepad button or the Enter key and nothing else, so in
   cocktail — which forces the lobby whatever is connected — a touch-only player could not
@@ -809,7 +837,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 78 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 79 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
