@@ -14,13 +14,18 @@ const r = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.sel.mode='3v3'; M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;
-  // Deliberately distinct maxima so each award has one unambiguous winner.
+  // Deliberately distinct maxima so each award has one unambiguous winner — and,
+  // ⚠️ since computeAwards caps ribbons per PLAYER, distinct WINNERS too. The first
+  // version of this tally piled goals, key passes, posts and the hardest shot onto
+  // player 0, which is the eight-ribbons-to-one-name case the cap exists to stop; the
+  // suite then read the cap doing its job as four missing awards. One speciality each,
+  // so every award type is still exercised and nobody holds more than two.
   const tally = [
-    { goals:3, saves:0, assists:1, clears:0, passKey:2, posts:1, hardest:9.4, shots:5, touches:30 },
-    { goals:1, saves:2, assists:0, clears:4, passKey:0, posts:0, hardest:7.0, shots:2, touches:22 },
+    { goals:0, saves:0, assists:3, clears:0, passKey:0, posts:0, hardest:0,   shots:1, touches:26 },
+    { goals:0, saves:0, assists:0, clears:4, passKey:0, posts:0, hardest:9.4, shots:2, touches:22 },
     { goals:0, saves:5, assists:0, clears:1, passKey:0, posts:0, hardest:6.0, shots:0, touches:18 },
-    { goals:2, saves:0, assists:3, clears:0, passKey:0, posts:0, hardest:8.1, shots:4, touches:26 },
-    { goals:0, saves:1, assists:0, clears:0, passKey:1, posts:0, hardest:0,   shots:1, touches:12 },
+    { goals:2, saves:0, assists:0, clears:0, passKey:0, posts:0, hardest:8.1, shots:4, touches:26 },
+    { goals:0, saves:1, assists:0, clears:0, passKey:2, posts:0, hardest:0,   shots:1, touches:12 },
     { goals:0, saves:0, assists:0, clears:0, passKey:0, posts:2, hardest:0,   shots:0, touches:9  },
   ];
   w.players.forEach((q,i)=>Object.assign(q.ms, tally[i]));
@@ -34,13 +39,17 @@ const r = await p.evaluate(()=>{
   const byLabel = Object.fromEntries(aw.map(a=>[a.label, a]));
   const notes = Object.fromEntries(aw.map(a=>[a.label, a.note]));
   o.notes = notes;
-  o.goals    = notes['Most Goals']   === '3 goals';
+  o.goals    = notes['Most Goals']   === '2 goals';
   o.saves    = notes['Most Saves']   === '5 saves';
   o.assists  = notes['Most Assists'] === '3 assists';
   o.wall     = notes['The Wall']     === '4 clearances';
   o.playmkr  = notes['Playmaker']    === '2 key passes';
-  o.hat      = notes['Hat Trick']    === '3 goals';
   o.ironBoot = /9\.4 power/.test(notes['Iron Boot']||'');
+  // ⚠️ No player may hold more than the cap — this is the whole reason the tally above
+  // spreads its maxima across six bodies rather than piling them on one.
+  const per = {}; aw.forEach(a => { per[a.p.name] = (per[a.p.name]||0) + 1; });
+  o.underCap = Math.max(...Object.values(per)) <= M.AWARD_PER_PLAYER;
+  o.perPlayer = per;
   o.mvp      = /rating/.test(notes['Golden Boot']||'') && /\d/.test(notes['Golden Boot']||'');
   // The number in the note IS the value that won the award.
   o.notesMatchValues = aw.every(a=>{
@@ -51,6 +60,22 @@ const r = await p.evaluate(()=>{
   // Winners are still the right players.
   o.savesWinner = byLabel['Most Saves'] && byLabel['Most Saves'].p === w.players[2];
   o.wallWinner  = byLabel['The Wall']   && byLabel['The Wall'].p   === w.players[1];
+
+  // ---- Hat Trick REPLACES Most Goals -------------------------------------
+  // ⚠️ They are the same `topBy` over the same stat with a different floor, so they
+  // always land on the same player AND print the same note. Shipping both gave a
+  // 3-goal scorer "Most Goals · 3 goals" and "Hat Trick · 3 goals" — one fact, two
+  // ribbons, and the purest form of the clutter that made the result screen
+  // unreadable on a phone. Below three goals nothing changes.
+  w.players[3].ms.goals = 3;
+  const hats = M.computeAwards(w);
+  const hLab = hats.map(a=>a.label);
+  o.hat          = (hats.find(a=>a.label==='Hat Trick')||{}).note === '3 goals';
+  o.hatReplaces  = hLab.includes('Hat Trick') && !hLab.includes('Most Goals');
+  o.hatSamePlayer = (hats.find(a=>a.label==='Hat Trick')||{}).p === w.players[3];
+  w.players[3].ms.goals = 2;
+  const twos = M.computeAwards(w).map(a=>a.label);
+  o.twoGoalsKeepsMostGoals = twos.includes('Most Goals') && !twos.includes('Hat Trick');
 
   // Singular vs plural, so "1 saves" never ships.
   o.plural = M.plural(1,'save')==='1 save' && M.plural(2,'save')==='2 saves' &&
@@ -79,6 +104,7 @@ console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.count >= 6 && r.everyAwardHasNote && r.everyNoteHasDigits &&
   r.goals && r.saves && r.assists && r.wall && r.playmkr && r.hat && r.ironBoot && r.mvp &&
+  r.underCap && r.hatReplaces && r.hatSamePlayer && r.twoGoalsKeepsMostGoals &&
   r.notesMatchValues && r.savesWinner && r.wallWinner && r.plural && r.singularShown &&
   r.domShowsCounts && r.domSaysSaves && r.everyRibbonUnderItsTeam && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));

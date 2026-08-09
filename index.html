@@ -853,8 +853,27 @@
          doesn't bleed through and fight the result text/cards. Also keeps themed text
          (var(--text) award rows) legible on the Paper theme, which a fixed dark scrim
          would break. A faint pitch peek isn't worth the lost contrast. */
-      background: var(--bg-grad) fixed; padding: 24px;
+      background: var(--bg-grad) fixed;
+      padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      /* ⚠️ THIS SCREEN MUST SCROLL, and centring is what stopped it. A result screen
+         on a 390x844 phone measured 1087px of content, so `justify-content: center`
+         pushed the title 271px ABOVE the viewport — and overflow was `visible`, so
+         there was no way to get to it or to the Restart / Warm-up / Main Menu buttons
+         277px below the fold. After a match a touch-only player was simply stuck,
+         waiting on the 30s auto-advance.
+         `safe center` is the whole fix: it centres while the content fits and falls
+         back to flex-start the moment it doesn't, so nothing is ever parked out of
+         reach at the top. It is listed AFTER the plain `center` so a browser that
+         doesn't know the keyword drops this line and keeps the old behaviour.
+         `overscroll-behavior: contain` stops a flick at the end of the list turning
+         into a page-level bounce over the frozen pitch. */
+      justify-content: safe center;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain; touch-action: pan-y;
     }
+    /* A flex column's children shrink to fit before they overflow, which on a phone
+       squashed the panels instead of letting the screen scroll. */
+    #overlay > * { flex: 0 0 auto; }
     #overlay.show { display: flex; }
     /* ⚠️ EVERY button on this overlay is the same size. Resume carried an inline
        max-width and the ghosts sized themselves to their own text, so Settings and
@@ -899,8 +918,19 @@
     #ovHint { font-family: var(--pix); font-size:10px; color: var(--muted);
       letter-spacing:.5px; margin-top:10px; text-align:center; }
     #ovStats { width:100%; max-width:820px; margin:14px auto 0; }
-    .statshead { font-family: var(--pix); font-size:12px; color: var(--muted);
-      letter-spacing:1px; text-align:left; margin:0 4px 8px; }
+    /* The heading IS the fold control — see renderMatchStats. 44px so it's a real
+       touch target rather than a 14px line of small caps. */
+    button.statshead {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      width:100%; min-height:44px; padding:0 4px; margin:0 0 4px;
+      background:none; border:none; cursor:pointer;
+      font-family: var(--pix); font-size:12px; color: var(--muted);
+      letter-spacing:1px; text-align:left;
+    }
+    button.statshead:active { transform: translateY(1px); }
+    .statstog { font-family: var(--pix); font-size:11px; letter-spacing:.5px; color: var(--accent); }
+    /* Folded: the numbers go, the score and the ribbons stay. */
+    #ovStats.lean .statstbl { display:none; }
     /* One column per team: players, then score, then that team's awards. */
     .teampanels { display:flex; gap:10px; align-items:stretch; }
     .tpanel { flex:1 1 0; min-width:0; display:flex; flex-direction:column;
@@ -918,8 +948,15 @@
     .tpanel.twin .tpscore { color: var(--accent); }
     .tpawards { display:flex; flex-direction:column; gap:5px; }
     .tpawards:empty { display:none; }
-    /* Two panels of eight numeric columns don't fit a phone — stack them there. */
-    @media (max-width: 720px){ .teampanels { flex-direction:column; } }
+    /* Two panels of eight numeric columns don't fit a phone — stack them there.
+       ⚠️ And drop the `flex:1 1 0` when they do. Side by side that equalises their
+       WIDTHS, which is what it is for; stacked, the main axis is vertical, so it
+       equalised their HEIGHTS instead — a team with no ribbons got a panel stretched
+       to match the other one, 190px of empty box around a single digit. */
+    @media (max-width: 720px){
+      .teampanels { flex-direction:column; }
+      .tpanel { flex:0 0 auto; }
+    }
     .statstbl { display:flex; flex-direction:column; gap:3px; }
     /* Three spelled columns, not eight acronyms — see STAT_COLS for why. */
     .statsrow { display:grid; grid-template-columns: minmax(72px,1fr) repeat(3, minmax(40px,72px));
@@ -10547,6 +10584,10 @@ function matchRoster(w){
                                  p.ms.clears || p.ms.passKey || p.ms.posts || p.ms.touches);
   return w.players.concat((w.bench || []).filter(played));
 }
+// How many ribbons one player may hold. See the note further down for why there is
+// a cap at all. Declared above its reader — the fifth TDZ bite in this file was a
+// const sitting below the code that wanted it.
+const AWARD_PER_PLAYER = 2;
 function computeAwards(w){
   const ps = matchRoster(w); ps.forEach(p=>{ p._hero = isHero(w,p); });
   const out = [];
@@ -10558,9 +10599,15 @@ function computeAwards(w){
   };
   add(topBy(ps, p=>mvpScore(p.ms), 0),        'trophy', 'Golden Boot',
       (v)=>`MVP · ${v.toFixed(1)} rating`);
-  add(topBy(ps, p=>p.ms.goals, 0),            'ball', 'Most Goals', (v)=>plural(v,'goal'));
-  const hat = topBy(ps, p=>p.ms.goals, 2);    // 3+ goals
+  // ⚠️ HAT TRICK REPLACES MOST GOALS — it is not a second ribbon. Both are the same
+  // `topBy` over the same stat with a higher floor, so they always resolve to the same
+  // player AND print the same note: a 3-goal top scorer collected "Most Goals · 3 goals"
+  // and "Hat Trick · 3 goals", one fact wearing two ribbons. Hat Trick is the better
+  // name for it, so above three goals it is the one that shows.
+  const mostGoals = topBy(ps, p=>p.ms.goals, 0);
+  const hat       = topBy(ps, p=>p.ms.goals, 2);    // 3+ goals
   if (hat) add(hat, 'hat', 'Hat Trick', (v)=>plural(v,'goal'));
+  else     add(mostGoals, 'ball', 'Most Goals', (v)=>plural(v,'goal'));
   add(topBy(ps, p=>p.ms.saves, 0),            'glove', 'Most Saves', (v)=>plural(v,'save'));
   add(topBy(ps, p=>p.ms.assists, 0),          'target', 'Most Assists', (v)=>plural(v,'assist'));
   add(topBy(ps, p=>p.ms.clears, 0),           'wall', 'The Wall', (v)=>plural(v,'clearance'));
@@ -10578,8 +10625,24 @@ function computeAwards(w){
   // human earned is shown even if it falls past the cap.
   const seen = new Set(), ranked = [];
   for (const a of out){ if (seen.has(a.label)) continue; seen.add(a.label); ranked.push(a); }
-  let shown = ranked.slice(0, 8);
-  const mine = ranked.find(a=>a.p._hero);
+  // ⚠️ AND CAP PER PLAYER. Every award here is a `topBy`, so one player who ran the
+  // match takes the lot: a real 3v3 produced EIGHT ribbons and all eight were the same
+  // name, which is half a phone screen spent saying one thing eight times. Two is the
+  // story ("Rush scored the most and rated highest"); the next six are the same story
+  // with different nouns.
+  // The dropped ones are NOT handed down to the runner-up — "Most Saves" belongs to
+  // whoever actually made the most saves, and awarding it to second place to fill a
+  // row would be a lie. They just don't appear, which is the honest shape of a match
+  // one player dominated. `out` is already in priority order, so what survives is that
+  // player's best two.
+  const perP = new Map(), capped = [];
+  for (const a of ranked){
+    const n = (perP.get(a.p) || 0);
+    if (n >= AWARD_PER_PLAYER) continue;
+    perP.set(a.p, n + 1); capped.push(a);
+  }
+  let shown = capped.slice(0, 8);
+  const mine = capped.find(a=>a.p._hero);
   if (mine && !shown.includes(mine)){ shown = shown.slice(0,7); shown.push(mine); }
   return shown;
 }
@@ -10605,6 +10668,12 @@ const STAT_COLS = [
 // match, and being the one stat every player always has, it put a prose line on every
 // single row — including the rows whose whole story is that nothing happened. It still
 // feeds `mvpScore`; it just isn't worth a line of its own.
+// The width the two team panels already stop sitting side by side at — reused so the
+// fold and the stacking are one decision about "is this a phone" rather than two.
+const STATS_WIDE = 720;
+// null until the first result screen decides it from the viewport. A phone starts
+// folded, anything wider starts open, and a tap wins over both for the session.
+let statsOpen = null;
 const STAT_MORE = [
   { k:'shots',   one:'shot' },
   { k:'clears',  one:'clearance' },
@@ -10625,8 +10694,27 @@ function statLine(ms){
 function renderMatchStats(w){
   const host = $('ovStats'); if (!host) return; host.innerHTML='';
   if (!w || w.drillMode || w.tutorial || !w.players || !w.players.length) return;
-  const head = document.createElement('div'); head.className='statshead';
-  head.textContent = 'MATCH STATS';
+  // ⚠️ The per-player table FOLDS on a phone. A 3v3 result measured 882px of #ovStats
+  // inside an 844px window, which is most of why the Restart / Warm-up / Main Menu
+  // buttons sat below the fold. What anybody wants in the first second is who won, by
+  // how much, and what to press next — the panel keeps its name, its score and its
+  // ribbons, and the table of numbers is one tap away.
+  // Only the TABLE folds: the score and the award ribbons stay, because they are the
+  // result rather than a breakdown of it.
+  if (statsOpen === null) statsOpen = window.innerWidth > STATS_WIDE;
+  const head = document.createElement('button'); head.className='statshead'; head.type='button';
+  const cap = document.createElement('span'); cap.textContent = 'MATCH STATS';
+  const tog = document.createElement('span'); tog.className='statstog';
+  head.append(cap, tog);
+  const syncFold = () => {
+    host.classList.toggle('lean', !statsOpen);
+    head.setAttribute('aria-expanded', String(statsOpen));
+    tog.textContent = statsOpen ? 'HIDE PLAYERS ▲' : 'SHOW PLAYERS ▼';
+  };
+  // Sticky for the session, deliberately: someone who opens it once is someone who
+  // reads it, and making them re-open it after every match is the same nag repeated.
+  head.onclick = () => { statsOpen = !statsOpen; syncFold(); };
+  syncFold();
   host.appendChild(head);
   // Awards are grouped by the team of whoever won them, so each panel can carry
   // its own. computeAwards stays the single source of who won what.
@@ -15622,7 +15710,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260806.0620PM';
+const VERSION = '20260809.0410PM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -15766,6 +15854,7 @@ if (window.__MAGNETDEBUG) {
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, renderMatchStats, STAT_COLS, STAT_MORE, statLine,
+    AWARD_PER_PLAYER, STATS_WIDE, get statsOpen(){ return statsOpen; },
     mvpScore, noteKick, ballSquash, endMatch,
     BOT, runBot, botInit, botAssignBerry, berryLive, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
     setMatchSeed, botSkill, DIFF, botIntercept, ballAt, botTimeToBall, botLaneClear, botAperture,
