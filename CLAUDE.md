@@ -562,8 +562,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   right for sending someone, wrong for keeping: large, baked at whatever size the window
   was, and never usable again. A replay file is the replay **itself**, so it re-renders at
   your screen's size, in your theme, at any speed, in ~25KB. Saved from the replay bar and
-  the result footer; opened from **Watch → Load replay**, which closes Watch first because
-  a replay draws to the game canvas that screen is covering.
+  the result footer; opened from the menu's own **Replays** card (`data-sec="replay"`,
+  `watchReplayFromMenu`) and still from **Watch → Load replay**.
+  ⚠️ **The menu has to get out of the way.** On a phone `#setup` is a full-bleed fixed
+  screen at z-index 20 over the canvas, so a replay plays perfectly and is completely
+  invisible — `watchReplayFile` calls `hideScreens()` first and puts the screen back in a
+  `finally`, so a throw mid-playback still lands you somewhere. Ending and stopping early
+  come back the same way, because `playReplay` resolves identically for both.
+  ⚠️ `watchReplayFile(back, pick)` takes a picker override purely so a suite can drive it —
+  a real file dialog can't be opened headlessly, and what's worth testing is what happens
+  *around* the playback.
+  ⚠️ `pickReplayDoc` resolves on **`cancel`** as well as `change`: dismissing the dialog
+  fires no `change`, and the caller's `finally` is what restores the menu, so a promise
+  listening only for `change` is a menu that never comes back.
+  ⚠️ The card **says where files land**, and that is a `downloadPathHint()` per platform,
+  never a real path — a page is never told the download directory, so an absolute path
+  would be a fabrication, and the card says so in as many words. The example filename is
+  generated from the real `repFilename()` with the timestamp swapped out, so it cannot
+  drift from what actually gets written.
   ⚠️ **Plain `.json`, not an invented extension.** It shipped for one commit as `.mbr`
   ("MagnetBall Replay") — which already means Master Boot Record, and bought nothing when
   the payload is ordinary JSON. A saved replay now opens in any editor, viewer or diff.
@@ -872,7 +888,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 80 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 81 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
