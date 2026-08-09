@@ -93,11 +93,16 @@ async function openResult(w, h, mobile){
   // ⚠️ Measured by scrolling to the control and hit-testing its centre, not by asking
   // whether it happens to be on screen — the screen scrolls, so "below the fold" is a
   // fine place for a button to be. Unreachable or covered is not.
+  // ⚠️ And over the buttons the screen actually OFFERS, not a hard-coded three. Warm-up
+  // is deliberately absent on a phone with no controller (there is no stick to test and
+  // no side to walk onto — see `warmupUseful`), so naming it here would make this suite
+  // fail on a screen that is behaving correctly. The count is asserted separately, which
+  // is what stops "every offered button works" being satisfied by offering none.
   const reach = async () => p.evaluate(() => {
     const out = {};
     for (const id of ['ovResume','ovRematch','ovMenu']){
       const el = document.getElementById(id);
-      if (!el || el.offsetParent === null || getComputedStyle(el).display === 'none'){ out[id] = 'hidden'; continue; }
+      if (!el || el.offsetParent === null || getComputedStyle(el).display === 'none') continue;
       el.scrollIntoView({ block:'center' });
       const r = el.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
@@ -109,6 +114,10 @@ async function openResult(w, h, mobile){
   });
   const folded = await reach();
   for (const id of Object.keys(folded)) ok('phone: ' + id + ' pressable', folded[id] === 'ok', folded[id]);
+  // The screen still has to answer "what now?" — Restart to play again, Main Menu to
+  // leave. Those two are the floor whatever else is hidden.
+  ok('phone: Restart and Main Menu are both offered',
+     folded.ovResume === 'ok' && folded.ovMenu === 'ok', Object.keys(folded).join());
 
   // ---- 3. one player cannot own the whole ribbon list ---------------------
   const aw = await p.evaluate(() => {
