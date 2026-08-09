@@ -372,10 +372,10 @@
     #installBtn svg.ic { width:18px; height:18px; }
     /* Buttons that carry a drawn mark alongside their label. ⚠️ An inline SVG in a
        text button collapses to nothing without a box to sit in. */
-    #warmupBtn, #ovSettings, #ovRematch {
+    #warmupBtn, #ovSettings, #ovRematch, #ovShowLock {
       display:flex; align-items:center; justify-content:center; gap:8px;
     }
-    #warmupBtn svg.ic, #ovSettings svg.ic, #ovRematch svg.ic { width:18px; height:18px; flex:none; }
+    #warmupBtn svg.ic, #ovSettings svg.ic, #ovRematch svg.ic, #ovShowLock svg.ic { width:18px; height:18px; flex:none; }
     .toast .tic svg.ic { width:15px; height:15px; display:block; }
     .toast .tic { display:flex; align-items:center; }
     /* Label on the left, a small action on the right. */
@@ -603,6 +603,41 @@
     .card.collapsible.collapsed > h2::after { transform: rotate(-90deg); }
     .card.collapsible > h2 { margin-bottom: 14px; }
     .card.collapsible.collapsed > h2 { margin-bottom: 0; }
+    /* ---------- Show mode: the menu cut down for a guest ----------
+       Everything hidden here is a SETTING. What survives is a CHOICE: KICK OFF,
+       Warm-up, what you play and what you play it on, plus How to play.
+       ⚠️ CSS is only half of it — `shownInShowMode` does the same filtering in JS for
+       the sub-tab chips, the jump bar and the menu search, because `display:none`
+       hides a control from the eye and from nothing else. */
+    body.showmode #setup .card.collapsible:not([data-sec="match"]):not([data-sec="more"]) { display: none !important; }
+    body.showmode #setup #recordCard { display: none !important; }
+    /* The Match card keeps Game + Pitch; Players and Rules are configuration. */
+    body.showmode #matchCard .subpane[data-pane="players"],
+    body.showmode #matchCard .subpane[data-pane="rules"] { display: none !important; }
+    /* More keeps a single tile, so its heading and the other two groups go with it —
+       a card called "More" listing one thing under three labels reads as breakage. */
+    body.showmode [data-sec="more"] > h2,
+    body.showmode [data-sec="more"] .navgroup .navlab { display: none !important; }
+    body.showmode [data-sec="more"] .navtile:not(#howBtn) { display: none !important; }
+    body.showmode [data-sec="more"] .navgroup:not(:has(#howBtn)) { display: none !important; }
+    /* One tile left, so it takes the row. A single small tile floating in a full-width
+       box reads as something that failed to load. */
+    body.showmode [data-sec="more"] .navgrid { grid-template-columns: 1fr !important; }
+    /* ⚠️ `:has()` is recent; without it the empty groups would just be blank space
+       rather than broken, and the rule above still removes every tile. */
+    body.showmode #jumpBar { display: none !important; }   /* one section left to jump to */
+    /* ⚠️ The search box is a DOOR, not a card — it says "search settings" and would
+       invite exactly the poking about show mode exists to stop. (Its index is filtered
+       too, so it could not reach a hidden pane; it should still not be sitting there
+       asking.) Same for the update check, which reloads the page mid-demo. */
+    body.showmode #searchWrap, body.showmode #updCheckBtn { display: none !important; }
+    /* ⚠️ And "Reset all settings to default" is the single worst button to leave in
+       front of a stranger — one tap wipes every preference you configured. */
+    body.showmode #settingsReset { display: none !important; }
+    /* Settings on the pause screen jumps into the menu's Theme card, which show mode
+       has hidden — a button that lands nowhere. */
+    body.showmode #ovSettings { display: none !important; }
+
     /* Warm-up sits under the KICK OFF header and stays reachable while collapsed,
        so it is exempt along with the header itself. */
     .card.collapsible.collapsed > *:not(h2):not(#warmupBtn) { display: none !important; }
@@ -1711,6 +1746,10 @@
     <div id="ovAwards"></div>
     <button class="primary" id="ovResume">Resume</button>
     <button class="ghost" id="ovSettings" style="display:none"><span class="btnlab">Settings</span></button>
+    <!-- Show mode lives HERE and only here: a pause screen is somewhere a guest has no
+         reason to go and you can always reach, and putting it in the menu would mean
+         hiding it along with everything else the moment it was switched on. -->
+    <button class="ghost" id="ovShowLock" style="display:none"><span class="btnlab">Show mode</span></button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
     <div id="ovHint" style="display:none"></div>
@@ -2497,6 +2536,11 @@ const ICONS = {
   phone:     'M7.4 3h9.2a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6V4.6A1.6 1.6 0 0 1 7.4 3Z M10.4 5.6h3.2 M12 17.8a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
   gear:      'M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z M12 3.4v1.9 M12 18.7v1.9 M20.6 12h-1.9 M5.3 12H3.4 M18.1 5.9l-1.4 1.4 M7.3 16.7l-1.4 1.4 M18.1 18.1l-1.4-1.4 M7.3 7.3 5.9 5.9',
   info:      'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 10.8v5.6 M12 7.4a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z',
+  // Show mode. The two differ by the SHACKLE, not by a tiny detail inside the body:
+  // closed and seated for locked, swung open to the right for unlocked, so the state
+  // reads at 18px on a pause screen you are glancing at.
+  lock:      'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0v2.8 M12 14v3',
+  unlock:    'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0 M12 14v3',
   question:  'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M9.4 9.4a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.2-2.6 4 M12 17.2a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z',
   // --- match length
   bolt:      'M13.4 2.6 5.6 13.4h5.4l-.8 8 7.8-10.8h-5.4Z',
@@ -2650,7 +2694,7 @@ function detectPanel(){
 }
 const PANEL = detectPanel();
 
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
@@ -6286,6 +6330,72 @@ const SUBTABS = {
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
 const subTab = {};                                  // which pane each group is showing
+
+// ============================================================
+//  SHOW MODE — the menu cut down to what a guest needs
+// ============================================================
+// Handing the game to somebody means handing them 376 controls across eleven cards,
+// and what they actually want is to start a match. Show mode hides everything that
+// is a SETTING and leaves what is a CHOICE: KICK OFF, Warm-up, and what you play on.
+//
+// ⚠️ It is a TIDINESS control, not a security one. The toggle lives on the pause
+// screen in plain sight, which is what makes it easy to flip back — anyone who thinks
+// to pause and read the buttons can turn it off. That is the deal, deliberately:
+// a hidden gesture nobody can find is also one YOU cannot find in six months.
+//
+// ⚠️ Guest matches still count. Asked for explicitly — RP, rank and stats record
+// exactly as they always did, so nothing here touches `recordResult`.
+//
+// ⚠️ ONE predicate, `shownInShowMode`, and everything that can surface a control goes
+// through it — the cards, the sub-tab chips, the jump bar AND the menu search. Hiding
+// a card with CSS alone leaves `querySelectorAll` finding its controls, so the search
+// would happily jump a guest straight into the pane you just hid. That is the exact
+// trap `audit` already watches for with orphan panes.
+const SHOW_PANES = ['game', 'pitch'];   // the Match sub-tabs that survive
+// ⚠️ How to play survives, and it is the one thing here that is NOT a setting: a
+// stranger holding your phone needs to know what the buttons do. Everything else in
+// the More card — Season, Gauntlet, Drills, Tutorial, Stats, Ranks, Daily, Shop,
+// Watch, Settings — is either progression or configuration and goes.
+const SHOW_TILES = ['howBtn'];
+function showModeOn(){ return !!sel.showMode; }
+function shownInShowMode(sec, pane){
+  if (!showModeOn()) return true;
+  if (sec === 'more') return true;      // kept, but trimmed to How to play — see the CSS
+  if (sec !== 'match') return false;
+  return !pane || SHOW_PANES.includes(pane);
+}
+function applyShowMode(){
+  const on = showModeOn();
+  document.body.classList.toggle('showmode', on);
+  if (on){
+    // ⚠️ Collapse anything now hidden rather than leaving it open underneath. An open
+    // card that is `display:none` still owns the "which section is open" state, so the
+    // jump bar highlights a chip that isn't there and `openSection` has nothing to close.
+    for (const card of document.querySelectorAll('#setup .card.collapsible'))
+      if (!shownInShowMode(card.dataset.sec)) card.classList.add('collapsed');
+  }
+  buildSubTabs();          // re-filters the chips
+  buildJumpBar();          // ...and the section jumps
+  syncWarmupOffer();
+  syncSticky();
+  syncShowLock();
+}
+// The pause-screen toggle. Says which state it is IN, not what pressing it does —
+// "Show mode: ON" is readable at a glance, "Turn off show mode" needs a second pass.
+function syncShowLock(){
+  const b = $('ovShowLock'); if (!b) return;
+  const on = showModeOn();
+  b.innerHTML = (iconSvg(on ? 'lock' : 'unlock') || (on ? '🔒' : '🔓')) +
+                `<span class="btnlab">Show mode: ${on ? 'ON' : 'OFF'}</span>`;
+  b.classList.toggle('navsel', on);
+}
+function toggleShowMode(){
+  sel.showMode = !sel.showMode; saveSel();
+  applyShowMode();
+  toast(sel.showMode ? '🔒 Show mode on — menu trimmed for guests'
+                     : '🔓 Show mode off — full menu back');
+}
+
 function showSubTab(group, pane){
   const card = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!card) return;
   subTab[group] = pane;
@@ -6299,7 +6409,11 @@ function buildSubTabs(){
   for (const group in SUBTABS){
     const host = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!host) continue;
     host.innerHTML = '';
-    for (const [pane, label, ic] of SUBTABS[group]){
+    // ⚠️ Show mode drops chips, so the group's tab list is whatever SURVIVED — the
+    // remembered pane may be one of the hidden ones, and showing it would put a pane
+    // on screen with no chip to leave it by.
+    const avail = SUBTABS[group].filter(([pane]) => shownInShowMode(group, pane));
+    for (const [pane, label, ic] of avail){
       const bt = document.createElement('button');
       bt.type='button'; bt.className='subchip'; bt.dataset.pane = pane;
       const sv = ic ? iconSvg(ic) : '';
@@ -6308,7 +6422,9 @@ function buildSubTabs(){
       bt.onclick = () => showSubTab(group, pane);
       host.appendChild(bt);
     }
-    showSubTab(group, subTab[group] || SUBTABS[group][0][0]);
+    if (!avail.length) continue;
+    const want = avail.some(([p]) => p === subTab[group]) ? subTab[group] : avail[0][0];
+    showSubTab(group, want);
   }
 }
 // Built from the cards themselves so it can never offer a section that isn't there.
@@ -6363,6 +6479,7 @@ function buildJumpBar(){
   host.innerHTML = '';
   for (const card of document.querySelectorAll('#setup .card.collapsible')){
     const sec = card.dataset.sec; if (!sec) continue;
+    if (!shownInShowMode(sec)) continue;      // no chip for a section that isn't there
     const nm = (card.querySelector('.secname') || card.querySelector('h2'));
     const bt = document.createElement('button');
     bt.type='button'; bt.className='jumpchip'; bt.dataset.sec = sec;
@@ -6401,20 +6518,27 @@ function menuSearchIndex(){
   };
   for (const card of document.querySelectorAll('#setup .card.collapsible')){
     const sec = card.dataset.sec; if (!sec) continue;
+    // ⚠️ Show mode has to be honoured HERE too, not only in CSS. Hiding a card with
+    // `display:none` does nothing to `querySelectorAll`, so without this the search
+    // still lists every hidden control and jumps a guest into the pane you just hid —
+    // the same hole `audit` watches for with orphan panes.
+    if (!shownInShowMode(sec)) continue;
     const nm = card.querySelector('.secname') || card.querySelector('h2');
     const secName = ((nm && nm.textContent) || sec).trim().split('\n')[0];
     const tabs = card.querySelector('.subtabs');
     const group = tabs ? tabs.dataset.tabs : null;
     const paneOf = el => { const pn = el.closest('.subpane'); return pn ? pn.dataset.pane : null; };
+    const keep = (el) => shownInShowMode(sec, paneOf(el));
     add(secName, card, sec, secName, null, null, 'Section');
     // A setting is its label; an option is the thing you would actually be looking
     // for ("Killer Queen", "Colossus"), so both are indexed and options rank higher.
     for (const lb of card.querySelectorAll('label.field'))
-      add(lb.textContent, lb, sec, secName, group, paneOf(lb), 'Setting');
+      if (keep(lb)) add(lb.textContent, lb, sec, secName, group, paneOf(lb), 'Setting');
     for (const op of card.querySelectorAll('.opt'))
-      add((op.querySelector('span:not(.emoji)') || {}).textContent, op, sec, secName, group, paneOf(op), 'Option');
+      if (keep(op)) add((op.querySelector('span:not(.emoji)') || {}).textContent, op, sec, secName, group, paneOf(op), 'Option');
     for (const nv of card.querySelectorAll('.navtile'))
-      add(nv.textContent, nv, sec, secName, group, paneOf(nv), 'Screen');
+      if (keep(nv) && (!showModeOn() || SHOW_TILES.includes(nv.id)))
+        add(nv.textContent, nv, sec, secName, group, paneOf(nv), 'Screen');
   }
   return rows;
 }
@@ -6598,6 +6722,7 @@ async function startPhotoCam(){
 buildPhotoPane();
 
 buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
+applyShowMode();   // a locked menu has to come back locked after a reload
 
 $('playBtn').onclick = startMatch;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
@@ -6727,6 +6852,7 @@ $('ovMenu').onclick = toMenu;
 // Settings is reached from the pause menu now. The gear used to sit in the HUD, one
 // mis-tap from the ball while the match was live.
 $('ovSettings').onclick = () => openLook('theme');
+$('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
 function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
@@ -10673,7 +10799,7 @@ function restartToWarmup(w){ restartMatch(w); enterWarmup(w); }
 // a table you don't want whoever mashes first deciding what happens next.
 let overNav = 0;
 function overButtons(){
-  return ['ovResume','ovSettings','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
+  return ['ovResume','ovSettings','ovShowLock','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
 }
 function syncOverNav(){
   const bs = overButtons();
@@ -15870,11 +15996,14 @@ function showOverlay(title, sub, resumable){
   $('ovRematch').dataset.role = '';
   $('ovMenu').textContent = 'Main Menu';
   { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
-  ['ovResume','ovSettings','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
+  ['ovResume','ovSettings','ovShowLock','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
   $('ovResume').style.display = resumable ? '' : 'none';
   // Settings is a PAUSE option — offered where the match is already stopped, never
   // over a result screen where it would just be clutter.
   { const st2=$('ovSettings'); if (st2) st2.style.display = resumable ? '' : 'none'; }
+  // ⚠️ Pause only, same as Settings — over a RESULT screen it would sit between
+  // Restart and Main Menu, which is the worst place to put a mode switch.
+  { const sl=$('ovShowLock'); if (sl) sl.style.display = resumable ? '' : 'none'; syncShowLock(); }
   $('ovRematch').style.display = resumable ? 'none' : '';
   $('overlay').classList.add('show');
 }
@@ -15984,7 +16113,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260809.0810PM';
+const VERSION = '20260809.0930PM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -16148,7 +16277,8 @@ if (window.__MAGNETDEBUG) {
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
-    SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
+    showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
