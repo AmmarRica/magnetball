@@ -601,6 +601,33 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
   the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
   `tests/touchstart.mjs`.
+- **Show mode (`sel.showMode`)** — the menu cut down for a guest. Handing somebody the
+  game means handing them 376 controls across eleven cards when all they want is to
+  start a match, so show mode hides everything that is a **setting** and leaves what is
+  a **choice**: KICK OFF, Warm-up, the Match card's Game + Pitch tabs (`SHOW_PANES`),
+  and How to play (`SHOW_TILES` — the one survivor that isn't a setting, because a
+  stranger needs to know what the buttons do). Eleven cards become two, and the search
+  index drops from 559 rows to 72.
+  ⚠️ **ONE predicate, `shownInShowMode(sec, pane)`, and everything that can surface a
+  control goes through it** — the sub-tab chips, the jump bar **and `menuSearchIndex`**.
+  CSS is only half a fix: `display:none` hides a card from the eye and from nothing
+  else, so without the index filter the search still lists every hidden setting and
+  jumps a guest into the pane you just hid. Same hole `audit` watches for with orphan
+  panes; `tests/showmode.mjs` sabotage-checks exactly that case.
+  ⚠️ Also hidden: the **search box** (a door that says "search settings"), the **update
+  check** (it reloads the page mid-demo) and **Reset all settings** — the single worst
+  button to leave in front of a stranger.
+  ⚠️ **A tidiness control, not a security one.** The toggle sits in plain sight on the
+  **pause screen** (`#ovShowLock`, pause only — over a result screen it would land
+  between Restart and Main Menu). Anyone who thinks to pause can turn it off; that is
+  the deal, because a hidden gesture nobody can find is one *you* cannot find in six
+  months. The pause screen is also the only place it can live: in the menu it would
+  hide along with everything else the moment it was switched on.
+  ⚠️ **Guest matches still count** — asked for explicitly, so nothing here touches
+  `recordResult`. ⚠️ Persisted through `saveSel()` and re-applied at boot, or a reload
+  unlocks it. ⚠️ **Default off**, which is what makes `audit`'s "every setting is
+  reachable" true — `tests/showmode.mjs` asserts the default where the reason is written
+  down, since `audit` failing would otherwise point nowhere near here.
 - **Warm-up is only OFFERED where it has something to do** — `warmupUseful()`, and both
   ways in follow it (`syncWarmupOffer` hides `#warmupBtn` and the result screen's
   `#ovRematch`). The lobby exists to test a stick, walk onto a side and calibrate a
@@ -845,7 +872,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 79 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 80 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
