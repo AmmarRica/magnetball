@@ -557,20 +557,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
-- **`.mbr` replay files** (`MBR`, `mbrBuild`/`mbrParse`/`mbrWorld`, `saveReplayFile`,
-  `playReplayFile`, `openReplayFile`). Save clip writes a **video** — right for sending
-  someone, wrong for keeping: large, baked at whatever size the window was, and never
-  usable again. A `.mbr` is the replay **itself**, so it re-renders at your screen's size,
-  in your theme, at any speed, in a few tens of KB of JSON. Saved from the replay bar and
+- **Replay files on disk** (`REPFILE`, `repFileBuild`/`repFileParse`/`repFileWorld`,
+  `saveReplayFile`, `playReplayFile`, `openReplayFile`). Save clip writes a **video** —
+  right for sending someone, wrong for keeping: large, baked at whatever size the window
+  was, and never usable again. A replay file is the replay **itself**, so it re-renders at
+  your screen's size, in your theme, at any speed, in ~25KB. Saved from the replay bar and
   the result footer; opened from **Watch → Load replay**, which closes Watch first because
   a replay draws to the game canvas that screen is covering.
+  ⚠️ **Plain `.json`, not an invented extension.** It shipped for one commit as `.mbr`
+  ("MagnetBall Replay") — which already means Master Boot Record, and bought nothing when
+  the payload is ordinary JSON. A saved replay now opens in any editor, viewer or diff.
+  ⚠️ Which makes `format: 'magnetball-replay'` **load-bearing rather than decorative**: the
+  picker will hand us any JSON on the disk, so the magic string is the only thing between a
+  `package.json` and a stack trace on a menu. The filename carries `-replay-` for the same
+  reason — with a generic extension the name is all that distinguishes it in a downloads
+  folder.
   ⚠️ **SELF-CONTAINED, and that is the whole design constraint.** `drawReplayFrame` reads
   the field geometry and every player's colour/flag/eyes off the **live world**, so a file
   of positions alone can only be watched in the match it came from — i.e. never, since the
   replay is already in memory by then. It carries the field key and a full look per player,
-  and `mbrWorld` rebuilds a world through **`buildGeometry`**, never a hand-copied bounds
-  object (the walls and posts are what `drawPitch` paints the court from). `look` is stored
-  but deliberately **not applied** — you watch in the theme you are sitting in.
+  and `repFileWorld` rebuilds a world through **`buildGeometry`**, never a hand-copied
+  bounds object (the walls and posts are what `drawPitch` paints the court from). `look` is
+  stored but deliberately **not applied** — you watch in the theme you are sitting in.
   ⚠️ `playReplayFile` swaps the **global `world`** rather than threading a source through
   `drawReplayFrame` → `drawPitch` → `wx`/`wy`/`cam`, which all take the live world
   implicitly. Safe only because `loop()` returns immediately while `replay.active` is set,
@@ -578,10 +586,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **One frame encoder** (`repEncodeFrames`/`repDecodeFrames`) shared with the sheet
   payload — the sheet caps at 120 frames to fit a cell, the file passes `Infinity`; two
   copies drifted the moment the file wanted more frames than the sheet could hold.
-  ⚠️ Magic-stamped and versioned, and **every row is length-checked before playback**: a
-  short row indexes past the end and fails as a **blank screen**, not as an error anybody
-  can read. `tests/replayfile.mjs` loads a file into a page that has never played that
-  match — different field, different mode — which is the only place a missing field shows.
+  ⚠️ Versioned, and **every row is length-checked before playback**: a short row indexes
+  past the end and fails as a **blank screen**, not as an error anybody can read.
+  `tests/replayfile.mjs` loads a file into a page that has never played that match —
+  different field, different mode — which is the only place a missing field shows.
   ⚠️ Its render check measures **coverage over a known fill**, and varies the players and
   the ball **independently**: "two frames look different" passed with the players pinned at
   the origin, because the ball alone moved.
