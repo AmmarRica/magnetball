@@ -88,6 +88,59 @@ const page = async (seed, w = 900, h = 1000) => {
   await p.close();
 }
 
+// ---- 1b. VERSIONS ARE COMPARED, NOT DIFFED --------------------------------
+// ⚠️ THE BRICK THIS FIXES. `r.v !== VERSION` reads as "there is an update" and is not: it
+// is also true when the running build is NEWER than the one on record. A player who
+// updated past a recorded build, or whose record went stale, was blocked for ever — and
+// offline there is no check that could ever clear it. The same bug meant a rollback deploy
+// would start a 30-day countdown to install an OLDER build.
+{
+  const p = await page();
+  const r = await p.evaluate((DAY) => {
+    const M = window.__magnet, o = {};
+    o.parsesOwn = M.verNum(M.VERSION) > 0;
+    // ⚠️ The 12-hour clock is where a naive parse goes wrong: 12:01AM is the FIRST minute
+    // of a day and 12:01PM is just past noon, so both wrap to hour 0 before the PM shift.
+    o.ordersMinutes = M.verNum('20260810.0140AM') < M.verNum('20260810.0141AM');
+    o.ordersNoon    = M.verNum('20260810.1159AM') < M.verNum('20260810.1201PM');
+    o.ordersMidnight= M.verNum('20260810.1201AM') < M.verNum('20260810.0100AM');
+    o.ordersDays    = M.verNum('20260810.1159PM') < M.verNum('20260811.1201AM');
+    o.rejectsJunk   = M.verNum('nonsense') === null && M.verNum('') === null;
+    o.newerIsStrict = !M.updNewer(M.VERSION) && M.updNewer('20991231.1159PM') &&
+                      !M.updNewer('20200101.0100AM') && !M.updNewer('nonsense');
+    // A record naming a build we have already passed must NOT lock the game.
+    M.updSaveRec({ v:'20200101.0100AM', first: Date.now() - 40*DAY });
+    o.olderNeverBlocks = !M.updOverdue();
+    // Nor may one we cannot read.
+    M.updSaveRec({ v:'nonsense', first: Date.now() - 40*DAY });
+    o.junkNeverBlocks = !M.updOverdue();
+    // A rollback deploy must not be recorded as something to install.
+    M.updSaveRec(null); M.updNote('20200101.0100AM');
+    o.rollbackIgnored = M.updRec() === null;
+    // ...and a genuinely newer build still does everything it did before.
+    M.updNote('20991231.0100AM');
+    o.realNewerRecorded = !!M.updRec();
+    M.updSaveRec({ v:'20991231.0100AM', first: Date.now() - 40*DAY });
+    o.realNewerStillBlocks = M.updOverdue();
+    M.updSaveRec(null);
+    return o;
+  }, DAY);
+  ok('the running version parses', r.parsesOwn);
+  ok('stamps order by minute', r.ordersMinutes);
+  ok('...across noon', r.ordersNoon);
+  ok('...across midnight', r.ordersMidnight);
+  ok('...and across days', r.ordersDays);
+  ok('an unreadable stamp is refused, not guessed', r.rejectsJunk);
+  ok('"newer" is strict and one-directional', r.newerIsStrict);
+  ok('a build we have PASSED never locks the game', r.olderNeverBlocks,
+     'this is the brick: offline, nothing could ever clear it');
+  ok('an unreadable record never locks the game', r.junkNeverBlocks);
+  ok('a rollback deploy is not offered as an update', r.rollbackIgnored);
+  ok('a genuinely newer build is still recorded', r.realNewerRecorded);
+  ok('...and still blocks after 30 days', r.realNewerStillBlocks);
+  await p.close();
+}
+
 // ---- 2b. the gate fires from a STORED record on a bare load ----------------
 // ⚠️ From boot, on file://, with no network call at all — the case the `updPossible()`
 // guard silently broke. A player who has been offline for a month is still stopped.
@@ -278,6 +331,54 @@ const page = async (seed, w = 900, h = 1000) => {
   ok('saving writes the FILE and the library entry', r.saveWroteFile && r.saveWroteLibrary,
      JSON.stringify({ file:r.saveWroteFile, lib:r.saveWroteLibrary }));
   ok('the library is capped', r.cap > 0 && r.cap <= 100, String(r.cap));
+  await p.close();
+}
+
+// ---- 4c. the library is SPLIT, and that is a performance guarantee --------
+// ⚠️ With the frames inline, listing the library structured-cloned every replay in full:
+// twenty saved replays measured **68ms** to draw twenty lines of text, on every rebuild of
+// the settings screen. Metadata and payload are separate stores now, so the list reads a
+// few numbers per row and the frames are fetched only when something is watched.
+{
+  const p = await page(undefined, 900, 1000);
+  const r = await p.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    M.setMatchSeed(3); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=1;
+    for (let i=0;i<120;i++) M.step(w);
+    M.repOnGoal(w);
+    const doc = M.repFileBuild();
+    for (let i=0;i<20;i++) await M.repLibAdd(doc);
+
+    const rows = await M.repLibAll();
+    o.rows = rows.length;
+    // ⚠️ The guarantee, stated as a property rather than a stopwatch: a metadata row must
+    // carry NO frames. A timing threshold on a CI box is a flake; this is the actual rule.
+    o.metaIsThin = rows.every(x => !('doc' in x) && !('json' in x) && !('frames' in x && Array.isArray(x.frames)));
+    o.metaHasWhatTheListNeeds = rows.every(x => x.field && x.mode && x.players > 0 && x.bytes > 0);
+    let t = performance.now(); await M.repLibAll(); o.metaMs = performance.now() - t;
+    // The payload is still there, on demand, and still a usable replay.
+    const one = await M.repLibGet(rows[0].id);
+    o.payloadUsable = !!one && one.frames.length > 0 && one.players.length > 0 &&
+                      one.format === 'magnetball-replay';
+    // ⚠️ Delete has to clear BOTH stores in one go — half a delete leaves a listed replay
+    // whose frames are gone, which fails later as a replay that will not play.
+    await M.repLibDel(rows[0].id);
+    o.metaGone = (await M.repLibAll()).length === 19;
+    o.payloadGone = await M.repLibGet(rows[0].id).then(() => false).catch(() => true);
+    await M.repLibClear();
+    o.clearedBoth = (await M.repLibAll()).length === 0;
+    return o;
+  });
+  ok('twenty replays list', r.rows === 20, String(r.rows));
+  ok('a metadata row carries no frames', r.metaIsThin,
+     'listing them was 68ms of structured clone for twenty lines of text');
+  ok('...but everything the list draws', r.metaHasWhatTheListNeeds);
+  ok('reading the whole list is cheap', r.metaMs < 25, r.metaMs.toFixed(1) + 'ms');
+  ok('the payload is still there on demand', r.payloadUsable);
+  ok('delete clears both stores', r.metaGone && r.payloadGone,
+     JSON.stringify({ meta:r.metaGone, payload:r.payloadGone }));
+  ok('so does delete-all', r.clearedBoth);
   await p.close();
 }
 

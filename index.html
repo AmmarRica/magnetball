@@ -2811,7 +2811,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0140AM';
+const VERSION = '20260810.0315AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2827,7 +2827,7 @@ const VERSION = '20260810.0140AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260810.0140AM', title: 'Replays you can keep',
+  { v: '20260810.0315AM', title: 'Replays you can keep',
     added: [
       'Replays — save a match from the replay bar or the result screen, then watch it back from the new Replays section in the menu.',
       'Delete replays you have finished with, one at a time or all at once.',
@@ -6259,6 +6259,11 @@ const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true, onli
 // screen is never a wall of every control at once and you don't lose your place
 // scrolling past six expanded cards.
 function openSection(sec){
+  // ⚠️ The replay list is built HERE rather than in `buildSettings`. It is an IndexedDB
+  // round trip, `buildSettings` runs on every option tap, and the list is only on screen
+  // when this card is open — so doing it there was a database read per tap for a list
+  // nobody was looking at.
+  if (sec === 'replay') buildReplayList();
   document.querySelectorAll('.card.collapsible').forEach(card=>{
     const mine = card.dataset.sec === sec;
     card.classList.toggle('collapsed', !mine);
@@ -7716,7 +7721,6 @@ function buildSettings(){
   buildFeelPresets();
   buildFeelSliders();
   buildReplayInfo();
-  buildReplayList();
   buildNews();
   { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
@@ -9210,23 +9214,39 @@ function downloadBlob(blob, filename){
 // Saving still writes the FILE as well — that is the copy you can send someone or keep
 // after clearing site data. The library is the copy you can watch and delete from inside
 // the game. Same document, `repFileBuild()`, either way, so they cannot disagree.
-const REPLIB = { db:'magnetball', store:'replays', v:1, max:40 };
+// ⚠️ TWO STORES, and the split is the whole performance story. With the frames living in
+// the same record as the name and the date, listing the library meant `getAll()`
+// structured-cloning every replay in full — 20 saved replays measured **68ms** just to
+// draw a list of 20 lines, and it ran on every rebuild of the settings screen. The
+// metadata store holds a few numbers per replay; the payload store holds the frames as a
+// JSON STRING (cloning one string is far cheaper than a graph of 360 arrays) and is only
+// ever read when you actually press Watch.
+const REPLIB = { db:'magnetball', store:'replays', blobs:'replaydata', v:2, max:40 };
 function repLibOpen(){
   return new Promise((res, rej) => {
     if (!window.indexedDB) return rej(new Error('no IndexedDB'));
     const req = indexedDB.open(REPLIB.db, REPLIB.v);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(REPLIB.store)) db.createObjectStore(REPLIB.store, { keyPath:'id' });
+      // ⚠️ v1 kept the frames inline. Rather than migrate a schema that is hours old, the
+      // old store is dropped — the downloaded FILES are untouched, which is the copy that
+      // was always meant to outlive the app's own storage.
+      if (db.objectStoreNames.contains(REPLIB.store)) db.deleteObjectStore(REPLIB.store);
+      if (db.objectStoreNames.contains(REPLIB.blobs)) db.deleteObjectStore(REPLIB.blobs);
+      db.createObjectStore(REPLIB.store, { keyPath:'id' });
+      db.createObjectStore(REPLIB.blobs, { keyPath:'id' });
     };
     req.onsuccess = () => res(req.result);
     req.onerror = () => rej(req.error || new Error('open failed'));
   });
 }
-function repLibTx(mode, fn){
+// `stores` may be one name or several — a delete has to touch both in ONE transaction, or
+// a failure halfway leaves a listed replay whose frames are gone.
+function repLibTx(stores, mode, fn){
+  const names = [].concat(stores);
   return repLibOpen().then(db => new Promise((res, rej) => {
-    const tx = db.transaction(REPLIB.store, mode);
-    const out = fn(tx.objectStore(REPLIB.store));
+    const tx = db.transaction(names, mode);
+    const out = fn(...names.map(n => tx.objectStore(n)));
     tx.oncomplete = () => { db.close(); res(out && out.result !== undefined ? out.result : out); };
     tx.onerror = () => { db.close(); rej(tx.error); };
   }));
@@ -9236,22 +9256,45 @@ function repLibTx(mode, fn){
 let _repLibN = 0;
 function repLibId(){ return Date.now() + '-' + (++_repLibN); }
 function repLibAdd(doc){
+  const json = JSON.stringify(doc);
   const rec = {
     id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
-    players: doc.players.length, frames: doc.frames.length,
-    bytes: JSON.stringify(doc).length,
-    doc,
+    players: doc.players.length, frames: doc.frames.length, bytes: json.length,
   };
-  return repLibTx('readwrite', st => st.put(rec)).then(() => repLibTrim()).then(() => rec);
+  return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
+    meta.put(rec); blob.put({ id: rec.id, json });
+  }).then(() => repLibTrim()).then(() => rec);
 }
+// ⚠️ Metadata ONLY. This is what the list is drawn from and it must stay cheap — reading
+// the frames here is what cost 68ms for twenty rows.
 function repLibAll(){
-  return repLibTx('readonly', st => st.getAll())
+  return repLibTx(REPLIB.store, 'readonly', st => st.getAll())
     // Newest first. Sorted here rather than with an index: forty rows is nothing, and an
     // index is a schema migration the first time the sort changes.
-    .then(rows => (rows || []).sort((a, b) => String(b.id).localeCompare(String(a.id))));
+    // ⚠️ Numeric on the timestamp, not `localeCompare` on the whole id — ids are
+    // `<ms>-<counter>`, so as strings "1000-2" sorts above "999-9" and the order goes wrong
+    // the moment the millisecond count changes width.
+    .then(rows => (rows || []).sort((a, b) => (+String(b.id).split('-')[0]) - (+String(a.id).split('-')[0])
+                                              || String(b.id).localeCompare(String(a.id))));
 }
-function repLibDel(id){ return repLibTx('readwrite', st => st.delete(id)); }
-function repLibClear(){ return repLibTx('readwrite', st => st.clear()); }
+// The frames, fetched only when something is actually going to be watched or exported.
+function repLibGet(id){
+  return repLibTx(REPLIB.blobs, 'readonly', st => st.get(id))
+    .then(row => { if (!row || !row.json) throw new Error('replay data missing');
+                   return repFileParse(row.json); });
+}
+// ⚠️ Both stores in ONE transaction: half a delete leaves a row in the list whose frames
+// are gone, which fails later as a replay that will not play.
+function repLibDel(id){
+  return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
+    meta.delete(id); blob.delete(id);
+  });
+}
+function repLibClear(){
+  return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
+    meta.clear(); blob.clear();
+  });
+}
 // ⚠️ A cap, because nothing else would ever remove one. Saving a replay is a one-tap habit
 // and an unbounded store is a slow leak into the device's quota; the OLDEST goes.
 function repLibTrim(){
@@ -9428,13 +9471,20 @@ function buildReplayList(){
       // ⚠️ Straight through `watchReplayFromMenu` with the picker stood in. A library entry
       // is just another source of a document, so it must not grow its own copy of
       // "hide the menu, play it, come back".
-      play.onclick = () => watchReplayFromMenu(async () => rec.doc);
+      // ⚠️ The frames are fetched HERE, not held in the list. `watchReplayFromMenu` takes a
+      // picker, and a picker is allowed to be async — which is exactly what lets the list
+      // stay metadata-only.
+      play.onclick = () => watchReplayFromMenu(() => repLibGet(rec.id).catch(e => {
+        toast('⚠ ' + e.message); return null;
+      }));
 
       const down = document.createElement('button'); down.className = 'repbtn';
       down.type = 'button'; down.setAttribute('aria-label', 'Save this replay as a file');
       down.innerHTML = iconSvg('save') || '⤓';
-      down.onclick = () => downloadBlob(new Blob([JSON.stringify(rec.doc)], { type:'application/json' }),
-                                        repFilename(rec.field));
+      down.onclick = () => repLibGet(rec.id)
+        .then(doc => downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }),
+                                  repFilename(rec.field)))
+        .catch(e => toast('⚠ ' + e.message));
 
       const del = document.createElement('button'); del.className = 'repbtn del';
       del.type = 'button'; del.setAttribute('aria-label', 'Delete this replay');
@@ -16560,11 +16610,33 @@ function updRec(){
 function updSaveRec(r){
   try { if (r) localStorage.setItem(UPD.key, JSON.stringify(r)); else localStorage.removeItem(UPD.key); } catch(_){}
 }
+// ⚠️ VERSIONS ARE COMPARED, NEVER JUST DIFFED. `v !== VERSION` looks like "there is an
+// update" and is not: it is also true when the running build is NEWER than the one on
+// record. That is a brick, not a nit — a player who updates past a recorded build, or whose
+// record goes stale, gets `r.v !== VERSION` for ever, and offline there is no check that can
+// ever clear it. It also meant a rollback deploy would start a 30-day countdown to install
+// an OLDER build.
+// Stamps are `YYYYMMDD.HHMMAM/PM`, so this folds one into a sortable minute count.
+function verNum(v){
+  const m = String(v || '').match(/^(\d{8})\.(\d{2})(\d{2})(AM|PM)$/);
+  if (!m) return null;                                  // unparseable: refuse to guess
+  let h = (+m[2]) % 12; if (m[4] === 'PM') h += 12;
+  return (+m[1]) * 1440 + h * 60 + (+m[3]);
+}
+// Strictly newer than what we are running. ⚠️ Unparseable on EITHER side answers false —
+// the only safe direction, because every consequence of `true` here (a prompt, a countdown,
+// eventually a locked game) is worse than missing one update.
+function updNewer(v){
+  const a = verNum(v), b = verNum(VERSION);
+  return a != null && b != null && a > b;
+}
 // Called with whatever the server said. `null` means we could not reach it — which must NOT
 // clear the record, or going offline would reset the deadline every launch.
 function updNote(v){
   if (!v) return;
-  if (v === VERSION){ updSaveRec(null); return; }      // we are on it now: clock off
+  // Anything that is not strictly newer — the same build, an older one, or a stamp we
+  // cannot read — means there is nothing to install, so the clock comes off.
+  if (!updNewer(v)){ updSaveRec(null); return; }
   const r = updRec();
   if (!r || r.v !== v) updSaveRec({ v, first: Date.now() });
 }
@@ -16580,7 +16652,9 @@ function updDaysLeft(){ return Math.max(0, UPD.graceDays - updWaitingDays()); }
 // actually lands, without needing the network to confirm it.
 function updOverdue(){
   const r = updRec();
-  return !!(r && r.v !== VERSION && updWaitingDays() >= UPD.graceDays);
+  // ⚠️ `updNewer`, not `r.v !== VERSION`. A record naming a build we have already passed
+  // must not lock the game — see verNum. A record we cannot parse must not either.
+  return !!(r && updNewer(r.v) && updWaitingDays() >= UPD.graceDays);
 }
 // ⚠️ The version is pulled out with a regex that must not match ITS OWN SOURCE. This file
 // fetches itself, so the pattern's text appears in the reply BEFORE the real declaration —
@@ -16622,10 +16696,10 @@ async function updCheck(manual){
   } catch (_) { v = null; }          // nothing cached either: say nothing at all
   if (manual){
     if (!v) toast('Could not reach the server', 'err', 'info');
-    else if (v === VERSION) toast('Up to date · v' + VERSION, 'ok', 'save');
+    else if (!updNewer(v)) toast('Up to date · v' + VERSION, 'ok', 'save');
   }
   updNote(v);                       // start (or keep) the deadline clock for this build
-  if (!v || v === VERSION) return v;
+  if (!updNewer(v)) return v;        // same build, an older one, or unreadable: nothing to do
   updEnforce();                      // ...and if it is already overdue, stop here
   // ⚠️ Declining silences the prompt for THIS SESSION only — `updSeen` is deliberately not
   // persisted, so every launch asks once more. Being nagged twice in one sitting is what
@@ -16814,8 +16888,8 @@ if (window.__MAGNETDEBUG) {
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY,
-    REPLIB, repLibAdd, repLibAll, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
-    updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce,
+    REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
+    updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },
