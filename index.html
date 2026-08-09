@@ -586,6 +586,35 @@
       margin: 10px 0 4px; line-height: 1.9; }
     #updVers b { color: var(--accent); font-weight: 400; }
     #updModal .updrow { display: flex; gap: 8px; margin-top: 16px; }
+    /* The gate and the news screen borrow updModal's shell. ⚠️ The gate sits ABOVE
+       everything, the update modal included — if both were up it is the one that matters. */
+    #updBlock, #newsModal {
+      position: fixed; inset: 0; z-index: 60; display: flex;
+      align-items: center; justify-content: center; padding: 20px;
+      background: rgba(0,0,0,.86); backdrop-filter: blur(3px);
+    }
+    #updBlock { z-index: 70; }
+    #updBlock.hidden, #newsModal.hidden { display: none; }
+    #updBlock .dm-card, #newsModal .dm-card { max-width: 420px; }
+    #updBlock h2 { color: var(--red); }
+    #updBlock .updrow, #newsModal .updrow { display: flex; gap: 8px; margin-top: 16px; justify-content: center; }
+    .upddead { font-family: var(--pix); font-size: 11px; color: var(--red); line-height: 1.6;
+      margin-top: 10px; text-align: left; }
+    /* Changelog. One release per block: heading, then the lines, then the generic fix line. */
+    .newsbody { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; text-align: left; margin-top: 6px; }
+    #newsList { display: flex; flex-direction: column; gap: 16px; }
+    .relblock { text-align: left; }
+    .relhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+    .reltitle { font-family: var(--pix); font-size: 13px; color: var(--accent); }
+    .relver { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px; color: var(--muted); }
+    .relver.now { color: var(--go); }
+    .rellist { list-style: none; padding: 0; margin: 0 0 2px; display: flex; flex-direction: column; gap: 5px; }
+    .rellist li { font-size: 12.5px; line-height: 1.55; color: var(--text);
+      padding-left: 16px; position: relative; }
+    .rellist li::before { content: '+'; position: absolute; left: 0; color: var(--go); font-weight: 700; }
+    .rellist li.chg::before { content: '~'; color: var(--accent); }
+    .relfix { font-size: 12px; color: var(--muted); line-height: 1.55; margin: 4px 0 0; padding-left: 16px; }
     #updModal .updrow button { flex: 1 1 0; min-height: 46px; }
 
     /* Collapsible menu sections (accordion) */
@@ -1038,7 +1067,24 @@
       flex:0 0 58px; }
     .pathval { font-size:12px; color: var(--text); overflow-wrap:anywhere; }
     .pathval.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    #repWatchBtn { display:block; width:100%; margin:0 0 4px; }
+    #repWatchBtn, #repClearAll { display:block; width:100%; margin:0 0 4px; }
+    #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
+    .reprow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
+      background: rgba(128,128,128,.08); border:1px solid var(--edge); }
+    .reptxt { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
+    .reptxt b { font-family: var(--pix); font-size:11.5px; font-weight:400; color: var(--text);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .reptxt span { font-size:10.5px; color: var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .repacts { display:flex; gap:6px; flex:0 0 auto; }
+    /* 44px targets: three of these sit side by side on a phone, and one of them deletes. */
+    .repbtn { min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
+      border-radius:9px; border:1px solid var(--edge); background: rgba(128,128,128,.14);
+      cursor:pointer; color: var(--text); font-family: var(--pix); font-size:10px; padding:0 6px; }
+    .repbtn svg.ic { width:18px; height:18px; }
+    .repbtn:active { transform: translateY(1px); }
+    .repbtn.del { color: var(--red); }
+    /* Armed: it says "Sure?" and looks like it means it. */
+    .repbtn.del.arm { background: rgba(224,90,90,.22); border-color: var(--red); min-width:56px; }
 
     .votetally { display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
       font-family: var(--pix); font-size:11px; color: var(--text); }
@@ -1583,11 +1629,21 @@
     </div>
 
 
+    <div class="card collapsible collapsed" data-sec="news">
+      <h2>What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></h2>
+      <div id="newsList"></div>
+      <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
+    </div>
+
     <!-- Replays. Its own section because loading one is something you do between
          matches, from the menu, not from a screen that is covering the pitch. -->
     <div class="card collapsible collapsed" data-sec="replay">
       <h2>Replays</h2>
-      <label class="field">Watch a saved replay</label>
+      <label class="field">Saved replays <small id="repListSub" style="color:var(--muted);font-weight:400"></small></label>
+      <div id="repList"></div>
+      <button class="ghost" id="repClearAll" type="button" style="display:none;margin-top:8px">Delete all saved replays</button>
+      <div style="height:14px"></div>
+      <label class="field">Watch a replay from a file</label>
       <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
       <div class="hint always" style="text-align:left">Plays through to the end and comes straight back here. <b id="repSkipHint">Tap the screen to stop early.</b></div>
       <div style="height:14px"></div>
@@ -1786,9 +1842,37 @@
       <h2>UPDATE AVAILABLE</h2>
       <p id="updVers"></p>
       <p class="hint always" style="text-align:left">Updating reloads the game. Your settings, player and career are stored on this device and are not touched.</p>
+      <p id="updDeadline" class="upddead" style="display:none"></p>
       <div class="updrow">
         <button class="primary" id="updNow" type="button">Update now</button>
         <button class="ghost" id="updLater" type="button">Later</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The hard gate. No dismiss, no Later, and `updEnforce` stops the match loop as well
+       as covering it — a modal you can play behind is a suggestion. -->
+  <div id="updBlock" class="hidden">
+    <div class="dm-card">
+      <h2>UPDATE REQUIRED</h2>
+      <p id="updBlockVers"></p>
+      <p class="hint always" style="text-align:left">This version is too far behind to keep playing. Updating reloads the game and takes a moment — your settings, your player and your career are stored on this device and are not touched.</p>
+      <p class="hint always" style="text-align:left">If you are offline you will need a connection to install it.</p>
+      <div class="updrow">
+        <button class="primary" id="updForce" type="button">Update now</button>
+      </div>
+      <p id="updBlockErr" class="upddead" style="display:none"></p>
+    </div>
+  </div>
+
+  <!-- What changed, shown once after an update lands and any time from the menu. -->
+  <div id="newsModal" class="hidden">
+    <div class="dm-card">
+      <h2>WHAT'S NEW</h2>
+      <p id="newsVers"></p>
+      <div id="newsBody" class="newsbody"></div>
+      <div class="updrow">
+        <button class="primary" id="newsOk" type="button">Got it</button>
       </div>
     </div>
   </div>
@@ -2563,6 +2647,10 @@ const ICONS = {
   // closed and seated for locked, swung open to the right for unlocked, so the state
   // reads at 18px on a pause screen you are glancing at.
   lock:      'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0v2.8 M12 14v3',
+  // --- replay library
+  play:      'M8.4 5.6 18 12l-9.6 6.4Z',
+  save:      'M12 4.2v10.4 M7.8 10.6 12 14.8l4.2-4.2 M5 19.4h14',
+  trash:     'M4.8 7.4h14.4 M9.4 7.4V5.2h5.2v2.2 M6.8 7.4l.9 12.2h8.6l.9-12.2 M10.4 10.8v5.6 M13.6 10.8v5.6',
   unlock:    'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0 M12 14v3',
   question:  'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M9.4 9.4a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.2-2.6 4 M12 17.2a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z',
   // --- match length
@@ -2717,6 +2805,65 @@ function detectPanel(){
 }
 const PANEL = detectPanel();
 
+// Build version under the title. Format: YYYYMMDD.build — bump on every change.
+// ⚠️ Declared UP HERE. It used to sit two thirds of the way down the file, which was fine
+// while only render-time code read it — then `buildNews()` started reading it during the
+// bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
+// That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
+// has to be declared above the thing that reads it.
+const VERSION = '20260810.0140AM';
+
+// ============================================================
+//  CHANGELOG — what changed, for PLAYERS
+// ============================================================
+// ⚠️ Declared UP HERE, not next to the update machinery it belongs with. `buildSettings()`
+// runs during the bootstrap and renders this, and a `const` sitting further down the file
+// is in the temporal dead zone at that moment — the sixth time this file has been bitten
+// by exactly that.
+//
+// ⚠️ WHAT GOES IN, and the rule is the whole point: only things a player would want to
+// know. New things to do, changes they will feel, and that is it. Every bug fix collapses
+// into ONE generic line — "a handful of smaller fixes" — because a player does not care
+// that a flex column was centring its overflow, and a changelog that lists internals is a
+// changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
+const CHANGELOG = [
+  { v: '20260810.0140AM', title: 'Replays you can keep',
+    added: [
+      'Replays — save a match from the replay bar or the result screen, then watch it back from the new Replays section in the menu.',
+      'Delete replays you have finished with, one at a time or all at once.',
+      'This screen. After an update it shows you what changed.',
+    ],
+    changed: [
+      'The game checks for a new version every time you open it, and asks you to install one that has been out for a while.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260809.0930PM', title: 'Show mode, and a readable result screen',
+    added: [
+      'Show mode — hand the game to someone without handing them every setting. Turn it on from the pause screen.',
+      'Save a replay as a file and watch it again later, at your screen’s size and in your theme.',
+    ],
+    changed: [
+      'The result screen scrolls on a phone. The buttons at the bottom were unreachable before.',
+      'One player can no longer collect every award ribbon, so the list says something.',
+      'Player stats on the result screen fold away on a phone — tap the heading for the full table.',
+      'Warm-up is only offered where it does something: with a controller, in cocktail, or if you ask for it.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260809.0410PM', title: 'Tilt, substitutions and a fairer goal box',
+    added: [
+      'Tilt your phone and the pitch, the players and the controls shift at different depths.',
+      'Plug a controller in mid-match: a player walks to the touchline, you pick a side, and you come on at the next goal.',
+      'Frame rate in the debug readout.',
+    ],
+    changed: [
+      'Half a second of grace in the goalkeeper box, so you can run through it without being shoved out.',
+      'Everything under Theme is grouped into tabs, so there is far less scrolling.',
+      'Slow motion is saved for the goal that wins the match.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+];
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
@@ -6867,7 +7014,22 @@ $('socialBack').onclick = closeSocial;
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
 $('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
-$('repWatchBtn').onclick = watchReplayFromMenu;
+$('repWatchBtn').onclick = () => watchReplayFromMenu();
+// ⚠️ Two presses here as well, and for a stronger reason: this one takes the lot.
+(function wireClearAll(){
+  const b = $('repClearAll'); if (!b) return;
+  let armed = false, t = 0;
+  b.onclick = () => {
+    if (!armed){ armed = true; b.textContent = 'Delete all — press again to confirm';
+                 b.classList.add('danger');
+                 t = setTimeout(() => { armed = false; b.classList.remove('danger');
+                                        b.textContent = 'Delete all saved replays'; }, 4000);
+                 return; }
+    clearTimeout(t); armed = false; b.classList.remove('danger');
+    b.textContent = 'Delete all saved replays';
+    repLibClear().then(() => buildReplayList()).catch(() => {});
+  };
+})();
 $('rogueBack').onclick = toMenu;
 $('shopSupport').onclick = () => { const b=$('shopSupport'); b.textContent='💛 Thank you! Have fun out there.'; };
 $('padCfgBtn').onclick = openPadConfig;
@@ -7554,6 +7716,8 @@ function buildSettings(){
   buildFeelPresets();
   buildFeelSliders();
   buildReplayInfo();
+  buildReplayList();
+  buildNews();
   { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
   // created by this function, so a one-shot pass at startup left them unclassified
@@ -9010,12 +9174,15 @@ function repFileBuild(){
     frames,
   };
 }
-function repFilename(){
+function repFilename(field){
   // ⚠️ Colons are illegal in filenames on Windows and awkward everywhere else, and the
   // name has to say "replay" out loud — with a plain `.json` extension the filename is
   // the only thing distinguishing this from every other JSON in the downloads folder.
+  // `field` is passed when exporting a LIBRARY entry, which may be from another court
+  // than the one loaded now.
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  return `magnetball-replay-${(world && world.fieldKey) || sel.field}-${t}.${REPFILE.ext}`;
+  const f = field || (world && world.fieldKey) || sel.field;
+  return `magnetball-replay-${f}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -9028,10 +9195,85 @@ function downloadBlob(blob, filename){
   // when click() returns, and a revoked URL there downloads a zero-byte file.
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+// ============================================================
+//  THE REPLAY LIBRARY — because a page cannot delete your downloads
+// ============================================================
+// ⚠️ "Delete a replay" is IMPOSSIBLE for a downloaded file. Once a Blob has gone to the
+// Downloads folder it belongs to the operating system; there is no web API that can list
+// it, move it or remove it, and there never will be for a file the page did not open. So
+// for delete to mean anything, the replay has to live somewhere the page OWNS.
+//
+// It goes in IndexedDB rather than localStorage: a replay is ~25KB, and localStorage is a
+// ~5MB budget already shared with the save, the profile and a photo faceplate. Forty
+// replays would be a fifth of it at best and a QuotaExceededError at worst.
+//
+// Saving still writes the FILE as well — that is the copy you can send someone or keep
+// after clearing site data. The library is the copy you can watch and delete from inside
+// the game. Same document, `repFileBuild()`, either way, so they cannot disagree.
+const REPLIB = { db:'magnetball', store:'replays', v:1, max:40 };
+function repLibOpen(){
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('no IndexedDB'));
+    const req = indexedDB.open(REPLIB.db, REPLIB.v);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(REPLIB.store)) db.createObjectStore(REPLIB.store, { keyPath:'id' });
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error || new Error('open failed'));
+  });
+}
+function repLibTx(mode, fn){
+  return repLibOpen().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(REPLIB.store, mode);
+    const out = fn(tx.objectStore(REPLIB.store));
+    tx.oncomplete = () => { db.close(); res(out && out.result !== undefined ? out.result : out); };
+    tx.onerror = () => { db.close(); rej(tx.error); };
+  }));
+}
+// ⚠️ The id carries the save time and a counter, so two replays saved in the same second
+// cannot collide — a keyPath clash silently REPLACES the earlier one.
+let _repLibN = 0;
+function repLibId(){ return Date.now() + '-' + (++_repLibN); }
+function repLibAdd(doc){
+  const rec = {
+    id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
+    players: doc.players.length, frames: doc.frames.length,
+    bytes: JSON.stringify(doc).length,
+    doc,
+  };
+  return repLibTx('readwrite', st => st.put(rec)).then(() => repLibTrim()).then(() => rec);
+}
+function repLibAll(){
+  return repLibTx('readonly', st => st.getAll())
+    // Newest first. Sorted here rather than with an index: forty rows is nothing, and an
+    // index is a schema migration the first time the sort changes.
+    .then(rows => (rows || []).sort((a, b) => String(b.id).localeCompare(String(a.id))));
+}
+function repLibDel(id){ return repLibTx('readwrite', st => st.delete(id)); }
+function repLibClear(){ return repLibTx('readwrite', st => st.clear()); }
+// ⚠️ A cap, because nothing else would ever remove one. Saving a replay is a one-tap habit
+// and an unbounded store is a slow leak into the device's quota; the OLDEST goes.
+function repLibTrim(){
+  return repLibAll().then(rows => {
+    const extra = rows.slice(REPLIB.max);
+    return Promise.all(extra.map(r => repLibDel(r.id)));
+  });
+}
+function repLibLabel(rec){
+  const f = (FIELDS[rec.field] && FIELDS[rec.field].name) || rec.field;
+  let when = '';
+  try { const d = new Date(rec.saved); if (isFinite(d)) when = d.toLocaleString(); } catch(_){}
+  return { title: f + ' · ' + (rec.mode || '?'),
+           sub: [when, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB'].filter(Boolean).join(' · ') };
+}
+// Saving does BOTH: the file for keeping and sending, the library entry for watching and
+// deleting. The file is what the player asked for, so a library failure must not lose it.
 function saveReplayFile(){
   const doc = repFileBuild();
   if (!doc) return false;
   downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename());
+  repLibAdd(doc).then(() => buildReplayList()).catch(() => {});
   return true;
 }
 // Parse + validate. Returns the document or throws with a reason a human can act on.
@@ -9138,12 +9380,88 @@ async function watchReplayFile(back, pick){
 // From the menu's Replays card: plays to the end, then comes straight back to the card
 // it was started from. Stopping early lands in the same place — `playReplay` resolves on
 // a skip exactly as it does on the last frame, so there is one way back, not two.
-function watchReplayFromMenu(){
+function watchReplayFromMenu(pick){
   return watchReplayFile(() => {
     dockOrFull('setup');
     openSection('replay');
-    const card = document.querySelector('#setup [data-sec="replay"]');
+    // ⚠️ `.card`, qualified: `#setup [data-sec="replay"]` also matches the jump-bar CHIP,
+    // which comes first in the document, so the loose selector scrolls to the chip.
+    const card = document.querySelector('#setup .card[data-sec="replay"]');
     if (card) requestAnimationFrame(() => card.scrollIntoView({ block:'start' }));
+  }, pick);
+}
+// The saved-replay list, with the delete the whole library exists for.
+// ⚠️ Delete is CONFIRMED, and by the button changing rather than a `confirm()` dialog: the
+// rows are small and close together, the action cannot be undone, and a stray thumb is
+// exactly how somebody loses the goal they saved. Press once for "Sure?", again to remove;
+// it disarms itself after three seconds so a half-press is not left waiting.
+function buildReplayList(){
+  const host = $('repList'); if (!host) return Promise.resolve();
+  return repLibAll().then(rows => {
+    host.innerHTML = '';
+    const bulk = $('repClearAll');
+    if (bulk) bulk.style.display = rows.length ? '' : 'none';
+    const sub = $('repListSub');
+    if (sub) sub.textContent = rows.length
+      ? rows.length + (rows.length === 1 ? ' replay' : ' replays') + ' · ' +
+        Math.round(rows.reduce((n, r) => n + (r.bytes || 0), 0) / 1024) + ' KB'
+      : '';
+    if (!rows.length){
+      const e = document.createElement('div'); e.className = 'mvempty';
+      e.textContent = 'Nothing saved yet. Score a goal, then press Save replay on the replay bar or the '
+        + 'result screen — it is kept here to watch again, and written to your downloads as a file you '
+        + 'can send or back up.';
+      host.appendChild(e); return;
+    }
+    for (const rec of rows){
+      const lab = repLibLabel(rec);
+      const row = document.createElement('div'); row.className = 'reprow'; row.dataset.id = rec.id;
+      const txt = document.createElement('div'); txt.className = 'reptxt';
+      const t = document.createElement('b'); t.textContent = lab.title;
+      const s = document.createElement('span'); s.textContent = lab.sub;
+      txt.append(t, s);
+      const acts = document.createElement('div'); acts.className = 'repacts';
+
+      const play = document.createElement('button'); play.className = 'repbtn';
+      play.type = 'button'; play.setAttribute('aria-label', 'Watch this replay');
+      play.innerHTML = iconSvg('play') || '▶';
+      // ⚠️ Straight through `watchReplayFromMenu` with the picker stood in. A library entry
+      // is just another source of a document, so it must not grow its own copy of
+      // "hide the menu, play it, come back".
+      play.onclick = () => watchReplayFromMenu(async () => rec.doc);
+
+      const down = document.createElement('button'); down.className = 'repbtn';
+      down.type = 'button'; down.setAttribute('aria-label', 'Save this replay as a file');
+      down.innerHTML = iconSvg('save') || '⤓';
+      down.onclick = () => downloadBlob(new Blob([JSON.stringify(rec.doc)], { type:'application/json' }),
+                                        repFilename(rec.field));
+
+      const del = document.createElement('button'); del.className = 'repbtn del';
+      del.type = 'button'; del.setAttribute('aria-label', 'Delete this replay');
+      del.innerHTML = iconSvg('trash') || '✕';
+      let armed = false, dt = 0;
+      del.onclick = () => {
+        if (!armed){
+          armed = true; del.classList.add('arm'); del.textContent = 'Sure?';
+          dt = setTimeout(() => { armed = false; del.classList.remove('arm');
+                                  del.innerHTML = iconSvg('trash') || '✕'; }, 3000);
+          return;
+        }
+        clearTimeout(dt);
+        repLibDel(rec.id).then(() => buildReplayList()).catch(() => {});
+      };
+      acts.append(play, down, del);
+      row.append(txt, acts); host.appendChild(row);
+    }
+  }).catch(() => {
+    // ⚠️ IndexedDB can be absent or blocked (private windows, locked-down browsers). Say so
+    // and point at the thing that still works, rather than showing an empty list that looks
+    // like nothing was ever saved.
+    host.innerHTML = '';
+    const e = document.createElement('div'); e.className = 'mvempty';
+    e.textContent = 'Saved replays are not available in this browser. Saving still writes a file, '
+      + 'and you can watch it with the button above.';
+    host.appendChild(e);
   });
 }
 // ⚠️ Where a saved replay lands. A page is NEVER told the download directory, so this
@@ -16207,9 +16525,6 @@ if (PANEL){
   syncPush();
 }
 
-// Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260810.1215AM';
-
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
 // ============================================================
@@ -16224,10 +16539,49 @@ const VERSION = '20260810.1215AM';
 const UPD = {
   bootDelay: 4,     // seconds after load before the first check — starting up comes first
   minGap: 60,       // seconds between automatic checks, however often you switch back
+  // ⚠️ After this many days with a newer build available, the game STOPS and will not play
+  // until it is updated. Deliberately blunt: an old client posts scores to the same
+  // leaderboard and reports bugs that were fixed weeks ago.
+  graceDays: 30,
+  warnDays: 7,      // ...and from here on the prompt says how long is left, and re-asks
+  key: 'magnetball.upd',
 };
-let updSeen = null;      // a version already offered and declined: never offer it twice
+let updSeen = null;      // declined this session: asked once per launch, not once per build
 let updFound = null;     // a new build found while a match was live, waiting for a good moment
 let _updLast = 0;
+// ⚠️ THE DEADLINE IS PERSISTED, and it has to be, because the clock starts the first time a
+// newer build is SEEN rather than when the player is next online. `{v, first}` — the version
+// that is waiting and the moment we first saw it. Reset when a different version appears
+// (each release gets its own 30 days) and cleared once we are running it.
+function updRec(){
+  try { const r = JSON.parse(localStorage.getItem(UPD.key) || 'null');
+        return (r && r.v && r.first) ? r : null; } catch(_){ return null; }
+}
+function updSaveRec(r){
+  try { if (r) localStorage.setItem(UPD.key, JSON.stringify(r)); else localStorage.removeItem(UPD.key); } catch(_){}
+}
+// Called with whatever the server said. `null` means we could not reach it — which must NOT
+// clear the record, or going offline would reset the deadline every launch.
+function updNote(v){
+  if (!v) return;
+  if (v === VERSION){ updSaveRec(null); return; }      // we are on it now: clock off
+  const r = updRec();
+  if (!r || r.v !== v) updSaveRec({ v, first: Date.now() });
+}
+// Whole days since the waiting build was first seen. ⚠️ Clamped at 0: a device clock moved
+// backwards would otherwise read as a negative age and quietly disable the deadline.
+function updWaitingDays(){
+  const r = updRec(); if (!r) return 0;
+  return Math.max(0, Math.floor((Date.now() - r.first) / 86400000));
+}
+function updDaysLeft(){ return Math.max(0, UPD.graceDays - updWaitingDays()); }
+// ⚠️ Reads the RECORD, not a live check, so it still bites offline — the whole point of
+// persisting it. And `r.v !== VERSION` is what releases the block the moment the update
+// actually lands, without needing the network to confirm it.
+function updOverdue(){
+  const r = updRec();
+  return !!(r && r.v !== VERSION && updWaitingDays() >= UPD.graceDays);
+}
 // ⚠️ The version is pulled out with a regex that must not match ITS OWN SOURCE. This file
 // fetches itself, so the pattern's text appears in the reply BEFORE the real declaration —
 // requiring a digit right after the quote is what keeps `\s*` in the pattern from being read
@@ -16270,14 +16624,40 @@ async function updCheck(manual){
     if (!v) toast('Could not reach the server', 'err', 'info');
     else if (v === VERSION) toast('Up to date · v' + VERSION, 'ok', 'save');
   }
+  updNote(v);                       // start (or keep) the deadline clock for this build
   if (!v || v === VERSION) return v;
-  // ⚠️ Declining silences the AUTOMATIC checks only. Being asked twice about one build is what
-  // teaches people to dismiss update prompts unread — but a player who has just PRESSED
-  // "check for updates" is asking, and a button that knowingly answers nothing is worse.
-  if (v === updSeen && !manual) return v;
+  updEnforce();                      // ...and if it is already overdue, stop here
+  // ⚠️ Declining silences the prompt for THIS SESSION only — `updSeen` is deliberately not
+  // persisted, so every launch asks once more. Being nagged twice in one sitting is what
+  // teaches people to dismiss updates unread; never being asked again is how a client ends
+  // up three months stale. A player who PRESSED "check for updates" is asking either way.
+  // Inside the warning window it re-asks regardless, because the deadline is now the point.
+  if (v === updSeen && !manual && updDaysLeft() > UPD.warnDays) return v;
   updFound = v;
   updMaybeShow();
   return v;
+}
+// ============================================================
+//  THE HARD GATE — an old client eventually stops playing
+// ============================================================
+// ⚠️ Not dismissible, and it stops the match loop rather than just covering it: a modal you
+// can play behind is a suggestion. The only way out is an update that actually lands, which
+// is why the button reports failure instead of pretending.
+// ⚠️ OFFLINE THERE IS NO WAY THROUGH, and that is the accepted cost of "force" — the gate
+// says exactly that rather than looping silently, so a player who cannot reach the network
+// knows what is being asked of them instead of thinking the game is broken.
+function updEnforce(){
+  if (!updOverdue()) return false;
+  const el = $('updBlock'); if (!el) return true;
+  const r = updRec();
+  const vs = $('updBlockVers');
+  if (vs) vs.innerHTML = 'Required: <b>v' + r.v + '</b><br>You have: v' + VERSION +
+                         '<br>Available for ' + updWaitingDays() + ' days';
+  // Stop play outright. `running = false` ends the loop; the overlay covers what is left.
+  running = false; paused = true;
+  try { hideOverlay(); } catch(_){}
+  el.classList.remove('hidden');
+  return true;
 }
 // ⚠️ NEVER over a live match. A modal that lands mid-play steals the ball out of your hands;
 // the news costs nothing to hold until you are somewhere it does no harm — the menu, the
@@ -16289,13 +16669,84 @@ function updCanShow(){
   return !!world.demo || world.state === 'over';
 }
 function updMaybeShow(){
+  if (updEnforce()) return;          // past the deadline there is nothing to decide
   if (!updFound || !updCanShow()) return;
   const el = $('updModal'); if (!el) return;
   const vs = $('updVers');
   if (vs) vs.innerHTML = 'New: <b>v' + updFound + '</b><br>You have: v' + VERSION;
+  // ⚠️ Say how long is left, but only once it is close. A countdown from thirty days is
+  // noise; a countdown from a week is information, and it is what stops the hard gate
+  // arriving as a surprise.
+  const left = updDaysLeft(), warn = $('updDeadline');
+  if (warn){
+    const near = updRec() && left <= UPD.warnDays;
+    warn.style.display = near ? '' : 'none';
+    if (near) warn.textContent = left <= 0
+      ? 'This update is now required — the game will not start without it.'
+      : `Required in ${left} ${left === 1 ? 'day' : 'days'}: after that the game will not start until it is installed.`;
+  }
+  const later = $('updLater');
+  if (later) later.textContent = left <= UPD.warnDays ? 'Not yet' : 'Later';
   el.classList.remove('hidden');
 }
 function updHide(){ const el = $('updModal'); if (el) el.classList.add('hidden'); }
+
+// ============================================================
+//  WHAT'S NEW — the changelog, on screen
+// ============================================================
+// ONE renderer for both places it appears: the modal that fires once after an update and
+// the menu card you can open any time. Two copies would drift, and the whole value of a
+// changelog is that it is the same list wherever you read it.
+const NEWS_KEY = 'magnetball.lastver';
+function releaseBlock(rel){
+  const wrap = document.createElement('div'); wrap.className = 'relblock';
+  const head = document.createElement('div'); head.className = 'relhead';
+  const t = document.createElement('span'); t.className = 'reltitle'; t.textContent = rel.title;
+  const v = document.createElement('span'); v.className = 'relver' + (rel.v === VERSION ? ' now' : '');
+  v.textContent = 'v' + rel.v + (rel.v === VERSION ? ' · you have this' : '');
+  head.append(t, v); wrap.appendChild(head);
+  const ul = document.createElement('ul'); ul.className = 'rellist';
+  for (const line of (rel.added || [])){ const li = document.createElement('li'); li.textContent = line; ul.appendChild(li); }
+  for (const line of (rel.changed || [])){ const li = document.createElement('li'); li.className = 'chg'; li.textContent = line; ul.appendChild(li); }
+  if (ul.children.length) wrap.appendChild(ul);
+  // ⚠️ ONE line for every bug fixed, on purpose. A player does not care which flex column
+  // was centring its overflow, and a changelog that itemises internals is one nobody reads
+  // a second time.
+  if (rel.fixed){ const p = document.createElement('p'); p.className = 'relfix'; p.textContent = rel.fixed; wrap.appendChild(p); }
+  return wrap;
+}
+function buildNews(){
+  const host = $('newsList'); if (!host) return;
+  host.innerHTML = '';
+  for (const rel of CHANGELOG) host.appendChild(releaseBlock(rel));
+  const sub = $('newsSub');
+  if (sub) sub.textContent = 'v' + VERSION;
+}
+// The one-off modal. Shows only the release you have just landed on — the full history is
+// in the menu, and a wall of every release is not what somebody wants after a reload.
+function newsShow(rel){
+  const el = $('newsModal'); if (!el) return;
+  const body = $('newsBody'); if (body){ body.innerHTML = ''; body.appendChild(releaseBlock(rel)); }
+  const vs = $('newsVers');
+  if (vs) vs.textContent = 'Updated to v' + VERSION;
+  el.classList.remove('hidden');
+}
+function newsHide(){ const el = $('newsModal'); if (el) el.classList.add('hidden');
+  try { localStorage.setItem(NEWS_KEY, VERSION); } catch(_){} }
+// ⚠️ Fires when the STORED version differs from the running one — i.e. exactly once per
+// update, per device. A first-ever visit records the version WITHOUT showing anything: a
+// brand new player has nothing to catch up on, and "what's new" as the first thing you see
+// is a changelog for a game you have not played.
+function newsMaybeShow(){
+  let last = null;
+  try { last = localStorage.getItem(NEWS_KEY); } catch(_){}
+  if (last === VERSION) return;
+  if (!last){ try { localStorage.setItem(NEWS_KEY, VERSION); } catch(_){} return; }
+  const rel = CHANGELOG.find(r => r.v === VERSION);
+  if (!rel){ try { localStorage.setItem(NEWS_KEY, VERSION); } catch(_){} return; }
+  if (!updCanShow()) return;         // same rule as the update prompt: never over a live match
+  newsShow(rel);
+}
 async function updApply(){
   const bt = $('updNow'); if (bt){ bt.disabled = true; bt.textContent = 'Updating…'; }
   // ⚠️ Ask the worker to re-check too. The page is what changed, and the check above has
@@ -16315,12 +16766,38 @@ function updLater(){ updSeen = updFound; updFound = null; updHide(); }
   const now = $('updNow'), later = $('updLater'), chk = $('updCheckBtn');
   if (now) now.onclick = updApply;
   if (later) later.onclick = updLater;
+  // ⚠️ The gate's button REPORTS failure rather than pretending. Offline there is genuinely
+  // no way through, and a button that silently does nothing reads as a broken game.
+  const force = $('updForce');
+  if (force) force.onclick = async () => {
+    const err = $('updBlockErr');
+    force.disabled = true; force.textContent = 'Updating…';
+    if (err) err.style.display = 'none';
+    const v = await updCheck(true);
+    if (!v){
+      force.disabled = false; force.textContent = 'Update now';
+      if (err){ err.textContent = 'Could not reach the server. Connect to the internet and try again.';
+                err.style.display = ''; }
+      return;
+    }
+    updApply();
+  };
+  const nok = $('newsOk');
+  if (nok) nok.onclick = newsHide;
   if (chk) chk.onclick = () => { chk.disabled = true; chk.textContent = 'Checking…';
     updCheck(true).finally(() => { chk.disabled = false; chk.textContent = 'Check for updates'; }); };
   // First check a few seconds in, then whenever the app is brought back to the front —
   // which is the closest thing a standalone PWA has to being relaunched. Throttled by
   // UPD.minGap, so flicking between apps does not hammer the server.
   if (chk) chk.style.display = updPossible() ? '' : 'none';   // no server, no button
+  // ⚠️ THESE TWO RUN BEFORE THE `updPossible()` GUARD, and that is the whole point.
+  // Neither needs a server: the deadline is read from the STORED record, so a player who
+  // has been offline for a month is still stopped, and the changelog is a comparison
+  // between the version running and the version last seen on this device. Sitting them
+  // below the guard meant they never fired on a `file://` page at all — which is where
+  // every suite here runs, so it was invisible until one was written.
+  updEnforce();
+  setTimeout(() => { if (!updEnforce()) newsMaybeShow(); }, 400);
   if (!updPossible()) return;
   setTimeout(() => updCheck(), UPD.bootDelay * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updCheck(); });
@@ -16336,6 +16813,9 @@ if (window.__MAGNETDEBUG) {
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
+    CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY,
+    REPLIB, repLibAdd, repLibAll, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
+    updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },

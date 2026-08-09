@@ -787,6 +787,49 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
+- **Forced updates (`UPD.graceDays` = 30, `#updBlock`, `updEnforce`):** a check on every
+  launch and every return to the app, and after **30 days** with a newer build available the
+  game **stops** until it is installed. ⚠️ The deadline is **persisted** (`magnetball.upd`
+  = `{v, first}`) because the clock starts when a newer build is first *seen*, not when the
+  player is next online — so `updEnforce()` reads the record and bites **offline too**, which
+  is the whole reason it is stored. `updNote(null)` (could not reach the server) must NOT
+  clear it, or going offline would reset the deadline every launch; seeing the **same**
+  version again must not restart it either, or a daily player never reaches the deadline; a
+  **different** version does restart it, because each release gets its own thirty days. It
+  releases the moment `r.v === VERSION`, with no network needed to confirm.
+  ⚠️ The gate sets `running = false`: a modal you can play behind is a suggestion. No
+  "Later", one button, and it **reports failure** rather than pretending — offline there is
+  genuinely no way through, and a button that silently does nothing reads as a broken game.
+  ⚠️ `updSeen` is deliberately **not persisted**, so declining lasts one session and every
+  launch asks once more; inside `UPD.warnDays` (7) it re-asks regardless and the prompt says
+  how many days are left. A countdown from thirty days is noise; from a week it is what stops
+  the hard gate arriving as a surprise.
+  ⚠️ **`updEnforce()` and `newsMaybeShow()` are wired ABOVE the `updPossible()` guard** in the
+  boot block. Neither needs a server, and below it they never fired on a `file://` page —
+  which is where every suite runs, so it was invisible until one was written.
+- **Changelog (`CHANGELOG`, `buildNews`, `newsShow`):** ⚠️ declared **near the top of the
+  file**, and `const VERSION` had to move up with it — `buildNews()` runs during the
+  bootstrap, and VERSION two-thirds of the way down took the whole page out with
+  "Cannot access 'VERSION' before initialization". That is the **seventh** TDZ bite here.
+  ⚠️ **What goes in is the rule**: only what a player would want to know. Every bug fix
+  collapses into ONE generic line — a player does not care which flex column was centring
+  its overflow, and a changelog that itemises internals is one nobody reads twice.
+  `tests/forceupdate.mjs` checks the entries for developer jargon.
+  One renderer (`releaseBlock`) for both the modal and the menu card, so they cannot drift.
+  The modal fires **once per update per device** off `magnetball.lastver` and shows only the
+  release you landed on; a **first-ever visit records the version and shows nothing**, since
+  "what's new" as the first thing you ever see is a changelog for a game you have not played.
+- **Replay library (`REPLIB`, IndexedDB):** ⚠️ it exists because **a page cannot delete your
+  downloads**. Once a Blob is in the Downloads folder it belongs to the OS — no web API can
+  list, move or remove it — so "delete a replay" is only meaningful for a copy the page owns.
+  Saving writes **both**: the file to send or keep, and a library entry to watch and delete.
+  IndexedDB rather than `localStorage` because a replay is ~25KB against a ~5MB budget already
+  shared with the save, the profile and a photo. Capped at `REPLIB.max` (40, oldest goes) since
+  nothing else would ever remove one. ⚠️ **Delete takes two presses** — the rows are small and
+  close together and it cannot be undone; the button arms to "Sure?" and disarms after 3s.
+  A row's Watch goes through **`watchReplayFromMenu(pick)`**, never its own copy of
+  "hide the menu, play, come back". `repLibId()` carries a counter as well as the clock,
+  because two saves in one second would otherwise share a keyPath and silently replace.
 - **Update screen (`#updModal`, `updCheck`):** ⚠️ it compares **`VERSION`, not the service
   worker**. A deploy here is a new `index.html` and `sw.js` barely ever changes, so
   `registration.update()` fires `updatefound` for almost none of them — an SW-based check
@@ -888,7 +931,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 81 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 82 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
