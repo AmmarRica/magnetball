@@ -1029,6 +1029,17 @@
        .awrow) already carries this override; this one was simply missed.
        A flex row rather than inline-block so the count sits on the icon's centre line
        instead of on a font baseline that no glyph here shares. */
+    /* Replays card: where files land. Monospace on the values, because a path and a
+       filename are things you retype and a proportional font hides the hyphens. */
+    #repPathInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
+    .pathrow { display:flex; align-items:baseline; gap:10px; padding:7px 10px; border-radius:9px;
+      background: rgba(128,128,128,.10); border:1px solid var(--edge); }
+    .pathkey { font-family: var(--pix); font-size:10px; letter-spacing:.5px; color: var(--muted);
+      flex:0 0 58px; }
+    .pathval { font-size:12px; color: var(--text); overflow-wrap:anywhere; }
+    .pathval.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #repWatchBtn { display:block; width:100%; margin:0 0 4px; }
+
     .votetally { display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
       font-family: var(--pix); font-size:11px; color: var(--text); }
     .votetally svg.ic { width:14px; height:14px; display:block; flex:0 0 auto; }
@@ -1572,6 +1583,18 @@
     </div>
 
 
+    <!-- Replays. Its own section because loading one is something you do between
+         matches, from the menu, not from a screen that is covering the pitch. -->
+    <div class="card collapsible collapsed" data-sec="replay">
+      <h2>Replays</h2>
+      <label class="field">Watch a saved replay</label>
+      <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
+      <div class="hint always" style="text-align:left">Plays through to the end and comes straight back here. <b id="repSkipHint">Tap the screen to stop early.</b></div>
+      <div style="height:14px"></div>
+      <label class="field">Where saved replays go</label>
+      <div id="repPathInfo"></div>
+      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from the <b>Save replay</b> button on the replay bar during a match, and from the result screen.</div>
+    </div>
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
       <div class="hint" style="text-align:left">Two video decks and two DJ decks, run from here while the game plays fullscreen on the projector. Everything is off until you turn it on, and the game looks and sounds exactly as normal until then.</div>
@@ -3425,6 +3448,14 @@ function padOnly(){
 }
 function skipWord(){ return padOnly() ? 'press any button to skip'
                    : isTouchLayout() ? 'tap to skip' : 'click or press a key to skip'; }
+// ⚠️ Its own wording, not `skipWord()`. "Skip" is right over a goal replay you are
+// waiting out; in the Replays card you deliberately chose to watch this, so the verb is
+// "stop early". Same device checks, different sentence.
+function replayStopHint(){
+  return padOnly()        ? 'Press any button to stop early.'
+       : isTouchLayout()  ? 'Tap the screen to stop early.'
+                          : 'Click or press any key to stop early.';
+}
 
 // 3 variants per category — designed to be previewed and picked.
 const SFX = {
@@ -6835,7 +6866,8 @@ $('socialBack').onclick = closeSocial;
 // ⚠️ Closes Watch first. A replay draws to the game canvas, and the Watch screen is a
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
-$('repLoadBtn').onclick = () => { closeSocial(); openReplayFile(); };
+$('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
+$('repWatchBtn').onclick = watchReplayFromMenu;
 $('rogueBack').onclick = toMenu;
 $('shopSupport').onclick = () => { const b=$('shopSupport'); b.textContent='💛 Thank you! Have fun out there.'; };
 $('padCfgBtn').onclick = openPadConfig;
@@ -7521,6 +7553,8 @@ function buildSettings(){
   }
   buildFeelPresets();
   buildFeelSliders();
+  buildReplayInfo();
+  { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
   // created by this function, so a one-shot pass at startup left them unclassified
   // and permanently expanded — the exact clutter the component exists to remove.
@@ -9057,25 +9091,86 @@ async function playReplayFile(doc, speed){
 }
 // The file picker. One hidden input, reused — a fresh one per click leaks a node per
 // press, and `value=''` is what makes picking the SAME file twice fire `change` again.
-let _repFileInput = null;
-function openReplayFile(){
+let _repFileInput = null, _repPick = null;
+// Pick a file and hand back the parsed document, or null if nothing usable came of it.
+// ⚠️ ONE hidden input, reused: a fresh one per press leaks a node each time, and
+// `value = ''` is what makes picking the SAME file twice fire `change` again.
+// ⚠️ It resolves on `cancel` too. Dismissing the dialog fires no `change`, so a promise
+// that only listened for that would hang for ever — and the caller's `finally` is what
+// puts the menu back, so a hung promise is a menu that never returns.
+function pickReplayDoc(){
   if (!_repFileInput){
     _repFileInput = document.createElement('input');
     _repFileInput.type = 'file'; _repFileInput.accept = '.' + REPFILE.ext + ',application/json';
     _repFileInput.style.display = 'none';
+    const settle = (v) => { const r = _repPick; _repPick = null; if (r) r(v); };
     _repFileInput.onchange = async () => {
       const f = _repFileInput.files && _repFileInput.files[0];
       _repFileInput.value = '';
-      if (!f) return;
-      let doc;
-      try { doc = repFileParse(await f.text()); }
-      catch(e){ toast('⚠ ' + e.message); return; }
-      toast('▶ ' + (FIELDS[doc.field].name || doc.field) + ' · ' + doc.players.length + ' players');
-      await playReplayFile(doc);
+      if (!f) return settle(null);
+      try { settle(repFileParse(await f.text())); }
+      catch(e){ toast('⚠ ' + e.message); settle(null); }
     };
+    _repFileInput.oncancel = () => settle(null);
     document.body.appendChild(_repFileInput);
   }
-  _repFileInput.click();
+  return new Promise(res => { _repPick = res; _repFileInput.click(); });
+}
+// Pick one, watch it, and go back where you came from. `back` runs in a `finally`, so a
+// throw mid-playback still returns you to a screen instead of a bare canvas.
+// `pick` overrides where the document comes from — a real file dialog cannot be driven
+// headlessly, and the thing worth testing here is what happens AROUND the playback
+// (menu out of the way, menu back afterwards), not the picker.
+async function watchReplayFile(back, pick){
+  const doc = await (pick || pickReplayDoc)();
+  if (!doc){ if (back) back(); return; }
+  toast('▶ ' + ((FIELDS[doc.field] && FIELDS[doc.field].name) || doc.field) +
+        ' · ' + doc.players.length + ' players');
+  // ⚠️ The menu has to get out of the way first. On a phone `#setup` is a full-bleed
+  // fixed screen at z-index 20 over the canvas, so the replay would play perfectly and
+  // be completely invisible. (On desktop the menu docks left and the pitch keeps the
+  // right-hand side, but hiding it there too keeps one code path.)
+  hideScreens();
+  $('hud').classList.add('hidden');
+  try { await playReplayFile(doc); }
+  finally { if (back) back(); }
+}
+// From the menu's Replays card: plays to the end, then comes straight back to the card
+// it was started from. Stopping early lands in the same place — `playReplay` resolves on
+// a skip exactly as it does on the last frame, so there is one way back, not two.
+function watchReplayFromMenu(){
+  return watchReplayFile(() => {
+    dockOrFull('setup');
+    openSection('replay');
+    const card = document.querySelector('#setup [data-sec="replay"]');
+    if (card) requestAnimationFrame(() => card.scrollIntoView({ block:'start' }));
+  });
+}
+// ⚠️ Where a saved replay lands. A page is NEVER told the download directory, so this
+// is the browser's default for the platform rather than a real path — said plainly in
+// the card, because a made-up absolute path is worse than an honest description.
+function downloadPathHint(){
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/.test(ua))        return 'Files → On My iPhone → Downloads';
+  if (/Android/.test(ua))                 return 'Files → Downloads';
+  if (/Mac OS X|Macintosh/.test(ua))      return '~/Downloads';
+  if (/Windows/.test(ua))                 return 'C:\\Users\\<you>\\Downloads';
+  if (/Linux|X11|CrOS/.test(ua))          return '~/Downloads';
+  return 'your browser’s Downloads folder';
+}
+// The card's readout: where they go, and what one is called. The filename comes from
+// the real `repFilename()` so the example can never drift from what gets written.
+function buildReplayInfo(){
+  const host = $('repPathInfo'); if (!host) return;
+  host.innerHTML = '';
+  const row = (k, v, mono) => {
+    const d = document.createElement('div'); d.className = 'pathrow';
+    const a = document.createElement('span'); a.className='pathkey'; a.textContent = k;
+    const b = document.createElement('span'); b.className='pathval' + (mono ? ' mono' : ''); b.textContent = v;
+    d.append(a, b); host.appendChild(d);
+  };
+  row('Folder', downloadPathHint(), true);
+  row('Named', repFilename().replace(/-\d[\d-]*\./, '-<date>.'), true);
 }
 function repMime(){
   const cands = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
@@ -16113,7 +16208,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260809.0930PM';
+const VERSION = '20260810.1215AM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -16239,7 +16334,8 @@ if (window.__MAGNETDEBUG) {
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
-    REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile, openReplayFile,
+    REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
+    pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },
