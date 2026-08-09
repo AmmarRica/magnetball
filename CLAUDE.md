@@ -792,7 +792,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   game **stops** until it is installed. ⚠️ The deadline is **persisted** (`magnetball.upd`
   = `{v, first}`) because the clock starts when a newer build is first *seen*, not when the
   player is next online — so `updEnforce()` reads the record and bites **offline too**, which
-  is the whole reason it is stored. `updNote(null)` (could not reach the server) must NOT
+  is the whole reason it is stored.
+  ⚠️ **Versions are COMPARED, never diffed** (`verNum`, `updNewer`). `r.v !== VERSION` reads
+  as "there is an update" and is not: it is also true when the running build is *newer* than
+  the one on record, which bricked the game — a player who updated past a recorded build was
+  blocked for ever, and offline no check could clear it. The same bug had a rollback deploy
+  starting a 30-day countdown to install an *older* build. `verNum` folds `YYYYMMDD.HHMMAM/PM`
+  into a minute count and returns **null** for anything it cannot read; `updNewer` is false
+  whenever either side is unparseable, because every consequence of a wrong `true` (a prompt,
+  a countdown, a locked game) is worse than missing one update. The 12-hour clock is the trap:
+  12:01**AM** is the first minute of a day and 12:01**PM** is just past noon. `updNote(null)` (could not reach the server) must NOT
   clear it, or going offline would reset the deadline every launch; seeing the **same**
   version again must not restart it either, or a daily player never reaches the deadline; a
   **different** version does restart it, because each release gets its own thirty days. It
@@ -824,7 +833,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   list, move or remove it — so "delete a replay" is only meaningful for a copy the page owns.
   Saving writes **both**: the file to send or keep, and a library entry to watch and delete.
   IndexedDB rather than `localStorage` because a replay is ~25KB against a ~5MB budget already
-  shared with the save, the profile and a photo. Capped at `REPLIB.max` (40, oldest goes) since
+  shared with the save, the profile and a photo.
+  ⚠️ **TWO stores** (`REPLIB.store` metadata, `REPLIB.blobs` payload), and the split is a
+  performance guarantee rather than tidiness: with the frames inline, `getAll()`
+  structured-cloned every replay in full and twenty of them cost **68ms to draw twenty lines
+  of text** — on every rebuild of the settings screen. Metadata is a few numbers per row; the
+  frames are a JSON **string** fetched by `repLibGet(id)` only when something is watched or
+  exported. Now 1ms to list. A delete touches **both stores in one transaction** — half a
+  delete leaves a listed replay whose frames are gone. And `buildReplayList()` is called from
+  **`openSection('replay')`**, never `buildSettings()`, which runs on every option tap. Capped at `REPLIB.max` (40, oldest goes) since
   nothing else would ever remove one. ⚠️ **Delete takes two presses** — the rows are small and
   close together and it cannot be undone; the button arms to "Sure?" and disarms after 3s.
   A row's Watch goes through **`watchReplayFromMenu(pick)`**, never its own copy of
