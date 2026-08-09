@@ -6236,6 +6236,8 @@ function updatePadInfo(){
   const dr = $('dropInRow');
   if (dr) dr.classList.toggle('hidden',
     !(sel.controllers==='on' && !(MODES[sel.mode]||{}).twoP && !(MODES[sel.mode]||{}).train));
+  // A pad arriving or leaving changes whether warming up has anything to do.
+  syncWarmupOffer();
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 window.addEventListener('gamepaddisconnected', updatePadInfo);
@@ -6620,7 +6622,10 @@ function syncSticky(){
   if (sec) su.style.setProperty('--sec-h', sec.offsetHeight + 'px');
 }
 syncSticky();
-window.addEventListener('resize', syncSticky);
+// ⚠️ Warm-up's visibility rides along: `viewMode()` reads the window, so a phone
+// turned landscape — or a browser window dragged past the desktop breakpoint —
+// changes whether warming up has anything to do.
+window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); });
 
 // ---- Add to home screen ----------------------------------------------------
 // ⚠️ The button only exists while the browser is actually offering an install. There
@@ -7016,6 +7021,41 @@ function seatSide(n){ return (sel.cocktailSides && sel.cocktailSides[n]) || ['bo
 function isDeck(){ return sel.display==='deck'; }
 function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
+// Is the warm-up lobby worth OFFERING at all? It exists to do three things: test a
+// stick before the whistle, walk onto the side you want, and tell a cocktail seat
+// which way is up. ⚠️ On a PHONE WITH NO CONTROLLER there is none of that to do — it
+// is one or two thumbs on one screen, the sides are fixed, and there is no stick to
+// test — so the Warm-up button and the result screen's Warm-up option were a trip to
+// an empty room. Hidden there, and only there.
+//   · cocktail always needs it, whatever you are playing on;
+//   · a connected pad always needs it, phone or not — that is what it is FOR;
+//   · "Everyone" is an explicit ask for it everywhere, so it is honoured;
+//   · desktop keeps it: two people on one keyboard still have sides to pick.
+// ⚠️ Deliberately NOT gated on `sel.lobby === 'off'`. Skip means "don't drop me in
+// automatically"; the button is the manual way in, and hiding it would leave no way
+// at all. That is the difference between this and `lobbyWanted` — this asks whether
+// to OFFER the lobby, `lobbyWanted` asks whether THIS match should start in it.
+function warmupUseful(){
+  if (sel.display === 'cocktail') return true;
+  if (sel.lobby === 'touch') return true;
+  // ⚠️ Through `padsTakeSeats()`, not a second copy of `sel.controllers === 'on'` —
+  // that function is already the one place that knows whether a pad drives anybody,
+  // and with Input set to "tap to steer" a pad in the room has no stick to test and
+  // no side to walk onto.
+  if (padsTakeSeats() && connectedGamepadIndices().length) return true;
+  return !isTouchLayout();
+}
+// Both ways in follow it. Called on boot, on a pad connecting or leaving, whenever
+// the settings are rebuilt, and on resize — a phone rotated into a desktop-width
+// layout changes the answer.
+function syncWarmupOffer(){
+  const on = warmupUseful();
+  const bt = $('warmupBtn'); if (bt) bt.style.display = on ? '' : 'none';
+  // The result screen's copy, but only while it IS the Warm-up option — rogue and
+  // season borrow the same button for Menu / Cup and set it themselves.
+  const ov = $('ovRematch');
+  if (ov && ov.dataset.role === 'warmup'){ ov.style.display = on ? '' : 'none'; syncOverNav(); }
+}
 // Deck docks its menu at any window size; otherwise docking is a desktop-width thing.
 function dockCapable(){ return isDeck() || isDesktop(); }
 // Cocktail never turns: people are sat around the screen.
@@ -7332,6 +7372,9 @@ function buildSettings(){
   // would show nothing at all. buildSubTabs re-selects the remembered pane (`subTab`), so
   // changing a ball look leaves you looking at the ball tab rather than at a blank card.
   buildSubTabs();
+  // Changing the Warm-up lobby pick or the display mode changes whether the Warm-up
+  // button has anywhere to go, and both of those rebuild the settings.
+  syncWarmupOffer();
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
@@ -10540,8 +10583,12 @@ function finishMatch(w){
   // ⚠️ Through iconSvg with the emoji as the fallback — the result screen's buttons
   // are functional marks, so they follow the same rule the option tiles do.
   $('ovRematch').innerHTML = (iconSvg('person') || '🧍') + '<span>Warm-up</span>';
-  $('ovRematch').style.display = '';
   $('ovRematch').onclick = () => restartToWarmup(w);
+  // ...and it only appears where warming up has something to do — see warmupUseful.
+  // On a phone with no controller this leaves Restart and Main Menu, which is the
+  // whole of the choice there.
+  $('ovRematch').dataset.role = 'warmup';
+  syncWarmupOffer();
   $('ovMenu').textContent = 'Main Menu'; $('ovMenu').onclick = toMenu;
   overNav = 0; syncOverNav();
   const p1 = w.players.find(p => p.ctrl !== 'bot') || (w.bench||[]).find(p => p.ctrl !== 'bot');
@@ -15594,6 +15641,10 @@ function showOverlay(title, sub, resumable){
   // Restore the standard match/pause buttons (the drill result repurposes them).
   $('ovResume').textContent = 'Resume'; $('ovResume').onclick = () => togglePause(false);
   $('ovRematch').textContent = 'Rematch'; $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
+  // ⚠️ Cleared HERE, in the one place that restores the standard buttons, rather than
+  // at each of the eight sites that repurpose this button for Menu / Cup / Retry /
+  // Drills. Only finishMatch sets it, and it does so after this has run.
+  $('ovRematch').dataset.role = '';
   $('ovMenu').textContent = 'Main Menu';
   { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
   ['ovResume','ovSettings','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
@@ -15710,7 +15761,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260809.0410PM';
+const VERSION = '20260809.0525PM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -15871,7 +15922,7 @@ if (window.__MAGNETDEBUG) {
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
-    SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },

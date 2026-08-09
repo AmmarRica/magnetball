@@ -565,6 +565,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `'on'` is the old controllers-only behaviour exactly. It routes through `lobbyStart()`,
   the same path the pad and the auto-start use, and asks a cocktail seat to calibrate first.
   `tests/touchstart.mjs`.
+- **Warm-up is only OFFERED where it has something to do** — `warmupUseful()`, and both
+  ways in follow it (`syncWarmupOffer` hides `#warmupBtn` and the result screen's
+  `#ovRematch`). The lobby exists to test a stick, walk onto a side and calibrate a
+  cocktail seat. ⚠️ On a **phone with no controller** there is none of that — one or two
+  thumbs on one screen, fixed sides, no stick — so both entry points were a trip to an
+  empty room; on a phone the result screen is now Restart / Main Menu, which is the whole
+  of the choice there. It comes straight back for cocktail, for `sel.lobby === 'touch'`
+  ("Everyone", an explicit ask), and for a connected pad — gated through **`padsTakeSeats()`**
+  rather than a second copy of `sel.controllers === 'on'`, since `controllers` defaults to
+  `'off'` and a pad driving nobody has no stick to test.
+  ⚠️ Deliberately **not** gated on `sel.lobby === 'off'`: Skip means "don't drop me in
+  automatically" and the button is the manual way in, so hiding it there leaves no way at
+  all. That is the difference from `lobbyWanted(w)`, which asks whether *this match* should
+  start in the lobby rather than whether to offer it.
+  ⚠️ Re-synced live — on `gamepadconnected`/`disconnected`, at the end of `buildSettings`
+  and on `resize` (`viewMode()` reads the window, so a rotation changes the answer) — never
+  decided once at boot. The result screen's copy is found by `dataset.role === 'warmup'`,
+  cleared in `showOverlay` (the one place that restores the standard buttons) rather than at
+  each of the eight sites that repurpose that button for Menu / Cup / Retry / Drills.
+  `tests/warmupoffer.mjs`, which pins the rule from **both** ends — a predicate that only
+  ever returns false passes every hiding check and would have deleted the feature.
 - **Drop-in / substitutions (`sel.dropIn`, default on):** plug a controller in mid-match and
   a body walks out to the **touchline**; walk to the half you want, press START, and you come
   on **at the next goal**. ⚠️ Seats used to be handed out exactly once in `startMatch`, so a
@@ -788,7 +809,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 77 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 78 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
