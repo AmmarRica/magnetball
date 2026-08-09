@@ -1661,11 +1661,11 @@
       <div class="socfilters" id="socFilters"></div>
     </div>
     <div id="feed"></div>
-    <!-- Watch is where you go to watch things, so it is where a saved .mbr is opened
+    <!-- Watch is where you go to watch things, so it is where a saved replay is opened
          from. Deliberately NOT on the result screen: loading a file is something you
          do between matches, not with one frozen behind the overlay. -->
-    <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.mbr)</button>
-    <div class="hint" style="text-align:left; margin-top:6px">Opens a replay saved with <b>Save replay</b>. It is the match data rather than a video, so it plays at your screen’s size and in whatever theme you are using now.</div>
+    <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.json)</button>
+    <div class="hint" style="text-align:left; margin-top:6px">Opens a replay saved with <b>Save replay</b>. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
     <button class="ghost" id="socialBack" style="margin-top:12px">← Back</button>
   </div>
 
@@ -8798,13 +8798,22 @@ function playReplay(speed){
 }
 
 // ============================================================
-//  .mbr — REPLAY FILES ON DISK
+//  REPLAY FILES ON DISK — plain .json
 // ============================================================
 // "Save clip" writes a VIDEO, which is the right thing to send someone and the wrong
 // thing to keep: it is large, it is baked at whatever resolution the window happened
-// to be, and nothing can ever be done with it again. A `.mbr` is the replay ITSELF —
-// the positions — so it re-renders at your screen's size, in your theme, at any speed,
-// and it is a few tens of KB of plain JSON.
+// to be, and nothing can ever be done with it again. A replay file is the replay
+// ITSELF — the positions — so it re-renders at your screen's size, in your theme, at
+// any speed, and it is a few tens of KB.
+//
+// ⚠️ PLAIN `.json`, deliberately, and NOT a made-up extension. This shipped for one
+// commit as `.mbr` ("MagnetBall Replay"), which was two mistakes: `.mbr` already means
+// Master Boot Record, and inventing an extension buys nothing when the payload is
+// ordinary JSON anyway. A saved replay opens in any text editor, any JSON viewer and
+// any diff tool, which is worth more than a filter in one file picker.
+// ⚠️ Which makes `format` LOad-BEARING rather than decorative: with `.json` the picker
+// will happily hand us any JSON on the disk, so the magic string is now the only thing
+// standing between a package.json and a stack trace on a menu.
 //
 // ⚠️ THE FILE IS SELF-CONTAINED, and that is the whole design constraint. Frames alone
 // are useless: `drawReplayFrame` reads the field geometry and every player's colour,
@@ -8814,21 +8823,20 @@ function playReplay(speed){
 // full look for every player, and loading one rebuilds a world from that.
 //
 // ⚠️ VERSIONED AND MAGIC-STAMPED. `v` is checked on load and `format` proves the file
-// is ours before we start indexing into arrays — a JSON file that happens to parse is
-// not a replay, and the failure mode without the check is a stack trace on a menu.
-const MBR = { ext:'mbr', format:'magnetball-replay', v:1 };
+// is ours before we start indexing into arrays.
+const REPFILE = { ext:'json', format:'magnetball-replay', v:1 };
 // Everything a player needs to be DRAWN, and nothing else. Deliberately not the whole
 // object: velocities, AI scratch and match stats are all mid-play state that means
 // nothing in a recording, and `ms` alone would double the file.
-function mbrPlayer(p){
+function repFilePlayer(p){
   return { team:p.team, name:p.name, color:p.color, cap:p.cap,
            flag:p.flag||'none', eyes:p.eyes||'googly', r:p.r };
 }
-function mbrBuild(){
+function repFileBuild(){
   if (!lastReplay || !lastReplay.frames || !lastReplay.frames.length || !world) return null;
   const { frames, fps } = repEncodeFrames(lastReplay.frames, Infinity);
   return {
-    format: MBR.format, v: MBR.v,
+    format: REPFILE.format, v: REPFILE.v,
     build: VERSION, saved: new Date().toISOString(),
     field: world.fieldKey || sel.field,
     mode: sel.mode,
@@ -8838,14 +8846,16 @@ function mbrBuild(){
     look: { ...(sel.look||{}) },
     score: world.score ? world.score.slice() : [0,0],
     fps,
-    players: world.players.map(mbrPlayer),
+    players: world.players.map(repFilePlayer),
     frames,
   };
 }
-function mbrFilename(){
-  // Colons are illegal in filenames on Windows and awkward everywhere else.
+function repFilename(){
+  // ⚠️ Colons are illegal in filenames on Windows and awkward everywhere else, and the
+  // name has to say "replay" out loud — with a plain `.json` extension the filename is
+  // the only thing distinguishing this from every other JSON in the downloads folder.
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  return `magnetball-${(world && world.fieldKey) || sel.field}-${t}.${MBR.ext}`;
+  return `magnetball-replay-${(world && world.fieldKey) || sel.field}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -8859,17 +8869,17 @@ function downloadBlob(blob, filename){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 function saveReplayFile(){
-  const doc = mbrBuild();
+  const doc = repFileBuild();
   if (!doc) return false;
-  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), mbrFilename());
+  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename());
   return true;
 }
 // Parse + validate. Returns the document or throws with a reason a human can act on.
-function mbrParse(text){
+function repFileParse(text){
   let doc;
   try { doc = JSON.parse(text); } catch(_){ throw new Error('not a replay file'); }
-  if (!doc || doc.format !== MBR.format) throw new Error('not a Magnetball replay');
-  if (doc.v > MBR.v) throw new Error('saved by a newer build — update the game');
+  if (!doc || doc.format !== REPFILE.format) throw new Error('not a Magnetball replay');
+  if (doc.v > REPFILE.v) throw new Error('saved by a newer build — update the game');
   if (!Array.isArray(doc.frames) || !doc.frames.length) throw new Error('no frames in it');
   if (!Array.isArray(doc.players) || !doc.players.length) throw new Error('no players in it');
   if (!FIELDS[doc.field]) throw new Error('unknown field "' + doc.field + '"');
@@ -8886,7 +8896,7 @@ function mbrParse(text){
 // and posts are what drawPitch paints the court from, and a court drawn from a second
 // implementation of the geometry is how the replay would come back subtly the wrong
 // shape on the rounded fields.
-function mbrWorld(doc){
+function repFileWorld(doc){
   const w = {
     field: FIELDS[doc.field], fieldKey: doc.field,
     state: 'over', stateT: 0, magnet: 0,
@@ -8899,7 +8909,7 @@ function mbrWorld(doc){
   w.cb = w.bounds;
   return w;
 }
-// Watch a `.mbr`. ⚠️ It swaps the GLOBAL `world` for the duration rather than threading
+// Watch a saved replay. ⚠️ It swaps the GLOBAL `world` for the duration rather than threading
 // a source argument through drawReplayFrame → drawPitch → wx/wy/cam, because the camera
 // and both of those readers all take the live world implicitly. That is safe precisely
 // because `loop()` returns immediately while `replay.active` is set — nothing steps or
@@ -8909,7 +8919,7 @@ async function playReplayFile(doc, speed){
   if (replay.active) return;
   const prevWorld = world, prevLast = lastReplay;
   try {
-    world = mbrWorld(doc);
+    world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length) };
     computeCam();
     await playReplay(speed || 0.6);
@@ -8921,25 +8931,25 @@ async function playReplayFile(doc, speed){
 }
 // The file picker. One hidden input, reused — a fresh one per click leaks a node per
 // press, and `value=''` is what makes picking the SAME file twice fire `change` again.
-let _mbrInput = null;
+let _repFileInput = null;
 function openReplayFile(){
-  if (!_mbrInput){
-    _mbrInput = document.createElement('input');
-    _mbrInput.type = 'file'; _mbrInput.accept = '.' + MBR.ext + ',application/json';
-    _mbrInput.style.display = 'none';
-    _mbrInput.onchange = async () => {
-      const f = _mbrInput.files && _mbrInput.files[0];
-      _mbrInput.value = '';
+  if (!_repFileInput){
+    _repFileInput = document.createElement('input');
+    _repFileInput.type = 'file'; _repFileInput.accept = '.' + REPFILE.ext + ',application/json';
+    _repFileInput.style.display = 'none';
+    _repFileInput.onchange = async () => {
+      const f = _repFileInput.files && _repFileInput.files[0];
+      _repFileInput.value = '';
       if (!f) return;
       let doc;
-      try { doc = mbrParse(await f.text()); }
+      try { doc = repFileParse(await f.text()); }
       catch(e){ toast('⚠ ' + e.message); return; }
       toast('▶ ' + (FIELDS[doc.field].name || doc.field) + ' · ' + doc.players.length + ' players');
       await playReplayFile(doc);
     };
-    document.body.appendChild(_mbrInput);
+    document.body.appendChild(_repFileInput);
   }
-  _mbrInput.click();
+  _repFileInput.click();
 }
 function repMime(){
   const cands = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
@@ -15974,7 +15984,7 @@ if (PANEL){
 }
 
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
-const VERSION = '20260809.0705PM';
+const VERSION = '20260809.0810PM';
 
 // ============================================================
 //  UPDATE CHECK — "a new build is live, do you want it?"
@@ -16100,7 +16110,7 @@ if (window.__MAGNETDEBUG) {
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
-    MBR, mbrBuild, mbrParse, mbrWorld, mbrFilename, saveReplayFile, playReplayFile, openReplayFile,
+    REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile, openReplayFile,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },

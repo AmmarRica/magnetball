@@ -1,8 +1,8 @@
-// SAVING A REPLAY TO DISK — the `.mbr` format.
+// SAVING A REPLAY TO DISK — plain `.json`.
 //
 // "Save clip" writes a VIDEO: right for sending someone, wrong for keeping. It is
 // large, baked at whatever size the window happened to be, and nothing can ever be
-// done with it again. A `.mbr` is the replay ITSELF — the positions — so it re-renders
+// done with it again. A replay file is the replay ITSELF — the positions — so it re-renders
 // at your screen's size, in your theme, at any speed, in a few tens of KB of JSON.
 //
 // ⚠️ THE ONE THING THAT MAKES OR BREAKS THE FORMAT IS SELF-CONTAINMENT. `drawReplayFrame`
@@ -12,6 +12,12 @@
 // So the sharpest check here loads a file into a page that has never played that match:
 // a different field, a different mode, a fresh world. If the format is missing anything,
 // that is where it shows.
+//
+// ⚠️ The extension is plain `.json` on purpose (it shipped for one commit as an invented
+// `.mbr`, which already means Master Boot Record and bought nothing). That makes the
+// `format` magic string LOAD-BEARING rather than decorative — the picker will hand us any
+// JSON on the disk — so the guard tests below are the ones protecting a menu from a
+// stack trace when somebody picks a package.json.
 //
 // Also held: the magic/version guard (a JSON file that merely parses is not a replay),
 // the frame-length guard (a short row indexes past the end and fails as a BLANK SCREEN
@@ -44,7 +50,7 @@ const made = await p.evaluate(() => {
   // Play far enough to fill the rolling buffer, then freeze it the way a goal does.
   for (let i=0;i<400;i++) M.step(w);
   M.repOnGoal(w);
-  const doc = M.mbrBuild();
+  const doc = M.repFileBuild();
   return {
     hasDoc: !!doc,
     format: doc && doc.format, v: doc && doc.v,
@@ -56,7 +62,7 @@ const made = await p.evaluate(() => {
     player0: doc && doc.players[0],
     rowLen: doc && doc.frames[0].length,
     bytes: doc && JSON.stringify(doc).length,
-    filename: M.mbrFilename(),
+    filename: M.repFilename(),
     look: doc && doc.look,
     build: doc && !!doc.build, saved: doc && !!doc.saved,
     json: doc && JSON.stringify(doc),
@@ -82,7 +88,7 @@ ok('players carry what it takes to draw them',
 ok('and nothing else', made.player0 && !('vx' in made.player0) && !('ms' in made.player0) && !('aiTarget' in made.player0),
    Object.keys(made.player0 || {}).join());
 ok('it is small', made.bytes < 200000, made.bytes + ' bytes');
-ok('the filename is safe on every OS', /^magnetball-classic-[\d-]+\.mbr$/.test(made.filename) && !made.filename.includes(':'),
+ok('the filename is safe on every OS', /^magnetball-replay-classic-[\d-]+\.json$/.test(made.filename) && !made.filename.includes(':'),
    made.filename);
 ok('the look is recorded', made.look && typeof made.look === 'object');
 ok('it stamps the build and the date', made.build && made.saved);
@@ -102,9 +108,9 @@ await p.close();
     const before = M.world;
     const beforeField = before.fieldKey, beforePlayers = before.players.length;
 
-    const doc = M.mbrParse(json);
+    const doc = M.repFileParse(json);
     // The world the loader builds from the file alone.
-    const rw = M.mbrWorld(doc);
+    const rw = M.repFileWorld(doc);
     const o = {
       parsed: !!doc,
       builtField: rw.fieldKey,
@@ -199,13 +205,15 @@ await p.close();
   const q = await page();
   const guards = await q.evaluate((json) => {
     const M = window.__magnet;
-    const why = (t) => { try { M.mbrParse(t); return 'ACCEPTED'; } catch(e){ return e.message; } };
+    const why = (t) => { try { M.repFileParse(t); return 'ACCEPTED'; } catch(e){ return e.message; } };
     const doc = JSON.parse(json);
     const bad = (mut) => { const d = JSON.parse(json); mut(d); return why(JSON.stringify(d)); };
     return {
       good:      why(json) === 'ACCEPTED',
       notJson:   why('<html>nope</html>'),
-      otherJson: why('{"hello":"world"}'),
+      // ⚠️ The realistic accident now that the extension is plain `.json`: the picker
+      // offers every JSON on the disk, so this is the one guard doing real work.
+      otherJson: why('{"name":"my-app","version":"1.0.0","dependencies":{}}'),
       newer:     bad(d => { d.v = 99; }),
       noFrames:  bad(d => { d.frames = []; }),
       noPlayers: bad(d => { d.players = []; }),
@@ -241,7 +249,7 @@ await p.close();
   const empty = await q.evaluate(() => {
     const M = window.__magnet;
     const dm = document.getElementById('dmCollect'); if (dm) dm.click();
-    return { noDoc: M.mbrBuild() === null, noSave: M.saveReplayFile() === false };
+    return { noDoc: M.repFileBuild() === null, noSave: M.saveReplayFile() === false };
   });
   ok('no replay yet → no file, no throw', empty.noDoc && empty.noSave, JSON.stringify(empty));
   await q.close();
