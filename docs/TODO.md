@@ -1441,9 +1441,15 @@ what was asked for and not a fourth tuning pass:
   flow that arms first (press Delete → tick the ones to go → confirm). ⚠️ `localStorage` is
   ~5MB and already holds the save; 100 × 128² photos belongs in IndexedDB alongside the
   replay library, not beside it.
-- [ ] **Continents kick off the game** — first launch is on Grass with country flags, one
-  continent against another, every player on a side from the same continent and never a
-  continent against itself.
+- [x] **Continents kick off the game** — the first match on a fresh device is one continent
+  against another, on Grass (already the default surface).
+  - [x] ⚠️ A **one shot**, persisted — not "every match until you change a setting", which
+    would hand a player happy with the defaults a different team every time and break
+    `botlook`'s stable-across-restarts guarantee.
+  - [x] ⚠️ **Human seats are left alone.** Your profile is yours; the lineup dresses the bots.
+  - [x] ⚠️ The coverage assertion (`CONTINENTS` covers every `FLAGS` country exactly once)
+    caught **five unplaced flags** on its first run — argentina, venezuela, costarica,
+    singapore, australia — which would have dropped out of the draw silently.
 - [x] **Warm-up balls** — a ball at each half's centre, one more per player who joins, each
   confined to its own half by a `ballOnly` wall on halfway.
   - [x] ⚠️ **The real finding: the lobby's ball was FROZEN** (`integrate(w, true, ...)`), so
@@ -1456,8 +1462,14 @@ what was asked for and not a fourth tuning pass:
   - [x] ⚠️ **Third: KICK was bound to Start in the lobby**, so pressing A to test a kick ended
     the warm-up. Reverses an earlier deliberate decision, for a reason that did not exist when
     it was made — the ball was frozen then, so A had no other job in there.
-- [ ] **Per-name local stats** — track a player's record against the name they are using, and
-  start a fresh record when the name changes.
+- [x] **Per-name local stats** — answered as "only keep main player stats, those are guests",
+  so there is nothing per-name to build. Verified instead: guest names never reach the save,
+  `stats` is one flat object of numbers, and renaming adds no keys.
+  - [x] ⚠️ **Found doing it, and much worse than the ask:** every path that reported or
+    recorded a result read `w.score[0]` as "mine". A **5–0 win from the top half was recorded
+    as a LOSS** — RP, Elo, streak, goals for/against and the clean sheet all inverted, the
+    screen saying YOU LOSE, a cleared cup round counted as failed and a won Gauntlet round
+    costing a life. `youTeam(w)` / `yourScore(w)`.
 - [ ] **Break-the-targets drill** — 60 seconds to score as many balls as you can into either
   goal, balls respawning at one of five fixed spots. A ball-control teacher, Smash Bros style.
 - [ ] **Trapping turns the ball round you** — a trapped ball rotates about the player toward
