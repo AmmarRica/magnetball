@@ -2650,7 +2650,13 @@ const LOBBY = {
   ballBase: 1,         // balls per half before anyone joins
   ballMax: 14,         // hard cap, both halves together
   ballSpread: 90,      // world units between the extras around a half's centre
-  ballRow: 3,          // extras per row before it starts a second one
+  // ⚠️ Column offsets in multiples of `ballSpread`, CENTRE FIRST and then outward, so
+  // ball zero sits on its half's centre spot and the rest fan out either side. Written
+  // as an explicit list because the arithmetic version of this was wrong in a way that
+  // was invisible: `(col - (row-1)/2) * spread * (row ? 1 : (k ? 1 : 0))` gave x=0 for
+  // BOTH k=0 and k=1, so two balls spawned on exactly the same point, shoved each other
+  // apart, and a trap fired the one you were not looking at.
+  ballCols: [0, -1, 1, -2, 2],
   // ⚠️ The halfway WALL is what keeps a half's balls in that half — a real wall in
   // `w.walls`, `ballOnly` like every other boundary, so the ball bounces off it and
   // players still walk across freely to pick a side. Reusing the boundary physics
@@ -2939,7 +2945,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0905PM';
+const VERSION = '20260811.0110AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2955,6 +2961,15 @@ const VERSION = '20260810.0905PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0110AM', title: 'Turn on the ball, and take it off them',
+    added: [
+      'You can now knock the ball off an opponent who is holding it. Get in range, press kick, and it is loose again — there is no safe way to sit on the ball any more.',
+    ],
+    changed: [
+      'Holding the ball now swings it round you toward where you are aiming instead of snapping it there. Turning to pass upfield is something you commit to, and it lets go pointing where you can see it pointing.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260810.0905PM', title: 'Break the Targets',
     added: [
       'A new drill — Break the Targets. Sixty seconds to score as many balls as you can into either goal, with the next ball always appearing at one of five fixed spots.',
@@ -4204,7 +4219,18 @@ const KICK_SLOW = 0.45;                   // accel multiplier while holding kick
 // running shot is more powerful and directional than a standing one (HaxBall-like).
 const KICK_CARRY = 0.5;
 // Trap-and-release: humans hold KICK to stick the ball to their feet, then let go to shoot.
-const TRAP = { max:0.5 };                // ball stays stuck for at most half a second
+// ⚠️ `spin` is an ANGULAR RATE, not a snap. The trap used to plant the ball on your
+// facing every step, so the ball teleported round you the instant the stick moved and
+// there was nothing to read and nothing to beat. It now SWINGS: the ball keeps a
+// bearing around you and that bearing turns toward where you are aiming, at a bounded
+// rate. A ball at six o'clock takes a beat to come round to twelve, which is what
+// makes turning to pass a thing you commit to rather than a thing you toggle.
+// 9 rad/s is a bit under a turn and a half a second — a full half-turn in ~0.35s,
+// most of the half-second trap window.
+// ⚠️ And a trapped ball is STEALABLE the whole time, with no protection at all,
+// including mid-swing: `steal` is the reach past the usual kick range at which
+// somebody else's KICK breaks your trap.
+const TRAP = { max:0.5, spin:9.0, steal:2 };   // ball stays stuck for at most half a second
 
 // ⚠️ Declared HERE, above the bootstrap, not down with the camera code. The
 // slider wiring calls syncGoalCamSliders() at init, and a const declared further
@@ -10392,8 +10418,9 @@ function lobbyBallCount(w){
 function lobbyBallSpot(w, i){
   const half = (i % 2) ? 1 : -1, k = (i / 2) | 0;
   const cy = half * w.bounds.halfL / 2;
-  const col = k % LOBBY.ballRow, row = (k / LOBBY.ballRow) | 0;
-  return { x: (col - (LOBBY.ballRow - 1) / 2) * LOBBY.ballSpread * (row ? 1 : (k ? 1 : 0)),
+  const n = LOBBY.ballCols.length;
+  const col = LOBBY.ballCols[k % n], row = (k / n) | 0;
+  return { x: col * LOBBY.ballSpread,
            y: cy + half * row * LOBBY.ballSpread * 0.6 };
 }
 // ⚠️ Balls are ADDED and REMOVED, never repositioned: a ball somebody is dribbling
@@ -11228,6 +11255,28 @@ function handleBallControl(w, p, ball, ballFrozen){
   const dist = Math.hypot(dx,dy);
   const sum = p.r + ball.r;
 
+  // ⚠️ A TRAPPED BALL IS STEALABLE, by anyone, at any time, including mid-swing.
+  // Holding it is a risk you are taking rather than a lock you are holding — asked
+  // for in exactly those terms ("any time — no protection").
+  // Without this the trap was absolute: the carrier re-plants the ball on their own
+  // bearing every step, so another player's kick added velocity that was overwritten
+  // on the very next frame. Breaking the trap first is what makes the kick land.
+  // ⚠️ Order-independent on purpose. Players are stepped in array order, so the
+  // carrier may run before or after the thief in the same step; breaking the trap
+  // here means the worst case is one frame of glue that is gone next step, rather
+  // than a steal that works from one side of the roster and not the other.
+  if (!ballFrozen && ball._trappedBy && ball._trappedBy !== p && ball._trappedBy.team !== p.team
+      && p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange + TRAP.steal){
+    const c = ball._trappedBy;
+    c.trap = false; c.trapAng = null; c.tapArmed = false;
+    // ⚠️ `trapUsed` latches until KICK is RELEASED, so the carrier cannot simply
+    // re-trap on the next frame while still holding the button — a steal that lasts
+    // one step is not a steal.
+    c.trapUsed = true; c.chargeT = 0;
+    ball._trappedBy = null;
+    spawnTouchFx(ball.x, ball.y, TH.accent, 20);
+  }
+
   // Bots take the SAME path as a human from here on. They used to have their own
   // instant kick with a diff.power multiplier, which meant they could never trap,
   // dribble or vary their power — and it was the one place a bot did something no
@@ -11256,7 +11305,13 @@ function handleBallControl(w, p, ball, ballFrozen){
         if (near){
           if (!p.tapArmed){ p.tapArmed = true; p.tapT = 0; }
           p.tapT += STEP;
-          if (p.tapT >= TAP_HOLD){ p.trap = true; p.trapT = 0; p.tapArmed = false; p._pfx = null; spawnTouchFx(ball.x,ball.y,TH.accent,26); }  // held → trap (first-touch cue)
+          if (p.tapT >= TAP_HOLD){ p.trap = true; p.trapT = 0; p.tapArmed = false; p._pfx = null;
+            // ⚠️ The swing starts where the ball ACTUALLY IS, not on your facing —
+            // that is the whole "ball at six o'clock comes round to twelve". Snapping
+            // it to the facing on the first frame is the behaviour this replaces.
+            p.trapAng = (dist > 0.001) ? Math.atan2(dy, dx) : Math.atan2(p.faceY, p.faceX);
+            ball._trappedBy = p;
+            spawnTouchFx(ball.x,ball.y,TH.accent,26); }  // held → trap (first-touch cue)
         } else { p.tapArmed = false; }
       }
       if (p.trap){
@@ -11267,15 +11322,29 @@ function handleBallControl(w, p, ball, ballFrozen){
         if (p._pfx != null){ const cross = p._pfx*fy - p._pfy*fx; ball.spin = (ball.spin||0) + cross*0.6;
           if (Math.abs(cross) > 0.5) spawnTouchFx(ball.x,ball.y,TH.accent,22); }
         p._pfx = fx; p._pfy = fy;
+        // ⚠️ TURN toward the aim, don't jump to it. `trapAng` is the ball's bearing
+        // around you; it eases toward the facing at TRAP.spin rad/s, taking the SHORT
+        // way round (the wrap through ±π is why the difference is normalised rather
+        // than subtracted — without it a ball at 179° swings the long way to −179°).
+        const want = Math.atan2(fy, fx);
+        let da = want - (p.trapAng == null ? want : p.trapAng);
+        while (da >  Math.PI) da -= Math.PI*2;
+        while (da < -Math.PI) da += Math.PI*2;
+        const step = TRAP.spin * STEP;
+        p.trapAng = (p.trapAng == null ? want : p.trapAng) +
+                    (Math.abs(da) <= step ? da : Math.sign(da) * step);
+        const ax = Math.cos(p.trapAng), ay = Math.sin(p.trapAng);
+        ball._trappedBy = p;
         const hold = sum + 2;                              // just outside the body — never clips through
-        ball.x = p.x + fx*hold; ball.y = p.y + fy*hold;
+        ball.x = p.x + ax*hold; ball.y = p.y + ay*hold;
         ball.vx = p.vx; ball.vy = p.vy;                    // travels with you
         if (p.trapT >= (w.trapMax || TRAP.max)) releaseTrap(w, p, ball);   // your Trap window, then it fires
       }
     } else {
       if (p.trap){ releaseTrap(w, p, ball); }              // let go while carrying → shoot
       else if (p.tapArmed && near && !p.trapUsed){ oneShotKick(w, p, ball, dx, dy, dist, false); }  // quick tap → instant pass
-      p.trap = false; p.trapUsed = false; p.tapArmed = false;
+      p.trap = false; p.trapUsed = false; p.tapArmed = false; p.trapAng = null;
+      if (ball._trappedBy === p) ball._trappedBy = null;
     }
   }
 
@@ -11312,11 +11381,20 @@ function oneShotKick(w, p, ball, dx, dy, dist, charged){
 // Release a trapped ball as a kick/pass in the player's facing direction. Power
 // scales with how long KICK was held (charge) and adds the player's momentum.
 function releaseTrap(w, p, ball){
-  let fx=p.faceX, fy=p.faceY; const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
+  // ⚠️ Fires along WHERE THE BALL IS, not along your facing. Those were the same
+  // thing while the trap snapped the ball onto the facing every frame; now that it
+  // swings round, they differ for as long as the swing lasts — and firing along the
+  // facing would send the ball somewhere it visibly is not, which is the one thing a
+  // player cannot forgive. Let go early and it goes where you can SEE it pointing.
+  let fx, fy;
+  if (p.trapAng != null){ fx = Math.cos(p.trapAng); fy = Math.sin(p.trapAng); }
+  else { fx = p.faceX; fy = p.faceY; }
+  const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
   let power = (w.kickPower||PLAYER.kick) * (1 + (p.chargeT / CHARGE.max) * CHARGE.bonus);
   if (w.magnet > 0) power *= 1 + (w.magnet/100) * 0.7;
   ball.vx = fx*power + p.vx; ball.vy = fy*power + p.vy;
-  p.trap = false; p.trapUsed = true; p.chargeT = 0;
+  p.trap = false; p.trapUsed = true; p.chargeT = 0; p.trapAng = null;
+  if (ball._trappedBy === p) ball._trappedBy = null;
   noteKick(w, p, power, fx, fy);
   spawnKickFx(ball.x, ball.y, fx, fy, power); playSfx('kick');
 }
@@ -13156,7 +13234,20 @@ function runBot(w, p){
   if (p.aiState === 'carry'){
     // Release when we're facing the aim, or when the trap window is nearly spent.
     const faceAim = p.faceX*aimx + p.faceY*aimy;
-    p.kick = !(faceAim > BOT.carryAlign || p.aiCarryT <= 0);
+    // ⚠️ ...and when the BALL is on the aim too, not just the face. A trapped ball
+    // SWINGS round to the facing at TRAP.spin rather than snapping there, so the two
+    // differ for as long as the swing lasts — and `releaseTrap` fires along the ball.
+    // Aligned on the face alone the bot let go while the ball was still coming round
+    // and shot somewhere it had not aimed, which cost the stronger tiers most because
+    // they trap most: measured, the difficulty ladder inverted, with rookie beating
+    // insane 83% of the time. Reading `trapAng` is a READ — a bot still writes only
+    // `kick` here, which is the rule.
+    const bx = p.trapAng != null ? Math.cos(p.trapAng) : p.faceX;
+    const by = p.trapAng != null ? Math.sin(p.trapAng) : p.faceY;
+    const ballAim = bx*aimx + by*aimy;
+    // `aiCarryT` is still the escape hatch, so a bot that can never line the ball up
+    // lets go rather than carrying until the trap fires itself.
+    p.kick = !((faceAim > BOT.carryAlign && ballAim > BOT.carryAlign) || p.aiCarryT <= 0);
   } else if (w.trapOff){
     // One-touch: the flag stops a single press firing every frame, and the branch
     // that owns it clears it on release.

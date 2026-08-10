@@ -79,7 +79,17 @@ const page = async () => {
   ok('a real goal was scored', r.realGoal);
   ok('the buffer freezes at the crossing too', r.frozenAtOnce,
      'otherwise Save replay has nothing until the tail finishes');
-  ok('the replay grows past the crossing', r.grew);
+  // ⚠️ FIXTURE-DEPENDENT, exactly like the lead-up check below it, and for the same
+  // reason. Once the ring buffer has reached REP_MAX it cannot grow — the tail arrives
+  // by shifting the front, not by extending the end. Whether it is full at the crossing
+  // depends on how long the fixture's match ran before the goal, which is a fact about
+  // the seed rather than about the code: this one started overflowing the moment a
+  // change to trapping made bots hold the ball a little longer. What the tail actually
+  // has to do is covered either way by `tailRight` and by the marker check below.
+  ok('the replay grows past the crossing', !r.neverOverflowed || r.grew,
+     `${r.atCross} frames at the whistle, ${r.total} after the tail (REP_MAX ${r.max})`);
+  ok('...or the tail arrived by shifting the front', r.grew || r.tailRight,
+     `a full buffer must still gain the tail: goalAt ${r.goalAt}, total ${r.total}, tail ${r.tail}`);
   ok('the tail is REP_TAIL long', r.tailRight, r.tail + ' frames');
   ok('goalAt points inside the replay', r.goalAt > 0 && r.goalAt < r.total - 1,
      r.goalAt + ' of ' + r.total);
