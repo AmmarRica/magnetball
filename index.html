@@ -2250,6 +2250,34 @@ const FLAGS = {
   australia:{name:'Australia', draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#00008b'); c.fillStyle='#fff'; c.fillRect(x-r,y-r,r,r); c.strokeStyle='#e4002b'; c.lineWidth=r*0.1; c.beginPath(); c.moveTo(x-r,y-r); c.lineTo(x,y); c.moveTo(x-r,y); c.lineTo(x,y-r); c.stroke(); _cd(c,x-r*0.3,y+r*0.5,r,'#fff',r*0.12); _cd(c,x+r*0.4,y-r*0.3,r,'#fff',r*0.1); } },
 };
 const FLAG_KEYS = Object.keys(FLAGS);
+// ---------- Continents ------------------------------------------------------
+// Every country flag, grouped, so a first match can be one continent against
+// another. ⚠️ Built as a KEY LIST per continent rather than a `continent:` field on
+// each FLAGS entry, because FLAGS is also a cosmetics table the pickers iterate and
+// a per-entry field would have to be kept in step by 79 separate edits.
+// ⚠️ Turkey and Russia sit in Europe, and AUSTRALIA sits in ASIA — all three are
+// awkward geographically, and the tie-break used is the confederation they play
+// football in, which is the only sense in which a country is "in" a continent for a
+// game about football. Australia is also the practical answer: it is the one Oceania
+// country in the table, and a continent of one cannot field a side.
+// `firstRunLineup` asserts the union covers FLAGS, so adding a flag without placing
+// it is caught rather than silently dropping it out of the draw.
+const CONTINENTS = {
+  europe:   { name:'Europe', keys:['poland','austria','germany','netherl','ukraine','spain','france','italy',
+              'ireland','belgium','romania','portugal','sweden','finland','denmark','norway','uk','greece',
+              'turkey','russia','hungary','czechia','slovakia','croatia','serbia','slovenia','switzerl',
+              'iceland','estonia','latvia','lithuan','belarus','bulgaria'] },
+  africa:   { name:'Africa', keys:['nigeria','egypt','kenya','ghana','morocco','algeria','senegal','cameroon',
+              'southafr','ethiopia'] },
+  asia:     { name:'Asia', keys:['japan','bangla','india','indo','korea','china','vietnam','thailand','philipp',
+              'malaysia','pakistan','srilanka','nepal','iran','iraq','israel','saudi','uae','qatar','kuwait',
+              'jordan','lebanon','singapore','australia'] },
+  namerica: { name:'North America', keys:['mexico','canada','usa','panama','cuba','jamaica','costarica'] },
+  samerica: { name:'South America', keys:['brazil','chile','peru','colombia','uruguay','ecuador','bolivia','paraguay','argentina','venezuela'] },
+};
+const CONTINENT_KEYS = Object.keys(CONTINENTS);
+// Every country that belongs to one, so the check below has something to compare to.
+function placedFlags(){ const out = new Set(); for (const k of CONTINENT_KEYS) for (const f of CONTINENTS[k].keys) out.add(f); return out; }
 // Real flag art (Kenney flag pack — 64×64 SVGs by ISO code). paintFace draws the
 // SVG for a country and falls back to the hand-drawn FLAGS[key].draw until it loads.
 const FLAG_DIR = 'assets/Kenney/kenney_flag-pack/Vector/';
@@ -2911,7 +2939,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0245PM';
+const VERSION = '20260810.0620PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2927,6 +2955,14 @@ const VERSION = '20260810.0245PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260810.0620PM', title: 'Your first match, and your side of the scoreline',
+    added: [
+      'Your very first match is one continent against another — a team of countries against a team from somewhere else.',
+      'Your own player keeps your name, colour and flag in that match. Everyone else is a country.',
+    ],
+    changed: [],
+    fixed: 'Winning from the top half of the pitch was recorded as a loss. If you picked the far side in the warm-up lobby, your points, rank, streak and goals all went to the other team, and the result screen told you that you had lost a match you had just won. Cup rounds and Gauntlet runs counted the same way round.' },
+
   { v: '20260810.0245PM', title: 'A warm-up you can actually warm up in',
     added: [
       'Balls in the warm-up lobby — one at each end, and another for every person who joins. A wall down the middle keeps each end’s balls where they are, so everyone gets room.',
@@ -4511,9 +4547,28 @@ function defaultStats(){ return { points:1000, played:0, wins:0, losses:0, draws
   bestWin:0, cleanSheets:0, goalsBest:0 }; }   // bestWin = biggest winning margin; goalsBest = most goals in one match
 // Elo-style skill rating updated per match against the bot tier's implied strength.
 const DIFF_RATING = { rookie:700, easy:900, normal:1100, hard:1300, pro:1500, elite:1700, insane:1900 };
+// ⚠️ WHICH SIDE ARE *YOU* ON. Everything that reports or records a result used to
+// read `w.score[0]` as "mine", and team 0 is not always yours: the warm-up lobby
+// assigns sides by which half you walked into, so walking to the top half puts you on
+// team 1. Measured — a 5-0 win recorded as a LOSS, with the RP, the Elo, the streak,
+// the goals for/against and the clean sheet all inverted, and the result screen saying
+// YOU LOSE over a match you won. It reaches Season (a cleared round counted as failed)
+// and Gauntlet (a won round costing a life) through the same door.
+//
+// ⚠️ The bench is searched too: a player who was substituted out is not in `w.players`
+// but the match was still theirs, which is the same reason `matchRoster()` exists.
+// Falls back to 0 — the pre-lobby answer — so nothing changes for a match with no
+// human in it at all (the attract demo, a spectated match).
+function youTeam(w){
+  const find = list => (list || []).find(q => q.ctrl === 'human1');
+  const me = find(w && w.players) || find(w && w.bench);
+  return me ? (me.team === 1 ? 1 : 0) : 0;
+}
+// The scoreline as YOU experienced it: [yours, theirs].
+function yourScore(w){ const t = youTeam(w); return t === 1 ? [w.score[1], w.score[0]] : [w.score[0], w.score[1]]; }
 function updateMMR(w){
   const oppR = DIFF_RATING[sel.diff] != null ? DIFF_RATING[sel.diff] : 1100;
-  const my=w.score[0], opp=w.score[1];
+  const [my, opp] = yourScore(w);
   const score = my>opp ? 1 : (my<opp ? 0 : 0.5);
   const exp = 1/(1+Math.pow(10,(oppR-(stats.mmr||1000))/400));
   const before = stats.mmr||1000;
@@ -4525,14 +4580,15 @@ function loadStats(){ let s={}; try { s=JSON.parse(localStorage.getItem('magnetb
 function saveStats(s){ try { localStorage.setItem('magnetball.stats', JSON.stringify(s)); } catch(e){} }
 let stats = loadStats();
 
-// Apply one match result for team 0 (you); returns the RP delta.
+// Apply one match result for YOUR side; returns the RP delta. See youTeam().
 function recordResult(w){
   const diffIdx = Object.keys(DIFF).indexOf(sel.diff);          // 0..N (rookie..insane)
-  const my = w.score[0], opp = w.score[1];
+  const mine = youTeam(w);
+  const [my, opp] = yourScore(w);
   // Killer Queen: a snail home decides the match outright, so the result is taken
   // from forceWin rather than the scoreline. Goals for/against stay the real tally.
-  const won  = w.forceWin != null ? w.forceWin === 0 : my > opp;
-  const lost = w.forceWin != null ? w.forceWin === 1 : my < opp;
+  const won  = w.forceWin != null ? w.forceWin === mine : my > opp;
+  const lost = w.forceWin != null ? w.forceWin !== mine : my < opp;
   let delta;
   if (won)       delta = 10 + diffIdx*7;                        // beat harder bots for more
   else if (lost) delta = -Math.max(3, 22 - diffIdx*3);          // losing to easy bots hurts more (never positive)
@@ -8060,7 +8116,10 @@ function seasonEnd(w){
   if (!w.watch) delta = recordResult(w);
   const rp = delta ? `   ·   ${delta>0?'+':''}${delta} RP` : '';
   const sc = `${w.score[0]}–${w.score[1]}`;
-  const won = w.score[0] > w.score[1];
+  // ⚠️ youTeam, not team 0 — see recordResult. A cleared round counted as a failure
+  // whenever the lobby put you on the top half.
+  const [myG, oppG] = yourScore(w);
+  const won = myG > oppG;
   if (won){
     if (w.season.round === season.cleared){ season.cleared++; saveSeasonState(); }
     if (season.cleared >= SEASON_ROUNDS.length){
@@ -8152,7 +8211,10 @@ function rogueEnd(w){
   let delta=0; if(!w.watch) delta=recordResult(w);
   const rp = delta ? `   ·   ${delta>0?'+':''}${delta} RP` : '';
   const sc = `${w.score[0]}–${w.score[1]}`;
-  if(w.score[0] > w.score[1]){
+  // ⚠️ youTeam, not team 0 — a won round cost a life whenever the lobby put you on
+  // the top half. See recordResult.
+  const [myG, oppG] = yourScore(w);
+  if(myG > oppG){
     rogue.depth++; if(rogue.depth>rogue.best) rogue.best=rogue.depth; saveRogue();
     rogueOverlay(`DEPTH ${rogue.depth} ✅`, `${sc}${rp} · ❤×${rogue.lives}`, 'perk');
   } else {
@@ -8772,6 +8834,12 @@ function startMatch(){
   // Spectator: hand your seat to the AI and just watch the match.
   const watch = _forceWatch || (sel.spectate==='watch' && !mode.twoP && !mode.train);
   if (watch) you.ctrl = 'bot';
+
+  // ⚠️ A BRAND-NEW PLAYER'S FIRST MATCH is one continent against another — see
+  // firstRunLineup. Deliberately after the seat/name assignment above, because it
+  // overwrites the names, and deliberately before `_startQuiet`, which owns the
+  // attract demo's own look and must keep winning.
+  if (!_startQuiet && isFirstRun()) firstRunLineup(players);
 
   // The idle demo is bot vs bot, so dressing both sides in YOUR colours makes the
   // menu look like your own team playing itself. Give each side its own country.
@@ -10338,6 +10406,62 @@ function syncLobbyBalls(w){
     const s = lobbyBallSpot(w, 0); w.ball.x = s.x; w.ball.y = s.y;
   }
 }
+// ---------- The first match you ever play ------------------------------------
+// A brand-new player gets one continent against another: every body on a side wearing
+// a country from the same continent, and never a continent against itself. It is a
+// picture of what the game is, on a screen where nothing has been chosen yet.
+//
+// ⚠️ "Brand new" is the ABSENCE of a saved `sel`, which is exactly "has never changed
+// a setting". `saveSel()` is the one writer and the boot path does not call it —
+// verified, because a boot that wrote defaults would make this dead code on the second
+// frame of the first visit. The moment anything is touched the save appears and this
+// stops overriding for good, which is the promise: your settings win forever after.
+const FIRSTRUN_KEY = 'magnetball.firstrun';
+function isFirstRun(){
+  try {
+    // Already had it once. ⚠️ ONE match, not "every match until you change a
+    // setting" — a player who is happy with the defaults would otherwise get a
+    // different lineup every single time, and nothing about their team would ever
+    // stay put. It also has to be stable across a restart, which the bots' look is
+    // required to be (`tests/botlook.mjs`).
+    if (localStorage.getItem(FIRSTRUN_KEY) != null) return false;
+    // ...or has changed a setting, which is the promise: your settings win after.
+    return localStorage.getItem('magnetball.sel') == null;
+  } catch(e){ return false; }
+}
+function markFirstRunDone(){ try { localStorage.setItem(FIRSTRUN_KEY, '1'); } catch(e){} }
+// ⚠️ `Math.random` on purpose. This runs from `startMatch`, outside the sim, exactly
+// like the attract demo's country picker two lines below it — the rule is that nothing
+// inside `step()` may call it, and a lineup chosen before the whistle is not in it.
+function firstRunLineup(players){
+  markFirstRunDone();
+  const pick = arr => arr[(Math.random() * arr.length) | 0];
+  // Two DIFFERENT continents. Drawing the second from the remaining list rather than
+  // re-rolling until it differs means it cannot loop and cannot ever tie.
+  const a = pick(CONTINENT_KEYS);
+  const b = pick(CONTINENT_KEYS.filter(k => k !== a));
+  const pool = { 0: CONTINENTS[a].keys.slice(), 1: CONTINENTS[b].keys.slice() };
+  const used = { 0: [], 1: [] };
+  players.forEach(pl => {
+    // ⚠️ HUMAN SEATS ARE LEFT ALONE. You have a profile — a name, a colour, a flag,
+    // maybe a photo — and none of that is the game's to overwrite because it is your
+    // first match. "Every player on a side from one continent" is about the bots you
+    // are being introduced to; you are the exception because you are you. On a fresh
+    // device your seat carries no flag at all, which makes you the one body on the
+    // pitch that is not a country, and that reads as exactly right.
+    if (pl.ctrl === 'human1' || pl.ctrl === 'human2') return;
+    const t = pl.team === 1 ? 1 : 0;
+    // Drawn WITHOUT replacement, so a side never fields the same country twice — the
+    // smallest continent here has six countries and the biggest match is four a side.
+    if (!pool[t].length) pool[t] = CONTINENTS[t === 0 ? a : b].keys.slice();
+    const i = (Math.random() * pool[t].length) | 0;
+    const key = pool[t].splice(i, 1)[0];
+    used[t].push(key);
+    pl.flag = key;
+    pl.name = (FLAGS[key] || {}).name || pl.name;
+  });
+  return { a, b, used };
+}
 // Waiting bots stand off the pitch, in a line beside the touchline. They keep their
 // team colour so you can see who you'd be playing, but they don't run the AI.
 function benchBots(w){ benchLine(w, w.players.filter(p => p.ctrl === 'bot')); }
@@ -11747,23 +11871,37 @@ function finishMatch(w){
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
+  // ⚠️ "You" is `youTeam(w)`, not team 0 — the warm-up lobby hands you a side by which
+  // half you walked into, so a match won from the top half said YOU LOSE.
+  const mine = youTeam(w);
+  const [myG, oppG] = yourScore(w);
+  // ⚠️ The SCORELINE stays in team order, deliberately. The scorebug is colour-coded
+  // red-then-blue and has read that way for the whole match, so reordering it here to
+  // put your goals first would show a number the player never saw. The title carries
+  // the perspective; the scoreline carries the match.
+  const line = `${w.score[0]} – ${w.score[1]}`;
+  // In a 2-player match the labels are about WHICH HUMAN, so they follow the seats
+  // rather than the teams — human2 can end up on team 0 through the lobby too.
   if (w.forceWin != null){
     // Killer Queen: the snail — or a full hive — decides it outright, so say WHICH
     // instead of quoting a scoreline that may well favour the loser.
-    if (w.forceWinBy === 'hive'){
-      title = w.forceWin===0 ? 'HIVE FULL! 🫐' : (w.mode.twoP ? 'PLAYER 2 FILLED THE HIVE' : 'HIVE LOST 🫐');
-      sub = `${w.score[0]} – ${w.score[1]}   ·   hive win`;
+    const byHive = w.forceWinBy === 'hive';
+    const mineWon = w.forceWin === mine;
+    if (byHive){
+      title = mineWon ? 'HIVE FULL! 🫐' : (w.mode.twoP ? 'PLAYER 2 FILLED THE HIVE' : 'HIVE LOST 🫐');
+      sub = `${line}   ·   hive win`;
     } else {
-      title = w.forceWin===0 ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
-      sub = `${w.score[0]} – ${w.score[1]}   ·   snail win`;
+      title = mineWon ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
+      sub = `${line}   ·   snail win`;
     }
   }
-  else if (w.score[0]===w.score[1]){ title='DRAW'; sub=`${w.score[0]} – ${w.score[1]}`; }
-  else if (w.score[0]>w.score[1]){ title='YOU WIN! 🏆'; sub=`${w.score[0]} – ${w.score[1]}`; }
-  else { title = w.mode.twoP ? 'PLAYER 2 WINS' : 'YOU LOSE'; sub=`${w.score[0]} – ${w.score[1]}`; }
-  if (w.mode.twoP && w.forceWin == null){
-    if (w.score[0]>w.score[1]) title='PLAYER 1 WINS 🏆';
-    else if (w.score[1]>w.score[0]) title='PLAYER 2 WINS 🏆';
+  else if (myG === oppG){ title='DRAW'; sub=line; }
+  else if (myG > oppG){ title='YOU WIN! 🏆'; sub=line; }
+  else { title = w.mode.twoP ? 'PLAYER 2 WINS' : 'YOU LOSE'; sub=line; }
+  // `myG` is human1's side, so Player 1 vs Player 2 falls straight out of it — no
+  // second reading of the teams needed.
+  if (w.mode.twoP && w.forceWin == null && myG !== oppG){
+    title = myG > oppG ? 'PLAYER 1 WINS 🏆' : 'PLAYER 2 WINS 🏆';
   }
   // Record ranked stats for single-player matches vs bots (not couch, training or spectate).
   if (!w.mode.twoP && !w.train && !w.watch){
@@ -17373,7 +17511,8 @@ if (window.__MAGNETDEBUG) {
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
-    resetKickoff, MODES, nearestControlBall,
+    resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
+    CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,

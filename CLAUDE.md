@@ -550,6 +550,40 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   bodies actually FIELDED, not `mode.per`, since the lobby can put six a side on a 4v4.
   Stored in `localStorage` under `magnetball.mapvotes`; `mapVoteTable()` ranks the pairs and
   `buildMapVotes()` draws them on the career screen. `tests/mapvote.mjs` holds the split.
+- **`youTeam(w)` / `yourScore(w)` — WHICH SIDE ARE *YOU* ON.** ⚠️ Everything that
+  reported or recorded a result read `w.score[0]` as "mine", and team 0 is not always
+  yours: the warm-up lobby assigns sides by which half you walked into. Measured — a
+  5–0 win from the top half recorded as a **LOSS**, with RP, Elo, the streak, the
+  goals for/against and the clean sheet all inverted, and the result screen saying YOU
+  LOSE over a match you won. It reached Season (a cleared round counted as failed) and
+  Gauntlet (a won round costing a life) through the same door. The bench is searched
+  too — a substituted player's match was still theirs, the same reason `matchRoster()`
+  exists. ⚠️ The result screen's **scoreline stays in TEAM order**: the scorebug is
+  colour-coded red-then-blue and has read that way all match, so putting your goals
+  first would print a number the player never saw. The title carries the perspective.
+  ⚠️ **Guests have no record at all** — only the main player is tracked, `stats` is a
+  flat object of numbers, and a name in the Player names box never reaches the save.
+  `tests/yourside.mjs`.
+- **First match ever: one continent vs another** (`CONTINENTS`, `CONTINENT_KEYS`,
+  `isFirstRun`, `firstRunLineup`). Every bot on a side wears a country from one
+  continent, the two continents differ, and no country is fielded twice.
+  ⚠️ **A ONE SHOT**, persisted at `magnetball.firstrun` — not "every match until you
+  change a setting", which would hand a player happy with the defaults a different
+  team every time and break the separate guarantee that a bot's look is stable across
+  a restart. It also stops the moment `magnetball.sel` exists, which is exactly "has
+  changed a setting"; the boot path does not call `saveSel()`, verified, or this would
+  be dead code on the first frame.
+  ⚠️ **HUMAN SEATS ARE LEFT ALONE.** You have a profile — name, colour, flag, photo —
+  and none of it is the game's to overwrite. On a fresh device your seat carries no
+  flag, so you are the one body on the pitch that is not a country.
+  ⚠️ The continent table is a **key list per continent**, not a `continent:` field on
+  each `FLAGS` entry — `FLAGS` is a cosmetics table the pickers iterate, and a
+  per-entry field is 84 separate edits to keep in step. `placedFlags()` + the suite
+  assert the union covers `FLAGS` **exactly once**, which is what stops a new flag
+  silently dropping out of the draw — it caught five on the first run.
+  ⚠️ Turkey and Russia sit in Europe and **Australia in Asia**: the tie-break is the
+  confederation they play football in, and Australia is also the only Oceania country
+  here — a continent of one cannot field a side. `tests/continents.mjs`.
 - **Progression:** `stats` (RP `points`, ranks, and Elo `mmr` via `updateMMR`). Saves in
   `localStorage` under `magnetball.*` keys.
 - **Leaderboard:** `LB` config; reads via the public Google **gviz** JSON endpoint (`lbLoad`,

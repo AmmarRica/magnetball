@@ -5,7 +5,14 @@ const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:900,height:900} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
 p.on('console',m=>{ if(m.type()==='error' && !/ERR_TUNNEL|Failed to load/.test(m.text())) errors.push(m.text()); });
-await p.addInitScript(()=>{ window.__MAGNETDEBUG=true; localStorage.clear(); });
+// ⚠️ NOT A FRESH DEVICE. A brand-new player's first match is dressed one continent
+// against another (`tests/continents.mjs`), so a cleared `localStorage` gets bots
+// wearing country flags and country names — which is correct, and is not what this
+// suite is about. Marking the first run as already spent puts the page in the state
+// every returning player is in, which is the state whose shirt numbers are being
+// measured here.
+await p.addInitScript(()=>{ window.__MAGNETDEBUG=true; localStorage.clear();
+  localStorage.setItem('magnetball.firstrun','1'); });
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(700);
 
