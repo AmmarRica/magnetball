@@ -864,6 +864,38 @@
       display: flex; gap: 10px; justify-content: center; pointer-events: none;
     }
     #replayBar.hidden { display: none; }
+    /* Replay transport. Same corner language as the replay bar, but full width so the
+       three targets are big enough to hit while something is moving on screen. */
+    #repCtl {
+      position: fixed; left: 50%; transform: translateX(-50%); z-index: 14;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      width: min(440px, calc(100vw - 24px));
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+      border-radius: 14px; border: 1px solid var(--edge);
+      background: rgba(10,12,18,.86); backdrop-filter: blur(6px);
+    }
+    #repCtl.hidden { display: none; }
+    /* ⚠️ Toasts live at the bottom too, and a "now playing" toast landed straight on top
+       of the speed buttons. The transport is the thing you need to press, so the toasts
+       move up while it is on screen. */
+    body.repctl #toasts { bottom: calc(96px + max(14px, env(safe-area-inset-bottom))); }
+    .repprog { position: relative; height: 4px; border-radius: 3px; background: rgba(128,128,128,.30); }
+    #repProgFill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); }
+    /* Where the ball actually crossed. Everything right of it is the tail. */
+    #repProgGoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
+      border-radius: 1px; }
+    .repctlrow { display: flex; align-items: center; gap: 8px; }
+    .repspeeds { display: flex; gap: 6px; margin: 0 auto; }
+    #repCtl button {
+      min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
+      border-radius: 10px; border: 1px solid var(--edge); background: rgba(128,128,128,.16);
+      color: var(--text); font-family: var(--pix); font-size: 12px; cursor: pointer; padding: 0 8px;
+    }
+    #repCtl button svg.ic { width: 18px; height: 18px; }
+    #repCtl button:active { transform: translateY(1px); }
+    #repCtl .repspd.sel { border-color: var(--accent); color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent) inset; }
     #replayBar button {
       pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px); color: var(--overlay-ink); font-family: var(--pix);
@@ -1244,6 +1276,18 @@
       <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at
            your screen's size in your theme, and can be watched again from Watch. -->
       <button id="repSaveBtn">⤓ Save replay</button>
+    </div>
+  </div>
+
+  <!-- Transport for a replay you chose to watch. ⚠️ OUTSIDE #hud: playback hides the HUD,
+       and while it lived in there the bar inherited `display:none` — visible by its own
+       class, zero pixels tall in reality, which is what the suite now measures. -->
+  <div id="repCtl" class="hidden">
+    <div class="repprog"><div id="repProgFill"></div><span id="repProgGoal"></span></div>
+    <div class="repctlrow">
+      <button id="repPause" type="button" aria-label="Pause">❚❚</button>
+      <div class="repspeeds" id="repSpeeds"></div>
+      <button id="repExit" type="button" aria-label="Stop watching">✕</button>
     </div>
   </div>
 
@@ -2649,6 +2693,10 @@ const ICONS = {
   lock:      'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0v2.8 M12 14v3',
   // --- replay library
   play:      'M8.4 5.6 18 12l-9.6 6.4Z',
+  // ⚠️ Bars at 35% and 65% of the grid, not hard against the middle: the icons suite
+  // rejects a bounding box under 6x6 as a typo, and a pause with a 5.6px gap reads as
+  // one thick stroke at 18px anyway.
+  pause:     'M8.4 5.6v12.8 M15.6 5.6v12.8',
   save:      'M12 4.2v10.4 M7.8 10.6 12 14.8l4.2-4.2 M5 19.4h14',
   trash:     'M4.8 7.4h14.4 M9.4 7.4V5.2h5.2v2.2 M6.8 7.4l.9 12.2h8.6l.9-12.2 M10.4 10.8v5.6 M13.6 10.8v5.6',
   unlock:    'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0 M12 14v3',
@@ -2811,7 +2859,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0315AM';
+const VERSION = '20260810.0520AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2827,14 +2875,16 @@ const VERSION = '20260810.0315AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260810.0315AM', title: 'Replays you can keep',
+  { v: '20260810.0520AM', title: 'Replays you can keep',
     added: [
       'Replays — save a match from the replay bar or the result screen, then watch it back from the new Replays section in the menu.',
       'Delete replays you have finished with, one at a time or all at once.',
       'This screen. After an update it shows you what changed.',
+      'Watching a replay now has pause and four speeds, and a marker showing where the ball crossed the line.',
     ],
     changed: [
       'The game checks for a new version every time you open it, and asks you to install one that has been out for a while.',
+      'Goal replays carry on past the line, so you see the ball hit the net instead of stopping the moment it crosses.',
     ],
     fixed: 'A handful of smaller fixes.' },
 
@@ -7019,6 +7069,8 @@ $('socialBack').onclick = closeSocial;
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
 $('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
+$('repPause').onclick = repTogglePause;
+$('repExit').onclick = skipReplay;
 $('repWatchBtn').onclick = () => watchReplayFromMenu();
 // ⚠️ Two presses here as well, and for a stronger reason: this one takes the lot.
 (function wireClearAll(){
@@ -9040,20 +9092,47 @@ function loop(t){
 //  playback into a shareable clip. No external libraries.
 // ============================================================
 const REP_SECONDS = 6;
-const REP_MAX = Math.round(REP_SECONDS / STEP);
+// ⚠️ A goal replay that STOPS the instant the ball crosses the line stops before the thing
+// you wanted to see. `checkGoal` sets `state='goal'` and the goal state still integrates
+// ("ball flies into the net; players can keep moving"), so the interesting second and a
+// half — the ball hitting the net and settling, the celebration starting — was being
+// captured into the rolling buffer and then thrown away, because `repOnGoal` froze at the
+// crossing. The freeze is DELAYED by this much instead.
+const REP_TAIL = 1.6;
+const REP_TAIL_F = Math.round(REP_TAIL / STEP);
+// The buffer holds the lead-up PLUS the tail, so keeping the tail does not cost you the
+// approach play — a goal replay is the full REP_SECONDS before and REP_TAIL after.
+const REP_MAX = Math.round((REP_SECONDS + REP_TAIL) / STEP);
 let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
-const replay = { active:false, raf:0 };
+let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
+let repGoalIdx = -1;     // where in repBuf the ball actually crossed
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false };
 
-function repReset(){ repBuf = []; lastReplay = null; const b=$('replayBar'); if(b) b.classList.add('hidden'); }
+function repReset(){
+  repBuf = []; lastReplay = null; repPend = -1; repGoalIdx = -1;
+  const b=$('replayBar'); if(b) b.classList.add('hidden');
+}
 function repCapture(w){
   if (!w || w.drillMode) return;
   repBuf.push({ bx:w.ball.x, by:w.ball.y, p: w.players.map(pl => ({ x:pl.x, y:pl.y, k:!!pl.kick })) });
-  if (repBuf.length > REP_MAX) repBuf.shift();
+  // ⚠️ The goal index has to shift with the buffer, or the marker drifts one frame per
+  // capture once the ring starts rolling.
+  if (repBuf.length > REP_MAX){ repBuf.shift(); if (repGoalIdx > 0) repGoalIdx--; }
+  if (repPend > 0){ repPend--; if (repPend === 0) repFreeze(w); }
+}
+function repFreeze(w){
+  repPend = -1;
+  lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
 }
 function repOnGoal(w){
   if (!repBuf.length) return;
-  lastReplay = { players:w.players.length, frames: repBuf.slice() };
+  // Freeze what we have RIGHT NOW so the replay bar and Save replay are never looking at
+  // nothing, then keep capturing and freeze again with the tail included. The auto-replay
+  // fires at 1.8s, comfortably after REP_TAIL, so what it plays is the complete version.
+  repGoalIdx = repBuf.length - 1;
+  lastReplay = { players:w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
+  repPend = REP_TAIL_F;
   const b=$('replayBar'); if(b) b.classList.remove('hidden');
 }
 function drawReplayFrame(f){
@@ -9083,9 +9162,13 @@ function drawReplayFrame(f){
   ctx.font = `${Math.round(Math.min(cw,ch)*0.075)}px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.fillStyle = TH.accent || '#21e6ff';
   ctx.fillText('▶ REPLAY', cx, cy);
-  ctx.font = `12px 'Kenney', system-ui, -apple-system, sans-serif`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(skipWord(), cx, cy + Math.min(cw,ch)*0.075*0.72 + 6);
+  // ⚠️ No "tap to skip" while the transport is up: tapping the pitch deliberately does
+  // nothing there, so the hint would be an instruction that fails.
+  if (!replay.controls){
+    ctx.font = `12px 'Kenney', system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(skipWord(), cx, cy + Math.min(cw,ch)*0.075*0.72 + 6);
+  }
   ctx.restore();
   ctx.textBaseline='alphabetic';
 }
@@ -9098,17 +9181,72 @@ function anyPadPressed(){
   for (const g of gps){ if(!g) continue; for (const b of g.buttons){ if (b && (b.pressed || b.value>0.5)) return true; } }
   return false;
 }
-function playReplay(speed){
-  speed = speed || 0.55;
+// ============================================================
+//  REPLAY TRANSPORT — pause, speed, exit
+// ============================================================
+// ⚠️ Only for a replay you CHOSE to watch. The instant replay after a goal stays a
+// "get on with it" gesture: any tap, key or pad button skips it, and a control bar there
+// would put four things to read between you and the kickoff. A replay opened from the
+// menu is the opposite — you went looking for it, so it gets a transport and a tap on the
+// pitch does nothing.
+const REP_SPEEDS = [0.25, 0.5, 1, 2];
+function repCtlShow(){
+  const el = $('repCtl'); if (!el) return;
+  el.classList.remove('hidden');
+  document.body.classList.add('repctl');
+  const host = $('repSpeeds');
+  if (host && !host.childElementCount){
+    for (const s of REP_SPEEDS){
+      const b = document.createElement('button');
+      b.type='button'; b.className='repspd'; b.dataset.spd = String(s);
+      b.textContent = (s === 1 ? '1' : String(s).replace('0.', '.')) + '×';
+      b.onclick = () => { replay.speed = s; repCtlSync(); };
+      host.appendChild(b);
+    }
+  }
+  repCtlSync();
+}
+function repCtlHide(){ const el = $('repCtl'); if (el) el.classList.add('hidden');
+  document.body.classList.remove('repctl'); }
+function repCtlSync(){
+  const pb = $('repPause');
+  if (pb){
+    pb.innerHTML = (iconSvg(replay.paused ? 'play' : 'pause') || (replay.paused ? '▶' : '❚❚'));
+    pb.setAttribute('aria-label', replay.paused ? 'Resume' : 'Pause');
+  }
+  for (const b of document.querySelectorAll('#repSpeeds .repspd'))
+    b.classList.toggle('sel', Math.abs(parseFloat(b.dataset.spd) - replay.speed) < 0.001);
+}
+// A line under the transport, with a tick where the ball actually crossed. On a goal
+// replay everything after that tick is the tail — the net, and the moment after.
+function repCtlProgress(idx, total, goalAt){
+  const fill = $('repProgFill'); if (fill) fill.style.width = (100 * (idx+1) / total).toFixed(1) + '%';
+  const mark = $('repProgGoal');
+  if (mark){
+    const show = goalAt != null && goalAt >= 0 && goalAt < total - 1;
+    mark.style.display = show ? '' : 'none';
+    if (show) mark.style.left = (100 * goalAt / total).toFixed(1) + '%';
+  }
+}
+function repTogglePause(){ if (!replay.active) return; replay.paused = !replay.paused; repCtlSync(); }
+
+function playReplay(speed, opts){
+  opts = opts || {};
   return new Promise(resolve=>{
     if (!lastReplay || !lastReplay.frames.length || lastReplay.players !== (world?world.players.length:-1)){ resolve(); return; }
-    const frames = lastReplay.frames;
+    const frames = lastReplay.frames, goalAt = lastReplay.goalAt;
     replay.active = true;
+    replay.paused = false;
+    replay.speed = speed || 0.55;
+    replay.controls = !!opts.controls;
+    if (replay.controls) repCtlShow();
+    const finish = () => { replay.controls = false; repCtlHide(); resolve(); };
     let idx = 0, last = 0;
-    const dur = (STEP/speed)*1000;
     function tick(t){
-      if (!replay.active){ resolve(); return; }
-      if (idx > 4 && anyPadPressed()){ replay.active=false; resolve(); return; }   // controller skips too
+      if (!replay.active){ finish(); return; }
+      // ⚠️ Not while the transport is up: with controls the pad is how you drive it, and
+      // "any button ends the replay" would make the thing unusable on a controller.
+      if (!replay.controls && idx > 4 && anyPadPressed()){ replay.active=false; finish(); return; }
       if (!last) last = t;
       // ⚠️ The field advances once per REPLAYED FRAME, not once per rAF tick. A replay
       // is not the step loop, so advanceDynField() was never called and every animated
@@ -9116,9 +9254,16 @@ function playReplay(speed){
       // Abduction floaters stopped, the Specimen margin stopped scrolling. Tying it to
       // frames consumed rather than to the refresh keeps it on the same clock as the
       // action, which means it correctly runs in slow motion along with the replay.
-      while (t - last >= dur){ last += dur; idx++; advanceDynField(); }
-      if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; resolve(); return; }
+      // ⚠️ The step is recomputed EVERY tick, not once up front — the speed buttons change
+      // it mid-playback, and a `dur` captured at the start would ignore them.
+      const dur = (STEP / Math.max(0.05, replay.speed)) * 1000;
+      // ⚠️ Paused, `last` tracks the clock instead of accumulating. Leaving it behind
+      // would bank the paused seconds and fast-forward the moment you resumed.
+      if (replay.paused) last = t;
+      else while (t - last >= dur){ last += dur; idx++; advanceDynField(); }
+      if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; finish(); return; }
       drawReplayFrame(frames[idx]);
+      if (replay.controls) repCtlProgress(idx, frames.length, goalAt);
       replay.raf = requestAnimationFrame(tick);
     }
     replay.raf = requestAnimationFrame(tick);
@@ -9173,6 +9318,9 @@ function repFileBuild(){
     // a later "watch as recorded" needs no format change.
     look: { ...(sel.look||{}) },
     score: world.score ? world.score.slice() : [0,0],
+    // Where the ball crossed. Everything after it is the tail — the net, and the
+    // moment after — and the transport marks it on the progress line.
+    goalAt: (lastReplay.goalAt != null && lastReplay.goalAt >= 0) ? lastReplay.goalAt : -1,
     fps,
     players: world.players.map(repFilePlayer),
     frames,
@@ -9360,14 +9508,15 @@ function repFileWorld(doc){
 // because `loop()` returns immediately while `replay.active` is set — nothing steps or
 // renders the swapped world — and everything is put back in a `finally` so a throw
 // mid-playback cannot strand the game holding a replay's world.
-async function playReplayFile(doc, speed){
+async function playReplayFile(doc, speed, opts){
   if (replay.active) return;
   const prevWorld = world, prevLast = lastReplay;
   try {
     world = repFileWorld(doc);
-    lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length) };
+    lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length),
+                   goalAt: (doc.goalAt != null ? doc.goalAt : -1) };
     computeCam();
-    await playReplay(speed || 0.6);
+    await playReplay(speed || 1, opts);
   } finally {
     world = prevWorld; lastReplay = prevLast;
     if (world) computeCam();
@@ -9417,7 +9566,10 @@ async function watchReplayFile(back, pick){
   // right-hand side, but hiding it there too keeps one code path.)
   hideScreens();
   $('hud').classList.add('hidden');
-  try { await playReplayFile(doc); }
+  // ⚠️ And whatever the last match left shouting. A "GOAL!" banner from the match you just
+  // finished sits at z-index above the canvas and reads as part of the replay.
+  { const bn = $('banner'); if (bn){ bn.textContent = ''; bn.classList.remove('show'); } }
+  try { await playReplayFile(doc, null, { controls:true }); }
   finally { if (back) back(); }
 }
 // From the menu's Replays card: plays to the end, then comes straight back to the card
@@ -16209,7 +16361,9 @@ function zoneForTouch(x, y){
 }
 
 function onDown(id, x, y){
-  if (replay.active){ skipReplay(); return; }   // tap anywhere skips a playing replay
+  // ⚠️ Only an UNCONTROLLED replay. With the transport up the pitch is not a button —
+  // a mis-tap must not end something you deliberately sat down to watch.
+  if (replay.active){ if (!replay.controls) skipReplay(); return; }
   if (!running || paused || (world && world.state==='over')) return;
   const z = zoneForTouch(x,y);
   const pad = pads[z.pad];
@@ -16282,7 +16436,14 @@ function keyboardDrivesGame(){
 }
 const keys = {};
 window.addEventListener('keydown', e => {
-  if (replay.active){ skipReplay(); return; }   // any key skips a playing replay
+  if (replay.active){
+    // With the transport up the keyboard drives it instead: space pauses, Escape leaves.
+    if (replay.controls){
+      if (e.code === 'Space'){ e.preventDefault(); repTogglePause(); }
+      else if (e.key === 'Escape') skipReplay();
+    } else skipReplay();
+    return;
+  }
   keys[e.key.toLowerCase()] = true;
   const kickKey = e.key === ' ' || e.key === 'x' || e.key === 'X';
   if (kickKey && keyboardDrivesGame() && !typingInField(e.target)){
@@ -16888,6 +17049,7 @@ if (window.__MAGNETDEBUG) {
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY,
+    REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
     drawReplayFrame,
