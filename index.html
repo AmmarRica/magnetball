@@ -302,6 +302,23 @@
     .photocam { width: 100%; max-width: 260px; margin-top: 10px; border-radius: 12px;
       border: 1px solid var(--edge); background: #000; display: block;
       transform: scaleX(-1); }   /* mirrored: a selfie feed you can aim */
+    /* ---- Saved photo grid ---- */
+    .photogrid { margin-top: 12px; }
+    .photohead { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      font-family: var(--pix); font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+    .photohead span { flex: 1 1 auto; }
+    .photohead button { min-height: 36px; }
+    .photohead button.danger { color: var(--overlay-red); border-color: var(--overlay-red); }
+    /* Tiles are a 56px touch target, wrapping — a hundred of them has to scroll the
+       card rather than a box inside it, or the grid gets its own scrollbar on a phone. */
+    .phototiles { display:flex; flex-wrap:wrap; gap:8px; }
+    .phototile { width:56px; height:56px; padding:0; border-radius:50%; overflow:hidden;
+      border:2px solid var(--edge); background:none; cursor:pointer; flex:0 0 auto; }
+    .phototile img { width:100%; height:100%; object-fit:cover; display:block; }
+    .phototile.worn { border-color: var(--accent); }
+    /* Ticked for deletion: dimmed AND ringed, because a colour change alone is exactly
+       what a colour-blind player cannot use to tell which ones are about to go. */
+    .phototile.picked { border-color: var(--overlay-red); border-width:3px; opacity:.45; }
     .photomsg { font-family: var(--pix); font-size: 10px; color: var(--muted);
       text-align: left; margin-top: 8px; line-height: 1.6; }
     .photomsg:empty { display: none; }
@@ -2945,7 +2962,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0110AM';
+const VERSION = '20260811.0355AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2961,6 +2978,14 @@ const VERSION = '20260811.0110AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0355AM', title: 'Keep all your photos',
+    added: [
+      'Every photo you add is kept — up to a hundred of them — so a shared device can hold a face for everyone. Tap one to put it on.',
+      'Delete the ones you have finished with: press Delete, tick them, then confirm.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0110AM', title: 'Turn on the ball, and take it off them',
     added: [
       'You can now knock the ball off an opponent who is holding it. Get in range, press kick, and it is loose again — there is no safe way to sit on the ball any more.',
@@ -5883,6 +5908,20 @@ const TEXT_FONT = "'Kenney', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Noto San
 // on screen. 128 square covers the 120px preview and a retina disc with room to
 // spare, and lands around 6KB as JPEG.
 const PHOTO = { size: 128, quality: 0.86 };
+// ⚠️ The PHOTO library shares the same database, so there is one `indexedDB.open`
+// version to keep straight rather than two databases racing each other's upgrades.
+// ⚠️ Photos are stored INLINE, unlike replays — which looks like the mistake `REPLIB`
+// documents (frames inline cost 68ms to draw twenty rows of text) and is the opposite
+// case: the replay LIST is text, so reading the payload to draw it was pure waste,
+// while the photo list IS the photos. There is nothing to defer. At ~6KB each, a full
+// hundred is about 600KB.
+const PHOTOLIB = { store:'photos', max:100 };
+// ⚠️ Declared UP HERE with `PHOTO`, not down beside `REPLIB` where the rest of the
+// database code lives. `buildPhotoPane()` runs during the bootstrap and draws the
+// saved-photo grid, which reads this — declared below its reader it is in the temporal
+// dead zone at that moment and takes the whole page down with "Cannot access
+// 'PHOTOLIB' before initialization". That is the EIGHTH time this file has been bitten
+// by exactly that.
 let photoImg = null, photoSrc = null;
 // Decoded lazily and cached, so drawing a disc never re-parses the data URL.
 function photoFace(){
@@ -5908,7 +5947,10 @@ function photoFrom(source, w, h){
   c.drawImage(source, (w-side)/2, (h-side)/2, side, side, 0, 0, n, n);
   return cv.toDataURL('image/jpeg', PHOTO.quality);
 }
-function setPhoto(dataUrl){
+// `keep` is false when the photo is being WORN from the library — it is already in
+// there, and re-adding it on every pick would fill the hundred with one face.
+function setPhoto(dataUrl, keep){
+  if (dataUrl && keep !== false) photoLibAdd(dataUrl).then(buildPhotoGrid).catch(()=>{});
   profile.photo = dataUrl || '';
   if (dataUrl) profile.flag = 'photo';
   else if (profile.flag === 'photo') profile.flag = defaultProfile().flag;
@@ -7126,6 +7168,78 @@ function buildPhotoPane(){
   msg.textContent = photoMsgText;
   host.appendChild(msg);
   if (profile.photo && profile.flag !== 'photo' && !live) photoNote('Saved — press "Wear it" to put it on.');
+  const grid = document.createElement('div'); grid.id = 'photoGrid'; grid.className = 'photogrid';
+  host.appendChild(grid);
+  buildPhotoGrid();
+}
+// ---------- The saved-photo grid --------------------------------------------
+// ⚠️ Deleting ARMS first, exactly as asked: press Delete, tick the ones to go, then
+// confirm. The tiles are small and close together and a delete cannot be undone, so a
+// single tap that removed a photo would be a mis-tap that removed a photo. It is the
+// same argument as the replay list's two-press delete, applied to a grid where you
+// usually want to remove several at once — hence a selection rather than a per-row arm.
+let photoDeleteArmed = false;
+let photoPicked = new Set();
+function buildPhotoGrid(){
+  const grid = document.getElementById('photoGrid'); if (!grid) return;
+  photoLibAll().then(rows => {
+    const g = document.getElementById('photoGrid'); if (!g) return;   // pane rebuilt under us
+    g.innerHTML = '';
+    if (!rows.length){ photoDeleteArmed = false; photoPicked.clear(); return; }
+    const head = document.createElement('div'); head.className = 'photohead';
+    const count = document.createElement('span');
+    count.textContent = rows.length + (rows.length === 1 ? ' saved photo' : ' saved photos') +
+                        ' · ' + PHOTOLIB.max + ' max';
+    head.appendChild(count);
+    const mk = (label, fn, cls) => { const b=document.createElement('button');
+      b.type='button'; b.className='ghost mini'+(cls?' '+cls:''); b.textContent=label;
+      b.onclick=fn; head.appendChild(b); return b; };
+    if (!photoDeleteArmed){
+      mk('Delete…', () => { photoDeleteArmed = true; photoPicked.clear(); buildPhotoGrid(); });
+    } else {
+      const n = photoPicked.size;
+      // ⚠️ The confirm says HOW MANY. "Delete" over a grid you have been tapping is a
+      // button whose consequence you have to remember; "Delete 3" is one you can read.
+      mk(n ? 'Delete ' + n : 'Delete', () => {
+        if (!photoPicked.size) return;
+        const ids = [...photoPicked];
+        // Wearing one you just deleted would leave a face with nothing behind it.
+        const worn = rows.filter(r => ids.includes(r.id)).some(r => r.url === profile.photo);
+        photoLibDel(ids).then(() => {
+          photoDeleteArmed = false; photoPicked.clear();
+          if (worn) setPhoto('', false);
+          buildPhotoGrid();
+        });
+      }, n ? 'danger' : '');
+      mk('Cancel', () => { photoDeleteArmed = false; photoPicked.clear(); buildPhotoGrid(); });
+    }
+    g.appendChild(head);
+    const wrap = document.createElement('div'); wrap.className = 'phototiles';
+    rows.forEach(r => {
+      const t = document.createElement('button');
+      t.type = 'button'; t.className = 'phototile';
+      if (r.url === profile.photo) t.classList.add('worn');
+      if (photoDeleteArmed && photoPicked.has(r.id)) t.classList.add('picked');
+      const im = document.createElement('img'); im.src = r.url; im.alt = '';
+      t.appendChild(im);
+      t.onclick = () => {
+        if (photoDeleteArmed){
+          if (photoPicked.has(r.id)) photoPicked.delete(r.id); else photoPicked.add(r.id);
+          buildPhotoGrid();
+        } else {
+          // ⚠️ `keep:false` — it is already in the library, and re-adding on every pick
+          // would fill the hundred slots with one face.
+          setPhoto(r.url, false);
+        }
+      };
+      wrap.appendChild(t);
+    });
+    g.appendChild(wrap);
+  }).catch(()=>{});
+}
+function photoPick(id){
+  if (photoPicked.has(id)) photoPicked.delete(id); else photoPicked.add(id);
+  return photoPicked.size;
 }
 async function startPhotoCam(){
   photoNote('');
@@ -9591,20 +9705,25 @@ function downloadBlob(blob, filename){
 // metadata store holds a few numbers per replay; the payload store holds the frames as a
 // JSON STRING (cloning one string is far cheaper than a graph of 360 arrays) and is only
 // ever read when you actually press Watch.
-const REPLIB = { db:'magnetball', store:'replays', blobs:'replaydata', v:2, max:40 };
+const REPLIB = { db:'magnetball', store:'replays', blobs:'replaydata', v:3, max:40 };
 function repLibOpen(){
   return new Promise((res, rej) => {
     if (!window.indexedDB) return rej(new Error('no IndexedDB'));
     const req = indexedDB.open(REPLIB.db, REPLIB.v);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (ev) => {
       const db = req.result;
-      // ⚠️ v1 kept the frames inline. Rather than migrate a schema that is hours old, the
-      // old store is dropped — the downloaded FILES are untouched, which is the copy that
-      // was always meant to outlive the app's own storage.
-      if (db.objectStoreNames.contains(REPLIB.store)) db.deleteObjectStore(REPLIB.store);
-      if (db.objectStoreNames.contains(REPLIB.blobs)) db.deleteObjectStore(REPLIB.blobs);
-      db.createObjectStore(REPLIB.store, { keyPath:'id' });
-      db.createObjectStore(REPLIB.blobs, { keyPath:'id' });
+      // ⚠️ The v1 drop is GATED ON `oldVersion`, and it has to be. v1 kept the frames
+      // inline and was hours old, so dropping it rather than migrating was free — but
+      // this handler runs on EVERY version bump, and left ungated the v3 bump that
+      // added the photo store would have deleted every replay the player had saved.
+      if (ev.oldVersion < 2){
+        if (db.objectStoreNames.contains(REPLIB.store)) db.deleteObjectStore(REPLIB.store);
+        if (db.objectStoreNames.contains(REPLIB.blobs)) db.deleteObjectStore(REPLIB.blobs);
+      }
+      // Created only if missing, so an upgrade from any version lands in the same shape.
+      if (!db.objectStoreNames.contains(REPLIB.store)) db.createObjectStore(REPLIB.store, { keyPath:'id' });
+      if (!db.objectStoreNames.contains(REPLIB.blobs)) db.createObjectStore(REPLIB.blobs, { keyPath:'id' });
+      if (!db.objectStoreNames.contains(PHOTOLIB.store)) db.createObjectStore(PHOTOLIB.store, { keyPath:'id' });
     };
     req.onsuccess = () => res(req.result);
     req.onerror = () => rej(req.error || new Error('open failed'));
@@ -9672,6 +9791,39 @@ function repLibTrim(){
     const extra = rows.slice(REPLIB.max);
     return Promise.all(extra.map(r => repLibDel(r.id)));
   });
+}
+// ---------- Photo library ---------------------------------------------------
+// Up to a hundred saved faceplate photos: pick one to wear, and delete the ones you
+// are done with. ⚠️ IndexedDB rather than `localStorage`, for the same reason the
+// replay library is there — the ~5MB budget is already shared with the save, the
+// settings and the worn photo, and a hundred photos would eat it on their own.
+// ⚠️ `profile.photo` is still the WORN one and still lives in `localStorage`: the
+// library is a collection you choose from, not the thing the pitch reads, and a disc
+// must never have to wait on a database to draw.
+function photoLibAdd(dataUrl){
+  if (!dataUrl) return Promise.resolve(null);
+  const rec = { id: repLibId(), saved: Date.now(), url: dataUrl };
+  return repLibTx(PHOTOLIB.store, 'readwrite', st => st.put(rec))
+    .then(() => photoLibTrim()).then(() => rec);
+}
+function photoLibAll(){
+  return repLibTx(PHOTOLIB.store, 'readonly', st => st.getAll())
+    // Newest first, numerically on the timestamp half of the id — as strings
+    // "1000-2" sorts above "999-9", the same trap `repLibAll` records.
+    .then(rows => (rows || []).sort((a, b) => (+String(b.id).split('-')[0]) - (+String(a.id).split('-')[0])
+                                              || String(b.id).localeCompare(String(a.id))));
+}
+// ⚠️ Takes a LIST and deletes them in ONE transaction. The delete flow ticks several
+// at a time, and one transaction per photo means a failure halfway leaves the grid
+// showing some of what you just confirmed away.
+function photoLibDel(ids){
+  const list = [].concat(ids || []);
+  if (!list.length) return Promise.resolve(0);
+  return repLibTx(PHOTOLIB.store, 'readwrite', st => { list.forEach(id => st.delete(id)); })
+    .then(() => list.length);
+}
+function photoLibTrim(){
+  return photoLibAll().then(rows => photoLibDel(rows.slice(PHOTOLIB.max).map(r => r.id)));
 }
 function repLibLabel(rec){
   const f = (FIELDS[rec.field] && FIELDS[rec.field].name) || rec.field;
@@ -17686,6 +17838,7 @@ if (window.__MAGNETDEBUG) {
     buildHintToggles, HINT_SKIP,
     menuSearchIndex, menuSearchRank, menuSearchGo, menuSearchDraw, menuSearchClose, buildMenuSearch, SEARCH_MAX,
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
+    PHOTOLIB, photoLibAdd, photoLibAll, photoLibDel, photoLibTrim, photoPick, photoDeleteArmed,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,

@@ -974,6 +974,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   The modal fires **once per update per device** off `magnetball.lastver` and shows only the
   release you landed on; a **first-ever visit records the version and shows nothing**, since
   "what's new" as the first thing you ever see is a changelog for a game you have not played.
+- **Photo library (`PHOTOLIB`, IndexedDB, `photoLibAdd/All/Del/Trim`, `buildPhotoGrid`):**
+  up to 100 saved faceplate photos, tap one to wear it, capped with the oldest going.
+  ⚠️ **Photos are stored INLINE**, which looks like the mistake `REPLIB` documents and
+  is the opposite case: the replay LIST is text, so reading the payload to draw it was
+  pure waste, while the photo list **is** the photos. At ~6KB each a full hundred is
+  ~600KB. ⚠️ IndexedDB not `localStorage` — the ~5MB budget is already shared with the
+  save, the settings and the worn photo. `profile.photo` stays the WORN one in
+  `localStorage`: a disc must never wait on a database to draw.
+  ⚠️ **Deleting ARMS first** — press Delete, tick, confirm — because the tiles are
+  small and close together and it cannot be undone; the confirm says how many. Picking
+  passes `keep:false` so wearing one does not re-add it (a hundred slots filled with one
+  face). Deleting the one you WEAR clears your face too.
+  ⚠️ **It shares `REPLIB`'s database**, so the store arrived as a version bump — and
+  `repLibOpen`'s upgrade handler dropped both replay stores **unconditionally**, written
+  for a v1→v2 migration where the old schema was hours old. Reached from v2 it would
+  have deleted every replay a player had saved. Gated on `ev.oldVersion < 2`, with the
+  stores created only if missing.
+  ⚠️ `const PHOTOLIB` is declared with `PHOTO`, near the top — `buildPhotoPane()` runs
+  during the bootstrap and draws the grid, and declared beside `REPLIB` it was in the
+  temporal dead zone there. **Eighth TDZ bite in this file.** `tests/photolib.mjs`.
 - **Replay library (`REPLIB`, IndexedDB):** ⚠️ it exists because **a page cannot delete your
   downloads**. Once a Blob is in the Downloads folder it belongs to the OS — no web API can
   list, move or remove it — so "delete a replay" is only meaningful for a copy the page owns.
