@@ -557,6 +557,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
+- **Goal replays keep a TAIL** (`REP_TAIL` 1.6s, `repPend`, `lastReplay.goalAt`). ⚠️ The
+  goal state still integrates ("ball flies into the net; players can keep moving"), so those
+  frames were already in the rolling buffer and `repOnGoal` threw them away by freezing at
+  the crossing. The freeze is delayed instead: `repOnGoal` snapshots immediately (so Save
+  replay is never looking at nothing) and again once the tail is captured — the auto-replay
+  fires at 1.8s, comfortably after. `REP_MAX` covers `REP_SECONDS + REP_TAIL`, so keeping
+  the tail does not cost you the approach play, and `repGoalIdx` **decrements with the ring
+  shift** or the marker drifts a frame per capture. `goalAt` rides in the replay file too.
+- **Replay transport** (`#repCtl`, `REP_SPEEDS`, `replay.paused/speed/controls`) — pause,
+  four speeds, exit, and a progress line marking where the ball crossed. ⚠️ **Only for a
+  replay you CHOSE to watch.** The instant replay after a goal stays a one-gesture skip: any
+  tap, key or pad button, no bar, because four things to read between a goal and the kickoff
+  is worse than no replay. With controls up a tap on the pitch does nothing (a mis-tap must
+  not end what you sat down to watch), space pauses and Escape leaves.
+  ⚠️ `dur` is recomputed **every tick** — captured once, the speed buttons set a variable
+  nothing reads. ⚠️ Paused, `last = t` tracks the clock; leaving it behind banks the paused
+  seconds and fast-forwards on resume (measured: a 1s pause jumped 16.6% of the replay in
+  60ms). ⚠️ `#repCtl` lives **outside `#hud`** — playback hides the HUD, and in there the bar
+  was `hidden`-free and **zero pixels tall**. `tests/replaywatch.mjs` measures rendered
+  boxes, never the class.
 - **Replay files on disk** (`REPFILE`, `repFileBuild`/`repFileParse`/`repFileWorld`,
   `saveReplayFile`, `playReplayFile`, `openReplayFile`). Save clip writes a **video** —
   right for sending someone, wrong for keeping: large, baked at whatever size the window
@@ -948,7 +968,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 82 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 83 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
