@@ -1437,10 +1437,15 @@ what was asked for and not a fourth tuning pass:
   it is render-only and that is not negotiable.
 
 ## 🧾 Asked for, not yet built (2026-08-10 list)
-- [ ] **Multiple photos** — up to 100 saved faceplate photos, pick one to wear, and a delete
-  flow that arms first (press Delete → tick the ones to go → confirm). ⚠️ `localStorage` is
-  ~5MB and already holds the save; 100 × 128² photos belongs in IndexedDB alongside the
-  replay library, not beside it.
+- [x] **Multiple photos** — up to 100, pick one to wear, arm-then-confirm delete. IndexedDB,
+  sharing the replay library's database.
+  - [x] ⚠️ **The version bump nearly ate every saved replay.** `repLibOpen`'s upgrade handler
+    dropped both replay stores unconditionally — written for a v1→v2 migration hours after
+    v1 shipped. Gated on `ev.oldVersion`.
+  - [x] ⚠️ And testing that needed a hand-built v2 database: IndexedDB is **not shared
+    between `file://` pages** in the harness, so save-reload-read passes either way.
+  - [x] ⚠️ Eighth TDZ bite — `PHOTOLIB` had to move up beside `PHOTO`, because
+    `buildPhotoPane()` draws the grid during the bootstrap.
 - [x] **Continents kick off the game** — the first match on a fresh device is one continent
   against another, on Grass (already the default surface).
   - [x] ⚠️ A **one shot**, persisted — not "every match until you change a setting", which
