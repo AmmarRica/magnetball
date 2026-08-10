@@ -62,20 +62,34 @@ const o = {}; const allErrs = [];
     for(let i=0;i<200;i++) M.step(w);
     r.backToOnePerSide = bots().filter(q=>q.team===0).length === 1 &&
                          bots().filter(q=>q.team===1).length === 1;
-    // ...and the ball stays parked, so nothing can be scored in the lobby.
-    r.ballParked = w.ball.x===0 && w.ball.y===0 && w.ball.vx===0 && w.ball.vy===0;
+    // ⚠️ THE BALL IS LIVE IN HERE, and this assertion used to say the exact opposite —
+    // `ballParked`, pinning it at the centre spot with `integrate(w, true, ...)`. That
+    // was wrong for the one thing the lobby is for: you come in here to test a stick,
+    // and the control you most need to test is the one you could not. Nothing can be
+    // SCORED, which is the part that actually mattered — `checkGoal` is gated on
+    // `w.state === 'play'` — so the freeze was buying nothing and costing the feature.
+    // Balls, counts and the halfway wall live in `tests/lobbyballs.mjs`; what is held
+    // here is that the state itself is safe.
+    r.nothingScored = w.score[0] === 0 && w.score[1] === 0;
     // Controls ARE testable: the stick moves your player.
     const me=M.lobbyHumans(w)[0]; me.x=0; me.y=40; me.vx=0; me.vy=0;
     window.__pads[0].axes[1] = -1;
     for(let i=0;i<45;i++) M.step(w);
     r.stickMovesYou = me.y < 30;
     window.__pads[0].axes[1] = 0;
-    // KICK is testable too and cannot disturb the parked ball.
-    me.x=0; me.y=26; me.vx=me.vy=0;
-    window.__pads[0].buttons[0] = true;
-    for(let i=0;i<60;i++) M.step(w);
-    window.__pads[0].buttons[0] = false;
-    r.kickCannotMoveBall = w.ball.vx===0 && w.ball.vy===0;
+    // ...and so is KICK. Stand next to a ball, hold the button, and it goes.
+    {
+      const ball = (w.extraBalls||[]).find(x => x.lobbyBall) || w.ball;
+      ball.vx = 0; ball.vy = 0;
+      me.x = ball.x; me.y = ball.y - 26; me.vx = me.vy = 0;
+      window.__pads[0].buttons[0] = true;
+      let best = 0;
+      for(let i=0;i<60;i++){ M.step(w); best = Math.max(best, Math.hypot(ball.vx, ball.vy)); }
+      window.__pads[0].buttons[0] = false;
+      r.kickMovesTheBall = best > 1;
+      r.kickBest = +best.toFixed(2);
+    }
+    r.stillNothingScored = w.score[0] === 0 && w.score[1] === 0 && w.state === 'warmup';
     // No lobby without pads — a keyboard-only match still kicks straight off.
     M.sel.controllers='off'; M.applyDisplayMode(); M.startMatch();
     r.noPadsNoLobby = M.world.state === 'kickoff';
@@ -382,7 +396,7 @@ console.log(JSON.stringify(o,null,1));
 console.log('ERRORS:', allErrs.length?allErrs.slice(0,5):'none');
 const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWalkedOn','botsOnOwnHalf',
   'botsInTheMiddle','botsSettle','botsSwappedSides','backToOnePerSide','botsIdle',
-  'ballParked','stickMovesYou','kickCannotMoveBall','noPadsNoLobby',
+  'nothingScored','stickMovesYou','kickMovesTheBall','stillNothingScored','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',
   'unevenGetsABot','allOneSideStaysTogether','sixAllOnOneTeam','eightIsTheCeiling',
   'rosterSettles','soloIsAutoAssigned','soloKeepsItsSide','previewTellsTruth',

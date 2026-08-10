@@ -742,6 +742,32 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
     inside the canvas (the body is outside the touchline, so a centred label loses its last
     words — which are the side). `tests/dropin.mjs`.
+- **The warm-up ball is LIVE, and there is one per half plus one per person.**
+  `integrate(w, false, false)` in the warmup branch — it passed `true` and froze the
+  ball, which made the one control you most need to test the one control you could
+  not. Safe because `checkGoal` is gated on `w.state === 'play'`. `LOBBY.ballBase/
+  ballMax/ballSpread/ballRow`, `syncLobbyBalls` (called every step, so a pad waking up
+  mid-lobby brings a ball on), `lobbyBallSpot` (pure arithmetic — no PRNG at all).
+  ⚠️ Balls are ADDED and REMOVED, never repositioned: a ball somebody is dribbling
+  must not teleport home because a fourth player plugged in.
+  ⚠️ **A `ballOnly` wall on halfway** (`addLobbyWall`) keeps each half's balls on that
+  half while players still walk across freely — walking into a half is the entire
+  mechanism for picking a side, so a wall that held players would break the lobby.
+  ⚠️ **`clearLobbyProps` is called from `resetKickoff`, NOT `lobbyStart`** — that is
+  the one function that lays the pitch out for play and it is on every path into it,
+  so a wall across the middle of a live match cannot happen however warm-up ended.
+  `enterWarmup` runs *after* `resetKickoff` at `startMatch`, so they don't fight.
+  ⚠️ **KICK no longer starts the match** (`pollLobbyStart` is START/Select only). A was
+  bound to both jobs and did the wrong one — a player warming up pressed A to kick and
+  the lobby ended instead. Nobody is stranded: Select is still bound and
+  `#lobbyStartBtn` is on screen throughout. `tests/lobbyballs.mjs`.
+- **`nearestControlBall(w, p, ball)` — a player controls the NEAREST ball**, not
+  always `w.ball`. ⚠️ `handleBallControl` was only ever handed the primary ball, so
+  every extra was a thing you could bump and never kick; multiball hid it (an obstacle
+  reads like a ball you keep missing) and the warm-up balls made it obvious. ONE ball
+  per player per step, never a loop — `p.trap`/`p.kickUsed`/`p.chargeT` are
+  single-ball state, so kicking everything in range is a shotgun. The snail and
+  berries are excluded: they have their own handlers for reasons written above.
 - **Warm-up lobby:** `lobbyPlan(w)` is the **single source of truth** for who plays, on which
   side, and how many bots fill the gaps — `drawLobby` renders it and `lobbyStart` executes it,
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
@@ -917,13 +943,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   fetch is an HTTP directive and does not bypass a worker. `tests/swupdate.mjs` registers the real
   worker against a temp site, changes the file, and checks the settings route sees the new build.
 - **Goal camera:** on a goal the view pushes in to `goalZoom()` (a player dial; `GOALCAM.zoom` is only the default) on whoever last touched
-  the ball and eases back when the celebration ends. ⚠️ The default is a **5% push arriving in
-  0.10s** — six frames, so it lands as the ball crosses. It was 5.0× over 1.15s, which is two
-  mistakes at once: 5× is most of the pitch gone, and 1.15s of a 1.8s goal state is spent
-  travelling, so what read was the MOVE rather than the moment. The slider still goes to 8× for
-  anyone who wants the old behaviour, `goalZoomLabel()` says `+5%` below 1.5× (a "1.1×" label for
-  a 5% push is a rounding error presented as a setting), and `normalizeGoalCam()` folds a save
-  still holding exactly the old 500/115 to the new defaults. Render only — it moves `cam`, which no
+  the ball and eases back when the celebration ends. ⚠️ **THIRD tuning.** 5.0× over 1.15s was
+  two mistakes at once (5× is most of the pitch gone; 1.15s of a 1.8s goal state is spent
+  travelling, so what read was the MOVE rather than the moment); the correction to a 5% push
+  over-corrected into a setting nobody could see. The default is now **1.8× in 0.10s** — six
+  frames, so it lands as the ball crosses. ⚠️ **In and out are different numbers on purpose**:
+  `outSecs` 1.10s against `inSecs` 0.10s, and `inSecs` is a dial while `outSecs` is not, so
+  "fast in, slow out" holds however the dial is set. A camera that leaves as fast as it arrives
+  is a twitch. ⚠️ **The release LETS GO of its subject** — `resetKickoff` teleports every body
+  to its formation, so a camera still following the scorer drags the whole view across the pitch
+  mid-drift-out (measured at **704px**); it freezes on the last real position instead. Invisible
+  at 5%, a lurch at 1.8×. `goalZoomLabel()` says `+5%` below 1.5× (a "1.1×" label for
+  a 5% push is a rounding error presented as a setting), and `normalizeGoalCam()` folds
+  **both** superseded default pairs (`GOALCAM_WAS`: 500/115 and 105/10) to the new ones —
+  matched on the PAIR, because 105 beside a speed the player moved themselves is a deliberate
+  choice and folding it would overwrite it. Render only — it moves `cam`, which no
   physics, hit test or bot reads, and `tests/goalcam.mjs` proves the world is bit-identical
   with it running. ⚠️ Advanced in `advanceGoalCam()` next to `decayJuice()`, **never in a
   draw** (the trails rule); being step-locked also means the goal slow-mo stretches it.
