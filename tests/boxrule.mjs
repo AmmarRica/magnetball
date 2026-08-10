@@ -29,9 +29,9 @@ await p.waitForTimeout(800);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
 
-  const start = (boxRule, mode) => {
+  const start = (boxRule, mode, seed) => {
     M.sel.mode = mode || '4v4'; M.sel.kickoffRule='off'; M.sel.boxRule = boxRule;
-    M.setMatchSeed(3); M.startMatch();
+    M.setMatchSeed(seed == null ? 3 : seed); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2;
     return w;
   };
@@ -236,8 +236,15 @@ const r = await p.evaluate(async ()=>{
   // Bots get shoved by this the same way they get shoved by the kickoff line. What
   // matters is that matches still look like matches: goals still go in, and nobody
   // ends up vibrating on the edge of the box for three minutes.
-  const play = (rule) => {
-    const ww = start(rule); ww.players.forEach(q=>{ q.ctrl='bot'; });
+  // ⚠️ MEASUREMENT TRAP: this is a POOLED count over several seeds, and it has to be.
+  // On one pinned seed the number swings wildly — the same comparison read 15-vs-6,
+  // 18-vs-14, 6-vs-25, 10-vs-11 and 7-vs-51 across five seeds of the same build, so a
+  // margin tight enough to catch a real jam fires on seed luck alone and a margin loose
+  // enough to survive it catches nothing. Two hours of 4v4 is one sample, not a
+  // measurement. It failed exactly this way on an unrelated change to the goal posts,
+  // where the pooled figure showed sticking had gone DOWN by a factor of three.
+  const play = (rule, seed) => {
+    const ww = start(rule, null, seed); ww.players.forEach(q=>{ q.ctrl='bot'; });
     let stuck = 0;
     for (let i=0;i<60*120;i++){
       M.step(ww);
@@ -249,10 +256,17 @@ const r = await p.evaluate(async ()=>{
     }
     return { score: ww.score.slice(), goals: ww.score[0]+ww.score[1], stuck };
   };
-  o.botsOn  = play('on');
-  o.botsOff = play('off');
+  const pool = (rule) => {
+    const runs = [3,11,23].map(s => play(rule, s));
+    return { runs: runs.map(x=>x.stuck), goals: runs.reduce((a,x)=>a+x.goals,0),
+             stuck: runs.reduce((a,x)=>a+x.stuck,0), score: runs[0].score };
+  };
+  o.botsOn  = pool('on');
+  o.botsOff = pool('off');
   o.botsStillScore = o.botsOn.goals > 0;
-  o.botsNotStuck = o.botsOn.stuck <= o.botsOff.stuck + 6;
+  // Against the pooled baseline, plus a flat allowance so a quiet set of matches with
+  // the rule off can't make any figure at all look like a jam.
+  o.botsNotStuck = o.botsOn.stuck <= o.botsOff.stuck * 1.5 + 20;
 
   M.sel.boxRule='on'; M.sel.mode='1v1'; M.setMatchSeed(null);
   return o;
@@ -284,7 +298,7 @@ ok(r.offRunSinksDeeper, 'with the rule OFF the runner did not end up deeper than
 ok(r.clockResets, `the grace clock did not reset once the runner was clear (${r.graceSecs}s) — a second run in has to get its own free window`);
 ok(r.holderNeverOnAClock, 'the slot HOLDER was put on a grace clock, which only applies to bodies being pushed');
 ok(r.botsStillScore, `two minutes of bots with the rule on produced no goals: ${JSON.stringify(r.botsOn)}`);
-ok(r.botsNotStuck, `bots are jammed on the box edge: ${r.botsOn.stuck} stuck samples vs ${r.botsOff.stuck} with the rule off`);
+ok(r.botsNotStuck, `bots are jammed on the box edge: ${r.botsOn.stuck} stuck samples (${r.botsOn.runs}) vs ${r.botsOff.stuck} (${r.botsOff.runs}) with the rule off`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify(r, null, 1));

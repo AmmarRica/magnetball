@@ -216,8 +216,14 @@
     .hint.folded { display: none; }
     /* Lobby Start. Sits above the thumbstick band so it is never under a thumb that
        is busy steering, and centred so it reads as the one thing to press. */
+    /* ⚠️ `pointer-events: auto`, and its absence was the whole bug. `#hud` is
+       `pointer-events: none` so the pitch underneath stays steerable, and every other
+       control in there — the pause button, the scorebug, the replay bar — says `auto`
+       to opt back in. This one did not, so on a phone the lobby's START was drawn,
+       lit up and completely dead: every tap fell straight through to the canvas.
+       `elementFromPoint` at the button's own centre returned `game`. */
     #lobbyStartBtn { position: fixed; left: 50%; transform: translateX(-50%);
-      bottom: calc(70px + 78px); z-index: 9;
+      bottom: calc(70px + 78px); z-index: 9; pointer-events: auto;
       font-family: var(--pix); font-size: 15px; letter-spacing: 1px;
       color: var(--green); background: rgba(53,255,135,0.12);
       border: 2px solid var(--green); border-radius: 12px; padding: 13px 30px;
@@ -411,6 +417,10 @@
       padding: 13px 18px; font-family: var(--pix); font-size: 12px; cursor: pointer;
     }
     button.ghost:active { transform: translateY(1px); }
+    /* Two buttons under the names box. They wrap rather than shrink — on a narrow
+       phone "Fill example names" squeezed to three lines beside Clear. */
+    .namebtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .namebtns > button { flex: 1 1 auto; min-height: 44px; }
 
     .preview { display: flex; align-items: center; gap: 14px; padding: 14px 0 2px; }
     .pvBall { width: 58px; height: 58px; flex: 0 0 auto; }
@@ -1408,9 +1418,12 @@
       <div style="height:14px"></div>
       <label class="field">Player names <small id="namesInfo" style="color:var(--muted);font-weight:400"></small></label>
       <textarea id="seatNames" rows="4" spellcheck="false" autocomplete="off"
-                placeholder="One name per line, in seat order"></textarea>
+                placeholder="Ash&#10;Rio&#10;Kit&#10;Nova"></textarea>
       <div class="hint" style="text-align:left; margin-top:4px">Your side first (you, then your team-mates), then the opposition. Blank lines keep the default name. Applies to the next match.</div>
-      <button class="ghost" id="namesClear" style="margin-top:8px">Clear names</button>
+      <div class="namebtns">
+        <button class="ghost" id="namesExample" type="button">Fill example names</button>
+        <button class="ghost" id="namesClear">Clear names</button>
+      </div>
       </div>
 
       <div class="subpane" data-pane="rules">
@@ -2521,6 +2534,12 @@ const MODES = {
   'train':{ name:'Training',emoji:'🎯', icon:'target', per:0, twoP:false, train:true, desc:'Free practice' },
 };
 
+// Example seat names, in the order the box wants them: your side first, then the
+// opposition. Twelve, because the warm-up lobby can field six a side on a 4v4.
+// ⚠️ All within the 12-character limit `seatNameList()` slices to — an example that
+// gets truncated is an example of the wrong thing.
+const EXAMPLE_NAMES = ['Ash','Rio','Kit','Nova','Wren','Bex','Juno','Sol','Pike','Vale','Mira','Ozzy'];
+
 // The snail is KICKABLE, and still heavy. It does not go through handleBallControl —
 // that path traps and carries, and dribbling the objective onto the goal line would
 // be the whole mode in one move. It gets its own shove instead: the same charge, the
@@ -2844,7 +2863,10 @@ const GOAL_BOX_A = 0.34;
 const CENTER_R = 58;
 const PLAYER = { r:15, invMass:0.5, bCoef:0.45, damp:0.905, accel:0.40, kick:5.5, kickRange:14 };
 const BALL   = { r:10, invMass:1.0, bCoef:0.55, damp:0.990 };
-const POST   = { r:8,  invMass:0.0, bCoef:0.55 };
+// ⚠️ Halved from 8. A post is a circle the ball bounces off, and at r=8 it read as a
+// bollard rather than a post — it also swallowed shots that were plainly inside the
+// frame. Physics and drawing both take it from here, so they cannot disagree.
+const POST   = { r:4,  invMass:0.0, bCoef:0.55 };
 
 // ---------- State
 let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // controller-remap capture state
@@ -2875,7 +2897,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0705AM';
+const VERSION = '20260810.1050AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2891,6 +2913,17 @@ const VERSION = '20260810.0705AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260810.1050AM', title: 'The warm-up Start button works on a phone',
+    added: [
+      'A “Fill example names” button under Player names, so you can see the order the box wants and type over it.',
+      'On a computer, the install button now says so — it offered to “install on phone” in front of a laptop.',
+    ],
+    changed: [
+      'Ball magnet reads 0 to 10 in halves instead of 0 to 100 in fives. Same setting, a number you can aim at.',
+      'Goal posts are half the size. The old ones swallowed shots that were plainly inside the frame.',
+    ],
+    fixed: 'The Start button in the warm-up lobby did nothing when tapped on a phone.' },
+
   { v: '20260810.0705AM', title: 'Replays you can keep',
     added: [
       'Replays — save a match from the replay bar or the result screen, then watch it back from the new Replays section in the menu.',
@@ -2931,6 +2964,10 @@ const CHANGELOG = [
     ],
     fixed: 'A handful of smaller fixes.' },
 ];
+// ⚠️ The magnet slider is stored 0–100 in fives and SHOWN 0–10 in halves. Twenty-one
+// stops either way, so nothing about the save, the presets or the physics changes — but
+// "45" told a player nothing, while "4.5" is a number you can aim at.
+function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
@@ -6494,6 +6531,19 @@ if (namesEl){
   namesEl.oninput = () => { sel.names = namesEl.value; saveSel(); showSeats(); };
   const clr = $('namesClear');
   if (clr) clr.onclick = () => { sel.names=''; namesEl.value=''; saveSel(); showSeats(); };
+  // ⚠️ The placeholder alone was not enough. A four-line box with grey ghost text
+  // reads as "type something here" and says nothing about the ORDER — that your side
+  // comes first and line 1 is you. Filling it with real, editable lines makes the
+  // shape of the answer obvious, and every one of them is a name you overwrite.
+  // Exactly as many lines as the current mode has seats, so there is no dead text
+  // below the last one that plays.
+  const ex = $('namesExample');
+  if (ex) ex.onclick = () => {
+    const m = MODES[sel.mode] || {};
+    const seats = Math.max(1, Math.min(EXAMPLE_NAMES.length, m.twoP ? 2 : (m.per || 1) * 2));
+    namesEl.value = EXAMPLE_NAMES.slice(0, seats).join('\n');
+    sel.names = namesEl.value; saveSel(); showSeats();
+  };
 }
 
 updatePreview();
@@ -7029,13 +7079,21 @@ window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); });
 // Chrome that has already installed the app, and a dead button in a menu is worse
 // than no button. It hides itself again the moment the install goes through.
 let installEvt = null;
+function installWord(){
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod|Android/i.test(ua)) return 'Install on phone';
+  return 'Install on this computer';
+}
 function syncInstallBtn(){
   const b = $('installBtn'); if (!b) return;
   const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
   b.style.display = (installEvt && !standalone) ? '' : 'none';
   if (!b.dataset.built){
     b.dataset.built = '1';
-    b.innerHTML = (iconSvg('install') || '') + '<span>Install on phone</span>';
+    // ⚠️ Named for the device you are actually on. `beforeinstallprompt` fires on
+    // desktop Chrome and Edge too, so the button was already offered there — it just
+    // said "Install on phone", which reads as "not for you" in front of a laptop.
+    b.innerHTML = (iconSvg('install') || '') + '<span>' + installWord() + '</span>';
     b.onclick = async () => {
       if (!installEvt) return;
       const e = installEvt; installEvt = null;      // a prompt may only be used once
@@ -7415,7 +7473,7 @@ const FEEL_SLIDERS = [
   {g:'ball', label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
   {g:'ball', label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
   {g:'ball', label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
-  {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:v=>''+v},
+  {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
   {g:'ball', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
@@ -7538,7 +7596,7 @@ function telemetryRows(){
     `you   ${you?Math.hypot(you.vx,you.vy).toFixed(2):'—'}`,
     `accel ${f.accel!=null?f.accel:40}   pdamp ${f.pdamp!=null?f.pdamp:905}`,
     `kick  ${f.kick!=null?f.kick:55}   bcap ${f.ballcap!=null?f.ballcap:32}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
-    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':'trap '+((w.trapMax||TRAP.max).toFixed(2)+'s')}${sel.oneHand?'   1-hand':''}`,
+    `magnet ${magnetLabel(sel.magnet||0)}   ${sel.trapOff?'one-touch':'trap '+((w.trapMax||TRAP.max).toFixed(2)+'s')}${sel.oneHand?'   1-hand':''}`,
     `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
   ];
 }
@@ -13555,7 +13613,7 @@ function drawDebug(w){
     `you   ${pspd.toFixed(2)}`,
     `accel ${f.accel!=null?f.accel:40}   pdamp ${f.pdamp!=null?f.pdamp:905}`,
     `bcap  ${f.ballcap!=null?f.ballcap:32}   kick ${f.kick!=null?f.kick:55}   bdamp ${f.bdamp!=null?f.bdamp:990}`,
-    `magnet ${sel.magnet||0}   ${sel.trapOff?'one-touch':`trap ${(w.trapMax||TRAP.max).toFixed(2)}s`}   sens ${(sel.sens||1).toFixed(2)}${sel.oneHand?'   1-hand':''}`,
+    `magnet ${magnetLabel(sel.magnet||0)}   ${sel.trapOff?'one-touch':`trap ${(w.trapMax||TRAP.max).toFixed(2)}s`}   sens ${(sel.sens||1).toFixed(2)}${sel.oneHand?'   1-hand':''}`,
     `${w.mode?w.mode.name:'—'} · ${w.field?w.field.name:'—'} · ${w.state}`,
     // ⚠️ LAST row, so it lands directly above the version tag — the two together are what you
     // quote when reporting something, so they belong next to each other rather than at

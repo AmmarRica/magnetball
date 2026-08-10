@@ -1412,6 +1412,43 @@ two and `tests/cocktailnopad.mjs` the third.)_
 - [x] Persistence — theme, player name, and all settings already save to `localStorage`
   (`magnetball.sel` / `magnetball.profile`) and restore on load. **Verified working.**
 
+## 🎥 Goal camera, take three — the answers are already in
+Reported twice as "still bad". Interviewed rather than guessed at, so the spec below is
+what was asked for and not a fourth tuning pass:
+- [ ] **Subject: the scorer.** Same as today — the camera follows whoever last touched the
+  ball. Confirmed, so `goalCam.p` does not change.
+- [ ] **Motion: fast push, SLOW release.** The push is already six frames; the way out is
+  not, and the way out is the half of it that currently reads as a lurch. `inSecs` and
+  `outSecs` want to be genuinely different numbers, not one dial mirrored.
+- [ ] **Amount: strong, ~1.8×.** The shipped default is a 5% push, which was a correction
+  for a 5.0× that swallowed the pitch — and it over-corrected into doing nothing visible.
+  1.8× is the answer to both.
+- [ ] ⚠️ Whatever lands, `normalizeGoalCam()` folds the old saved defaults forward, and
+  `tests/goalcam.mjs` still has to show the world bit-identical with the camera running —
+  it is render-only and that is not negotiable.
+
+## 🧾 Asked for, not yet built (2026-08-10 list)
+- [ ] **Multiple photos** — up to 100 saved faceplate photos, pick one to wear, and a delete
+  flow that arms first (press Delete → tick the ones to go → confirm). ⚠️ `localStorage` is
+  ~5MB and already holds the save; 100 × 128² photos belongs in IndexedDB alongside the
+  replay library, not beside it.
+- [ ] **Continents kick off the game** — first launch is on Grass with country flags, one
+  continent against another, every player on a side from the same continent and never a
+  continent against itself.
+- [ ] **Warm-up balls** — a ball at each half's centre, one more per player who joins, each
+  confined to its own half so the lobby does not turn into a scramble across the line.
+- [ ] **Per-name local stats** — track a player's record against the name they are using, and
+  start a fresh record when the name changes.
+- [ ] **Break-the-targets drill** — 60 seconds to score as many balls as you can into either
+  goal, balls respawning at one of five fixed spots. A ball-control teacher, Smash Bros style.
+- [ ] **Trapping turns the ball round you** — a trapped ball rotates about the player toward
+  where you are aiming (6 o'clock swings to 12 to pass upfield), and another player can kick
+  it off you while you hold it. ⚠️ The second half is the interesting one: `handleBallControl`
+  currently owns a trapped ball outright.
+- [ ] **Cocktail calibration by touch** — found while fixing the lobby Start button. On a
+  cocktail seat with no controller, Start calls `beginCalibration`, which has no touch path,
+  so the player is stuck in the lobby with a button that does nothing they can finish.
+
 ## 📋 Next — near-term, self-contained
 - [x] **Reset scope option** — "Reset settings" now offers an opt-in second confirm to also reset
   the player name/appearance (colour, flag/animal, eyes, cap). Default still keeps your look;

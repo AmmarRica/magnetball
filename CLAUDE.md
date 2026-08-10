@@ -96,6 +96,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **Goal posts are `POST.r` 4**, halved from 8. A post is a circle the ball bounces off,
+  and at 8 it read as a bollard rather than a post — it also swallowed shots that were
+  plainly inside the frame. Physics (`w.posts`) and the draw both take the radius from
+  there, so they cannot disagree; `dCone`'s separate `r:9` is a drill cone, not a post.
+- **The magnet slider is stored 0–100 in fives and SHOWN 0–10 in halves** (`magnetLabel`).
+  Twenty-one stops either way, so the save, the presets and the physics are untouched —
+  but "45" told a player nothing and "4.5" is a number you can aim at. Both debug
+  readouts go through the same helper.
 - **Goal box:** the net pocket mirrored onto the pitch in front of each goal line — same
   mouth width, same depth — drawn OPEN (three sides; the goal line closes it) at
   `GOAL_BOX_A` alpha so the goal line stays the loudest mark down there.
@@ -630,6 +638,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the ball **independently**: "two frames look different" passed with the players pinned at
   the origin, because the ball alone moved.
 - **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
+  ⚠️ **`pointer-events: auto`, and its absence was a whole bug on its own.** `#hud` is
+  `pointer-events: none` so the pitch underneath stays steerable, and every control in
+  there — pause, the scorebug, the replay bar — opts back in with `auto`. This one did
+  not, so on a phone the lobby's START was drawn, lit up and completely dead: every tap
+  fell through to the canvas and `elementFromPoint` at the button's own centre returned
+  `game`. `tests/touchstart.mjs` had pressed it with `.click()`, which dispatches at the
+  node and does no hit testing, so nineteen assertions passed over an untappable button;
+  it now asks the document what is at that point.
   ⚠️ Start used to be bound to a gamepad button or the Enter key and nothing else, so in
   cocktail — which forces the lobby whatever is connected — a touch-only player could not
   leave it: the idle auto-start resets on movement, and an engaged player sat there for 90
