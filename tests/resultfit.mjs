@@ -62,6 +62,16 @@ async function openResult(w, h, mobile){
     w2.score = [2, 6];
     M.endMatch(w2); M.finishMatch(w2);
   }, TALLY);
+  // ⚠️ MEASUREMENT TRAP: wait for the SLAM to finish before measuring anything.
+  // The result title runs `@keyframes slam`, which starts at `scale(2.6)` — and
+  // `getBoundingClientRect()` reports the TRANSFORMED box, so mid-animation a title
+  // laid out correctly at y=24 measures y=-16 and the "nothing above the viewport"
+  // check fails on a screen with nothing wrong with it. The desktop case caught it
+  // because a wide layout finishes building sooner and was still sampled inside the
+  // half-second; the phone case passed on timing luck alone.
+  await p.evaluate(() => Promise.all(
+    document.getElementById('overlay').getAnimations({ subtree:true }).map(a => a.finished.catch(()=>{}))
+  ));
   await p.waitForTimeout(120);
   return p;
 }

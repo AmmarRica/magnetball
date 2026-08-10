@@ -49,6 +49,22 @@ const r = await p.evaluate(()=>{
   M.render();
   o.buttonShows = shown();
   o.buttonLabel = btn() ? btn().textContent : null;
+  // ⚠️ MEASUREMENT TRAP, and it let a real bug through for four builds: every check
+  // below presses the button with `btn().click()`, which dispatches straight at the
+  // node and does no hit testing at all — so a control that is drawn, lit up and
+  // completely untappable passes all of them. `#hud` is `pointer-events: none` so the
+  // pitch underneath stays steerable, and `#lobbyStartBtn` forgot to opt back in with
+  // `auto`; on a phone every tap fell through to the canvas. Ask the DOCUMENT what is
+  // at the button's own centre instead.
+  {
+    const el = btn(), b2 = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(b2.left + b2.width/2, b2.top + b2.height/2);
+    o.hitCentre = hit ? (hit.id || hit.tagName) : null;
+    o.reallyTappable = !!hit && (hit === el || el.contains(hit));
+    o.onScreen = b2.width > 0 && b2.height > 0 &&
+                 b2.top >= 0 && b2.bottom <= innerHeight && b2.left >= 0 && b2.right <= innerWidth;
+    o.bigEnough = b2.width >= 44 && b2.height >= 44;   // a touch target, on a touch-only path
+  }
   // Side selection already works by walking: the touch stick moves you, and
   // lobbyPlan reads where you stand. Prove the plan follows a touch player.
   const me = M.lobbyHumans(w)[0];
@@ -112,6 +128,9 @@ ok(r.noButtonWhenNoLobby, 'the Start button shows when there is no lobby');
 ok(r.optInEntersLobby, 'opting in did not give a touch player a warm-up lobby');
 ok(r.buttonShows, 'no on-screen Start in a touch lobby — this is the whole defect');
 ok(/START/.test(r.buttonLabel||''), `the Start control reads "${r.buttonLabel}"`);
+ok(r.reallyTappable, `a tap at the Start button's own centre lands on <${r.hitCentre}> instead — the control is drawn but dead`);
+ok(r.onScreen, 'the Start button is not fully inside the viewport');
+ok(r.bigEnough, 'the Start button is under 44px — the one control a touch-only player must hit');
 ok(r.touchPicksASide, `a touch player walking into a half was not put on that side: preview ${r.sidePreview}`);
 ok(r.botsFillSeats, 'bots do not fill the empty seats for a lone touch player');
 ok(r.startedByTouch && r.lobbyCleared, 'pressing the on-screen Start did not kick off');
