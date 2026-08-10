@@ -93,41 +93,51 @@ const r = await p.evaluate(()=>{
   o.cocktailStillWarmsUp = w2.state === 'warmup';
   M.render();
   o.cocktailButtonShows = shown();
-  // An uncalibrated cocktail seat is asked to set up first, exactly as the pad path
-  // does — starting a match you cannot steer is not a fix.
-  o.cocktailAsksSetupFirst = /SET UP/.test(btn().textContent);
-  btn().click();
-  o.cocktailBeginsCalibration = !!(w2.lobby && w2.lobby.calib);
-  o.cocktailDidNotStart = w2.state === 'warmup';
-  // The button gets out of the way while calibrating.
-  M.render();
-  o.hiddenDuringCalibration = !shown();
 
-  // ---- ...and a TOUCH seat can FINISH that calibration ---------------------
-  // ⚠️ This was reported as a dead end — "a cocktail seat with no controller calls
-  // beginCalibration, which has no touch path, so the player is stuck" — and it is not
-  // true. `padFor` maps `human1` to `pads.p1`, which is the on-screen thumbstick, so
-  // holding a direction on the touch stick registers exactly as a pad's would. The
-  // claim was made from reading `beginCalibration` and never driving it, so it is
-  // pinned here rather than argued about: removing calibration on touch would have
-  // deleted the one thing that makes cocktail work, since players sitting on different
-  // edges of a shared screen genuinely need different rotations.
-  const hold = (dx, dy, n) => { for (let i=0;i<n;i++){ M.pads.p1.dx=dx; M.pads.p1.dy=dy; M.step(w2); } };
-  o.calMag = LOBBY_HOLDMIN_OK();
-  hold(0, -1, 75);                          // "UP", held past LOBBY.holdTicks
-  o.calStepAdvanced = !!(w2.lobby && w2.lobby.calib) && w2.lobby.calib.step === 1;
-  hold(1, 0, 75);                           // "RIGHT"
-  M.pads.p1.dx = 0; M.pads.p1.dy = 0;
-  o.calFinishedByTouch = !w2.lobby.calib && !!M.lobbyHost(w2).calibrated;
-  M.render();
-  o.startsAfterCalibration = shown() && /START/.test(btn().textContent);
+  // ---- ...and a TOUCH seat does NOT calibrate at all -----------------------
+  // ⚠️ THIS ASSERTION WAS THE OTHER WAY ROUND for one build, and the reason is worth
+  // keeping: touch calibration was defended on the grounds that "players sitting on
+  // different edges of a shared screen genuinely need different rotations". That is
+  // true, and it is true of the CONTROLLER seats it was being used to justify a touch
+  // path for. Cocktail multiplayer is controllers; a touch seat here is one player,
+  // looking at the screen their own thumb zone is drawn on, with nothing to discover.
+  // (The one two-touch-player mode, `local`, is a PHONE split — `zoneForTouch` rotates
+  // player two by a fixed 180° and never reads `sel.cocktailSides`.) So a lone touch
+  // player was being made to hold a stick in two directions, for a second each, to
+  // establish a rotation that was never in question.
+  o.touchNeedsNoCalibration = !M.needsCalibration(M.lobbyHost(w2));
+  o.touchStartsStraightAway = /START/.test(btn().textContent);
   btn().click();
-  o.cocktailStartedAfterCal = w2.state !== 'warmup';
-  function LOBBY_HOLDMIN_OK(){
-    // The touch stick normalises to at most 1 (`pad.dx = dx/R` after clamping to R),
-    // so the threshold has to be reachable by a thumb. A holdMin above 1 would be a
-    // calibration nobody on a phone could ever satisfy.
-    return M.LOBBY.holdMin <= 1;
+  o.cocktailStartedByTouch = w2.state !== 'warmup';
+  o.noCalibrationRan = !(w2.lobby && w2.lobby.calib);
+  // ...and their side is still whatever Display → Configure player sides says, so it
+  // is set rather than merely defaulted-and-unreachable.
+  {
+    M.sel.cocktailSides = { 1: 'left' };
+    M.setMatchSeed(3); M.startMatch();
+    const w4 = M.world;
+    const me4 = w4.players.find(q => q.ctrl === 'human1');
+    o.seatSideHonoured = me4.rotQuarter === M.sideQuarter('left');
+    M.sel.cocktailSides = {};
+  }
+
+  // ---- ...while a PAD seat still calibrates --------------------------------
+  // ⚠️ The other half, and without it "nobody calibrates" passes everything above.
+  // Driven with a fake gamepad, because that is the seat the flow exists for.
+  {
+    window.__pads = [{ id:'test', mapping:'standard', connected:true,
+      axes:[0,0,0,0], buttons:Array.from({length:16},()=>({pressed:false,value:0})) }];
+    navigator.getGamepads = () => window.__pads;
+    M.sel.controllers = 'on'; M.sel.display = 'cocktail'; M.applyDisplayMode();
+    M.setMatchSeed(3); M.startMatch();
+    const w5 = M.world;
+    const pad = M.lobbyHumans(w5).find(q => q.ctrl === 'gamepad');
+    o.padSeatExists = !!pad;
+    o.padNeedsCalibration = !!pad && M.needsCalibration(pad);
+    M.render();
+    o.padAsksSetup = /SET UP/.test(btn().textContent);
+    navigator.getGamepads = () => [];
+    M.sel.controllers = 'off'; M.applyDisplayMode();
   }
 
   // ---- ...and the old blockage is genuinely gone ---------------------------
@@ -166,14 +176,14 @@ ok(r.keptItsSide, 'the touch player did not keep the side they walked to');
 ok(r.buttonHidesAfterStart, 'the Start button stayed on screen during the match');
 ok(r.cocktailStillWarmsUp, 'cocktail no longer warms up');
 ok(r.cocktailButtonShows, 'cocktail — the layout where this was a HARD block — still has no touch Start');
-ok(r.cocktailAsksSetupFirst, `cocktail should calibrate before starting; the control reads "${r.buttonLabel}"`);
-ok(r.cocktailBeginsCalibration && r.cocktailDidNotStart, 'cocktail started a match before the seat knew which way is up');
-ok(r.hiddenDuringCalibration, 'the Start button sat on top of the calibration prompt');
-ok(r.calMag, 'LOBBY.holdMin is above 1 — the touch stick tops out at 1, so no thumb could ever satisfy it');
-ok(r.calStepAdvanced, 'holding UP on the TOUCH stick did not advance cocktail calibration');
-ok(r.calFinishedByTouch, 'a cocktail seat could not finish calibration by touch — this is the reported dead end, and it must stay fixed');
-ok(r.startsAfterCalibration, 'after calibrating by touch the button did not go back to START');
-ok(r.cocktailStartedAfterCal, 'a calibrated cocktail touch seat still could not start the match');
+ok(r.touchNeedsNoCalibration, 'a TOUCH seat in cocktail is still being asked to calibrate — there is one touch player here and nothing for them to discover');
+ok(r.touchStartsStraightAway, 'the button still says SET UP for a touch-only cocktail seat');
+ok(r.cocktailStartedByTouch, 'a touch-only cocktail seat could not start the match');
+ok(r.noCalibrationRan, 'a calibration was started for a touch seat anyway');
+ok(r.seatSideHonoured, 'a touch seat ignored the side set in Display -> Configure player sides, which is the manual route that makes skipping calibration safe');
+ok(r.padSeatExists, 'the fixture never produced a gamepad seat, so the half below measures nothing');
+ok(r.padNeedsCalibration, 'a PAD seat in cocktail no longer calibrates — that is the case the whole flow exists for');
+ok(r.padAsksSetup, 'the button did not ask a pad seat to set up first');
 ok(r.stillStuckWithoutPressing, 'the idle auto-start now fires while the player is moving — that is a different change from the one intended');
 ok(r.escapeHatchOnScreen && r.escaped, 'an engaged touch player still cannot leave the lobby');
 ok(errs.length===0, 'console errors: '+errs.join(' | '));

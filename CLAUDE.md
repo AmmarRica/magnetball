@@ -710,6 +710,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Its render check measures **coverage over a known fill**, and varies the players and
   the ball **independently**: "two frames look different" passed with the players pinned at
   the origin, because the ball alone moved.
+- **Cocktail calibration is for CONTROLLER seats** — `needsCalibration(p)`, the one
+  predicate the on-screen button, the pad poll and the button's label all read.
+  Cocktail is a tabletop layout where people sit on different edges, and what has to be
+  discovered is which way "up" is for a **stick held at some angle to the screen**.
+  ⚠️ A touch seat has nothing to discover: the thumb zone is drawn on the screen the
+  player is looking at, and **cocktail multiplayer is controllers**, so there is only
+  ever one touch player here. The one two-touch-player mode, `local`, is a **phone**
+  split — `zoneForTouch` rotates player two by a fixed 180° and never reads
+  `sel.cocktailSides` at all.
+  ⚠️ This **reverses** an earlier call made on a wrong premise: touch calibration was
+  kept because "players on different edges need different rotations", which is true and
+  is true *of the controller seats* it was being used to justify a touch path for. A
+  lone touch player was made to hold a stick in two directions for a second each to
+  establish a rotation that was never in question. Their side comes from `seatSide()`,
+  which **Display → Configure player sides** sets by hand, so nothing is unreachable —
+  `tests/touchstart.mjs` measures that fallback as well as both halves of the gate.
+  Keyboard is not a case: `pollKeys` returns immediately in cocktail ("pads only").
 - **Warm-up lobby Start is reachable by TOUCH** (`#lobbyStartBtn`, `onLobbyStartPress`).
   ⚠️ **`pointer-events: auto`, and its absence was a whole bug on its own.** `#hud` is
   `pointer-events: none` so the pitch underneath stays steerable, and every control in
