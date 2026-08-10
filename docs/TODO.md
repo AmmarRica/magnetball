@@ -1412,18 +1412,27 @@ two and `tests/cocktailnopad.mjs` the third.)_
 - [x] Persistence — theme, player name, and all settings already save to `localStorage`
   (`magnetball.sel` / `magnetball.profile`) and restore on load. **Verified working.**
 
-## 🎥 Goal camera, take three — the answers are already in
+## 🎥 Goal camera, take three — done
 Reported twice as "still bad". Interviewed rather than guessed at, so the spec below is
 what was asked for and not a fourth tuning pass:
-- [ ] **Subject: the scorer.** Same as today — the camera follows whoever last touched the
+- [x] **Subject: the scorer.** Same as today — the camera follows whoever last touched the
   ball. Confirmed, so `goalCam.p` does not change.
-- [ ] **Motion: fast push, SLOW release.** The push is already six frames; the way out is
+- [x] **Motion: fast push, SLOW release.** `outSecs` 1.10s against `inSecs` 0.10s — eleven
+  times, and asserted as a RATIO so a retune can move both without the check going quiet. The push is already six frames; the way out is
   not, and the way out is the half of it that currently reads as a lurch. `inSecs` and
   `outSecs` want to be genuinely different numbers, not one dial mirrored.
-- [ ] **Amount: strong, ~1.8×.** The shipped default is a 5% push, which was a correction
+- [x] **Amount: strong, ~1.8×.** The shipped default is a 5% push, which was a correction
   for a 5.0× that swallowed the pitch — and it over-corrected into doing nothing visible.
   1.8× is the answer to both.
-- [ ] ⚠️ Whatever lands, `normalizeGoalCam()` folds the old saved defaults forward, and
+- [x] ⚠️ **TWO old default pairs to fold now**, not one — 500/115 and 105/10 — and the
+  match is on the PAIR, because 105 beside a speed the player moved themselves is a
+  deliberate 5% push and folding it would overwrite a choice.
+- [x] ⚠️ **Found doing it: the release DRAGGED the view across the pitch.** `resetKickoff`
+  teleports every body to its formation and the camera follows its subject's live
+  position, so the scorer hauled the whole view with them mid-drift-out — measured at
+  **704px**. Invisible at a 5% push; a lurch at 1.8× over 1.1s, and it would have read as
+  the retune being wrong. The camera now lets go of the player and holds the spot.
+- [x] ⚠️ Whatever lands, `normalizeGoalCam()` folds the old saved defaults forward, and
   `tests/goalcam.mjs` still has to show the world bit-identical with the camera running —
   it is render-only and that is not negotiable.
 
@@ -1435,8 +1444,18 @@ what was asked for and not a fourth tuning pass:
 - [ ] **Continents kick off the game** — first launch is on Grass with country flags, one
   continent against another, every player on a side from the same continent and never a
   continent against itself.
-- [ ] **Warm-up balls** — a ball at each half's centre, one more per player who joins, each
-  confined to its own half so the lobby does not turn into a scramble across the line.
+- [x] **Warm-up balls** — a ball at each half's centre, one more per player who joins, each
+  confined to its own half by a `ballOnly` wall on halfway.
+  - [x] ⚠️ **The real finding: the lobby's ball was FROZEN** (`integrate(w, true, ...)`), so
+    the one control you most need to test before a match was the one you could not. Live now;
+    `checkGoal` is gated on `state === 'play'`, so nothing in the lobby can reach the score.
+  - [x] ⚠️ **Second finding: extras were never kickable.** `handleBallControl` was only ever
+    handed `w.ball`, so every multiball extra was a thing you could bump and not kick.
+    `nearestControlBall` — one ball per player per step, never a loop, because trap/kickUsed/
+    charge are single-ball state.
+  - [x] ⚠️ **Third: KICK was bound to Start in the lobby**, so pressing A to test a kick ended
+    the warm-up. Reverses an earlier deliberate decision, for a reason that did not exist when
+    it was made — the ball was frozen then, so A had no other job in there.
 - [ ] **Per-name local stats** — track a player's record against the name they are using, and
   start a fresh record when the name changes.
 - [ ] **Break-the-targets drill** — 60 seconds to score as many balls as you can into either
@@ -1445,9 +1464,14 @@ what was asked for and not a fourth tuning pass:
   where you are aiming (6 o'clock swings to 12 to pass upfield), and another player can kick
   it off you while you hold it. ⚠️ The second half is the interesting one: `handleBallControl`
   currently owns a trapped ball outright.
-- [ ] **Cocktail calibration by touch** — found while fixing the lobby Start button. On a
-  cocktail seat with no controller, Start calls `beginCalibration`, which has no touch path,
-  so the player is stuck in the lobby with a button that does nothing they can finish.
+- [-] **Cocktail calibration by touch** — reported here as a dead end and **it is not one**.
+  The claim came from reading `beginCalibration` without driving it: `padFor` maps `human1`
+  to `pads.p1`, which *is* the on-screen thumbstick, so holding a direction on the touch
+  stick registers exactly as a pad's would. Driven end to end it completes both steps and
+  the button goes back to START. Authorisation to "skip calibration on touch" was given on
+  the strength of the wrong premise, so it was **not** acted on — removing it would delete
+  the one thing that makes cocktail work, since players on different edges of a shared
+  screen genuinely need different rotations. Pinned in `tests/touchstart.mjs` instead.
 
 ## 📋 Next — near-term, self-contained
 - [x] **Reset scope option** — "Reset settings" now offers an opt-in second confirm to also reset

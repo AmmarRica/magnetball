@@ -110,6 +110,15 @@ const r = await p.evaluate(async ()=>{
   M.replay.active = realReplay;
 
   // ---- effects off means no camera move at all -----------------------------
+  // ⚠️ RESET FIRST, and the absence of this was a latent false pass. The block above
+  // leaves the camera pushed in and easing out, and `goalCamStart` bailing on
+  // `sel.juice` cannot undo a push that is already live — so this block was measuring
+  // the PREVIOUS block's camera and calling it a juice-off failure. It happened to
+  // pass only because 90 steps used to be long enough to drain `t` at the old
+  // `outSecs` of 0.5s; the release is 1.1s now, `t` was still 0.09 at the end, and the
+  // assertion fired on a build with nothing wrong with it. A test that depends on one
+  // constant's value to isolate the next case is not isolating anything.
+  M.goalCamReset();
   M.sel.juice = false;
   w = start();          // start() leaves sel.juice alone, so this stays off
   w.ball.lastKicker = w.players[0];
@@ -137,9 +146,14 @@ const r = await p.evaluate(async ()=>{
   o.simSample = on.slice(0, 50);
 
   // ---- the two dials actually drive it -------------------------------------
+  // ⚠️ `null` for either dial means "leave it at the shipped default" — and it has to
+  // go through `defaultSel()` rather than a number typed in here, or every retune of
+  // GOALCAM leaves this suite quietly restoring a value that is no longer the default.
   const dial = (zoomPct, spdPct) => {
     const z=document.getElementById('goalZoom'), sp=document.getElementById('goalZoomSpd');
-    z.value = zoomPct; z.oninput(); sp.value = spdPct; sp.oninput();
+    const d = M.defaultSel();
+    z.value = zoomPct == null ? d.goalZoom : zoomPct; z.oninput();
+    sp.value = spdPct == null ? d.goalZoomSpd : spdPct; sp.oninput();
   };
   o.slidersExist = !!document.getElementById('goalZoom') && !!document.getElementById('goalZoomSpd');
   dial(250, 40);
@@ -172,9 +186,61 @@ const r = await p.evaluate(async ()=>{
   M.sel.goalZoom = 99999; M.sel.goalZoomSpd = -5;
   o.clamped = [M.goalZoom(), M.goalZoomSecs()];
   o.clampsWildValues = M.goalZoom() === M.GOALCAM.zoomMax && M.goalZoomSecs() === M.GOALCAM.spdMin;
-  dial(105, 10);            // back to the shipped defaults
+  dial(null, null);         // back to the shipped defaults, whatever they currently are
 
-  M.goalCamReset(); M.setMatchSeed(null);
+  // ---- FAST IN, SLOW OUT — the asymmetry IS the feature --------------------
+  // ⚠️ Asserted as a RATIO against the two constants rather than as two magic numbers,
+  // so a retune can move both and this still means something. A camera that leaves as
+  // fast as it arrives reads as a twitch; the whole point of the third tuning was that
+  // it snaps in and drifts out. And `inSecs` is a dial while `outSecs` is not, so the
+  // relationship has to hold with the dial at BOTH ends of its range.
+  o.inOutRatio = +(M.GOALCAM.outSecs / M.GOALCAM.inSecs).toFixed(2);
+  o.outIsSlower = M.GOALCAM.outSecs > M.GOALCAM.inSecs * 3;
+  {
+    const secsOut = M.GOALCAM.outSecs;
+    dial(null, 5);   const fastest = M.goalZoomSecs();      // dial pinned at its quickest
+    dial(null, 300); const slowest = M.goalZoomSecs();      // ...and its slowest
+    dial(null, null);
+    o.dialRange = [fastest, slowest, secsOut];
+    // The dial's fastest setting must still be faster than the release; at its slowest
+    // the player has deliberately asked for a slow push, and that is theirs to have.
+    o.outSlowerThanFastestDial = secsOut > fastest;
+  }
+  // ⚠️ ...and it must actually be visible by DEFAULT, which is the thing that was
+  // wrong: the previous default was a 5% push, i.e. a setting nobody could see.
+  o.defaultZoom = M.goalZoom();
+  o.defaultIsVisible = M.goalZoom() >= 1.4;
+
+  // ---- the release must not DRAG the view across the pitch -----------------
+  // ⚠️ `resetKickoff` teleports every body to its kickoff formation, and the camera
+  // follows its subject's live position — so a scorer standing in the net one frame and
+  // on the halfway line the next hauls the whole view with them, mid-drift-out. At a 5%
+  // push that shift was invisible; at 1.8x over 1.1s it is a lurch, and it would read as
+  // the retune being wrong rather than as a separate bug. The camera lets go of the
+  // player when the push starts coming out and holds the spot instead.
+  {
+    M.goalCamReset(); M.sel.juice = true;
+    const w4 = start();
+    const scorer = w4.players[0];
+    w4.ball.lastKicker = scorer;
+    M.scoreGoal(w4, 0);
+    for (let i=0;i<20;i++){ M.step(w4); M.advanceGoalCam(w4); }
+    M.computeCam(); const heldOx = M.cam.ox, heldOy = M.cam.oy;
+    o.followsWhilePushed = M.goalCam.p === scorer;
+    // Now leave the goal state and TELEPORT the scorer the length of the pitch — the
+    // worst case `resetKickoff` can produce, done explicitly so the check does not
+    // depend on where that seed's formation happens to put them.
+    w4.state = 'kickoff';
+    M.advanceGoalCam(w4);                       // one step: this is where it lets go
+    o.dropsTheSubject = M.goalCam.p === null;
+    scorer.x = -w4.bounds.halfW * 0.9; scorer.y = -w4.bounds.halfL * 0.9;
+    M.computeCam();
+    o.panJump = Math.round(Math.hypot(M.cam.ox - heldOx, M.cam.oy - heldOy));
+    // A few px of drift is the zoom easing out. Hundreds is the subject dragging it.
+    o.noSnapOnRelease = o.panJump < 12;
+  }
+
+  M.goalCamReset(); M.sel.goalZoom = null; M.sel.goalZoomSpd = null; M.setMatchSeed(null);
   return o;
 });
 
@@ -200,6 +266,12 @@ ok(r.dialChangesPeak, `the zoom dial did not change the peak: ${r.fastPeak}x on 
 ok(r.dialChangesSpeed, `the speed dial did not change the push: full at step ${r.fastStepsToFull}, expected under 40 for 0.40s`);
 ok(r.oneMeansOff, `1.0x did not mean off (label "${r.zoomOffLabel}")`);
 ok(r.clampsWildValues, `out-of-range dial values were obeyed rather than clamped: ${JSON.stringify(r.clamped)}`);
+ok(r.outIsSlower, `the push leaves as fast as it arrives (out/in = ${r.inOutRatio}) — it reads as a twitch, not an emphasis`);
+ok(r.outSlowerThanFastestDial, `the release is quicker than the dial's quickest push: ${JSON.stringify(r.dialRange)}`);
+ok(r.defaultIsVisible, `the DEFAULT push is ${r.defaultZoom}x — a setting nobody can see is the bug this retune exists to fix`);
+ok(r.followsWhilePushed, 'the camera did not latch onto the scorer while pushed in');
+ok(r.dropsTheSubject, 'the camera kept following its subject into the ease-out');
+ok(r.noSnapOnRelease, `the view jumped ${r.panJump}px when the scorer was moved to their kickoff spot — the release is dragging the camera across the pitch`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify(r, null, 1));

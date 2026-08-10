@@ -1669,7 +1669,7 @@
       <div style="height:6px"></div>
       <label class="field">Goal zoom speed <small id="goalZoomSpdVal" style="color:var(--accent)"></small></label>
       <input id="goalZoomSpd" class="slider" type="range" min="5" max="300" step="5" />
-      <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes — lower is slower. Both ride the Screen shake &amp; effects toggle.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes, so a <i>smaller</i> number is a faster push. It always drifts back out slowly, whatever you set here. Both ride the Screen shake &amp; effects toggle.</div>
       <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
@@ -2615,6 +2615,20 @@ const LOBBY = {
   // 34, so the band has to be wider than that and narrower than a half.
   neutral: 60,         // world units either side of halfway that count as undecided
   arrowR: 92,          // radius of the drawn calibration arrow
+  // ---- Warm-up balls -------------------------------------------------------
+  // One at each half's centre before anybody arrives, and one more per person in
+  // the lobby, so a room of four is never four people queueing for one ball. The
+  // lobby is where you test a stick, and you cannot test a stick without a ball.
+  ballBase: 1,         // balls per half before anyone joins
+  ballMax: 14,         // hard cap, both halves together
+  ballSpread: 90,      // world units between the extras around a half's centre
+  ballRow: 3,          // extras per row before it starts a second one
+  // ⚠️ The halfway WALL is what keeps a half's balls in that half — a real wall in
+  // `w.walls`, `ballOnly` like every other boundary, so the ball bounces off it and
+  // players still walk across freely to pick a side. Reusing the boundary physics
+  // rather than inventing a soft pull means it cannot disagree with how the rest of
+  // the pitch behaves, and `bCoef` matches a touchline so a pass off it is lively.
+  wallB: 0.9,
   // Six people who all want to be on the same team should get to be. This used to
   // be 4 (a 4v4's worth) which, combined with splitting a one-sided lineup down the
   // middle, made that impossible. 8 costs ~2ms a frame at 8v8 — a measured eighth
@@ -2897,7 +2911,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.1050AM';
+const VERSION = '20260810.0245PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2913,6 +2927,18 @@ const VERSION = '20260810.1050AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260810.0245PM', title: 'A warm-up you can actually warm up in',
+    added: [
+      'Balls in the warm-up lobby — one at each end, and another for every person who joins. A wall down the middle keeps each end’s balls where they are, so everyone gets room.',
+    ],
+    changed: [
+      'The ball is live in the warm-up lobby. You can dribble and shoot before the whistle instead of walking around a frozen ball.',
+      'You can kick every ball on the pitch now, not just the main one — which is what multi-ball matches always should have been.',
+      'The goal camera pushes in much harder and drifts back out slowly. It was a 5% nudge you could barely see.',
+      'In the warm-up lobby the kick button kicks. Use Start or Select — or the on-screen button — to begin the match.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260810.1050AM', title: 'The warm-up Start button works on a phone',
     added: [
       'A “Fill example names” button under Player names, so you can see the order the box wants and type over it.',
@@ -2972,7 +2998,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
-            goalZoom:105, goalZoomSpd:10,       // goal camera: 1.05x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             look: { palette:'neon', field:'none', discs:'none', ball:'classic', trail:'dots' },
@@ -4096,12 +4122,17 @@ function normalizeLook(){
 // is folded to it. That is safe rather than presumptuous: 0 is in the fallback set, so
 // A still kicks on every standard pad, and nobody deliberately binds kick to the button
 // it was already bound to by default.
-// ⚠️ The old shipped goal camera was 5.0x over 1.15s, which is most of the pitch gone
-// and most of the celebration spent travelling. A save carrying exactly those two
-// values gets the new defaults; anything else the player has chosen is left alone.
+// ⚠️ The goal camera has shipped THREE sets of defaults — 5.0x over 1.15s, then 1.05x
+// over 0.10s, now 1.8x over 0.10s — so there are two old pairs to fold, not one. A save
+// carrying exactly a superseded default is a save that never chose anything and should
+// get the current answer; anything else the player picked on purpose is left alone.
+// ⚠️ Which is why the check is on the PAIR and not on either value alone: 105 with a
+// speed the player moved themselves is a deliberate 5% push, and folding it would
+// overwrite a choice.
+const GOALCAM_WAS = [[500, 115], [105, 10]];
 function normalizeGoalCam(){
   const d = defaultSel();
-  if (sel.goalZoom === 500 && sel.goalZoomSpd === 115){
+  if (GOALCAM_WAS.some(([z, sp]) => sel.goalZoom === z && sel.goalZoomSpd === sp)){
     sel.goalZoom = d.goalZoom; sel.goalZoomSpd = d.goalZoomSpd;
   }
 }
@@ -4136,14 +4167,20 @@ const TRAP = { max:0.5 };                // ball stays stuck for at most half a 
 // down the file is still in the temporal dead zone at that point — which took the
 // whole page down with "Cannot access 'GOALCAM' before initialization".
 const GOALCAM = {
-  // ⚠️ A 5% push, arriving in a tenth of a second. It used to be 5.0x over 1.15s,
-  // which is two different mistakes: 5x is most of the pitch gone, and 1.15s of a
-  // 1.8s goal state is spent travelling, so the thing that reads is the MOVE rather
-  // than the moment. A goal camera should register the instant the ball crosses and
-  // then hold — the slider still goes to 8x for anyone who wants the old behaviour.
-  zoom:    1.05,   // DEFAULT magnification: 5% closer
+  // ⚠️ THIRD TUNING, and the shape is what took three goes rather than the numbers.
+  // It shipped at 5.0x over 1.15s: 5x is most of the pitch gone, and 1.15s of a 1.8s
+  // goal state is spent travelling, so what read was the MOVE rather than the moment.
+  // The correction went to a 5% push in 0.10s, which fixed the travelling and then
+  // over-corrected into doing nothing you could see. 1.8x answers both — a real push,
+  // arriving in six frames so it lands as the ball crosses.
+  //
+  // ⚠️ IN AND OUT ARE DIFFERENT NUMBERS, deliberately, and that asymmetry is the
+  // feature. A camera that leaves as fast as it arrives reads as a twitch; one that
+  // snaps in and drifts out reads as an emphasis. `inSecs` is a player dial and
+  // `outSecs` is not, so "fast in, slow out" holds however the dial is set.
+  zoom:    1.8,    // DEFAULT magnification: a push you can actually see
   inSecs:  0.10,   // DEFAULT sim-seconds to get there — six frames, so it lands at once
-  outSecs: 0.5,    // sim-seconds to ease back once the celebration is over
+  outSecs: 1.10,   // sim-seconds to drift back out. Eleven times the push, on purpose.
   zoomMin: 1.0, zoomMax: 8.0,      // slider range — 1.0x is "no push at all"
   spdMin:  0.05, spdMax: 3.0,      // slider range, in sim-seconds for the push in
 };
@@ -8967,6 +9004,12 @@ function buildGeometry(w){
 
 function resetKickoff(w, initial){
   const f = w.field, halfL = f.L/2;
+  // ⚠️ THE ONE OWNER of taking the warm-up props back off. This runs on every path
+  // into play — `startMatch`, `lobbyStart`, every goal — so a halfway wall or a spare
+  // lobby ball cannot survive into a match no matter how warm-up ended. Putting it in
+  // `lobbyStart` instead would cover the button and miss everything else, and a wall
+  // across the middle of a live match is not a cosmetic bug.
+  clearLobbyProps(w);
   // ⚠️ The one moment the match's own size is known for certain: this roster, before
   // anybody has joined or left it. See subFloorOf.
   if (initial){ w.subFloor = null; w.subPer = null; subPer(w); }
@@ -9929,7 +9972,13 @@ function step(w){
   if (w.ball.sqT) w.ball.sqT *= 0.72;
 
   if (active){ stepBench(w); stepSubWalk(w); }   // touchline traffic — see SUB
-  if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, true, false); }
+  // ⚠️ The warm-up ball is LIVE — `false`, not the `true` it used to pass. The lobby's
+  // whole job is letting you test a stick before the whistle, and a frozen ball means
+  // the one control you cannot test in there is the one that decides matches. Kicking
+  // is safe here for the same reason the balls are: `checkGoal` is gated on
+  // `w.state === 'play'`, so nothing that happens in the lobby can put a goal on the
+  // board, and `resetKickoff` puts the ball back on the centre spot on the way out.
+  if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, false, false); }
   else if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
   else if (w.state==='goal') integrate(w, false, false);     // ball flies into the net; players can keep moving
@@ -10045,7 +10094,7 @@ function integrate(w, ballFrozen, playersFrozen){
       p.vy += p.inY * a;
     }
     for (const p of discs){
-      handleBallControl(w, p, ball, ballFrozen);
+      handleBallControl(w, p, nearestControlBall(w, p, ball), ballFrozen);
       handleSnailKick(w, p, ballFrozen);
       handleKickPush(w, p);
     }
@@ -10113,6 +10162,33 @@ function integrate(w, ballFrozen, playersFrozen){
   if (!ballFrozen && w.state==='play') checkGoal(w);
 }
 
+// Which ball this player is controlling THIS step — the nearest one they could reach.
+// ⚠️ `handleBallControl` used to be handed `w.ball` and nothing else, so every extra
+// ball on the pitch was a thing you could bump but never kick. That went unnoticed
+// because the only extras were multiball's (an obstacle reads much like a ball you
+// keep missing) and Killer Queen's, which are shepherded by contact anyway. The
+// warm-up balls made it obvious: a lobby full of balls where KICK did nothing.
+//
+// ⚠️ ONE ball per player per step, never a loop over all of them. `p.trap`,
+// `p.kickUsed` and `p.chargeT` are single-ball state, so kicking every ball in range
+// off one press would fire a shotgun and leave the trap pointing at whichever ball
+// happened to be last in the array.
+//
+// ⚠️ Berries and the snail are excluded on purpose: the snail has `handleSnailKick`
+// (deliberately not a trap — dribbling the objective onto the line would be the whole
+// mode in one run) and a trappable berry would be the same mistake a second time.
+function nearestControlBall(w, p, ball){
+  const ex = w.extraBalls;
+  if (!ex || !ex.length) return ball;
+  let best = ball, bd = Math.hypot(ball.x - p.x, ball.y - p.y);
+  for (const eb of ex){
+    if (eb.isSnail || eb.isBerry || eb.banked) continue;
+    const d = Math.hypot(eb.x - p.x, eb.y - p.y);
+    if (d < bd){ bd = d; best = eb; }
+  }
+  return best;
+}
+
 // Move one ball a fixed step: damp, cap, sub-step + collide vs players/posts/walls.
 function moveBall(w, ball, discs){
   ball.vx *= ball.damp; ball.vy *= ball.damp;
@@ -10175,13 +10251,15 @@ function enterWarmup(w){
     labelA = w.players.map(()=>1);
   }
   w.state = 'warmup'; w.stateT = 0; w.endRamp = null;
-  w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
+  w.ball.vx = 0; w.ball.vy = 0;
   // Own PRNG: where a bot walks on must not consume draws from w.rng, or how long
   // somebody spent in the lobby would change every bot decision in the match.
   w.lobby = { ready: new Set(), calib: null, sides: new Map(),
               rng: mulberry32(((w.seed|0) ^ 0x9E3779B9) >>> 0) };
   w.players.forEach(p => { p._lobT = undefined; p._lobTo = null; });
   benchBots(w);
+  addLobbyWall(w);
+  syncLobbyBalls(w);
   // Humans start spread along the halfway line so nobody is pre-committed to a side.
   const hs = lobbyHumans(w), n = hs.length;
   hs.forEach((p, i) => {
@@ -10190,6 +10268,75 @@ function enterWarmup(w){
     p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
   });
   resetTrails();
+}
+// ---------- Warm-up balls, and the wall that keeps them home -----------------
+// The lobby is where you test a stick, and one ball between six people is a queue
+// rather than a warm-up. Each half gets its own, plus one more per person waiting,
+// and a wall down the halfway line keeps each half's balls on that half so a room
+// does not turn into one scramble across the middle.
+//
+// ⚠️ THE WALL IS `ballOnly`, like every other boundary in `buildGeometry`. That is
+// the whole trick: the BALL bounces off it, and players still walk straight through
+// to pick a side — which is the one thing the lobby exists for. A wall that stopped
+// players would make choosing a half impossible.
+//
+// ⚠️ And `clearLobbyProps` is called from `resetKickoff`, not from `lobbyStart`.
+// `resetKickoff` is the one function that lays the pitch out for play and it is on
+// every path to it, so a halfway wall cannot leak into a match however warm-up came
+// to an end — which is the failure that would matter, since a wall across the middle
+// of a real match is unplayable. `enterWarmup` runs AFTER `resetKickoff` at
+// `startMatch`, so the ordering puts them back on rather than fighting.
+function addLobbyWall(w){
+  const { halfW } = w.bounds;
+  clearLobbyProps(w);
+  w.walls.push({ a:{x:-halfW, y:0}, b:{x:halfW, y:0}, bCoef:LOBBY.wallB,
+                 ballOnly:true, lobbyWall:true });
+}
+function clearLobbyProps(w){
+  if (w.walls) for (let i = w.walls.length - 1; i >= 0; i--) if (w.walls[i].lobbyWall) w.walls.splice(i, 1);
+  if (w.extraBalls) for (let i = w.extraBalls.length - 1; i >= 0; i--) if (w.extraBalls[i].lobbyBall) w.extraBalls.splice(i, 1);
+}
+// How many balls the room should have right now: one per half, plus one per person
+// in it. ⚠️ Counted off `lobbyHumans`, so a controller waking up mid-lobby brings a
+// ball on with it — that is the "one ball per joining player" half of the ask, and a
+// count taken once at `enterWarmup` would miss every late arrival.
+function lobbyBallCount(w){
+  return Math.min(LOBBY.ballMax, LOBBY.ballBase * 2 + lobbyHumans(w).length);
+}
+// Where ball `i` lives. Alternating halves, so an odd count favours neither side,
+// laid out in rows around each half's centre. ⚠️ Purely positional arithmetic — no
+// PRNG at all, not even `w.lobby.rng`: there is nothing here worth randomising, and
+// every draw is one more thing that has to be reasoned about for determinism.
+function lobbyBallSpot(w, i){
+  const half = (i % 2) ? 1 : -1, k = (i / 2) | 0;
+  const cy = half * w.bounds.halfL / 2;
+  const col = k % LOBBY.ballRow, row = (k / LOBBY.ballRow) | 0;
+  return { x: (col - (LOBBY.ballRow - 1) / 2) * LOBBY.ballSpread * (row ? 1 : (k ? 1 : 0)),
+           y: cy + half * row * LOBBY.ballSpread * 0.6 };
+}
+// ⚠️ Balls are ADDED and REMOVED, never repositioned: a ball somebody is dribbling
+// must not teleport back to its spot because a fourth player plugged a pad in.
+function syncLobbyBalls(w){
+  if (!w.extraBalls) w.extraBalls = [];
+  const want = lobbyBallCount(w);
+  const have = w.extraBalls.filter(b => b.lobbyBall);
+  // The main ball is one of them, so the extras make up the difference.
+  const src = w.ball;
+  for (let i = have.length; i < want - 1; i++){
+    const s = lobbyBallSpot(w, i + 1);
+    w.extraBalls.push({ x:s.x, y:s.y, vx:0, vy:0, r:src.r, invMass:src.invMass,
+                        bCoef:src.bCoef, damp:src.damp, isBall:true, extra:true, lobbyBall:true });
+  }
+  for (let i = have.length; i > want - 1; i--){
+    const gone = have[i - 1];
+    const at = w.extraBalls.indexOf(gone);
+    if (at >= 0) w.extraBalls.splice(at, 1);
+  }
+  // The primary ball takes spot 0 only while it is still sitting on the centre spot —
+  // once anybody has touched it, it is theirs.
+  if (!w.ball.vx && !w.ball.vy && !w.ball.x && !w.ball.y){
+    const s = lobbyBallSpot(w, 0); w.ball.x = s.x; w.ball.y = s.y;
+  }
 }
 // Waiting bots stand off the pitch, in a line beside the touchline. They keep their
 // team colour so you can see who you'd be playing, but they don't run the AI.
@@ -10292,6 +10439,10 @@ function stepWarmup(w){
   for (const p of plan.a) L.sides.set(p, 0);
   for (const p of plan.b) L.sides.set(p, 1);
   for (const p of plan.out) L.sides.set(p, -1);
+  // ⚠️ Every step, not once at `enterWarmup`: a controller waking up mid-lobby is a
+  // person joining, and they bring a ball on with them. It adds and removes only —
+  // see syncLobbyBalls — so this is a no-op on the frames nothing changed.
+  syncLobbyBalls(w);
   if (L.calib){ stepCalibration(w); L.idle = AUTO.warmup; return; }   // mid-setup: no clock
   stepLobbyClock(w);
 }
@@ -10478,11 +10629,19 @@ function pollLobbyStart(w){
     let pressed = false, key = p.ctrl;
     if (p.ctrl === 'gamepad'){
       const g = gps[p.padIndex];
-      // ⚠️ A (or whatever kick is bound to) as well as Start/Select. Start was the
-      // only way out of the lobby, which is a button plenty of pads put somewhere
-      // awkward and the Steam Deck puts under a menu — and A is already the button
-      // every other screen takes as "yes".
-      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
+      // ⚠️ START AND SELECT ONLY — and KICK is deliberately NOT in this list any more,
+      // which reverses an earlier decision on purpose. A was added here because Start
+      // is a button plenty of pads put somewhere awkward and the Steam Deck buries
+      // under a menu, and A is what every other screen takes as "yes". That was right
+      // while the lobby's ball was frozen and A did nothing else in here.
+      // The ball is live now, so A is how you test the one control that decides
+      // matches — and bound to both jobs it did the wrong one: a player warming up
+      // pressed A to kick, and the match started instead. Measured at `kickBest: 0`
+      // in `tests/lobby.mjs`, which read as "the ball is not kickable" and was really
+      // "the lobby ended before the ball could move".
+      // Nobody is stranded by this: Select (8) is still bound, and `#lobbyStartBtn` is
+      // on screen for the whole of warm-up whatever is connected.
+      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8)));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
@@ -12893,6 +13052,16 @@ function advanceGoalCam(w){
   // A replay owns the framing while it runs, so the push has to be out of the way
   // even though w.state is still 'goal' underneath it.
   const want = (goalCam.live && w && w.state === 'goal' && !replay.active) ? 1 : 0;
+  // ⚠️ LET GO OF THE PLAYER the moment the push starts coming out, and hold the spot
+  // they were standing on instead. `resetKickoff` teleports every body to its kickoff
+  // formation, and the camera follows its subject's position — so a scorer standing in
+  // the net one frame and on the halfway line the next drags the whole view across the
+  // pitch with them. At the old 5% default that shift was 5% of nothing and invisible;
+  // at 1.8x over a 1.1s release it is a lurch, and it would have read as the retune
+  // being wrong rather than as a separate bug. Freezing on the last real position keeps
+  // the drift-out a pure zoom, which is what it is meant to be.
+  // Raw x/y, not ix/iy: this runs in the step loop, where the interpolation is stale.
+  if (!want && goalCam.p){ goalCam.x = goalCam.p.x; goalCam.y = goalCam.p.y; goalCam.p = null; }
   const rate = STEP / (want ? goalZoomSecs() : GOALCAM.outSecs);
   goalCam.t = want ? Math.min(1, goalCam.t + rate) : Math.max(0, goalCam.t - rate);
   if (goalCam.t <= 0 && !want){ goalCam.live = false; goalCam.p = null; }
@@ -17189,6 +17358,7 @@ if (window.__MAGNETDEBUG) {
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
+    addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
@@ -17203,7 +17373,7 @@ if (window.__MAGNETDEBUG) {
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
-    resetKickoff, MODES,
+    resetKickoff, MODES, nearestControlBall,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
