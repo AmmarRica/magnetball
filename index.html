@@ -2939,7 +2939,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0620PM';
+const VERSION = '20260810.0905PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2955,6 +2955,14 @@ const VERSION = '20260810.0620PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260810.0905PM', title: 'Break the Targets',
+    added: [
+      'A new drill — Break the Targets. Sixty seconds to score as many balls as you can into either goal, with the next ball always appearing at one of five fixed spots.',
+      'It keeps your best score rather than your best time, so there is something to beat.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260810.0620PM', title: 'Your first match, and your side of the scoreline',
     added: [
       'Your very first match is one continent against another — a team of countries against a team from somewhere else.',
@@ -8014,7 +8022,7 @@ function buildDrillList(){
     const dl = DRILLS[key]; const best = drillBest[key];
     const el = document.createElement('div'); el.className='opt';
     el.innerHTML = `<span class="emoji">${dl.emoji}</span><span>${dl.name}</span>`+
-      `<small>${best!=null?('best '+best.toFixed(2)+'s'):dl.desc.slice(0,22)}</small>`;
+      `<small>${best!=null?('best '+(dl.high?(best+(best===1?' goal':' goals')):(best.toFixed(2)+'s'))):dl.desc.slice(0,22)}</small>`;
     el.onclick = () => startDrill(key);
     wrap.appendChild(el);
   });
@@ -10279,7 +10287,13 @@ function moveBall(w, ball, discs){
 function clampBallInside(w, ball){
   const b = ball || w.ball, r = b.r;
   const halfW = w.field.W/2, halfL = w.field.L/2;
-  const gh = w.drillMode ? -1 : w.field.goal/2, net = w.drillMode ? 0 : w.field.net;
+  // ⚠️ Drills SEAL the goal mouth — `gh = -1` makes `inGoalX` false everywhere, so
+  // the ball is contained on all four sides. That is right for every drill scored on
+  // gates and zones, where a ball vanishing into a net is a ball you have to go and
+  // fetch. Break the Targets is scored on GOALS, so it needs the mouth open, and it
+  // says so with `drillGoalsOpen` rather than by being special-cased by key.
+  const sealed = w.drillMode && !w.drillGoalsOpen;
+  const gh = sealed ? -1 : w.field.goal/2, net = sealed ? 0 : w.field.net;
   if (b.x < -halfW + r){ b.x = -halfW + r; if (b.vx < 0) b.vx = -b.vx*0.3; }
   if (b.x >  halfW - r){ b.x =  halfW - r; if (b.vx > 0) b.vx = -b.vx*0.3; }
   const inGoalX = Math.abs(b.x) < gh - r*0.5;
@@ -13350,6 +13364,54 @@ function dCone(w,x,y){ w.cones.push({x,y}); w.posts.push({x,y,vx:0,vy:0,r:9,invM
 function dWall(w,x1,y1,x2,y2){ w.walls.push({a:{x:x1,y:y1},b:{x:x2,y:y2},bCoef:0.4, draw:true}); }
 function dSet(w,px,py,bx,by,bvx,bvy){ const p=w.players[0]; p.x=px;p.y=py;p.vx=0;p.vy=0;p.faceX=0;p.faceY=-1;p.trap=false;p.trapUsed=false;p.kick=false;p.kickUsed=false;p.chargeT=0;
   w.ball.x=bx;w.ball.y=by;w.ball.vx=bvx||0;w.ball.vy=bvy||0; w.ball.px=bx; w.ball.py=by; }
+// ---- Break the Targets: a real pitch, and five fixed places a ball appears ----
+// ⚠️ This drill needs actual GOALS, which no other drill does — the rest score on
+// gates and zones. Rather than hand-building a goal frame it calls `buildGeometry`,
+// the same function a match uses, so the mouth, the posts and the net pocket are the
+// ones you play with and cannot drift from them.
+function drillGoals(w){ buildGeometry(w); w.drillGoalsOpen = true; }
+// Five spots, fixed, so the drill is a route you can learn rather than a scramble —
+// which is the whole point of a break-the-targets: the second run is faster because
+// you know where the next one is. Given as FRACTIONS of the field so the layout is
+// the same shape on any pitch it is ever pointed at.
+const TARGET_SPOTS = [
+  { fx:  0.00, fy:  0.00 },   // the centre spot
+  { fx: -0.62, fy: -0.30 },
+  { fx:  0.62, fy: -0.30 },
+  { fx: -0.62, fy:  0.30 },
+  { fx:  0.62, fy:  0.30 },
+];
+function targetSpot(w, i){
+  const t = TARGET_SPOTS[((i % TARGET_SPOTS.length) + TARGET_SPOTS.length) % TARGET_SPOTS.length];
+  return { x: t.fx * w.field.W/2, y: t.fy * w.field.L/2 };
+}
+// Put the next ball out. ⚠️ The PLAYER is deliberately not moved — walking to the
+// next ball is the drill. Moving them would make it a shooting gallery.
+function targetNext(w){
+  const d = w.drill;
+  d.spot = (d.spot == null ? 0 : d.spot + 1);
+  const s = targetSpot(w, d.spot);
+  const b = w.ball;
+  b.x = s.x; b.y = s.y; b.vx = 0; b.vy = 0;
+  // A trapped ball that has just been scored must not stay stuck to the player, or
+  // the next one arrives already glued to them.
+  const p = w.players[0];
+  p.trap = false; p.trapUsed = false; p.kickUsed = false;
+}
+// Did the ball cross a goal line this step? Either end counts — the ask was "into
+// either goal", so there is no wrong net and no defending to do.
+// ⚠️ Measured on the SEGMENT the ball travelled, not on where it ended up: at the
+// speed a struck ball moves it can be outside the net by the time anything looks,
+// and a position test would then miss it entirely on the fast shots that deserve it
+// most. Same reason `updateDrill` crosses gates with `segCross`.
+function targetScored(w){
+  const b = w.ball, hl = w.bounds.halfL, gh = w.bounds.gh;
+  for (const sign of [-1, 1]){
+    const y = sign * hl;
+    if (segCross(b.px, b.py, b.x, b.y, -gh, y, gh, y)) return true;
+  }
+  return false;
+}
 function drillBoundary(w){ const hw=w.field.W/2, hl=w.field.L/2, b=0.3;
   w.walls.push({a:{x:-hw,y:-hl},b:{x:hw,y:-hl},bCoef:b},{a:{x:hw,y:-hl},b:{x:hw,y:hl},bCoef:b},
                {a:{x:hw,y:hl},b:{x:-hw,y:hl},bCoef:b},{a:{x:-hw,y:hl},b:{x:-hw,y:-hl},bCoef:b});
@@ -13427,6 +13489,14 @@ const DRILLS = {
       dGate(w,-150,130,84,0);              // …then the left gap
       dCone(w,0,-235); dCone(w,10,15); dCone(w,-30,290);
       dZone(w,150,300,42,'reach'); } },
+  // ⚠️ The only drill scored on POINTS rather than on time, and the only one with
+  // real goals. `high:true` flips which way `drillBest` compares — everything else
+  // here is "lower is better" and a straight `t < prev` would record your worst run
+  // as your record.
+  targets:{ name:'Break the Targets', emoji:'🎯', unit:'p', desc:'60 seconds — score as many as you can, either goal',
+    timed:60, targets:true, high:true,
+    build(w){ drillGoals(w); w.drill.spot = 0; w.drill.scored = 0;
+      const s = targetSpot(w, 0); dSet(w, 0, s.y + 120, s.x, s.y); } },
 };
 const DRILL_KEYS = Object.keys(DRILLS);
 
@@ -13498,6 +13568,37 @@ function segCross(ax,ay,bx,by,cx,cy,dx,dy){
 function updateDrill(w){
   const d = w.drill, b = w.ball;
   const speed = Math.hypot(b.vx,b.vy);
+  // ⚠️ Break the Targets is handled FIRST and returns, for two separate reasons.
+  //   1. It has no gates and no zones, so `d.total` is 0 and the `doneCount >= d.total`
+  //      below is `0 >= 0` — it would finish the drill on its first frame with nothing
+  //      scored.
+  //   2. ⚠️ `b.px/b.py` is the crossing TRAIL, and `updateDrill` resets it to the
+  //      current position part-way down. Checked after that line, the segment handed to
+  //      `segCross` is zero-length and no shot ever crosses anything — measured, with
+  //      the ball sitting in the back of the net and the score still reading 0.
+  if (d.def.targets){
+    if (targetScored(w)){
+      d.scored = (d.scored || 0) + 1;
+      spawnConfetti(b.x, b.y); for (let k=0;k<12;k++) spawnConfetti(b.x, b.y);
+      playSfx('goal');
+      targetNext(w);
+    }
+    // Advance the crossing trail, so `targetScored` measures ONE step of travel.
+    // ⚠️ Honest note: nothing currently writes `px/py` for this drill except this
+    // line, so removing it freezes the trail at the spawn point rather than producing
+    // a double-count — a sabotage run confirmed no assertion here can tell the
+    // difference, and the comment that claimed otherwise was wrong. It stays because
+    // a growing segment is not what the check means, and the moment anything else
+    // moves the ball (a respawn, a reset, a future mode) a stale origin is a phantom
+    // crossing waiting to happen. `targetNext` deliberately does not also cut it: two
+    // owners is how the first version came to have no coverage at all.
+    b.px = b.x; b.py = b.y;
+    d.doneCount = d.scored || 0;
+    d.timeLeft = Math.max(0, d.timed - d.elapsed);
+    if (d.timeLeft <= 0 && !d.complete) drillDone(w);
+    return;
+  }
+
   // active gates: for sequence, only the first undone; else all undone
   const gates = w.gates, zones = w.zones;
   const firstUndoneG = gates.findIndex(g=>!g.done);
@@ -13529,13 +13630,18 @@ function updateDrill(w){
 
 function drillDone(w){
   const d = w.drill; d.complete = true;
-  // score: timed drills score = gates done? all done here; use time either way (lower is better)
-  const t = d.elapsed;
+  // ⚠️ TWO DIRECTIONS. Every drill but one is "lower is better" and scores on time;
+  // Break the Targets scores on goals, where higher wins. A single `t < prev` would
+  // quietly record your WORST run as your record on that one.
+  const high = !!d.def.high;
+  const t = high ? (d.scored || 0) : d.elapsed;
   const prev = drillBest[d.key];
-  const isBest = prev==null || t < prev;
-  if (isBest){ drillBest[d.key] = +t.toFixed(2); saveDrillBest(drillBest); }
-  showBanner('COMPLETE!', 'var(--green)');
-  showDrillResult('COMPLETE! ✅', `Time ${t.toFixed(2)}s` + (isBest?'   ·   NEW BEST 🏆':(prev!=null?`   ·   best ${prev.toFixed(2)}s`:'')), true);
+  const isBest = prev == null || (high ? t > prev : t < prev);
+  if (isBest){ drillBest[d.key] = high ? t : +t.toFixed(2); saveDrillBest(drillBest); }
+  const say = v => high ? (v + (v === 1 ? ' goal' : ' goals')) : ('Time ' + v.toFixed(2) + 's');
+  showBanner(high ? "TIME'S UP" : 'COMPLETE!', high ? 'var(--accent)' : 'var(--green)');
+  showDrillResult(high ? "TIME'S UP ⏱️" : 'COMPLETE! ✅',
+    say(t) + (isBest ? '   ·   NEW BEST 🏆' : (prev != null ? `   ·   best ${say(prev)}` : '')), true);
 }
 function drillFail(w){
   w.drill.failed = true;
@@ -17459,7 +17565,7 @@ if (window.__MAGNETDEBUG) {
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; },
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
-    get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal,
+    get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal, clampBallInside,
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, buildUnlocked, UNL_CATS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
@@ -17508,11 +17614,13 @@ if (window.__MAGNETDEBUG) {
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
+    get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
+    TARGET_SPOTS, targetSpot, targetNext, targetScored, drillGoals,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
