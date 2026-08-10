@@ -1492,7 +1492,23 @@ what was asked for and not a fourth tuning pass:
     face let go while the ball was still coming round and shot somewhere it had not aimed.
   - [x] ⚠️ Found doing it: `LOBBY.ballCols` — the warm-up ball spot arithmetic put balls 0
     and 1 on exactly the same point.
-- [-] **Cocktail calibration by touch** — reported here as a dead end and **it is not one**.
+- [x] **Cocktail calibration by touch** — SETTLED, and the final answer is the one
+  originally asked for: a touch seat does not calibrate.
+  The middle of this was a mistake worth recording. It was first reported as a dead end
+  ("`beginCalibration` has no touch path"), which was **wrong** — `padFor` maps `human1`
+  to the on-screen thumbstick and the flow completes. On that basis the approved
+  "skip calibration on touch" was declined, defended with "players sitting on different
+  edges of a shared screen genuinely need different rotations".
+  ⚠️ **That defence was also wrong**, and in a way the code says plainly: cocktail
+  multiplayer is CONTROLLERS. The per-seat rotation system (`sel.cocktailSides`,
+  `rotQuarter`) is fed by pads; the one two-touch-player mode, `local`, is a phone split
+  where `zoneForTouch` rotates player two by a fixed 180° and never reads
+  `cocktailSides`. So the multi-touch-edges scenario being defended does not exist, and
+  a lone touch player was being made to hold a stick in two directions for a second each
+  to discover a rotation that was never in question.
+  `needsCalibration(p)` now gates on `p.ctrl === 'gamepad'`. Their side still comes from
+  Display → Configure player sides.
+  - [-] (superseded) reported here as a dead end and it is not one.
   The claim came from reading `beginCalibration` without driving it: `padFor` maps `human1`
   to `pads.p1`, which *is* the on-screen thumbstick, so holding a direction on the touch
   stick registers exactly as a pad's would. Driven end to end it completes both steps and

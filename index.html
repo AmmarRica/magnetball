@@ -2962,7 +2962,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0355AM';
+const VERSION = '20260811.0540AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2978,6 +2978,14 @@ const VERSION = '20260811.0355AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0540AM', title: 'Cocktail starts faster on a touchscreen',
+    added: [],
+    changed: [
+      'On a cocktail table with no controller, the match starts straight away. The set-up step that asked you to hold a direction twice is for controllers, which is where sitting at an odd angle to the screen actually matters.',
+      'You can still set which side each player sits on by hand, in Display settings.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0355AM', title: 'Keep all your photos',
     added: [
       'Every photo you add is kept — up to a hundred of them — so a shared device can hold a face for everyone. Tap one to put it on.',
@@ -10861,6 +10869,31 @@ function lobbyStart(w){
 // samples (up, then right) are enough to pin the rotation, and taking BOTH means a
 // pad plugged in upside-down is caught rather than silently mirrored.
 const CALIB_STEPS = [{ key:'up', label:'UP', want:[0,-1] }, { key:'right', label:'RIGHT', want:[1,0] }];
+// ⚠️ CALIBRATION IS FOR CONTROLLER SEATS, and that is the whole rule — one predicate,
+// so the on-screen button, the pad poll and the button's own label cannot disagree
+// about whether a seat still has to set up.
+//
+// Cocktail is a tabletop layout where people sit on different edges, and the thing
+// that has to be discovered is which way "up" is for a stick you are holding at some
+// angle to the screen. A TOUCH seat has nothing to discover: the thumb zone is drawn
+// on the screen the player is looking at, and there is only ever one touch player
+// here — cocktail multiplayer is controllers. (The one two-touch-player mode, `local`,
+// is a PHONE split: `zoneForTouch` rotates player two by a fixed 180° and never reads
+// `sel.cocktailSides` at all.)
+//
+// ⚠️ This reverses a decision made on a wrong premise. Touch calibration was kept
+// because "players sitting on different edges of a shared screen genuinely need
+// different rotations" — true, and true of the CONTROLLER seats it was being used to
+// justify a touch path for. A lone touch player was being made to hold a stick in two
+// directions for a second each before they could start, to discover a rotation that
+// was never in question. Their side still comes from `seatSide()`, which Display →
+// Configure player sides sets by hand, so nothing is unreachable.
+//
+// Keyboard is not a case here either: `pollKeys` returns immediately in cocktail
+// ("pads only"), so a keyboard seat does not drive the game in this layout at all.
+function needsCalibration(p){
+  return sel.display === 'cocktail' && !!p && p.ctrl === 'gamepad' && !p.calibrated;
+}
 function beginCalibration(w, p){
   w.lobby.calib = { who: p, step: 0, held: 0, vec: null, got: [] };
 }
@@ -10928,7 +10961,7 @@ function syncLobbyStartBtn(){
   if (bt.classList.contains('hidden') === show) bt.classList.toggle('hidden', !show);
   if (show){
     const host = lobbyHost(world);
-    const needCal = sel.display === 'cocktail' && host && !host.calibrated;
+    const needCal = needsCalibration(host);
     const want = needCal ? 'SET UP ▶' : 'START ▶';
     if (bt.textContent !== want) bt.textContent = want;
   }
@@ -10936,7 +10969,7 @@ function syncLobbyStartBtn(){
 function onLobbyStartPress(){
   if (!lobbyStartVisible()) return;
   const w = world, host = lobbyHost(w);
-  if (sel.display === 'cocktail' && host && !host.calibrated){ beginCalibration(w, host); return; }
+  if (needsCalibration(host)){ beginCalibration(w, host); return; }
   lobbyStart(w);
 }
 function pollLobbyStart(w){
@@ -10967,7 +11000,7 @@ function pollLobbyStart(w){
     _startPrev[key] = pressed;
     if (!pressed || was) continue;           // edge only
     if (w.lobby.calib) continue;             // mid-calibration: ignore
-    if (sel.display === 'cocktail' && !p.calibrated){ beginCalibration(w, p); continue; }
+    if (needsCalibration(p)){ beginCalibration(w, p); continue; }
     if (p === lobbyHost(w)){ lobbyStart(w); return; }
     if (w.lobby.ready.has(p)) w.lobby.ready.delete(p); else w.lobby.ready.add(p);
   }
@@ -17850,7 +17883,7 @@ if (window.__MAGNETDEBUG) {
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
-    benchBots, beginCalibration, finishCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
+    benchBots, beginCalibration, finishCalibration, needsCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     DOT_GAP, DOT_MAX, DOT_FADE, BALL_PATH, BALL_LEN_MAX, BALL_MIN_SPD,
