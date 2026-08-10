@@ -191,14 +191,28 @@ o.offlineIsSilent = o.offline.threw === false && o.offline.v === o.offline.runni
 await ctx.setOffline(false);
 
 // ---- the manual button is reachable and says what it is ---------------------
+// ⚠️ It lives in the ABOUT card now, not loose at the top of the menu — so "reachable"
+// means reachable the way a player gets there, which is opening that section. The check
+// therefore opens it first, and separately requires the section to be FINDABLE (jump bar
+// and menu search), because a button behind a card nobody can locate is not reachable at
+// all — that is the part the move could have broken.
 o.button = await p.evaluate(()=>{
+  const M = window.__magnet;
+  const findable = [...document.querySelectorAll('#jumpBar .jumpchip')].map(c=>c.dataset.sec).includes('about')
+                && M.menuSearchIndex().some(x => x.sec === 'about');
+  M.openSection('about');
   const bt = document.getElementById('updCheckBtn');
   if (!bt) return null;
   const cs = getComputedStyle(bt);
-  return { text: bt.textContent.trim(), visible: cs.display !== 'none' && cs.visibility !== 'hidden',
-           inMenu: !!bt.closest('#setup') };
+  const r = bt.getBoundingClientRect();
+  return { text: bt.textContent.trim(),
+           visible: cs.display !== 'none' && cs.visibility !== 'hidden' && r.height > 0,
+           tall: Math.round(r.height),
+           inAbout: !!bt.closest('[data-sec="about"]'),
+           inMenu: !!bt.closest('#setup'), findable };
 });
-o.buttonUsable = !!o.button && o.button.visible && o.button.inMenu && /check/i.test(o.button.text);
+o.buttonUsable = !!o.button && o.button.visible && o.button.inMenu && o.button.inAbout &&
+                 o.button.findable && o.button.tall >= 44 && /check/i.test(o.button.text);
 
 // ---- and Update actually reloads, onto the new build ------------------------
 await setVersion('99991231.0303AM');
@@ -231,7 +245,7 @@ ok(o.demoCountsAsMenu, "the menu's own attract demo was treated as a live match,
 ok(o.throttleHolds, `automatic checks are not throttled: ${JSON.stringify(o.autoThrottled)} — this fires on every return to the app`);
 ok(o.manualAlwaysGoes, 'a MANUAL check was swallowed by the throttle, so pressing the button could do nothing at all');
 ok(o.offlineIsSilent, `offline it did not stay quiet with the cache in step: ${JSON.stringify(o.offline)} — the check falls back to the SERVICE WORKER'S cached page, so with nothing newer cached it must read the running version and say nothing`);
-ok(o.buttonUsable, `the manual check button is not usable: ${JSON.stringify(o.button)} — an installed PWA has no reload button, so this is the only way to ASK`);
+ok(o.buttonUsable, `the manual check button is not usable: ${JSON.stringify(o.button)} — an installed PWA has no reload button, so this is the only way to ASK, and moving it into About must not have made it unreachable`);
 ok(o.updateLandedOnNewBuild, `Update did not land on the new build: ${o.beforeReload} → ${o.afterReload}`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

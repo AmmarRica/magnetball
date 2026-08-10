@@ -246,6 +246,58 @@ const page = async (seed, w = 900, h = 1000) => {
   await upd.close();
 }
 
+// ---- 3c. the About card -----------------------------------------------------
+// The version and the update check moved here from under the title and the top of the
+// menu. Both are things you go looking for once, and neither was worth the two permanent
+// lines they cost at the top of every visit.
+{
+  const p = await page();
+  const r = await p.evaluate(() => {
+    const M = window.__magnet;
+    M.openSection('about');
+    const card = document.querySelector('#setup .card[data-sec="about"]');
+    const ver = document.getElementById('ver');
+    return {
+      card: !!card,
+      // ⚠️ Both are INSIDE the card, not merely present somewhere on the page — the ask was
+      // to move them, and a duplicate left behind at the top would satisfy a looser check.
+      verInside: !!card && card.contains(ver),
+      updInside: !!card && !!card.querySelector('#updCheckBtn'),
+      verText: ver ? ver.textContent : '',
+      verRight: ver && ver.textContent === 'v' + M.VERSION,
+      // ...and gone from where they were.
+      noLogoVer: !document.querySelector('.logo .ver'),
+      noTopUpd: !document.querySelector('#setup > #updCheckBtn'),
+      status: (document.getElementById('aboutUpd') || {}).textContent || '',
+      inJump: [...document.querySelectorAll('#jumpBar .jumpchip')].map(c => c.dataset.sec).includes('about'),
+      inSearch: M.menuSearchIndex().some(x => x.sec === 'about'),
+    };
+  });
+  ok('the About card exists', r.card);
+  ok('the version lives in it', r.verInside && r.verRight, r.verText);
+  ok('the update check lives in it', r.updInside);
+  ok('...and neither is left behind where it was', r.noLogoVer && r.noTopUpd,
+     JSON.stringify({ logo:r.noLogoVer, top:r.noTopUpd }));
+  ok('it is reachable from the jump bar and the search', r.inJump && r.inSearch);
+  // ⚠️ On a file:// page there is no server to ask, so the status must SAY that rather
+  // than claim to be up to date — which would be a guess presented as a fact.
+  ok('with no server it says so', /no server/.test(r.status), r.status);
+
+  // The status follows the record, and counts down with it.
+  const live = await p.evaluate((DAY) => {
+    const M = window.__magnet;
+    M.updSaveRec({ v:'20991231.0100AM', first: Date.now() - 27*DAY });
+    M.buildAbout();
+    const waiting = document.getElementById('aboutUpd').textContent;
+    M.updSaveRec(null); M.buildAbout();
+    return { waiting, cleared: document.getElementById('aboutUpd').textContent };
+  }, DAY);
+  ok('a waiting build is named, with the days left',
+     /20991231\.0100AM/.test(live.waiting) && /3 days/.test(live.waiting), live.waiting);
+  ok('...and clears when there is nothing waiting', !/available/.test(live.cleared), live.cleared);
+  await p.close();
+}
+
 // ---- 4. the replay library, and DELETE ------------------------------------
 {
   const p = await page(undefined, 480, 950);
