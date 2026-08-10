@@ -72,15 +72,25 @@ const r = await p.evaluate(()=>{
     const att = bt.team===0 ? -1 : 1;
     w.ball.x=0; w.ball.y=0; w.ball.vx=w.ball.vy=0;
     bt.x=6; bt.y=att*55; bt.vx=bt.vy=0;
-    let flips=0, prev=0, reached=false, ticks=-1;
+    // ⚠️ Flips are counted ONLY on the APPROACH, up to first contact. The limit cycle
+    // this exists to catch is a bot jittering back and forth on the wrong side of the
+    // ball, unable to commit to going around it — which is a thing that happens before
+    // it gets there. Counted over the whole 4 seconds it also counts the bot TURNING
+    // WHILE CARRYING, which is the job rather than a fault: once a trapped ball swings
+    // round to the aim instead of snapping there, a carry legitimately changes
+    // direction two or three times and a healthy bot read 6 flips against a threshold
+    // of 4. Reported after contact too, so nothing is lost, but not enforced.
+    let flips=0, after=0, prev=0, reached=false, ticks=-1;
     for(let i=0;i<240;i++){ park(w); M.step(w);
-      const s=Math.sign(bt.vy*att); if(s&&prev&&s!==prev) flips++; if(s) prev=s;
+      const s=Math.sign(bt.vy*att);
+      if(s&&prev&&s!==prev){ if (reached) after++; else flips++; }
+      if(s) prev=s;
       if (!reached && Math.hypot(bt.x-w.ball.x,bt.y-w.ball.y) < bt.r+w.ball.r+8){ reached=true; ticks=i; } }
-    return { flips, reached, ticks, ballMoved:+Math.hypot(w.ball.x,w.ball.y).toFixed(1) };
+    return { flips, afterContact:after, reached, ticks, ballMoved:+Math.hypot(w.ball.x,w.ball.y).toFixed(1) };
   };
   const ws = ['normal','hard','insane'].map(wrongSide);
   o.wrongSide = ws;
-  o.noLimitCycle    = ws.every(x=>x.flips <= 4);       // baseline: 16 flips in 4 s
+  o.noLimitCycle    = ws.every(x=>x.flips <= 4);       // baseline: 16 flips in 4 s, all on the approach
   o.reachesTheBall  = ws.every(x=>x.reached && x.ticks < 180);
   o.actuallyStrikes = ws.every(x=>x.ballMoved > 40);   // baseline: ball never moved
   o.goesAroundNotThrough = ws.every(x=>x.ticks > 20);  // it circles rather than barging

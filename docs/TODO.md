@@ -1477,10 +1477,16 @@ what was asked for and not a fourth tuning pass:
     hands `segCross` a **zero-length segment** — ball in the net, score reading 0.
   - [x] ⚠️ `drillBest` is lower-is-better everywhere else; unguarded it records your **worst**
     run as your record on the one drill scored on points.
-- [ ] **Trapping turns the ball round you** — a trapped ball rotates about the player toward
-  where you are aiming (6 o'clock swings to 12 to pass upfield), and another player can kick
-  it off you while you hold it. ⚠️ The second half is the interesting one: `handleBallControl`
-  currently owns a trapped ball outright.
+- [x] **Trapping turns the ball round you** — `TRAP.spin`, an angular rate rather than a snap,
+  and `releaseTrap` fires along the ball rather than the facing.
+  - [x] ⚠️ Breaking the trap is what makes another player's kick LAND. The carrier re-plants
+    the ball every step, so an impulse that leaves the trap alone is overwritten next frame.
+  - [x] ⚠️ **Opponents only**, measured: unrestricted, team-mates stripped each other and the
+    bot difficulty ladder inverted (rookie beat insane 83%).
+  - [x] ⚠️ `BOT.carryAlign` had to check the BALL as well as the face — a bot aligned on its
+    face let go while the ball was still coming round and shot somewhere it had not aimed.
+  - [x] ⚠️ Found doing it: `LOBBY.ballCols` — the warm-up ball spot arithmetic put balls 0
+    and 1 on exactly the same point.
 - [-] **Cocktail calibration by touch** — reported here as a dead end and **it is not one**.
   The claim came from reading `beginCalibration` without driving it: `padFor` maps `human1`
   to `pads.p1`, which *is* the on-screen thumbstick, so holding a direction on the touch

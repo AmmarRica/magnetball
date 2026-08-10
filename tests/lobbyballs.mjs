@@ -79,6 +79,17 @@ const r = await p.evaluate(() => {
   o.leavingTakesABall = o.afterLeave === o.oneHuman;
   o.movedBallLeftAlone = w.extraBalls.includes(rolling)
     ? (rolling.x !== wasAt[0] || rolling.vx === 2) : 'removed';
+  // ⚠️ Every spot DISTINCT. The first arithmetic here put balls 0 and 1 on exactly the
+  // same point — invisible in a screenshot, and it made a trapped ball fire the other
+  // one. Checked over more spots than the cap allows, so a wider room cannot stack them.
+  {
+    const spots = [];
+    for (let i = 0; i < M.LOBBY.ballMax + 4; i++){
+      const s2 = M.lobbyBallSpot(w, i); spots.push(Math.round(s2.x) + ',' + Math.round(s2.y));
+    }
+    o.spots = spots;
+    o.spotsAreDistinct = new Set(spots).size === spots.length;
+  }
   o.capped = M.lobbyBallCount({ ...w, players: new Array(40).fill(0).map(()=>({ctrl:'human1'})) }) <= M.LOBBY.ballMax;
 
   // ---- 2. the wall contains a ball ----------------------------------------
@@ -174,6 +185,8 @@ ok('...and leaving takes one away', r.leavingTakesABall, `${r.afterJoin} -> ${r.
 ok('a ball being dribbled is not teleported home by the resync', r.movedBallLeftAlone !== false,
    String(r.movedBallLeftAlone));
 ok('the count is capped', r.capped);
+ok('no two balls share a spawn spot', r.spotsAreDistinct,
+   `${JSON.stringify(r.spots)} — two balls on one point shove each other apart, and a trapped ball fires the one you are not looking at`);
 ok('warm-up puts exactly one wall on halfway', r.wallsWhileWarming === 1, String(r.wallsWhileWarming));
 ok('the wall keeps a ball on its own half', r.wallHoldsTheBall,
    `fired at the line and reached y=${r.ballDeepest}`);

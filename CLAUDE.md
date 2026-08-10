@@ -545,6 +545,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   they leave. Recomputing "who is deepest" every step made two defenders trade it and shove each
   other out on alternate frames. Eased out like `applyKickoffLine`, with the same hard backstop.
   `tests/boxrule.mjs`.
+- **Trapping SWINGS the ball round you, and an opponent can knock it off.**
+  `TRAP.spin` (9 rad/s) is an angular rate, not a snap: the trap keeps a bearing
+  (`p.trapAng`) that turns toward your facing, taking the SHORT way round the ±π wrap.
+  A ball at six o'clock takes a beat to come round to twelve, which is what makes
+  turning to pass something you commit to. ⚠️ **`releaseTrap` fires along `trapAng`,
+  not along the facing** — those were the same thing while the trap snapped, and firing
+  along the facing now would send the ball somewhere it visibly is not.
+  ⚠️ **A trapped ball is stealable by any OPPONENT at any time, including mid-swing**
+  (`ball._trappedBy`, `TRAP.steal`). The carrier re-plants the ball every step, so a
+  kick that does not BREAK the trap is overwritten next frame — the trap was absolute
+  before this. `trapUsed` latches on the carrier so they cannot re-trap while still
+  holding KICK; a steal that lasts one frame is not a steal.
+  ⚠️ **Opponents only, and that qualification was measured.** Unrestricted, team-mates
+  stripped each other — every carry a scrum between players who are supposed to be
+  helping — and it showed up as the bots' difficulty ladder inverting.
+  ⚠️ **`BOT.carryAlign` is checked on the BALL as well as the face** (`runBot`'s carry
+  branch). Aligned on the face alone a bot let go while the ball was still coming round
+  and shot somewhere it had not aimed, which cost the stronger tiers most because they
+  trap most: rookie beat insane 83% of the time. Reading `trapAng` is a read — a bot
+  still writes only `kick`. `tests/trapspin.mjs`.
 - **Bots (AI-only layer):** `runBot(w,p)` in four layers — `botPhase` (attack/defend/transition)
   → `botAssignRoles` (chaser/support/defender/goalie, every `BOT.roleTicks` with a switch margin)
   → the per-bot decision → Layer-0 steering (`botArrive`, `botSeparate`, `botArcPoint`,
@@ -800,7 +820,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ball, which made the one control you most need to test the one control you could
   not. Safe because `checkGoal` is gated on `w.state === 'play'`. `LOBBY.ballBase/
   ballMax/ballSpread/ballRow`, `syncLobbyBalls` (called every step, so a pad waking up
-  mid-lobby brings a ball on), `lobbyBallSpot` (pure arithmetic — no PRNG at all).
+  mid-lobby brings a ball on), `lobbyBallSpot` (pure arithmetic — no PRNG at all). ⚠️ `LOBBY.ballCols` is an
+  explicit centre-out list because the arithmetic version put balls 0 and 1 on **exactly
+  the same point** — invisible in a screenshot, and it made a trapped ball fire the one
+  you were not looking at.
   ⚠️ Balls are ADDED and REMOVED, never repositioned: a ball somebody is dribbling
   must not teleport home because a fourth player plugged in.
   ⚠️ **A `ballOnly` wall on halfway** (`addLobbyWall`) keeps each half's balls on that
