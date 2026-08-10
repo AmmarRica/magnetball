@@ -1470,8 +1470,13 @@ what was asked for and not a fourth tuning pass:
     as a LOSS** — RP, Elo, streak, goals for/against and the clean sheet all inverted, the
     screen saying YOU LOSE, a cleared cup round counted as failed and a won Gauntlet round
     costing a life. `youTeam(w)` / `yourScore(w)`.
-- [ ] **Break-the-targets drill** — 60 seconds to score as many balls as you can into either
-  goal, balls respawning at one of five fixed spots. A ball-control teacher, Smash Bros style.
+- [x] **Break-the-targets drill** — 60 seconds, either goal, five fixed spawn spots.
+  - [x] ⚠️ `clampBallInside` **seals the goal mouth in drill mode**, so the first build's shots
+    bounced off a closed goal line and nothing ever scored. `w.drillGoalsOpen`.
+  - [x] ⚠️ `updateDrill` resets the crossing trail part-way down, so a check placed after it
+    hands `segCross` a **zero-length segment** — ball in the net, score reading 0.
+  - [x] ⚠️ `drillBest` is lower-is-better everywhere else; unguarded it records your **worst**
+    run as your record on the one drill scored on points.
 - [ ] **Trapping turns the ball round you** — a trapped ball rotates about the player toward
   where you are aiming (6 o'clock swings to 12 to pass upfield), and another player can kick
   it off you while you hold it. ⚠️ The second half is the interesting one: `handleBallControl`

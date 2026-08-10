@@ -474,6 +474,25 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Ball look:** `BALL_LOOKS` + `paintBall(c,x,y,r,rot,key)` — nine drawn patterns, no sprites.
   The pitch and the picker tiles call the same painter, so a tile can't show something the ball
   won't. Ball *physics* is `BALLS`, which is a different thing entirely.
+- **Break the Targets** (`DRILLS.targets`, `TARGET_SPOTS`, `targetSpot/targetNext/targetScored`,
+  `drillGoals`): 60 seconds, score as many balls as you can into **either** goal, one
+  at a time, respawning at five FIXED spots — fixed because the drill is a route you
+  learn, which is the whole point of a break-the-targets. Spots are stored as
+  fractions of the field, so the layout is the same shape on any pitch.
+  ⚠️ **The only drill with real goals**, so it calls `buildGeometry` — the match's own
+  function — rather than hand-building a frame that could drift from it.
+  ⚠️ **`clampBallInside` SEALS the goal mouth in drill mode** (`gh = -1` makes
+  `inGoalX` false everywhere), which is right for the twenty-odd gate/zone drills and
+  fatal here — shots bounced off a closed goal line and nothing ever scored. Opened by
+  `w.drillGoalsOpen`, a property of the drill, never a check on its key.
+  ⚠️ **The targets branch runs FIRST in `updateDrill` and returns.** Two reasons: it
+  has no gates or zones so `d.total` is 0 and `doneCount >= d.total` finishes the drill
+  on frame one, and `updateDrill` resets the crossing trail part-way down — checked
+  after that line the segment is zero-length and no shot crosses anything.
+  ⚠️ **The only drill where HIGHER is better** (`def.high`). Every other one scores on
+  time, and an unguarded `t < prev` records your worst run as your record.
+  ⚠️ The player is never moved to the next ball — walking to it is the drill.
+  `tests/targetsdrill.mjs`.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
