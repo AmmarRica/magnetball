@@ -807,6 +807,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
+- **About card (`data-sec="about"`, `buildAbout`)** — the version (`#ver`) and
+  **Check for updates** (`#updCheckBtn`) live here, not under the title and above the fold:
+  both are things you go looking for once, and neither was worth the two permanent lines
+  they cost at the top of every visit. Plus a status line that names a waiting build and
+  counts down with it, and a link across to What's new. ⚠️ `buildAbout()` writes **text
+  only** — `#ver` is a child of `#aboutInfo` and the boot block fills it, so rebuilding that
+  subtree would blank it. ⚠️ With no server to ask (a `file://` page) the status says so
+  rather than claiming "up to date", which would be a guess presented as a fact.
 - **Forced updates (`UPD.graceDays` = 30, `#updBlock`, `updEnforce`):** a check on every
   launch and every return to the app, and after **30 days** with a newer build available the
   game **stops** until it is installed. ⚠️ The deadline is **persisted** (`magnetball.upd`

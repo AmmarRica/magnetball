@@ -1100,6 +1100,10 @@
     .pathval { font-size:12px; color: var(--text); overflow-wrap:anywhere; }
     .pathval.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     #repWatchBtn, #repClearAll { display:block; width:100%; margin:0 0 4px; }
+    /* About reuses the Replays card's key/value rows — same job, same shape. */
+    #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px; }
+    /* 44px: these are the two things anyone opens About to press. */
+    #updCheckBtn, #aboutNews { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
     .reprow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
       background: rgba(128,128,128,.08); border:1px solid var(--edge); }
@@ -1301,7 +1305,6 @@
   <div id="setup" class="screen">
     <div class="logo">
       <h1>MAGNETBALL</h1>
-      <p id="ver" class="ver"></p>
       <p>Right thumb moves · Left thumb kicks</p>
     </div>
 
@@ -1342,10 +1345,6 @@
          again once installed — a dead button on a platform that never fires the
          prompt is worse than no button. -->
     <button class="ghost" id="installBtn" type="button" style="display:none">Install on phone</button>
-    <!-- ⚠️ An installed PWA has no reload button and no address bar, so "check now" is the
-         only way a player can ASK. Always visible: unlike the install prompt, this one is
-         never dead — offline it simply reports that it could not reach the server. -->
-    <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
 
     <div class="card collapsible collapsed" id="matchCard" data-sec="match">
       <h2>
@@ -1700,6 +1699,23 @@
       <div class="hint" style="text-align:left">Two video decks and two DJ decks, run from here while the game plays fullscreen on the projector. Everything is off until you turn it on, and the game looks and sounds exactly as normal until then.</div>
       <div id="vjPanel"></div>
     </div>
+    <!-- About. The version and the update check live HERE rather than under the title and
+         above the fold: both are things you go looking for once, and neither is worth the
+         two permanent lines they cost at the top of every visit. -->
+    <div class="card collapsible collapsed" data-sec="about">
+      <h2>About</h2>
+      <div id="aboutInfo">
+        <div class="pathrow"><span class="pathkey">Version</span><span class="pathval mono" id="ver"></span></div>
+        <div class="pathrow"><span class="pathkey">Updates</span><span class="pathval" id="aboutUpd"></span></div>
+      </div>
+      <!-- ⚠️ An installed PWA has no reload button and no address bar, so "check now" is the
+           only way a player can ASK. Never dead: offline it reports that it could not reach
+           the server rather than doing nothing. -->
+      <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
+      <button class="ghost" id="aboutNews" type="button" style="margin-top:8px">What&rsquo;s new in this version</button>
+      <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
+    </div>
+
     <div class="card collapsible collapsed" data-sec="online">
       <h2>Online</h2>
       <div class="hint" style="text-align:left">Local and vs-bot only for now. Online is not built.</div>
@@ -2859,7 +2875,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260810.0520AM';
+const VERSION = '20260810.0705AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2875,12 +2891,13 @@ const VERSION = '20260810.0520AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260810.0520AM', title: 'Replays you can keep',
+  { v: '20260810.0705AM', title: 'Replays you can keep',
     added: [
       'Replays — save a match from the replay bar or the result screen, then watch it back from the new Replays section in the menu.',
       'Delete replays you have finished with, one at a time or all at once.',
       'This screen. After an update it shows you what changed.',
       'Watching a replay now has pause and four speeds, and a marker showing where the ball crossed the line.',
+      'An About section, with the version and the update check in it.',
     ],
     changed: [
       'The game checks for a new version every time you open it, and asks you to install one that has been out for a while.',
@@ -7069,6 +7086,7 @@ $('socialBack').onclick = closeSocial;
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
 $('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
+$('aboutNews').onclick = () => openSection('news');
 $('repPause').onclick = repTogglePause;
 $('repExit').onclick = skipReplay;
 $('repWatchBtn').onclick = () => watchReplayFromMenu();
@@ -7773,6 +7791,7 @@ function buildSettings(){
   buildFeelPresets();
   buildFeelSliders();
   buildReplayInfo();
+  buildAbout();
   buildNews();
   { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
@@ -9680,6 +9699,24 @@ function downloadPathHint(){
 }
 // The card's readout: where they go, and what one is called. The filename comes from
 // the real `repFilename()` so the example can never drift from what gets written.
+// About: the version, and whether anything newer is waiting. ⚠️ Text only — `#ver` is a
+// child of `#aboutInfo` and the boot block writes it, so this must never rebuild that
+// subtree out from under it.
+function buildAbout(){
+  const el = $('aboutUpd'); if (!el) return;
+  const r = updRec();
+  if (r && updNewer(r.v)){
+    const left = updDaysLeft();
+    el.textContent = 'v' + r.v + ' available' +
+      (left <= 0 ? ' — required now' : ' — required in ' + left + (left === 1 ? ' day' : ' days'));
+  } else if (!updPossible()){
+    // ⚠️ Say why rather than claiming to be up to date: on a `file://` page there is no
+    // server to ask, so "up to date" would be a guess dressed as a fact.
+    el.textContent = 'no server to check from here';
+  } else {
+    el.textContent = 'up to date as far as we know';
+  }
+}
 function buildReplayInfo(){
   const host = $('repPathInfo'); if (!host) return;
   host.innerHTML = '';
@@ -16855,6 +16892,7 @@ async function updCheck(manual){
     // is genuinely available to install. With nothing newer cached it equals VERSION and this
     // stays silent, which is the ordinary offline case.
   } catch (_) { v = null; }          // nothing cached either: say nothing at all
+  buildAbout();                      // the About card's status line follows every check
   if (manual){
     if (!v) toast('Could not reach the server', 'err', 'info');
     else if (!updNewer(v)) toast('Up to date · v' + VERSION, 'ok', 'save');
@@ -17048,7 +17086,7 @@ if (window.__MAGNETDEBUG) {
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY,
+    CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
