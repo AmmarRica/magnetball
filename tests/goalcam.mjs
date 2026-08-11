@@ -244,8 +244,61 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ---- THE WIRING, driven through the REAL loop --------------------------------
+// ⚠️ EVERYTHING ABOVE CALLS `computeCam()` BY HAND before it samples `cam.s`, and that
+// is exactly how this suite passed a build where the goal camera did not work at all.
+// `applyGoalCam` lives inside `computeCam`, and `computeCam` was called only from
+// `resize()` — so the push never animated in the running game, and a resize landing
+// during a celebration multiplied the zoom into `cam.s` and left it there for good.
+// On a phone the URL bar showing and hiding fires `resize` constantly, so matches stuck
+// at 1.8x at random until the player hit fullscreen. Measured, not theorised: `cam.s`
+// held its fitted value through an entire celebration while `goalCam.t` reached 1.
+//
+// So this block touches `computeCam` NOWHERE. It scores a goal, lets rAF run, and reads
+// `cam.s` — which is the only version of this question the player can actually see.
+const live = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+live.on('pageerror', e => errors.push(e.message));
+await live.addInitScript(()=>{ window.__MAGNETDEBUG=true; localStorage.clear();
+  localStorage.setItem('magnetball.firstrun','1'); });
+await live.goto('file://' + process.cwd() + '/index.html');
+await live.waitForTimeout(900);
+const L = await live.evaluate(async ()=>{
+  const M=window.__magnet; const o={};
+  const dm=document.getElementById('dmCollect'); if(dm) dm.click();
+  const wait = ms => new Promise(r2=>setTimeout(r2,ms));
+  M.sel.juice=true; M.sel.autoReplay=false; M.sel.mode='1v1'; M.sel.lobby='off';
+  M.setMatchSeed(9); M.startMatch();
+  const w=M.world; w.state='play'; w.stateT=1;
+  await wait(80);
+  o.base = +M.cam.s.toFixed(5);          // whatever the running game settled on
+
+  w.ball.lastKicker = w.players[0];
+  M.scoreGoal(w, 0);
+  const seen=[];
+  for (let i=0;i<12;i++){ await wait(50); seen.push(M.cam.s); }
+  o.peak = +(Math.max(...seen)/o.base).toFixed(3);
+  o.animatesUnaided = Math.max(...seen) > o.base*1.05;
+
+  // ⚠️ A RESIZE MID-CELEBRATION — the exact trigger. A phone fires this on its own
+  // every time the URL bar slides.
+  w.state='goal'; w.stateT=0; M.goalCam.live=true; M.goalCam.t=1;
+  window.dispatchEvent(new Event('resize'));
+  await wait(60);
+  o.midResize = +(M.cam.s/o.base).toFixed(3);
+  w.state='kickoff';
+  await wait(2200);                       // far longer than GOALCAM.outSecs
+  o.settled = +(M.cam.s/o.base).toFixed(3);
+  o.releasesAfterResize = M.cam.s <= o.base*1.02;
+  o.goalCamT = +M.goalCam.t.toFixed(3);
+  return o;
+});
+await live.close();
+
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
+ok(L.animatesUnaided, `the push never moved cam.s in the running game (peak ${L.peak}x) — applyGoalCam only runs inside computeCam, and nothing calls that per frame`);
+ok(Math.abs(L.peak - 1.8) < 0.15, `the live push peaked at ${L.peak}x, not the 1.8x default`);
+ok(L.releasesAfterResize, `a resize during the celebration baked the zoom in: still ${L.settled}x of base two seconds later, with goalCam.t back at ${L.goalCamT} — this is the "stuck zoomed until I hit fullscreen" bug`);
 ok(r.startsLevel, 'a fresh match did not start on a level camera');
 ok(r.live && r.followsTheScorer, 'the goal camera did not latch onto the scorer');
 ok(r.stillWithoutStep, 'the push advanced inside a DRAW — a 144Hz screen would run it fast');

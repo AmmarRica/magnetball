@@ -1076,7 +1076,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   draw** (the trails rule); being step-locked also means the goal slow-mo stretches it.
   The followed player is read through `ix`/`iy`, and the origin shift is rotated by `cam.rot`
   or deck view puts them off to one side. Stands down while a replay owns the framing, and
-  rides the Screen shake & effects dial. Amount and speed are **sliders** —
+  rides the Screen shake & effects dial.
+  ⚠️ **`render()` calls `computeCam()` EVERY FRAME, and that is load-bearing.**
+  `applyGoalCam` lives inside `computeCam`, and `computeCam` used to be called only from
+  `resize()` — so the push never animated in the running game at all (measured: `cam.s`
+  held its fitted value through a whole celebration while `goalCam.t` reached 1), and any
+  resize landing DURING a celebration multiplied the zoom into `cam.s` and left it there,
+  because nothing recomputed it after. On a phone the URL bar sliding fires `resize`
+  constantly, so matches stuck zoomed at random until the player hit fullscreen. At the
+  old 5% default this was a 5% error nobody could see; 1.8× made it unplayable.
+  ⚠️ `tests/goalcam.mjs` passed the broken build because every assertion in it called
+  `computeCam()` by hand before sampling — it measured the maths and never the wiring.
+  It now has a block that drives the REAL rAF loop and touches `computeCam` nowhere.
+  Amount and speed are **sliders** —
   `goalZoom()`/`goalZoomSecs()` clamp and default in one place, and **1.0× means off**
   (the camera never even latches). ⚠️ `const GOALCAM` lives with the feel constants, not
   with the camera code: the slider wiring reads it during the bootstrap, and declared

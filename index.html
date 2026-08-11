@@ -2962,7 +2962,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0540AM';
+const VERSION = '20260811.0725AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2978,6 +2978,14 @@ const VERSION = '20260811.0540AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0725AM', title: 'The stuck zoom, fixed',
+    added: [],
+    changed: [
+      'The goal camera now actually moves during play. It was only ever applying itself when the screen resized, so most of the time you never saw it.',
+      'It also lets go properly afterwards, instead of leaving the view where it landed.',
+    ],
+    fixed: 'The view could get stuck zoomed right in until you pressed fullscreen. It happened when the screen resized during a goal celebration — which phones do on their own, every time the address bar slides in or out — and once it stuck it stayed. The goal camera also never actually animated in play; it does now.' },
+
   { v: '20260811.0540AM', title: 'Cocktail starts faster on a touchscreen',
     added: [],
     changed: [
@@ -14025,6 +14033,19 @@ function pitchXform(dx, dy){
 function render(){
   if (!world) return;
   if (world.drillMode){ renderDrill(); return; }
+  // ⚠️ EVERY FRAME, and its absence was a real bug with two halves. `applyGoalCam`
+  // lives inside `computeCam`, and `computeCam` was called only from `resize()` — so
+  // the goal push-in never animated at all in the running game (measured: `cam.s` sat
+  // at its fitted value for the whole celebration while `goalCam.t` went to 1), and
+  // any resize that landed DURING a celebration multiplied the zoom into `cam.s` and
+  // left it there, because nothing recomputed it afterwards. On a phone the URL bar
+  // showing and hiding fires `resize` constantly, so a match would randomly stick at
+  // 1.8x until something else resized — the fullscreen button, in practice.
+  // At the old 5% default the same wiring was a 5% error nobody could see; raising the
+  // push to 1.8x turned a latent bug into an unplayable one.
+  // The whole function is a handful of Math.min calls — measured at well under a
+  // twentieth of a millisecond, against a ~0.30ms render.
+  computeCam();
   ctx.clearRect(0,0,cw,ch);
   ctx.fillStyle = TH.fieldBg;
   ctx.fillRect(0,0,cw,ch);
