@@ -164,6 +164,115 @@ const r = await p.evaluate(() => {
   o.bestAfterBetter = M.drillBest.targets;
   o.betterRunTakesTheRecord = o.bestAfterBetter === o.fiveScored && o.fiveScored > o.bestAfterThree;
 
+  // ---- 5b. IT IS ACTUALLY ON THE SCREEN -----------------------------------
+  // ⚠️ THE DEFECT THIS BLOCK EXISTS FOR, and everything above passed while it was live:
+  // this suite drove `step()` and read world state, and never once looked at the canvas.
+  // `renderDrill` draws `w.bounds` as a single `strokeRect` plus gates, zones, cones and
+  // `wl.draw` walls — and `buildGeometry` produces none of those. So the goals were in
+  // the physics and NOWHERE ON THE SCREEN: the goal line ran solid straight across both
+  // mouths, the five spawn spots were invisible, the readout said `0/0`, and the drill
+  // was a box with a ball in it and nothing to aim at. Mechanics passing is not the
+  // drill working.
+  {
+    M.startDrill('targets'); const ww = M.world;
+    M.render();
+    const cv = document.getElementById('game');
+    const g2 = cv.getContext('2d');
+    const D = Math.min(window.devicePixelRatio || 1, 2.5);
+    // ⚠️ Scan a BOX and count, never sample one point: these are thin strokes, and a
+    // point-sample lands between them and reads "nothing drawn" on a correct build.
+    const inked = (wx0, wy0, wx1, wy1) => {
+      const x0 = Math.round(Math.min(M.wx(wx0), M.wx(wx1)) * D), x1 = Math.round(Math.max(M.wx(wx0), M.wx(wx1)) * D);
+      const y0 = Math.round(Math.min(M.wy(wy0), M.wy(wy1)) * D), y1 = Math.round(Math.max(M.wy(wy0), M.wy(wy1)) * D);
+      const w2 = Math.max(1, x1-x0), h2 = Math.max(1, y1-y0);
+      const dat = g2.getImageData(x0, y0, w2, h2).data;
+      // The court is one flat colour; anything that is not it is something drawn.
+      const c0 = g2.getImageData(Math.round(M.wx(0)*D), Math.round(M.wy(60)*D), 1, 1).data;
+      let n = 0;
+      for (let i = 0; i < dat.length; i += 4){
+        if (Math.abs(dat[i]-c0[0]) + Math.abs(dat[i+1]-c0[1]) + Math.abs(dat[i+2]-c0[2]) > 24) n++;
+      }
+      return n;
+    };
+    const bb = ww.bounds;
+    // ⚠️ MEASURED AS A DIFF OF TWO RENDERS, and the first version of this was wrong in a
+    // way worth writing down. It counted pixels "not the court colour" inside a box round
+    // the goal mouth — but the mouth box straddles the goal line, so half of it is the
+    // page background, which is never the court colour. The region therefore read as
+    // heavily inked whatever was drawn, and the sabotage that removed the goals entirely
+    // passed: the plain `strokeRect` fallback even puts a line across the mouth. Same for
+    // the net pocket, which is background all the way through.
+    // Rendering once with the goals on and once with them off and counting what CHANGED
+    // measures the thing itself, and is immune to whatever is behind it.
+    const shot = () => { M.render(); return g2.getImageData(0, 0, cv.width, cv.height).data; };
+    const withGoals = shot();
+    ww.drillGoalsOpen = false;
+    const without = shot();
+    ww.drillGoalsOpen = true;
+    M.render();
+    const changed = (wx0, wy0, wx1, wy1) => {
+      const x0 = Math.round(Math.min(M.wx(wx0), M.wx(wx1)) * D), x1 = Math.round(Math.max(M.wx(wx0), M.wx(wx1)) * D);
+      const y0 = Math.round(Math.min(M.wy(wy0), M.wy(wy1)) * D), y1 = Math.round(Math.max(M.wy(wy0), M.wy(wy1)) * D);
+      let n = 0;
+      for (let y = Math.max(0,y0); y < Math.min(cv.height, y1); y++)
+        for (let x = Math.max(0,x0); x < Math.min(cv.width, x1); x++){
+          const i = (y*cv.width + x)*4;
+          if (Math.abs(withGoals[i]-without[i]) + Math.abs(withGoals[i+1]-without[i+1])
+            + Math.abs(withGoals[i+2]-without[i+2]) > 24) n++;
+        }
+      return n;
+    };
+    o.inkTopMouth = changed(-bb.gh, -bb.halfL - 8, bb.gh, -bb.halfL + 8);
+    o.inkBotMouth = changed(-bb.gh,  bb.halfL - 8, bb.gh,  bb.halfL + 8);
+    o.inkTopNet   = changed(-bb.gh, -bb.halfL - bb.net - 4, bb.gh, -bb.halfL - 6);
+    // ⚠️ The mouth MARKING is measured as real ink, not as a diff, and the reason is the
+    // second measurement mistake in this block. The diff's baseline is `drillGoalsOpen =
+    // false`, which is not "nothing drawn" — it is the plain `strokeRect` fallback, and
+    // that draws a line straight ACROSS the mouth. So a diff in the middle of the mouth
+    // is large whether the marking is there or not (the two renders differ either way),
+    // and removing the marking passed. Verified by running that sabotage.
+    // Counting pixels that are neither court nor page-background isolates drawn ink: the
+    // box is two units either side of the goal line, so with nothing drawn it holds only
+    // court below and background above.
+    const inkOnly = (wx0, wy0, wx1, wy1) => {
+      const x0 = Math.round(Math.min(M.wx(wx0), M.wx(wx1)) * D), x1 = Math.round(Math.max(M.wx(wx0), M.wx(wx1)) * D);
+      const y0 = Math.round(Math.min(M.wy(wy0), M.wy(wy1)) * D), y1 = Math.round(Math.max(M.wy(wy0), M.wy(wy1)) * D);
+      const dat = g2.getImageData(x0, y0, Math.max(1,x1-x0), Math.max(1,y1-y0)).data;
+      const court = g2.getImageData(Math.round(M.wx(0)*D), Math.round(M.wy(60)*D), 1, 1).data;
+      const bg = g2.getImageData(2, Math.round(cv.height/2), 1, 1).data;
+      const far = (d2, i, c) => Math.abs(d2[i]-c[0]) + Math.abs(d2[i+1]-c[1]) + Math.abs(d2[i+2]-c[2]) > 30;
+      let n = 0;
+      for (let i = 0; i < dat.length; i += 4) if (far(dat,i,court) && far(dat,i,bg)) n++;
+      return n;
+    };
+    o.inkMouthMiddle = inkOnly(-bb.gh/3, -bb.halfL - 2, bb.gh/3, -bb.halfL + 2);
+    o.mouthIsMarked = o.inkMouthMiddle > 10;
+    o.goalsAreDrawn = o.inkTopMouth > 20 && o.inkBotMouth > 20;
+    o.netIsDrawn = o.inkTopNet > 10;
+    // ...and the five spots are visible, each one individually. These sit on flat court,
+    // so the court-relative `inked` helper above is honest for them.
+    o.spotInk = [];
+    for (let i = 0; i < M.TARGET_SPOTS.length; i++){
+      const t = M.targetSpot(ww, i);
+      o.spotInk.push(inked(t.x - 34, t.y - 34, t.x + 34, t.y + 34));
+    }
+    o.allSpotsDrawn = o.spotInk.every(n => n > 10);
+    // A control: bare court between the spots must be clean, or "ink everywhere" would
+    // pass the spot check for the wrong reason.
+    o.inkEmpty = inked(bb.halfW * 0.15, bb.halfL * 0.62, bb.halfW * 0.30, bb.halfL * 0.72);
+    o.emptyIsClean = o.inkEmpty < 8;
+    // ...and the same control for the diff: bare court must be IDENTICAL between the two
+    // renders, so the goal numbers above cannot be picking up an unrelated repaint.
+    o.diffEmpty = changed(bb.halfW * 0.15, bb.halfL * 0.62, bb.halfW * 0.30, bb.halfL * 0.72);
+    o.diffIsLocal = o.diffEmpty === 0;
+    // The readout says GOALS, not `0/0`. A points drill has no `total`, so the shared
+    // readout claimed the drill was complete and empty at the same time. Asserted on the
+    // flag the renderer branches on — reading text back off a canvas is not something
+    // this suite can do honestly, and a flag check with the branch beside it is better
+    // than a pixel check dressed up as one.
+    o.readoutHigh = !!ww.drill.def.high;
+  }
+
   // ---- 6. every OTHER drill still has a sealed goal mouth ------------------
   // ⚠️ Opening it globally would let the ball escape on the twenty-odd drills built
   // on `drillBoundary`, which expect a closed box.
@@ -213,6 +322,18 @@ ok('a WORSE run does not overwrite the record', r.worseRunKeepsTheRecord,
 ok('...and it says so', r.subSaysKeptBest, r.sub);
 ok('a BETTER run does take it', r.betterRunTakesTheRecord,
    `scored ${r.fiveScored}, record ${r.bestAfterBetter}`);
+ok('the GOALS are actually drawn, at both ends', r.goalsAreDrawn,
+   `ink on the mouths: top ${r.inkTopMouth}, bottom ${r.inkBotMouth} — the goals were in the physics and nowhere on the screen`);
+ok('...including the net pocket', r.netIsDrawn, `net ink ${r.inkTopNet}`);
+ok('...and the mouth is marked as the thing to shoot at', r.mouthIsMarked,
+   `${r.inkMouthMiddle} ink across the middle of the mouth — the posts alone keep the wide check green, and the diff baseline draws a line there too, so this is the only one that sees the marking`);
+ok('all five spawn spots are drawn', r.allSpotsDrawn,
+   `per-spot ink ${JSON.stringify(r.spotInk)} — fixed spots are pointless if you cannot see the route`);
+ok('...and empty court is still empty', r.emptyIsClean,
+   `${r.inkEmpty} ink on bare court, so the checks above could be passing on noise`);
+ok('...and the goal diff is local to the goals', r.diffIsLocal,
+   `${r.diffEmpty} pixels changed on bare court between the two renders`);
+ok('the drill is flagged as scored-on-points, so the readout says goals', r.readoutHigh);
 ok('every other drill still has a sealed goal mouth', r.otherDrillSealed);
 ok('...and clampBallInside still hauls its ball back inside', r.otherDrillContained,
    `a ball placed past the goal line stayed at y=${r.otherDrillBallY} — the mouth is open on a drill that expects a closed box`);

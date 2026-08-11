@@ -2962,7 +2962,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0725AM';
+const VERSION = '20260811.0930AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2978,6 +2978,15 @@ const VERSION = '20260811.0725AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0930AM', title: 'Break the Targets, now visible',
+    added: [
+      'The five spots a ball can appear at are marked on the pitch, so the route is something you can learn. The one the ball is on is highlighted.',
+    ],
+    changed: [
+      'The drill now shows how many you have scored instead of a meaningless 0/0.',
+    ],
+    fixed: 'Break the Targets had no goals drawn on it at all — just a box and a ball, with nothing to aim at. The goals, posts and nets are on the pitch now.' },
+
   { v: '20260811.0725AM', title: 'The stuck zoom, fixed',
     added: [],
     changed: [
@@ -13983,6 +13992,49 @@ function drawCoach(w){
 }
 
 // ---- drill rendering
+// The real goal frame, for the one drill that has real goals. Drawn from `w.bounds`
+// and `POST.r` — the same numbers the physics uses — so what you aim at is what the
+// ball actually collides with.
+// ⚠️ The goal LINE is left open. In `buildGeometry` the end walls run from the corner
+// to the post and stop, so a rectangle drawn straight across the mouth is a line the
+// ball goes through, which is the one thing a boundary must never look like.
+function drawDrillGoals(w){
+  const b = w.bounds, s = cam.s;
+  const seg = (x1,y1,x2,y2) => { ctx.beginPath(); ctx.moveTo(wx(x1),wy(y1)); ctx.lineTo(wx(x2),wy(y2)); ctx.stroke(); };
+  ctx.strokeStyle = TH.line; ctx.lineWidth = Math.max(2, 3*s);
+  seg(-b.halfW, -b.halfL, -b.halfW, b.halfL);          // the two touchlines
+  seg( b.halfW, -b.halfL,  b.halfW, b.halfL);
+  for (const sign of [-1, 1]){
+    const y = sign * b.halfL, ny = y + sign * b.net;
+    seg(-b.halfW, y, -b.gh, y);                        // goal line, either side of the mouth
+    seg( b.gh,    y,  b.halfW, y);
+    // The net pocket, open at the mouth — the same three sides the match draws.
+    ctx.strokeStyle = TH.dim || TH.line;
+    seg(-b.gh, y, -b.gh, ny); seg(b.gh, y, b.gh, ny); seg(-b.gh, ny, b.gh, ny);
+    // ...and the mouth itself, marked as the thing to shoot at rather than a wall.
+    ctx.strokeStyle = TH.good; ctx.lineWidth = Math.max(2, 4*s);
+    seg(-b.gh, y, b.gh, y);
+    ctx.strokeStyle = TH.line; ctx.lineWidth = Math.max(2, 3*s);
+    for (const px of [-b.gh, b.gh]){
+      ctx.beginPath(); ctx.arc(wx(px), wy(y), Math.max(2, POST.r*s), 0, 2*Math.PI);
+      ctx.fillStyle = TH.post; ctx.fill();
+    }
+  }
+}
+// ⚠️ The five spawn spots, DRAWN. Without them the drill is a ball appearing out of
+// nowhere: the whole point of fixed spots is that the route is learnable, and a route
+// you cannot see is not one you can learn. The spot the ball is on is filled in, so
+// "where am I" and "where next" are both answerable at a glance.
+function drawTargetSpots(w){
+  const s = cam.s, d = w.drill, cur = ((d.spot || 0) % TARGET_SPOTS.length + TARGET_SPOTS.length) % TARGET_SPOTS.length;
+  for (let i = 0; i < TARGET_SPOTS.length; i++){
+    const t = targetSpot(w, i), on = i === cur;
+    ctx.beginPath(); ctx.arc(wx(t.x), wy(t.y), Math.max(4, 26*s), 0, 2*Math.PI);
+    ctx.strokeStyle = on ? TH.warn : (TH.dim || TH.line);
+    ctx.lineWidth = Math.max(1, (on ? 3 : 2)*s);
+    ctx.setLineDash(on ? [] : [7,6]); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
 function renderDrill(){
   const w = world;
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
@@ -13990,7 +14042,14 @@ function renderDrill(){
   ctx.fillStyle=TH.court;
   ctx.fillRect(wx(-b.halfW),wy(-b.halfL),(b.halfW*2)*s,(b.halfL*2)*s);
   ctx.strokeStyle=TH.line; ctx.lineWidth=Math.max(2,3*s);
-  ctx.strokeRect(wx(-b.halfW),wy(-b.halfL),(b.halfW*2)*s,(b.halfL*2)*s);
+  // ⚠️ A drill with real GOALS cannot use a plain rectangle for its boundary. Break the
+  // Targets is the only one, and it shipped unplayable: `renderDrill` drew `w.bounds` as
+  // one `strokeRect` and then only gates, zones, cones and `wl.draw` walls — none of
+  // which `buildGeometry` produces. So the goals were in the physics and nowhere on the
+  // screen, the goal line ran solid straight across both mouths, and the player was
+  // looking at a box with a ball in it and nothing to aim at.
+  if (w.drillGoalsOpen) drawDrillGoals(w);
+  else ctx.strokeRect(wx(-b.halfW),wy(-b.halfL),(b.halfW*2)*s,(b.halfL*2)*s);
   // solid walls (obstacles) — draw the non-boundary ones
   ctx.strokeStyle=TH.obstacle; ctx.lineWidth=Math.max(3,4*s); ctx.lineCap='round';
   for (const g of w.gates){ if(g.solid){ for(const wl of [g.wa0,g.wa1]){ ctx.beginPath(); ctx.moveTo(wx(wl.a.x),wy(wl.a.y)); ctx.lineTo(wx(wl.b.x),wy(wl.b.y)); ctx.stroke(); } } }
@@ -14011,12 +14070,16 @@ function renderDrill(){
     for(const po of [g.po0,g.po1]){ ctx.beginPath(); ctx.arc(wx(po.x),wy(po.y),po.r*s,0,2*Math.PI); ctx.fillStyle=TH.post; ctx.fill(); ctx.lineWidth=Math.max(1,2*s); ctx.strokeStyle=col; ctx.stroke(); }
   });
   for (const ccn of w.cones){ ctx.beginPath(); ctx.arc(wx(ccn.x),wy(ccn.y),9*s,0,2*Math.PI); ctx.fillStyle=TH.cone; ctx.fill(); ctx.strokeStyle=TH.discRim; ctx.lineWidth=Math.max(1,2*s); ctx.stroke(); }
+  if (w.drillGoalsOpen) drawTargetSpots(w);
   drawDiscs(w); drawBall(w);
   const d=w.drill; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=TH.hudText;
   ctx.font=`12px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.fillText(d.def.name.toUpperCase(), cw/2, 54);
   ctx.font=`10px 'Kenney', system-ui, -apple-system, sans-serif`; ctx.fillStyle=TH.hudSub;
-  const prog = `${d.doneCount||0}/${d.total}`;
+  // ⚠️ A drill scored on POINTS has no `total`, so the shared `0/0` readout was not
+  // just unhelpful, it was wrong — it said the drill was complete and empty at once.
+  const n = d.doneCount || 0;
+  const prog = d.def.high ? (n + (n === 1 ? ' goal' : ' goals')) : `${n}/${d.total}`;
   const time = d.timed ? `${Math.ceil(d.timeLeft)}s` : `${d.elapsed.toFixed(1)}s`;
   ctx.fillText(prog + '   ' + time, cw/2, 74);
   drawControls();
@@ -17918,7 +17981,7 @@ if (window.__MAGNETDEBUG) {
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
-    TARGET_SPOTS, targetSpot, targetNext, targetScored, drillGoals,
+    TARGET_SPOTS, targetSpot, targetNext, targetScored, drillGoals, drawDrillGoals, drawTargetSpots,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
