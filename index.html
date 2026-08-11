@@ -1677,6 +1677,10 @@
       <div class="opts" id="tiltPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
       <div style="height:10px"></div>
+      <label class="field">Floating stat text</label>
+      <div class="opts" id="popupPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
+      <div style="height:10px"></div>
       <label class="field">Hit stop <small id="hitStopVal" style="color:var(--accent)"></small></label>
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
@@ -2731,6 +2735,14 @@ const COOP = {
 };
 // Phone parallax: tilt the handset and the pitch and the bodies shift by different
 // amounts. See TILT for why the two layers go opposite ways.
+// Floating stat text. ⚠️ Its own toggle rather than riding Screen shake & effects: a
+// label naming what you just did is INFORMATION, and somebody who turns the wobble off
+// for motion reasons has not asked to stop being told they got an assist. Same argument
+// as hit stop having its own dial.
+const POPOPT = {
+  on:  { name:'Show',  emoji:'💬', icon:'chat' },
+  off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
+};
 const TILTOPT = {
   on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
   off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
@@ -2962,7 +2974,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0930AM';
+const VERSION = '20260811.1215PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2978,6 +2990,14 @@ const VERSION = '20260811.0930AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.1215PM', title: 'It tells you what you just did',
+    added: [
+      'A short label floats off a player the moment they earn something — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second.',
+      'Turn it off in Game Feel under Presentation if you would rather not have it.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0930AM', title: 'Break the Targets, now visible',
     added: [
       'The five spots a ball can appear at are marked on the pitch, so the route is something you can learn. The one the ball is on is highlighted.',
@@ -3105,7 +3125,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
             goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -3954,7 +3974,7 @@ function sfxGroan(){ try{ Aud.noise(0.5,{bp:420,Q:0.6,vol:0.28,swell:true}); Aud
 function crowdReact(w){
   const b=w.ball;
   w._crowdCd = Math.max(0, (w._crowdCd||0) - STEP);
-  if (b._hitPost){ b._hitPost=false; if (b.lastKicker && b.lastKicker.ms) b.lastKicker.ms.posts++; if (w._crowdCd<=0){ sfxGroan(); spawnTouchFx(b.x,b.y,'#ffd23d',30); w._crowdCd=1.0; } return; }
+  if (b._hitPost){ b._hitPost=false; if (b.lastKicker && b.lastKicker.ms){ b.lastKicker.ms.posts++; addFloater(b.lastKicker, 'POST!', TH.warn); } if (w._crowdCd<=0){ sfxGroan(); spawnTouchFx(b.x,b.y,'#ffd23d',30); w._crowdCd=1.0; } return; }
   if (w.state!=='play') return;
   const halfL=w.field.L/2, gh=w.field.goal/2, sp=Math.hypot(b.vx,b.vy);
   if (sp < 7 || w._crowdCd>0) return;
@@ -4286,6 +4306,17 @@ const TRAP = { max:0.5, spin:9.0, steal:2 };   // ball stays stuck for at most h
 // slider wiring calls syncGoalCamSliders() at init, and a const declared further
 // down the file is still in the temporal dead zone at that point — which took the
 // whole page down with "Cannot access 'GOALCAM' before initialization".
+// ⚠️ FLOATING STAT TEXT — "ASSIST", "SAVE", the MMO damage-number idea. Declared up
+// here with GOALCAM for the same reason: the settings wiring runs during the bootstrap.
+const FLOAT = {
+  life: 0.95,      // seconds on screen
+  fade: 0.42,      // last fraction of that life spent fading out
+  rise: 30,        // SCREEN pixels it drifts up over its life
+  lift: 24,        // screen pixels it starts above the disc
+  gap: 15,         // stagger when one player earns several at once
+  size: 11,        // font px — screen, not world (see drawFloaters)
+  max: 20,         // hard cap; oldest goes
+};
 const GOALCAM = {
   // ⚠️ THIRD TUNING, and the shape is what took three goes rather than the numbers.
   // It shipped at 5.0x over 1.15s: 5x is most of the pitch gone, and 1.15s of a 1.8s
@@ -6524,6 +6555,7 @@ function buildMatchOpts(){
   buildOpts('coop', COOP, 'coop');
   buildOpts('dropIn', DROPIN, 'dropIn');
   buildOpts('tiltPick', TILTOPT, 'tilt');
+  buildOpts('popupPick', POPOPT, 'popups');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -9437,6 +9469,7 @@ function loop(t){
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
     pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
+    advanceFloaters();      // stat labels age with the sim, never with the refresh rate
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
     advanceFx();            // ...and the sparks, for exactly the same reason
     acc -= STEP; steps++;
@@ -10881,6 +10914,81 @@ function lobbyStart(w){
   w.lobby = null;
   resetKickoff(w, true);
 }
+// ---------- Floating stat text ----------------------------------------------
+// A short label over a player the moment they do something the match record will
+// remember — GOAL, ASSIST, SAVE, KEY PASS. It rises a little and fades.
+//
+// ⚠️ SPAWNED WHERE THE STAT IS COUNTED, never from a second reading of the game.
+// Every one of these hangs off the exact line that does `ms.<stat>++`, so a floater
+// cannot claim something the result screen will not also show. TOUCHES is deliberately
+// excluded: it is the one stat every player always has, so a floater on every touch is
+// a permanent smear of text over the pitch that tells you nothing — the same argument
+// that keeps it off the result screen.
+//
+// ⚠️ It AGES in `advanceFloaters()`, next to `decayJuice()`, never in a draw. That is
+// the trails rule: on a 144Hz screen a draw-aged label would live a third as long, and
+// two draws of one frame would show two different pictures.
+//
+// ⚠️ NO RANDOMNESS AT ALL. These are spawned from inside `step()` — off `noteKick` and
+// `checkGoal` — so a `Math.random` here would break the determinism rule outright, and
+// drawing from `w.rng` would make how many labels appeared perturb every later bot
+// decision. The stagger is counted, not rolled.
+let floaters = [];
+function clearFloaters(){ floaters.length = 0; }
+function addFloater(p, text, col){
+  if (!p || sel.popups === 'off') return;
+  // Stagger against whatever this player already has up, so two in the same instant
+  // do not print on top of each other.
+  let n = 0;
+  for (const f of floaters) if (f.p === p) n++;
+  floaters.push({ p, x: p.x, y: p.y, t: 0, text, col, tier: n });
+  // Oldest out first — a cap that dropped the NEWEST would silently swallow the goal
+  // in a scramble, which is the one you most want to see.
+  while (floaters.length > FLOAT.max) floaters.shift();
+}
+function advanceFloaters(){
+  if (!floaters.length) return;
+  for (const f of floaters) f.t += STEP;
+  // Filtered in place rather than reallocated: this runs every step.
+  let k = 0;
+  for (const f of floaters) if (f.t < FLOAT.life) floaters[k++] = f;
+  floaters.length = k;
+}
+// ⚠️ Drawn OUTSIDE the pitch rotation and placed through `screenPt`, exactly like the
+// REPLAY label: deck view turns the pitch a quarter-turn, and text is the one thing
+// that must stay the right way up when it does. It still carries the BODY layer's tilt
+// and shake offsets by hand, because it is pinned to a body.
+// ⚠️ The rise and the font are in SCREEN pixels while the anchor is in world space —
+// on the huge courts `cam.s` falls far enough that a world-sized label would be a
+// smudge, and the whole point of the thing is that it is readable.
+function drawFloaters(sx, sy, bx, by){
+  if (!floaters.length || sel.popups === 'off') return;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  for (const f of floaters){
+    const k = f.t / FLOAT.life;
+    // Ease the rise out, so it leaps away from the player and settles rather than
+    // crawling at a constant speed.
+    const climb = FLOAT.lift + FLOAT.rise * (1 - (1-k)*(1-k));
+    const a = k < (1 - FLOAT.fade) ? 1 : Math.max(0, (1 - k) / FLOAT.fade);
+    const [px, py] = screenPt(wx(f.x), wy(f.y));
+    ctx.font = `${FLOAT.size}px 'Kenney', system-ui, -apple-system, sans-serif`;
+    // ⚠️ CLAMPED INSIDE THE CANVAS, the same reason `drawSubPrompts` is: a player can be
+    // at the touchline — or stepped past it — and a centred label then loses its last
+    // letters off the edge, which is exactly when you want to read it. Measured after the
+    // font is set, or the width is taken against whatever font happened to be current.
+    const half = ctx.measureText(f.text).width / 2 + 4;
+    const x = Math.max(half, Math.min(cw - half, px + sx + bx));
+    const y = Math.max(FLOAT.size + 2, py + sy + by - climb - f.tier * FLOAT.gap);
+    ctx.globalAlpha = a;
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)';
+    ctx.strokeText(f.text, x, y);
+    ctx.fillStyle = f.col || TH.hudText;
+    ctx.fillText(f.text, x, y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
 // ---------- Cocktail direction calibration -----------------------------------
 // One arrow at a time: hold the stick that way for a second and it's recorded. Two
 // samples (up, then right) are enough to pin the rotation, and taking BOTH means a
@@ -11401,17 +11509,20 @@ function noteKick(w, p, power, nx, ny){
   const halfL = w.field.L/2;
   // Shot: a real strike heading goalward.
   if (power > 4 && ny*attackDir > 0.25){
-    ms.shots++;
+    ms.shots++; addFloater(p, 'SHOT', TH.hudSub);
     // Playmaker: the previous distinct kicker was a teammate teeing this up.
-    if (b.prevKicker && b.prevKicker!==p && b.prevKicker.team===p.team && (w.matchT-b.prevKickT) < 3 && b.prevKicker.ms)
-      b.prevKicker.ms.passKey++;
+    if (b.prevKicker && b.prevKicker!==p && b.prevKicker.team===p.team && (w.matchT-b.prevKickT) < 3 && b.prevKicker.ms){
+      b.prevKicker.ms.passKey++; addFloater(b.prevKicker, 'KEY PASS', TH.accent);
+    }
   }
   // The Wall: a clearance struck from your own half, sent upfield.
   const ownLineY = -attackDir*halfL;
-  if (Math.abs(p.y-ownLineY) < halfL*0.55 && ny*attackDir > 0.15 && power > 3.5) ms.clears++;
+  if (Math.abs(p.y-ownLineY) < halfL*0.55 && ny*attackDir > 0.15 && power > 3.5){
+    ms.clears++; addFloater(p, 'CLEARANCE', TH.hudSub);
+  }
   // Save: you were the threatened team and you've just turned the ball away from goal.
   if (w.threat && w.threat.team===p.team && (w.ball.vy * w.threat.dir) <= 0.5){
-    ms.saves++; w.threat = null;
+    ms.saves++; addFloater(p, 'SAVE', TH.accent); w.threat = null;
   }
 }
 // Update the on-target "threat" each play step so a defender's clearing kick can be
@@ -11864,9 +11975,11 @@ function creditScorer(w, b, team){
   // own goal is still their moment. Captured here because the chain is cleared below.
   w.goalCamP = b.lastKicker || null;
   if (b.lastKicker && b.lastKicker.team===team && b.lastKicker.ms){
-    b.lastKicker.ms.goals++;
+    b.lastKicker.ms.goals++; addFloater(b.lastKicker, 'GOAL!', TH.good);
     if (b.prevKicker && b.prevKicker!==b.lastKicker && b.prevKicker.team===team &&
-        (w.matchT - (b.prevKickT||0)) < 6 && b.prevKicker.ms) b.prevKicker.ms.assists++;
+        (w.matchT - (b.prevKickT||0)) < 6 && b.prevKicker.ms){
+      b.prevKicker.ms.assists++; addFloater(b.prevKicker, 'ASSIST', TH.good);
+    }
   }
   b.lastKicker = null; b.prevKicker = null;   // reset chain for the next kickoff
 }
@@ -12068,6 +12181,7 @@ function kqGoal(w, ball, team){
 function restartMatch(w){
   w.score = [0,0]; w.overtime = false; w.forceWin = null; w.endRamp = null;
   goalCamReset();                 // a new match starts on a level camera
+  clearFloaters();                // ...and with no stat labels left over from the last
   w.timeLeft = w.mode.train ? 0 : (w.len.secs || 0);
   w.matchT = 0; w.maxDeficit = [0,0]; w.practiceGoals = 0;
   w.lastScorer = -1; w.kickTeam = 1; w.threat = null;
@@ -14133,6 +14247,9 @@ function render(){
   // off-pitch until it respawns; skip it rather than draw a halo out in the void.
   if (world.extraBalls) for (const eb of world.extraBalls){ if (!eb.banked) drawBall({ ball: eb }); }
   ctx.restore();
+  // ⚠️ After the restore, so the pitch's quarter-turn in deck view cannot lie the text
+  // on its side. It takes the body layer's shake and tilt by hand instead.
+  drawFloaters(sx, sy, bx, by);
   // Goal flash — a quick coloured wash that fades.
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
@@ -18025,6 +18142,7 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
+    FLOAT, POPOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
     onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,

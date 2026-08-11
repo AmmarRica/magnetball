@@ -155,6 +155,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the time
   it was given, so a kick looked punchier on a slow monitor. It also meant two draws of one
   frame produced two different pictures.
+- **Floating stat text** (`FLOAT`, `floaters`, `addFloater`, `advanceFloaters`,
+  `drawFloaters`, `sel.popups`): a short label over a player the instant they earn
+  something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST.
+  ⚠️ **Spawned where the stat is COUNTED**, never from a second reading of the game —
+  every `addFloater` hangs off the exact line that does `ms.<stat>++` (in `noteKick`,
+  `creditScorer` and the post branch), so a label cannot claim something the result
+  screen will not also show.
+  ⚠️ **TOUCHES is excluded**, the same argument that keeps it off the result screen: it
+  is the one stat every player always has, so a label per touch is a permanent smear of
+  text that tells you nothing.
+  ⚠️ Ages in `advanceFloaters()` next to `decayJuice()`, **never in a draw** — the trails
+  rule. ⚠️ **No randomness at all**: these are spawned from inside `step()`, so
+  `Math.random` would break the determinism rule outright and `w.rng` would make how many
+  labels appeared perturb every later bot decision. The stagger is counted, not rolled.
+  ⚠️ Drawn **outside the pitch rotation** through `screenPt`, like the REPLAY label — deck
+  view turns the pitch a quarter-turn and text must stay upright — while carrying the
+  body layer's tilt and shake by hand. The anchor is in world space but the rise and the
+  font are **screen pixels**, because on the huge courts `cam.s` makes a world-sized
+  label a smudge. ⚠️ **Clamped inside the canvas** (`drawSubPrompts`' reason): a body at
+  or past the touchline otherwise loses its last letters off the edge.
+  ⚠️ The cap drops the **oldest** — dropping the newest swallows the goal in a scramble.
+  ⚠️ Its own toggle, not under Screen shake: a label naming what you did is information,
+  and turning the wobble off is not asking to stop being told. `tests/floaters.mjs`.
 - **Motion tells:** short dot tails behind the players and one streak behind the ball,
   both capped in world units (`DOT_GAP`/`DOT_MAX`, `BALL_LEN_MAX`). ⚠️ A three-second,
   time-measured version of these was built and **reverted**: at the speed cap it drew a
