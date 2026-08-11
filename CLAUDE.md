@@ -491,6 +491,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   after that line the segment is zero-length and no shot crosses anything.
   ⚠️ **The only drill where HIGHER is better** (`def.high`). Every other one scores on
   time, and an unguarded `t < prev` records your worst run as your record.
+  ⚠️ **`renderDrill` had to learn to draw a GOAL.** It paints `w.bounds` as one
+  `strokeRect` plus gates, zones, cones and `wl.draw` walls — and `buildGeometry`
+  produces none of those, so the goals were in the physics and nowhere on the screen:
+  a solid line ran across both mouths and the drill was a box with a ball in it.
+  `drawDrillGoals` (mouth left open, net pocket, posts, mouth marked in `TH.good`) and
+  `drawTargetSpots` (all five, current one solid) are gated on `w.drillGoalsOpen`, so
+  every other drill is untouched. The readout branches on `def.high` too — a points
+  drill has no `total`, so the shared `0/0` claimed it was complete and empty at once.
   ⚠️ The player is never moved to the next ball — walking to it is the drill.
   `tests/targetsdrill.mjs`.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
