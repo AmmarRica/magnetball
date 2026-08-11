@@ -334,6 +334,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   with a few shards scattering more as the block ages). Both scatters are derived from the
   point's own coordinates, never a clock or a PRNG — a draw must not differ between two
   draws of one step.
+  `smash` (shown as **Blast Zone**) = a platform fighter's stage: a bright cream slab
+  floating in a dark void, hard black edge, a nebula wash and a slow drift of stars
+  outside it. ⚠️ Taken as a **design language, not characters** — no borrowed art, just
+  the four things that genre got right: the stage FLOATS (the outside is where you get
+  knocked into, not a margin), heavy black outlines so a bright screen still parses, a
+  **player indicator** under every body because finding yourself in a scramble is the
+  hardest read, and the KO streak — which is `comet`, **reused** rather than reinvented.
+  ⚠️ The field `bleed`s and paints the void over a region **nine times the pitch box**;
+  painted into `L,T,W,H` the stars land under the stage and the court fill covers them,
+  which is how it first shipped — a flat dark surround with a sky nobody could see.
+  ⚠️ The sides are a KO **star** against a **shield bubble**, measured on a ring at
+  0.62r: a star is ink at five points and court between them, a bubble is ink all the
+  way round. The radius matters — at 0.88r both read near zero, because the star's
+  points end at 0.86. ⚠️ **The player indicator is a RIM ARC, never a filled plate.** A
+  translucent backing disc covers every probe angle, and the first build measured both
+  sides at 32/32: the silhouette rule defeated by the very idea being borrowed.
+  The ball is a four-point **sparkle orb** — four and not five on purpose, because team 0
+  already wears a five-point star and the ball must never read as a player.
   `abari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
   built from — triangle, square, circle — drifting in the room BEYOND the pitch.
   ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink

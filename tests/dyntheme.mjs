@@ -982,6 +982,100 @@ const r = await p.evaluate(async ()=>{
     o.ampDraws = aShot('amp') !== aShot('plain');
     M.applyBundle('classic');
   }
+
+  // ---- Blast Zone: a floating stage, a KO star and a shield bubble ----------
+  // ⚠️ The silhouette is measured on a ring at 0.62r, and the radius matters. A star
+  // is ink near its five points and court in the valleys between them; a bubble is ink
+  // all the way round. Probing further out (0.88r) reads near-zero for BOTH — the star's
+  // points end at 0.86 — so the band has to sit inside the star's reach.
+  {
+    M.applyBundle('smash');
+    o.smashName = M.bundleName();
+    o.smashSlots = JSON.stringify(M.sel.look);
+    const R = 60, CX = 150, CY = 150;
+    const cvS = document.createElement('canvas'); cvS.width = cvS.height = 300;
+    const ccS = cvS.getContext('2d');
+    const ringInk = (team, fr) => {
+      ccS.fillStyle = '#7f7f7f'; ccS.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.smash.paint(ccS, q, CX, CY, R, { players:[q] });
+      let hit = 0; const N = 32;
+      for (let k=0;k<N;k++){
+        const a = k*2*Math.PI/N;
+        const d = ccS.getImageData(Math.round(CX+Math.cos(a)*R*fr), Math.round(CY+Math.sin(a)*R*fr), 1, 1).data;
+        if (Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127) > 60) hit++;
+      }
+      return hit;
+    };
+    o.starInk = ringInk(0, 0.62);
+    o.shieldInk = ringInk(1, 0.62);
+    o.smashSidesDiffer = o.starInk <= 22 && o.shieldInk >= 30;
+    // ⚠️ ...and the PLAYER INDICATOR must not undo it. A translucent backing plate behind
+    // the mark covers every probe angle, and the first build drew exactly that: both sides
+    // measured 32 of 32 and the silhouette rule was defeated by the very idea being
+    // borrowed. The indicator is a rim arc now, so the band above sees only the mark.
+    o.indicatorNotAPlate = o.starInk < 30;
+    // Nothing crosses the guide ring — the ring is what collides.
+    o.outsideRing = ringInk(0, 1.06) === 0 && ringInk(1, 1.06) === 0;
+
+    // ---- the stage FLOATS: the field paints OUTSIDE the pitch -------------
+    // ⚠️ THE BUG THIS CATCHES, and it shipped in the first build: the void and its stars
+    // were painted into `L,T,W,H` — the pitch box — and then the court was filled straight
+    // over them. The blast zone was a flat dark surround with a sky nobody could see.
+    {
+      const cvB = document.createElement('canvas'); cvB.width = cvB.height = 400;
+      const ccB = cvB.getContext('2d');
+      ccB.fillStyle = '#7f7f7f'; ccB.fillRect(0,0,400,400);
+      const f = M.DYN_FIELDS.blastzone, stB = {};
+      // A pitch box in the MIDDLE of the canvas, so there is room either side to look at.
+      const L = 140, T = 120, W = 120, H = 160;
+      f.reset(stB); f.step(stB, 2.0);
+      f.paint(ccB, stB, L, T, W, H, { field: M.FIELDS.classic });
+      const count = (x0, y0, x1, y1, pred) => {
+        const d = ccB.getImageData(x0, y0, x1-x0, y1-y0).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (pred([d[i],d[i+1],d[i+2]])) n++;
+        return n;
+      };
+      // Out in the void: not the untouched grey backdrop, and carrying star ink.
+      const notGrey = c2 => Math.abs(c2[0]-127)+Math.abs(c2[1]-127)+Math.abs(c2[2]-127) > 30;
+      o.voidPainted = count(4, 4, 130, 396, notGrey);
+      o.paintsOutside = o.voidPainted > 2000;
+      // ⚠️ And the sky is a SKY: points of light, not a flat wash. Measured by DIFFING a
+      // paint against one with the star list emptied, because "bright pixels in the void"
+      // is not that claim — the nebula bloom alone reads 6,612 of them, so removing every
+      // star still passed. Verified by running that sabotage: it failed a different
+      // assertion entirely, which is how the weak one was found.
+      const lum = c2 => c2[0]*0.3 + c2[1]*0.6 + c2[2]*0.1;
+      const frame = () => { ccB.fillStyle='#7f7f7f'; ccB.fillRect(0,0,400,400);
+        f.paint(ccB, stB, L, T, W, H, { field: M.FIELDS.classic });
+        return ccB.getImageData(4, 4, 126, 392).data; };
+      const withStars = frame();
+      const keptStars = stB.st; stB.st = [];
+      const noStars = frame();
+      stB.st = keptStars;
+      let sp = 0;
+      for (let i = 0; i < withStars.length; i += 4)
+        if (Math.abs(withStars[i]-noStars[i]) + Math.abs(withStars[i+1]-noStars[i+1])
+          + Math.abs(withStars[i+2]-noStars[i+2]) > 20) sp++;
+      o.starPixels = sp;
+      o.skyHasStars = sp > 200;
+      // ...while the STAGE itself is clean: no stars strewn across the court.
+      o.stageStars = count(L+12, T+12, L+W-12, T+H-12, c2 => lum(c2) > 40 && c2[2] > c2[1] + 12);
+      o.stageIsClean = o.stageStars === 0;
+      // ⚠️ Paint is PURE for a given step: two paints of one step must be identical, or a
+      // paused screen crawls at the refresh rate.
+      const snap = () => { ccB.fillStyle='#7f7f7f'; ccB.fillRect(0,0,400,400);
+        f.paint(ccB, stB, L, T, W, H, { field: M.FIELDS.classic });
+        return ccB.getImageData(0,0,400,400).data.join(','); };
+      const a1 = snap(), a2 = snap();
+      o.paintIsPure = a1 === a2;
+      f.step(stB, 1.0);
+      o.driftMovesWithStep = snap() !== a1;
+    }
+    M.applyBundle('classic');
+  }
+
   return o;
 });
 
@@ -1108,6 +1202,15 @@ ok(r.rollIsStable, 'the same step drawn twice gave different frames — the blin
 ok(r.rollVariesByCycle, 'the blink pattern is identical from cycle to cycle, so nothing is actually being rolled');
 ok(r.blocksKeepOffCentre, `the blocks reach past their corners (${r.blockReach} of ${r.blockGrid} cells) — the middle of the pitch is the one place nothing decorative belongs`);
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
+ok(r.smashName === 'Blast Zone', `the Blast Zone bundle does not resolve: ${r.smashName}`);
+ok(r.smashSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
+ok(r.indicatorNotAPlate, `the player indicator is a filled plate behind the mark (star reads ${r.starInk}/32) — it covers every probe angle and defeats the silhouette it was added alongside`);
+ok(r.outsideRing, 'a Blast Zone mark crosses the guide ring, which is the thing that actually collides');
+ok(r.paintsOutside, `the blast zone paints nothing outside the pitch (${r.voidPainted} px) — the void is the whole theme, and painting it into the pitch box means the court covers it`);
+ok(r.skyHasStars, `the void is a flat wash with no stars in it — emptying the star list changed only ${r.starPixels} px`);
+ok(r.stageIsClean, `${r.stageStars} star pixels landed ON the stage — the court is the one place nothing decorative belongs`);
+ok(r.paintIsPure, 'two paints of one sim step gave different frames — the drift must advance in step(), or a paused screen crawls at the refresh rate');
+ok(r.driftMovesWithStep, 'the star drift never moved when the field was stepped');
 
 console.log(JSON.stringify(r, null, 1));
 await b.close();
