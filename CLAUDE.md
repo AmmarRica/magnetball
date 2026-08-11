@@ -467,6 +467,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   because the cue ball look is *plain* and never exercised the spot, so every other look
   rendered as a plain white ball. Every other palette is 10.6:1+, which is why it hid.
   A readable spot is left untouched; this is a floor, not a repaint. `tests/balllook.mjs`.
+- **The ball as a ROLLING SPHERE** (`sel.ball3d`, default **off**; `BALL3D`,
+  `paintBallSphere`, `ballSphereTex`): the pattern is mapped onto a cylinder-projected
+  sphere and scrolled by the roll, so the markings compress toward the limb and go over
+  the horizon. The ball already had sphere *shading* — a ground shadow and a fixed
+  highlight — and what read flat was the pattern being **rotated in 2D**, which is a
+  spinning disc.
+  ⚠️ **A setting, not a theme**, and default off: it changes the most-watched object on
+  the pitch, so it is something you turn on rather than something that arrives.
+  ⚠️ The texture is **baked once per (look, ink)** and scrolled with `drawImage` — keyed
+  on the ink because slots mix and the pattern is drawn in the ball's spot colour, and
+  dropped in `clearSwatchCache` so cycling palettes leaves nothing behind.
+  ⚠️ **Slices scale with radius** (`max(8, min(26, r*0.9))`). A fixed 26 costs the same
+  at 9px as at 70px, and the warm-up lobby fields fourteen balls; worst case measured at
+  **1.4ms** of a 16.6ms frame.
+  ⚠️ **`minPx` is 5, matching the flat pattern's own `r >= 5`.** It shipped at 7 — above
+  the **6.56px** the ball is actually drawn at on a 390×844 phone — so the feature did
+  nothing at all for the people most likely to switch it on. `tests/ball3d.mjs` asserts
+  engagement against the real drawn radius.
+  ⚠️ The roll DIRECTION comes from the ball's velocity, and the last heading is kept in a
+  **module variable, never on the ball**: a draw that wrote to the world would be
+  reachable from the sim on the next step, and `tests/determinism.mjs` hashes the world.
+  Render only — the suite proves the world bit-identical with it on and off.
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
