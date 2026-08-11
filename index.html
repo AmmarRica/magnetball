@@ -1681,6 +1681,10 @@
       <div class="opts" id="ball3dPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
       <div style="height:10px"></div>
+      <label class="field">Replay camera</label>
+      <div class="opts" id="sideViewPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Watch replays and the idle demo match from beside the touchline instead of straight down: the pitch turns so goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow. Render only — nothing about the match changes, and the two views replay the same recording. Deliberately not offered for playing a match in: a body in front of the ball is good television and a bad time on the ball.</div>
+      <div style="height:10px"></div>
       <label class="field">Floating stat text</label>
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
@@ -2063,6 +2067,8 @@
    ── drawing ──────────────────────────────────────────────────────────────
    Render entry                "let cam = { s:1, ox:0"
    Goal camera                 "Goal camera ---"
+   Side view (showcase cam)    "SIDE VIEW — the showcase camera"
+   Side view bodies            "The side view's bodies ---"
    Pitch surfaces              "Pitch surfaces ---"
    Pitch wear                  "Wear that accumulates"
    Dynamic fields              "Dynamic visual themes"
@@ -2755,6 +2761,62 @@ const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
 };
+// ============================================================
+//  SIDE VIEW — the showcase camera
+// ============================================================
+// A broadcast-style camera for SHOWING the game rather than playing it: the pitch turns
+// so goal-to-goal runs left→right, the ground plane is squashed as though seen from
+// beside the touchline, and every body stands up off it as a cylinder.
+//
+// ⚠️ An OBLIQUE SQUASH, not a perspective projection, and that is the load-bearing
+// choice rather than a shortcut. Every pitch painter in this file works from a
+// RECTANGLE — `drawPitch` computes `L,T,R,B` and hands it to `drawGrass`, to
+// `vjPaintVideo` and to all fourteen `DYN_FIELDS` painters as `L,T,W,H` — and an
+// oblique y-squash maps a rectangle to a rectangle. So the grass clip, the goal boxes,
+// the markings, the pool table's cushion path and every animated field keep working
+// with no change at all. A true perspective does NOT preserve rectangles, so it would
+// mean rewriting all fourteen field painters, both goal pockets and every marking, for
+// a camera nobody plays with.
+//
+// ⚠️ REPLAYS AND THE IDLE ATTRACT MATCH ONLY, and there is deliberately no "always on"
+// option. `pitchHorizontal()` is what `applySeatRotation` reads to decide which way a
+// stick points, and it is answered once on a layout change — not per frame — so a
+// camera that turned the pitch a quarter-turn behind the input's back would hand a
+// player a stick that is 90° wrong. A replay has no input but "skip" and the attract
+// demo has no humans in it at all, so the question never arises. That is also exactly
+// what was asked for: a view for showing the game off, not for playing a match in.
+const SIDE = {
+  sq:     0.52,   // ground-plane squash — the camera sits ~31° above the horizon
+  h:      1.15,   // cylinder height, in body radii
+  head:   40,     // world units of extra headroom, so a standing body can't clip the top
+  wallHi: 0.86,   // wall shading just under the top face...
+  wallLo: 0.38,   // ...and at the base
+  shadow: 0.5,    // ground-shadow alpha
+  // ⚠️ WIDER than the body, and that is the point rather than a look. The wall covers the
+  // whole footprint — it is drawn from the top face down and round the bottom of the base
+  // ellipse — so a shadow at the body's own radius is painted over completely and the
+  // first build had one nobody could see. The spill is the part that reads.
+  shadowR: 1.3,
+};
+const SIDEOPT = {
+  off:  { name:'Top-down',  emoji:'⬜', icon:'barrier' },
+  show: { name:'Side view', emoji:'🎥', icon:'stadium' },
+};
+// ⚠️ Answered ONCE PER FRAME into `sideNow`, never asked again mid-frame: half a frame
+// squashed and half of it flat would be a mess, and `replay.active` genuinely does flip
+// between one frame and the next.
+let sideNow = false;
+function sideViewWant(){
+  if ((sel.sideView || 'off') === 'off') return false;
+  if (!world || world.drillMode) return false;
+  return replay.active || !!world.demo;
+}
+// Screen pixels a body of DRAWN radius r stands off the ground.
+function sideLift(r){ return SIDE.h * r; }
+function sideBallLift(w){
+  const b = w && w.ball; if (!b) return 0;
+  return sideLift(b.r * cam.s * cam.body);
+}
 const TILTOPT = {
   on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
   off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
@@ -2986,7 +3048,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0625PM';
+const VERSION = '20260811.0940PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3002,6 +3064,14 @@ const VERSION = '20260811.0625PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0940PM', title: 'Watch from the touchline',
+    added: [
+      'Replays and the idle demo match can be shown from beside the pitch instead of straight down: goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow.',
+      'Off by default — turn it on in Game Feel under Presentation. It only ever changes how a replay or the demo is DRAWN, never how a match plays, and it is deliberately not offered for playing in: a player standing in front of the ball makes good television and a bad time on the ball.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0625PM', title: 'A ball that rolls',
     added: [
       'The ball can roll like a real sphere: its markings wrap round it, squash up at the edge and go over the horizon, following whichever way it is travelling.',
@@ -3153,7 +3223,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
             goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -4392,6 +4462,10 @@ const FLOAT = {
   gap: 15,         // stagger when one player earns several at once
   size: 11,        // font px — screen, not world (see drawFloaters)
   max: 20,         // hard cap; oldest goes
+  // Nominal body radius, in world units, used only to clear a standing body in the side
+  // view. A floater stores a POINT and not which body earned it (it outlives the body's
+  // position on purpose — it stays where the thing happened), so there is no p.r to read.
+  anchorR: 14,
 };
 // ⚠️ ROLLING-SPHERE BALL. Declared up here with FLOAT/GOALCAM because `paintBall` runs
 // during the bootstrap (the picker tiles are the real painter) and a const further down
@@ -6661,6 +6735,7 @@ function buildMatchOpts(){
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
+  buildOpts('sideViewPick', SIDEOPT, 'sideView');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -9646,9 +9721,16 @@ function drawReplayFrame(f){
   // replay came back at ninety degrees to the match it was a replay OF. It is two passes
   // for the same reason render() is: the ground and the bodies carry different offsets,
   // and a replay of a tilted pitch has to be tilted the same way or the shadows detach.
+  // ⚠️ The side camera is asked and the camera refitted HERE too, not just in render():
+  // this path does not go through render() at all (loop() returns early while a replay
+  // is active), so without it a replay would be drawn with whatever cam.sq the last
+  // ordinary frame left behind — which is 1, because `replay.active` was false then.
+  sideNow = sideViewWant();
+  computeCam();
   const [rgx, rgy] = tiltGround(), [rbx, rby] = tiltLift();
   ctx.save(); pitchXform(rgx, rgy); drawPitch(fake); ctx.restore();
-  ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore();
+  if (sideNow) drawBodiesSide(fake, rbx, rby);
+  else { ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore(); }
   // Big, centred REPLAY label + skip hint so it's clear what's happening.
   // Centre on the PITCH (wx/wy(0)), not the raw canvas — a docked desktop panel
   // insets the pitch to the right, so cw/2 would sit left of the play area.
@@ -11084,7 +11166,11 @@ function drawFloaters(sx, sy, bx, by){
     // font is set, or the width is taken against whatever font happened to be current.
     const half = ctx.measureText(f.text).width / 2 + 4;
     const x = Math.max(half, Math.min(cw - half, px + sx + bx));
-    const y = Math.max(FLOAT.size + 2, py + sy + by - climb - f.tier * FLOAT.gap);
+    // ⚠️ Plus the body height in the side view. `screenPt` lands on the GROUND, and out
+    // there a body stands a full radius and a bit above it, so an unadjusted label would
+    // sit across the middle of the player it is naming.
+    const stand = sideNow ? sideLift(FLOAT.anchorR * cam.s * cam.body) : 0;
+    const y = Math.max(FLOAT.size + 2, py + sy + by - climb - stand - f.tier * FLOAT.gap);
     ctx.globalAlpha = a;
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)';
     ctx.strokeText(f.text, x, y);
@@ -13690,7 +13776,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 // ============================================================
 //  RENDER
 // ============================================================
-let cam = { s:1, ox:0, oy:0, body:1 };   // body = render-only size floor, see MIN_BODY_PX
+let cam = { s:1, ox:0, oy:0, body:1, sq:1 };   // body = render-only size floor, see MIN_BODY_PX; sq = SIDE view squash
 // ---------- Goal camera ------------------------------------------------------
 // On a goal the view pushes in on whoever last touched the ball and eases back out
 // when the celebration ends. Render layer only — it moves `cam`, which no physics,
@@ -13734,6 +13820,12 @@ function advanceGoalCam(w){
 function goalCamEase(){ const t = goalCam.t; return t*t*(3 - 2*t); }
 // Apply to a camera that has already been fitted to the pitch.
 function applyGoalCam(){
+  // ⚠️ A replay owns its own framing — the same rule `advanceGoalCam`'s `want` already
+  // states. It used to be enough to say it there, because nothing on the replay path
+  // called computeCam at all; the side view does (it has to refit the camera for the
+  // squash), and without this guard a goal replay would inherit the 1.8× push frozen at
+  // full strength, since the step loop that eases it back out is not running.
+  if (replay.active) return;
   const g = goalCamEase();
   if (g <= 0.0001) return;
   // ⚠️ ix/iy, not the raw position — mid-step they differ by up to a full step of
@@ -13800,15 +13892,32 @@ function computeCam(){
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
   // wide screen is actually used. render() applies the matching canvas rotation, so
   // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
-  if (pitchHorizontal()){
+  // The showcase camera always turns the pitch — a side view of a portrait pitch that
+  // was not turned would be a view along the goal-to-goal axis, which is a view of one
+  // goal. ⚠️ It sets cam.rot ITSELF rather than going through pitchHorizontal(): that
+  // predicate is also what applySeatRotation reads to decide which way a stick points,
+  // and it is answered on a layout change rather than per frame. See SIDE.
+  if (sideNow){
     cam.rot = -Math.PI/2;
+    cam.sq  = SIDE.sq;
+    // Squashing the ground plane lets the pitch be BIGGER, not smaller — the vertical
+    // extent it needs is the pitch's width times the squash, plus the headroom a body
+    // standing up needs above the far touchline.
+    cam.s = Math.min(availW/worldH, availH/(worldW*SIDE.sq + SIDE.head));
+  } else if (pitchHorizontal()){
+    cam.rot = -Math.PI/2;
+    cam.sq  = 1;
     cam.s = Math.min(availW/worldH, availH/worldW);
   } else {
     cam.rot = 0;
+    cam.sq  = 1;
     cam.s = Math.min(availW/worldW, availH/worldH);
   }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
+  // Push the pitch down by half the headroom, so the room a standing body needs is at
+  // the TOP of the frame where the far touchline is, not split evenly above and below.
+  if (sideNow) cam.oy += SIDE.head * cam.s * 0.5;
   applyGoalCam();
   // ⚠️ RENDER ONLY. On the huge courts the whole pitch still has to fit on screen, so
   // cam.s falls far enough that a player disc is 2 pixels across — measured 2.1px on
@@ -13824,6 +13933,9 @@ function computeCam(){
 
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
+// The side view's ground-plane squash, in SCREEN space. Applied about cam.oy so the
+// pitch centre stays put while the plane flattens.
+function sideSquashY(y){ return cam.sq === 1 ? y : cam.oy + (y - cam.oy)*cam.sq; }
 // Draw screen-upright content at a point inside the rotated pitch (name plates,
 // cap glyphs) — without this they'd lie on their side in deck view.
 function uprightAt(x, y, fn){
@@ -13833,10 +13945,12 @@ function uprightAt(x, y, fn){
 // True on-screen point for a camera-space point — applies the same quarter-turn
 // render() does, so overlap tests measure what the player actually sees.
 function screenPt(px, py){
-  if (!cam.rot) return [px, py];
+  if (!cam.rot) return [px, sideSquashY(py)];
   const dx = px - cam.ox, dy = py - cam.oy;
   const c = Math.cos(cam.rot), sn = Math.sin(cam.rot);
-  return [cam.ox + dx*c - dy*sn, cam.oy + dx*sn + dy*c];
+  // ⚠️ The squash comes AFTER the turn, in the same order pitchXform composes them:
+  // it is a foreshortening of the screen, not of the pitch's own axes.
+  return [cam.ox + dx*c - dy*sn, sideSquashY(cam.oy + dx*sn + dy*c)];
 }
 // Circle vs axis-aligned rect (screen space): nearest point on the rect to the
 // centre, then a plain radius check.
@@ -14308,12 +14422,23 @@ function renderDrill(){
 // ⚠️ ONE place. render() draws the ground and the bodies as two passes so they can carry
 // different offsets, and drawReplayFrame needs the same turn — three hand-written copies
 // of it is how the replay came to be drawn at ninety degrees to the match it replayed.
+// ⚠️ The side view's squash is the FIRST call here, which makes it the LAST thing
+// applied on the way from the world to the screen — ctx transforms compose inwards, so a
+// later call is nearer the drawing. It has to be that way round: it is a foreshortening
+// of the SCREEN, so it must land after the quarter-turn, not before it (squashed before
+// the turn and it would flatten the pitch's length instead of its width).
+// The shake and tilt offsets are inside it, so they foreshorten too — which is right: a
+// shake of a ground plane seen at 31° is a shake of that plane, not of the monitor.
 function pitchXform(dx, dy){
+  if (cam.sq !== 1){ ctx.translate(0, cam.oy); ctx.scale(1, cam.sq); ctx.translate(0, -cam.oy); }
   ctx.translate(dx, dy);
   if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
 }
 function render(){
   if (!world) return;
+  // ⚠️ Answered once, HERE, before anything reads it — see SIDE. Cleared for a drill on
+  // the way past, so `sideNow` can never be left true from an earlier frame.
+  sideNow = sideViewWant();
   if (world.drillMode){ renderDrill(); return; }
   // ⚠️ EVERY FRAME, and its absence was a real bug with two halves. `applyGoalCam`
   // lives inside `computeCam`, and `computeCam` was called only from `resize()` — so
@@ -14342,6 +14467,20 @@ function render(){
   ctx.save(); pitchXform(sx + gx, sy + gy);
   drawPitch(world);
   ctx.restore();
+  if (sideNow){
+    // The dot tails are marks ON the ground, so they stay on the squashed plane. The
+    // ball's streak and the kick sparks are lifted with the ball: a streak that does not
+    // meet the thing it is a streak of is the same "sticker" problem the tilt shadows
+    // have, and here the gap would be a whole body height.
+    ctx.save(); pitchXform(sx + bx, sy + by); drawDiscTrails(world); ctx.restore();
+    const bl = sideBallLift(world);
+    // ⚠️ Outside pitchXform, so the lift is real screen pixels and not a squashed
+    // fraction of one. (pitchXform's first act is the squash — see there.)
+    ctx.save(); ctx.translate(0, -bl); pitchXform(sx + bx, sy + by);
+    drawFx(); drawBallTrail(world);
+    ctx.restore();
+    drawBodiesSide(world, sx + bx, sy + by);
+  } else {
   ctx.save(); pitchXform(sx + bx, sy + by);
   drawFx();                   // sparks happen at body height, so they ride the body layer
   drawBallTrail(world);
@@ -14352,6 +14491,7 @@ function render(){
   // off-pitch until it respawns; skip it rather than draw a halo out in the void.
   if (world.extraBalls) for (const eb of world.extraBalls){ if (!eb.banked) drawBall({ ball: eb }); }
   ctx.restore();
+  }
   // ⚠️ After the restore, so the pitch's quarter-turn in deck view cannot lie the text
   // on its side. It takes the body layer's shake and tilt by hand instead.
   drawFloaters(sx, sy, bx, by);
@@ -17019,25 +17159,29 @@ const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
 // By index, NOT on the player — the replay rebuilds its player objects every frame,
 // which re-seeds anything stored there and the fade never converges.
 let labelA = [];
+// Sitting this one out: drawn faded, on the sideline, so it reads as "waiting" rather
+// than "missing". Its own function because the side view draws the bodies in depth order
+// and still wants the bench exactly as it is — flat on the touchline, behind everything.
+function drawBenchDiscs(w){
+  if (!w.bench || !w.bench.length) return;
+  const s = cam.s;
+  ctx.globalAlpha = 0.45;
+  for (const p of w.bench){
+    const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
+    uprightAt(x, y, (px, py) => {
+      ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
+      ctx.fillStyle = TH.discRim; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, r, 0, 2*Math.PI);
+      ctx.fillStyle = TH.dim || '#4a6076'; ctx.fill();
+      paintFace(ctx, px, py, r, p);
+    });
+  }
+  ctx.globalAlpha = 1;
+}
 function drawDiscs(w){
   const s = cam.s;
   if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
-  // Sitting this one out: drawn faded, on the sideline, so it reads as "waiting"
-  // rather than "missing".
-  if (w.bench && w.bench.length){
-    ctx.globalAlpha = 0.45;
-    for (const p of w.bench){
-      const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
-      uprightAt(x, y, (px, py) => {
-        ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
-        ctx.fillStyle = TH.discRim; ctx.fill();
-        ctx.beginPath(); ctx.arc(px, py, r, 0, 2*Math.PI);
-        ctx.fillStyle = TH.dim || '#4a6076'; ctx.fill();
-        paintFace(ctx, px, py, r, p);
-      });
-    }
-    ctx.globalAlpha = 1;
-  }
+  drawBenchDiscs(w);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
@@ -17045,6 +17189,88 @@ function drawDiscs(w){
     uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s*cam.body, s, i));
   }
 }
+
+// ---------- The side view's bodies ------------------------------------------
+// Everything standing on the pitch, painted FAR TO NEAR as cylinders. The rest of the
+// side view is free — see SIDE for why an oblique squash costs nothing — but depth
+// order is not: two bodies at the same screen height need the nearer one on top, and
+// that includes the ball, which is why this replaces both drawDiscs and drawBall rather
+// than sitting between them. (Drawing every disc and then the ball puts the ball in
+// front of a player who is standing between it and the camera.)
+function drawBodiesSide(w, dx, dy){
+  const s = cam.s, sq = cam.sq;
+  ctx.save(); pitchXform(dx, dy);
+  drawBenchDiscs(w);
+  const list = [];
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i];
+    list.push({ p, i, ball:null, x: wx(ix(p)), y: wy(iy(p)), r: p.r*s*cam.body });
+  }
+  for (const b of [w.ball].concat(w.extraBalls || [])){
+    if (!b || b.banked) continue;
+    list.push({ p:null, i:-1, ball:b, x: wx(ix(b)), y: wy(iy(b)), r: b.r*s*cam.body });
+  }
+  // ⚠️ Sorted on the REAL on-screen y (`screenPt`, which carries both the quarter-turn
+  // and the squash), never on a world axis: which world axis runs into the screen
+  // depends on the turn, and hard-coding one is how the replay came to be drawn at
+  // ninety degrees to its own match.
+  for (const e of list) e.d = screenPt(e.x, e.y)[1];
+  list.sort((a, b) => a.d - b.d);
+  for (const e of list){
+    const lift = sideLift(e.r);
+    uprightAt(e.x, e.y, (x, y) => {
+      // ⚠️ y - lift/sq, not y - lift: inside this frame a step of 1 lands sq pixels up
+      // the screen, so the division is what makes the cylinder SIDE.h radii tall rather
+      // than barely half that.
+      const top = y - lift/sq;
+      sideShadow(x, y, e.r);
+      if (e.ball){
+        // ⚠️ A sphere is a circle from EVERY angle, so the ball is the one thing here
+        // that must not ride the squash — undone about the ball's own centre, which
+        // leaves it where the squashed ground puts it but perfectly round. A squashed
+        // ball reads as a discus, and it is the object everybody is tracking.
+        ctx.save(); ctx.translate(x, top); ctx.scale(1, 1/sq); ctx.translate(-x, -top);
+        drawOneBall(e.ball, x, top, e.r, s);
+        ctx.restore();
+      } else {
+        sideWall(x, y, e.r, lift, e.p);
+        drawOneDisc(w, e.p, x, top, e.r, s, e.i);
+      }
+    });
+  }
+  ctx.restore();
+}
+// The ground the body is standing on. ⚠️ Drawn from here rather than left to
+// drawOneDisc/drawOneBall, whose own shadow sits a fraction of a radius below the art:
+// with the art a whole body height up, that shadow would hang in mid-air under the top
+// face instead of marking the spot.
+function sideShadow(x, y, r){
+  ctx.save(); ctx.globalAlpha = SIDE.shadow;
+  ctx.beginPath(); ctx.arc(x, y, r*SIDE.shadowR, 0, 2*Math.PI);
+  ctx.fillStyle = TH.shadow; ctx.fill();
+  ctx.restore();
+}
+// The side of the cylinder: the strip between the ground footprint and the raised top
+// face. Both ends are the same ellipse the guide ring already is under the squash — a
+// cylinder seen obliquely is two ellipses and the wall between them — so this is the
+// footprint's BOTTOM half swept up to the top face, and nothing here has to know what
+// the disc skin above it drew.
+function sideWall(x, y, r, lift, p){
+  const sq = cam.sq, top = y - lift/sq;
+  ctx.beginPath();
+  ctx.moveTo(x - r, top);
+  ctx.lineTo(x - r, y);
+  ctx.arc(x, y, r, Math.PI, 0, true);      // round the BOTTOM of the footprint
+  ctx.lineTo(x + r, top);
+  ctx.closePath();
+  const col = p && p.team === 0 ? TH.teamRed : TH.teamBlue;
+  const g = ctx.createLinearGradient(0, top, 0, y + r*sq);
+  g.addColorStop(0, shade(col, SIDE.wallHi));
+  g.addColorStop(1, shade(col, SIDE.wallLo));
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = TH.discRim; ctx.lineWidth = Math.max(1, r*0.10); ctx.stroke();
+}
+
 function drawOneDisc(w, p, x, y, r, s, idx){
   {
     // Shadow. ⚠️ The body layer is lifted off the ground by the tilt parallax (see
@@ -17052,9 +17278,13 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // STANDS — a shadow that travels with the body is a sticker, and the gap opening and
     // closing between the two is the whole reason the effect reads as height.
     // The offset is screen-space because uprightAt has already cancelled the pitch turn.
+    // ⚠️ Skipped in the side view, where the art is a whole body height off the ground
+    // and drawBodiesSide has already marked the spot the body is standing on.
     const [slx, sly] = tiltLift();
-    ctx.beginPath(); ctx.arc(x - slx, y + r*0.28 - sly, r*0.95, 0, 2*Math.PI);
-    ctx.fillStyle=TH.shadow; ctx.fill();
+    if (!sideNow){
+      ctx.beginPath(); ctx.arc(x - slx, y + r*0.28 - sly, r*0.95, 0, 2*Math.PI);
+      ctx.fillStyle=TH.shadow; ctx.fill();
+    }
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
     // A theme can own what a player LOOKS like, not just what colour they are.
     const skin = discSkin();
@@ -17263,9 +17493,13 @@ function drawBall(w){
   uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
 }
 function drawOneBall(b, x, y, r, s){
-  // Anchored to the ground, exactly as the discs' is — see drawOneDisc.
+  // Anchored to the ground, exactly as the discs' is — see drawOneDisc. Skipped in the
+  // side view for the same reason: drawBodiesSide has already put a shadow on the spot,
+  // and this one would ride up with the lifted ball.
   const [slx, sly] = tiltLift();
-  ctx.beginPath(); ctx.arc(x - slx, y + r*0.3 - sly, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  if (!sideNow){
+    ctx.beginPath(); ctx.arc(x - slx, y + r*0.3 - sly, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  }
   // The snail must never be mistaken for the scoring ball — it's the sudden-death
   // objective. Amber shell with a spiral, deliberately unlike the white ball.
   if (b.isSnail){
@@ -18477,6 +18711,8 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
+    SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
+    get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,

@@ -70,6 +70,17 @@ const out = await p.evaluate(async ()=>{
   };
   const screens = ['openStats','openHow','openShop','openSocial','openDrills','openSeason',
                    'openRogue','openLeaderboard','openDailyView','openCocktailCfg','openPadConfig'];
+  // ⚠️ The theme colour TRANSITION is switched off outright rather than waited out. body
+  // carries `transition: background-color .2s, color .2s`, so a sample taken mid-fade reads
+  // one theme's ink over another's paper and invents failures — measured as Abari's
+  // `#f4f2f4` text on Specimen's `#e5d501` yellow, a pair that exists in no palette. The
+  // 320ms waits below were the first fix and they are a MARGIN, not a guarantee: this loop
+  // rebuilds the whole settings screen 20 times over, so any work added to buildSettings
+  // eats into it, and the suite failed roughly one run in four with the margin still in
+  // place. Nothing here is testing the fade.
+  const noFade = document.createElement('style');
+  noFade.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+  document.head.appendChild(noFade);
   let scanned = 0;
   for (const key of Object.keys(M.THEMES)){
     M.applyTheme(key); M.buildSettings(); M.updatePreview();

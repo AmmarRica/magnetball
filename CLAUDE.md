@@ -489,6 +489,60 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   **module variable, never on the ball**: a draw that wrote to the world would be
   reachable from the sim on the next step, and `tests/determinism.mjs` hashes the world.
   Render only — the suite proves the world bit-identical with it on and off.
+- **Side view (`sel.sideView`, `SIDE`, `sideNow`, `drawBodiesSide`):** a showcase camera —
+  the pitch turned goal-to-goal, the ground plane squashed as though seen from beside the
+  touchline, and every body standing up off it as a cylinder with the ball a real sphere
+  above its shadow.
+  ⚠️ **An OBLIQUE SQUASH, and that is load-bearing rather than a shortcut.** Every pitch
+  painter in the file works from a RECTANGLE — `drawPitch` computes `L,T,R,B` and hands it
+  to `drawGrass`, to `vjPaintVideo` and to all fourteen `DYN_FIELDS` painters as
+  `L,T,W,H` — and an oblique y-squash maps a rectangle to a rectangle, so the grass clip,
+  the goal boxes, the markings, the pool table's cushion path and every animated field
+  keep working with **no change at all**. A true perspective does not preserve rectangles
+  and would mean rewriting all fourteen field painters, both goal pockets and every
+  marking, for a camera nobody plays with. `tests/sideview.mjs` measures the rectangle on
+  the pitch corners.
+  ⚠️ **REPLAYS AND THE ATTRACT DEMO ONLY, with no "always" option**, and the reason is the
+  input rather than taste: `pitchHorizontal()` is what `applySeatRotation` reads to decide
+  which way a stick points, and it is answered on a **layout change**, not per frame — so a
+  camera turning the pitch a quarter-turn behind its back would hand a player a stick 90°
+  wrong. The side view therefore sets `cam.rot` **itself inside `computeCam`** and never
+  touches that predicate. A replay has no input but "skip" and the demo has no humans at
+  all, so the question never arises. The suite drives the real `applySeatRotation` with the
+  camera live and requires every seat unmoved.
+  ⚠️ **Answered ONCE PER FRAME into `sideNow`** (top of `render()`, and again in
+  `drawReplayFrame` — that path never goes through `render()`, because `loop()` returns
+  early while a replay is active). Half a frame squashed and half flat is a mess, and
+  `replay.active` genuinely flips between one frame and the next.
+  ⚠️ The squash is the **FIRST call in `pitchXform`**, which makes it the LAST thing applied
+  on the way to the screen: it is a foreshortening of the SCREEN, so it lands after the
+  quarter-turn. Squashed before the turn it would flatten the pitch's length instead of its
+  width. `screenPt` composes them the same way round, and the suite asserts the two agree
+  by finding real ink at the point `screenPt` names — a drift between them puts every label
+  somewhere its body is not.
+  ⚠️ **The BALL must not ride the squash** — a sphere is a circle from every angle, so
+  `drawBodiesSide` undoes it about the ball's own centre. Squashed it reads as a discus,
+  and it is the object everybody is tracking. The suite's assertion is the **contrast**
+  between a round ball and a squashed disc, because "the ball is round" is also true of a
+  build with no squash at all.
+  ⚠️ Bodies paint **FAR TO NEAR and the ball sorts into the same list**, which is why this
+  replaces `drawDiscs` *and* `drawBall` rather than sitting between them: every disc and
+  then the ball puts the ball in front of a player standing between it and the camera.
+  Sorted on the real on-screen y through `screenPt`, never on a world axis — which world
+  axis runs into the screen depends on the turn.
+  ⚠️ **The ground shadow is WIDER than the body** (`SIDE.shadowR`). The wall is drawn from
+  the top face down and round the bottom of the base ellipse, so it covers the whole
+  footprint: a shadow at the body's own radius is painted over completely, and the first
+  build had one nobody could see. The spill is the part that reads.
+  ⚠️ The dot tails stay on the ground; the ball's **streak and the kick sparks are lifted
+  with the ball**, or the streak does not meet the thing it is a streak of.
+  ⚠️ `applyGoalCam` now **stands down during a replay**. It was enough to say that in
+  `advanceGoalCam`'s `want` while nothing on the replay path called `computeCam`; the side
+  view has to (it refits for the squash), and `goalCam.t` is frozen at 1 there because the
+  step loop that eases it out is not running.
+  ⚠️ **Render only** — the suite hashes the world over 600 steps with it on and off, with
+  `demo` true in **both** runs (it is read from inside `step()`, so switching it is not a
+  control). `tests/sideview.mjs`.
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
@@ -1222,7 +1276,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 83 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 93 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
