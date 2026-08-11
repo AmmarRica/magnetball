@@ -1677,6 +1677,10 @@
       <div class="opts" id="tiltPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
       <div style="height:10px"></div>
+      <label class="field">Ball rolls in 3D</label>
+      <div class="opts" id="ball3dPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
+      <div style="height:10px"></div>
       <label class="field">Floating stat text</label>
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
@@ -2739,6 +2743,14 @@ const COOP = {
 // label naming what you just did is INFORMATION, and somebody who turns the wobble off
 // for motion reasons has not asked to stop being told they got an assist. Same argument
 // as hit stop having its own dial.
+// ⚠️ Default OFF, deliberately. This changes how the single most-watched object on the
+// pitch looks, and nobody playing today asked for that — so it is something you turn on,
+// not something that arrives. It is a setting rather than a theme because it works on
+// every palette and every ball look: the texture is baked from whatever look is selected.
+const BALL3DOPT = {
+  off: { name:'Flat',   emoji:'⚪', icon:'barrier' },
+  on:  { name:'Rolling', emoji:'🔮', icon:'ball' },
+};
 const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
@@ -2974,7 +2986,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0305PM';
+const VERSION = '20260811.0625PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -2990,6 +3002,14 @@ const VERSION = '20260811.0305PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260811.0625PM', title: 'A ball that rolls',
+    added: [
+      'The ball can roll like a real sphere: its markings wrap round it, squash up at the edge and go over the horizon, following whichever way it is travelling.',
+      'Off by default — turn it on in Game Feel under Presentation. It works with whichever ball you have picked.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0305PM', title: 'Blast Zone',
     added: [
       'A new theme: the pitch is a bright platform floating in a starry void, with a hard black edge and a drift of stars outside it.',
@@ -3133,7 +3153,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
             goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -3737,7 +3757,11 @@ const OVERLAY_A = 0.86;
 // are looking at it.
 const swatchCache = new Map();      // painted against the LIVE inks: dropped on a change
 const swatchFixed = new Map();      // painted against its own: never stale
-function clearSwatchCache(){ swatchCache.clear(); }
+function clearSwatchCache(){ swatchCache.clear();
+  // The sphere textures are baked in the ball's spot ink. The key carries that colour so
+  // a stale one can never be USED, but a player cycling palettes would otherwise leave a
+  // canvas per palette behind — dropped here, alongside the swatches, for the same reason.
+  ballTexCache.clear(); }
 function cachedSwatch(key, make, fixed){
   const m = fixed ? swatchFixed : swatchCache;
   let cv = m.get(key);
@@ -4369,6 +4393,34 @@ const FLOAT = {
   size: 11,        // font px — screen, not world (see drawFloaters)
   max: 20,         // hard cap; oldest goes
 };
+// ⚠️ ROLLING-SPHERE BALL. Declared up here with FLOAT/GOALCAM because `paintBall` runs
+// during the bootstrap (the picker tiles are the real painter) and a const further down
+// is in the temporal dead zone at that point — the ninth time this file has been bitten.
+//
+// The ball already had sphere SHADING: a ground shadow that subtracts the tilt lift, and
+// a radial highlight fixed up-left. What made it still read flat is that the pattern was
+// rotated in 2D, which is a spinning disc. The cue your eye actually uses for "rolling"
+// is the pattern compressing toward the limb and going over the edge, so the pattern is
+// mapped onto a cylinder-projected sphere and scrolled by the roll.
+const BALL3D = {
+  slices: 26,     // vertical strips across the face. 26 is smooth at any size we draw.
+  // ⚠️ 5, MATCHING the threshold the flat pattern already uses (`r >= 5` in paintBall).
+  // It was 7, which is above the size the ball is actually DRAWN at on a phone — measured
+  // at 6.56px on a 390x844 viewport on Classic — so the whole feature silently did nothing
+  // for the people most likely to turn it on. Below 5 the flat path degrades to a plain
+  // dot anyway, so that is the honest boundary rather than a number picked by eye.
+  minPx: 5,
+  tex: 96,        // texture height (= ball diameter in texture space)
+  reps: 3,        // pattern instances per 360° of wrap
+  inst: 0.42,     // each instance's radius, as a fraction of `tex`
+};
+// ⚠️ Declared HERE, with BALL3D, and not down beside the painter that fills it.
+// `clearSwatchCache` empties this and runs from `applyTheme` during the bootstrap, so a
+// `const` further down is in its temporal dead zone at that moment — and guarding with
+// `typeof ballTexCache !== 'undefined'` does NOT help, because `typeof` on a const in its
+// TDZ throws a ReferenceError rather than returning 'undefined'. That took the whole page
+// down, and it is the NINTH time this file has been bitten by a late const.
+const ballTexCache = new Map();
 const GOALCAM = {
   // ⚠️ THIRD TUNING, and the shape is what took three goes rather than the numbers.
   // It shipped at 5.0x over 1.15s: 5x is most of the pitch gone, and 1.15s of a 1.8s
@@ -6608,6 +6660,7 @@ function buildMatchOpts(){
   buildOpts('dropIn', DROPIN, 'dropIn');
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
+  buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -17268,7 +17321,7 @@ function drawOneBall(b, x, y, r, s){
   }
   // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
   // (rot advances with speed in step()). Same painter the picker tiles use.
-  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball);
+  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.vx, b.vy);
   if (warped) ctx.restore();
 }
 // ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
@@ -17402,6 +17455,74 @@ function paintBallLook(c, x, y, r, rot, key, spot){
   look.draw(c, r, rot || 0);
   c.restore();
 }
+// ---------- The ball as a rolling sphere -------------------------------------
+// ⚠️ The texture is baked ONCE per (look, ink) and scrolled with `drawImage`, never
+// redrawn per frame. Drawing the pattern afresh for every slice of every ball would be
+// the `ctx.filter` mistake again — that cost 2.2× the whole frame budget — and the
+// dither ramp and the nebula are both cached for exactly this reason.
+// ⚠️ Keyed on the INK as well as the look, because slots mix: the same look can be asked
+// for over another palette, and a texture baked in the old spot colour would be wrong.
+function ballSphereTex(key, spot){
+  const ck = key + '|' + spot;
+  let t = ballTexCache.get(ck);
+  if (t) return t;
+  const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
+  const D = BALL3D.tex, TW = D * 2;
+  const cv = document.createElement('canvas');
+  // TWICE the wrap width, so a slice sampled near the seam never reads past the end.
+  cv.width = TW * 2; cv.height = D;
+  const cc = cv.getContext('2d');
+  cc.fillStyle = spot;
+  // The pattern repeated across the strip. A look draws a disc-shaped arrangement, so a
+  // single instance would leave most of the wrap blank and the ball would roll through
+  // empty patches.
+  for (let cp = 0; cp < 2; cp++)
+    for (let k = 0; k < BALL3D.reps; k++){
+      cc.save();
+      cc.translate(cp*TW + (k + 0.5) * (TW / BALL3D.reps), D/2);
+      cc.fillStyle = spot;
+      look.draw(cc, D * BALL3D.inst, 0);
+      cc.restore();
+    }
+  t = { cv, TW, D };
+  ballTexCache.set(ck, t);
+  return t;
+}
+// ⚠️ Render-only, and OUTSIDE the world. The roll direction comes from the ball's
+// velocity, but a ball at rest has no direction — so the last heading is remembered in a
+// module variable rather than written onto the ball. Writing it to the world would make
+// a DRAW mutate the sim, which `tests/determinism.mjs` hashes for.
+let ballHeading = 0;
+function paintBallSphere(c, x, y, r, rot, key, spot, vx, vy){
+  const sp = Math.hypot(vx || 0, vy || 0);
+  if (sp > 0.15) ballHeading = Math.atan2(vy, vx);
+  const t = ballSphereTex(key, spot);
+  // ⚠️ SLICES SCALE WITH SIZE. A fixed 26 costs the same at 9px as at 70px, and the
+  // warm-up lobby can field fourteen balls at once — measured, a fixed count put that
+  // frame well past its budget. At the size a ball is actually drawn on a phone the
+  // extra slices are below a pixel each and change nothing you can see.
+  const N = Math.max(8, Math.min(BALL3D.slices, Math.round(r * 0.9)));
+  const phase = rot || 0;
+  c.save();
+  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+  c.translate(x, y); c.rotate(ballHeading);
+  for (let i = 0; i < N; i++){
+    // Longitudes of this slice's two edges, over the visible hemisphere.
+    const lonA = -Math.PI/2 + (i / N) * Math.PI;
+    const lonB = -Math.PI/2 + ((i+1) / N) * Math.PI;
+    // ⚠️ Destination edges from sin(lon), which IS the compression: slices near the limb
+    // are narrow because the surface is turning away there. Taking a constant width and
+    // scaling it would give a flat scroll, which is the thing this replaces.
+    const dA = r * Math.sin(lonA), dB = r * Math.sin(lonB);
+    const dw = dB - dA;
+    if (dw <= 0.01) continue;
+    let u = ((lonA + phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
+    const sx = u * t.TW, sw = t.TW * (lonB - lonA) / (2*Math.PI);
+    c.drawImage(t.cv, sx, 0, sw, t.D, dA, -r, dw, r*2);
+  }
+  c.restore();
+}
+function ballIs3D(r){ return sel.ball3d === 'on' && r >= BALL3D.minPx; }
 // ⚠️ The pattern has to be visible ON the ball, and a palette can pair the two badly.
 // Pool's cue ball is #f7f4ec with a #e8e2d2 spot — a contrast ratio of 1.18:1 — because
 // the cue ball look is PLAIN and the spot was never exercised by it. Pick any other
@@ -17423,12 +17544,16 @@ function ballSpotInk(P){
 }
 // One ball, start to finish, on any context — rim, body, pattern, 3D shade. The
 // picker tiles call this too, so they are the ball rather than a picture of it.
-function paintBall(c, x, y, r, rot, key, pal){
+// `vx/vy` are optional and only the sphere path reads them: they give the roll its
+// DIRECTION. A picker tile passes none, so a tile rolls along its own x — which is what
+// you want in a 64px square anyway.
+function paintBall(c, x, y, r, rot, key, pal, vx, vy){
   const P = pal || TH;
   const spot = ballSpotInk(P);
   c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
-  if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot);
+  if (ballIs3D(r)) paintBallSphere(c, x, y, r, rot, key, spot, vx, vy);
+  else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot);
   else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=spot; c.fill(); }
   const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
   g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
@@ -18300,6 +18425,7 @@ if (window.__MAGNETDEBUG) {
     TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
+    BALL3D, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; },
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
@@ -18351,7 +18477,7 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
-    FLOAT, POPOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
+    FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
     onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,
