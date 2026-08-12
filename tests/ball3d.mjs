@@ -24,10 +24,17 @@
 //      same bar `bigcourt`, `goalcam` and `tilt` are held to. A draw must not write to the
 //      ball either: the roll and its axis are advanced by `advanceBallSpin` in the STEP
 //      loop and only read by the painter;
-//   4b. the roll is SIGNED about a latched axis, so a ball rebounding straight off a wall
+//   4b. the roll is SIGNED about a CANONICAL axis, so a ball rebounding straight off a wall
 //      unrolls the way it came instead of the axis flipping and jumping half a turn of
 //      texture across the face in one frame;
-//   4c. ⚠️ and the spin advances IN A DRILL. It used to live inline in `step()`, which a
+//   4c. ⚠️ and the FLAT pattern reverses too. `sel.ball3d` is off by default, so the flat
+//      look is what nearly everybody sees, and its `rot` was driven by SPEED — a magnitude —
+//      so the pattern turned the same way whichever direction the ball was going. A wheel
+//      rolling right reads clockwise, and it stayed clockwise when the ball came back left,
+//      which is the whole of "the ball rotates the opposite way to where it is rolling".
+//      Held from both ends here: the sign of `rot` per direction, AND that a positive `rot`
+//      really is clockwise on screen — half the claim each, and neither is the complaint;
+//   4d. ⚠️ and the spin advances IN A DRILL. It used to live inline in `step()`, which a
 //      drill never runs, so a drill's ball had a frozen pattern however hard it was hit;
 //   5. the texture is BAKED once per (look, ink) and rebuilt when the ink changes, because
 //      slots mix and the pattern is drawn in the ball's spot colour;
@@ -290,6 +297,61 @@ const r = await p.evaluate(() => {
     o.axRelatched = Math.abs(fake.ball.rollAx - outAx) > 1;
   }
 
+  // ---- ⚠️ AND THE FLAT PATTERN REVERSES, WHICH IS THE ONE MOST PEOPLE SEE --
+  // `sel.ball3d` is off by default, so `rot` and the flat look are what nearly everybody is
+  // looking at — and `rot` was advanced by SPEED, a magnitude, so the pattern turned the
+  // same way in every direction. Every direction is driven through the real function.
+  {
+    const spin = (vx, vy) => {
+      const f = { ball:{ x:0, y:0, vx, vy, rot:0, spin:0 } };
+      for (let i=0;i<10;i++){ f.ball.vx = vx; f.ball.vy = vy; M.advanceBallSpin(f); }
+      return { rot:+f.ball.rot.toFixed(3), ax:+f.ball.rollAx.toFixed(3) };
+    };
+    const R4 = spin(6,0), L4 = spin(-6,0), D4 = spin(0,6), U4 = spin(0,-6), Q4 = spin(-4,-4);
+    o.spinRight = R4.rot; o.spinLeft = L4.rot; o.spinDown = D4.rot; o.spinUp = U4.rot;
+    o.rotReverses = R4.rot > 0.3 && L4.rot < -0.3 && D4.rot > 0.3 && U4.rot < -0.3;
+    o.rotSymmetric = Math.abs(R4.rot + L4.rot) < 1e-6 && Math.abs(D4.rot + U4.rot) < 1e-6;
+    // The axis is canonical — right half-plane — which is what makes the SIGN mean anything.
+    // ⚠️ Compared with a 1e-3 slack, because these are rounded to three decimals for the
+    // failure message and cos(1.571) is already -3.7e-6. An exact test here is a test of
+    // the rounding.
+    o.axes = [R4.ax, L4.ax, D4.ax, U4.ax, Q4.ax];
+    o.axesCanonical = o.axes.every(a => Math.cos(a) >= -1e-3);
+    o.oppositeSameAxis = Math.abs(R4.ax - L4.ax) < 1e-9 && Math.abs(D4.ax - U4.ax) < 1e-9;
+  }
+
+  // ⚠️ ...and a POSITIVE rot really is clockwise on screen. Without this half, "right gives
+  // a positive rot" says nothing about which way the ball appears to turn — the two halves
+  // together are the complaint. Measured with a one-off probe look carrying a single
+  // off-centre dot, because every shipped look is either symmetric under rotation or too
+  // busy to track. ⚠️ The probe has to apply `rot` ITSELF: each look does its own
+  // c.rotate(rot), and a probe that ignored it measured no movement at all and would have
+  // called a completely broken build correct.
+  {
+    M.BALL_LOOKS.__probe = { name:'probe', draw:(c, rr, rot) => {
+      c.save(); c.rotate(rot);
+      c.beginPath(); c.arc(rr*0.62, 0, rr*0.20, 0, 7); c.fill(); c.restore(); } };
+    const dotAngle = (rot) => {
+      M.sel.ball3d = 'off';
+      cc.fillStyle = '#7f7f7f'; cc.fillRect(0, 0, S, S);
+      M.paintBall(cc, CX, CY, R, rot, '__probe');
+      const d = cc.getImageData(0, 0, S, S).data;
+      let sx = 0, sy = 0, n = 0;
+      for (let yy=0; yy<S; yy++) for (let xx=0; xx<S; xx++){
+        const dx = xx-CX, dy = yy-CY; if (dx*dx + dy*dy > (R-2)*(R-2)) continue;
+        const i = (yy*S + xx)*4;
+        if (d[i]*0.2126 + d[i+1]*0.7152 + d[i+2]*0.0722 < 110){ sx+=xx; sy+=yy; n++; }
+      }
+      return n > 10 ? Math.atan2(sy/n - CY, sx/n - CX) : null;
+    };
+    const a0 = dotAngle(0), a1 = dotAngle(0.5);
+    delete M.BALL_LOOKS.__probe;
+    o.dotFound = a0 != null && a1 != null;
+    o.dotTurned = o.dotFound ? +(a1 - a0).toFixed(3) : 0;
+    // Canvas y points DOWN, so a rising atan2 angle is clockwise on screen.
+    o.positiveRotIsClockwise = o.dotFound && o.dotTurned > 0.3 && o.dotTurned < 0.7;
+  }
+
   // ---- ⚠️ AND IT ADVANCES IN A DRILL --------------------------------------
   // This block lived inline in `step()`, which a drill never runs — so in every drill the
   // ball's pattern was frozen solid however hard you hit it. Driven through the real
@@ -303,6 +365,69 @@ const r = await p.evaluate(() => {
     o.drillRot  = +(Math.abs((w.ball.rot||0) - rot0)).toFixed(3);
     o.drillRoll = +(Math.abs((w.ball.roll||0) - roll0)).toFixed(3);
     o.drillBallRolls = o.drillRot > 0.05 && o.drillRoll > 0.05;
+  }
+
+  // ---- ⚠️ THE ROLL AXIS IS A DIRECTION ON THE PITCH, NOT ON THE SCREEN ----
+  // `rollAx` is stored in the pitch's frame, and `drawOneBall` paints inside `uprightAt`,
+  // which has already cancelled the pitch's quarter-turn — so the call site has to add
+  // cam.rot back. Without it, in deck view (and under the side camera) the ball rolled
+  // ninety degrees across its own direction of travel. Same class of bug as the replay that
+  // came back at ninety degrees to the match it was a replay of.
+  // ⚠️ Driven through the REAL `drawBall` with the camera set BY HAND, not through render():
+  // this suite runs at a 390x844 phone viewport, where a turned pitch fits at a scale that
+  // draws the ball about six pixels across — far too small to find a mark's centroid in. The
+  // camera is render state, so setting it is exactly what render() would have done.
+  {
+    const keepSpots = M.BALL3D.spots, keepPatch = M.BALL3D.patch;
+    M.BALL3D.spots = [[0, 0]]; M.BALL3D.patch = 22; M.ballTexCache.clear();
+    M.sel.ball3d = 'on'; M.sel.look.ball = 'period';       // one dot, unambiguous
+    M.sel.mode = '2v2'; M.sel.kickoffRule = 'off';
+    M.setMatchSeed(4); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (const q of w.players){ q.x = 9000; q.y = 9000; q.vx = q.vy = 0; }
+    w.ball.x = 0; w.ball.y = 0; w.ball.vx = 7; w.ball.vy = 0;   // travelling along world +x
+    M.advanceBallSpin(w);
+    o.deckAx = +(w.ball.rollAx || 0).toFixed(3);
+
+    const gc = document.getElementById('game'), gx = gc.getContext('2d', { willReadFrequently:true });
+    const BIG = 46;
+    const shoot = (roll) => {
+      // The quarter-turn the deck view uses, with a scale big enough to measure.
+      M.cam.rot = -Math.PI/2; M.cam.sq = 1; M.cam.body = 1;
+      M.cam.s = BIG / w.ball.r; M.cam.ox = gc.width/2; M.cam.oy = gc.height/2;
+      gx.fillStyle = '#7f7f7f'; gx.fillRect(0, 0, gc.width, gc.height);
+      w.ball.roll = roll; M.markPrev(w); M.renderAlpha = 1;
+      // ⚠️ INSIDE pitchXform, exactly as render() calls it. `uprightAt` cancels the pitch's
+      // quarter-turn, so calling drawBall with no transform to cancel leaves the frame
+      // rotated by -cam.rot and the painter's +cam.rot then nets it back out — the mark came
+      // back moving along screen x and this check called a correct build broken.
+      gx.save(); M.pitchXform(0, 0); M.drawBall(w); gx.restore();
+      const [bx, by] = M.screenPt(M.wx(0), M.wy(0));
+      const half = BIG + 4;
+      const d = gx.getImageData(Math.round(bx)-half, Math.round(by)-half, half*2, half*2).data;
+      let sx = 0, sy = 0, n = 0;
+      for (let yy=0; yy<half*2; yy++) for (let xx=0; xx<half*2; xx++){
+        const dx = xx-half, dy = yy-half; if (dx*dx + dy*dy > (BIG*0.82)*(BIG*0.82)) continue;
+        const i = (yy*half*2 + xx)*4;
+        if (d[i]*0.2126 + d[i+1]*0.7152 + d[i+2]*0.0722 < 130){ sx+=dx; sy+=dy; n++; }
+      }
+      // Where the ball is GOING on screen, read through the same screenPt.
+      const A = M.screenPt(M.wx(0), M.wy(0)), B = M.screenPt(M.wx(40), M.wy(0));
+      return { n, x: n ? sx/n : 0, y: n ? sy/n : 0, tx: B[0]-A[0], ty: B[1]-A[1] };
+    };
+    const m0 = shoot(0), m1 = shoot(0.45);
+    o.deckMarkPx = m0.n;
+    o.deckMarkFound = m0.n > 20 && m1.n > 20;
+    if (o.deckMarkFound){
+      const mx = m1.x - m0.x, my = m1.y - m0.y, ml = Math.hypot(mx, my) || 1;
+      const tl = Math.hypot(m0.tx, m0.ty) || 1;
+      o.deckMarkShift = +ml.toFixed(2);
+      o.deckAlign = +((mx*m0.tx + my*m0.ty) / (ml*tl)).toFixed(3);
+      o.deckTravelIsVertical = Math.abs(m0.ty) > Math.abs(m0.tx) * 4;
+    }
+    o.rollFollowsScreenTravel = o.deckMarkFound && o.deckMarkShift > 2 && o.deckAlign > 0.7;
+    M.BALL3D.spots = keepSpots; M.BALL3D.patch = keepPatch; M.ballTexCache.clear();
+    M.sel.look.ball = 'classic'; M.computeCam();
   }
 
   // ---- THE SIM IS UNTOUCHED ------------------------------------------------
@@ -384,6 +509,21 @@ ok('the roll UNWINDS on a rebound', r.rollUnwinds,
    `axis kept: ${r.axKept}, roll went back: ${r.rollBack} — a ball bouncing straight off a wall rolls back the way it came, and taking the axis from the live velocity instead flips it 180° and jumps half a turn of texture across the face in one frame`);
 ok('...but a real change of direction re-latches the axis', r.axRelatched,
    'a ball turning a corner would otherwise roll backwards for the rest of the match');
+ok('the FLAT pattern reverses with direction', r.rotReverses,
+   `rot after ten steps: right ${r.spinRight}, left ${r.spinLeft}, down ${r.spinDown}, up ${r.spinUp} — sel.ball3d is off by DEFAULT, so the flat look is what nearly everybody sees, and its rot was driven by SPEED, a magnitude. The pattern turned the same way whichever direction the ball went, which is the whole of "the ball rotates the opposite way to where it is rolling"`);
+ok('...by exactly as much, both ways', r.rotSymmetric,
+   `right ${r.spinRight} against left ${r.spinLeft} — a ball that goes out and comes back must arrive with its pattern where it started`);
+ok('...about a CANONICAL axis', r.axesCanonical && r.oppositeSameAxis,
+   `axes ${JSON.stringify(r.axes)} — the axis has to point into the same half-plane whichever way the ball is going, or the sign of the roll means nothing and opposite directions both come out positive`);
+ok('a positive rot IS clockwise on screen', r.positiveRotIsClockwise,
+   `a mark turned ${r.dotTurned} rad for a rot of +0.5 — without this half, "right gives a positive rot" says nothing about which way the ball appears to turn, and the two halves together are the complaint`);
+ok('the probe dot was found at all', r.dotFound,
+   'the rotation-direction probe found no mark, so the check above proves nothing');
+ok('the turned-pitch probe is actually turned', r.deckTravelIsVertical,
+   `the ball's on-screen travel came out mostly horizontal, so the quarter-turn is not in play and the check below proves nothing`);
+ok('a mark was found on the turned pitch', r.deckMarkFound, `${r.deckMarkPx} dark pixels inside the ball`);
+ok('the roll follows the ball\'s SCREEN travel, turned pitch included', r.rollFollowsScreenTravel,
+   `a mark moved ${r.deckMarkShift}px at cos ${r.deckAlign} to the ball's own on-screen direction — rollAx is a direction on the PITCH and uprightAt has already cancelled the quarter-turn, so without adding cam.rot back the ball rolled ninety degrees across its own travel. Same class of bug as the replay that came back at ninety degrees to its match`);
 ok('the ball ROLLS IN A DRILL', r.drillBallRolls,
    `rot moved ${r.drillRot} and roll moved ${r.drillRoll} over twenty drill steps — the spin used to be inline in step(), which a drill never runs, so a drill's ball had a frozen pattern however hard it was hit`);
 ok('THE SIM IS BIT-IDENTICAL with it on and off', r.simBitIdentical, r.simSample);

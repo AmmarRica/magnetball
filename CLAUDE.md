@@ -492,6 +492,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ball in one frame, and a ball rebounding off a wall should *unroll* the way it came.
   The axis is re-latched only when travel goes more than 60° off it — a real change of
   direction rather than a rebound along the same line.
+  ⚠️ **`rollAx` is a direction on the PITCH**, and `drawOneBall` paints inside `uprightAt`,
+  which has already cancelled the pitch's quarter-turn — so the call site adds `cam.rot`
+  back. Without it, deck view and the side camera had the ball rolling ninety degrees
+  across its own direction of travel, which is the replay-at-ninety-degrees bug again.
   ⚠️ **It rolls FORWARDS**, and it shipped backwards. Seen from above, the face of a
   rolling ball travels the way the ball is going (the contact point is what stands
   still), so the phase is SUBTRACTED from the longitude. A backwards scroll changes
@@ -583,10 +587,25 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   clamp — which would pass on a build where the clamp is never reached.
 - **`advanceBallSpin(w)` is called from `step()` AND `stepDrill()`.** It lived inline in
   `step()`, which a drill never runs, so in every drill the ball's pattern was frozen
-  solid however hard it was hit — a ball that has stopped being a ball. It keeps two
-  separate quantities on purpose: `rot`, an unsigned 2D spin for the flat look (a
-  stylisation — a ball rolling on a pitch has no spin about the vertical axis at all), and
-  `roll`/`rollAx` for the sphere. Step loop only, never a draw (the trails rule).
+  solid however hard it was hit — a ball that has stopped being a ball. Step loop only,
+  never a draw (the trails rule).
+  ⚠️ **ONE signed quantity drives BOTH looks**: `along`, the travel projected onto
+  `rollAx`. It feeds `roll` for the sphere and `rot` for the flat pattern, so the two can
+  never disagree about which way the ball is turning.
+  ⚠️ **`rollAx` is CANONICALISED** into the right half of the pitch's frame (`canonRollAx`
+  — along +x, or +y when travel is exactly sideways to that). That is what makes the sign
+  of `along` mean anything: forward along the axis is always the same direction, so a ball
+  going one way rolls positively and a ball coming back rolls negatively. Latched, and
+  re-latched only past 60° off — a real turn rather than a rebound along the same line.
+  ⚠️ **`rot` is driven by `along`, never by SPEED**, and it shipped as `sp*0.03`. `sp` is a
+  magnitude, so the flat pattern turned the same way in every direction — a wheel rolling
+  right reads clockwise and it stayed clockwise when the ball came back left. That was the
+  whole of "the ball rotates the opposite way to where it is rolling", and it is the look
+  **nearly everybody sees**, because `sel.ball3d` is off by default. The first fix went
+  only to the sphere and the report came straight back.
+  ⚠️ `tests/ball3d.mjs` holds it from **both ends** — the sign of `rot` per direction, and
+  that a positive `rot` really is clockwise on screen. Either alone is half the claim and
+  neither alone is the complaint.
 - **The Sheep ball is a SILHOUETTE, not a set of marks**, and that took three goes. Drawn
   as its dark parts on a white ball — first a ring of seven fleece nubs plus a head, an ear
   and two legs, then a bigger head with four legs and a tail — it came out as a field of

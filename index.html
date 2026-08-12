@@ -3048,7 +3048,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0210AM';
+const VERSION = '20260812.0525AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3064,6 +3064,14 @@ const VERSION = '20260812.0210AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0525AM', title: 'The ball turns the right way',
+    added: [],
+    changed: [
+      'The ball\'s markings now turn with the ball instead of always turning the same way, so it no longer looks like it is rolling backwards half the time.',
+      'Knock the ball back the way it came and its markings unwind rather than carrying on round.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0210AM', title: 'The ball rolls properly',
     added: [],
     changed: [
@@ -10553,21 +10561,36 @@ function step(w){
 //          half a turn of texture jumped across the ball. The axis is only re-latched when
 //          travel goes more than 60° off it, which is a genuine change of direction rather
 //          than a rebound along the same line.
+// ⚠️ The axis is CANONICALISED into the right half of the pitch's own frame — pointing
+// along +x, or along +y when travel is exactly sideways to that. That is what makes the
+// SIGN of `along` mean something: forward along the axis is always the same direction, so
+// a ball going one way rolls positively and a ball going back rolls negatively.
+// Without it `rollAx` just tracked the heading, `along` was positive whichever way the
+// ball was going, and the flat pattern turned the same way in every direction — which is
+// what "the ball rotates the opposite way to where it is rolling" was. A wheel rolling
+// right reads clockwise, and this stayed clockwise when the ball came back left.
+function canonRollAx(vx, vy){
+  if (vx < 0 || (vx === 0 && vy < 0)){ vx = -vx; vy = -vy; }
+  return Math.atan2(vy, vx);
+}
 function advanceBallSpin(w){
   for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
     if (!bl) continue;
     const sp = Math.hypot(bl.vx, bl.vy);
-    bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
-    bl.spin = (bl.spin||0) * 0.90;
-    if (sp <= 0.15) continue;                     // at rest it keeps the axis it had
-    const ax = bl.rollAx;
-    const along = ax == null ? 0 : bl.vx*Math.cos(ax) + bl.vy*Math.sin(ax);
-    if (ax == null || Math.abs(along) < sp*0.5){  // >60° off the axis: re-latch
-      bl.rollAx = Math.atan2(bl.vy, bl.vx);
-      bl.roll = (bl.roll||0) + sp*BALL3D.roll;
-    } else {
+    let along = 0;                                // signed travel along the roll axis
+    if (sp > 0.15){                               // at rest it keeps the axis it had
+      const ax = bl.rollAx;
+      const a0 = ax == null ? null : bl.vx*Math.cos(ax) + bl.vy*Math.sin(ax);
+      if (a0 == null || Math.abs(a0) < sp*0.5){   // >60° off the axis: a real turn
+        bl.rollAx = canonRollAx(bl.vx, bl.vy);
+        along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
+      } else along = a0;
       bl.roll = (bl.roll||0) + along*BALL3D.roll;
     }
+    // ⚠️ `along`, never `sp`. The flat look reads `rot` as a 2D turn of the pattern and a
+    // player reads that turn as a wheel, so it has to reverse when the ball reverses.
+    bl.rot = (bl.rot||0) + (bl.spin||0) + along*0.03;
+    bl.spin = (bl.spin||0) * 0.90;
   }
 }
 function ballSounds(w){
@@ -17639,7 +17662,10 @@ function drawOneBall(b, x, y, r, s){
   }
   // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
   // (rot advances with speed in step()). Same painter the picker tiles use.
-  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.roll || 0, b.rollAx || 0);
+  // ⚠️ PLUS cam.rot. `rollAx` is a direction on the PITCH, and `uprightAt` has already
+  // cancelled the pitch's quarter-turn — so in deck view, or under the side camera, an
+  // unrotated axis had the ball rolling ninety degrees across its own direction of travel.
+  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.roll || 0, (b.rollAx || 0) + cam.rot);
   if (warped) ctx.restore();
 }
 // ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
