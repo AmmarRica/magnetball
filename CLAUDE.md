@@ -1232,6 +1232,38 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `const PHOTOLIB` is declared with `PHOTO`, near the top — `buildPhotoPane()` runs
   during the bootstrap and draws the grid, and declared beside `REPLIB` it was in the
   temporal dead zone there. **Eighth TDZ bite in this file.** `tests/photolib.mjs`.
+- **TWO replays, and a clip — three different things** (`repBuf` vs `repMatchBuf` vs
+  `saveClip`). The rolling ring holds the last few seconds, which is a **goal**. A second
+  un-ringed buffer holds the **match**, kickoff to whistle. The clip is a **video**.
+  ⚠️ **Save clip is END OF MATCH ONLY.** Recording one plays the replay back through
+  `MediaRecorder` for its full length, which mid-match is several seconds of the game being
+  unavailable while you are still playing it — and a video is the thing you send someone,
+  which is an end-of-match errand. The in-match bar keeps Replay and Save goal.
+  ⚠️ The match buffer is **SAMPLED** (`REPMATCH.every`, 30Hz): plenty to watch a top-down
+  match back, and a third of the memory and the file of the same match at 60. A full 5-minute
+  4v4 measures **9,000 frames / 807KB**, against 41KB for a goal.
+  ⚠️ Past `REPMATCH.max` it **HALVES ITS OWN RATE in place** rather than stopping. "First to
+  5" has no time limit, so a buffer that stopped would save the first six minutes of a
+  fifteen-minute match and call it the match — and every check would still pass, because a
+  truncated recording is a perfectly valid file of a shorter match. The goal marks are
+  rescaled with it.
+  ⚠️ **STABLE SLOTS**, which is why this is not just a longer ring. `w.players` GROWS —
+  drop-in adds a body at a goal and `evenUpSides` matches it — so a row captured after that
+  is longer than one captured before. A body that arrives takes the next slot and every
+  earlier frame is **back-filled** with where it was standing (on the touchline, which is
+  where it was); a body that leaves keeps its slot and is recorded on the bench. Every row is
+  then the same length and the replay tells the truth about both.
+  ⚠️ The goal buffer snapshots its **roster** at freeze time for the same reason: the world
+  can hold one more player than the frames do by the time anybody presses Save.
+  ⚠️ `drawReplayFrame` is driven by the **frame's** bodies, not the live world's — the world
+  is only consulted for what each one looks like, with a fallback. It used to map over
+  `world.players` and index past the end of `f.p`, which took the page down.
+  ⚠️ **Playback honours the recorded `fps`**, and for a long time it did not. That field has
+  been written into every payload since the sheet ones were capped at 120 frames and nothing
+  ever read it, so a decimated replay played back at however many times too fast its
+  decimation was. Invisible until a 30Hz match file ran at double speed.
+  ⚠️ The progress line marks **every** goal, not one: a line through five goals that marks
+  only the first reads as "this is where the goal is". `tests/replayfile.mjs`.
 - **Replay library (`REPLIB`, IndexedDB):** ⚠️ it exists because **a page cannot delete your
   downloads**. Once a Blob is in the Downloads folder it belongs to the OS — no web API can
   list, move or remove it — so "delete a replay" is only meaningful for a copy the page owns.

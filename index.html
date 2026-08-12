@@ -910,7 +910,8 @@
     .repprog { position: relative; height: 4px; border-radius: 3px; background: rgba(128,128,128,.30); }
     #repProgFill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); }
     /* Where the ball actually crossed. Everything right of it is the tail. */
-    #repProgGoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
+    #repProgGoal { position: absolute; inset: 0; pointer-events: none; }
+    .repgoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
       border-radius: 1px; }
     .repctlrow { display: flex; align-items: center; gap: 8px; }
     .repspeeds { display: flex; gap: 6px; margin: 0 auto; }
@@ -1301,12 +1302,16 @@
          reachable in every layout, cocktail included, where the PITCH turns but the
          screen does not. -->
     <button id="lobbyStartBtn" class="hidden">START ▶</button>
+    <!-- ⚠️ NO "Save clip" in here. Recording one plays the replay back through
+         MediaRecorder for its full length, which mid-match is several seconds of the game
+         being unavailable while you are still playing it; and the video is the thing you
+         send someone, which is an end-of-match errand rather than a mid-match one. It
+         lives on the result screen, where there is nothing to interrupt. -->
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
-      <button id="clipBtn">⇪ Save clip</button>
       <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at
            your screen's size in your theme, and can be watched again from Watch. -->
-      <button id="repSaveBtn">⤓ Save replay</button>
+      <button id="repSaveBtn">⤓ Save goal</button>
     </div>
   </div>
 
@@ -1734,7 +1739,7 @@
       <div style="height:14px"></div>
       <label class="field">Where saved replays go</label>
       <div id="repPathInfo"></div>
-      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from the <b>Save replay</b> button on the replay bar during a match, and from the result screen.</div>
+      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save goal</b> on the replay bar during a match, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen.</div>
     </div>
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
@@ -1881,7 +1886,7 @@
          from. Deliberately NOT on the result screen: loading a file is something you
          do between matches, not with one frozen behind the overlay. -->
     <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.json)</button>
-    <div class="hint" style="text-align:left; margin-top:6px">Opens a replay saved with <b>Save replay</b>. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
+    <div class="hint" style="text-align:left; margin-top:6px">Opens a saved replay, of one goal or of a whole match. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
     <button class="ghost" id="socialBack" style="margin-top:12px">← Back</button>
   </div>
 
@@ -3048,7 +3053,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0955AM';
+const VERSION = '20260812.0230PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3064,6 +3069,16 @@ const VERSION = '20260812.0955AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0230PM', title: 'Save the whole match',
+    added: [
+      'The result screen can now save the WHOLE match as a replay, not just the last goal — every goal in it is marked on the progress bar so you can jump between them.',
+    ],
+    changed: [
+      'Save clip is now on the result screen only. Recording one plays the goal back to film it, which is not something to do in the middle of a match.',
+      'The replay bar during a match now says Save goal, because that is what it saves.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0955AM', title: 'The 3D ball rolls properly',
     added: [],
     changed: [
@@ -7978,7 +7993,10 @@ $('settingsBtn').onclick = () => {
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
-$('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
+// ⚠️ Guarded: the button is only on the result screen now, so it does not exist while the
+// replay bar is the only thing on screen. An unguarded `$(id).onclick` here threw during
+// the bootstrap and took the rest of the wiring with it.
+{ const cb = $('clipBtn'); if (cb) cb.onclick = () => { if (!replay.active) saveClip(); }; }
 // ⚠️ Says what happened on the button itself rather than through a toast: this one
 // writes a file, and a download that produces no visible response reads as a dead
 // button on any browser that saves without asking.
@@ -8798,14 +8816,17 @@ async function lbSubmit(){
 // file passes Infinity and keeps every frame at the full 60fps.
 // Two copies of this drifted apart the moment the file format wanted more frames than
 // the sheet could hold, which is exactly the duplication this repo keeps paying for.
-function repEncodeFrames(src, cap){
+// `baseFps` is the rate the SOURCE was captured at — 60 for the goal ring, less for the
+// match buffer, which samples as it goes. Without it a match buffer already at 30Hz would
+// be reported as 60 and play back at double speed.
+function repEncodeFrames(src, cap, baseFps){
   const step = Math.max(1, Math.ceil(src.length / (cap || Infinity))), frames = [];
   for (let i=0; i<src.length; i+=step){
     const f = src[i], row = [Math.round(f.bx), Math.round(f.by)];
     for (const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), pl.k?1:0);
     frames.push(row);
   }
-  return { frames, fps: Math.round(60/step) };
+  return { frames, fps: Math.max(1, Math.round((baseFps || 60)/step)) };
 }
 // The inverse: flat rows back into the {bx,by,p:[{x,y,k}]} shape playReplay wants.
 function repDecodeFrames(rows, players){
@@ -9735,10 +9756,40 @@ let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
 let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
 let repGoalIdx = -1;     // where in repBuf the ball actually crossed
-const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false };
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60 };
+
+// ============================================================
+//  THE WHOLE MATCH — a second, un-ringed buffer
+// ============================================================
+// The rolling buffer above holds the last few seconds, which is a GOAL. This one holds the
+// match: kickoff to the whistle, so the result screen can offer both. They are separate
+// buffers rather than one big one because they want opposite things — the goal replay wants
+// every frame of a few seconds, the match replay wants a watchable record of several minutes
+// without carrying a quarter of a million objects around to get it.
+//
+// ⚠️ Sampled, not every step. 30Hz is plenty to watch a top-down match back, and it is a
+// third of the memory and a third of the file of the same match at 60. `repEncodeFrames`
+// already carries an `fps` for exactly this — see the playback note there, because storing
+// it and honouring it turned out to be two different things.
+//
+// ⚠️ Past the cap it HALVES ITS OWN RATE in place rather than stopping or dropping the
+// start. A "first to 5" match has no time limit at all, so a buffer that simply stopped
+// would quietly save the first six minutes of a fifteen-minute match and call it the match.
+// Halving costs a little smoothness and keeps the whole thing.
+const REPMATCH = {
+  every: 2,        // capture one step in N: 30Hz
+  max:   12000,    // frames before the rate halves — about 6½ minutes at 30Hz
+};
+let repMatchBuf = [];       // the whole match, sampled
+let repMatchEvery = REPMATCH.every;
+let repMatchTick = 0;
+let repMatchGoals = [];     // frame indices where the ball crossed
+let repMatchSlots = [];     // the bodies, in a STABLE order — see repMatchCapture
 
 function repReset(){
   repBuf = []; lastReplay = null; repPend = -1; repGoalIdx = -1;
+  repMatchBuf = []; repMatchEvery = REPMATCH.every; repMatchTick = 0;
+  repMatchGoals = []; repMatchSlots = [];
   const b=$('replayBar'); if(b) b.classList.add('hidden');
 }
 function repCapture(w){
@@ -9748,10 +9799,48 @@ function repCapture(w){
   // capture once the ring starts rolling.
   if (repBuf.length > REP_MAX){ repBuf.shift(); if (repGoalIdx > 0) repGoalIdx--; }
   if (repPend > 0){ repPend--; if (repPend === 0) repFreeze(w); }
+  repMatchCapture(w);
 }
+// ⚠️ STABLE SLOTS, and this is the whole reason the match buffer is not just a longer
+// version of the ring. `w.players` GROWS: drop-in lets a controller join at a goal and
+// `evenUpSides` adds a bot to match, so a row captured after that is longer than one
+// captured before it — and `repFileParse` rejects a file whose rows disagree with its
+// player count, which is the good outcome. The bad one is a file that loads and indexes
+// past the end of a row, which fails as a blank screen rather than as an error.
+// So a body that arrives takes the next slot and every EARLIER frame is back-filled with
+// where it was standing at the time (out on the touchline, which is where it was), and a
+// body that leaves keeps its slot and is recorded wherever it now is — on the bench. Every
+// row is then the same length and the replay tells the truth about both.
+function repMatchCapture(w){
+  // The warm-up lobby is not the match, and the idle attract demo is not worth the memory.
+  if (w.demo || w.state === 'warmup') return;
+  if (++repMatchTick < repMatchEvery) return;
+  repMatchTick = 0;
+  for (const p of w.players){
+    if (repMatchSlots.indexOf(p) >= 0) continue;
+    repMatchSlots.push(p);
+    for (const f of repMatchBuf) f.p.push({ x:p.x, y:p.y, k:false });
+  }
+  repMatchBuf.push({ bx:w.ball.x, by:w.ball.y,
+                     p: repMatchSlots.map(p => ({ x:p.x, y:p.y, k:!!p.kick })) });
+  if (repMatchBuf.length >= REPMATCH.max){
+    const half = [];
+    for (let i = 0; i < repMatchBuf.length; i += 2) half.push(repMatchBuf[i]);
+    repMatchGoals = repMatchGoals.map(g => g >> 1);
+    repMatchBuf = half;
+    repMatchEvery *= 2;
+  }
+}
+// ⚠️ The ROSTER is snapshotted with the frames, not read off the live world when the file is
+// built. `w.players` grows: drop-in adds a body at a GOAL, which is exactly when this buffer
+// freezes, so by the time anybody presses Save the world can hold one more player than the
+// frames do — and `repFileBuild` was pairing that longer player list with the shorter rows.
+// The result parses as "frames do not match the player count" if you are lucky, and indexes
+// past the end of a row if you are not, which fails as a blank screen.
 function repFreeze(w){
   repPend = -1;
-  lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
+  lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx,
+                 roster: w.players.map(repFilePlayer) };
 }
 function repOnGoal(w){
   if (!repBuf.length) return;
@@ -9759,7 +9848,9 @@ function repOnGoal(w){
   // nothing, then keep capturing and freeze again with the tail included. The auto-replay
   // fires at 1.8s, comfortably after REP_TAIL, so what it plays is the complete version.
   repGoalIdx = repBuf.length - 1;
-  lastReplay = { players:w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
+  lastReplay = { players:w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx,
+                 roster: w.players.map(repFilePlayer) };
+  repMatchGoals.push(repMatchBuf.length - 1);   // ...and mark it on the match record too
   repPend = REP_TAIL_F;
   const b=$('replayBar'); if(b) b.classList.remove('hidden');
 }
@@ -9767,7 +9858,14 @@ function drawReplayFrame(f){
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
   const fake = {
     field: world.field, bounds: world.bounds, cb: world.cb, magnet: 0, state:'play',
-    players: world.players.map((pl,i)=>({ ...pl, x:f.p[i].x, y:f.p[i].y, kick:f.p[i].k, trap:false, chargeT:0 })),
+    // ⚠️ Driven by the FRAME's bodies, not by the live world's. The frame is the authority
+    // for how many there were; `world.players` is whatever is on the pitch right now, and
+    // the two can disagree — a body joining while a replay is on screen made this index past
+    // the end of `f.p` and take the page down with "cannot read properties of undefined".
+    // The world is only consulted for what each body LOOKS like, and falls back if it is
+    // short, because a replay drawn in the wrong colours still beats a stack trace.
+    players: f.p.map((fp,i)=>({ ...(world.players[i] || world.players[0]),
+                                x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0 })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
   // ⚠️ The SAME transform render() applies, through the same `pitchXform` — deck view
@@ -9854,13 +9952,20 @@ function repCtlSync(){
 }
 // A line under the transport, with a tick where the ball actually crossed. On a goal
 // replay everything after that tick is the tail — the net, and the moment after.
-function repCtlProgress(idx, total, goalAt){
+function repCtlProgress(idx, total, goalAt, goals){
   const fill = $('repProgFill'); if (fill) fill.style.width = (100 * (idx+1) / total).toFixed(1) + '%';
-  const mark = $('repProgGoal');
-  if (mark){
-    const show = goalAt != null && goalAt >= 0 && goalAt < total - 1;
-    mark.style.display = show ? '' : 'none';
-    if (show) mark.style.left = (100 * goalAt / total).toFixed(1) + '%';
+  // ⚠️ EVERY goal, not one. A goal replay has exactly one and always did; a whole match has
+  // as many as were scored, and a progress line through five goals that marks only the first
+  // is worse than one that marks none — it reads as "this is where the goal is".
+  const host = $('repProgGoal');
+  if (host){
+    const list = (goals && goals.length ? goals : (goalAt != null && goalAt >= 0 ? [goalAt] : []))
+      .filter(g => g >= 0 && g < total - 1);
+    while (host.childElementCount > list.length) host.removeChild(host.lastChild);
+    while (host.childElementCount < list.length){
+      const m = document.createElement('i'); m.className = 'repgoal'; host.appendChild(m);
+    }
+    list.forEach((g, i) => { host.children[i].style.left = (100 * g / total).toFixed(1) + '%'; });
   }
 }
 function repTogglePause(){ if (!replay.active) return; replay.paused = !replay.paused; repCtlSync(); }
@@ -9872,6 +9977,7 @@ function playReplay(speed, opts){
     const frames = lastReplay.frames, goalAt = lastReplay.goalAt;
     replay.active = true;
     replay.paused = false;
+    replay.fps = lastReplay.fps || 60;
     replay.speed = speed || 0.55;
     replay.controls = !!opts.controls;
     if (replay.controls) repCtlShow();
@@ -9891,14 +9997,23 @@ function playReplay(speed, opts){
       // action, which means it correctly runs in slow motion along with the replay.
       // ⚠️ The step is recomputed EVERY tick, not once up front — the speed buttons change
       // it mid-playback, and a `dur` captured at the start would ignore them.
-      const dur = (STEP / Math.max(0.05, replay.speed)) * 1000;
+      // ⚠️ ...and it is the RECORDING's frame rate, not a flat 1/60. `fps` has been written
+      // into every replay payload since the sheet ones were capped at 120 frames, and
+      // nothing ever read it — so a decimated replay played back at however many times too
+      // fast its decimation was. It only became visible with a whole-match file, which is
+      // sampled at 30Hz by design and ran at double speed.
+      const fps = Math.max(1, replay.fps || 60);
+      const dur = ((1/fps) / Math.max(0.05, replay.speed)) * 1000;
       // ⚠️ Paused, `last` tracks the clock instead of accumulating. Leaving it behind
       // would bank the paused seconds and fast-forward the moment you resumed.
       if (replay.paused) last = t;
-      else while (t - last >= dur){ last += dur; idx++; advanceDynField(); }
+      // The field advances by the SIM steps a frame covers, not once per frame, or an
+      // animated theme crawls at half pace through a 30Hz recording.
+      else while (t - last >= dur){ last += dur; idx++;
+        for (let k = 0; k < Math.max(1, Math.round(60/fps)); k++) advanceDynField(); }
       if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; finish(); return; }
       drawReplayFrame(frames[idx]);
-      if (replay.controls) repCtlProgress(idx, frames.length, goalAt);
+      if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
       replay.raf = requestAnimationFrame(tick);
     }
     replay.raf = requestAnimationFrame(tick);
@@ -9944,7 +10059,7 @@ function repFileBuild(){
   if (!lastReplay || !lastReplay.frames || !lastReplay.frames.length || !world) return null;
   const { frames, fps } = repEncodeFrames(lastReplay.frames, Infinity);
   return {
-    format: REPFILE.format, v: REPFILE.v,
+    format: REPFILE.format, v: REPFILE.v, kind: 'goal',
     build: VERSION, saved: new Date().toISOString(),
     field: world.fieldKey || sel.field,
     mode: sel.mode,
@@ -9957,11 +10072,35 @@ function repFileBuild(){
     // moment after — and the transport marks it on the progress line.
     goalAt: (lastReplay.goalAt != null && lastReplay.goalAt >= 0) ? lastReplay.goalAt : -1,
     fps,
-    players: world.players.map(repFilePlayer),
+    players: lastReplay.roster || world.players.map(repFilePlayer),
     frames,
   };
 }
-function repFilename(field){
+// The WHOLE match, out of the match buffer. ⚠️ Its players come from `repMatchSlots`, not
+// from `world.players`: the slots are what the rows were recorded against, and after a
+// drop-in the two lists differ — which is exactly the case that produces a file whose rows
+// do not match its own player count.
+function repMatchFileBuild(){
+  if (!repMatchBuf.length || !world) return null;
+  const { frames, fps } = repEncodeFrames(repMatchBuf, Infinity, 60/repMatchEvery);
+  return {
+    format: REPFILE.format, v: REPFILE.v, kind: 'match',
+    build: VERSION, saved: new Date().toISOString(),
+    field: world.fieldKey || sel.field,
+    mode: sel.mode,
+    look: { ...(sel.look||{}) },
+    score: world.score ? world.score.slice() : [0,0],
+    // Every goal in the match, so the transport can mark them all on the progress line.
+    // `goalAt` stays as the FIRST of them, so an older build that only knows that field
+    // still gets a sensible mark rather than nothing.
+    goals: repMatchGoals.slice(),
+    goalAt: repMatchGoals.length ? repMatchGoals[0] : -1,
+    fps,
+    players: repMatchSlots.map(repFilePlayer),
+    frames,
+  };
+}
+function repFilename(field, kind){
   // ⚠️ Colons are illegal in filenames on Windows and awkward everywhere else, and the
   // name has to say "replay" out loud — with a plain `.json` extension the filename is
   // the only thing distinguishing this from every other JSON in the downloads folder.
@@ -9969,7 +10108,10 @@ function repFilename(field){
   // than the one loaded now.
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
   const f = field || (world && world.fieldKey) || sel.field;
-  return `magnetball-replay-${f}-${t}.${REPFILE.ext}`;
+  // ⚠️ The KIND is in the name too. A goal and a whole match are both "a replay of a match
+  // on Classic", so without it a downloads folder holds two files you cannot tell apart
+  // until you open them — and one of them is fifty times the size of the other.
+  return `magnetball-${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -10048,6 +10190,10 @@ function repLibAdd(doc){
   const rec = {
     id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
     players: doc.players.length, frames: doc.frames.length, bytes: json.length,
+    // ⚠️ Kind and rate go in the METADATA, not just the payload. The list is drawn from
+    // this record alone — reading the frames to find out what a row is would put the 68ms
+    // structured clone straight back — so anything the row shows has to be here.
+    kind: doc.kind || 'goal', fps: doc.fps || 60,
   };
   return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
     meta.put(rec); blob.put({ id: rec.id, json });
@@ -10128,15 +10274,23 @@ function repLibLabel(rec){
   const f = (FIELDS[rec.field] && FIELDS[rec.field].name) || rec.field;
   let when = '';
   try { const d = new Date(rec.saved); if (isFinite(d)) when = d.toLocaleString(); } catch(_){}
-  return { title: f + ' · ' + (rec.mode || '?'),
-           sub: [when, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB'].filter(Boolean).join(' · ') };
+  // ⚠️ The KIND leads the title. A goal and a whole match off the same court in the same
+  // mode are otherwise the same row twice, and the only visible difference is a size in KB
+  // — which is a thing to work out rather than a thing to read.
+  // ⚠️ Older rows carry no `kind` at all; they are all goals, because that is all there was.
+  const match = rec.kind === 'match';
+  const secs = (rec.frames && rec.fps) ? Math.round(rec.frames / rec.fps) : 0;
+  const len = secs ? (secs >= 60 ? Math.floor(secs/60) + 'm ' + (secs%60) + 's' : secs + 's') : '';
+  return { title: (match ? 'Match' : 'Goal') + ' · ' + f + ' · ' + (rec.mode || '?'),
+           sub: [when, len, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB']
+                  .filter(Boolean).join(' · ') };
 }
 // Saving does BOTH: the file for keeping and sending, the library entry for watching and
 // deleting. The file is what the player asked for, so a library failure must not lose it.
-function saveReplayFile(){
-  const doc = repFileBuild();
+function saveReplayFile(kind){
+  const doc = kind === 'match' ? repMatchFileBuild() : repFileBuild();
   if (!doc) return false;
-  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename());
+  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename(null, doc.kind));
   repLibAdd(doc).then(() => buildReplayList()).catch(() => {});
   return true;
 }
@@ -10187,7 +10341,9 @@ async function playReplayFile(doc, speed, opts){
   try {
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length),
-                   goalAt: (doc.goalAt != null ? doc.goalAt : -1) };
+                   goalAt: (doc.goalAt != null ? doc.goalAt : -1),
+                   goals: Array.isArray(doc.goals) ? doc.goals : null,
+                   fps: doc.fps || 60 };
     computeCam();
     await playReplay(speed || 1, opts);
   } finally {
@@ -10276,7 +10432,7 @@ function buildReplayList(){
       : '';
     if (!rows.length){
       const e = document.createElement('div'); e.className = 'mvempty';
-      e.textContent = 'Nothing saved yet. Score a goal, then press Save replay on the replay bar or the '
+      e.textContent = 'Nothing saved yet. Score a goal, then press Save goal on the replay bar, or save a goal or the whole match from the '
         + 'result screen — it is kept here to watch again, and written to your downloads as a file you '
         + 'can send or back up.';
       host.appendChild(e); return;
@@ -10308,7 +10464,7 @@ function buildReplayList(){
       down.innerHTML = iconSvg('save') || '⤓';
       down.onclick = () => repLibGet(rec.id)
         .then(doc => downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }),
-                                  repFilename(rec.field)))
+                                  repFilename(rec.field, rec.kind)))
         .catch(e => toast('⚠ ' + e.message));
 
       const del = document.createElement('button'); del.className = 'repbtn del';
@@ -13024,16 +13180,22 @@ function renderAwards(w){
       const sh=document.createElement('button'); sh.textContent='⬇ Save clip';
       sh.onclick=()=>saveClip(); foot.appendChild(sh);
     }
-    // ⚠️ Offered next to Save clip, because they are not the same thing and the
-    // difference is worth a button: the clip is a video to send someone, this is the
-    // match data to keep and watch again from Watch → Load replay.
-    const rf=document.createElement('button'); rf.textContent='⤓ Save replay';
-    rf.onclick=(e)=>{
-      const b=e.currentTarget, was=b.textContent;
-      b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
-      setTimeout(()=>{ if (b.textContent!==was) b.textContent=was; }, 2200);
+    // ⚠️ THREE things and they are all different, which is why all three get a button.
+    // The clip is a VIDEO of the last goal, to send someone. The other two are the match
+    // DATA, which re-renders at your screen's size in your theme and can be watched again:
+    // one of the last goal, one of the whole match. The two replays are the same format and
+    // the same code path — only the buffer they come out of differs.
+    const saver = (label, kind) => {
+      const b=document.createElement('button'); b.textContent=label;
+      b.onclick=(e)=>{
+        const el=e.currentTarget, was=el.textContent;
+        el.textContent = saveReplayFile(kind) ? '✓ Saved' : '⚠ Nothing to save';
+        setTimeout(()=>{ if (el.textContent!==was) el.textContent=was; }, 2200);
+      };
+      foot.appendChild(b);
     };
-    foot.appendChild(rf);
+    saver('⤓ Save goal replay', 'goal');
+    saver('⤓ Save match replay', 'match');
     host.appendChild(foot);
   }
 }
@@ -18777,6 +18939,9 @@ if (window.__MAGNETDEBUG) {
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
+    REPMATCH, repMatchFileBuild, repMatchCapture, get repMatchBuf(){ return repMatchBuf; },
+    get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
+    repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
