@@ -3183,7 +3183,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.1150PM';
+const VERSION = '20260813.0015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3199,7 +3199,7 @@ const VERSION = '20260812.1150PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260812.1150PM', title: 'Standup arcade mode',
+  { v: '20260813.0015AM', title: 'Standup arcade mode',
     added: [
       'A new Display layout: Standup arcade. Four sets of controls on one keyboard, wired the way a real cabinet is, so four people can play against the AI or two a side with nothing but a keyboard encoder.',
       'The panel uses the arcade standard map, so a cabinet works with no setup: P1 on the arrows, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1 to 4 to start and 5 to 8 to insert a coin.',
@@ -9989,6 +9989,24 @@ function decayJuice(){
   shake = shake > 0.3 ? shake * 0.85 : 0;
   flash = flash > 0.01 ? flash * 0.88 : 0;
 }
+// The celebration is over — put the screen back. Called when a REPLAY takes the canvas,
+// beside `goalCamReset()`, and the mechanism is the same one: these decay in `decayJuice()`,
+// which is step-locked, and `loop()` returns immediately while `replay.active` — so nothing
+// winds them down for the whole of playback and whatever they hold comes back the frame the
+// loop resumes.
+// ⚠️ DEFENSIVE, and deliberately recorded as such rather than dressed up as the goal-camera
+// bug's twin — a probe that pinned the ball in the goal mouth made it look like one, and the
+// numbers it produced were its own doing. Measured on a natural goal, shake peaks at ~5.8 and
+// is at ZERO within ~430ms, while a replay does not start until `GOALHOLD.replayAt` (3.0s),
+// so the ordinary path carries nothing in. What is real is the narrow case: play continues
+// through the celebration, so a kick landing in the last moments of it tops the shake back up
+// (measured going 3.57 → 4.74 mid-celebration) and that residue would otherwise be frozen for
+// the length of the replay and discharged over the kickoff. Small, but a wobble with nothing
+// on screen to justify it.
+// ⚠️ `hitStop` cannot be pending here at all — it is at most twelve frames against a
+// three-second hold — but it is frozen by the same early return, and leaving one of the three
+// behind is how this comes back.
+function juiceReset(){ shake = 0; flash = 0; hitStop = 0; }
 
 // ⚠️ FRAME RATE IS A WALL-CLOCK MEASUREMENT, so unlike everything else it is counted in
 // loop() off real time and NOT step-locked — the sim rate is fixed at 1/60 by design, so a
@@ -10379,6 +10397,10 @@ function playReplay(speed, opts){
     // half the fix; it has to be RELEASED, because by the time you come back the ball is on
     // the centre spot and there is nothing left to push in on.
     goalCamReset();
+    // ...and the shake and the flash, for exactly the same reason: they decay in the step
+    // loop, which is not running either, so they hold at full strength for the whole replay
+    // and discharge into the kickoff. See juiceReset().
+    juiceReset();
     replay.active = true;
     replay.paused = false;
     replay.fps = lastReplay.fps || 60;
@@ -19466,7 +19488,7 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,

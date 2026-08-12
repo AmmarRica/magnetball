@@ -1435,6 +1435,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   The followed player is read through `ix`/`iy`, and the origin shift is rotated by `cam.rot`
   or deck view puts them off to one side. Stands down while a replay owns the framing, and
   rides the Screen shake & effects dial.
+  ⚠️ **The SHAKE and the FLASH are released with it** (`juiceReset()`, called beside
+  `goalCamReset()` in `playReplay`) — same mechanism, since `decayJuice()` is step-locked
+  and `loop()` returns early during playback. ⚠️ **Defensive rather than a twin of the
+  camera bug**, and recorded that way on purpose: on an ordinary goal shake is at zero
+  within ~430ms while a replay does not start until `GOALHOLD.replayAt` (3.0s), so nothing
+  is carried in. The real case is narrow — play continues through the celebration, so a
+  kick landing in its last moments tops the shake back up and *that* would be frozen for
+  the length of the replay and discharged over the kickoff. `tests/goalcam.mjs` has to
+  inject that late kick to test it at all; sampling the natural path reads zero on a build
+  with the release and on one without.
   ⚠️ **A REPLAY RELEASES IT, it does not merely suspend it.** `applyGoalCam` standing down
   while `replay.active` is only half the job: `loop()` returns immediately during playback,
   so `advanceGoalCam` never ticks either and `goalCam.t` sits frozen at whatever it reached.
