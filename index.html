@@ -1659,22 +1659,34 @@
 
     <div class="card collapsible collapsed" data-sec="feel">
       <h2>Game Feel</h2>
+      <!-- ⚠️ The preset row sits OUTSIDE the tabs, and the reset button at the foot does
+           too: both act on the WHOLE card, so filing a set-everything control under one
+           fifth of the things it sets would be worse than leaving it above the chips. The
+           Match card keeps KICK OFF and Warm-up outside its own tabs for the same reason. -->
       <label class="field">Preset</label>
       <div class="opts" id="feelPresets"></div>
 
-      <div class="subhead">⚽ Ball controls</div>
+      <!-- ⚠️ Nineteen controls, so five things you might be here for rather than one list.
+           As one list the Tilt parallax toggle sat sixteenth in it and was reported as a
+           missing feature; the chip row is now the heading, which is why the three
+           `.subhead` groups this replaced are gone rather than repeated inside the panes. -->
+      <div class="subtabs" data-tabs="feel"></div>
+
+      <div class="subpane" data-pane="ball">
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
       <div id="feelSlidersBall"></div>
+      </div>
 
-      <div class="subhead">🕹️ Player controls</div>
+      <div class="subpane" data-pane="player">
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
       <div id="feelSlidersPlayer"></div>
+      </div>
 
-      <div class="subhead">🎬 Presentation</div>
+      <div class="subpane" data-pane="effects">
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
@@ -1682,22 +1694,21 @@
       <div class="opts" id="tiltPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
       <div style="height:10px"></div>
-      <label class="field">Ball rolls in 3D</label>
-      <div class="opts" id="ball3dPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
-      <div style="height:10px"></div>
-      <label class="field">Replay camera</label>
-      <div class="opts" id="sideViewPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Watch replays and the idle demo match from beside the touchline instead of straight down: the pitch turns so goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow. Render only — nothing about the match changes, and the two views replay the same recording. Deliberately not offered for playing a match in: a body in front of the ball is good television and a bad time on the ball.</div>
-      <div style="height:10px"></div>
       <label class="field">Floating stat text</label>
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
+      <div style="height:10px"></div>
+      <label class="field">Ball rolls in 3D</label>
+      <div class="opts" id="ball3dPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
       <div style="height:10px"></div>
       <label class="field">Hit stop <small id="hitStopVal" style="color:var(--accent)"></small></label>
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
       <div style="height:10px"></div>
+      </div>
+
+      <div class="subpane" data-pane="camera">
       <label class="field">Goal zoom <small id="goalZoomVal" style="color:var(--accent)"></small></label>
       <input id="goalZoom" class="slider" type="range" min="100" max="800" step="5" />
       <div style="height:6px"></div>
@@ -1708,12 +1719,21 @@
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
       <div style="height:10px"></div>
+      <label class="field">Replay camera</label>
+      <div class="opts" id="sideViewPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Watch replays and the idle demo match from beside the touchline instead of straight down: the pitch turns so goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow. Render only — nothing about the match changes, and the two views replay the same recording. Deliberately not offered for playing a match in: a body in front of the ball is good television and a bad time on the ball.</div>
+      <div style="height:10px"></div>
+      </div>
+
+      <div class="subpane" data-pane="advanced">
       <label class="field">Match speed <small id="mspeedVal" style="color:var(--accent)"></small></label>
       <input id="mspeed" class="slider" type="range" min="50" max="200" step="5" />
       <div style="height:10px"></div>
       <label class="field">Debug readout</label>
       <div class="opts" id="debugPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Ball and player speed plus your current feel numbers, bottom-left while you play.</div>
+
+      </div>
 
       <button class="ghost" id="feelReset" style="margin-top:14px">Reset to defaults</button>
     </div>
@@ -2904,6 +2924,8 @@ const ICONS = {
   duo:       'M7.4 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M16.6 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M2.8 20v-1.6a4.6 4.6 0 0 1 4.6-4.6 4.6 4.6 0 0 1 4.6 4.6V20 M12.2 20v-1.6a4.6 4.6 0 0 1 4.4-4.6 4.6 4.6 0 0 1 4.6 4.6V20',
   gamepad:   'M8.2 7.4h7.6a5.6 5.6 0 0 1 5.4 4.2l.9 3.6a2.7 2.7 0 0 1-5 1.9l-1-1.7H8l-1 1.7a2.7 2.7 0 0 1-5-1.9l.9-3.6a5.6 5.6 0 0 1 5.3-4.2Z M7 10.6v3.2 M5.4 12.2h3.2 M15.4 11.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z M17.8 13.6a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z',
   snail:     'M13 7.6a5.4 5.4 0 1 0 0 10.8 5.4 5.4 0 0 0 0-10.8Z M13 10.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Z M7.6 18.4H3.6c0-2.2 1.4-3.4 3.2-3.6 M4.6 14.8 2.8 12 M6.4 14.4 5.6 11.2',
+  // --- presentation
+  camera:    'M3.4 8.6h3.2l1.6-2.4h7.6l1.6 2.4h3.2v10H3.4Z M12 10.4a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z M18.2 10.8h1',
   // --- rules
   barrier:   'M3 8.6h18v6.8H3Z M3 8.6l6 6.8 M9 8.6l6 6.8 M15 8.6l6 6.8 M5.4 15.4V20 M18.6 15.4V20',
   run:       'M13.6 3.4a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z M9.4 20.6l2.2-5.2-2.6-2.6.8-4.6 3.2-1 2.6 3 3 1 M11 12.8 6.6 14 M14.2 15.4l2.6 5.2',
@@ -3053,7 +3075,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0230PM';
+const VERSION = '20260812.0640PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3069,6 +3091,14 @@ const VERSION = '20260812.0230PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0640PM', title: 'Game Feel, in tabs',
+    added: [],
+    changed: [
+      'The Game Feel card is now five tabs — Ball, Player, Effects, Camera and Advanced — instead of one list of nineteen settings you had to scroll through to find anything.',
+      'The preset row and Reset to defaults stay put on every tab, since they set everything at once.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0230PM', title: 'Save the whole match',
     added: [
       'The result screen can now save the WHOLE match as a replay, not just the last goal — every goal in it is marked on the progress bar so you can jump between them.',
@@ -7101,6 +7131,15 @@ const SUBTABS = {
   // ⚠️ Built from SLOT_KEYS, never a hand-written copy of it: the chips and the panes have to
   // come from the same list or a new slot arrives with a pane and no chip, and its controls
   // are then hidden while `audit` and the menu search still find them.
+  // ⚠️ Game Feel carries nineteen controls, which was one list long enough that the
+  // Tilt parallax toggle sat sixteenth in it and got reported as a MISSING feature. The
+  // preset row and the reset button stay OUTSIDE these, because both act on the whole
+  // card — filing a set-everything control under one fifth of the things it sets is
+  // worse than leaving it above the chips, and the Match card keeps KICK OFF and Warm-up
+  // outside its own tabs for the same reason.
+  feel:   [['ball','Ball','ball'], ['player','Player','run'],
+           ['effects','Effects','flame'], ['camera','Camera','camera'],
+           ['advanced','Advanced','gear']],
   theme:  [['bundle', '✨ Bundle']].concat(
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };

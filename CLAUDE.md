@@ -1136,7 +1136,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   controls simply were not there on four palettes.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
-  declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress
+  declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
+  `theme` and `feel`.
+  ⚠️ **Game Feel is tabbed too** — Ball / Player / Effects / Camera / Advanced. Nineteen
+  controls in one list is how the Tilt parallax toggle came to sit *sixteenth* in it and get
+  reported as a missing feature; the chip row is the heading now, which is why the three
+  `.subhead` groups it replaced are gone rather than repeated inside the panes.
+  ⚠️ The **preset row and the reset button stay OUTSIDE the panes**: both act on the whole
+  card, and filing a set-everything control under one fifth of the things it sets is worse
+  than leaving it above the chips. `#matchCard` keeps KICK OFF and Warm-up outside its own
+  tabs for the same reason.
+  ⚠️ Order inside the **Effects** pane is load-bearing: Screen shake, then Tilt, then the
+  rest, then the Hit stop slider — `tests/tilt.mjs` pins tilt as directly after Screen shake
+  and above every slider in the card, and the Camera pane (which holds Goal zoom) therefore
+  has to come after Effects in the DOM. Nav tiles are grouped Play / Progress
   / Help; `#jumpBar` chips jump to a section and are built from the cards themselves.
   ⚠️ A pane with no chip **hides** its controls while `querySelectorAll` still finds them —
   `audit` checks for orphan panes for exactly that reason. Sticky order is chips → KICK OFF →

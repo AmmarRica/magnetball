@@ -48,21 +48,75 @@ const r = await p.evaluate(async ()=>{
     }
   }
   // ...and the cards actually got shorter. Measured, not asserted by eye.
+  // ⚠️ Measured on the card's BODY where it has one. `#matchCard` is `display: contents`
+  // so the hero KICK OFF button can stick to the scroll column — an element with no box has
+  // a scrollHeight of ZERO, so `matchH` has been 0 all along and `cardsAreShort` was really
+  // only ever testing the Your Player card. A zero passes a "is it under 1400px" check for
+  // free, which is the sort of pass this file exists to catch.
   const height = s => { const c=card(s); c.classList.remove('collapsed');
-    const h=c.scrollHeight; return h; };
+    const box = c.querySelector('#matchBody') || c;
+    return box.scrollHeight; };
   M.showSubTab('player','colour'); M.showSubTab('match','game');
   o.playerH = height('player'); o.matchH = height('match');
   o.playerScreens = +(o.playerH/950).toFixed(1);
   o.matchScreens  = +(o.matchH/950).toFixed(1);
-  o.cardsAreShort = o.playerH < 1400 && o.matchH < 1400;   // both were 3000-6800px flat
+  o.cardsAreShort = o.playerH > 100 && o.matchH > 100 && o.playerH < 1400 && o.matchH < 1400;
   // The tallest single pane is still far under the old flat card.
   let worst = 0;
+  // ⚠️ `height(g)`, not `height(g==='player'?'player':'match')`. That is the exact bug the
+  // comment at the top of this block warns about, still sitting here: every group other than
+  // `player` was measured on the MATCH card, so the theme and feel panes were never measured
+  // at all and the match card returned zero into the bargain.
   for (const g of Object.keys(M.SUBTABS))
-    for (const [k] of M.SUBTABS[g]){ M.showSubTab(g,k); worst = Math.max(worst, height(g==='player'?'player':'match')); }
+    for (const [k] of M.SUBTABS[g]){ M.showSubTab(g,k); worst = Math.max(worst, height(g)); }
   o.worstPane = worst;
   o.worstPaneBeatsFlat = worst < 4000;                      // Your Player was 6777px
   M.showSubTab('player','colour'); M.showSubTab('match','game');
   document.querySelectorAll('#setup .card.collapsible').forEach(c=>c.classList.add('collapsed'));
+
+  // ---- 2b) GAME FEEL, split the same way -----------------------------------
+  // Nineteen controls in one list, which is how the Tilt parallax toggle came to sit
+  // sixteenth in it and get reported as a missing feature. ⚠️ Two things have to hold at
+  // once: every control still exists and is reachable, and the two that act on the WHOLE
+  // card stay out of the panes — a preset filed under one fifth of what it sets is worse
+  // than one above the chips.
+  {
+    const c = card('feel'); c.classList.remove('collapsed');
+    const IDS = ['trapPick','feelSlidersBall','oneHandPick','feelSlidersPlayer','juicePick',
+                 'tiltPick','popupPick','ball3dPick','hitStop','goalZoom','goalZoomSpd',
+                 'autoReplayPick','sideViewPick','mspeed','debugPick'];
+    o.feelMissing = IDS.filter(id => !document.getElementById(id));
+    o.feelOutsideAPane = IDS.filter(id => !document.getElementById(id).closest('.subpane'));
+    o.feelWholeCard = ['feelPresets','feelReset']
+      .filter(id => { const e = document.getElementById(id); return e && !e.closest('.subpane'); });
+    // Each control in exactly ONE pane, so nothing is duplicated into two tabs.
+    o.feelPaneOf = {};
+    for (const id of IDS){
+      const pn = document.getElementById(id).closest('.subpane');
+      o.feelPaneOf[id] = pn ? pn.dataset.pane : null;
+    }
+    o.feelPanesUsed = [...new Set(Object.values(o.feelPaneOf))].sort().join(',');
+    // ⚠️ THE LAST CHIP HAS TO BE REACHABLE. Five chips do not fit a 430px phone, so the row
+    // scrolls sideways — and a chip you cannot reach hides a whole pane. Scrolled into view
+    // and HIT-TESTED at its own centre, never just `.click()`ed: that dispatches at the node
+    // and does no hit testing at all, which is how nineteen assertions once passed over an
+    // untappable button (see tests/touchstart.mjs).
+    const row = document.querySelector('.subtabs[data-tabs="feel"]');
+    const chips = [...row.querySelectorAll('.subchip')];
+    const last = chips[chips.length-1];
+    o.feelRowScrolls = row.scrollWidth > row.clientWidth + 2;
+    last.scrollIntoView({ block:'nearest', inline:'center' });
+    const b2 = last.getBoundingClientRect();
+    const hit = document.elementFromPoint(b2.left + b2.width/2, b2.top + b2.height/2);
+    o.feelLastChipHit = !!(hit && (hit === last || last.contains(hit)));
+    o.feelLastChipPane = last.dataset.pane;
+    hit && hit.click();
+    o.feelLastPaneOpened = !!c.querySelector(`.subpane[data-pane="${last.dataset.pane}"].on`);
+    // ...and the whole-card controls stay put whichever tab is showing.
+    o.feelWholeCardVisible = chips.every(ch => { ch.click();
+      return vis(document.getElementById('feelPresets')) && vis(document.getElementById('feelReset')); });
+    c.classList.add('collapsed');
+  }
 
   // ---- 4) nav tiles grouped -----------------------------------------------
   const groups = [...document.querySelectorAll('#setup .navgroup')];
@@ -135,7 +189,7 @@ const r = await p.evaluate(async ()=>{
 
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
-ok(r.groups === 'match,player,theme', `expected sub-tabs on match, player and theme, got ${r.groups}`);
+ok(r.groups === 'feel,match,player,theme', `expected sub-tabs on feel, match, player and theme, got ${r.groups}`);
 // ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
 // to come from one list, or a new slot arrives with a pane and no chip and its controls are
 // hidden while the audit and the menu search still find them.
@@ -150,6 +204,18 @@ ok(r.everyPaneShowable, 'a pane stayed invisible even when its own chip was pres
 ok(r.cardsAreShort, `the cards are still enormous: player ${r.playerH}px, match ${r.matchH}px`);
 ok(r.worstPaneBeatsFlat, `the tallest pane (${r.worstPane}px) is no better than the old flat card`);
 ok(r.navGroupCount === 3, `expected three nav groups, got ${r.navGroupCount}`);
+ok(r.feelMissing.length === 0, `Game Feel lost controls in the split: ${JSON.stringify(r.feelMissing)}`);
+ok(r.feelOutsideAPane.length === 0,
+   `a Game Feel control is outside every pane: ${JSON.stringify(r.feelOutsideAPane)} — it would show on every tab, which is what the tabs exist to stop`);
+ok(r.feelWholeCard.length === 2,
+   `the preset row and the reset button must stay OUT of the panes (found ${JSON.stringify(r.feelWholeCard)}) — both act on the whole card, so filing either under one fifth of what it sets is worse than leaving it above the chips`);
+ok(r.feelPanesUsed === 'advanced,ball,camera,effects,player',
+   `the Game Feel controls are spread over ${r.feelPanesUsed} — every pane has to earn its chip, and a chip with nothing behind it is a dead tab`);
+ok(r.feelRowScrolls === true || r.feelLastChipHit,
+   'the chip row neither fits nor scrolls, so the last tab is unreachable');
+ok(r.feelLastChipHit, `the last Game Feel chip (${r.feelLastChipPane}) is not hit-testable at its own centre once scrolled to — five chips do not fit a phone, and a chip you cannot press hides a whole pane`);
+ok(r.feelLastPaneOpened, `pressing the last chip did not open the ${r.feelLastChipPane} pane`);
+ok(r.feelWholeCardVisible, 'the preset row or the reset button vanished on some tab');
 ok(r.everyGroupLabelled, `a nav group has no label: ${JSON.stringify(r.navLabels)}`);
 ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);
