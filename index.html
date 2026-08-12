@@ -1622,6 +1622,10 @@
       <h2>Display</h2>
       <label class="field">Layout <small id="displayDetected" style="color:var(--muted);font-weight:400"></small></label>
       <div class="opts" id="displayPick"></div>
+      <div id="arcadeBox" style="margin-top:10px; display:none">
+        <div class="hint" style="text-align:left">An upright cabinet with four sets of controls, all wired to the keyboard the way an arcade encoder does it. Four people play against the AI, or two a side.</div>
+        <button class="ghost" id="arcadeCfgBtn" style="margin-top:8px">🕹 Arcade settings</button>
+      </div>
       <div id="cocktailBox" style="margin-top:10px; display:none">
         <div class="hint" style="text-align:left">For a screen lying flat on a table with people stood around it. Tell it where each player is sitting and their "up" will point into the table instead of off the top of the screen.</div>
         <button class="ghost" id="cocktailCfgBtn" style="margin-top:8px">🎛 Configure player sides</button>
@@ -1915,6 +1919,30 @@
   </div>
 
   <!-- ===================== CONTROLLER CONFIG ===================== -->
+  <!-- ===================== ARCADE OPERATOR ===================== -->
+  <!-- The bookkeeping an operator actually wants: what went in the slot, how many games
+       came out of it, and whether the machine is taking money at all. Reachable from the
+       Display card and from the service key (F2) on the panel itself. -->
+  <div id="arcadeCfg" class="screen hidden">
+    <div class="logo"><h1 style="font-size:26px">ARCADE</h1><p id="arcadeStatus">Standup cabinet · four panels</p></div>
+    <div class="card">
+      <h2>Takings</h2>
+      <div id="arcadeBook"></div>
+      <div class="hint" style="text-align:left">Kept on this machine only — it is never sent anywhere. Free play still counts the games, because how much a cabinet gets used is worth knowing whether or not it is charging for it.</div>
+      <div style="height:14px"></div>
+      <label class="field">Mode</label>
+      <div class="opts" id="arcadePlayPick"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Coin-op needs a credit to start a game — press a coin key (5 to 8, one per player) to add one. Free play starts whenever somebody presses START.</div>
+    </div>
+    <div class="card">
+      <h2>Panel</h2>
+      <div id="arcadeKeys"></div>
+      <div class="hint" style="text-align:left">MAME's own defaults, so a cabinet wired with any keyboard encoder works with no setup. Bound to the physical switch rather than the printed character, so the numpad stick and the coin keys never collide and the layout the machine is set to does not matter.</div>
+    </div>
+    <button class="ghost" id="arcadeClear" style="margin-top:12px">Reset the counters</button>
+    <button class="ghost" id="arcadeBack" style="margin-top:12px">← Back</button>
+  </div>
+
   <div id="padConfig" class="screen hidden">
     <div class="logo"><h1 style="font-size:26px">CONTROLLER</h1><p id="padStatus">Press a direction on your controller to bind it</p></div>
     <div class="card">
@@ -2880,6 +2908,48 @@ function digitalVec(dx, dy){
   const k = Math.round(Math.atan2(dy, dx) / (Math.PI/4));
   return [Math.round(Math.cos(k*Math.PI/4)), Math.round(Math.sin(k*Math.PI/4))];
 }
+// ============================================================
+//  STANDUP ARCADE — a cabinet, four players, one keyboard
+// ============================================================
+// A fourth layout beside Auto, Steam Deck and Cocktail: an upright cabinet with four sets
+// of controls, everyone stood shoulder to shoulder facing the same screen.
+//
+// ⚠️ THE KEYBOARD IS THE WIRING, and that is not a shortcut — it is how arcade cabinets are
+// actually built. A JAMMA harness runs into a keyboard encoder (an I-PAC, a Zero Delay), and
+// every stick and button on the panel arrives at the browser as a keystroke. So the map here
+// is MAME's own default, which means a cabinet wired by anybody who has ever wired one works
+// with no configuration at all: P1 on the arrows with LCtrl/LAlt/Space, P2 on RDFG with A/S/Q,
+// P3 on IJKL, P4 on the numpad, 1-4 to start and 5-8 to insert a coin.
+//
+// ⚠️ The four players are presented as VIRTUAL GAMEPADS rather than as new seat types.
+// `connectedGamepadIndices` and `gamepadPad` are the two functions the whole seat machinery
+// already goes through — assignment, drop-in, names, the warm-up lobby, evening the sides up
+// — so a cabinet inherits every one of them instead of growing a parallel path that has to
+// be kept in step. Nothing downstream knows the difference.
+// ⚠️ Bound to `e.code`, not `e.key`, and for two reasons that both matter on a cabinet.
+// P4's stick is the NUMPAD, and a numpad key reports the same `e.key` as the number row —
+// "6" is "6" either way — so P4 pressing right would also drop a coin in P2's slot. And a
+// panel is FIXED HARDWARE: `code` is the physical switch regardless of the keyboard layout
+// the machine happens to be set to, so a cabinet built in France still works.
+const ARCADE = {
+  seats: [
+    { up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight',
+      fire:['ControlLeft','AltLeft','Space'],      start:'Digit1', coin:'Digit5' },
+    { up:'KeyR',    down:'KeyF',      left:'KeyD',      right:'KeyG',
+      fire:['KeyA','KeyS','KeyQ'],                 start:'Digit2', coin:'Digit6' },
+    { up:'KeyI',    down:'KeyK',      left:'KeyJ',      right:'KeyL',
+      fire:['ShiftRight','Enter','Comma'],         start:'Digit3', coin:'Digit7' },
+    { up:'Numpad8', down:'Numpad2',   left:'Numpad4',   right:'Numpad6',
+      fire:['Numpad0','NumpadDecimal','NumpadEnter'], start:'Digit4', coin:'Digit8' },
+  ],
+  maxSeats: 4,
+  // The operator's service key: holds the bookkeeping screen. F2 on a real cabinet.
+  service: 'F2',
+};
+const ARCADEOPT = {
+  free: { name:'Free play', emoji:'🆓', icon:'unlock' },
+  coin: { name:'Coin-op',   emoji:'🪙', icon:'gift' },
+};
 const TILTOPT = {
   on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
   off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
@@ -3113,7 +3183,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.1105PM';
+const VERSION = '20260812.1150PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3129,6 +3199,17 @@ const VERSION = '20260812.1105PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.1150PM', title: 'Standup arcade mode',
+    added: [
+      'A new Display layout: Standup arcade. Four sets of controls on one keyboard, wired the way a real cabinet is, so four people can play against the AI or two a side with nothing but a keyboard encoder.',
+      'The panel uses the arcade standard map, so a cabinet works with no setup: P1 on the arrows, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1 to 4 to start and 5 to 8 to insert a coin.',
+      'An arcade settings screen with the takings on it — coins in, credits waiting and games played — plus free play or coin-op, and the full panel map. Open it from the Display card or with F2 on the cabinet itself.',
+    ],
+    changed: [
+      'Goal replays now wait a moment longer before cutting in, so you get to see the ball in the net first.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.1105PM', title: 'Replays at the right size',
     added: [],
     changed: [
@@ -3348,7 +3429,7 @@ function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
+            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free',
             goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
@@ -6272,6 +6353,9 @@ function buildOpts(containerId, obj, key, extra){
       // ⚠️ Asked HERE, inside the tap that turned it on: iOS only grants the sensor from a
       // user gesture, and a request made at boot is refused outright.
       if (key==='tilt') tiltReset();
+      // The operator screen's headline says whether the machine is taking money, so a
+      // change of mode has to redraw it — the tiles rebuild themselves, the rest doesn't.
+      if (key==='arcadePlay') syncArcade();
     };
     wrap.appendChild(el);
   });
@@ -7114,7 +7198,109 @@ updatePadInfo();
 if (!PANEL) checkDailyLogin();   // grant + show today's reward on the first visit each day
 
 // Reflect connected gamepads on the setup screen.
+// ============================================================
+//  ARCADE CABINET — pads, credits, bookkeeping
+// ============================================================
+function arcadeMode(){ return sel.display === 'arcade'; }
+function arcadeFreePlay(){ return (sel.arcadePlay || 'free') === 'free'; }
+// How many of the four panels are wired up. Fixed at four: a cabinet has the sticks it has,
+// and a seat nobody is standing at costs nothing — `evenUpSides` fills it with a bot.
+function arcadeSeats(){ return ARCADE.maxSeats; }
+// A panel, read as a pad. ⚠️ Returns the same shape `gamepadPad` does, so it flows through
+// `applyHumanInput` and every seat function unchanged — that is the whole design.
+// ⚠️ -1/0/+1 per axis, like `pollKeys` and the digital thumbstick: a stick on a cabinet is a
+// four-microswitch assembly and has no in-between at all.
+function arcadePad(i){
+  const s2 = ARCADE.seats[i];
+  if (!s2) return { dx:0, dy:0, kick:false, invert:false };
+  let dx = 0, dy = 0;
+  if (codes[s2.left]) dx -= 1;
+  if (codes[s2.right]) dx += 1;
+  if (codes[s2.up]) dy -= 1;
+  if (codes[s2.down]) dy += 1;
+  return { dx, dy, kick: s2.fire.some(c => codes[c]), invert:false };
+}
+// ---- credits and the takings ------------------------------------------------
+// ⚠️ Persisted, and kept OUT of `sel`. `saveSel()` serialises all of `sel` to localStorage
+// and `syncAdopt()` shallow-merges it between the game and the settings window — takings are
+// a record of what happened, not a preference, and a merge is exactly the wrong thing to do
+// to a counter. Same argument that keeps the VJ decks out of `sel`.
+const ARCADEBK = { key: 'magnetball.arcade' };
+let arcade = { credits: 0, coins: 0, plays: 0 };
+function loadArcade(){
+  try { const v = JSON.parse(localStorage.getItem(ARCADEBK.key) || 'null');
+        if (v && typeof v === 'object') arcade = { credits:v.credits|0, coins:v.coins|0, plays:v.plays|0 }; }
+  catch(_){}
+}
+function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(arcade)); } catch(_){} }
+// ⚠️ Loaded HERE, right under the declaration, and deliberately not up with `loadSel()` in
+// the bootstrap: `arcade` is a `let` further down the file, so a call from up there reads it
+// in the temporal dead zone and takes the whole page out. That has happened nine times in
+// this file already.
+loadArcade();
+// A coin goes in. Counted whether or not anybody plays: the takings are what went into the
+// slot, and a credit walked away from is still a coin the operator has.
+function arcadeCoin(n){
+  arcade.coins += 1; arcade.credits += 1; saveArcade();
+  syncArcade();
+  toast('CREDIT ' + arcade.credits + (n != null ? '  ·  P' + (n+1) : ''));
+  return arcade.credits;
+}
+// Spend one to start. ⚠️ Free play still COUNTS THE PLAY — an operator wants to know how
+// much the machine is used whether or not it is taking money for it.
+function arcadeSpend(){
+  if (!arcadeMode()) return true;
+  if (!arcadeFreePlay()){
+    if (arcade.credits <= 0){ toast('INSERT COIN'); return false; }
+    arcade.credits -= 1;
+  }
+  arcade.plays += 1; saveArcade(); syncArcade();
+  return true;
+}
+// A panel's START and its fire buttons, as HELD switches. ⚠️ `pollLobbyStart` and
+// `pollSubReady` reach into the Gamepad API DIRECTLY rather than going through `gamepadPad`,
+// because START is not part of the shape a pad reports here — so those two are the one place
+// the virtual-pad trick does not carry a cabinet for free, and they have to ask this instead.
+// Without it the warm-up lobby had no way out on a cabinet at all: four people stood at the
+// machine with a live START switch that did nothing, waiting on the 30-second auto-start.
+function arcadeStartHeld(i){ const s2 = ARCADE.seats[i]; return !!(s2 && codes[s2.start]); }
+function arcadeFireHeld(i){ const s2 = ARCADE.seats[i]; return !!(s2 && s2.fire.some(c => codes[c])); }
+// Is there a game in progress that START would be taking off somebody? The ATTRACT DEMO is
+// not one — it is what the cabinet does while nobody is playing, which is exactly when START
+// means "start" — and neither is a finished match sitting on its result screen.
+// ⚠️ Deliberately NOT `updCanShow`, which asks a similar question and also counts a PAUSED
+// match: an update prompt over a pause screen is fine, and starting a fresh game over one
+// takes four people's match away from them.
+function arcadeIdle(){
+  if (!running || !world) return true;
+  return !!world.demo || world.state === 'over';
+}
+// The coin and START keys, edge-triggered off keydown rather than polled — a coin is an
+// event, and polling one would bank a credit every frame the switch is held.
+function arcadeKeyDown(e){
+  if (e.repeat) return false;
+  if (e.code === ARCADE.service){ openArcadeCfg(); return true; }
+  for (let i = 0; i < ARCADE.seats.length; i++){
+    const s2 = ARCADE.seats[i];
+    if (e.code === s2.coin){ arcadeCoin(i); return true; }
+    // ⚠️ START only starts a match from the MENU. Mid-match it is the pause/ready button the
+    // lobby and drop-in already listen for, and hijacking it here would take the game away
+    // from four people because one of them leant on the panel.
+    if (e.code === s2.start){
+      if (arcadeIdle()){ tryKickOff(); return true; }
+      return false;
+    }
+  }
+  return false;
+}
+// The one way a PLAYER asks for a game. Everything else that reaches startMatch — the attract
+// demo, the next season round, a drill — is the machine doing something rather than somebody
+// paying for it, so those are not charged.
+function tryKickOff(){ if (arcadeSpend()) startMatch(); }
 function connectedGamepadIndices(){
+  // A cabinet's four panels, presented as four pads. Everything downstream — seat handout,
+  // drop-in, the warm-up lobby, evening the sides up — goes through this one list.
+  if (arcadeMode()) return Array.from({ length: arcadeSeats() }, (_, i) => i);
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const out = [];
   for (let i=0;i<gps.length;i++){
@@ -7665,7 +7851,11 @@ buildPhotoPane();
 buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
 applyShowMode();   // a locked menu has to come back locked after a reload
 
-$('playBtn').onclick = startMatch;
+// ⚠️ Through tryKickOff, not straight to startMatch: on a cabinet a play costs a credit, and
+// the two ways in (this button and a panel's START) must charge the same way. Everything
+// else that calls startMatch — the attract demo, a season round, a drill — is the machine
+// doing something rather than a player asking for a game, and is not charged.
+$('playBtn').onclick = tryKickOff;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
 // useful for trying controls, or for picking sides with no controller connected.
@@ -7780,6 +7970,7 @@ $('lbRefresh').onclick = () => buildLeaderboard(true);
 $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
 $('cocktailBack').onclick = () => openLook('display');
+$('arcadeBack').onclick = () => openLook('display');
 $('socialBack').onclick = closeSocial;
 // ⚠️ Closes Watch first. A replay draws to the game canvas, and the Watch screen is a
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
@@ -7823,7 +8014,7 @@ $('ovSettings').onclick = () => openLook('theme');
 $('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -8148,7 +8339,11 @@ function sideQuarter(side){ return {bottom:0, left:1, top:2, right:3}[side] || 0
 function seatSide(n){ return (sel.cocktailSides && sel.cocktailSides[n]) || ['bottom','top','left','right'][(n-1)%4]; }
 // Steam Deck view: landscape pitch, menu docked left, driven entirely by a pad.
 function isDeck(){ return sel.display==='deck'; }
-function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
+// ⚠️ Arcade is its own mode and NOT 'mobile', however narrow the cabinet's monitor is. An
+// upright cab has no touchscreen, so on-screen thumbsticks there are two controls nobody can
+// press sitting on top of the pitch — `isTouchLayout` is what draws them.
+function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : sel.display==='arcade' ? 'arcade'
+                          : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
 // Is the warm-up lobby worth OFFERING at all? It exists to do three things: test a
 // stick before the whistle, walk onto the side you want, and tell a cocktail seat
@@ -8263,6 +8458,91 @@ function applyDisplayMode(){
   if (isDeck() && !PANEL) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
   else { if (world) resize(); setTimeout(deckFocusReset, 0); }
 }
+// ---- the operator's screen -------------------------------------------------
+// ⚠️ Reachable TWO ways on purpose: from the Display card, and from the service key on the
+// panel itself (F2, MAME's own). A cabinet has no menu — the person opening it is stood in
+// front of the machine with the coin door open, and the only input they have is the panel.
+function openArcadeCfg(){ dockOrFull('arcadeCfg', buildArcadeRows); }
+// A key code as it is printed on a panel. ⚠️ The bindings are `e.code` — a name a
+// programmer reads — and the map on screen is for somebody wiring a harness, so "Numpad8"
+// has to come out as "Num 8" and "ControlLeft" as "L-Ctrl".
+function arcadeKeyName(code){
+  if (/^Key(.)$/.test(code)) return RegExp.$1;
+  if (/^Digit(.)$/.test(code)) return RegExp.$1;
+  if (/^Numpad(\d)$/.test(code)) return 'Num ' + RegExp.$1;
+  if (code === 'NumpadDecimal') return 'Num .';
+  if (code === 'NumpadEnter') return 'Num Enter';
+  if (/^Arrow(.+)$/.test(code)) return RegExp.$1;
+  if (code === 'ControlLeft') return 'L-Ctrl';
+  if (code === 'AltLeft') return 'L-Alt';
+  if (code === 'ShiftRight') return 'R-Shift';
+  if (code === 'Comma') return ',';
+  return code;
+}
+// The headline and the takings. ⚠️ Its own function rather than a `buildArcadeRows()` call,
+// because it runs on every coin and every game started — rebuilding the whole panel map for
+// a number that changed would relayout the screen under the operator's finger.
+function syncArcade(){
+  const st = $('arcadeStatus');
+  if (st) st.textContent = arcadeFreePlay()
+    ? 'Free play  ·  ' + arcade.plays + (arcade.plays === 1 ? ' game' : ' games')
+    : 'Credits ' + arcade.credits + '  ·  ' + arcade.coins + (arcade.coins === 1 ? ' coin' : ' coins');
+  const book = $('arcadeBook');
+  if (!book) return;
+  book.innerHTML = '';
+  [['Coins in', arcade.coins], ['Credits waiting', arcade.credits], ['Games played', arcade.plays]]
+    .forEach(([lab, n]) => {
+      const row = document.createElement('div'); row.className = 'ckrow';
+      const l = document.createElement('span'); l.className = 'cklab'; l.textContent = lab;
+      const v = document.createElement('span'); v.className = 'cksides'; v.textContent = String(n);
+      row.append(l, v); book.appendChild(row);
+    });
+}
+function buildArcadeRows(){
+  syncArcade();
+  buildOpts('arcadePlayPick', ARCADEOPT, 'arcadePlay');
+  const keys = $('arcadeKeys');
+  if (keys){
+    keys.innerHTML = '';
+    ARCADE.seats.forEach((s2, i) => {
+      const row = document.createElement('div'); row.className = 'ckrow';
+      const l = document.createElement('span'); l.className = 'cklab'; l.textContent = 'Player ' + (i+1);
+      const v = document.createElement('span'); v.className = 'cksides';
+      v.style.fontSize = '11px'; v.style.color = 'var(--muted)';
+      v.textContent = [s2.up, s2.left, s2.down, s2.right].map(arcadeKeyName).join(' ')
+        + '  ·  ' + s2.fire.map(arcadeKeyName).join('/')
+        + '  ·  Start ' + arcadeKeyName(s2.start)
+        + '  ·  Coin ' + arcadeKeyName(s2.coin);
+      row.append(l, v); keys.appendChild(row);
+    });
+    const row = document.createElement('div'); row.className = 'ckrow';
+    const l = document.createElement('span'); l.className = 'cklab'; l.textContent = 'Service';
+    const v = document.createElement('span'); v.className = 'cksides';
+    v.style.fontSize = '11px'; v.style.color = 'var(--muted)';
+    v.textContent = arcadeKeyName(ARCADE.service) + '  ·  opens this screen';
+    row.append(l, v); keys.appendChild(row);
+  }
+  // ⚠️ Arm-then-confirm, the same as the replay and photo deletes: the takings are the
+  // one number on this screen that cannot be got back, and it is a button an operator
+  // presses with a coin door open and a queue waiting.
+  const cl = $('arcadeClear');
+  if (cl){
+    cl.textContent = 'Reset the counters';
+    cl.dataset.armed = '';
+    cl.onclick = () => {
+      if (!cl.dataset.armed){
+        cl.dataset.armed = '1';
+        cl.textContent = 'Clear ' + arcade.coins + ' coins and ' + arcade.plays + ' games?';
+        setTimeout(() => { if (cl.dataset.armed){ cl.dataset.armed = ''; cl.textContent = 'Reset the counters'; } }, 3000);
+        return;
+      }
+      arcade = { credits: 0, coins: 0, plays: 0 };
+      saveArcade();
+      cl.dataset.armed = ''; cl.textContent = 'Reset the counters';
+      syncArcade();
+    };
+  }
+}
 function openCocktailCfg(){ dockOrFull('cocktailCfg', buildCocktailRows); }
 function buildCocktailRows(){
   const wrap=$('cocktailRows'); if(!wrap) return; wrap.innerHTML='';
@@ -8351,7 +8631,7 @@ function buildSettings(){
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
   const dp=$('displayPick');
   if (dp){ dp.innerHTML='';
-    [['auto','🖥 Auto'],['deck','🎮 Steam Deck'],['cocktail','🍸 Cocktail']].forEach(([k,lab])=>{
+    [['auto','🖥 Auto'],['deck','🎮 Steam Deck'],['cocktail','🍸 Cocktail'],['arcade','🕹 Standup arcade']].forEach(([k,lab])=>{
       const on=(sel.display||'auto')===k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{
@@ -8364,10 +8644,12 @@ function buildSettings(){
     });
   }
   const dd=$('displayDetected');
-  if (dd) dd.textContent = sel.display==='cocktail' ? '· cocktail'
+  if (dd) dd.textContent = sel.display==='arcade' ? '· standup cabinet · 4 panels on the keyboard'
+    : sel.display==='cocktail' ? '· cocktail'
     : isDeck() ? '· landscape pitch · Select opens the menu'
     : (isDesktop()?'· desktop detected':'· mobile detected');
   const cbx=$('cocktailBox'); if (cbx) cbx.style.display = sel.display==='cocktail' ? '' : 'none';
+  const abx=$('arcadeBox'); if (abx) abx.style.display = sel.display==='arcade' ? '' : 'none';
   // Pitch direction — which way goal-to-goal runs. Independent of the layout.
   const op=$('orientPick');
   if (op){ op.innerHTML='';
@@ -8387,6 +8669,7 @@ function buildSettings(){
   const fb=$('fsBtn'); if (fb) fb.onclick = () => toggleFullscreen(true);
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
+  const acb=$('arcadeCfgBtn'); if (acb) acb.onclick=openArcadeCfg;
   buildBallLookPick();
   const kp=$('kickPushPick');
   if (kp){ kp.innerHTML='';
@@ -9293,7 +9576,8 @@ function padResetMap(){ sel.pad = Object.assign({}, defaultSel().pad); saveSel()
 // ============================================================
 // Cocktail hands seats to pads whether or not you flipped the toggle; the lobby, the
 // kickoff assignment and mid-match drop-in all ask this same question.
-function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail'; }
+// ⚠️ Arcade always: a cabinet's panels ARE the seats, and there is no toggle to forget.
+function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail' || sel.display === 'arcade'; }
 // ⚠️ The ONE order controllers take seats in: Co-op fills your side first (N humans vs
 // N AI), Versus interleaves you → opponent → teammate. Used by the kickoff assignment
 // AND by drop-in, so a pad that joins at minute three lands in exactly the seat it
@@ -9841,6 +10125,23 @@ const REP_SECONDS = 6;
 // half — the ball hitting the net and settling, the celebration starting — was being
 // captured into the rolling buffer and then thrown away, because `repOnGoal` froze at the
 // crossing. The freeze is DELAYED by this much instead.
+// How long the ball sits in the net before the game moves on, and how long before an
+// auto-replay cuts in. ⚠️ The replay wait is the LONGER of the two on purpose — see the
+// goal branch in step(). It also has to clear REP_TAIL, because the tail is captured on a
+// delay and a replay that starts before it is finished is a replay of the approach with the
+// goal cut off the end.
+const GOALHOLD = { hold: 1.8, replayAt: 3.0 };
+// Is an auto-replay actually going to fire for this goal? ⚠️ ONE predicate, because the
+// answer is needed twice — once to pick how long to hold the celebration and once to decide
+// what to do when that runs out — and two copies would drift into a hold that waits for a
+// replay that never comes.
+function autoReplayReady(w){
+  const ending = w.goalsTarget && Math.max(w.score[0], w.score[1]) >= w.goalsTarget;
+  return !!(sel.autoReplay && !vj.on && !w.demo && !ending && !w.overtime
+            && !(w.party && w.party.multi) && !w._autoReplayed
+            && lastReplay && lastReplay.frames && lastReplay.frames.length
+            && lastReplay.players === w.players.length);
+}
 const REP_TAIL = 1.6;
 const REP_TAIL_F = Math.round(REP_TAIL / STEP);
 // The buffer holds the lead-up PLUS the tail, so keeping the tail does not cost you the
@@ -10701,13 +11002,18 @@ function step(w){
   if (w.state === 'goal'){
     // ⚠️ Substitutions happen HERE and only here — one hook in the goal state rather than
     // a call at each of the five places that set it, because one of those five is always
-    // the one somebody forgets. Latched so a 1.8s celebration is one substitution window.
+    // the one somebody forgets. Latched so the celebration is one substitution window.
     if (!w._subDone){ w._subDone = true; runSubs(w); }
-    if (w.stateT > 1.8){
-      const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
+    // ⚠️ TWO waits, not one. A replay that cuts in the moment the ball crosses takes the
+    // goal away from you to show it back — and the thing anyone wants to see first is the
+    // net. It also has to clear REP_TAIL by a real margin: the tail is captured on a delay,
+    // so a replay that starts too early plays a version of the goal that stops at the
+    // crossing. Without a replay coming there is nothing to wait for, so the plain hold is
+    // unchanged and kickoff timing is exactly what it always was.
+    const rep = autoReplayReady(w);
+    if (w.stateT > (rep ? GOALHOLD.replayAt : GOALHOLD.hold)){
       if (w.overtime) endMatch(w);                 // golden goal — first goal in OT wins
-      else if (sel.autoReplay && !vj.on && !w.demo && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
-               && lastReplay.players === w.players.length && !w._autoReplayed){
+      else if (rep){
         w._autoReplayed = true;                    // slow-mo instant replay, then kick off
         playReplay(0.5).then(()=>{ if (world===w){ resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; } });
       } else { resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; }
@@ -10904,6 +11210,7 @@ function oneHandKick(p, mag, held){
 // ---------- Gamepad polling (Gamepad API). Left stick = move, A/X/RB/RT = kick.
 // Returns a pad-like object so it flows through applyHumanInput unchanged.
 function gamepadPad(index){
+  if (arcadeMode()) return arcadePad(index);
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = gps[index];
   if (!g){ return { dx:0, dy:0, kick:false, invert:false }; }
@@ -11683,7 +11990,8 @@ function pollLobbyStart(w){
       // "the lobby ended before the ball could move".
       // Nobody is stranded by this: Select (8) is still bound, and `#lobbyStartBtn` is
       // on screen for the whole of warm-up whatever is connected.
-      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8)));
+      pressed = arcadeMode() ? arcadeStartHeld(p.padIndex)
+                             : !!(g && (btn(g, START_BTN) || btn(g, 8)));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
@@ -11886,7 +12194,9 @@ function pollSubReady(w){
   for (const p of benchHumans(w)){
     if (p.ctrl !== 'gamepad') continue;
     const g = gps[p.padIndex];
-    const pressed = !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
+    const pressed = arcadeMode()
+      ? (arcadeStartHeld(p.padIndex) || arcadeFireHeld(p.padIndex))
+      : !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
     const key = 'sub' + p.padIndex, was = _startPrev[key];
     _startPrev[key] = pressed;
     if (!pressed || was) continue;
@@ -12893,7 +13203,9 @@ function finishMatch(w){
   // there for when somebody wants to swap sides or sit one out.
   $('ovResume').textContent = '↻ Restart';
   $('ovResume').style.display = '';
-  $('ovResume').onclick = () => restartMatch(w);
+  // ⚠️ Charged too. Another game is another game, and a cabinet where "Restart" is free
+  // takes one coin an evening.
+  $('ovResume').onclick = () => { if (arcadeSpend()) restartMatch(w); };
   // ⚠️ Through iconSvg with the emoji as the fallback — the result screen's buttons
   // are functional marks, so they follow the same rule the option tiles do.
   $('ovRematch').innerHTML = (iconSvg('person') || '🧍') + '<span>Warm-up</span>';
@@ -18431,12 +18743,21 @@ window.addEventListener('mouseup', () => onUp(mouseDownId));
 // Typing must never double as gameplay input.
 function typingInField(t){ return !!(t && /input|textarea|select/i.test(t.tagName)); }
 function keyboardDrivesGame(){
+  // ⚠️ Arcade: the keyboard IS the panel, and every seat already reads it through arcadePad.
+  // Leaving the ordinary keyboard seat live as well would give P1's stick to two players at
+  // once — the seat it was assigned AND whoever holds human1.
+  if (sel.display === 'arcade') return false;
   if (sel.display !== 'cocktail') return true;
   // Cocktail means pads round a table — but only if there ARE pads. With none
   // connected, taking the keyboard away leaves nothing driving the player at all.
   return connectedGamepadIndices().length === 0;
 }
 const keys = {};
+// ⚠️ A parallel map on `e.code`. `keys` is keyed on the CHARACTER, which is what the ordinary
+// keyboard seat wants (WASD should be WASD wherever the letters are printed) — but a cabinet
+// panel is fixed hardware and needs the physical switch: the numpad and the number row report
+// the same character, so P4's stick and the coin slots would be the same four keys. See ARCADE.
+const codes = {};
 window.addEventListener('keydown', e => {
   if (replay.active){
     // With the transport up the keyboard drives it instead: space pauses, Escape leaves.
@@ -18447,6 +18768,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   keys[e.key.toLowerCase()] = true;
+  if (e.code) codes[e.code] = true;
+  // Coins and START are edge-triggered, so they are handled on the press rather than polled.
+  if (arcadeMode() && !typingInField(e.target) && arcadeKeyDown(e)) { e.preventDefault(); return; }
   const kickKey = e.key === ' ' || e.key === 'x' || e.key === 'X';
   if (kickKey && keyboardDrivesGame() && !typingInField(e.target)){
     pads.p1.kick = true; e.preventDefault();
@@ -18458,6 +18782,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys[e.key.toLowerCase()] = false;
+  if (e.code) codes[e.code] = false;
   // Always release, even if the press was ignored — otherwise a kick can stick on.
   if (e.key === ' ' || e.key === 'x' || e.key === 'X') pads.p1.kick = false;
 });
@@ -18698,7 +19023,7 @@ if ('serviceWorker' in navigator) {
 // ---------------------------------------------------------------------------
 const ROUTE_OF = { setup:'home', how:'how', drills:'drills',
   season:'season', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
-  rogue:'rogue', cocktailCfg:'cocktail', padConfig:'controller' };
+  rogue:'rogue', cocktailCfg:'cocktail', arcadeCfg:'arcade', padConfig:'controller' };
 const ROUTES = {
   home:        toMenu,
   settings:    () => openLook('theme'),   // deep-link: main menu, Theme section
@@ -18711,6 +19036,7 @@ const ROUTES = {
   social:      openSocial,
   rogue:       openRogue,
   cocktail:    openCocktailCfg,
+  arcade:      openArcadeCfg,
   controller:  openPadConfig,
 };
 var _navLock = false;                         // true while applying a route (suppresses re-push)
@@ -19117,6 +19443,10 @@ if (window.__MAGNETDEBUG) {
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, needsCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
+    ARCADE, ARCADEOPT, arcadeMode, arcadeFreePlay, arcadeSeats, arcadePad, arcadeKeyDown,
+    arcadeCoin, arcadeSpend, tryKickOff, openArcadeCfg, buildArcadeRows, syncArcade,
+    arcadeStartHeld, arcadeFireHeld, arcadeIdle,
+    loadArcade, saveArcade, get arcade(){ return arcade; }, set arcade(v){ arcade = v; },
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     DOT_GAP, DOT_MAX, DOT_FADE, BALL_PATH, BALL_LEN_MAX, BALL_MIN_SPD,
     TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,

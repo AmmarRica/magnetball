@@ -859,6 +859,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
+- **The auto-replay waits LONGER than the plain goal hold** (`GOALHOLD`,
+  `autoReplayReady`). ⚠️ **Two waits, not one.** A replay that cuts in the moment the ball
+  crosses takes the goal away from you in order to show it back, and the thing anybody wants
+  to see first is the net. It also has to clear `REP_TAIL` by a real margin — the tail is
+  captured on a delay, so a replay starting too early is a replay of the approach with the
+  goal cut off the end. With no replay coming there is nothing to wait for and the plain hold
+  is exactly what it always was, so kickoff timing on a normal goal is untouched.
+  ⚠️ **`autoReplayReady` is ONE predicate**, because the answer is needed twice — to pick how
+  long to hold, and to decide what to do when the hold runs out — and two copies drift into a
+  hold that waits for a replay that never comes.
+  ⚠️ A **synchronous test harness must switch auto-replay off**: `playReplay()` returns a
+  promise, and a `for` loop of `step(w)` with no `await` in it can never resolve one, so the
+  goal state just keeps ticking. `tests/botai.mjs` was losing **910 of 3,600 steps** a duel
+  to this, which is where its ladder's run-to-run swing was coming from.
 - **Goal replays keep a TAIL** (`REP_TAIL` 1.6s, `repPend`, `lastReplay.goalAt`). ⚠️ The
   goal state still integrates ("ball flies into the net; players can keep moving"), so those
   frames were already in the rolling buffer and `repOnGoal` threw them away by freezing at
@@ -951,6 +965,64 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   same rule that keeps a live thumbstick off the tilt UI layer); `dx/dy` is what the game is
   told. A pip on the rim shows which of the eight is being applied, because either side of a
   sector boundary the thumb looks identical and there are only eight answers.
+- **Standup arcade (`sel.display === 'arcade'`, `ARCADE`, `arcadePad`):** a fourth layout
+  beside Auto, Steam Deck and Cocktail — an upright cabinet with four sets of controls,
+  everybody stood shoulder to shoulder facing one screen. Four people against the AI, or
+  two a side.
+  ⚠️ **THE KEYBOARD IS THE WIRING**, and that is how cabinets are actually built rather
+  than a shortcut: a JAMMA harness runs into a keyboard encoder (an I-PAC, a Zero Delay)
+  and every stick and button on the panel arrives as a keystroke. The map is **MAME's own
+  defaults**, so a cab wired by anybody who has ever wired one works with no setup —
+  P1 on the arrows with LCtrl/LAlt/Space, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1-4
+  to start, 5-8 to insert a coin, F2 for service.
+  ⚠️ **The four panels are VIRTUAL GAMEPADS, not a new seat type.**
+  `connectedGamepadIndices` and `gamepadPad` are the two functions the whole seat machinery
+  already goes through — assignment, drop-in, names, the warm-up lobby, `evenUpSides` — so a
+  cabinet inherits every one of them instead of growing a parallel path to keep in step.
+  ⚠️ **Bound to `e.code`, never `e.key`**, and a numpad key's `e.key` is never its own name:
+  NumLock ON, `Numpad6` reports `"6"` — which is **P2's coin slot** — and NumLock OFF it
+  reports `"ArrowRight"`, which is **P1's stick**. So an `e.key` build cross-wires two panels
+  whichever way the encoder leaves the lock. `code` is also the physical switch regardless of
+  layout, so a cab built in France works.
+  ⚠️ **`keyboardDrivesGame()` returns false here.** The keyboard IS the panel and every seat
+  already reads it through `arcadePad`; leaving the ordinary keyboard seat live as well hands
+  P1's stick to two players at once — the seat it was given and whoever holds `human1`.
+  ⚠️ **Not a touch layout**, however narrow the cab's monitor: `isTouchLayout` is what draws
+  the on-screen thumbsticks, and on a cabinet those are two controls nobody can press sitting
+  on top of the pitch. `viewMode()` answers `'arcade'`.
+  ⚠️ **`pollLobbyStart` and `pollSubReady` are the one place the virtual-pad trick does NOT
+  carry a cabinet for free** — they reach into the Gamepad API directly, because START is not
+  part of the shape a pad reports here. `arcadeStartHeld`/`arcadeFireHeld` answer for them.
+  Without that the warm-up lobby had **no way out at all**: four people stood at a live START
+  switch waiting on the 30-second auto-start.
+  ⚠️ Calibration is untouched — `needsCalibration` is cocktail-only, and on a cabinet
+  everybody faces the same screen, so there is nothing to discover.
+  **Credits** (`ARCADEBK`, `arcade`, `arcadeCoin`, `arcadeSpend`, `sel.arcadePlay`): coin-op
+  needs a credit, free play does not.
+  ⚠️ **Free play still COUNTS THE PLAY** — an operator wants to know how much the machine is
+  used whether or not it is charging for it.
+  ⚠️ **The takings are kept OUT of `sel`.** `saveSel()` serialises all of `sel` to
+  localStorage and `syncAdopt()` shallow-merges it between the game and the settings window;
+  a merge is exactly the wrong thing to do to a counter. Same argument as the VJ decks.
+  ⚠️ A coin is **edge-triggered on keydown** with an `e.repeat` guard, never polled — a coin
+  slot leant on is otherwise free credits for as long as somebody leans on it.
+  ⚠️ **START only starts a game when `arcadeIdle()`** — nothing running, the attract demo, or
+  a finished match. Mid-match it is the lobby's ready button, and hijacking it takes the game
+  off four people because one of them leant on the panel. Deliberately **not** `updCanShow`,
+  which asks a similar question and counts a PAUSED match as fine: an update prompt over a
+  pause is, a fresh game over one is not.
+  ⚠️ `loadArcade()` is called **directly under its own declaration**, not up with `loadSel()`
+  in the bootstrap — `arcade` is a `let` further down, and a call from up there reads it in
+  the temporal dead zone and takes the page out. **Tenth TDZ bite in this file.**
+  The operator screen (`#arcadeCfg`, `openArcadeCfg`, `buildArcadeRows`, `syncArcade`) is
+  reachable from the Display card **and from the service key**, because a cabinet has no
+  menu — the person opening it is stood in front of the machine with the coin door open and
+  the panel is their only input. It names the **switches** (`arcadeKeyName`: "Num 8",
+  "L-Ctrl") rather than the codes, since it is read by somebody wiring a harness. The reset
+  **arms then confirms**, like the replay and photo deletes. ⚠️ `syncArcade` is its own
+  function rather than a `buildArcadeRows()` call: it runs on every coin and every game, and
+  rebuilding the panel map for a number that changed relayouts the screen under the
+  operator's finger. `tests/arcade.mjs`.
 - **Cocktail calibration is for CONTROLLER seats** — `needsCalibration(p)`, the one
   predicate the on-screen button, the pad poll and the button's label all read.
   Cocktail is a tabletop layout where people sit on different edges, and what has to be
@@ -1447,7 +1519,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 93 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 94 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
