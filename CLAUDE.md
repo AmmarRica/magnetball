@@ -508,12 +508,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the equator apart. That was the "terrible texture": every pattern came out as a
   vertical smear. Baking in sin(φ) makes the linear stretch exactly right and costs
   nothing per frame.
-  ⚠️ A look's drawing is a complete **disc design** and there is no honest way to wrap a
-  disc onto a sphere, so it is **PRINTED** on — sixteen times at fixed (longitude,
-  latitude) spots (`BALL3D.spots`), each warped to `α/cos(lat)` wide and `cos(lat)·sin(α)`
-  tall so it comes back round on the ball. A look whose subject is the WHOLE ball sets
-  `solo` and gets two hemisphere-sized prints instead (`soloSpots`): sixteen little sheep
-  in sixteen rings reads as a honeycomb.
+  ⚠️ **TWO PRINTS, one per hemisphere** (`BALL3D.prints`, `patch: 90`), and it shipped as
+  sixteen small identical ones on a regular 90° grid. That single decision caused **both**
+  halves of the second bug report. Sixteen identical marks 90° apart is a periodic lattice,
+  so between frames the eye locks onto whichever copy is nearest and reads the motion
+  backwards about as often as forwards — a filmstrip of the ball rolling right was near
+  indistinguishable from one of it rolling left. And a look's `draw` is a complete disc
+  design, so sixteen little copies is not the design you picked: the football came out as a
+  mass of small pentagons. At 90° a print spans exactly half the wrap and the whole of
+  sin(latitude), so two tile the sphere with no gap and no overlap.
+  ⚠️ **The two prints are DIFFERENT** — the second turned a quarter and mirrored — so the
+  pattern's period is a full turn rather than half of one. That moves the point where the
+  roll can start reading backwards from π/2 radians a frame out to π, which at the physical
+  rate is a ball travelling 31 units a step: the top of the range. `tests/ball3d.mjs`
+  measures it as "half a turn differs, a full turn matches".
+  ⚠️ **The design is laid in by COLUMNS at asin(x) of longitude** (`BALL3D.cols`). The strip
+  is indexed by longitude and the painter puts longitude at screen x = `r·sin(lon)`, so a
+  design laid in linearly is stretched by **π/2** across the middle of the ball — a round
+  dot rendered as a 1.46:1 oval. The asin pre-warp cancels the painter's sin at the print's
+  home orientation, leaving the design looking like itself; roll it away and the sin then
+  compresses it toward the limb, which is the real sphere behaviour. The suite measures the
+  sphere at rest against the **flat painter**, which is the thing it has to agree with.
+  ⚠️ The **rate is ω = v/R**, off the ball's own radius, not a constant. It was 0.055
+  against a radius of 10 — half the physical rate — so the ball under-turned for the ground
+  it covered and read as sliding. Nothing asserted it until a sabotage of that constant
+  passed.
   ⚠️ `BALL3D.wrap` (π×tex) makes the *stored* strip isotropic so a print is not resampled
   unevenly. It is **not** what makes a print come out round on the ball — the wrap width
   cancels between the bake and the painter, both of which derive from it. Believed

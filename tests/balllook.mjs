@@ -198,8 +198,11 @@ const sheep = await p.evaluate(()=>{
   // pitch is tracking, so a cosmetic choice may not turn it into a dark disc on dark grass.
   o.brighterThanPitch = o.midLum - o.pitchLum > 60;
 
-  // ---- `solo`: a whole-ball subject is printed TWICE, not sixteen times ----
-  // Sixteen little sheep in sixteen grey rings reads as a honeycomb.
+  // ---- the sphere prints it TWICE, not sixteen times ---------------------
+  // Sixteen little sheep in sixteen grey rings reads as a honeycomb, and that is how the
+  // sphere path shipped. ⚠️ The bad layout is BUILT HERE rather than left behind a flag on
+  // the look: every look is one print per hemisphere now, so there is no switch to flip, and
+  // a guard that can only test the shipping value is not a guard.
   // ⚠️ Measured as the BIGGEST connected patch of fleece, not the total amount of it. The
   // obvious version — what share of the disc comes back pale — does not discriminate at all:
   // sixteen small sheep read 0.669 against one big one's 0.622, so the tiled build scored
@@ -231,11 +234,17 @@ const sheep = await p.evaluate(()=>{
     }
     return { big: total ? best/total : 0, blobs };
   };
+  const keepPrints = M.BALL3D.prints, keepPatch = M.BALL3D.patch;
   M.ballTexCache.clear();
   const soloM = fleeceBlobs(shot('sheep', true, 0.2));
-  M.BALL_LOOKS.sheep.solo = false; M.ballTexCache.clear();
+  M.BALL3D.patch = 26;
+  M.BALL3D.prints = [];
+  for (const lon of [0, 0.25, 0.5, 0.75]) M.BALL3D.prints.push([lon, 0, false]);
+  for (const lon of [0.125, 0.375, 0.625, 0.875]){ M.BALL3D.prints.push([lon, 0.1, false]);
+                                                   M.BALL3D.prints.push([lon + 0.06, 0.4, true]); }
+  M.ballTexCache.clear();
   const tiledM = fleeceBlobs(shot('sheep', true, 0.2));
-  M.BALL_LOOKS.sheep.solo = true; M.ballTexCache.clear();
+  M.BALL3D.prints = keepPrints; M.BALL3D.patch = keepPatch; M.ballTexCache.clear();
   o.soloBlob = +soloM.big.toFixed(3); o.soloBlobs = soloM.blobs;
   o.tiledBlob = +tiledM.big.toFixed(3); o.tiledBlobs = tiledM.blobs;
   o.soloBeatsTiled = o.soloBlobs <= 3 && o.tiledBlobs >= o.soloBlobs + 3;

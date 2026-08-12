@@ -3048,7 +3048,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0525AM';
+const VERSION = '20260812.0955AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3064,6 +3064,14 @@ const VERSION = '20260812.0525AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0955AM', title: 'The 3D ball rolls properly',
+    added: [],
+    changed: [
+      'The rolling 3D ball now shows the ball look you picked, full size, wrapped round it — instead of sixteen small copies of it, which is why it never quite looked like your ball.',
+      'And because those sixteen copies all looked alike, it was impossible to tell which way the ball was turning. It now clearly rolls the way it is going, at the speed its travel calls for.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0525AM', title: 'The ball turns the right way',
     added: [],
     changed: [
@@ -4502,7 +4510,9 @@ const BALL3D = {
   // dot anyway, so that is the honest boundary rather than a number picked by eye.
   minPx: 5,
   tex: 128,       // texture height: sin(latitude) from -1 to +1
-  roll: 0.055,    // radians of roll per world unit travelled (see advanceBallSpin)
+  // ⚠️ The roll rate is the PHYSICAL one, ω = v/R, taken from the ball's own radius rather
+  // than a constant — see advanceBallSpin. It was 0.055 against a radius of 10, so the ball
+  // turned at half the rate its travel called for and read as sliding rather than rolling.
   // The wrap is π×tex wide so the STORED strip is isotropic: `tex` pixels covers sin(lat)
   // −1…+1, which is tex/2 pixels per radian of latitude at the equator, and π·tex pixels
   // covers 2π radians of longitude, which is the same. A print therefore sits in a square
@@ -4512,27 +4522,25 @@ const BALL3D = {
   // because both are computed from it. Believed otherwise for one commit, and the suite's
   // sabotage of this value passing is what showed it.
   wrap: (t) => Math.round(Math.PI * t),
-  patch: 26,      // angular radius of one printed instance, in DEGREES
-  // ⚠️ Fixed placements, in (longitude turns, latitude degrees). The look's own drawing is
-  // a complete disc design, and there is no honest way to wrap a disc onto a sphere — so
-  // it is PRINTED on, several times, the way a football's panels are. Latitude is kept
-  // well off ±90: a patch at the pole needs a longitude span of α/cos(lat), which runs
-  // away to the whole wrap, and the poles land on the very top and bottom of the drawn
-  // circle where almost nothing of them shows anyway.
-  spots: [
-    [0.000,   0], [0.250,   0], [0.500,   0], [0.750,   0],
-    [0.125,  40], [0.375,  40], [0.625,  40], [0.875,  40],
-    [0.125, -40], [0.375, -40], [0.625, -40], [0.875, -40],
-    [0.000,  70], [0.500,  70], [0.250, -70], [0.750, -70],
-  ],
-  // ⚠️ A look that draws a WHOLE-BALL subject rather than a mark sets `solo` and gets these
-  // instead: two prints, each a full hemisphere, so one goes over the horizon as the next
-  // comes round. Printing the Sheep sixteen times gave a grid of sixteen little sheep in
-  // sixteen grey rings, which reads as a honeycomb. 90° is not a tuned number — at that
-  // radius a patch spans exactly half the wrap and the whole of sin(latitude), which is one
-  // design per hemisphere and no gaps.
-  soloSpots: [[0.000, 0], [0.500, 0]],
-  soloPatch: 90,
+  // ⚠️ TWO PRINTS, ONE PER HEMISPHERE, and it was sixteen small ones on a regular grid.
+  // That is the whole of "it looks like it is rolling the wrong way, and it isn't my texture
+  // rolling in 3D": sixteen IDENTICAL marks spaced 90° apart in longitude make a periodic
+  // lattice, so the eye locks onto whichever copy is nearest between frames and reads the
+  // motion backwards about as often as forwards — a filmstrip of the ball rolling right and
+  // one of it rolling left were near indistinguishable. And a look's drawing is a complete
+  // disc design, so sixteen little copies of it is not the design you picked: the football
+  // came out as a mass of small pentagons rather than as a football.
+  // At 90° a print spans exactly half the wrap and the whole of sin(latitude), so two of
+  // them tile the sphere with no gap and no overlap, and the design comes back full size.
+  patch: 90,      // angular radius of one printed instance, in DEGREES
+  cols: 72,       // columns the design is sliced into for the asin warp — bake-time only
+  // ⚠️ The two prints are made DIFFERENT — the second turned a quarter and mirrored — so
+  // the pattern's period is a full turn rather than half of one. That is what pushes the
+  // point where the roll can start reading backwards from π/2 radians a frame out to π: at
+  // the physical roll rate that is a ball travelling at 31 units a step, which is the top of
+  // the speed range. Two identical hemispheres would alias from 15 upwards.
+  // [longitude in turns, the look's own rotation in turns, mirrored?]
+  prints: [[0.0, 0, false], [0.5, 0.25, true]],
 };
 // ⚠️ Declared HERE, with BALL3D, and not down beside the painter that fills it.
 // `clearSwatchCache` empties this and runs from `applyTheme` during the bootstrap, so a
@@ -10585,11 +10593,14 @@ function advanceBallSpin(w){
         bl.rollAx = canonRollAx(bl.vx, bl.vy);
         along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
       } else along = a0;
-      bl.roll = (bl.roll||0) + along*BALL3D.roll;
+      // ⚠️ ω = v/R, the real rolling-without-slipping rate, off the ball's OWN radius. A
+      // magic constant here was half the physical rate, so the ball under-turned for the
+      // ground it covered and read as sliding.
+      bl.roll = (bl.roll||0) + along/(bl.r || 10);
     }
     // ⚠️ `along`, never `sp`. The flat look reads `rot` as a 2D turn of the pattern and a
     // player reads that turn as a wheel, so it has to reverse when the ball reverses.
-    bl.rot = (bl.rot||0) + (bl.spin||0) + along*0.03;
+    bl.rot = (bl.rot||0) + (bl.spin||0) + along*0.03;   // the flat look keeps its own rate
     bl.spin = (bl.spin||0) * 0.90;
   }
 }
@@ -17749,7 +17760,7 @@ const BALL_LOOKS = {
   // ball reads as much smaller than the circle that actually collides. Held back, the full
   // disc still reads at radius r, the ball is still the brightest thing on the pitch, and
   // the silhouette is legible at every size the ball is ever drawn.
-  sheep:   { name:'Sheep', solo:true, draw:(c,r,rot,paper)=>{
+  sheep:   { name:'Sheep', draw:(c,r,rot,paper)=>{
     c.save(); c.rotate(rot);
     c.globalAlpha = SHEEP.surround;
     c.beginPath(); c.arc(0, 0, r*1.02, 0, 7); c.fill();
@@ -17841,33 +17852,41 @@ function ballSphereTex(key, spot, paper){
   if (t) return t;
   const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
   const D = BALL3D.tex, TW = BALL3D.wrap(D);
-  // One instance of the look, baked flat once, then stamped round the sphere. Baked at
-  // twice the size it is stamped at, so the down-scale is what smooths it.
-  const PS = Math.round(D * 0.9);
-  const pcv = document.createElement('canvas'); pcv.width = pcv.height = PS;
-  const pc = pcv.getContext('2d');
-  pc.save(); pc.translate(PS/2, PS/2); pc.fillStyle = spot; pc.strokeStyle = spot;
-  look.draw(pc, PS/2, 0, paper);
-  pc.restore();
-
   const cv = document.createElement('canvas');
   // TWICE the wrap width, so a slice sampled near the seam never reads past the end.
   cv.width = TW * 2; cv.height = D;
   const cc = cv.getContext('2d');
-  const solo = !!look.solo;
-  const A = (solo ? BALL3D.soloPatch : BALL3D.patch) * Math.PI/180;
-  for (const [lonTurns, latDeg] of (solo ? BALL3D.soloSpots : BALL3D.spots)){
-    const lat = latDeg * Math.PI/180, cosL = Math.cos(lat);
-    // A round patch of angular radius A at latitude `lat` occupies A/cos(lat) of longitude
-    // and cos(lat)·sin(A) of sin-latitude — wide and squat near the poles, which is exactly
-    // what makes it come back round on the ball.
-    const hw = Math.min(TW/2, (A / Math.max(0.2, cosL)) / (2*Math.PI) * TW);
-    const hh = Math.max(1, cosL * Math.sin(A) / 2 * D);
-    const cy = (Math.sin(lat) * Math.cos(A) + 1) / 2 * D;
-    // Drawn in both copies of the wrap, and once more a wrap-width either side, so a patch
-    // straddling the seam is whole wherever a slice happens to sample it.
-    for (const off of [-TW, 0, TW, TW*2])
-      cc.drawImage(pcv, off + lonTurns*TW - hw, cy - hh, hw*2, hh*2);
+  const A = BALL3D.patch * Math.PI/180;
+  const PS = Math.round(D * 0.9);
+  for (const [lonTurns, rotTurns, mir] of BALL3D.prints){
+    // One instance of the look, baked flat. ⚠️ Per PRINT, not once for all of them: the two
+    // carry different rotations and one is mirrored, which is what stops the sphere being
+    // self-similar at half a turn.
+    const pcv = document.createElement('canvas'); pcv.width = pcv.height = PS;
+    const pc = pcv.getContext('2d');
+    pc.save(); pc.translate(PS/2, PS/2);
+    if (mir) pc.scale(-1, 1);
+    pc.fillStyle = spot; pc.strokeStyle = spot;
+    look.draw(pc, PS/2, rotTurns * 2*Math.PI, paper);
+    pc.restore();
+    // ⚠️ The design is laid in by COLUMNS, each at asin(x) of longitude, and that warp is
+    // what makes a print look like ITSELF when it is facing you. The strip is indexed by
+    // longitude and the painter puts longitude at screen x = r·sin(lon) — so a design laid
+    // in linearly comes out stretched by π/2 across the middle of the ball, which is why a
+    // round dot rendered as a 1.46:1 oval. Pre-warping by asin cancels the painter's sin at
+    // the print's home orientation and leaves the design undistorted; roll it away and the
+    // painter's sin then compresses it toward the limb, which is the real sphere behaviour.
+    // Vertically it stays linear, because the strip's height already IS sin(latitude) and
+    // an orthographic sphere puts latitude φ at y = r·sin(φ).
+    const hh = Math.max(1, Math.sin(A) / 2 * D);
+    const N = BALL3D.cols, cx = lonTurns * TW;
+    for (const off of [-TW, 0, TW, TW*2]) for (let i = 0; i < N; i++){
+      const f0 = i/N*2 - 1, f1 = (i+1)/N*2 - 1;         // design x, -1..1
+      const l0 = Math.asin(Math.max(-1, Math.min(1, f0 * Math.sin(A))));
+      const l1 = Math.asin(Math.max(-1, Math.min(1, f1 * Math.sin(A))));
+      const u0 = off + cx + l0/(2*Math.PI)*TW, u1 = off + cx + l1/(2*Math.PI)*TW;
+      cc.drawImage(pcv, i/N*PS, 0, PS/N, PS, u0, D/2 - hh, Math.max(0.6, u1-u0), hh*2);
+    }
   }
   t = { cv, TW, D };
   ballTexCache.set(ck, t);

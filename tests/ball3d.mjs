@@ -112,12 +112,11 @@ const r = await p.evaluate(() => {
   // table — a mark whose position is known is the only way to say anything about the
   // projection, and with sixteen prints scattered over the sphere you cannot tell which
   // blob is which.
-  const keepSpots = M.BALL3D.spots, keepPatch = M.BALL3D.patch;
-  const onePrint = (lonTurns, latDeg, roll, patch) => {
-    M.BALL3D.spots = [[lonTurns, latDeg]]; M.BALL3D.patch = patch || 20;
-    M.ballTexCache.clear();
-    const f = paint(true, roll, 0, R, 'period');       // a single centred dot
-    // The mark's box: pixels clearly darker than the pale ball, inside the disc.
+  const keepPrints = M.BALL3D.prints;
+  // The mark's box in a rendered frame: pixels clearly darker than the pale ball, inside the
+  // disc. Shared, because the same measurement is taken on the sphere and on the flat painter
+  // and comparing two differently-derived boxes would compare the two measurements instead.
+  const boxOf = (f) => {
     let x0=1e9, y0=1e9, x1=-1, y1=-1, n=0;
     for (let yy = 1; yy < S-1; yy++) for (let xx = 1; xx < S-1; xx++){
       const dx = xx-CX, dy = yy-CY; if (dx*dx + dy*dy > (R-2)*(R-2)) continue;
@@ -125,7 +124,12 @@ const r = await p.evaluate(() => {
       if (f[i]*0.3 + f[i+1]*0.6 + f[i+2]*0.1 < 110){
         n++; if (xx<x0) x0=xx; if (xx>x1) x1=xx; if (yy<y0) y0=yy; if (yy>y1) y1=yy; }
     }
-    return n ? { n, cx:(x0+x1)/2, cy:(y0+y1)/2, w:x1-x0+1, h:y1-y0+1 } : { n:0 };
+    return n ? { n, cx:(x0+x1)/2, cy:(y0+y1)/2, w:x1-x0+1, h:y1-y0+1 } : { n:0, w:0, h:0 };
+  };
+  const onePrint = (roll) => {
+    M.BALL3D.prints = [[0, 0, false]];              // one print, unmirrored, at home
+    M.ballTexCache.clear();
+    return boxOf(paint(true, roll, 0, R, 'period'));   // a single centred dot
   };
 
   // ⚠️ IT ROLLS FORWARDS. A mark on the face of a rolling ball travels the way the ball is
@@ -134,44 +138,45 @@ const r = await p.evaluate(() => {
   // mark's movement, not as a pixel count, because a backwards scroll changes exactly as
   // many pixels as a forwards one and every other check here passed with it wrong.
   {
-    const a = onePrint(0, 0, 0), c2 = onePrint(0, 0, 0.30);
+    const a = onePrint(0), c2 = onePrint(0.30);
     o.markFound = a.n > 20 && c2.n > 20;
     o.markMoved = o.markFound ? +(c2.cx - a.cx).toFixed(1) : 0;
     o.rollsForwards = o.markFound && o.markMoved > 3;
   }
 
-  // ⚠️ THE VERTICAL MAPPING IS sin(LATITUDE). An orthographic sphere puts latitude φ at
-  // screen y = r·sin(φ), and the painter stretches the strip's whole height linearly onto
-  // the ball's whole height — so the strip has to be baked in sin(φ). Baked in φ itself
-  // (which is how it shipped) a print at 55° lands at 0.61·r instead of 0.82·r, and every
-  // pattern is crushed at the top and bottom of the circle and pulled apart in the middle.
-  // ⚠️ Probed with a SMALL print (12°) and compared on MAGNITUDE. Two things would otherwise
-  // make this read the implementation back rather than test it: which end of the strip is
-  // the top of the ball is a free convention (a sphere pattern has no up), and a print's box
-  // is centred on the midpoint of the latitude band it covers, which for a big patch sits
-  // cos(α) short of its own centre — 0.90 at the 26° the ball actually uses. At 12° that
-  // factor is 0.978 and the prediction is just sin(φ).
+  // ⚠️ A DESIGN FACING YOU LOOKS LIKE ITSELF, which is the asin pre-warp doing its job.
+  // The strip is indexed by longitude and the painter puts longitude at screen x = r·sin(lon),
+  // so a design laid into the strip linearly comes out stretched by π/2 across the middle of
+  // the ball — a round dot rendered as a 1.46:1 oval, and every look visibly not the look you
+  // picked. Measured against the FLAT painter, which is the thing it has to agree with.
   {
-    const LAT = 55, want = Math.sin(LAT*Math.PI/180);
-    const m = onePrint(0, LAT, 0, 12);
-    o.latMarkFound = m.n > 12;
-    o.latAt = o.latMarkFound ? +(Math.abs(m.cy - CY) / R).toFixed(3) : 0;
-    o.latWant = +want.toFixed(3);
-    o.latLinearWould = +(LAT/90).toFixed(3);          // what a latitude-linear bake gives
-    o.latIsSine = o.latMarkFound && Math.abs(o.latAt - want) < 0.08
-               && Math.abs(o.latAt - LAT/90) > 0.10;
-    // ...and a print at the equator comes back ROUND, which holds the bake's patch box
-    // against the painter's own scale factors — the two are computed separately and a
-    // mismatch stretches every mark on the ball.
-    // ⚠️ It is NOT a check on `BALL3D.wrap`, which was the first claim made for it: the
-    // wrap width cancels between the bake and the painter because both derive from it, and
-    // halving it changes nothing on screen. Sabotaging the wrap passed here, which is what
-    // showed that up; doubling the patch box's height fails it at an aspect of 2.13.
-    const eq = onePrint(0, 0, 0);
-    o.eqAspect = eq.n > 20 ? +(eq.h / eq.w).toFixed(3) : 0;
-    o.printIsRound = eq.n > 20 && o.eqAspect > 0.80 && o.eqAspect < 1.25;
+    const sphere = onePrint(0);
+    M.BALL3D.prints = keepPrints; M.ballTexCache.clear();
+    const flatDot = boxOf(paint(false, 0, 0, R, 'period'));
+    o.restW = sphere.w; o.restH = sphere.h; o.flatW = flatDot.w; o.flatH = flatDot.h;
+    o.restFound = sphere.n > 20 && flatDot.n > 20;
+    o.restAspect  = o.restFound ? +(sphere.h / sphere.w).toFixed(3) : 0;
+    o.restVsFlatW = o.restFound ? +(sphere.w / flatDot.w).toFixed(3) : 0;
+    // Round, and the same size the flat painter draws it.
+    o.printIsRound = o.restFound && o.restAspect > 0.85 && o.restAspect < 1.18
+                  && o.restVsFlatW > 0.85 && o.restVsFlatW < 1.18;
   }
-  M.BALL3D.spots = keepSpots; M.BALL3D.patch = keepPatch; M.ballTexCache.clear();
+
+  // ⚠️ TWO PRINTS, AND THEY ARE DIFFERENT — the pattern's period is a FULL turn, not half of
+  // one. That is the whole reason the roll direction reads at all: it shipped as sixteen
+  // identical prints on a regular 90° grid, and a filmstrip of the ball rolling right was
+  // near indistinguishable from one of it rolling left, because the eye locks onto whichever
+  // copy is nearest between frames. Half a turn must look DIFFERENT and a full turn must look
+  // the same, which is exactly "period 2π".
+  {
+    const f0 = paint(true, 0, 0, R, 'eight');
+    const fh = paint(true, Math.PI, 0, R, 'eight');
+    const ff = paint(true, 2*Math.PI, 0, R, 'eight');
+    o.halfTurnDiff = diff(f0, fh);
+    o.fullTurnDiff = diff(f0, ff);
+    o.periodIsAFullTurn = o.halfTurnDiff > 400 && o.fullTurnDiff < 40;
+  }
+  M.BALL3D.prints = keepPrints; M.ballTexCache.clear();
   paint(true, 0, 0);                                  // re-warm for what follows
 
   // ---- ⚠️ THE LIMB ACTUALLY COMPRESSES ------------------------------------
@@ -259,13 +264,22 @@ const r = await p.evaluate(() => {
   // ---- slices scale with size ---------------------------------------------
   // A fixed count costs the same at 9px as at 70px, and the warm-up lobby fields
   // fourteen balls at once. Measured as cost, not as an internal number.
+  // ⚠️ BEST OF THREE, not a single pass. A single timing of this loop swung between 0.28ms
+  // and 1.48ms for the same build on the same machine — enough to fail the comparison on its
+  // own — because these suites run back to back and the browser is contending for the CPU.
+  // The minimum is the least contaminated estimate of a CPU-bound loop's cost.
   {
-    const t0 = performance.now();
-    for (let i = 0; i < 400; i++) paint(true, i*0.02, 0, 11);
-    o.smallMs = +((performance.now() - t0) / 400).toFixed(4);
-    const t1b = performance.now();
-    for (let i = 0; i < 400; i++) paint(true, i*0.02, 0, 60);
-    o.bigMs = +((performance.now() - t1b) / 400).toFixed(4);
+    const timeAt = (rad) => {
+      let best = Infinity;
+      for (let t = 0; t < 3; t++){
+        const t0 = performance.now();
+        for (let i = 0; i < 400; i++) paint(true, i*0.02, 0, rad);
+        best = Math.min(best, (performance.now() - t0) / 400);
+      }
+      return +best.toFixed(4);
+    };
+    o.smallMs = timeAt(11);
+    o.bigMs = timeAt(60);
     o.smallIsCheaper = o.smallMs < o.bigMs * 0.6;
     // The worst case anyone can reach: fourteen lobby balls in one frame.
     M.sel.ball3d = 'on';
@@ -295,6 +309,23 @@ const r = await p.evaluate(() => {
     fake.ball.vx = 0; fake.ball.vy = 6;
     for (let i=0;i<10;i++) M.advanceBallSpin(fake);
     o.axRelatched = Math.abs(fake.ball.rollAx - outAx) > 1;
+  }
+
+  // ---- ⚠️ THE RATE IS THE PHYSICAL ONE, ω = v/R ---------------------------
+  // Rolling without slipping. It was a magic 0.055 against a radius of 10, so the ball turned
+  // at half the rate the ground it covered called for and read as sliding rather than rolling
+  // — and no assertion here noticed, which a sabotage of the constant proved.
+  // Taken off the ball's OWN radius, so a bigger ball turns less for the same travel.
+  {
+    const rollFor = (v, rr) => {
+      const f = { ball:{ x:0, y:0, vx:v, vy:0, rot:0, spin:0, r:rr } };
+      M.advanceBallSpin(f);
+      return f.ball.roll;
+    };
+    o.rollPerStep10 = +rollFor(10, 10).toFixed(4);
+    o.rollPerStep20 = +rollFor(10, 20).toFixed(4);
+    o.rateIsPhysical = Math.abs(o.rollPerStep10 - 1) < 1e-3          // v/R = 10/10
+                    && Math.abs(o.rollPerStep20 - 0.5) < 1e-3;       // v/R = 10/20
   }
 
   // ---- ⚠️ AND THE FLAT PATTERN REVERSES, WHICH IS THE ONE MOST PEOPLE SEE --
@@ -378,8 +409,8 @@ const r = await p.evaluate(() => {
   // draws the ball about six pixels across — far too small to find a mark's centroid in. The
   // camera is render state, so setting it is exactly what render() would have done.
   {
-    const keepSpots = M.BALL3D.spots, keepPatch = M.BALL3D.patch;
-    M.BALL3D.spots = [[0, 0]]; M.BALL3D.patch = 22; M.ballTexCache.clear();
+    const keepP = M.BALL3D.prints;
+    M.BALL3D.prints = [[0, 0, false]]; M.ballTexCache.clear();
     M.sel.ball3d = 'on'; M.sel.look.ball = 'period';       // one dot, unambiguous
     M.sel.mode = '2v2'; M.sel.kickoffRule = 'off';
     M.setMatchSeed(4); M.startMatch();
@@ -426,7 +457,7 @@ const r = await p.evaluate(() => {
       o.deckTravelIsVertical = Math.abs(m0.ty) > Math.abs(m0.tx) * 4;
     }
     o.rollFollowsScreenTravel = o.deckMarkFound && o.deckMarkShift > 2 && o.deckAlign > 0.7;
-    M.BALL3D.spots = keepSpots; M.BALL3D.patch = keepPatch; M.ballTexCache.clear();
+    M.BALL3D.prints = keepP; M.ballTexCache.clear();
     M.sel.look.ball = 'classic'; M.computeCam();
   }
 
@@ -488,10 +519,11 @@ ok('a print was found at all', r.markFound,
    'the single-print probe found no mark, so the direction and latitude checks below prove nothing');
 ok('IT ROLLS FORWARDS', r.rollsForwards,
    `a mark on the face moved ${r.markMoved}px for a positive roll — on a rolling ball the contact point is what stands still, so the face travels the way the ball is GOING. It shipped scrolling backwards, and a backwards scroll changes exactly as many pixels as a forwards one, so every other check here passed with it wrong`);
-ok('a print lands where sin(latitude) says', r.latIsSine,
-   `a print at 55° landed at ${r.latAt}·r, against ${r.latWant} for sin(latitude) and ${r.latLinearWould} for latitude itself — an orthographic sphere puts latitude φ at y = r·sin(φ), and baking the strip in φ crushes every pattern into the top and bottom of the circle and pulls it apart across the middle`);
-ok('a print at the equator comes back ROUND', r.printIsRound,
-   `it measured ${r.eqAspect} tall for its width — the bake's patch box and the painter's scale factors are worked out separately, and a mismatch between them stretches every mark on the ball`);
+ok('a design facing you looks like ITSELF', r.printIsRound,
+   `the sphere drew it ${r.restW}x${r.restH} against the flat painter's ${r.flatW}x${r.flatH} (aspect ${r.restAspect}, width ratio ${r.restVsFlatW}) — the strip is indexed by longitude and the painter puts longitude at r·sin(lon), so a design laid in linearly is stretched by π/2 across the middle of the ball. That rendered a round dot as a 1.46:1 oval and made every look visibly not the look you picked`);
+ok('...and the shape probe found both', r.restFound, 'no ink in one of the two renders');
+ok('the pattern\'s period is a FULL turn', r.periodIsAFullTurn,
+   `half a turn differed by ${r.halfTurnDiff}px and a full turn by ${r.fullTurnDiff}px — it shipped as sixteen IDENTICAL prints on a regular 90° grid, which makes the roll direction genuinely ambiguous: a filmstrip of the ball rolling right was near indistinguishable from one of it rolling left, because the eye locks onto whichever copy is nearest between frames. Two prints, and the second turned and mirrored, is what pushes the point where that starts from π/2 radians a frame out to π`);
 ok('the limb genuinely compresses', r.limbIsCompressed,
    `pattern edges per pixel: ${r.midDensity} in the middle of the face against ${r.limbDensity} at the limb — on a sphere the markings are squashed there; equal density means this is a flat scroll wearing a circular clip`);
 ok('it engages at the size a phone actually draws the ball', r.engagesOnAPhone,
@@ -509,6 +541,8 @@ ok('the roll UNWINDS on a rebound', r.rollUnwinds,
    `axis kept: ${r.axKept}, roll went back: ${r.rollBack} — a ball bouncing straight off a wall rolls back the way it came, and taking the axis from the live velocity instead flips it 180° and jumps half a turn of texture across the face in one frame`);
 ok('...but a real change of direction re-latches the axis', r.axRelatched,
    'a ball turning a corner would otherwise roll backwards for the rest of the match');
+ok('the roll rate is the PHYSICAL one, v/R', r.rateIsPhysical,
+   `travelling 10 units gave ${r.rollPerStep10} rad on a radius-10 ball and ${r.rollPerStep20} on a radius-20 one, against 1 and 0.5 for rolling without slipping — a magic constant here was half the physical rate, so the ball under-turned for the ground it covered and read as sliding`);
 ok('the FLAT pattern reverses with direction', r.rotReverses,
    `rot after ten steps: right ${r.spinRight}, left ${r.spinLeft}, down ${r.spinDown}, up ${r.spinUp} — sel.ball3d is off by DEFAULT, so the flat look is what nearly everybody sees, and its rot was driven by SPEED, a magnitude. The pattern turned the same way whichever direction the ball went, which is the whole of "the ball rotates the opposite way to where it is rolling"`);
 ok('...by exactly as much, both ways', r.rotSymmetric,
