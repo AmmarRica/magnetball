@@ -1583,6 +1583,10 @@
       <label class="field">Handed</label>
       <div class="opts" id="handed"></div>
       <div style="height:14px"></div>
+      <label class="field">Thumbstick <small style="color:var(--muted)">(touch)</small></label>
+      <div class="opts" id="touchDigPick"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Digital gives you eight directions and nothing between them, like a D-pad or the arrow keys: you are either holding a direction or you are not, and a half-push does not mean half speed. Analogue is the old behaviour, where how far you push is how fast you go. A diagonal runs at the same speed as a straight line either way. Controllers are always analogue — a real stick has an in-between and it should mean something.</div>
+      <div style="height:14px"></div>
       <label class="field">Stick sensitivity <small id="sensVal" style="color:var(--accent);font-weight:700">1.0×</small></label>
       <input id="sens" class="slider" type="range" min="60" max="160" step="10" value="100" />
       <div class="hint" style="text-align:left; margin-top:4px">Lower = push further for full speed</div>
@@ -2842,6 +2846,40 @@ function sideBallLift(w){
   const b = w && w.ball; if (!b) return 0;
   return sideLift(b.r * cam.s * cam.body);
 }
+// ============================================================
+//  DIGITAL THUMBSTICK
+// ============================================================
+// The on-screen stick reports one of EIGHT directions and nothing between them, exactly as
+// the keyboard already does — hold a direction or do not.
+//
+// ⚠️ It is the same shape the keyboard produces, deliberately: `pollKeys` writes ±1 into
+// `pads.p1`, and `applyHumanInput` already normalises a diagonal so two arrow keys at once
+// is not 41% faster than one. Producing -1/0/+1 here means the touch stick goes down that
+// same path rather than getting a second, parallel one — and a diagonal comes out at full
+// speed rather than at √2 of it.
+//
+// ⚠️ EIGHT-way, not four. Four would make a diagonal unreachable, and the keyboard has been
+// eight-way since it existed (left and up held together is a diagonal), so four here would
+// mean the two input methods no longer agree about what the game can be told.
+const TOUCHDIG = {
+  // How far the thumb has to travel from where it landed before it counts, as a fraction of
+  // the stick radius. Small, because the stick recentres wherever you touch down: a big
+  // deadzone on a control that starts under your thumb just reads as lag.
+  dead: 0.22,
+};
+const TOUCHDIGOPT = {
+  on:  { name:'Digital', emoji:'🎮', icon:'gamepad' },
+  off: { name:'Analogue', emoji:'🕹️', icon:'run' },
+};
+function touchIsDigital(){ return (sel.touchDigital || 'on') !== 'off'; }
+// The stick's reading, snapped to the nearest eighth. ⚠️ Returns -1, 0 or +1 per axis and
+// nothing else — the normalising is `applyHumanInput`'s job, and doing it here as well would
+// scale a diagonal twice.
+function digitalVec(dx, dy){
+  if (Math.hypot(dx, dy) < TOUCHDIG.dead) return [0, 0];
+  const k = Math.round(Math.atan2(dy, dx) / (Math.PI/4));
+  return [Math.round(Math.cos(k*Math.PI/4)), Math.round(Math.sin(k*Math.PI/4))];
+}
 const TILTOPT = {
   on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
   off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
@@ -3075,7 +3113,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0640PM';
+const VERSION = '20260812.0910PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3091,6 +3129,14 @@ const VERSION = '20260812.0640PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0910PM', title: 'A digital thumbstick',
+    added: [],
+    changed: [
+      'The on-screen thumbstick is now digital: eight directions and nothing between them, like a D-pad. You are either holding a direction or you are not, and a half-push no longer means half speed.',
+      'Analogue is still there if you preferred it — Controls, under Thumbstick. Controllers are always analogue either way.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0640PM', title: 'Game Feel, in tabs',
     added: [],
     changed: [
@@ -3293,7 +3339,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
             goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -6835,6 +6881,7 @@ function buildMatchOpts(){
   buildOpts('popupPick', POPOPT, 'popups');
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
   buildOpts('sideViewPick', SIDEOPT, 'sideView');
+  buildOpts('touchDigPick', TOUCHDIGOPT, 'touchDigital');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -18298,7 +18345,7 @@ function onDown(id, x, y){
   const z = zoneForTouch(x,y);
   const pad = pads[z.pad];
   if (z.kind==='move'){
-    pad.move.id = id; pad.move.cx = x; pad.move.cy = y; pad.dx=0; pad.dy=0;
+    pad.move.id = id; pad.move.cx = x; pad.move.cy = y; pad.dx=0; pad.dy=0; pad.rawX=0; pad.rawY=0;
   } else {
     pad.kick = true; pad.kickId = id;
   }
@@ -18312,14 +18359,22 @@ function onMove(id, x, y){
       let dx = x - pad.move.cx, dy = y - pad.move.cy;
       const mag = Math.hypot(dx,dy);
       if (mag > R){ dx = dx/mag*R; dy = dy/mag*R; }
-      pad.dx = dx/R; pad.dy = dy/R;
+      // ⚠️ TWO readings, and they are different things. `rawX/rawY` is where the THUMB is and
+      // exists only so the marker can stay under the finger holding it (see drawPad); `dx/dy`
+      // is what the GAME is told, which on a digital stick is one of eight directions. Snapped
+      // here rather than at `applyHumanInput` so `pads.dx/dy` means exactly one thing —
+      // `pollKeys` writes the same -1/0/+1 into the same fields, and the drawing, the lobby's
+      // idle clock and the tests all read them.
+      pad.rawX = dx/R; pad.rawY = dy/R;
+      if (touchIsDigital()){ const q = digitalVec(pad.rawX, pad.rawY); pad.dx = q[0]; pad.dy = q[1]; }
+      else { pad.dx = pad.rawX; pad.dy = pad.rawY; }
     }
   }
 }
 function onUp(id){
   for (const key of ['p1','p2']){
     const pad = pads[key];
-    if (pad.move.id === id){ pad.move.id=null; pad.dx=0; pad.dy=0; }
+    if (pad.move.id === id){ pad.move.id=null; pad.dx=0; pad.dy=0; pad.rawX=0; pad.rawY=0; }
     if (pad.kickId === id){ pad.kick=false; pad.kickId=null; }
   }
 }
@@ -18438,8 +18493,19 @@ function drawPad(pad, isP2){
   const bx = pad.move.cx, by = pad.move.cy;
   ctx.globalAlpha = 0.22; dot(bx,by,JOY_R,'#000'); ctx.globalAlpha=1;
   ring(bx,by,JOY_R,TH.padRing,2);
-  const kx = bx + pad.dx*JOY_R, ky = by + pad.dy*JOY_R;
+  // ⚠️ Drawn from the RAW thumb position, never from the snapped one. A control being touched
+  // is attached to your finger and must not float away from it — the same rule that keeps a
+  // live thumbstick off the tilt-parallax UI layer.
+  const rx = pad.rawX != null ? pad.rawX : pad.dx, ry = pad.rawY != null ? pad.rawY : pad.dy;
+  const kx = bx + rx*JOY_R, ky = by + ry*JOY_R;
   dot(kx,ky,JOY_R*0.42,TH.padRing);
+  // ...and on a digital stick, a pip on the rim for the direction actually being applied. The
+  // knob alone cannot say: either side of a sector boundary the thumb looks the same, and the
+  // whole point of the control is that there are only eight answers.
+  if (touchIsDigital() && (pad.dx || pad.dy)){
+    const m = Math.hypot(pad.dx, pad.dy);
+    dot(bx + pad.dx/m*JOY_R, by + pad.dy/m*JOY_R, JOY_R*0.18, TH.padRing);
+  }
 }
 // ⚠️ The thumb markers sit on the SURROUND, not on the court, so their ink is picked from the
 // surround's lightness instead of being hardcoded white. Highlighter, Sorry! and Specimen all
@@ -19092,6 +19158,7 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
+    TOUCHDIG, TOUCHDIGOPT, touchIsDigital, digitalVec, onDown, onMove, onUp, drawPad, padFor, gamepadPad, get keys(){ return keys; },
     SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,

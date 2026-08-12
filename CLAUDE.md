@@ -931,6 +931,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Its render check measures **coverage over a known fill**, and varies the players and
   the ball **independently**: "two frames look different" passed with the players pinned at
   the origin, because the ball alone moved.
+- **The on-screen thumbstick is DIGITAL** (`sel.touchDigital`, default on; `TOUCHDIG`,
+  `digitalVec`, `touchIsDigital`). Eight directions and nothing between them: you are
+  holding a direction or you are not, and a half-push is full speed.
+  ⚠️ It produces the **keyboard's own shape** — `-1`, `0` or `+1` per axis — because
+  `pollKeys` has always written exactly that into the same `pads.p1` fields, and
+  `applyHumanInput` already normalises a diagonal so two arrow keys at once is not 41%
+  faster than one. Copying that shape puts the touch stick down the same path rather than
+  giving it a second, parallel one; normalising here as well would scale a diagonal twice.
+  ⚠️ **EIGHT-way, not four.** Four makes a diagonal unreachable, and the keyboard has been
+  eight-way since it existed, so four here would mean the two input methods no longer agree
+  about what the game can be told.
+  ⚠️ Snapped in **`onMove`**, never in `applyHumanInput` — every input method goes through
+  that, so the snapping would reach controllers too, and a real stick has an in-between that
+  ought to mean something. `tests/digitalpad.mjs` stubs `navigator.getGamepads` and drives a
+  pad seat for exactly that reason.
+  ⚠️ **TWO readings on the pad, and they are different things.** `rawX/rawY` is where the
+  THUMB is and exists only so `drawPad` can keep the marker under the finger holding it (the
+  same rule that keeps a live thumbstick off the tilt UI layer); `dx/dy` is what the game is
+  told. A pip on the rim shows which of the eight is being applied, because either side of a
+  sector boundary the thumb looks identical and there are only eight answers.
 - **Cocktail calibration is for CONTROLLER seats** — `needsCalibration(p)`, the one
   predicate the on-screen button, the pad poll and the button's label all read.
   Cocktail is a tabletop layout where people sit on different edges, and what has to be
