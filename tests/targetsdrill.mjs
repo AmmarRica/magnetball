@@ -290,6 +290,39 @@ const r = await p.evaluate(() => {
     o.otherDrillBallY = Math.round(ww.ball.y);
     o.otherDrillContained = Math.abs(ww.ball.y) < ww.field.L/2;
   }
+
+  // ---- ⚠️ THE PLAYER CANNOT LEAVE THE PITCH ------------------------------
+  // A player must never end up off the screen, in any mode. `integrate`'s clamp used to sit
+  // behind `if (!w.drillMode)`, which was safe only for as long as every drill called
+  // `drillBoundary()` and got four solid walls that held a body in by collision. This drill
+  // does not — it calls the match's own `buildGeometry` so its goals cannot drift from a
+  // real one's, and every boundary that produces is `ballOnly`, which contains the ball and
+  // deliberately lets a player step out. So there was nothing holding the player on the
+  // pitch at all: you could walk off the edge and never come back.
+  // ⚠️ Driven by holding the STICK, through `stepDrill`, for long enough to be well past
+  // the touchline if nothing stopped it — not by placing the body outside and calling the
+  // clamp, which would pass on a build where the clamp is never reached.
+  {
+    for (const key of ['targets', 'straight_up']){
+      M.startDrill(key);
+      const ww = M.world, q = ww.players[0];
+      const bd = ww.bounds;
+      const out = { key, halfW: bd.halfW, halfL: bd.halfL };
+      for (const [ix, iy, tag] of [[1,0,'right'], [-1,0,'left'], [0,1,'down'], [0,-1,'up']]){
+        q.x = 0; q.y = 0; q.vx = q.vy = 0;
+        // 900 steps at full stick is several pitch-lengths of travel.
+        for (let i = 0; i < 900; i++){ M.pads.p1.dx = ix; M.pads.p1.dy = iy; M.stepDrill(ww); }
+        out[tag] = [Math.round(q.x), Math.round(q.y)];
+      }
+      M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+      // Every finishing position inside the pitch plus the step-out margin, with a little
+      // slack for the margin itself.
+      out.held = ['right','left','down','up'].every(t =>
+        Math.abs(out[t][0]) <= bd.halfW + 40 && Math.abs(out[t][1]) <= bd.halfL + 40);
+      o['walk_' + key] = out;
+    }
+    o.playerHeldIn = o.walk_targets.held && o.walk_straight_up.held;
+  }
   return o;
 });
 
@@ -337,6 +370,8 @@ ok('the drill is flagged as scored-on-points, so the readout says goals', r.read
 ok('every other drill still has a sealed goal mouth', r.otherDrillSealed);
 ok('...and clampBallInside still hauls its ball back inside', r.otherDrillContained,
    `a ball placed past the goal line stayed at y=${r.otherDrillBallY} — the mouth is open on a drill that expects a closed box`);
+ok('THE PLAYER CANNOT WALK OFF THE PITCH', r.playerHeldIn,
+   `holding the stick for 900 steps ended at ${JSON.stringify(r.walk_targets)} on Break the Targets and ${JSON.stringify(r.walk_straight_up)} on a walled drill — this drill builds the match's own geometry, whose boundaries are all ballOnly and let a player through on purpose, and integrate's clamp used to skip drill mode entirely. A player must never leave the view, in any mode`);
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
 console.log(JSON.stringify(r, null, 1));

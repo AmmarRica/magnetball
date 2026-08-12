@@ -485,9 +485,35 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the **6.56px** the ball is actually drawn at on a 390×844 phone — so the feature did
   nothing at all for the people most likely to switch it on. `tests/ball3d.mjs` asserts
   engagement against the real drawn radius.
-  ⚠️ The roll DIRECTION comes from the ball's velocity, and the last heading is kept in a
-  **module variable, never on the ball**: a draw that wrote to the world would be
-  reachable from the sim on the next step, and `tests/determinism.mjs` hashes the world.
+  ⚠️ **The roll is a SIGNED distance about a LATCHED axis** (`ball.roll`, `ball.rollAx`),
+  advanced by `advanceBallSpin` in the step loop and only *read* by the painter. It
+  first took its axis from the live velocity inside the draw, which was wrong twice
+  over: a bounce flipping the heading by 180° jumped half a turn of texture across the
+  ball in one frame, and a ball rebounding off a wall should *unroll* the way it came.
+  The axis is re-latched only when travel goes more than 60° off it — a real change of
+  direction rather than a rebound along the same line.
+  ⚠️ **It rolls FORWARDS**, and it shipped backwards. Seen from above, the face of a
+  rolling ball travels the way the ball is going (the contact point is what stands
+  still), so the phase is SUBTRACTED from the longitude. A backwards scroll changes
+  exactly as many pixels as a forwards one, so every assertion in the suite passed with
+  it wrong until one measured the *sign* of a known mark's movement.
+  ⚠️ **The texture's vertical axis is sin(LATITUDE), not latitude.** An orthographic
+  sphere puts latitude φ at screen y = r·sin(φ), and the painter stretches the strip's
+  full height linearly onto the ball's full height in one `drawImage` per slice — so a
+  strip baked in φ piles the polar rows up at the top and bottom of the circle and pulls
+  the equator apart. That was the "terrible texture": every pattern came out as a
+  vertical smear. Baking in sin(φ) makes the linear stretch exactly right and costs
+  nothing per frame.
+  ⚠️ A look's drawing is a complete **disc design** and there is no honest way to wrap a
+  disc onto a sphere, so it is **PRINTED** on — sixteen times at fixed (longitude,
+  latitude) spots (`BALL3D.spots`), each warped to `α/cos(lat)` wide and `cos(lat)·sin(α)`
+  tall so it comes back round on the ball. A look whose subject is the WHOLE ball sets
+  `solo` and gets two hemisphere-sized prints instead (`soloSpots`): sixteen little sheep
+  in sixteen rings reads as a honeycomb.
+  ⚠️ `BALL3D.wrap` (π×tex) makes the *stored* strip isotropic so a print is not resampled
+  unevenly. It is **not** what makes a print come out round on the ball — the wrap width
+  cancels between the bake and the painter, both of which derive from it. Believed
+  otherwise for one commit; the suite's sabotage of that value *passing* is what showed it.
   Render only — the suite proves the world bit-identical with it on and off.
 - **Side view (`sel.sideView`, `SIDE`, `sideNow`, `drawBodiesSide`):** a showcase camera —
   the pitch turned goal-to-goal, the ground plane squashed as though seen from beside the
@@ -543,6 +569,38 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **Render only** — the suite hashes the world over 600 steps with it on and off, with
   `demo` true in **both** runs (it is read from inside `step()`, so switching it is not a
   control). `tests/sideview.mjs`.
+- **A PLAYER MAY NEVER LEAVE THE VIEW, in any mode.** `integrate`'s clamp to
+  `bounds.halfW/halfL + 20` used to sit behind `if (!w.drillMode)`, which was safe only
+  while every drill called `drillBoundary()` and got four solid walls that held a body in
+  by collision. **Break the Targets does not** — it calls the match's own `buildGeometry`
+  so its goals cannot drift from a real one's, and every boundary that produces is
+  `ballOnly`, which contains the ball and deliberately lets a player step out. So there
+  was nothing holding the player on the pitch and you could walk off the screen and never
+  come back. ⚠️ The clamp reads **`w.bounds`**, not `w.field`: that is the rectangle the
+  drill actually laid out and the one `renderDrill` and `clampBallInside` already work
+  from, so the line you are held at is the line on the grass. `tests/targetsdrill.mjs`
+  holds the stick down for 900 steps rather than placing a body outside and calling the
+  clamp — which would pass on a build where the clamp is never reached.
+- **`advanceBallSpin(w)` is called from `step()` AND `stepDrill()`.** It lived inline in
+  `step()`, which a drill never runs, so in every drill the ball's pattern was frozen
+  solid however hard it was hit — a ball that has stopped being a ball. It keeps two
+  separate quantities on purpose: `rot`, an unsigned 2D spin for the flat look (a
+  stylisation — a ball rolling on a pitch has no spin about the vertical axis at all), and
+  `roll`/`rollAx` for the sphere. Step loop only, never a draw (the trails rule).
+- **The Sheep ball is a SILHOUETTE, not a set of marks**, and that took three goes. Drawn
+  as its dark parts on a white ball — first a ring of seven fleece nubs plus a head, an ear
+  and two legs, then a bigger head with four legs and a tail — it came out as a field of
+  same-sized dark spots, which is a cow. Nothing at the nine pixels a ball is actually
+  drawn at can be read as a head, an ear and a leg; a whole animal **outline** can. So the
+  ink covers the ball and the fleece is put back in the **paper** colour — which is why
+  `look.draw` is handed that colour at all (`paintBallLook`'s fourth argument), and the one
+  look that needs it. ⚠️ The surround is held back to `SHEEP.surround` (0.62) rather than
+  solid, and that is playability rather than looks: solid, the ball's own dark rim merges
+  with a dark surround, the disc's edge disappears, and the ball reads as much smaller than
+  the circle that actually collides. It also has to stay the brightest thing on the pitch.
+  `tests/balllook.mjs` measures all three, and counts fleece **regions** for the `solo`
+  check — the obvious "how much of the disc is pale" does not discriminate at all (sixteen
+  small sheep score 0.669 against one big one's 0.622, so the tiled build scored higher).
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was

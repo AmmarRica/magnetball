@@ -3,19 +3,32 @@
 // The ball already had sphere SHADING: a ground shadow that subtracts the tilt lift and a
 // radial highlight fixed up-left. What made it still read flat is that the pattern was
 // rotated in 2D, which is a spinning disc, not a rolling ball. The pattern is now mapped
-// onto a cylinder-projected sphere and scrolled by the roll, so the markings compress
-// toward the limb and go over the horizon.
+// onto a sphere and scrolled by the roll, so the markings compress toward the limb and go
+// over the horizon.
 //
 // What this suite holds:
 //   1. it is OFF by default — this changes the most-watched object on the pitch, and
 //      nobody playing today asked for that;
-//   2. on, it genuinely changes the ball, the face changes as it rolls, and the roll
-//      follows the DIRECTION OF TRAVEL (rolling right and rolling down differ);
+//   2. on, it genuinely changes the ball, the face changes as it rolls, the roll follows
+//      the AXIS it was rolled about, and it rolls FORWARDS — a mark on the face travels the
+//      way the ball is going, because on a rolling ball the contact point is what stands
+//      still. It shipped backwards;
+//   2b. ⚠️ the vertical mapping is sin(LATITUDE), which is what an orthographic sphere
+//      does. It shipped as latitude itself, so every pattern was piled up at the top and
+//      bottom of the circle and pulled apart across the middle — the "terrible texture"
+//      this suite had no assertion for at all. Measured by printing ONE mark at a known
+//      latitude and finding where on the ball it lands;
 //   3. ⚠️ it is PURE for a given (rot, heading): two draws of one frame must be identical,
 //      or a paused ball shimmers at the refresh rate;
 //   4. ⚠️ THE SIM IS UNTOUCHED, proved by hashing the world rather than asserted — the
 //      same bar `bigcourt`, `goalcam` and `tilt` are held to. A draw must not write to the
-//      world either, which is why the roll heading lives in a module variable;
+//      ball either: the roll and its axis are advanced by `advanceBallSpin` in the STEP
+//      loop and only read by the painter;
+//   4b. the roll is SIGNED about a latched axis, so a ball rebounding straight off a wall
+//      unrolls the way it came instead of the axis flipping and jumping half a turn of
+//      texture across the face in one frame;
+//   4c. ⚠️ and the spin advances IN A DRILL. It used to live inline in `step()`, which a
+//      drill never runs, so a drill's ball had a frozen pattern however hard it was hit;
 //   5. the texture is BAKED once per (look, ink) and rebuilt when the ink changes, because
 //      slots mix and the pattern is drawn in the ball's spot colour;
 //   6. it falls back to flat below `BALL3D.minPx`, where a mapped texture is just noise.
@@ -50,10 +63,12 @@ const r = await p.evaluate(() => {
   const S = 220, CX = 110, CY = 110, R = 60;
   const cv = document.createElement('canvas'); cv.width = cv.height = S;
   const cc = cv.getContext('2d');
-  const paint = (on, rot, vx, vy, rad) => {
+  // (on, roll, axis, radius, look) — `roll` is the signed distance rolled and `axis` the
+  // direction it rolled in, both of which the ball now carries (see advanceBallSpin).
+  const paint = (on, roll, ax, rad, look) => {
     M.sel.ball3d = on ? 'on' : 'off';
     cc.fillStyle = '#7f7f7f'; cc.fillRect(0, 0, S, S);
-    M.paintBall(cc, CX, CY, rad == null ? R : rad, rot, 'classic', null, vx, vy);
+    M.paintBall(cc, CX, CY, rad == null ? R : rad, 0, look || 'classic', null, roll, ax || 0);
     return cc.getImageData(0, 0, S, S).data;
   };
   const diff = (a, c2) => { let n = 0;
@@ -63,30 +78,94 @@ const r = await p.evaluate(() => {
 
   M.sel.look.ball = 'classic';
   // Warm the texture cache so the first timed/compared paint is like every other.
-  paint(true, 0, 8, 0);
+  paint(true, 0, 0);
 
   // ---- a control: two identical paints must be identical --------------------
-  o.controlDiff = diff(paint(true, 0.4, 8, 0), paint(true, 0.4, 8, 0));
+  o.controlDiff = diff(paint(true, 0.4, 0), paint(true, 0.4, 0));
   o.paintIsPure = o.controlDiff === 0;
 
   // ---- on vs off is a real difference --------------------------------------
-  const flat = paint(false, 0.4, 8, 0);
-  const sphere = paint(true, 0.4, 8, 0);
+  const flat = paint(false, 0.4, 0);
+  const sphere = paint(true, 0.4, 0);
   o.onVsOff = diff(flat, sphere);
   o.changesTheBall = o.onVsOff > 300;
 
   // ---- the face changes as it rolls ---------------------------------------
-  o.rollDiff = diff(paint(true, 0, 8, 0), paint(true, 0.8, 8, 0));
+  o.rollDiff = diff(paint(true, 0, 0), paint(true, 0.8, 0));
   o.rollsWithRot = o.rollDiff > 300;
 
-  // ⚠️ ...and the roll follows the DIRECTION OF TRAVEL. Without this the pattern always
+  // ⚠️ ...and the roll follows the AXIS it rolled about. Without this the pattern always
   // scrolls along screen-x, which reads as a ball rolling sideways while flying up the
   // pitch — the exact tell that gives away a fake.
-  o.headingDiff = diff(paint(true, 0.6, 8, 0), paint(true, 0.6, 0, 8));
-  o.followsHeading = o.headingDiff > 200;
-  // A still ball keeps the last heading rather than snapping to zero, so two paints of a
-  // stationary ball still agree.
-  o.stillIsStable = diff(paint(true, 0.6, 0, 0), paint(true, 0.6, 0, 0)) === 0;
+  o.axisDiff = diff(paint(true, 0.6, 0), paint(true, 0.6, Math.PI/2));
+  o.followsAxis = o.axisDiff > 200;
+
+  // ---- ⚠️ WHICH WAY IT ROLLS, and where a mark LANDS ----------------------
+  // Both of these are measured with ONE print at a known place, by overriding the spot
+  // table — a mark whose position is known is the only way to say anything about the
+  // projection, and with sixteen prints scattered over the sphere you cannot tell which
+  // blob is which.
+  const keepSpots = M.BALL3D.spots, keepPatch = M.BALL3D.patch;
+  const onePrint = (lonTurns, latDeg, roll, patch) => {
+    M.BALL3D.spots = [[lonTurns, latDeg]]; M.BALL3D.patch = patch || 20;
+    M.ballTexCache.clear();
+    const f = paint(true, roll, 0, R, 'period');       // a single centred dot
+    // The mark's box: pixels clearly darker than the pale ball, inside the disc.
+    let x0=1e9, y0=1e9, x1=-1, y1=-1, n=0;
+    for (let yy = 1; yy < S-1; yy++) for (let xx = 1; xx < S-1; xx++){
+      const dx = xx-CX, dy = yy-CY; if (dx*dx + dy*dy > (R-2)*(R-2)) continue;
+      const i = (yy*S + xx)*4;
+      if (f[i]*0.3 + f[i+1]*0.6 + f[i+2]*0.1 < 110){
+        n++; if (xx<x0) x0=xx; if (xx>x1) x1=xx; if (yy<y0) y0=yy; if (yy>y1) y1=yy; }
+    }
+    return n ? { n, cx:(x0+x1)/2, cy:(y0+y1)/2, w:x1-x0+1, h:y1-y0+1 } : { n:0 };
+  };
+
+  // ⚠️ IT ROLLS FORWARDS. A mark on the face of a rolling ball travels the way the ball is
+  // going — the contact point is what stands still — and this shipped scrolling the other
+  // way, which is what "rolling in the wrong direction" was. Measured as the sign of the
+  // mark's movement, not as a pixel count, because a backwards scroll changes exactly as
+  // many pixels as a forwards one and every other check here passed with it wrong.
+  {
+    const a = onePrint(0, 0, 0), c2 = onePrint(0, 0, 0.30);
+    o.markFound = a.n > 20 && c2.n > 20;
+    o.markMoved = o.markFound ? +(c2.cx - a.cx).toFixed(1) : 0;
+    o.rollsForwards = o.markFound && o.markMoved > 3;
+  }
+
+  // ⚠️ THE VERTICAL MAPPING IS sin(LATITUDE). An orthographic sphere puts latitude φ at
+  // screen y = r·sin(φ), and the painter stretches the strip's whole height linearly onto
+  // the ball's whole height — so the strip has to be baked in sin(φ). Baked in φ itself
+  // (which is how it shipped) a print at 55° lands at 0.61·r instead of 0.82·r, and every
+  // pattern is crushed at the top and bottom of the circle and pulled apart in the middle.
+  // ⚠️ Probed with a SMALL print (12°) and compared on MAGNITUDE. Two things would otherwise
+  // make this read the implementation back rather than test it: which end of the strip is
+  // the top of the ball is a free convention (a sphere pattern has no up), and a print's box
+  // is centred on the midpoint of the latitude band it covers, which for a big patch sits
+  // cos(α) short of its own centre — 0.90 at the 26° the ball actually uses. At 12° that
+  // factor is 0.978 and the prediction is just sin(φ).
+  {
+    const LAT = 55, want = Math.sin(LAT*Math.PI/180);
+    const m = onePrint(0, LAT, 0, 12);
+    o.latMarkFound = m.n > 12;
+    o.latAt = o.latMarkFound ? +(Math.abs(m.cy - CY) / R).toFixed(3) : 0;
+    o.latWant = +want.toFixed(3);
+    o.latLinearWould = +(LAT/90).toFixed(3);          // what a latitude-linear bake gives
+    o.latIsSine = o.latMarkFound && Math.abs(o.latAt - want) < 0.08
+               && Math.abs(o.latAt - LAT/90) > 0.10;
+    // ...and a print at the equator comes back ROUND, which holds the bake's patch box
+    // against the painter's own scale factors — the two are computed separately and a
+    // mismatch stretches every mark on the ball.
+    // ⚠️ It is NOT a check on `BALL3D.wrap`, which was the first claim made for it: the
+    // wrap width cancels between the bake and the painter because both derive from it, and
+    // halving it changes nothing on screen. Sabotaging the wrap passed here, which is what
+    // showed that up; doubling the patch box's height fails it at an aspect of 2.13.
+    const eq = onePrint(0, 0, 0);
+    o.eqAspect = eq.n > 20 ? +(eq.h / eq.w).toFixed(3) : 0;
+    o.printIsRound = eq.n > 20 && o.eqAspect > 0.80 && o.eqAspect < 1.25;
+  }
+  M.BALL3D.spots = keepSpots; M.BALL3D.patch = keepPatch; M.ballTexCache.clear();
+  paint(true, 0, 0);                                  // re-warm for what follows
 
   // ---- ⚠️ THE LIMB ACTUALLY COMPRESSES ------------------------------------
   // This is the whole point of the mapping, and nothing above measures it: a plain
@@ -103,25 +182,36 @@ const r = await p.evaluate(() => {
   // What compression actually is, is TEXTURE DENSITY: the same markings occupy less width
   // near the limb, so a scan line crosses more light/dark boundaries per pixel there. That
   // is measured in a single frame and cannot be confounded by motion.
+  // ⚠️ AVERAGED OVER TWELVE ROLL PHASES, and that is not belt-and-braces. The pattern is
+  // PRINTED at sixteen fixed places on the sphere rather than smeared continuously round
+  // it, so whether a given longitude band has any ink in it at all is down to where the
+  // roll happens to have stopped — measured on one frame the limb band came back with a
+  // density of 0.0138 against 0.0623 in the middle, which reads as the exact opposite of
+  // compression and is really just an empty strip of ball.
   {
-    const f = paint(true, 0.30, 8, 0);
-    const lum = i => f[i]*0.3 + f[i+1]*0.6 + f[i+2]*0.1;
-    // Edges per pixel of width, over rows near the equator where the pattern is widest.
-    const density = (fx0, fx1) => {
+    const lumOf = (f, i) => f[i]*0.3 + f[i+1]*0.6 + f[i+2]*0.1;
+    const density = (f, fx0, fx1) => {
       const x0 = Math.round(CX + R*fx0), x1 = Math.round(CX + R*fx1);
       let edges = 0, span = 0;
       for (let yy = Math.round(CY - R*0.32); yy <= Math.round(CY + R*0.32); yy++){
         let prev = null;
         for (let xx = x0; xx <= x1; xx++){
-          const v = lum((yy*S + xx)*4) > 128 ? 1 : 0;
+          const v = lumOf(f, (yy*S + xx)*4) > 128 ? 1 : 0;
           if (prev !== null && v !== prev) edges++;
           prev = v; span++;
         }
       }
       return span ? edges / span : 0;
     };
-    o.midDensity  = +density(-0.16, 0.16).toFixed(4);
-    o.limbDensity = +density(0.74, 0.94).toFixed(4);
+    let mid = 0, limb = 0;
+    for (let k = 0; k < 12; k++){
+      const f = paint(true, k * 0.13, 0);
+      mid  += density(f, -0.16, 0.16);
+      // Both limbs, so a print sitting on one of them cannot decide the answer.
+      limb += (density(f, 0.74, 0.94) + density(f, -0.94, -0.74)) / 2;
+    }
+    o.midDensity  = +(mid/12).toFixed(4);
+    o.limbDensity = +(limb/12).toFixed(4);
     o.limbIsCompressed = o.limbDensity > o.midDensity * 1.35;
   }
 
@@ -141,14 +231,14 @@ const r = await p.evaluate(() => {
 
   // ---- below minPx it falls back to flat -----------------------------------
   const tiny = Math.max(2, M.BALL3D.minPx - 2);
-  o.tinyDiff = diff(paint(false, 0.4, 8, 0, tiny), paint(true, 0.4, 8, 0, tiny));
+  o.tinyDiff = diff(paint(false, 0.4, 0, tiny), paint(true, 0.4, 0, tiny));
   o.tinyIsFlat = o.tinyDiff === 0;
   o.minPx = M.BALL3D.minPx;
 
   // ---- the texture is baked once, and rebuilt when the ink changes ---------
   M.ballTexCache.clear();
-  paint(true, 0.2, 8, 0); const after1 = M.ballTexCache.size;
-  paint(true, 0.5, 8, 0); paint(true, 0.9, 8, 0);
+  paint(true, 0.2, 0); const after1 = M.ballTexCache.size;
+  paint(true, 0.5, 0); paint(true, 0.9, 0);
   o.texAfterManyPaints = M.ballTexCache.size;
   o.texBakedOnce = after1 === 1 && o.texAfterManyPaints === 1;
   // ⚠️ Keyed on the INK too: the same look asked for over another palette must not reuse
@@ -164,19 +254,55 @@ const r = await p.evaluate(() => {
   // fourteen balls at once. Measured as cost, not as an internal number.
   {
     const t0 = performance.now();
-    for (let i = 0; i < 400; i++) paint(true, i*0.02, 8, 0, 11);
+    for (let i = 0; i < 400; i++) paint(true, i*0.02, 0, 11);
     o.smallMs = +((performance.now() - t0) / 400).toFixed(4);
     const t1b = performance.now();
-    for (let i = 0; i < 400; i++) paint(true, i*0.02, 8, 0, 60);
+    for (let i = 0; i < 400; i++) paint(true, i*0.02, 0, 60);
     o.bigMs = +((performance.now() - t1b) / 400).toFixed(4);
     o.smallIsCheaper = o.smallMs < o.bigMs * 0.6;
     // The worst case anyone can reach: fourteen lobby balls in one frame.
     M.sel.ball3d = 'on';
     const t2b = performance.now();
     for (let f = 0; f < 150; f++) for (let k = 0; k < 14; k++)
-      M.paintBall(cc, CX, CY, 11, f*0.02, 'classic', null, 8, 0);
+      M.paintBall(cc, CX, CY, 11, 0, 'classic', null, f*0.02, 0);
     o.fourteenMs = +((performance.now() - t2b) / 150).toFixed(3);
     o.worstCaseFitsAFrame = o.fourteenMs < 8;
+  }
+
+  // ---- ⚠️ THE ROLL IS SIGNED, ABOUT A LATCHED AXIS ------------------------
+  // A ball that rebounds straight off a wall rolls back the way it came. The painter used
+  // to take its axis from the live velocity instead, so the instant a bounce flipped the
+  // heading by 180° the axis flipped with it and half a turn of texture jumped across the
+  // face in a single frame. Driven through the real `advanceBallSpin`, not by poking fields.
+  {
+    const fake = { ball: { x:0, y:0, vx:6, vy:0, rot:0, spin:0 } };
+    for (let i=0;i<10;i++) M.advanceBallSpin(fake);
+    const outAx = fake.ball.rollAx, outRoll = fake.ball.roll;
+    fake.ball.vx = -6;                              // straight back off a wall
+    for (let i=0;i<10;i++) M.advanceBallSpin(fake);
+    o.axKept   = Math.abs(fake.ball.rollAx - outAx) < 1e-9;
+    o.rollBack = fake.ball.roll < outRoll - 1e-9;
+    o.rollUnwinds = o.axKept && o.rollBack;
+    // ...but a genuine change of DIRECTION does re-latch, or a ball turning a corner would
+    // roll backwards for the rest of the match.
+    fake.ball.vx = 0; fake.ball.vy = 6;
+    for (let i=0;i<10;i++) M.advanceBallSpin(fake);
+    o.axRelatched = Math.abs(fake.ball.rollAx - outAx) > 1;
+  }
+
+  // ---- ⚠️ AND IT ADVANCES IN A DRILL --------------------------------------
+  // This block lived inline in `step()`, which a drill never runs — so in every drill the
+  // ball's pattern was frozen solid however hard you hit it. Driven through the real
+  // `stepDrill`, because the whole defect was a call site that did not exist.
+  {
+    M.startDrill('targets');
+    const w = M.world;
+    w.ball.vx = 9; w.ball.vy = 3;
+    const rot0 = w.ball.rot || 0, roll0 = w.ball.roll || 0;
+    for (let i=0;i<20;i++){ w.ball.vx = 9; w.ball.vy = 3; M.stepDrill(w); }
+    o.drillRot  = +(Math.abs((w.ball.rot||0) - rot0)).toFixed(3);
+    o.drillRoll = +(Math.abs((w.ball.roll||0) - roll0)).toFixed(3);
+    o.drillBallRolls = o.drillRot > 0.05 && o.drillRoll > 0.05;
   }
 
   // ---- THE SIM IS UNTOUCHED ------------------------------------------------
@@ -231,9 +357,16 @@ ok('two identical paints are identical', r.paintIsPure,
    `${r.controlDiff} px differ between two identical paints — every comparison below is measuring that too`);
 ok('turning it on changes the ball', r.changesTheBall, `${r.onVsOff} px`);
 ok('the face changes as the ball rolls', r.rollsWithRot, `${r.rollDiff} px between two roll phases`);
-ok('the roll follows the direction of travel', r.followsHeading,
-   `${r.headingDiff} px between rolling right and rolling down — without this the pattern always scrolls along screen-x, which is the tell that gives away a fake`);
-ok('a stationary ball is stable', r.stillIsStable, 'it keeps the last heading rather than snapping to zero');
+ok('the roll follows the axis it rolled about', r.followsAxis,
+   `${r.axisDiff} px between rolling along x and along y — without this the pattern always scrolls along screen-x, which is the tell that gives away a fake`);
+ok('a print was found at all', r.markFound,
+   'the single-print probe found no mark, so the direction and latitude checks below prove nothing');
+ok('IT ROLLS FORWARDS', r.rollsForwards,
+   `a mark on the face moved ${r.markMoved}px for a positive roll — on a rolling ball the contact point is what stands still, so the face travels the way the ball is GOING. It shipped scrolling backwards, and a backwards scroll changes exactly as many pixels as a forwards one, so every other check here passed with it wrong`);
+ok('a print lands where sin(latitude) says', r.latIsSine,
+   `a print at 55° landed at ${r.latAt}·r, against ${r.latWant} for sin(latitude) and ${r.latLinearWould} for latitude itself — an orthographic sphere puts latitude φ at y = r·sin(φ), and baking the strip in φ crushes every pattern into the top and bottom of the circle and pulls it apart across the middle`);
+ok('a print at the equator comes back ROUND', r.printIsRound,
+   `it measured ${r.eqAspect} tall for its width — the bake's patch box and the painter's scale factors are worked out separately, and a mismatch between them stretches every mark on the ball`);
 ok('the limb genuinely compresses', r.limbIsCompressed,
    `pattern edges per pixel: ${r.midDensity} in the middle of the face against ${r.limbDensity} at the limb — on a sphere the markings are squashed there; equal density means this is a flat scroll wearing a circular clip`);
 ok('it engages at the size a phone actually draws the ball', r.engagesOnAPhone,
@@ -247,6 +380,12 @@ ok('a small ball costs less than a big one', r.smallIsCheaper,
    `${r.smallMs}ms at 11px against ${r.bigMs}ms at 60px — a fixed slice count costs the same at both`);
 ok('the worst case still fits a frame', r.worstCaseFitsAFrame,
    `fourteen lobby balls cost ${r.fourteenMs}ms of a 16.6ms frame`);
+ok('the roll UNWINDS on a rebound', r.rollUnwinds,
+   `axis kept: ${r.axKept}, roll went back: ${r.rollBack} — a ball bouncing straight off a wall rolls back the way it came, and taking the axis from the live velocity instead flips it 180° and jumps half a turn of texture across the face in one frame`);
+ok('...but a real change of direction re-latches the axis', r.axRelatched,
+   'a ball turning a corner would otherwise roll backwards for the rest of the match');
+ok('the ball ROLLS IN A DRILL', r.drillBallRolls,
+   `rot moved ${r.drillRot} and roll moved ${r.drillRoll} over twenty drill steps — the spin used to be inline in step(), which a drill never runs, so a drill's ball had a frozen pattern however hard it was hit`);
 ok('THE SIM IS BIT-IDENTICAL with it on and off', r.simBitIdentical, r.simSample);
 ok('...and a draw does not write to the ball', r.drawLeavesBallAlone,
    `drawing added ${JSON.stringify(r.addedByDraw)} to the ball — the roll heading must live outside the world, or a draw mutates the sim and determinism hashing breaks`);

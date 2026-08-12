@@ -151,17 +151,111 @@ for (const [k,c] of Object.entries(r.spotContrast||{}))
 const vals = Object.values(pitch);
 const r2 = { pitchShowsLook: new Set(vals).size === vals.length };
 
+// ============================================================
+//  THE SHEEP IS A SILHOUETTE
+// ============================================================
+// ⚠️ It took three goes, and the first two failed the same way. A sheep drawn as its dark
+// PARTS on a white ball — a ring of fleece nubs plus a head, an ear and legs, then a bigger
+// head with four legs and a tail — comes out as a field of same-sized dark spots, which is
+// a cow. Nothing at the nine pixels a ball is actually drawn at can be read as a head, an
+// ear and a leg; a whole animal OUTLINE can. So the ink covers the ball and the fleece is
+// put back in the paper colour, which is also why a look is handed that colour at all.
+const sheep = await p.evaluate(()=>{
+  const M = window.__magnet; const o = {};
+  const S = 200, CX = 100, CY = 100, R = 70;
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const c = cv.getContext('2d', { willReadFrequently:true });
+  const shot = (look, on, roll) => {
+    M.sel.ball3d = on ? 'on' : 'off';
+    c.fillStyle = '#2f6b3a'; c.fillRect(0, 0, S, S);      // a pitch to sit on
+    M.paintBall(c, CX, CY, R, 0.0, look, null, roll || 0, 0);
+    return c.getImageData(0, 0, S, S).data;
+  };
+  const lum = (f, x, y) => { const i = (Math.round(y)*S + Math.round(x))*4;
+                             return f[i]*0.2126 + f[i+1]*0.7152 + f[i+2]*0.0722; };
+
+  const f = shot('sheep', false);
+  // A horizontal line through the middle: fleece in the centre, surround at both ends.
+  o.midLum   = Math.round(lum(f, CX, CY));
+  o.leftLum  = Math.round(lum(f, CX - R*0.93, CY));
+  o.rightLum = Math.round(lum(f, CX + R*0.93, CY));
+  // ...and a vertical one: surround above and below, because the body is an oval.
+  o.topLum = Math.round(lum(f, CX, CY - R*0.88));
+  o.botLum = Math.round(lum(f, CX, CY + R*0.88));
+  o.isSilhouette = o.midLum - Math.max(o.leftLum, o.rightLum) > 40
+                && o.midLum - Math.max(o.topLum, o.botLum) > 40;
+
+  // ⚠️ THE FULL DISC STILL READS, which is why the surround is held back rather than solid.
+  // Solid, the ball's own dark rim merges with a dark surround and the edge of the disc
+  // disappears — so a player sees a small pale blob and the ball reads as much smaller than
+  // the circle that actually collides. Measured against the rim itself and against the pitch.
+  o.rimLum   = Math.round(lum(f, CX + R*1.10, CY));
+  o.pitchLum = Math.round(lum(f, CX + R*1.45, CY));
+  o.discEdgeReads = o.rightLum - o.rimLum > 25;
+  o.surround = M.SHEEP.surround;
+
+  // ⚠️ ...and it is still the BRIGHTEST thing out there. It is the object everybody on the
+  // pitch is tracking, so a cosmetic choice may not turn it into a dark disc on dark grass.
+  o.brighterThanPitch = o.midLum - o.pitchLum > 60;
+
+  // ---- `solo`: a whole-ball subject is printed TWICE, not sixteen times ----
+  // Sixteen little sheep in sixteen grey rings reads as a honeycomb.
+  // ⚠️ Measured as the BIGGEST connected patch of fleece, not the total amount of it. The
+  // obvious version — what share of the disc comes back pale — does not discriminate at all:
+  // sixteen small sheep read 0.669 against one big one's 0.622, so the tiled build scored
+  // HIGHER and the check passed whichever way round it was. What "one animal instead of a
+  // honeycomb" means is one large region, so that is what gets counted.
+  // ⚠️ And the biggest patch alone is not enough either: it reads 0.622 solo against 0.380
+  // tiled, because the tiled prints merge into each other. What separates them cleanly is
+  // HOW MANY sizeable patches there are — one animal, or a honeycomb of them.
+  const fleeceBlobs = (fr) => {
+    const inDisc = (xx, yy) => { const dx = xx-CX, dy = yy-CY; return dx*dx + dy*dy <= (R-3)*(R-3); };
+    const seen = new Uint8Array(S*S); let best = 0, total = 0, blobs = 0;
+    for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++)
+      if (inDisc(xx, yy)){ total++; }
+    for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++){
+      const k0 = yy*S + xx;
+      if (seen[k0] || !inDisc(xx, yy) || lum(fr, xx, yy) <= 170) continue;
+      let n = 0; const stack = [k0]; seen[k0] = 1;
+      while (stack.length){
+        const k = stack.pop(), y2 = (k / S) | 0, x2 = k % S; n++;
+        for (const [ax, ay] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx = x2+ax, ny = y2+ay, nk = ny*S + nx;
+          if (nx < 0 || ny < 0 || nx >= S || ny >= S || seen[nk]) continue;
+          if (!inDisc(nx, ny) || lum(fr, nx, ny) <= 170) continue;
+          seen[nk] = 1; stack.push(nk);
+        }
+      }
+      if (n > best) best = n;
+      if (n > total*0.01) blobs++;                 // anything more than 1% of the disc
+    }
+    return { big: total ? best/total : 0, blobs };
+  };
+  M.ballTexCache.clear();
+  const soloM = fleeceBlobs(shot('sheep', true, 0.2));
+  M.BALL_LOOKS.sheep.solo = false; M.ballTexCache.clear();
+  const tiledM = fleeceBlobs(shot('sheep', true, 0.2));
+  M.BALL_LOOKS.sheep.solo = true; M.ballTexCache.clear();
+  o.soloBlob = +soloM.big.toFixed(3); o.soloBlobs = soloM.blobs;
+  o.tiledBlob = +tiledM.big.toFixed(3); o.tiledBlobs = tiledM.blobs;
+  o.soloBeatsTiled = o.soloBlobs <= 3 && o.tiledBlobs >= o.soloBlobs + 3;
+  M.sel.ball3d = 'off';
+  return o;
+});
+
+
 // ---- Nothing is fetched for a ball any more
 const skinFetches = requested.filter(u=>/assets\/(ball|player)\//.test(u));
 
-console.log(JSON.stringify({ ...r, ...r2, pitch, skinFetches }, null, 1));
+console.log(JSON.stringify({ ...r, ...r2, sheep, pitch, skinFetches }, null, 1));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must = ['skinsCardGone','noSkinSettings','ballCardExists','ballLookDefault','allPaint',
   'allDistinct','plainIsStillABall','patternedDiffersFromPlain','staysInsideTheBall',
   'rotationChangesIt','plainIgnoresRotation','oneTilePerLook','tilesArePainted','noEmojiTiles',
   'noDisabledTiles','pickWrites','pickPersists','pickMarksTile','pitchShowsLook',
-  'neonUntouched','poolWasFixed','patternVisibleOnPool'];
-const all = { ...r, ...r2 };
+  'neonUntouched','poolWasFixed','patternVisibleOnPool',
+  'isSilhouette','discEdgeReads','brighterThanPitch','soloBeatsTiled'];
+const all = { ...r, ...r2, ...sheep };
 const bad = must.filter(k => all[k] !== true);
 if (all.weakPalettes && all.weakPalettes.length)
   bad.push('weakPalettes:' + all.weakPalettes.join(','));

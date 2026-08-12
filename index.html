@@ -3048,7 +3048,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0940PM';
+const VERSION = '20260812.0210AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3064,6 +3064,15 @@ const VERSION = '20260811.0940PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.0210AM', title: 'The ball rolls properly',
+    added: [],
+    changed: [
+      'The rolling 3D ball was rolling backwards, and its markings were stretched into smears. They now wrap round it properly and roll the way the ball is going.',
+      'A ball that bounces straight off a wall now rolls back the way it came instead of the pattern jumping.',
+      'The sheep ball is a sheep you can actually make out, at any size.',
+    ],
+    fixed: 'The ball sat frozen in drills instead of rolling, and in Break the Targets you could walk off the pitch and off the screen. Plus a handful of smaller fixes.' },
+
   { v: '20260811.0940PM', title: 'Watch from the touchline',
     added: [
       'Replays and the idle demo match can be shown from beside the pitch instead of straight down: goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow.',
@@ -4484,9 +4493,38 @@ const BALL3D = {
   // for the people most likely to turn it on. Below 5 the flat path degrades to a plain
   // dot anyway, so that is the honest boundary rather than a number picked by eye.
   minPx: 5,
-  tex: 96,        // texture height (= ball diameter in texture space)
-  reps: 3,        // pattern instances per 360° of wrap
-  inst: 0.42,     // each instance's radius, as a fraction of `tex`
+  tex: 128,       // texture height: sin(latitude) from -1 to +1
+  roll: 0.055,    // radians of roll per world unit travelled (see advanceBallSpin)
+  // The wrap is π×tex wide so the STORED strip is isotropic: `tex` pixels covers sin(lat)
+  // −1…+1, which is tex/2 pixels per radian of latitude at the equator, and π·tex pixels
+  // covers 2π radians of longitude, which is the same. A print therefore sits in a square
+  // box in the strip and is not resampled unevenly when it is baked.
+  // ⚠️ It is NOT what makes a print come out round on the BALL — that is the bake's patch
+  // box against the painter's own scale factors, and the wrap width cancels between them
+  // because both are computed from it. Believed otherwise for one commit, and the suite's
+  // sabotage of this value passing is what showed it.
+  wrap: (t) => Math.round(Math.PI * t),
+  patch: 26,      // angular radius of one printed instance, in DEGREES
+  // ⚠️ Fixed placements, in (longitude turns, latitude degrees). The look's own drawing is
+  // a complete disc design, and there is no honest way to wrap a disc onto a sphere — so
+  // it is PRINTED on, several times, the way a football's panels are. Latitude is kept
+  // well off ±90: a patch at the pole needs a longitude span of α/cos(lat), which runs
+  // away to the whole wrap, and the poles land on the very top and bottom of the drawn
+  // circle where almost nothing of them shows anyway.
+  spots: [
+    [0.000,   0], [0.250,   0], [0.500,   0], [0.750,   0],
+    [0.125,  40], [0.375,  40], [0.625,  40], [0.875,  40],
+    [0.125, -40], [0.375, -40], [0.625, -40], [0.875, -40],
+    [0.000,  70], [0.500,  70], [0.250, -70], [0.750, -70],
+  ],
+  // ⚠️ A look that draws a WHOLE-BALL subject rather than a mark sets `solo` and gets these
+  // instead: two prints, each a full hemisphere, so one goes over the horizon as the next
+  // comes round. Printing the Sheep sixteen times gave a grid of sixteen little sheep in
+  // sixteen grey rings, which reads as a honeycomb. 90° is not a tuned number — at that
+  // radius a patch spans exactly half the wrap and the whole of sin(latitude), which is one
+  // design per hemisphere and no gaps.
+  soloSpots: [[0.000, 0], [0.500, 0]],
+  soloPatch: 90,
 };
 // ⚠️ Declared HERE, with BALL3D, and not down beside the painter that fills it.
 // `clearSwatchCache` empties this and runs from `applyTheme` during the bootstrap, so a
@@ -10487,12 +10525,7 @@ function step(w){
   else if (w.state==='over' && w.endRamp != null) integrate(w, false, false);
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
-  // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
-  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
-    const sp=Math.hypot(bl.vx,bl.vy);
-    bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
-    bl.spin = (bl.spin||0) * 0.90;
-  }
+  advanceBallSpin(w);
   if (active) stepBerries(w);   // float bob + respawn of banked berries (never in a draw)
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
@@ -10501,6 +10534,42 @@ function step(w){
 }
 
 // Play a wall/net sound once per frame when the ball bounces (flags set in collideWall).
+// Visual ball spin — rolls while moving, plus any spin from carrying or redirecting, and
+// it decays. Advanced in the step loop, never in a draw (the trails rule).
+//
+// ⚠️ Its own function because `stepDrill` needs it too, and did not have it. This lived
+// inline in `step()`, which a drill never runs — so in every drill the ball's pattern was
+// frozen solid: you could knock it the length of the pitch off a wall and the markings
+// never turned once. It reads as a ball that has stopped being a ball.
+//
+// ⚠️ TWO separate quantities, because the flat look and the sphere want different things.
+//   `rot`  is a 2D spin for `paintBallLook`, unsigned and always increasing — a
+//          stylisation, since a ball rolling on a pitch has no spin about the vertical
+//          axis at all.
+//   `roll` is a SIGNED distance rolled about `rollAx`, the axis the sphere actually turns
+//          on. It has to be signed: a ball that bounces straight back off a wall rolls
+//          back the way it came, and the sphere path used to take its direction from the
+//          live heading instead — so the instant a bounce flipped that heading by 180°,
+//          half a turn of texture jumped across the ball. The axis is only re-latched when
+//          travel goes more than 60° off it, which is a genuine change of direction rather
+//          than a rebound along the same line.
+function advanceBallSpin(w){
+  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
+    if (!bl) continue;
+    const sp = Math.hypot(bl.vx, bl.vy);
+    bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
+    bl.spin = (bl.spin||0) * 0.90;
+    if (sp <= 0.15) continue;                     // at rest it keeps the axis it had
+    const ax = bl.rollAx;
+    const along = ax == null ? 0 : bl.vx*Math.cos(ax) + bl.vy*Math.sin(ax);
+    if (ax == null || Math.abs(along) < sp*0.5){  // >60° off the axis: re-latch
+      bl.rollAx = Math.atan2(bl.vy, bl.vx);
+      bl.roll = (bl.roll||0) + sp*BALL3D.roll;
+    } else {
+      bl.roll = (bl.roll||0) + along*BALL3D.roll;
+    }
+  }
+}
 function ballSounds(w){
   const b = w.ball;
   const sp = Math.hypot(b.vx,b.vy) || 1;
@@ -10627,10 +10696,24 @@ function integrate(w, ballFrozen, playersFrozen){
       ball.invMass = im; ball.vx = 0; ball.vy = 0;
     }
     // …but keep them from wandering off: clamp to the pitch + a small step-out margin.
-    if (!w.drillMode){
+    // ⚠️ A DRILL IS NOT EXEMPT, and it used to be. This whole block sat behind
+    // `if (!w.drillMode)`, which was true enough while every drill called
+    // `drillBoundary()` and got four solid walls that held a player in by collision.
+    // Break the Targets does not: it calls the match's own `buildGeometry` so its goals
+    // cannot drift from a real one's, and every boundary that produces is `ballOnly` —
+    // which contains the ball and deliberately lets a player step out. So there was
+    // nothing at all keeping the player on the pitch, and you could walk off the screen
+    // and never come back. A player must never leave the view, in any mode.
+    // ⚠️ Read off `w.bounds`, not `w.field`: that is the rectangle the drill actually
+    // laid out and the one `renderDrill` and `clampBallInside` already work from, so the
+    // line you are held at is the line on the screen. Every drill sets it, and so does
+    // `buildGeometry`.
+    {
       // 20 is the in-play step-out margin (getting round a wall-hugging ball). In
       // warm-up it opens up, because stepping outside is how you sit a match out.
-      const halfW=w.field.W/2, halfL=w.field.L/2, M = w.state==='warmup' ? LOBBY.outMargin : 20;
+      const bd = w.bounds;
+      const halfW = bd ? bd.halfW : w.field.W/2, halfL = bd ? bd.halfL : w.field.L/2;
+      const M = w.state==='warmup' ? LOBBY.outMargin : 20;
       for (const p of discs){
         if (p.x < -(halfW+M)){ p.x=-(halfW+M); if(p.vx<0)p.vx=0; }
         else if (p.x > halfW+M){ p.x=halfW+M; if(p.vx>0)p.vx=0; }
@@ -14178,6 +14261,7 @@ function stepDrill(w){
   else { p.chargeT = 0; p.holdT = 0; }
   // physics (no goals; checkGoal is skipped because state!=='play')
   integrate(w, false, false);
+  advanceBallSpin(w);   // ⚠️ a drill's ball rolls too — it used to sit frozen, see there
   ballSounds(w);
   updateDrill(w);
 }
@@ -17555,13 +17639,16 @@ function drawOneBall(b, x, y, r, s){
   }
   // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
   // (rot advances with speed in step()). Same painter the picker tiles use.
-  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.vx, b.vy);
+  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.roll || 0, b.rollAx || 0);
   if (warped) ctx.restore();
 }
 // ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
 // across and a sprite at that size is mush, while a path stays crisp at any zoom
 // and can roll with the real spin. `c` is a context, so the picker tiles and the
 // pitch share one implementation and can't drift.
+// The Sheep is the one look drawn as a silhouette rather than a mark — see its entry for
+// why, and why the surround is held back instead of solid.
+const SHEEP = { surround: 0.62 };
 const BALL_LOOKS = {
   classic: { name:'Classic', draw:(c,r,rot)=>{
     ballPent(c, 0, 0, r*0.36, -Math.PI/2 + rot); c.fill();
@@ -17623,19 +17710,33 @@ const BALL_LOOKS = {
   // so the fleece is the ball itself and the spot ink draws only what is not fleece:
   // the scalloped edge, the head and the legs. Trying to draw a whole sheep in one
   // ink filled the circle and it read as a blob.
-  sheep:   { name:'Sheep', draw:(c,r,rot)=>{
+  // ⚠️ A SILHOUETTE, not a set of marks, and that is what took three goes. Every earlier
+  // build drew the sheep's dark PARTS on a white ball — first a ring of seven fleece nubs
+  // plus a head, an ear and two legs, then a bigger head with four legs and a tail — and
+  // both of them came out as a field of same-sized dark spots on a white circle, which is
+  // a cow. Nothing at nine pixels can be read as a head, an ear and a leg; a whole animal
+  // OUTLINE can. So the ink covers the ball and the fleece is put BACK in the paper
+  // colour: a woolly body, a head, two ears, and the surround is the field around it.
+  // ⚠️ The surround is drawn at SHEEP.surround alpha and not solid, and that is about
+  // playability rather than looks. Solid, the ball's dark rim merges with a dark surround
+  // and the disc's edge disappears — so what a player sees is a small pale blob and the
+  // ball reads as much smaller than the circle that actually collides. Held back, the full
+  // disc still reads at radius r, the ball is still the brightest thing on the pitch, and
+  // the silhouette is legible at every size the ball is ever drawn.
+  sheep:   { name:'Sheep', solo:true, draw:(c,r,rot,paper)=>{
     c.save(); c.rotate(rot);
-    // ⚠️ The fleece is NUBS, not scallops, and it stops short of the head. Drawn as
-    // big arcs all the way round they closed into a ring of teeth and the ball read
-    // as a cog; and anything put on the rim is lost, because ballRim is dark too.
-    for (let k=0;k<7;k++){
-      const a = -Math.PI*0.78 + k*(Math.PI*1.46/6);
-      c.beginPath(); c.arc(Math.cos(a)*r*0.82, Math.sin(a)*r*0.82, r*0.17, 0, 7); c.fill(); }
-    // Head and ear, held clear of the rim so white fleece surrounds them.
-    c.beginPath(); c.ellipse(r*0.50, -r*0.30, r*0.30, r*0.23, 0.42, 0, 2*Math.PI); c.fill();
-    c.beginPath(); c.ellipse(r*0.32, -r*0.52, r*0.15, r*0.09, -0.35, 0, 2*Math.PI); c.fill();
-    for (const lx of [-r*0.34, r*0.20]){
-      c.beginPath(); c.ellipse(lx, r*0.56, r*0.09, r*0.22, 0, 0, 2*Math.PI); c.fill(); }
+    c.globalAlpha = SHEEP.surround;
+    c.beginPath(); c.arc(0, 0, r*1.02, 0, 7); c.fill();
+    c.globalAlpha = 1;
+    // ⚠️ Nothing to put the fleece back with means no silhouette — the picker tiles and the
+    // pitch both pass one, but a caller that does not gets the marks version rather than a
+    // grey disc with nothing in it.
+    if (!paper){ c.restore(); return; }
+    c.fillStyle = paper;
+    c.beginPath(); c.ellipse(-r*0.14, 0, r*0.78, r*0.55, 0, 0, 2*Math.PI); c.fill();   // fleece
+    c.beginPath(); c.ellipse(r*0.62, 0, r*0.27, r*0.22, 0, 0, 2*Math.PI); c.fill();     // head
+    for (const s of [-1, 1])                                                            // ears
+      { c.beginPath(); c.ellipse(r*0.52, s*r*0.41, r*0.16, r*0.10, s*0.7, 0, 2*Math.PI); c.fill(); }
     c.restore(); } },
   stripe:  { name:'Stripe', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
@@ -17680,13 +17781,18 @@ const BALL_LOOKS = {
 const BALL_LOOK_KEYS = Object.keys(BALL_LOOKS);
 // The pattern, clipped to the ball and painted in the theme's spot colour. Shared by
 // the pitch and the picker so a tile can never show something the ball doesn't.
-function paintBallLook(c, x, y, r, rot, key, spot){
+// ⚠️ A look is handed the PAPER colour as well as the ink. Almost none of them want it —
+// they draw a mark in one ink on the ball and that is the whole job — but the Sheep is the
+// one whose subject is a SILHOUETTE rather than a mark, so it has to be able to put the
+// fleece back. Without it the only way to invert is a compositing trick that erases the
+// ball fill underneath as well and punches a hole through to the pitch.
+function paintBallLook(c, x, y, r, rot, key, spot, paper){
   const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
   c.save();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
   c.translate(x, y);
   c.fillStyle = spot;
-  look.draw(c, r, rot || 0);
+  look.draw(c, r, rot || 0, paper);
   c.restore();
 }
 // ---------- The ball as a rolling sphere -------------------------------------
@@ -17696,50 +17802,68 @@ function paintBallLook(c, x, y, r, rot, key, spot){
 // dither ramp and the nebula are both cached for exactly this reason.
 // ⚠️ Keyed on the INK as well as the look, because slots mix: the same look can be asked
 // for over another palette, and a texture baked in the old spot colour would be wrong.
-function ballSphereTex(key, spot){
-  const ck = key + '|' + spot;
+// ⚠️ The strip's vertical axis is sin(LATITUDE), not latitude, and getting that wrong was
+// the whole reason this looked like a smear rather than a ball. An orthographic sphere puts
+// latitude φ at screen y = r·sin(φ), and `paintBallSphere` stretches the strip's full height
+// linearly onto the ball's full height in one drawImage per slice — so a strip whose rows
+// were even in φ piled the polar rows up at the top and bottom of the circle and pulled
+// everything near the equator apart. Baking in sin(φ) makes that linear stretch exactly
+// right, and it costs nothing per frame because it happens once.
+function ballSphereTex(key, spot, paper){
+  const ck = key + '|' + spot + '|' + paper;
   let t = ballTexCache.get(ck);
   if (t) return t;
   const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
-  const D = BALL3D.tex, TW = D * 2;
+  const D = BALL3D.tex, TW = BALL3D.wrap(D);
+  // One instance of the look, baked flat once, then stamped round the sphere. Baked at
+  // twice the size it is stamped at, so the down-scale is what smooths it.
+  const PS = Math.round(D * 0.9);
+  const pcv = document.createElement('canvas'); pcv.width = pcv.height = PS;
+  const pc = pcv.getContext('2d');
+  pc.save(); pc.translate(PS/2, PS/2); pc.fillStyle = spot; pc.strokeStyle = spot;
+  look.draw(pc, PS/2, 0, paper);
+  pc.restore();
+
   const cv = document.createElement('canvas');
   // TWICE the wrap width, so a slice sampled near the seam never reads past the end.
   cv.width = TW * 2; cv.height = D;
   const cc = cv.getContext('2d');
-  cc.fillStyle = spot;
-  // The pattern repeated across the strip. A look draws a disc-shaped arrangement, so a
-  // single instance would leave most of the wrap blank and the ball would roll through
-  // empty patches.
-  for (let cp = 0; cp < 2; cp++)
-    for (let k = 0; k < BALL3D.reps; k++){
-      cc.save();
-      cc.translate(cp*TW + (k + 0.5) * (TW / BALL3D.reps), D/2);
-      cc.fillStyle = spot;
-      look.draw(cc, D * BALL3D.inst, 0);
-      cc.restore();
-    }
+  const solo = !!look.solo;
+  const A = (solo ? BALL3D.soloPatch : BALL3D.patch) * Math.PI/180;
+  for (const [lonTurns, latDeg] of (solo ? BALL3D.soloSpots : BALL3D.spots)){
+    const lat = latDeg * Math.PI/180, cosL = Math.cos(lat);
+    // A round patch of angular radius A at latitude `lat` occupies A/cos(lat) of longitude
+    // and cos(lat)·sin(A) of sin-latitude — wide and squat near the poles, which is exactly
+    // what makes it come back round on the ball.
+    const hw = Math.min(TW/2, (A / Math.max(0.2, cosL)) / (2*Math.PI) * TW);
+    const hh = Math.max(1, cosL * Math.sin(A) / 2 * D);
+    const cy = (Math.sin(lat) * Math.cos(A) + 1) / 2 * D;
+    // Drawn in both copies of the wrap, and once more a wrap-width either side, so a patch
+    // straddling the seam is whole wherever a slice happens to sample it.
+    for (const off of [-TW, 0, TW, TW*2])
+      cc.drawImage(pcv, off + lonTurns*TW - hw, cy - hh, hw*2, hh*2);
+  }
   t = { cv, TW, D };
   ballTexCache.set(ck, t);
   return t;
 }
-// ⚠️ Render-only, and OUTSIDE the world. The roll direction comes from the ball's
-// velocity, but a ball at rest has no direction — so the last heading is remembered in a
-// module variable rather than written onto the ball. Writing it to the world would make
-// a DRAW mutate the sim, which `tests/determinism.mjs` hashes for.
-let ballHeading = 0;
-function paintBallSphere(c, x, y, r, rot, key, spot, vx, vy){
-  const sp = Math.hypot(vx || 0, vy || 0);
-  if (sp > 0.15) ballHeading = Math.atan2(vy, vx);
-  const t = ballSphereTex(key, spot);
+// ⚠️ `roll` and `ax` are read, never derived here. They are advanced in the step loop by
+// `advanceBallSpin` — see there for why the roll has to be a SIGNED distance about a
+// latched axis rather than taken from the live heading. A draw computing the axis from
+// `vx/vy` was the earlier design and it had two faults at once: the direction was
+// backwards, and a bounce flipping the heading by 180° jumped half a turn of texture
+// across the ball in one frame.
+function paintBallSphere(c, x, y, r, roll, ax, key, spot, paper){
+  const t = ballSphereTex(key, spot, paper);
   // ⚠️ SLICES SCALE WITH SIZE. A fixed 26 costs the same at 9px as at 70px, and the
   // warm-up lobby can field fourteen balls at once — measured, a fixed count put that
   // frame well past its budget. At the size a ball is actually drawn on a phone the
   // extra slices are below a pixel each and change nothing you can see.
   const N = Math.max(8, Math.min(BALL3D.slices, Math.round(r * 0.9)));
-  const phase = rot || 0;
+  const phase = roll || 0;
   c.save();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
-  c.translate(x, y); c.rotate(ballHeading);
+  c.translate(x, y); c.rotate(ax || 0);
   for (let i = 0; i < N; i++){
     // Longitudes of this slice's two edges, over the visible hemisphere.
     const lonA = -Math.PI/2 + (i / N) * Math.PI;
@@ -17750,7 +17874,13 @@ function paintBallSphere(c, x, y, r, rot, key, spot, vx, vy){
     const dA = r * Math.sin(lonA), dB = r * Math.sin(lonB);
     const dw = dB - dA;
     if (dw <= 0.01) continue;
-    let u = ((lonA + phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
+    // ⚠️ MINUS the phase, and the sign is the whole "it rolls backwards" bug. A mark baked
+    // at texture coordinate u₀ shows up wherever `u` evaluates to u₀ — with `+ phase` that
+    // is `lon = 2π·u₀ − phase`, which slides the mark toward SMALLER x as the roll grows,
+    // i.e. backwards out of the direction of travel. Seen from above, the face of a rolling
+    // ball travels forwards (the contact point is what stands still), so the mark has to
+    // move to larger x.
+    let u = ((lonA - phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
     const sx = u * t.TW, sw = t.TW * (lonB - lonA) / (2*Math.PI);
     c.drawImage(t.cv, sx, 0, sw, t.D, dA, -r, dw, r*2);
   }
@@ -17778,16 +17908,17 @@ function ballSpotInk(P){
 }
 // One ball, start to finish, on any context — rim, body, pattern, 3D shade. The
 // picker tiles call this too, so they are the ball rather than a picture of it.
-// `vx/vy` are optional and only the sphere path reads them: they give the roll its
-// DIRECTION. A picker tile passes none, so a tile rolls along its own x — which is what
+// `roll`/`rollAx` are optional and only the sphere path reads them: the signed distance
+// rolled and the axis it rolled about, both kept on the ball by `advanceBallSpin`. A
+// picker tile passes neither, so it falls back to `rot` about its own x — which is what
 // you want in a 64px square anyway.
-function paintBall(c, x, y, r, rot, key, pal, vx, vy){
+function paintBall(c, x, y, r, rot, key, pal, roll, rollAx){
   const P = pal || TH;
   const spot = ballSpotInk(P);
   c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
-  if (ballIs3D(r)) paintBallSphere(c, x, y, r, rot, key, spot, vx, vy);
-  else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot);
+  if (ballIs3D(r)) paintBallSphere(c, x, y, r, roll == null ? rot : roll, rollAx || 0, key, spot, P.ball);
+  else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot, P.ball);
   else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=spot; c.fill(); }
   const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
   g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
@@ -18661,6 +18792,7 @@ if (window.__MAGNETDEBUG) {
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     BALL3D, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; },
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
+    advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
