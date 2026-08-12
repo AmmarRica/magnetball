@@ -1363,6 +1363,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   The followed player is read through `ix`/`iy`, and the origin shift is rotated by `cam.rot`
   or deck view puts them off to one side. Stands down while a replay owns the framing, and
   rides the Screen shake & effects dial.
+  ⚠️ **A REPLAY RELEASES IT, it does not merely suspend it.** `applyGoalCam` standing down
+  while `replay.active` is only half the job: `loop()` returns immediately during playback,
+  so `advanceGoalCam` never ticks either and `goalCam.t` sits frozen at whatever it reached.
+  The instant the replay ended, the loop resumed and the whole 1.8× push came back for a
+  second and a tenth of kickoff — measured at 1.000 for one frame and **1.799** on the next.
+  `playReplay` calls `goalCamReset()` on the way in: by the time you come back the ball is on
+  the centre spot and there is nothing left to push in on. `tests/goalcam.mjs` drives the real
+  auto-replay for this, not a hand-set `replay.active`, because the fix lives on the path that
+  STARTS a replay — and it fills the rolling buffer first, or the auto-replay never fires and
+  the whole trace is a goal with no replay in it.
   ⚠️ **`render()` calls `computeCam()` EVERY FRAME, and that is load-bearing.**
   `applyGoalCam` lives inside `computeCam`, and `computeCam` used to be called only from
   `resize()` — so the push never animated in the running game at all (measured: `cam.s`

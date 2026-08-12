@@ -3113,7 +3113,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260812.0910PM';
+const VERSION = '20260812.1105PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3129,6 +3129,14 @@ const VERSION = '20260812.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260812.1105PM', title: 'Replays at the right size',
+    added: [],
+    changed: [
+      'Goal replays play at the normal size — the goal zoom no longer carries into them.',
+      'And the match picks back up at the normal size too, instead of starting the next kickoff zoomed in and slowly pulling out.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260812.0910PM', title: 'A digital thumbstick',
     added: [],
     changed: [
@@ -10061,6 +10069,15 @@ function playReplay(speed, opts){
   return new Promise(resolve=>{
     if (!lastReplay || !lastReplay.frames.length || lastReplay.players !== (world?world.players.length:-1)){ resolve(); return; }
     const frames = lastReplay.frames, goalAt = lastReplay.goalAt;
+    // ⚠️ THE CELEBRATION IS OVER once you have watched it back. `applyGoalCam` already stands
+    // down while a replay is on screen, but the step loop is not running either — so
+    // `advanceGoalCam` never ticks and `goalCam.t` sits frozen at whatever it reached. The
+    // moment the replay ended the loop resumed, the guard stopped applying, and the full
+    // 1.8x push came back for a second and a tenth of kickoff: measured as 1.000 for one
+    // frame and then 1.799 on the next. Standing the camera down for the duration was only
+    // half the fix; it has to be RELEASED, because by the time you come back the ball is on
+    // the centre spot and there is nothing left to push in on.
+    goalCamReset();
     replay.active = true;
     replay.paused = false;
     replay.fps = lastReplay.fps || 60;
