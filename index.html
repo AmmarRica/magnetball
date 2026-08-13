@@ -1826,6 +1826,14 @@
       <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
       <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
       <div style="height:14px"></div>
+      <!-- ⚠️ THE WHOLE GAME IS ONE FILE, so "download it" is literally that rather than an
+           installer, a package or a runtime. It matters most on Linux, where Firefox has no
+           install-as-app at all and Chrome's is inconsistent — a saved .html works in every
+           browser on every desktop with nothing to set up. -->
+      <label class="field">Play offline</label>
+      <button class="ghost" id="offlineBtn" type="button">⤓ Download the game</button>
+      <div class="hint always" style="text-align:left">Saves the whole game as a single HTML file. Open it in any browser &mdash; double-click it, or drag it onto a window &mdash; and it plays with no connection at all, on Linux, Mac or Windows. <b>Your career and settings do not come with it:</b> a file on your disk is a different origin to a website, so the browser keeps their saves apart. Put the file next to a copy of the <code>assets</code> folder if you want the flags, animals and pixel font as well; without it they fall back to drawn shapes and a system font.</div>
+      <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList"></div>
       <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
@@ -3233,7 +3241,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0620AM';
+const VERSION = '20260813.0745AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3249,6 +3257,14 @@ const VERSION = '20260813.0620AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.0745AM', title: 'Download it and play offline',
+    added: [
+      'Download the game: About \u2192 Play offline saves the whole thing as a single HTML file. Open it in any browser on Linux, Mac or Windows and it plays with no connection at all \u2014 nothing to install.',
+      'Your career and settings stay with the online copy, because a file on your disk is a different origin as far as the browser is concerned.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0620AM', title: 'Replays you can keep, name and find',
     added: [
       'Record every goal: turn it on and every goal is kept for you, so you can show the game to people and watch the lot back afterwards. Everything keeps the whole match too.',
@@ -8773,6 +8789,14 @@ function buildSettings(){
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   const acb=$('arcadeCfgBtn'); if (acb) acb.onclick=openArcadeCfg;
+  { const ob=$('offlineBtn');
+    if (ob && !ob._bound){
+      ob._bound = true;
+      ob.onclick = () => downloadOffline(ob);
+      // ⚠️ Relabelled, not hidden, on a page that already IS the download. Hiding it would
+      // leave somebody wondering where the button went; saying so answers the question.
+      if (!offlinePossible()) ob.textContent = '✓ You are playing the offline copy';
+    } }
   // The About block is a copy target. Bound here as well as at boot because buildSettings
   // rebuilds nothing in it — but the handler is cheap and one binding site is one place to
   // look, rather than two that can drift.
@@ -11279,6 +11303,55 @@ async function copyAbout(){
     say(ok ? '\u2713 Copied' : '\u26a0 Could not copy', ok);
     return !!ok;
   } catch(_){ say('\u26a0 Could not copy', false); return false; }
+}
+// ============================================================
+//  DOWNLOAD IT AND PLAY OFFLINE
+// ============================================================
+// ⚠️ The whole game is ONE FILE, so this is a copy of that file and nothing else — no
+// installer, no runtime, no packaging step. It matters most on Linux, where Firefox has no
+// install-as-app and Chrome's is inconsistent, and where "just give me the file" is the
+// answer that works in every browser.
+// ⚠️ Fetched rather than assembled from the DOM. `document.documentElement.outerHTML` is the
+// LIVE page — every class the menu has toggled, every node the settings screen built, the
+// canvas in whatever state it was in — which would save a snapshot of a running game rather
+// than the game. The served source is the thing that boots cleanly. Same reason `updCheck`
+// fetches it: it is the file, not the page.
+// ⚠️ `cache: 'reload'` for the same reason it is there, too: it goes to the network and
+// refreshes the worker's cached copy, so what lands on disk is the current build rather than
+// whatever was cached when the tab was opened.
+function offlinePossible(){ return /^https?:$/.test(location.protocol); }
+async function downloadOffline(btn){
+  const say = (msg) => {
+    if (!btn) return;
+    const was = btn.dataset.lab || btn.textContent;
+    btn.dataset.lab = was;
+    btn.textContent = msg;
+    setTimeout(() => { if (btn.textContent === msg) btn.textContent = was; }, 2600);
+  };
+  if (!offlinePossible()){
+    // Already a local copy: there is nothing to fetch, and a page on `file://` cannot fetch
+    // itself anyway. Say which, rather than failing silently.
+    say('✓ This IS the offline copy');
+    return false;
+  }
+  say('· Downloading…');
+  try {
+    const res = await fetch(location.href.split('#')[0], { cache: 'reload' });
+    if (!res.ok) throw new Error(res.status);
+    const text = await res.text();
+    // ⚠️ Sanity-check what came back. A captive portal or an offline worker miss can answer
+    // 200 with something that is not the game, and a file called magnetball.html that opens
+    // to a login page is worse than a refusal.
+    if (text.indexOf('__MAGNETDEBUG') < 0 && text.indexOf('MAGNETBALL') < 0) throw new Error('not the game');
+    downloadBlob(new Blob([text], { type: 'text/html' }), 'magnetball-' + VERSION + '.html');
+    say('✓ Saved · ' + Math.round(text.length / 1024) + ' KB');
+    return true;
+  } catch(e){
+    // ⚠️ Reports, like Save clip. Offline there is genuinely nothing to fetch, and a button
+    // that quietly does nothing reads as broken.
+    say('⚠ Could not download — try online');
+    return false;
+  }
 }
 function buildAbout(){
   const el = $('aboutUpd'); if (!el) return;
@@ -19846,7 +19919,7 @@ if (window.__MAGNETDEBUG) {
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
