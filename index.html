@@ -1513,7 +1513,6 @@
     <div class="navgroup">
       <div class="navlab">Help</div>
       <div class="navgrid">
-        <button class="navtile" id="settingsBtn" data-icon="gear">Settings</button>
         <button class="navtile" id="howBtn" data-icon="question">How to play</button>
       </div>
     </div>
@@ -1694,6 +1693,13 @@
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
+      <div style="height:10px"></div>
+      <label class="field">Hold to kick harder</label>
+      <div class="opts" id="chargePick"></div>
+      <div style="height:6px"></div>
+      <label class="field">Full power after <small id="chargeVal" style="color:var(--accent)"></small></label>
+      <input id="chargeMs" class="slider" type="range" min="100" max="2000" step="50" />
+      <div class="hint always" style="text-align:left; margin-top:4px">Holding KICK winds a shot up to <b>+90%</b> power, and a ring closes round you while it does. The slider is how long you have to hold for the full amount &mdash; shorter makes every shot hard, longer makes the wind-up something you commit to. Switch it off and every kick fires at exactly its normal strength, however long the button is down, which is what you want if you hold KICK to carry the ball. Affects shots, one-touches, body checks and booting the snail.</div>
       <div id="feelSlidersBall"></div>
       </div>
 
@@ -2872,6 +2878,10 @@ const BALL3DOPT = {
   off: { name:'Flat',   emoji:'⚪', icon:'barrier' },
   on:  { name:'Rolling', emoji:'🔮', icon:'ball' },
 };
+const CHARGEOPT = {
+  on:  { name:'On',  emoji:'💪', icon:'bolt' },
+  off: { name:'Off', emoji:'🚫', icon:'barrier' },
+};
 const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
@@ -3110,15 +3120,26 @@ const ICONS = {
   clipboard: 'M8.6 4.4H6.4A1.4 1.4 0 0 0 5 5.8v13.4a1.4 1.4 0 0 0 1.4 1.4h11.2a1.4 1.4 0 0 0 1.4-1.4V5.8a1.4 1.4 0 0 0-1.4-1.4h-2.2 M9.4 2.8h5.2v3.2H9.4Z M8.6 11h6.8 M8.6 15h4.8',
   wall:      'M3 5.4h18v13.2H3Z M3 9.8h18 M3 14.2h18 M9 5.4v4.4 M15 5.4v4.4 M6 9.8v4.4 M12 9.8v4.4 M18 9.8v4.4 M9 14.2v4.4 M15 14.2v4.4',
 };
-// Difficulty is a RAMP, not seven unrelated pictures. Drawn as filled pips out of
-// DIFF's own length, so adding a tier does not need a new drawing — and a row of
-// tiles reads as "harder to the right" at a glance, which seven emoji never did.
+// Difficulty is a RAMP, not seven unrelated pictures — generated out of DIFF's own
+// length, so adding a tier never needs a new drawing.
+// ⚠️ RISING BARS, and it shipped as a row of equal PIPS. A pip row says "four of seven",
+// which is a position in a list; the thing a difficulty tile has to say is "steeper", and
+// height is the one property that means that without being read. Seven identical dots
+// also have to be counted to be told apart, so at tile size the middle four looked alike —
+// the bars differ in silhouette, which is the same argument the disc skins are built on.
+// The unfilled remainder stays drawn, faintly, so the tile still shows how far up the
+// ladder this tier is rather than just how tall its own bar happens to be.
 function iconTier(n, of){
+  const gap = 18 / Math.max(1, of), bw = Math.min(3, gap * 0.62);
   let d = '';
   for (let i = 0; i < of; i++){
-    const x = 3 + i * (18 / Math.max(1, of - 1));
-    d += `<circle cx="${x.toFixed(2)}" cy="12" r="${i < n ? 2.6 : 1.7}"` +
-         (i < n ? ' fill="currentColor"' : ' fill="none" stroke="currentColor" stroke-width="1.4"') + '/>';
+    const x = 3 + i * gap + (gap - bw) / 2;
+    const h = 3.5 + (i / Math.max(1, of - 1)) * 13.5;      // shortest left, tallest right
+    const on = i < n;
+    d += `<rect x="${x.toFixed(2)}" y="${(20 - h).toFixed(2)}" width="${bw.toFixed(2)}" ` +
+         `height="${h.toFixed(2)}" rx="${(bw * 0.35).toFixed(2)}"` +
+         (on ? ' fill="currentColor"/>'
+             : ' fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"/>');
   }
   return d;
 }
@@ -3563,6 +3584,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
+            charge:'on', chargeMs:600,                     // hold to kick harder: on, full power at 0.6s
             goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
@@ -4352,6 +4374,11 @@ const SFX = {
     // Break — the rack going. A crack, then balls scattering. Kickoff in a pool hall.
     ()=>{ Aud.noise(0.06,{hp:1800,vol:0.5}); Aud.tone(880,0.06,'square',{to:260,vol:0.28});
           for(let i=0;i<8;i++) Aud.noise(0.018,{hp:2600,vol:0.13,delay:0.06+i*0.042}); },
+    // ⚠️ PINBALL — the plunger. A spring twang, then the ball rattling up the lane and
+    // tripping a rollover. Kickoff on a table is a ball being launched, not a referee.
+    ()=>{ Aud.tone(150,0.09,'sawtooth',{to:900,vol:0.30});
+          for(let i=0;i<5;i++) Aud.tone(1200+i*260,0.03,'square',{vol:0.14,delay:0.10+i*0.035});
+          Aud.tone(1760,0.10,'square',{to:2640,vol:0.22,delay:0.30}); },
     // Chirp — a rising synth blip, for a pitch with no air in it.
     ()=>{ Aud.tone(620,0.18,'sine',{to:2400,vol:0.28});
           Aud.tone(1240,0.16,'sine',{to:3600,vol:0.11,delay:0.03}); },
@@ -4387,6 +4414,11 @@ const SFX = {
           Aud.tone(900,0.13,'sine',{to:1500,vol:0.30,delay:0.25});
           Aud.tone(1100,0.95,'sine',{to:3200,vol:0.32,delay:0.50});
           Aud.tone(550,0.9,'triangle',{to:1600,vol:0.10,delay:0.50}); },
+    // ⚠️ PINBALL — GAME OVER. The knocker banging the cabinet, then the score reels
+    // running down and stopping. A table does not blow a whistle, it settles.
+    ()=>{ Aud.noise(0.05,{lp:500,vol:0.55}); Aud.tone(90,0.10,'square',{to:52,vol:0.40});
+          for(let i=0;i<14;i++) Aud.tone(660-i*32,0.05,'square',{vol:0.17,delay:0.24+i*0.062});
+          Aud.tone(196,0.42,'triangle',{to:98,vol:0.26,delay:1.14}); },
   ],
   crowd: [
     ()=>{ Aud.noise(0.9,{bp:800,Q:0.7,vol:0.5,swell:true}); },
@@ -4414,6 +4446,13 @@ const SFX = {
     ()=>{ Aud.noise(1.8,{bp:1400,Q:0.6,vol:0.28,swell:true});
           Aud.tone(130,1.6,'sine',{to:480,vol:0.10});
           Aud.tone(190,1.4,'sine',{to:720,vol:0.06,delay:0.2}); },
+    // ⚠️ PINBALL — JACKPOT. A rising arpeggio over a bell, then the knocker. A goal on
+    // a table is an award, so what celebrates it is the machine rather than a room.
+    ()=>{ const arp=[523,659,784,1047,1319,1568];
+          arp.forEach((f,i)=> Aud.tone(f,0.14,'square',{vol:0.24,delay:i*0.075}));
+          Aud.tone(1047,0.5,'triangle',{to:2093,vol:0.20,delay:0.46});
+          for(let i=0;i<3;i++) Aud.tone(2400,0.09,'sine',{vol:0.16,delay:0.5+i*0.16});
+          Aud.noise(0.05,{lp:520,vol:0.42,delay:0.62}); Aud.tone(88,0.12,'square',{to:50,vol:0.32,delay:0.62}); },
   ],
   kick: [
     ()=>{ Aud.tone(320,0.09,'square',{to:120,vol:0.5}); },
@@ -4422,6 +4461,10 @@ const SFX = {
     // Clack — phenolic on phenolic. Very short and very high, or it isn't a pool ball.
     ()=>{ Aud.tone(1450,0.035,'square',{to:680,vol:0.34}); Aud.noise(0.018,{hp:3000,vol:0.24}); },
     ()=>{ Aud.tone(1400,0.08,'sawtooth',{to:180,vol:0.34}); Aud.noise(0.035,{hp:2400,vol:0.17}); },
+    // ⚠️ PINBALL — the FLIPPER. A solenoid is a hard mechanical thunk with a coil buzz
+    // under it and a click of plastic on steel on top, all inside about 60ms.
+    ()=>{ Aud.tone(78,0.055,'square',{to:44,vol:0.46}); Aud.noise(0.03,{lp:900,vol:0.30});
+          Aud.tone(2600,0.02,'square',{vol:0.16,delay:0.012}); },
   ],
   wall: [
     ()=>{ Aud.tone(230,0.05,'square',{to:150,vol:0.32}); },
@@ -4430,6 +4473,11 @@ const SFX = {
     // Cushion — rubber under cloth: all body, no click.
     ()=>{ Aud.noise(0.06,{lp:480,vol:0.34}); Aud.tone(120,0.07,'sine',{to:78,vol:0.20}); },
     ()=>{ Aud.tone(1800,0.09,'sine',{to:1500,vol:0.21}); },
+    // ⚠️ PINBALL — the POP BUMPER. The one sound everybody can hum: a short square
+    // tone snapping DOWN in pitch over its own thump. Falling, not rising — a rising
+    // blip is a target award, and a bumper is the ball being thrown back at you.
+    ()=>{ Aud.tone(880,0.075,'square',{to:220,vol:0.34});
+          Aud.tone(110,0.05,'triangle',{to:70,vol:0.24}); Aud.noise(0.02,{hp:2600,vol:0.12}); },
   ],
   net: [
     ()=>{ Aud.noise(0.18,{lp:900,vol:0.3}); },
@@ -4439,9 +4487,14 @@ const SFX = {
     ()=>{ Aud.noise(0.05,{lp:800,vol:0.30}); Aud.tone(215,0.10,'triangle',{to:88,vol:0.24,delay:0.04});
           Aud.noise(0.04,{bp:1400,Q:2,vol:0.15,delay:0.11}); },
     ()=>{ Aud.tone(900,0.3,'sine',{to:90,vol:0.25}); Aud.noise(0.25,{bp:600,Q:1.2,vol:0.13}); },
+    // ⚠️ PINBALL — the SAUCER. The ball dropping into a hole, a chime for the award,
+    // and the kicker booting it back out. Three beats, which is what a hole sounds like.
+    ()=>{ Aud.tone(300,0.08,'sine',{to:120,vol:0.30}); Aud.noise(0.04,{lp:1100,vol:0.20});
+          Aud.tone(1568,0.11,'square',{vol:0.20,delay:0.11}); Aud.tone(2093,0.11,'square',{vol:0.16,delay:0.20});
+          Aud.tone(85,0.06,'square',{to:48,vol:0.34,delay:0.34}); },
   ],
 };
-const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Chirp'], fulltime:['Full time','Descending','Airy triple','Rack out','Power down'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash'], kick:['Thock','Punch','Pluck','Clack','Zap'], wall:['Tick','Click','Bonk','Cushion','Ping'], net:['Swish','Thud','Rustle','Pocket','Warp'] };
+const SFX_LABELS = { whistle:['Pea','Airy','Rising','Break','Plunger','Chirp'], fulltime:['Full time','Descending','Airy triple','Rack out','Power down','Game over'], crowd:['Roar','Applause','Swell','Stadium','Chant','Ovation','Hall','Wash','Jackpot'], kick:['Thock','Punch','Pluck','Clack','Zap','Flipper'], wall:['Tick','Click','Bonk','Cushion','Ping','Bumper'], net:['Swish','Thud','Rustle','Pocket','Warp','Saucer'] };
 function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world && world.demo) return;   // idle demo is silent
   // A goal dips the MUSIC bus so the crowd lands, then restores. Hooked here rather
   // than at the four goal call sites, so a fifth one can't forget.
@@ -4483,7 +4536,13 @@ function crowdReact(w){
 const SFX_SETS = {
   classic: { name:'Classic',   emoji:'⚽', pick:{ whistle:0, fulltime:0, crowd:0, kick:0, wall:0, net:0 } },
   pool:    { name:'Pool hall', emoji:'🎱', pick:{ whistle:3, fulltime:3, crowd:6, kick:3, wall:3, net:3 } },
-  space:   { name:'Space',     emoji:'🌌', pick:{ whistle:4, fulltime:4, crowd:7, kick:4, wall:4, net:4 } },
+  space:   { name:'Space',     emoji:'🌌', pick:{ whistle:5, fulltime:4, crowd:7, kick:4, wall:4, net:4 } },
+  // ⚠️ PINBALL. A whole table in one pick: the plunger for the kickoff, a solenoid
+  // flipper on the kick, a pop bumper off the walls, the saucer for the net, a jackpot
+  // for the goal and the knocker plus the score reels at full time. It works as a set
+  // because those six really are one machine — a flipper thunk under a referee's whistle
+  // is two rooms at once, which is the whole reason sets exist rather than six dials.
+  pinball: { name:'Pinball',   emoji:'🕹️', pick:{ whistle:4, fulltime:5, crowd:8, kick:5, wall:5, net:5 } },
 };
 // The categories come from SFX itself — a sixth one must not need remembering here.
 function sfxCatKeys(){ return Object.keys(SFX); }
@@ -4767,7 +4826,36 @@ function applyFeel(){ if(!world || world.drillMode) return; const v=feelVals();
   world.trapOff=!!sel.trapOff; world.trapMax=v.trap; }
 const HANDED = { right:{ name:'Right', emoji:'👉' }, left:{ name:'Left', emoji:'👈' } };
 // Charge-kick: holding KICK winds up extra power (fires stronger the moment you touch the ball).
+// A body actually ON the ball at kickoff, in world units past the two radii. Small on
+// purpose: this is contact, not proximity — a wide margin would start the match from
+// somebody jogging past the centre circle.
+const KICKOFF_TOUCH = 1.5;
+// ============================================================
+//  HOLD TO KICK HARDER — a dial, and a switch
+// ============================================================
+// Winding a kick up by holding the button has always been in here, at a fixed 0.6s for
+// up to +90% power, and it was the one part of the kick nothing in the menu admitted to.
+// ⚠️ TWO controls and not one, because "how long" and "whether" are different questions:
+// somebody who wants the power wants to tune the wind-up, and somebody who does not want
+// to be charging every time they hold KICK to trap the ball wants it gone outright. A
+// slider with an "off" at one end cannot say the second thing — zero seconds would mean
+// *instant* full power, which is the opposite.
+// ⚠️ `CHARGE.max` stays as the DEFAULT the slider is born at, not as the value the game
+// reads: `chargeSecs()` is what the physics and the wind-up ring both go through, so the
+// dial cannot move one and leave the other behind.
 const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
+const CHARGE_MS = { min:100, max:2000, step:50 };
+function chargeOn(){ return sel.charge !== 'off'; }
+function chargeSecs(){
+  const v = sel.chargeMs == null ? CHARGE.max*1000 : +sel.chargeMs;
+  return Math.max(CHARGE_MS.min, Math.min(CHARGE_MS.max, v || CHARGE.max*1000)) / 1000;
+}
+// ⚠️ THE ONE PLACE a wound-up kick becomes a number. Six call sites had their own copy of
+// `1 + (chargeT / CHARGE.max) * CHARGE.bonus` — a trap release, a one-touch, a snail boot,
+// a body check and two draws — so a switch that had to reach all six would have reached
+// five of them, and the one left behind would have kept charging invisibly.
+function chargeFrac(p){ return chargeOn() ? Math.min(1, (p.chargeT||0) / chargeSecs()) : 0; }
+function chargeMul(p){ return 1 + chargeFrac(p) * CHARGE.bonus; }
 const KICK_SLOW = 0.45;                   // accel multiplier while holding kick (Circle) — no free cruising
 // Fraction of the striker's velocity a one-shot kick carries into the ball, so a
 // running shot is more powerful and directional than a standing one (HaxBall-like).
@@ -7120,6 +7208,11 @@ function buildMatchOpts(){
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
+  // ⚠️ Rebuilt here rather than only at boot, and the SLIDER is re-synced with it: the
+  // switch and the dial are two controls for one feature, so the dial has to grey out
+  // the moment the switch moves or it sits there offering to tune something that is off.
+  buildOpts('chargePick', CHARGEOPT, 'charge');
+  syncCharge();
   buildOpts('sideViewPick', SIDEOPT, 'sideView');
   buildOpts('touchDigPick', TOUCHDIGOPT, 'touchDigital');
   buildOpts('balls', BALLS, 'ball');
@@ -7259,6 +7352,19 @@ function syncRepSecs(){
   const r=$('repSecs');
   if (r) r.oninput = () => { sel.repSecs = +r.value; saveSel(); syncRepSecs(); };
   syncRepSecs();
+}
+// Hold-to-kick: a switch and a dial, wired like the goal camera's pair. Read through
+// chargeSecs() rather than off `sel` directly, so the clamp and the default stay in one
+// place and a value synced in from /settings cannot push the wind-up out of range.
+function syncCharge(){
+  const c=$('chargeMs'), cv=$('chargeVal');
+  if (c){ c.value = Math.round(chargeSecs()*1000); c.disabled = !chargeOn(); c.style.opacity = chargeOn() ? '' : '0.4'; }
+  if (cv) cv.textContent = chargeOn() ? chargeSecs().toFixed(2).replace(/0$/,'') + 's of holding' : 'off';
+}
+{
+  const c=$('chargeMs');
+  if (c) c.oninput = () => { sel.chargeMs = +c.value; saveSel(); syncCharge(); };
+  syncCharge();
 }
 const hsEl = $('hitStop'), hsValEl = $('hitStopVal');
 if (hsEl){
@@ -8428,14 +8534,11 @@ let settingsDocked = false;
 let uiPadLeft = 0;                       // left inset for a docked settings panel
 const DOCK_W = 372;                      // must match #settings.docked width in CSS
 function isDesktop(){ return !!(window.matchMedia && window.matchMedia('(min-width:900px)').matches); }
-// Settings live inline on the main menu now — the ⚙ tile and the in-game gear
-// both jump to the Theme section of the menu (docked on the right-hand pitch on desktop).
-// Detached: the tile hands you the other tab instead of expanding cards that
-// aren't there. Named window, so it focuses the existing panel instead of piling up.
-$('settingsBtn').onclick = () => {
-  if (!PANEL && sel.settingsPanel === 'detached'){ window.open(settingsUrl(), 'magnetball-settings'); return; }
-  openLook('theme');
-};
+// ⚠️ THERE IS NO "Settings" TILE, and its absence is the point. The settings ARE the
+// menu — eleven cards of them, on the screen the tile was sitting on — so a tile that
+// scrolled you from one part of that screen to another part of the same screen was a
+// door onto the room you were already standing in. The detached panel is still reachable
+// from Display → its own button, which is where a window-management choice belongs.
 { const ob=$('openPanelBtn'); if (ob) ob.onclick = () => window.open(settingsUrl(), 'magnetball-settings'); }
 { const lb=$('lobbyStartBtn'); if (lb) lb.onclick = onLobbyStartPress; }
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
@@ -8453,7 +8556,9 @@ $('repSaveBtn').onclick = (e) => {
   b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
   setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2200);
 };
-$('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false; saveSel(); applyFeel(); buildSettings(); };
+$('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false;
+  sel.charge = 'on'; sel.chargeMs = CHARGE.max*1000;    // the wind-up is a feel control too
+  saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
   if (!confirm('Reset all settings (theme, display, ball, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
   // Optional wider scope: appearance is more personal than a setting, so it's a
@@ -9496,6 +9601,9 @@ function buildShop(){
 //  save and Today / This Month / All-time filters. Seeded with mock posts now;
 //  your own saved goals get pushed to the top for real. All local (no backend).
 // ============================================================
+// Which side gets the opening ball. Its own generator off the match seed, so the toss
+// is reproducible without taking a draw out of the stream the bots read.
+function kickoffToss(seed){ return mulberry32((seed|0) ^ 0x5f356495)() < 0.5 ? 0 : 1; }
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 const SOC_NAMES=[['Nyx','japan','#e05a5a'],['Volt','brazil','#5a7de0'],['Kestrel','germany','#46d17a'],['Sable','france','#f5d547'],['Blitz','ukraine','#f07a5a'],['Mira','italy','#e07ad0'],['Onyx','usa','#5aa0e0'],['Juno','argentina','#e05a5a'],['Rook','uk','#6b6be0'],['Pixel','sweden','#46d17a']];
 const SOC_CAPS=['Top bins. 🧠⚽','wall pass into the roof','last-second winner 😤','no magnet, all skill','told you I\'d score','cheeky chip 🥶','from my own half??','GOTM contender','bench told me to shoot','one-touch finish'];
@@ -9980,6 +10088,7 @@ function startMatch(){
   const bp = BALLS[sel.ball] || BALLS.normal;
   const fv = feelVals();
   const sf = surfaceFeel(fv);      // your sliders, bent by the surface — see PITCH
+  const seedForToss = nextMatchSeed();
   world = {
     // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
     field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : DIFF[sel.diff],
@@ -9987,7 +10096,7 @@ function startMatch(){
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
     // exactly. Nothing inside step() may call Math.random.
-    seed: nextMatchSeed(),
+    seed: seedForToss,
     train: !!mode.train,
     watch, demo: _startQuiet,   // idle background demo (desktop menu) — muted, not recorded
     cb: sel.cb==='on',
@@ -10006,7 +10115,17 @@ function startMatch(){
     practiceGoals: 0,
     state: 'kickoff',    // kickoff | play | goal | over
     stateT: 0,
-    kickTeam: 1,         // which team kicks off (loser)
+    // ⚠️ WHO KICKS OFF: the side that CONCEDED after a goal, and a COIN TOSS at the
+    // start. It was hard-coded to team 1 for the first whistle of every match ever
+    // played, so one side got the opening ball a hundred times in a row — and since the
+    // warm-up lobby lets you walk onto either half, which side that was had nothing to
+    // do with who was sitting there. There is no fair fixed answer, so it is tossed.
+    // ⚠️ Tossed off the MATCH SEED rather than `Math.random`, and through its own
+    // generator rather than a draw from `w.rng` — a pinned seed has to reproduce the
+    // whole match, and taking a number out of the shared stream would shift every bot
+    // decision after it for no reason other than deciding a kickoff.
+    kickTeam: kickoffToss(seedForToss),
+
     lastScorer: -1,
     trapOff: !!sel.trapOff,   // Pro mode: instant one-shot kick instead of trap
     trapMax: fv.trap,         // how long the ball stays stuck before it auto-fires
@@ -10221,6 +10340,7 @@ function resetKickoff(w, initial){
 
   for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
   w.finalGoal = false;              // ...and the slow-mo flag never survives a restart
+  w.fwT = 0; w.fwNext = 0;          // ...nor an unfinished firework show
   // The substitution window closes with the goal that opened it, and layTeam has just
   // put everybody on their mark — so a walk-on that was still in progress is finished
   // by definition rather than left steering a body away from its kickoff position.
@@ -10404,6 +10524,7 @@ function loop(t){
     advanceFloaters();      // stat labels age with the sim, never with the refresh rate
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
     advanceFx();            // ...and the sparks, for exactly the same reason
+    advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -11674,11 +11795,19 @@ function step(w){
     }
   } else if (w.state === 'kickoff'){
     // Ball stays parked at centre while players get into position; it only goes
-    // live once a human kicks near it (or a short fallback for bot-only games).
+    // live once a human plays it (or a short fallback for bot-only games).
+    // ⚠️ A TOUCH IS ENOUGH — it is not only a kick any more. The ball is frozen here
+    // (`integrate(w, true, false)`), so walking into it did nothing at all: the body
+    // went straight through the thing it was standing on and the match sat waiting for
+    // a button. Running onto the ball and driving away with it is the ordinary way to
+    // start, and having to stop and press KICK first is a rule nobody is told about.
     if (w.stateT > 0.5){
       const b=w.ball; let go=false;
       for (const p of w.players){
-        if (p.ctrl!=='bot' && p.kick && Math.hypot(b.x-p.x,b.y-p.y) < p.r+b.r+(w.kickRange||PLAYER.kickRange)+2){ go=true; break; }
+        if (p.ctrl==='bot') continue;
+        const d = Math.hypot(b.x-p.x, b.y-p.y);
+        if (d < p.r + b.r + KICKOFF_TOUCH){ go=true; break; }
+        if (p.kick && d < p.r+b.r+(w.kickRange||PLAYER.kickRange)+2){ go=true; break; }
       }
       const anyHuman = w.players.some(p=>p.ctrl!=='bot');
       if (go || w.stateT > (anyHuman ? 6 : 1.6)){ w.state='play'; w.stateT=0; }
@@ -11731,7 +11860,7 @@ function step(w){
     }
     // Kick charge: holding KICK winds up power; released or idle resets.
     for (const p of w.players){
-      if (p.kick){ p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
+      if (p.kick){ p.chargeT = Math.min(chargeSecs(), p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
       else { p.chargeT = 0; p.holdT = 0; }
     }
   }
@@ -13187,7 +13316,7 @@ function handleSnailKick(w, p, ballFrozen){
   let nx, ny;
   if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
   const power = (w.kickPower || PLAYER.kick) *
-                (1 + (p.chargeT / CHARGE.max) * CHARGE.bonus) * SNAIL.kick;
+                chargeMul(p) * SNAIL.kick;
   snail.vx += nx * power + p.vx * KICK_CARRY * SNAIL.kick;
   snail.vy += ny * power + p.vy * KICK_CARRY * SNAIL.kick;
   p.snailKicked = true;
@@ -13232,7 +13361,7 @@ function handleBallControl(w, p, ball, ballFrozen){
     if (p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange){
       let nx, ny;
       if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
-      const power = (w.kickPower||PLAYER.kick) * (1 + (p.chargeT / CHARGE.max) * CHARGE.bonus);
+      const power = (w.kickPower||PLAYER.kick) * chargeMul(p);
       ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
       p.kickUsed = true;
       noteKick(w, p, power, nx, ny);
@@ -13314,7 +13443,7 @@ function handleBallControl(w, p, ball, ballFrozen){
 function oneShotKick(w, p, ball, dx, dy, dist, charged){
   let nx, ny;
   if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
-  let power = (w.kickPower||PLAYER.kick) * (charged ? (1 + (p.chargeT/CHARGE.max)*CHARGE.bonus) : 1);
+  let power = (w.kickPower||PLAYER.kick) * (charged ? chargeMul(p) : 1);
   if (w.magnet > 0 && dist < (p.r+ball.r) + 22) power *= 1 + (w.magnet/100) * 0.5;
   ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
   p.kickUsed = true;
@@ -13335,7 +13464,7 @@ function releaseTrap(w, p, ball){
   if (p.trapAng != null){ fx = Math.cos(p.trapAng); fy = Math.sin(p.trapAng); }
   else { fx = p.faceX; fy = p.faceY; }
   const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
-  let power = (w.kickPower||PLAYER.kick) * (1 + (p.chargeT / CHARGE.max) * CHARGE.bonus);
+  let power = (w.kickPower||PLAYER.kick) * chargeMul(p);
   if (w.magnet > 0) power *= 1 + (w.magnet/100) * 0.7;
   ball.vx = fx*power + p.vx; ball.vy = fy*power + p.vy;
   p.trap = false; p.trapUsed = true; p.chargeT = 0; p.trapAng = null;
@@ -13372,7 +13501,7 @@ function handleKickPush(w, p){
   if (!p.kick){ p._pushUsed = false; return; }
   if (p._pushUsed || p._pushCool > 0) return;
   const reach = p.r + (w.kickRange || PLAYER.kickRange) + KICKPUSH.reach;
-  const pow = 1 + (Math.min(p.chargeT||0, CHARGE.max) / CHARGE.max) * KICKPUSH.charge;
+  const pow = 1 + chargeFrac(p) * KICKPUSH.charge;
   let fired = false;
 
   // --- Other players first: a body absorbs the kick, so you only get the reaction.
@@ -13633,8 +13762,8 @@ function scoreGoal(w, team){
   goalBurst(w, team);   // shake + flash + hit-stop
   repOnGoal(w);   // freeze the last few seconds for replay / clip share
   // The one goal that gets the slow motion: the one nobody plays on from.
-  if (w.sudden){ w.finalGoal = true; setTimeout(()=>endMatch(w), 1400); }   // sudden death: first goal wins
-  else if (w.goalsTarget && w.score[team] >= w.goalsTarget){ w.finalGoal = true; setTimeout(()=>endMatch(w), 1200); }
+  if (w.sudden){ w.finalGoal = true; startFireworks(w); setTimeout(()=>endMatch(w), 1400); }   // sudden death: first goal wins
+  else if (w.goalsTarget && w.score[team] >= w.goalsTarget){ w.finalGoal = true; startFireworks(w); setTimeout(()=>endMatch(w), 1200); }
 }
 function ball_x(w){ return w.ball.x; } function ball_y(w){ return w.ball.y; }
 
@@ -13658,7 +13787,7 @@ function scoreMultiBall(w, ball, team){
   // Winning goal → freeze into the result, same as a normal match end.
   if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
     w.kickTeam = team===0 ? 1 : 0;
-    w.finalGoal = true;
+    w.finalGoal = true; startFireworks(w);
     w.state='goal'; w.stateT=0;
     repOnGoal(w);
     setTimeout(()=>endMatch(w), 1200);
@@ -13816,10 +13945,10 @@ function restartMatch(w){
   clearFloaters();                // ...and with no stat labels left over from the last
   w.timeLeft = w.mode.train ? 0 : (w.len.secs || 0);
   w.matchT = 0; w.maxDeficit = [0,0]; w.practiceGoals = 0;
-  w.lastScorer = -1; w.kickTeam = 1; w.threat = null;
+  w.lastScorer = -1; w.threat = null;
   w.players.forEach(p => { p.ms = freshMs(); });
   if (w.bench) w.bench.forEach(p => { p.ms = freshMs(); });
-  w.seed = nextMatchSeed(); botInit(w);
+  w.seed = nextMatchSeed(); w.kickTeam = kickoffToss(w.seed); botInit(w);
   repReset(); resetTrails(); resetWear();
   hideOverlay(); paused = false;
   resetKickoff(w, true);
@@ -15589,12 +15718,18 @@ function startDrill(key){
   // ball cap/kick power and magnet — so a drill controls exactly like you play.
   const fv = feelVals();
   const sf = surfaceFeel(fv);
+  const dbp = BALLS[sel.ball] || BALLS.normal;
   world = {
     field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
     pAccel: sf.accel, pDamp: sf.damp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange, trapMax: fv.trap,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
-    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:BALL.r, invMass:BALL.invMass, bCoef:BALL.bCoef, damp:fv.bdamp, isBall:true },
+    // ⚠️ The ball you PICKED, not the default one. A drill exists to rehearse the match,
+    // and it already borrows the sliders, the grip, the kick power and the magnet for
+    // exactly that reason — so taking the ball from `BALL` rather than `BALLS[sel.ball]`
+    // put a differently sized, differently weighted ball in every drill. Anyone playing
+    // with a beach ball or a heavy one was practising with something they never play with.
+    ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:dbp.r, invMass:dbp.invMass, bCoef:dbp.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
     state:'drill', stateT:0,
     drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0 },
@@ -15631,7 +15766,7 @@ function stepDrill(w){
     const ddx=nx-g.x; g.x=nx; g.p0.x+=ddx; g.p1.x+=ddx; g.po0.x+=ddx; g.po1.x+=ddx; }
   const p = w.players[0];
   applyHumanInput(p, pads.p1);
-  if (p.kick){ p.chargeT = Math.min(CHARGE.max, p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
+  if (p.kick){ p.chargeT = Math.min(chargeSecs(), p.chargeT + STEP); p.holdT = (p.holdT||0) + STEP; }
   else { p.chargeT = 0; p.holdT = 0; }
   // physics (no goals; checkGoal is skipped because state!=='play')
   integrate(w, false, false);
@@ -18614,6 +18749,25 @@ function spriteImg(path){
 // Name plates duck out of the way when they'd cover a disc or the ball: 5% while
 // blocked, back to full once clear, eased so it reads as a fade rather than a blink.
 const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
+// ⚠️ AND THEY THIN OUT NEAR THE BALL, which is a different rule from the one above and
+// is there for a different reason. That one is about OVERLAP — a plate literally sitting
+// on top of a disc — and it can only fire once the damage is done. This one is about the
+// part of the pitch you are actually reading: everything happens within a body's length
+// or two of the ball, that is where four plates stack into a wall of text, and a name is
+// worth least exactly where the play is worth most. Measured in WORLD units off the
+// nearest ball, so it means the same thing on Classic and on Colossus and does not change
+// with the zoom.
+// ⚠️ A RAMP, not a switch: full strength at `far` and `near` at the ball, eased across the
+// gap, so a player running past the ball does not make their own name blink. `near` is
+// deliberately above zero — the plates recede, they do not vanish, because a name you can
+// still just read is the whole point of having one.
+const LABEL_BALL = { far: 190, near: 0.12 };
+// How much a plate should show given the distance from it to the nearest ball.
+function labelBallFade(d){
+  if (!(d < LABEL_BALL.far)) return 1;
+  const t = Math.max(0, d) / LABEL_BALL.far;             // 0 at the ball, 1 at the edge
+  return LABEL_BALL.near + (1 - LABEL_BALL.near) * (t * t);
+}
 // By index, NOT on the player — the replay rebuilds its player objects every frame,
 // which re-seeds anything stored there and the fade never converges.
 let labelA = [];
@@ -18779,9 +18933,11 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // Wind-up tell — the WHOLE ring pulses while you hold kick, faster and brighter
     // as it charges. It used to sweep round like a loading bar, which read as
     // progress rather than as a player winding up.
-    if (p.kick || (p.chargeT||0) > 0.01){
+    // ⚠️ Gated on the switch as well as the hold: with charging off the ring would still
+    // close round a player holding KICK to trap, promising power that is not coming.
+    if (chargeOn() && (p.kick || (p.chargeT||0) > 0.01)){
       const rr = r*1.42, lw = Math.max(2, r*0.16);
-      const f = Math.min(1, (p.chargeT||0) / CHARGE.max);
+      const f = chargeFrac(p);
       // Phase comes from chargeT, not a wall clock: same charge always looks the
       // same, and nothing here depends on frame timing.
       const hz = 3.5 + f*8;
@@ -18813,7 +18969,22 @@ function drawOneDisc(w, p, x, y, r, s, idx){
           if (circleHitsRect(bx, by, bl.r*s, lx, ly, lw, lh)){ blocked = true; break; }
         }
       }
-      const target = blocked ? LABEL_DIM : 1;
+      // ⚠️ Distance to the nearest ball in WORLD units, taken from the interpolated
+      // position like everything else anchored to a moving body — the raw one is up to a
+      // full step of travel away. The two rules compose by taking the quieter answer:
+      // being clear of a disc is no reason to shout over the play.
+      let near = 1;
+      if (w.ball){
+        const bl2 = (w.extraBalls && w.extraBalls.length) ? [w.ball, ...w.extraBalls] : [w.ball];
+        let d2 = Infinity;
+        for (const bl of bl2){
+          if (bl.banked) continue;
+          const dx2 = ix(p) - ix(bl), dy2 = iy(p) - iy(bl);
+          const m2 = dx2*dx2 + dy2*dy2; if (m2 < d2) d2 = m2;
+        }
+        if (d2 < Infinity) near = labelBallFade(Math.sqrt(d2));
+      }
+      const target = Math.min(blocked ? LABEL_DIM : 1, near);
       const prev = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
       const a = prev + (target - prev) * LABEL_FADE;
       if (idx != null) labelA[idx] = a;
@@ -19349,6 +19520,55 @@ function spawnConfetti(x,y){
   const a=fxRnd()*Math.PI*2, sp=1+fxRnd()*4;
   fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1.2, max:1.2, c:cols[(fxRnd()*cols.length)|0], r:2+fxRnd()*2.5, grav:0.06});
 }
+// ============================================================
+//  FIREWORKS — only for the goal that wins it
+// ============================================================
+// ⚠️ THE FINAL GOAL KEEPS CELEBRATING. Every goal got the same handful of confetti and
+// then the pitch went quiet, so the one that actually won the match looked exactly like
+// the one that made it 1-0. Fireworks run for the whole of that last celebration and
+// straight through the full-time wind-down, which is the same span the slow motion and
+// the `FINAL_SLOW` ramp already treat as one moment.
+// ⚠️ SHELLS OVER TIME, not one big burst. A single larger explosion is over in the same
+// second the confetti was, and "keep the fireworks" is a question of duration rather than
+// of size — so a shell goes up every `every` seconds for as long as the show lasts, each
+// one somewhere new, and they overlap.
+// ⚠️ Spawned from the STEP LOOP off `fxRnd`, never from a draw and never from `w.rng`.
+// Both halves matter and for the documented reasons: a draw would run the show 2.4× fast
+// on a 144Hz screen (the trails rule), and drawing from the sim's stream would make how
+// many sparks happened to fly perturb every bot decision after it.
+const FIREWORK = { show: 4.2, every: 0.34, sparks: 26, life: 1.5, spread: 5.2, grav: 0.055,
+                   cols: ['#ffd447','#ff6b6b','#5ad2ff','#7dff9b','#ffffff','#ff8ae0','#c08cff'] };
+function startFireworks(w){ if (w) w.fwT = FIREWORK.show; }
+// ⚠️ Runs during `goal` AND during `over`, because those are the two halves of one
+// celebration: `step()` keeps integrating through the whistle while `endRamp` winds the
+// sim rate down, so the show simply carries on and slows with everything else.
+function advanceFireworks(w){
+  if (!w || !(w.fwT > 0)) return;
+  if (w.state !== 'goal' && w.state !== 'over'){ w.fwT = 0; return; }
+  w.fwT -= STEP;
+  w.fwNext = (w.fwNext || 0) - STEP;
+  if (w.fwNext > 0) return;
+  w.fwNext = FIREWORK.every;
+  if (!sel.juice && fx.length > 60) return;      // shake-off players still get a show, just a lean one
+  const b = w.bounds || { halfW: 240, halfL: 380 };
+  // Over the pitch, never dead centre on the ball — the net is what you are looking at.
+  const x = (fxRnd()*2 - 1) * b.halfW * 0.78;
+  const y = (fxRnd()*2 - 1) * b.halfL * 0.72;
+  const col = FIREWORK.cols[(fxRnd()*FIREWORK.cols.length)|0];
+  const n = sel.juice ? FIREWORK.sparks : Math.round(FIREWORK.sparks * 0.55);
+  const turn = fxRnd() * Math.PI * 2;
+  for (let i = 0; i < n; i++){
+    // A RING with a little jitter, rather than n independent angles: independent angles
+    // clump and gap at random and read as a puff of smoke instead of a shell.
+    const a = turn + (i / n) * Math.PI * 2 + (fxRnd() - 0.5) * 0.25;
+    const sp = FIREWORK.spread * (0.55 + fxRnd() * 0.6);
+    const life = FIREWORK.life * (0.7 + fxRnd() * 0.5);
+    fx.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life, max: life,
+              c: col, r: 1.6 + fxRnd()*1.6, grav: FIREWORK.grav });
+  }
+  // A bright core, so the shell has a flash at its centre rather than only a ring.
+  fx.push({ ring:true, x, y, life:0.3, max:0.3, r0:3, r1:34, c:col });
+}
 // A quick expanding ring — used for first-touch / clean-control feedback.
 function spawnTouchFx(x,y,col,r1){
   if (!sel.juice) return;
@@ -19648,7 +19868,7 @@ function drawKickMarker(pad, isP2){
   // reading the change was meant to kill.
   const owner = world && world.players.find(p => p.ctrl === (isP2 ? 'human2' : 'human1'));
   if (owner && (owner.kick || (owner.chargeT||0) > 0.01)){
-    const f = Math.min(1, (owner.chargeT||0) / CHARGE.max);
+    const f = chargeFrac(owner);
     const hz = 3.5 + f*8;
     const pulse = 0.30 + 0.70 * (0.5 + 0.5*Math.sin((owner.holdT||0) * hz * 2*Math.PI));
     ctx.beginPath(); ctx.arc(kx, ky, KICK_R*0.78, 0, 2*Math.PI);
