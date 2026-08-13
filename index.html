@@ -1408,6 +1408,10 @@
       <label class="field">Difficulty <small style="color:var(--muted)">(bots)</small></label>
       <div class="opts" id="diffs"></div>
       <div style="height:14px"></div>
+      <label class="field">Bot strategy</label>
+      <div class="opts" id="botPlans"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. This is a <b>shape</b>, not a strength: every strategy is available at every difficulty, and picking one does not make the bots better or worse, only different to play against. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
+      <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
       </div>
@@ -2703,6 +2707,11 @@ const DIFF = {
   insane: { name:'Insane', emoji:'👽', icon:'tier7of7', react:1.10, err:0.6, aggr:1.42 },
 };
 
+// The picker's tiles. ⚠️ Names and descriptions are READ from BOT_PLANS, never copied —
+// the same rule the theme bundles follow, so a plan cannot be renamed in one place and
+// keep its old name in the menu. Declared as a getter-built object at boot because
+// BOT_PLANS is defined with the AI, far below.
+let BOTPLANOPT = { auto: { name:'Mixed', emoji:'🎲', icon:'tier1of7', desc:'A different one each side' } };
 const MODES = {
   '1v1':  { name:'1 v 1',   emoji:'👤', icon:'person', per:1, twoP:false, desc:'You vs bot' },
   '2v2':  { name:'2 v 2',   emoji:'👥', icon:'people', per:2, twoP:false, desc:'You + bot' },
@@ -3584,6 +3593,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
+            botPlan:'auto',                                // AI shape: 'auto' deals one per side
             charge:'on', chargeMs:600,                     // hold to kick harder: on, full power at 0.6s
             goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -7201,6 +7211,7 @@ function buildMatchOpts(){
   buildOpts('kickoffRule', KICKOFFRULE, 'kickoffRule');
   buildOpts('boxRule', BOXRULE, 'boxRule');
   buildOpts('diffs', DIFF, 'diff');
+  buildOpts('botPlans', BOTPLANOPT, 'botPlan', o=>o.desc);
   buildOpts('lengths', LENGTHS, 'length');
   buildOpts('controllers', CONTROLLERS, 'controllers');
   buildOpts('coop', COOP, 'coop');
@@ -14606,6 +14617,108 @@ const BOT = {
   decideTicksAll: 5,         // 12Hz
   pressR: 150,               // only one bot presses a carrier inside this
 };
+// ============================================================
+//  PLAYER TYPES AND TEAM STRATEGIES
+// ============================================================
+// ⚠️ A DIFFERENT AXIS FROM DIFFICULTY, and keeping them apart is the whole point.
+// `botSkill` below is a LADDER: one 0..1 scalar, every axis derived from it, so a
+// higher tier can only ever be better. A type is a SHAPE — a poacher is not a better
+// anchor, it is a player who does something else — so if types fed into the same
+// scalar they would quietly make one difficulty stronger than the one above it, which
+// is the exact bug the ladder was rebuilt to make impossible. Nothing here reads or
+// writes `skill`, and every value is a MULTIPLIER on a `BOT` number rather than a
+// replacement: the tuning stays in one block and a type can only lean on it.
+//
+// ⚠️ Types bend BEHAVIOUR, never ABILITY. There is no accuracy, reaction or speed
+// multiplier in this table on purpose — that would be a second difficulty dial hidden
+// inside a personality, and a "Poacher" that is simply a worse player is a bug wearing
+// a name. What a type changes is where a body stands, how much space it keeps, how far
+// it will chase, and what it looks for when it kicks.
+//
+// depth      × how far up the pitch its formation slot sits
+// influence  × how hard that slot is dragged toward the ball
+// space      × teammate repulsion (low = happy in a crowd, high = finds room)
+// chase      × how close the ball must be before an off-ball player commits to it
+// press      × how far out it will hunt a carrier
+// shot/pass  + added to the score of that kind of kick, so a type leans without ever
+//              being unable to play the other one. Small on purpose: these compete
+//              with lane, progress and openness, and a big bias makes a bot shoot
+//              from its own half because it is "a poacher".
+const BOT_TYPES = {
+  allround: { name:'All-rounder', desc:'No lean either way' },
+  poacher:  { name:'Poacher',     desc:'Lives high, shoots early',
+              depth:1.22, influence:0.85, space:1.25, chase:0.9,  press:0.7, shot:+0.16, pass:-0.06 },
+  playmaker:{ name:'Playmaker',   desc:'Finds room, looks for the pass',
+              depth:1.05, influence:0.80, space:1.35, chase:1.0,  press:0.9, shot:-0.10, pass:+0.16 },
+  anchor:   { name:'Anchor',      desc:'Sits deep, clears its lines',
+              depth:0.72, influence:1.15, space:0.90, chase:0.85, press:0.8, shot:-0.12, pass:+0.06 },
+  sweeper:  { name:'Sweeper',     desc:'Covers the space behind',
+              depth:0.82, influence:1.30, space:1.10, chase:1.3,  press:1.1, shot:-0.08, pass:+0.10 },
+  terrier:  { name:'Terrier',     desc:'Hounds whoever has it',
+              depth:1.02, influence:1.25, space:0.72, chase:1.6,  press:1.6, shot:-0.02, pass:+0.02 },
+};
+const BOT_TYPE_KEYS = Object.keys(BOT_TYPES);
+// A PLAN is a team-level shape: a line height, a global press, and which type each
+// role is filled with. ⚠️ Keyed by ROLE and not by seat index — roles are re-matched
+// every `roleTicks` by who is nearest what, so a plan written against seat 2 would
+// describe a different player every few seconds.
+// ⚠️ `line` multiplies every outfield slot's depth, so it composes with the type's own
+// `depth` rather than overriding it: "park the bus with a poacher up top" has to still
+// leave the poacher the highest player on that side.
+const BOT_PLANS = {
+  balanced: { name:'Balanced', desc:'A bit of everything', emoji:'⚖️', icon:'swords',
+              line:1.00, press:1.00,
+              roles:{ chaser:'allround', support:'playmaker', defender:'anchor', goalie:'anchor' } },
+  attack:   { name:'All-out attack', desc:'Everyone forward, few left behind', emoji:'⚔️', icon:'flame',
+              line:1.26, press:1.15,
+              roles:{ chaser:'poacher', support:'poacher', defender:'sweeper', goalie:'anchor' } },
+  bus:      { name:'Park the bus', desc:'Deep, narrow, hard to break down', emoji:'🚌', icon:'wall',
+              line:0.72, press:0.75,
+              roles:{ chaser:'terrier', support:'anchor', defender:'anchor', goalie:'anchor' } },
+  counter:  { name:'Counter', desc:'Sit off, then break at speed', emoji:'🏹', icon:'bolt',
+              line:0.86, press:0.80,
+              roles:{ chaser:'poacher', support:'playmaker', defender:'anchor', goalie:'anchor' } },
+  press:    { name:'High press', desc:'Hunt it back the moment it is lost', emoji:'🔥', icon:'run',
+              line:1.14, press:1.55,
+              roles:{ chaser:'terrier', support:'terrier', defender:'sweeper', goalie:'anchor' } },
+  passing:  { name:'Possession', desc:'Keep it, move it, wait for the gap', emoji:'🎯', icon:'target',
+              line:1.02, press:0.90,
+              roles:{ chaser:'playmaker', support:'playmaker', defender:'sweeper', goalie:'anchor' } },
+};
+const BOT_PLAN_KEYS = Object.keys(BOT_PLANS);
+// ⚠️ The picker's tiles are BUILT from the table, never listed a second time — add a
+// plan and it appears in the menu with the right name and blurb, which is the same rule
+// the theme bundles and the unlock categories follow.
+for (const k of BOT_PLAN_KEYS)
+  BOTPLANOPT[k] = { name: BOT_PLANS[k].name, emoji: BOT_PLANS[k].emoji, icon: BOT_PLANS[k].icon,
+                    desc: BOT_PLANS[k].desc };
+// Which plan a side plays. ⚠️ 'auto' is a DRAW off the match seed and not a default
+// hiding a fixed answer: the two sides get different plans, so a run of matches on one
+// setting is a run of different opponents. Deterministic like the kickoff toss, and
+// through its own generator so it takes nothing out of the stream the bots read.
+// ⚠️ Both sides are drawn TOGETHER, from one call, and the second draw is taken from
+// what is left — two independent draws off the same seed handed both teams "Park the
+// bus" often enough to look broken, and two sides playing the identical shape is the
+// one outcome "Mixed" is supposed to rule out.
+function botDrawPlans(w){
+  const pick = sel.botPlan || 'auto';
+  if (pick !== 'auto' && BOT_PLANS[pick]) return [BOT_PLANS[pick], BOT_PLANS[pick]];
+  const rnd = mulberry32((w.seed|0) ^ 0x165667b1);
+  const n = BOT_PLAN_KEYS.length;
+  const a = Math.min(n-1, (rnd()*n)|0);
+  const rest = BOT_PLAN_KEYS.filter((_, i) => i !== a);
+  const b = Math.min(rest.length-1, (rnd()*rest.length)|0);
+  return [BOT_PLANS[BOT_PLAN_KEYS[a]], BOT_PLANS[rest[b]]];
+}
+// ⚠️ THE ONE PLACE a type multiplier is read, so a missing key is 1 rather than NaN —
+// `allround` deliberately carries no numbers at all, and an undefined times a BOT value
+// silently poisons a formation slot instead of failing anywhere anyone would look.
+function botTypeM(p, key){
+  const t = BOT_TYPES[p && p.aiType] || null;
+  const v = t && t[key];
+  return typeof v === 'number' ? v : (key === 'shot' || key === 'pass' ? 0 : 1);
+}
+function botPlanOf(w, team){ return (w.plan && w.plan[team]) || BOT_PLANS.balanced; }
 // Every AI-side difficulty axis derives from one 0..1 scalar, so the ladder can only
 // ever be monotonic — a tier cannot accidentally be better at one thing and worse at
 // another. `react` is the source because that is what it always meant.
@@ -14643,6 +14756,10 @@ function nextMatchSeed(){
 function botInit(w){
   w.rng = mulberry32(w.seed >>> 0);
   w.ai = [botTeamState(), botTeamState()];
+  // ⚠️ A plan PER SIDE, drawn before any player state, because botInitPlayer's type
+  // comes out of it. Stored on the world so it survives a role re-match — a plan is
+  // how a team plays for the whole match, not a per-tick decision.
+  w.plan = botDrawPlans(w);
   w.players.forEach((p, i) => botInitPlayer(p, i));
 }
 function botTeamState(){
@@ -14659,6 +14776,7 @@ function botInitPlayer(p, i){
   p.aiKind = 'goal';                   // what the current aim IS: goal | pass | bank | clear
   p.aiErrT = 0; p.aiAimErr = 0; p.aiPosErrX = 0; p.aiPosErrY = 0;
   p.aiRole = 'defender'; p.aiRoleT = 0; p.aiSpot = null; p.aiMark = null;
+  p.aiType = 'allround';               // re-read from the plan whenever the role changes
   p.aiLag = 0;                         // reaction delay left on the pending decision
   p.aiBerry = null;                    // the KQ berry this bot is shepherding, if any
 }
@@ -14880,8 +14998,12 @@ function botPickAim(w, p, ball, mates, skill){
   const shotD = Math.hypot(goalY-ball.y, gh) || 1;
   const shotX = ball.x + Math.cos(shotAng)*shotD, shotY = ball.y + Math.sin(shotAng)*shotD;
   const apOpen = Math.min(1, ap.span / Math.max(0.05, ap.hi - ap.lo));
+  // ⚠️ The type's lean is ADDED to the score, never used to remove a candidate: a
+  // playmaker that cannot shoot when the goal is open is broken, not characterful. It
+  // competes with lane, progress and openness, so a clear chance still wins.
   cands.push({ kind:'goal', x:shotX, y:shotY,
-    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen, ap.span < BOT.apertureMin ? 0.6 : 0) });
+    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen, ap.span < BOT.apertureMin ? 0.6 : 0)
+       + botTypeM(p, 'shot') });
 
   // --- Kick aimed at a teammate (this IS the pass), led ahead of the runner.
   if (skill.pass) for (const q of mates){
@@ -14890,7 +15012,7 @@ function botPickAim(w, p, ball, mates, skill){
     let od = 1e9;
     for (const o of w.players) if (o.team !== p.team) od = Math.min(od, Math.hypot(o.x-tx, o.y-ty));
     cands.push({ kind:'pass', x:tx, y:ty, who:q,
-      s: botScoreAim(w, p, ball, tx, ty, null, Math.min(1, od/140), 0) });
+      s: botScoreAim(w, p, ball, tx, ty, null, Math.min(1, od/140), 0) + botTypeM(p, 'pass') });
   }
 
   // --- Banks off the boards, for the goal and for each mate. Same scorer, small
@@ -14982,6 +15104,13 @@ function botAssignRoles(w, team){
   ranked.forEach((q, i) => { q.aiRole = i < nSupport ? 'support' : 'defender'; });
   if (chaser) chaser.aiRole = 'chaser';
   if (goalie) goalie.aiRole = 'goalie';
+  // ⚠️ THE TYPE FOLLOWS THE ROLE, and is re-read here rather than pinned at kickoff.
+  // A plan describes a shape — "whoever is chasing plays like a terrier" — so a body
+  // that drops from support into defence has to start defending like one. Pinning a
+  // type to a player instead would mean the deepest man on the pitch still lived high
+  // because he happened to start as the striker.
+  { const plan = botPlanOf(w, team);
+    for (const q of squad) if (q.ctrl === 'bot') q.aiType = plan.roles[q.aiRole] || 'allround'; }
   // 4. Only ONE presser. The second defender covers instead of double-teaming.
   st.press = chaser || null;
   // 5. Killer Queen: at most ONE berry runner per side. More than one and the
@@ -15065,8 +15194,18 @@ function botFormationSpot(w, p, phase){
     return { x: clamp(ball.x*0.5, -gh*BOT.goalieSpanX, gh*BOT.goalieSpanX),
              y: -attackDir * (halfL - (halfL*BOT.slotDepth.goalie)) };
   }
-  const depth = BOT.slotDepth[role] * stretch * (role==='defender' ? (1 + (aggr-1)*BOT.aggrDepth) : 1);
-  const infl  = BOT.ballInfluence[role];
+  // ⚠️ The plan's line and the type's depth MULTIPLY rather than one winning: the type
+  // says where this player sits relative to its side, the plan says where the whole side
+  // sits, and collapsing them would make "park the bus with a poacher up top" impossible
+  // to express — which is most of what a plan is for.
+  const depth = BOT.slotDepth[role] * stretch * botPlanOf(w, p.team).line * botTypeM(p, 'depth')
+              * (role==='defender' ? (1 + (aggr-1)*BOT.aggrDepth) : 1);
+  // ⚠️ PRESS ONLY APPLIES WHILE DEFENDING, which is what makes it a press rather than
+  // a second line-height dial. It drags the slot toward the ball when the other side
+  // has it, so a high-press team collapses onto the carrier and a bus sits off and
+  // keeps its shape — and when they are attacking, both look like themselves again.
+  const press = phase === 'defend' ? botPlanOf(w, p.team).press * botTypeM(p, 'press') : 1;
+  const infl  = clamp(BOT.ballInfluence[role] * botTypeM(p, 'influence') * press, 0.05, 0.92);
   const baseY = -attackDir*halfL + attackDir * (2*halfL) * clamp(depth, 0.04, 0.94);
   const baseX = lane * halfW * BOT.slotSpread;
   return { x: clamp(baseX*(1-infl) + ball.x*infl, -halfW+p.r+6, halfW-p.r-6),
@@ -15213,7 +15352,10 @@ function runBot(w, p){
   // --- State machine. Every change costs a dwell, so nothing can flip on
   // consecutive ticks however close to a threshold it sits.
   p.aiStateT++;
-  const reach = iAmChaser ? BOT.strikeRange : (p.r + ball.r + BOT.strikeRangeOffBall);
+  // A terrier commits from much further out than an anchor; the chaser's own reach is
+  // untouched, because the chaser is going for the ball by definition.
+  const reach = iAmChaser ? BOT.strikeRange
+                          : (p.r + ball.r + BOT.strikeRangeOffBall * botTypeM(p, 'chase'));
   if (p.trap){
     // The ball is at our feet (casual mode). Carry it and release it at the aim —
     // exactly the human tap/hold/release, no bot-only kick.
@@ -15311,7 +15453,10 @@ function runBot(w, p){
   botArrive(w, p, p.aiTarget.x, p.aiTarget.y, seek);
   botSeparate(p, mates, sep);
   if (!iAmChaser && p.aiState !== 'carry') botWallAvoid(w, p, wall);
-  const sw = BOT.wSeparate * (iAmChaser ? BOT.separateChaser : 1);
+  // ⚠️ Space is the axis that most changes how a side LOOKS: a playmaker peeling off to
+  // find room and a terrier happy to stand on top of somebody are the same steering
+  // weight at two settings, and it is what stops every plan producing the same shape.
+  const sw = BOT.wSeparate * botTypeM(p, 'space') * (iAmChaser ? BOT.separateChaser : 1);
   let mx = seek.x*BOT.wSeek + sep.x*sw + wall.x*BOT.wWall;
   let my = seek.y*BOT.wSeek + sep.y*sw + wall.y*BOT.wWall;
   const ml = Math.hypot(mx,my);
