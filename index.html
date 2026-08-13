@@ -3251,7 +3251,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.1145AM';
+const VERSION = '20260813.1310PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3267,6 +3267,14 @@ const VERSION = '20260813.1145AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.1310PM', title: 'D-pad diagonals on a controller',
+    added: [],
+    changed: [
+      'The D-pad can go diagonally again \u2014 up-and-right is up and right, on every controller. It was being ignored whenever the game thought the stick was in use, which on some controllers is all the time.',
+      'The stick and the D-pad are now read together rather than one instead of the other, so whichever you reach for is the one that moves you.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.1145AM', title: 'Steam Deck: the stick just works',
     added: [],
     changed: [
@@ -11892,16 +11900,25 @@ function gamepadPad(index){
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = gps[index];
   if (!g){ return { dx:0, dy:0, kick:false, invert:false }; }
-  let [dx, dy] = padStick(g);
   const pm = sel.pad || {};
-  // The analog stick always works; mapped direction buttons (dpad by default) fill in.
-  if (Math.hypot(dx,dy) < 0.18){
-    const U=pm.up!=null?pm.up:12, D=pm.down!=null?pm.down:13, L=pm.left!=null?pm.left:14, R=pm.right!=null?pm.right:15;
-    dx = (btn(g,R)?1:0) - (btn(g,L)?1:0);
-    dy = (btn(g,D)?1:0) - (btn(g,U)?1:0);
-  }
-  const dead = 0.22, mag = Math.hypot(dx,dy);
-  if (mag < dead){ dx=0; dy=0; }
+  let [sx, sy] = padStick(g);
+  const dead = 0.22;
+  if (Math.hypot(sx, sy) < dead){ sx = 0; sy = 0; }
+  // ⚠️ THE BUTTONS ARE READ EVERY FRAME, NOT ONLY WHEN THE STICK LOOKS IDLE. They used to
+  // be a fallback behind `hypot(stick) < 0.18`, and that is how the D-pad lost its diagonals
+  // on a Steam Deck: if the axis pair being read as "the stick" is really the D-PAD reported
+  // as a hat — which is what a non-standard pad may do — then pressing a direction makes the
+  // stick look live, the button branch never runs, and a hat gives ONE direction at a time.
+  // Combining per axis means whichever source is actually saying something is heard, so
+  // up-and-right on the buttons is up AND right however the pad reports the rest.
+  const U=pm.up!=null?pm.up:12, D=pm.down!=null?pm.down:13, L=pm.left!=null?pm.left:14, R=pm.right!=null?pm.right:15;
+  const bx = (btn(g,R)?1:0) - (btn(g,L)?1:0);
+  const by = (btn(g,D)?1:0) - (btn(g,U)?1:0);
+  // Per axis, the louder of the two. A button is a full push, so it wins over a half-tilted
+  // stick on that axis and loses to a stick pushed harder — which is what you would expect
+  // if you somehow held both.
+  const dx = Math.abs(bx) > Math.abs(sx) ? bx : sx;
+  const dy = Math.abs(by) > Math.abs(sy) ? by : sy;
   return { dx, dy, kick: padKickHeld(g), invert:false };
 }
 // The one place that knows which button kicks. ⚠️ Unbound means A plus the usual fire

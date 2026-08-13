@@ -109,6 +109,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the pad seat drives one player from the stick and another from the D-pad-as-arrows.
   `tests/padstick.mjs` leaves `sel.controllers` at its default on purpose — the whole point
   is that a Deck needs no toggle.
+- **A pad's direction is read from BOTH the stick and the buttons, every frame** — never
+  one behind the other. ⚠️ The D-pad used to be a fallback behind `hypot(stick) < 0.18`, and
+  that is how the D-pad lost its DIAGONALS on a Steam Deck: if the axis pair being read as
+  "the stick" is really the D-pad reported as a **HAT** — which is a thing a non-standard pad
+  does — then pressing a direction makes the stick look live, the button branch never runs,
+  and a hat gives ONE direction at a time. Combined per axis (the louder of the two wins that
+  axis), whichever source is actually saying something is heard, so up-and-right on the
+  buttons is up AND right however the pad reports the rest. `tests/padstick.mjs` presses the
+  two buttons **with an axis deflected at the same time** — without that the check passes on
+  the broken build too, because the stick reads idle in an ordinary probe.
 - **The MOVE STICK is found, not assumed** (`padStick`, `padStickAxes`, `padRest`, `PADAX`).
   ⚠️ `axes[0]`/`axes[1]` is the left stick **only under the STANDARD mapping** — a pad
   reporting a non-standard one numbers its axes however it likes. That is the same trap
