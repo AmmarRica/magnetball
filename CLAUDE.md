@@ -1343,6 +1343,53 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `const PHOTOLIB` is declared with `PHOTO`, near the top — `buildPhotoPane()` runs
   during the bootstrap and draws the grid, and declared beside `REPLIB` it was in the
   temporal dead zone there. **Eighth TDZ bite in this file.** `tests/photolib.mjs`.
+- **One-handed play: a RELEASE is the FINGER LIFTING**, not the stick reading low
+  (`ONEHAND`, `oneHandKick`, `padTouchDown`). It armed and fired off magnitude alone, so
+  sweeping a thumb from one direction to the opposite one — across the middle of the stick,
+  never lifting — crossed the deadzone and fired a shot. Crossing the centre is *how you
+  turn round*, so this went off constantly. The digital thumbstick made it certain rather
+  than likely (it snaps hard to `(0,0)` below `TOUCHDIG.dead`) but the analogue one had the
+  same flaw. ⚠️ `padTouchDown(pad)` answers **`null`** for anything that is not an on-screen
+  stick — a gamepad and the keyboard write into the same `pads` fields and have no finger to
+  report — and `null` keeps the magnitude rule, because a stick springing back to centre IS
+  the release there. `tests/onehand.mjs`, which drives the **real** `onDown`/`onMove`/`onUp`
+  on a **phone-sized second page**: writing to `pads.p1` cannot test this at all (the fix
+  reads `pad.move.id`, which only the touch handlers set), and the suite's main page is
+  1280×800 where `zoneForTouch` never returns `move`.
+- **A replay must never outlive its world** (`replayAbort`, and the `if (!world)` guard in
+  `playReplay`'s tick). `toMenu()` sets `world = null`, and leaving a match mid-celebration
+  is an ordinary thing to do — so the pending tick of a live auto-replay read `world.field`
+  off null and threw. ⚠️ **A throw inside a rAF callback is SILENT**: `finish()` never ran,
+  so `replay.active` stayed **true for the rest of the page**. After that `playReplayFile`
+  returned at its first line, so opening a saved `.json` from the menu played nothing and
+  dropped you straight back on the menu, with no error and nothing on screen to say why —
+  and `loop()` checks the same flag, so the game was frozen behind it too.
+  ⚠️ **Two independent guards on purpose**, and the suite is verified with **both** removed:
+  either alone fixes it, so a sabotage of one passes and that is not a weak test.
+  `tests/replayfile.mjs`, measured on a **phone** viewport — that is the branch of `toMenu`
+  that nulls the world, since a desktop-sized window keeps the match running in a dock.
+- **The replay lead-in is a DIAL** (`REP_LEAD`, `repSecs()`, `repMaxFrames()`, Game Feel →
+  Camera). Six seconds was a constant, and a replay that starts mid-move shows the shot
+  without the build-up that made it. ⚠️ **The ring buffer is sized FROM the dial** — a build
+  that only fed it to the playback would replay the same six seconds however the slider was
+  set, and every "the setting exists" check would still pass, so the suite measures frames
+  actually held at 2s / 6s / 15s. ⚠️ `repMaxFrames()` is a **function**, and the ring sheds
+  with `while` not `if`: turning the dial down mid-match leaves the buffer far over its new
+  cap, and one frame a capture would take seconds to catch up.
+  ⚠️ `const REP_LEAD` is declared with the **feel constants near the top**, beside `GOALCAM`,
+  not with the replay code it belongs to — the slider wiring calls `syncRepSecs()` during
+  the bootstrap, and from there a `const` two-thirds of the way down is in the temporal dead
+  zone and takes the page out. **Eleventh TDZ bite in this file.**
+- **Save clip REPORTS what it did.** Every exit in `recordAndShareClip` was a bare `return`
+  or a swallowed `catch`, and `saveClip` wrote its status to `$('clipBtn')` — the in-match
+  bar's button, **deleted** when Save clip moved to the result screen. So on a browser with
+  no recorder it played the goal back, saved nothing and said nothing, which is a dead button
+  as far as anyone can tell. It now returns a reason, the button is **passed in** (the result
+  screen hands its own), and a recording failure beats the leaderboard sheet's status,
+  because the recording is what the player pressed for. ⚠️ The container is named off
+  `blob.type`, never off what `repMime()` asked for, or a webm gets handed over called
+  `.mp4`; mp4 is first in the candidate list so any browser that can encode one does.
+  ⚠️ Clips are named per goal — one fixed filename means each overwrites the last.
 - **TWO replays, and a clip — three different things** (`repBuf` vs `repMatchBuf` vs
   `saveClip`). The rolling ring holds the last few seconds, which is a **goal**. A second
   un-ringed buffer holds the **match**, kickoff to whistle. The clip is a **video**.

@@ -473,6 +473,193 @@ await p.close();
   await q.close();
 }
 
+// ============================================================================
+//  ⚠️ A REPLAY THAT OUTLIVES ITS WORLD STRANDS THE WHOLE FEATURE
+// ============================================================================
+// `toMenu()` sets `world = null`, and leaving a match mid-celebration is an ordinary thing
+// to do. The pending tick of a live auto-replay then read `world.field` off null and threw
+// — and a throw inside a rAF callback is SILENT: `finish()` never ran, so `replay.active`
+// stayed true for the rest of the page. After that, `playReplayFile` returned at its very
+// first line, so opening a saved .json from the menu played nothing and dropped you straight
+// back on the menu you started from, with no error and nothing on screen to say why.
+// `loop()` checks the same flag, so the game itself was frozen behind it too.
+//
+// Measured on a PHONE viewport, because that is where it was reported and where `toMenu()`
+// takes the branch that nulls the world (on a desktop-sized window the menu is a left dock
+// and the match keeps playing).
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  const o = await q.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=true;
+    M.setMatchSeed(3); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<400;i++) M.step(w);
+    w.ball.x=0; w.ball.y=-w.bounds.halfL+4; w.ball.vy=-14; w.ball.lastKicker=w.players[0];
+    for (let i=0;i<120;i++) M.step(w);
+    const doc = M.repFileBuild();
+    o.builtAFile = !!(doc && doc.frames && doc.frames.length);
+
+    // Leave the match. On this viewport that nulls the world.
+    M.toMenu();
+    await new Promise(r => setTimeout(r, 300));
+    o.worldIsGone = M.world === null;
+    // ⚠️ THE ASSERTION. Nothing may be left holding the replay flag.
+    o.flagIsClear = M.replay.active === false;
+
+    // Now watch a saved file, the way the Replays card does.
+    let ink = 0, sawActive = false;
+    const c = document.getElementById('game');
+    const done = M.watchReplayFromMenu(async () => doc);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 4000){
+      await new Promise(r => setTimeout(r, 50));
+      if (M.replay.active){
+        sawActive = true;
+        const d = c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+        let n = 0; for (let i=0;i<d.length;i+=4*97) if (d[i]+d[i+1]+d[i+2] > 40) n++;
+        ink = Math.max(ink, n);
+        o.menuGotOutOfTheWay = document.getElementById('setup').classList.contains('hidden');
+      }
+    }
+    await done;
+    o.itPlayed = sawActive;
+    o.drewTheCourt = ink;
+    o.cameBack = !document.getElementById('setup').classList.contains('hidden');
+    return o;
+  });
+
+  // ⚠️ TWO INDEPENDENT GUARDS, so removing EITHER one alone still passes here — the tick's
+  // `if (!world)` and `toMenu`'s `replayAbort()` each fix it on their own. That is not a weak
+  // test: with both removed the block below fails on the flag, on the ink, and with the real
+  // "Cannot read properties of null (reading 'field')" page error. Verified that way round.
+  ok('a file was built to watch', o.builtAFile);
+  ok('leaving the match really did take the world away', o.worldIsGone,
+     'if the world survived, the check below passes without exercising anything');
+  ok('...and left NOTHING holding the replay flag', o.flagIsClear,
+     'replay.active stayed true after toMenu() — the pending tick threw on a null world, which is silent inside a rAF, so finish() never ran. Everything downstream then quietly does nothing');
+  ok('a saved replay actually plays', o.itPlayed,
+     'playReplayFile returns at its first line while replay.active is set, so this is the symptom: press Watch, nothing happens');
+  ok('...and DRAWS THE COURT', o.drewTheCourt > 200,
+     `only ${o.drewTheCourt} lit samples — "it played" is also true of a blank canvas, which is exactly what a throw in drawReplayFrame leaves behind`);
+  ok('...with the menu out of the way while it does', o.menuGotOutOfTheWay === true,
+     'on a phone #setup is a full-bleed fixed screen over the canvas, so a replay under it is invisible however well it renders');
+  ok('...and the menu back afterwards', o.cameBack,
+     'the caller\'s finally is what restores it');
+  if (qerr.length) fails.push('replay-outlives-world page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  THE REPLAY LEAD-IN IS A DIAL
+// ============================================================================
+// Six seconds was a constant, and a replay that starts mid-move shows the shot without the
+// build-up that made it. ⚠️ The ring buffer is sized FROM the dial — a build that only fed
+// it to the playback would replay the same six seconds however the slider was set, and
+// every "the setting exists" check would still pass.
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const o = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const run = (secs) => {
+      M.sel.repSecs = secs;
+      M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(3); M.startMatch();
+      const w = M.world; w.state='play'; w.stateT=2;
+      for (let i=0;i<900;i++) M.step(w);        // well past any cap
+      return { cap: M.repMaxFrames(), held: M.repBuf.length };
+    };
+    o.short = run(2); o.def = run(6); o.long = run(15);
+    M.sel.repSecs = -5; o.clampLow  = M.repSecs();
+    M.sel.repSecs = 99; o.clampHigh = M.repSecs();
+    M.sel.repSecs = null; o.defaults = M.repSecs();
+    M.sel.repSecs = 6;
+    o.hasSlider  = !!document.querySelector('#setup .subpane[data-pane="camera"] #repSecs');
+    o.findable   = M.menuSearchIndex().some(x => /replay starts/i.test(x.t));
+    return o;
+  });
+  ok('the dial really sizes the buffer', o.short.held < o.def.held && o.def.held < o.long.held,
+     `${o.short.held} / ${o.def.held} / ${o.long.held} frames held at 2s / 6s / 15s — if these match, the slider is decoration and the replay is the same length whatever it says`);
+  ok('...to about the seconds it promises', Math.abs(o.def.held - 6*60) < 130,
+     `${o.def.held} frames for 6s + the tail`);
+  ok('it clamps both ends and has a default', o.clampLow === 2 && o.clampHigh === 15 && o.defaults === 6,
+     JSON.stringify({ low:o.clampLow, high:o.clampHigh, def:o.defaults }));
+  ok('the control is in Game Feel -> Camera', o.hasSlider);
+  ok('...and the search reaches it', o.findable);
+  if (qerr.length) fails.push('replay-lead page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  SAVE CLIP HAS TO SAY WHAT IT DID
+// ============================================================================
+// ⚠️ Every exit in `recordAndShareClip` was a bare `return` or a swallowed `catch`, and
+// `saveClip` wrote its status to `$('clipBtn')` — the in-match bar's button, which was
+// DELETED when Save clip moved to the result screen. So on a browser with no recorder the
+// button played the goal back, saved nothing, and said nothing: indistinguishable from a
+// dead button, which is how it was reported.
+{
+  const q = await b.newPage({ viewport:{ width:1280, height:800 } });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const o = await q.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    // There is no #clipBtn any more — that is the whole reason the status went nowhere.
+    o.noStaleButton = !document.getElementById('clipBtn');
+    // With nothing to record with, it must return a REASON rather than nothing.
+    const realMR = window.MediaRecorder;
+    delete window.MediaRecorder;
+    const btn = document.createElement('button'); btn.textContent = 'Save clip';
+    const reason = await M.recordAndShareClip(btn);
+    o.reportsNoSupport = typeof reason === 'string' && reason.length > 0;
+    o.reasonText = reason;
+    o.pointsSomewhere = /save replay/i.test(reason || '');
+    window.MediaRecorder = realMR;
+    // ...and with no goal at all, saveClip must tell the button it was handed.
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.startMatch();
+    const before = btn.textContent;
+    await M.saveClip(btn);
+    o.wroteToTheButtonPassedIn = btn.textContent !== before;
+    o.buttonText = btn.textContent;
+    // The result screen's own button hands itself in, or none of the above reaches a player.
+    o.resultPassesItself = /saveClip\s*\(\s*sh\s*\)/.test(M.renderAwards.toString());
+    // mp4 is asked for FIRST, so any browser that can encode one gets one.
+    o.prefersMp4 = M.repMime.toString().indexOf("'video/mp4'") < M.repMime.toString().indexOf('webm');
+    // A clip is named per-goal, not one fixed name that overwrites itself.
+    o.namesAreUnique = M.repClipName('mp4') !== 'magnetball-goal.mp4' &&
+                       /magnetball-clip-.*\.mp4$/.test(M.repClipName('mp4'));
+    return o;
+  });
+  ok('the stale #clipBtn really is gone', o.noStaleButton,
+     'if it still existed the old lookup would work and this would all pass for the wrong reason');
+  ok('no recorder produces a REASON, not silence', o.reportsNoSupport,
+     `returned ${JSON.stringify(o.reasonText)} — a bare return here is a button that does nothing and says nothing`);
+  ok('...and points at what does work', o.pointsSomewhere,
+     `${JSON.stringify(o.reasonText)} — Save replay is on the same screen and always works`);
+  ok('saveClip reports to the button it is HANDED', o.wroteToTheButtonPassedIn,
+     `button still reads ${JSON.stringify(o.buttonText)} — it used to look up an element that no longer exists, so every message went to null`);
+  ok('...and the result screen hands its own in', o.resultPassesItself,
+     'otherwise saveClip falls back to the missing #clipBtn and the player sees nothing');
+  ok('mp4 is preferred over webm', o.prefersMp4);
+  ok('clips are named per goal', o.namesAreUnique,
+     'one fixed filename means each clip overwrites the last in the downloads folder');
+  if (qerr.length) fails.push('save-clip page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
 await b.close();
 if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));
 if (fails.length){ console.log('FAIL replayfile\n  ' + fails.join('\n  ')); process.exit(1); }

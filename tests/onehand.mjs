@@ -98,9 +98,68 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ⚠️ A SECOND PAGE, phone-sized. The block below drives the REAL touch handlers, and the
+// suite above runs at 1280x800 where `isTouchLayout()` is false and `zoneForTouch` never
+// returns 'move' — so run there it silently probed nothing at all. One-handed play IS a
+// phone control, so this half belongs on a phone.
+const p2 = await b.newPage({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true });
+p2.on('pageerror', e => errors.push(e.message));
+await p2.addInitScript(() => { window.__MAGNETDEBUG = true; });
+await p2.goto('file://' + process.cwd() + '/index.html');
+await p2.waitForTimeout(700);
+const t = await p2.evaluate(() => {
+  const M = window.__magnet, o = {};
+  // --- ⚠️ SWEEPING ACROSS THE CENTRE IS NOT A RELEASE -----------------------
+  // The pulse armed and fired off MAGNITUDE alone, so dragging a thumb from one direction
+  // to the opposite one — over the middle of the stick, never lifting — passed through the
+  // deadzone and fired a shot. Crossing the centre is how you turn round, so this went off
+  // constantly. The digital stick made it certain rather than likely (it snaps hard to 0,0
+  // below TOUCHDIG.dead) but the analogue one had the same flaw.
+  // ⚠️ Driven through the REAL touch handlers. Writing to `pads.p1` directly cannot test
+  // this at all: the fix reads whether a FINGER is on the stick (`pad.move.id`), which only
+  // onDown/onUp set, so a probe that pokes dx/dy measures the old code path.
+  M.sel.oneHand = true; M.sel.touchDigital = 'on';
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(5); M.startMatch();
+  { const w=M.world; w.state='play'; w.stateT=2;
+    const me = w.players.find(q=>q.ctrl==='human1');
+    const HOME=[330,700];
+    o.probeIsOnTheStick = M.zoneForTouch(HOME[0],HOME[1]).kind === 'move';
+    const push=(dx,dy)=>{ M.onMove(1,HOME[0]+dx,HOME[1]+dy); M.applyHumanInput(me,M.pads.p1); return me.kick; };
+    M.onUp(1); M.onDown(1,HOME[0],HOME[1]);
+    for (let i=0;i<6;i++) push(60,0);                       // hold right: armed
+    let firedMidSweep = false;
+    for (const dx of [40,20,6,0,-6,-20,-40,-60]) if (push(dx,0)) firedMidSweep = true;
+    for (let i=0;i<4;i++) if (push(-60,0)) firedMidSweep = true;
+    o.sweepDoesNotFire = !firedMidSweep;
+    // ...and the thumb really did cross the dead centre, or the sweep proves nothing.
+    M.onMove(1,HOME[0],HOME[1]); M.applyHumanInput(me,M.pads.p1);
+    o.sweepCrossedTheDeadzone = M.pads.p1.dx === 0 && M.pads.p1.dy === 0;
+    // A GENUINE lift still fires — the fix is about what a release IS, not about removing it.
+    M.onUp(1);
+    let firedOnLift = false;
+    for (let i=0;i<4;i++){ M.applyHumanInput(me,M.pads.p1); if (me.kick) firedOnLift = true; }
+    o.liftStillFires = firedOnLift;
+    // And a CONTROLLER, which has no finger to report, keeps the magnitude rule: a stick
+    // springing back to centre is the only release signal there is.
+    const pad = { dx:0, dy:0, kick:false, invert:false };
+    const q = w.players.find(z=>z.ctrl==='human1');
+    q._ohArmed=false; q._ohPulse=0; q._ohCool=0;
+    pad.dx=1; for(let i=0;i<4;i++) M.applyHumanInput(q,pad);
+    pad.dx=0; let padFired=false;
+    for(let i=0;i<4;i++){ M.applyHumanInput(q,pad); if(q.kick) padFired=true; }
+    o.padStickStillFires = padFired;
+    o.padHasNoFinger = M.padTouchDown(pad) === null;
+  }
+
+  return o;
+});
+Object.assign(r, t);
+
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.releaseFires && r.firesForward && r.heldDoesNotFire && r.offModeSilent &&
+const ok = r.probeIsOnTheStick && r.sweepCrossedTheDeadzone && r.sweepDoesNotFire &&
+  r.liftStillFires && r.padStickStillFires && r.padHasNoFinger &&
+  r.releaseFires && r.firesForward && r.heldDoesNotFire && r.offModeSilent &&
   r.kickButtonStillWorks && r.pulseUnderTapHold && r.releaseNeverTraps && r.jitterDoesNotFire &&
   r.cooldownLimitsRate && r.toggleExists && r.toggleTurnsOn && r.togglePersists &&
   r.toggleTurnsOff && r.matchRunsClean && errors.length === 0;
