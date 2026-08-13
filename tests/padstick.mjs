@@ -128,7 +128,56 @@ const std = await q.evaluate(() => {
 });
 await q.close();
 
+// ------------------------------ 0. A DECK GETS A PAD SEAT WITHOUT BEING TOLD --
+// ⚠️ This is what was actually wrong when the stick was reported dead. `padsTakeSeats()`
+// listed cocktail and arcade but not deck, and `sel.controllers` defaults to 'off' — so no
+// pad seat was ever handed out, `gamepadPad` was never consulted for the player, and NONE of
+// the axis-finding above is even reached. The D-pad only looked like it worked because Steam
+// Input sends it as ARROW KEYS to the keyboard seat.
+const d = await pageWith('', [-1, -1, 0, 0, 0, 0]);
+const deck = await d.evaluate(() => {
+  const M = window.__magnet, P = window.__pad, o = {};
+  M.sel.mode = '1v1'; M.sel.lobby = 'off';
+  // ⚠️ Left at its DEFAULT, deliberately — the whole point is that a Deck needs no toggle.
+  o.controllersSetting = M.sel.controllers;
+  M.sel.display = 'deck';
+  o.takesSeats = M.padsTakeSeats();
+  M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const me = w.players.find(q => q.ctrl === 'gamepad');
+  o.gotAPadSeat = !!me;
+  // ...and the keyboard stands down, or the arrow keys Steam Input sends for the D-pad drive
+  // a SECOND player while the stick drives this one.
+  o.keyboardStandsDown = M.keyboardDrivesGame() === false;
+  if (me){
+    for (let i = 0; i < 3; i++) M.gamepadPad(0);
+    P.axes[2] = 1; P.axes[3] = 0;
+    M.applyHumanInput(me, M.gamepadPad(0));
+    o.stickMoves = Math.hypot(me.inX, me.inY) > 0.5;
+    P.axes[2] = 0;
+  }
+  // With NO pad connected the keyboard has to come back, or a deck-layout window on a
+  // desktop has nothing driving the player at all.
+  navigator.getGamepads = () => [];
+  o.keyboardBackWithNoPad = M.keyboardDrivesGame() === true;
+  navigator.getGamepads = () => [P];
+  // And a plain desktop is untouched.
+  M.sel.display = 'auto';
+  o.desktopUnchanged = M.padsTakeSeats() === false && M.keyboardDrivesGame() === true;
+  return o;
+});
+await d.close();
+
 // ------------------------------------------------------------------- report --
+ok('a Steam Deck takes a pad seat with NO toggle', deck.takesSeats && deck.gotAPadSeat,
+   JSON.stringify(deck) + ' — controllers is "' + deck.controllersSetting + '" here on purpose: a Deck is a controller and there is nothing else to play it with, so requiring the toggle left the stick dead until configured');
+ok('...and the stick drives that seat', deck.stickMoves, JSON.stringify(deck));
+ok('...with the keyboard stood down', deck.keyboardStandsDown,
+   'Steam Input commonly sends the D-pad as ARROW KEYS, so leaving the keyboard seat live drives one player from the stick and another from the D-pad');
+ok('...but back again with no pad connected', deck.keyboardBackWithNoPad,
+   'a deck-layout window on a desktop would otherwise have nothing driving the player');
+ok('a plain desktop is untouched', deck.desktopUnchanged, JSON.stringify(deck));
+
 ok('the pad takes a seat', r.gotASeat, JSON.stringify(r));
 ok('a NON-STANDARD pad still finds its stick', JSON.stringify(r.detected) === '[2,3]',
    `picked axes ${JSON.stringify(r.detected)} — axes 0 and 1 are the triggers here, and 0/1 is what the old code always read`);

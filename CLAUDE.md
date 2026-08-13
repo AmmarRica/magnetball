@@ -96,6 +96,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **A STEAM DECK IS A CONTROLLER, so it takes a pad seat untold** (`padsTakeSeats`,
+  `keyboardDrivesGame`). ⚠️ This is what was actually wrong when "the joystick does nothing on
+  Steam Deck" was reported — not the axis numbering below it. `padsTakeSeats()` listed
+  cocktail and arcade but not deck, and `sel.controllers` defaults to `'off'`, so **no pad
+  seat was ever handed out**: `gamepadPad` was never consulted for the player and none of the
+  stick-finding was even reached. The D-pad only *looked* like it worked because Steam Input
+  commonly sends it as **ARROW KEYS** to the keyboard seat.
+  ⚠️ The keyboard therefore **stands down on a deck**, exactly as it does for cocktail, and
+  for the same two-part reason: only once a pad is actually connected (or a deck-layout
+  window on a desktop has nothing driving the player), and because leaving it live alongside
+  the pad seat drives one player from the stick and another from the D-pad-as-arrows.
+  `tests/padstick.mjs` leaves `sel.controllers` at its default on purpose — the whole point
+  is that a Deck needs no toggle.
 - **The MOVE STICK is found, not assumed** (`padStick`, `padStickAxes`, `padRest`, `PADAX`).
   ⚠️ `axes[0]`/`axes[1]` is the left stick **only under the STANDARD mapping** — a pad
   reporting a non-standard one numbers its axes however it likes. That is the same trap

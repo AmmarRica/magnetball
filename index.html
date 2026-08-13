@@ -3251,7 +3251,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.1015AM';
+const VERSION = '20260813.1145AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3267,6 +3267,14 @@ const VERSION = '20260813.1015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.1145AM', title: 'Steam Deck: the stick just works',
+    added: [],
+    changed: [
+      'On Steam Deck the controller now drives your player straight away, with no setting to find first \u2014 which is what was really stopping the thumbstick from working.',
+      'The keyboard steps aside once a controller is connected there, so the stick and the D-pad no longer move two different players.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.1015AM', title: 'The stick works on every controller',
     added: [],
     changed: [
@@ -9827,7 +9835,14 @@ function padResetMap(){ sel.pad = Object.assign({}, defaultSel().pad); saveSel()
 // Cocktail hands seats to pads whether or not you flipped the toggle; the lobby, the
 // kickoff assignment and mid-match drop-in all ask this same question.
 // ⚠️ Arcade always: a cabinet's panels ARE the seats, and there is no toggle to forget.
-function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail' || sel.display === 'arcade'; }
+// ⚠️ A STEAM DECK IS A CONTROLLER — there is nothing else to play it with, so requiring the
+// Extra-controllers toggle first made the stick dead until configured. That is what was
+// actually wrong when "the joystick does nothing on Steam Deck" was reported: with no pad
+// seat handed out, `gamepadPad` was never consulted for the player at all, and the D-pad only
+// appeared to work because Steam Input sends it as ARROW KEYS to the keyboard seat. None of
+// the axis-finding below is even reached without this.
+function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail'
+                              || sel.display === 'arcade' || isDeck(); }
 // ⚠️ The ONE order controllers take seats in: Co-op fills your side first (N humans vs
 // N AI), Versus interleaves you → opponent → teammate. Used by the kickoff assignment
 // AND by drop-in, so a pad that joins at minute three lands in exactly the seat it
@@ -19418,9 +19433,12 @@ function keyboardDrivesGame(){
   // Leaving the ordinary keyboard seat live as well would give P1's stick to two players at
   // once — the seat it was assigned AND whoever holds human1.
   if (sel.display === 'arcade') return false;
-  if (sel.display !== 'cocktail') return true;
-  // Cocktail means pads round a table — but only if there ARE pads. With none
-  // connected, taking the keyboard away leaves nothing driving the player at all.
+  // ⚠️ A DECK OR A COCKTAIL TABLE IS PLAYED WITH A PAD, so the keyboard seat stands down —
+  // but ONLY once a pad is actually connected, or taking it away leaves nothing driving the
+  // player at all. On a Steam Deck this matters twice over: Steam Input commonly sends the
+  // D-pad as ARROW KEYS, so leaving the keyboard live alongside the pad seat drives one
+  // player from the stick and another from the D-pad.
+  if (sel.display !== 'cocktail' && !isDeck()) return true;
   return connectedGamepadIndices().length === 0;
 }
 const keys = {};
