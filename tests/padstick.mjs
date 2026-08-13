@@ -108,6 +108,26 @@ const r = await p.evaluate(async () => {
   delete M.sel.pad.axX; delete M.sel.pad.axY;
   o.autoAgain = JSON.stringify(M.padStickAxes(P)) === '[2,3]';
 
+  // ---- ⚠️ D-PAD DIAGONALS, WITH THE STICK AXES LIVE AT THE SAME TIME ----
+  // The buttons used to be a fallback behind `hypot(stick) < 0.18`, so if the pair being read
+  // as "the stick" is really the D-pad reported as a HAT — which a non-standard pad may do —
+  // pressing a direction made the stick look live, the button branch never ran, and a hat
+  // gives ONE direction at a time. That is exactly "the D-pad cannot go diagonally".
+  const press = (...idx) => { idx.forEach(i => P.buttons[i].pressed = true);
+    const pad = M.gamepadPad(0); idx.forEach(i => P.buttons[i].pressed = false);
+    return [pad.dx, pad.dy]; };
+  o.diag = { ur: press(12,15), dr: press(13,15), dl: press(13,14), ul: press(12,14) };
+  o.dpadDiagonals = o.diag.ur[0] === 1 && o.diag.ur[1] === -1 &&
+                    o.diag.dr[0] === 1 && o.diag.dr[1] === 1 &&
+                    o.diag.dl[0] === -1 && o.diag.dl[1] === 1 &&
+                    o.diag.ul[0] === -1 && o.diag.ul[1] === -1;
+  // ⚠️ ...and with an axis deflected at the same time, which is the case that broke. Without
+  // it this passes on the old build too, because the stick reads idle in the probe above.
+  P.axes[2] = 1;
+  o.diagWithAxisLive = press(12, 15);
+  P.axes[2] = 0;
+  o.diagonalsSurviveALiveAxis = o.diagWithAxisLive[0] === 1 && o.diagWithAxisLive[1] === -1;
+
   // ---- 8. the deck menu goes through the same helper ----
   o.deckUsesHelper = /padStick\(/.test(M.pollDeckUI ? M.pollDeckUI.toString() : '');
   return o;
@@ -189,6 +209,9 @@ ok('...and all eight are DIFFERENT', r.headings === 8,
 ok('...with diagonals no faster than straights', r.diagNotFaster, JSON.stringify(r.speeds));
 ok('a centred stick is still', r.restIsStill);
 ok('the D-pad still works', r.dpadWorks, JSON.stringify(r.dpad));
+ok('...including DIAGONALS', r.dpadDiagonals, JSON.stringify(r.diag));
+ok('...even with a stick axis deflected at the same time', r.diagonalsSurviveALiveAxis,
+   JSON.stringify(r.diagWithAxisLive) + ' — the buttons used to be read only when the stick looked idle, so a D-pad reported as a hat axis suppressed its own diagonals. Without a live axis here this check passes on the broken build too');
 ok('a hand-bound pair beats the automatic one', r.boundWins && r.boundMoves,
    JSON.stringify({ bound: r.boundWins, moves: r.boundMoves }));
 ok('...and clearing it goes back to automatic', r.autoAgain);
