@@ -1429,6 +1429,13 @@
       <div style="height:14px"></div>
       <label class="field">Grass cut <small style="color:var(--muted)">(look only)</small></label>
       <div class="opts tilewrap" id="grass"></div>
+      <!-- ⚠️ DESKTOP ONLY, and the row is HIDDEN rather than disabled on a phone —
+           a control you cannot use is worse than one that is not there. See mapsPossible. -->
+      <div id="mapMakerRow" class="hidden">
+        <div style="height:14px"></div>
+        <button class="ghost" id="mapMakerBtn">Map maker &mdash; build your own field</button>
+        <div class="hint" style="text-align:left; margin-top:4px">Set the size, the corners, the goals and how lively the boards are, then save it. Your fields sit alongside the built-in ones everywhere &mdash; the picker, the map votes, replays and drills &mdash; because they <i>are</i> fields, not a separate mode.</div>
+      </div>
       </div>
 
       <div class="subpane" data-pane="players">
@@ -2001,6 +2008,67 @@
     <button class="ghost" id="arcadeBack" style="margin-top:12px">← Back</button>
   </div>
 
+  <!-- ============================================================
+       MAP MAKER — build a field
+       ============================================================
+       ⚠️ DESKTOP ONLY, asked for. Nine sliders and a live plan view beside them is a
+       two-column layout, and on a phone it is nine full-width rows with the picture
+       scrolled off the top — so you would be tuning a shape you cannot see, which is
+       the one thing an editor may not do.
+       ⚠️ The preview is drawn from the SAME `buildGeometry` the match uses, never from
+       its own idea of what the numbers mean. That is the whole reason the editor can be
+       trusted: a separate drawing would be a second implementation of the pitch, and the
+       first time they disagreed the editor would be lying about the field it is making. -->
+  <div id="mapMaker" class="screen hidden">
+    <div class="logo"><h1 style="font-size:26px">MAP MAKER</h1><p id="mapStatus">Build a field</p></div>
+    <div class="card">
+      <h2>Your fields</h2>
+      <div class="opts tilewrap" id="mapList"></div>
+      <div class="hint" style="text-align:left">Saved on this device. They appear in the Field picker with everything else.</div>
+    </div>
+    <div class="card" id="mapEditCard">
+      <h2>Shape</h2>
+      <div id="mapPreviewWrap" style="text-align:center;margin-bottom:12px">
+        <canvas id="mapPreview" width="620" height="440" style="width:100%;max-width:310px;height:auto;border-radius:10px"></canvas>
+      </div>
+      <label class="field">Name</label>
+      <input id="mapName" type="text" maxlength="14" class="txt" placeholder="My field" />
+      <div style="height:12px"></div>
+      <label class="field">Width <small id="mapWv" style="color:var(--accent)"></small></label>
+      <input id="mapW" class="slider" type="range" min="240" max="1400" step="10" />
+      <label class="field">Length <small id="mapLv" style="color:var(--accent)"></small></label>
+      <input id="mapL" class="slider" type="range" min="360" max="2400" step="10" />
+      <div style="height:12px"></div>
+      <label class="field">Corners</label>
+      <div class="opts" id="mapCornerPick"></div>
+      <label class="field">Corner size <small id="mapCv" style="color:var(--accent)"></small></label>
+      <input id="mapC" class="slider" type="range" min="0" max="300" step="5" />
+      <div class="hint" style="text-align:left; margin-top:4px">Rounded corners are an arc the ball rolls along; chamfered is a straight diagonal. Square is the ordinary rectangle. Held below whichever of the two halves is smaller, so the corners can never eat the whole pitch.</div>
+    </div>
+    <div class="card">
+      <h2>Goals</h2>
+      <label class="field">Mouth width <small id="mapGv" style="color:var(--accent)"></small></label>
+      <input id="mapG" class="slider" type="range" min="60" max="500" step="5" />
+      <label class="field">Net depth <small id="mapNv" style="color:var(--accent)"></small></label>
+      <input id="mapN" class="slider" type="range" min="20" max="200" step="2" />
+      <label class="field">Post size <small id="mapPv" style="color:var(--accent)"></small></label>
+      <input id="mapP" class="slider" type="range" min="2" max="14" step="1" />
+      <label class="field">Net liveliness <small id="mapNBv" style="color:var(--accent)"></small></label>
+      <input id="mapNB" class="slider" type="range" min="0" max="80" step="2" />
+      <div class="hint always" style="text-align:left; margin-top:4px">A wide mouth makes a shooting gallery and a narrow one makes a siege &mdash; the built-in fields all sit near a third of the width. A <b>dead</b> net kills the ball where it lands; a lively one spits it back out, which on a small pitch means the ball is never out of play.</div>
+    </div>
+    <div class="card">
+      <h2>Boards</h2>
+      <label class="field">Wall liveliness <small id="mapWBv" style="color:var(--accent)"></small></label>
+      <input id="mapWB" class="slider" type="range" min="0" max="120" step="2" />
+      <div class="hint always" style="text-align:left; margin-top:4px">How much speed the boards give back. <b>100%</b> is a perfect rebound, so a pass off the wall arrives as fast as it left; below about 40% the boards absorb the game and it stops being a passing surface. Above 100% the walls add speed &mdash; a pinball table, and deliberately reachable, because it is a good time and nothing depends on it being sane.</div>
+    </div>
+    <button id="mapPlay" style="margin-top:12px">Play this field</button>
+    <button class="ghost" id="mapSaveNew" style="margin-top:12px">Save as a new field</button>
+    <button class="ghost" id="mapDelete" style="margin-top:12px">Delete this field</button>
+    <button class="ghost" id="mapBack" style="margin-top:12px">← Back</button>
+  </div>
+
   <div id="padConfig" class="screen hidden">
     <div class="logo"><h1 style="font-size:26px">CONTROLLER</h1><p id="padStatus">Press a direction on your controller to bind it</p></div>
     <div class="card">
@@ -2264,6 +2332,108 @@ const FIELDS = {
   sprint:  { name:'Sprint',   emoji:'💨', W:420, L:520,  goal:160, corner:0,   net:54 },
   endless: { name:'Endless',  emoji:'♾️', W:380, L:1100, goal:150, corner:0,   net:70 },
 };
+
+// ============================================================
+//  MAP MAKER — fields you build yourself
+// ============================================================
+// ⚠️ A CUSTOM FIELD IS JUST A `FIELDS` ENTRY, folded into the same table at boot, and
+// that single decision is what makes the feature small. Everything downstream already
+// works from `FIELDS` and a field key — the picker, `buildGeometry`, the pitch drawing,
+// every one of the fourteen animated themes, the goal boxes, drills, the map votes and
+// the self-contained replay files — so a separate "custom map" concept would have meant
+// teaching all of that about a second kind of field, and each of those is a place to
+// forget. There is no code anywhere below that asks whether a field is user-made.
+// ⚠️ Which is also why the limit exists: the field picker is a grid you scroll, and the
+// built-in set is already thirty tiles.
+const MAPMAKER = {
+  key: 'magnetball.maps',
+  max: 24,
+  // The clamps. ⚠️ These are the EDITOR's rails, not the physics' — nothing here can
+  // produce a field the engine cannot build, because every value lands in the same
+  // `buildGeometry` a shipped court does. They exist so a slider cannot make something
+  // unplayable by accident: a goal wider than the pitch, or corners that eat it.
+  W:   { min:240, max:1400 }, L: { min:360, max:2400 },
+  goal:{ min:60,  max:500  }, net:{ min:20, max:200 },
+  corner:{ min:0, max:300 }, post:{ min:2, max:14 },
+  wallB:{ min:0, max:1.2 }, netB:{ min:0, max:0.8 },
+  // ⚠️ The goal mouth is held inside the pitch with room for a post at each end — a
+  // mouth as wide as the field leaves the two end walls at zero length, which is a court
+  // with no back to it rather than an interesting map.
+  goalPad: 24,
+};
+let maps = {};                        // key → field, exactly the shape of a FIELDS entry
+// ⚠️ DESKTOP ONLY, asked for — and answered by the same `isDesktop()` the docked shell
+// uses, so "desktop" means one thing in this file. Checked live rather than at boot,
+// because a window can be resized into and out of it.
+function mapsPossible(){ return isDesktop(); }
+// ⚠️ Re-answered on every rebuild AND on resize, never decided once at boot — `isDesktop`
+// reads the window, so rotating a tablet or dragging a window narrow changes the answer,
+// and a row that was right at boot is the wrong row for the rest of the session.
+function syncMapMakerRow(){
+  const r = $('mapMakerRow');
+  if (r) r.classList.toggle('hidden', !mapsPossible());
+}
+function mapKeyNew(){
+  let i = 1; while (maps['map' + i]) i++;
+  return 'map' + i;
+}
+// ⚠️ Sanitised on the way IN, not on the way out. A saved file is read back on every
+// launch and handed straight to `buildGeometry`, so one bad number written by an older
+// build — or by somebody editing localStorage — would be a broken pitch on every match
+// from then on, with nothing to point at. Clamped here, once.
+function mapClean(m){
+  if (!m || typeof m !== 'object') return null;
+  const cl = (v, r, d) => { const n = +v; return isFinite(n) ? Math.max(r.min, Math.min(r.max, n)) : d; };
+  const W = Math.round(cl(m.W, MAPMAKER.W, 440)), L = Math.round(cl(m.L, MAPMAKER.L, 760));
+  const goal = Math.round(Math.min(cl(m.goal, MAPMAKER.goal, 150), W - MAPMAKER.goalPad*2));
+  return {
+    // ⚠️ Angle brackets and ampersands stripped, not escaped: this name is written into
+    // an option tile with innerHTML by `buildOpts`, which every other table's name goes
+    // through safely because every other table's names are written by us.
+    name: String(m.name || 'My field').replace(/[<>&]/g, '').slice(0, 14).trim() || 'My field',
+    emoji: '✏️', custom: true,
+    W, L, goal: Math.max(MAPMAKER.goal.min, goal),
+    // Corners are held under HALF THE SHORTER SIDE: at exactly half they meet in the
+    // middle of that side and the straight section between them vanishes.
+    corner: Math.round(Math.min(cl(m.corner, MAPMAKER.corner, 0), Math.min(W, L)/2 - 10)),
+    net: Math.round(cl(m.net, MAPMAKER.net, 64)),
+    cut: !!m.cut,
+    postR: Math.round(cl(m.postR, MAPMAKER.post, POST.r)),
+    wallB: Math.round(cl(m.wallB, MAPMAKER.wallB, 0.9) * 100) / 100,
+    netB:  Math.round(cl(m.netB,  MAPMAKER.netB,  0.2) * 100) / 100,
+  };
+}
+// ⚠️ Called from the BOOTSTRAP block far below, not from here. `loadMaps` writes into
+// `maps` and calls `applyMaps`, which reads `sel.field` and may call `saveSel()` — all of
+// which live above this line, but `POST` (which `mapClean` clamps against) does not. Same
+// shape as `loadArcade`'s note: a call placed for tidiness rather than for order is how
+// this file has been taken down by a temporal dead zone eleven times.
+function loadMaps(){
+  maps = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(MAPMAKER.key) || '{}');
+    for (const k of Object.keys(raw).slice(0, MAPMAKER.max)){
+      const m = mapClean(raw[k]);
+      if (m) maps[k] = m;
+    }
+  } catch(e){ maps = {}; }
+  applyMaps();
+}
+function saveMaps(){
+  try { localStorage.setItem(MAPMAKER.key, JSON.stringify(maps)); } catch(e){}
+  applyMaps();
+}
+// ⚠️ Folded into `FIELDS` rather than kept beside it, and DELETIONS are folded too —
+// a map removed from `maps` has to leave `FIELDS`, or the picker keeps offering a field
+// whose editor entry is gone and `sel.field` can point at something you deleted.
+function applyMaps(){
+  for (const k of Object.keys(FIELDS)) if (FIELDS[k].custom) delete FIELDS[k];
+  for (const k of Object.keys(maps)) FIELDS[k] = maps[k];
+  // ⚠️ A deleted field cannot stay selected. `startMatch` reads `FIELDS[sel.field]` and
+  // would hand `undefined` to `buildGeometry`, which is a blank screen rather than an
+  // error anybody can read.
+  if (!FIELDS[sel.field]) { sel.field = 'classic'; try { saveSel(); } catch(e){} }
+}
 
 const CAPS = {
   none:  { name:'None',   emoji:'' },
@@ -7516,6 +7686,10 @@ function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(a
 // in the temporal dead zone and takes the whole page out. That has happened nine times in
 // this file already.
 loadArcade();
+// ⚠️ Here and not with `loadSel()`: `applyMaps` reads `sel.field` (so the save must
+// already be in) and `mapClean` clamps against `POST`, which is declared below the map
+// block. Twelfth place in this file where a call's POSITION is the whole point.
+loadMaps();
 // A coin goes in. Counted whether or not anybody plays: the takings are what went into the
 // slot, and a credit walked away from is still a coin the operator has.
 function arcadeCoin(n){
@@ -7626,6 +7800,7 @@ function updatePadInfo(){
     !(sel.controllers==='on' && !(MODES[sel.mode]||{}).twoP && !(MODES[sel.mode]||{}).train));
   // A pad arriving or leaving changes whether warming up has anything to do.
   syncWarmupOffer();
+  syncMapMakerRow();          // desktop-only, and the window can change under us
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 window.addEventListener('gamepaddisconnected', updatePadInfo);
@@ -8180,7 +8355,7 @@ syncSticky();
 // ⚠️ Warm-up's visibility rides along: `viewMode()` reads the window, so a phone
 // turned landscape — or a browser window dragged past the desktop breakpoint —
 // changes whether warming up has anything to do.
-window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); });
+window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); syncMapMakerRow(); });
 
 // ---- Add to home screen ----------------------------------------------------
 // ⚠️ The button only exists while the browser is actually offering an install. There
@@ -8250,6 +8425,53 @@ $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
 $('cocktailBack').onclick = () => openLook('display');
 $('arcadeBack').onclick = () => openLook('display');
+// ---- Map maker -------------------------------------------------------------
+{ const b2 = $('mapMakerBtn'); if (b2) b2.onclick = openMapMaker; }
+$('mapBack').onclick = () => openLook('match');
+// ⚠️ Every slider goes through `mapClean` on the way in, so a value that would make an
+// impossible field is corrected the moment it is set rather than at save time — the
+// preview then shows what you would actually get, which is the point of having one.
+{
+  const wire = (id, key, div) => {
+    const e = $(id); if (!e) return;
+    e.oninput = () => {
+      mapEdit[key] = div ? (+e.value / div) : +e.value;
+      mapEdit = mapClean(mapEdit);
+      // ⚠️ Only the READOUT and the picture are refreshed here, never the input's own
+      // value — writing back to a range element mid-drag makes the thumb fight the
+      // mouse. `buildMapMaker` puts the clamped value in when the screen is rebuilt.
+      syncMapVals(); drawMapPreview();
+    };
+  };
+  wire('mapW', 'W'); wire('mapL', 'L'); wire('mapC', 'corner');
+  wire('mapG', 'goal'); wire('mapN', 'net'); wire('mapP', 'postR');
+  wire('mapWB', 'wallB', 100); wire('mapNB', 'netB', 100);
+  const nm = $('mapName');
+  if (nm) nm.oninput = () => { mapEdit.name = nm.value; syncMapVals(); };
+}
+$('mapSaveNew').onclick = () => { if (mapStore(true)) toast('Saved “' + mapEdit.name + '”', 'ok'); };
+// ⚠️ Play SAVES first, and saves in place. Pressing "play this" on an edit you have not
+// saved and coming back to find it gone is the worst thing an editor can do — and the
+// match needs the field to exist under a key, because `sel.field` is a key.
+$('mapPlay').onclick = () => {
+  const k = mapStore(false); if (!k) return;
+  sel.field = k; saveSel(); buildMatchOpts();
+  startMatch();
+};
+// Arm-then-confirm, like the replay and photo deletes: it cannot be undone, and any
+// match votes cast on that field go with it.
+$('mapDelete').onclick = (ev) => {
+  const b2 = ev.currentTarget;
+  if (b2.dataset.armed !== '1'){
+    b2.dataset.armed = '1'; b2.textContent = 'Delete — sure?';
+    setTimeout(() => { if (b2.dataset.armed === '1'){ b2.dataset.armed = ''; b2.textContent = 'Delete this field'; } }, 3000);
+    return;
+  }
+  b2.dataset.armed = ''; b2.textContent = 'Delete this field';
+  if (mapEditKey){ delete maps[mapEditKey]; mapEditKey = null; saveMaps(); buildMatchOpts(); }
+  mapEdit = mapClean({});
+  buildMapMaker();
+};
 $('socialBack').onclick = closeSocial;
 // ⚠️ Closes Watch first. A replay draws to the game canvas, and the Watch screen is a
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
@@ -8292,7 +8514,7 @@ $('ovSettings').onclick = () => openLook('theme');
 $('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false; padBind.stick=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','mapMaker','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false; padBind.stick=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -8776,6 +8998,166 @@ function syncArcade(){
       const v = document.createElement('span'); v.className = 'cksides'; v.textContent = String(n);
       row.append(l, v); book.appendChild(row);
     });
+}
+// ============================================================
+//  MAP MAKER — the editor
+// ============================================================
+// ⚠️ THE PREVIEW IS DRAWN FROM `buildGeometry`, the match's own function, and not from
+// the editor's own idea of what the numbers mean. That is the whole reason the picture
+// can be trusted: a hand-drawn preview is a second implementation of the pitch, and the
+// first time the two disagreed the editor would be lying about the field it is making.
+// It is the same argument that made Break the Targets call `buildGeometry` for its goals.
+let mapEdit = null, mapEditKey = null;
+function openMapMaker(){
+  if (!mapsPossible()) return;
+  // Start on whichever field is selected: editing the one you were about to play is
+  // what somebody who has just opened this wants, and a blank default is a wasted step.
+  const cur = FIELDS[sel.field];
+  mapEditKey = (cur && cur.custom) ? sel.field : null;
+  mapEdit = mapClean(Object.assign({}, cur || FIELDS.classic,
+                                   mapEditKey ? {} : { name: (cur ? cur.name : 'My field') + ' copy' }));
+  dockOrFull('mapMaker', buildMapMaker);
+}
+function buildMapMaker(){
+  if (!mapEdit) mapEdit = mapClean({});
+  const set = (id, v) => { const e = $(id); if (e) e.value = v; };
+  set('mapName', mapEdit.name); set('mapW', mapEdit.W); set('mapL', mapEdit.L);
+  set('mapC', mapEdit.corner); set('mapG', mapEdit.goal); set('mapN', mapEdit.net);
+  set('mapP', mapEdit.postR);
+  set('mapWB', Math.round(mapEdit.wallB*100)); set('mapNB', Math.round(mapEdit.netB*100));
+  // Corner STYLE is a three-way pick and not part of the size slider, because "how
+  // round" and "round or chamfered" are different questions and a slider can only ask
+  // one. Square is the size at zero, so it sets the slider rather than adding a mode.
+  const cp = $('mapCornerPick');
+  if (cp){
+    cp.innerHTML = '';
+    const style = mapEdit.corner <= 0 ? 'square' : (mapEdit.cut ? 'cut' : 'round');
+    [['square','Square','⬛'],['round','Rounded','⬤'],['cut','Chamfered','⬢']].forEach(([k,lab,em]) => {
+      const el = document.createElement('div');
+      el.className = 'opt' + (style === k ? ' sel' : '');
+      el.innerHTML = `<span class="emoji">${em}</span><span>${lab}</span>`;
+      el.onclick = () => {
+        if (k === 'square') mapEdit.corner = 0;
+        else { mapEdit.cut = (k === 'cut'); if (mapEdit.corner <= 0) mapEdit.corner = 110; }
+        mapEdit = mapClean(mapEdit); buildMapMaker();
+      };
+      cp.appendChild(el);
+    });
+  }
+  buildMapList();
+  syncMapVals();
+  drawMapPreview();
+  const del = $('mapDelete');
+  if (del) del.style.display = mapEditKey ? '' : 'none';
+}
+function syncMapVals(){
+  const m = mapEdit; if (!m) return;
+  const put = (id, t) => { const e = $(id); if (e) e.textContent = t; };
+  put('mapWv', m.W + ' wide'); put('mapLv', m.L + ' long');
+  put('mapCv', m.corner ? m.corner + '' : 'square');
+  // ⚠️ The mouth is shown as a FRACTION of the width as well as a number, because that
+  // is the thing that decides how the field plays — 150 is a normal goal on Classic and
+  // a slot on Colossus — and every built-in court sits near a third.
+  put('mapGv', m.goal + '  ·  ' + Math.round(m.goal / m.W * 100) + '% of the width');
+  put('mapNv', m.net + ' deep');
+  put('mapPv', m.postR + '');
+  put('mapWBv', Math.round(m.wallB*100) + '%' + (m.wallB > 1 ? '  ·  adds speed' : ''));
+  put('mapNBv', Math.round(m.netB*100) + '%' + (m.netB <= 0.05 ? '  ·  dead' : ''));
+  const st = $('mapStatus');
+  if (st) st.textContent = mapEditKey ? 'Editing ' + mapEdit.name
+                                      : Object.keys(maps).length + ' of ' + MAPMAKER.max + ' saved';
+}
+// A plan view of the real geometry: the walls the engine built, the arcs it built, the
+// posts it placed. Nothing here knows what a corner or a net is.
+function drawMapPreview(){
+  const cv = $('mapPreview'); if (!cv || !mapEdit) return;
+  const c = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  c.clearRect(0, 0, W, H);
+  c.fillStyle = TH.fieldBg || '#123'; c.fillRect(0, 0, W, H);
+  const stub = { field: mapEdit };
+  buildGeometry(stub);
+  const f = mapEdit;
+  const pad = 22;
+  const sc = Math.min((W - pad*2) / (f.W + f.net*2), (H - pad*2) / (f.L + f.net*2));
+  const X = v => W/2 + v*sc, Y = v => H/2 + v*sc;
+  c.fillStyle = TH.field || '#1c5b2e';
+  c.fillRect(X(-f.W/2), Y(-f.L/2), f.W*sc, f.L*sc);
+  c.lineWidth = 2;
+  for (const wl of stub.walls){
+    c.strokeStyle = wl.isNet ? (TH.dim || '#889') : (TH.line || '#fff');
+    c.beginPath(); c.moveTo(X(wl.a.x), Y(wl.a.y)); c.lineTo(X(wl.b.x), Y(wl.b.y)); c.stroke();
+  }
+  c.strokeStyle = TH.line || '#fff';
+  for (const ar of stub.arcs){
+    c.beginPath(); c.arc(X(ar.cx), Y(ar.cy), ar.r*sc, ar.a0, ar.a1); c.stroke();
+  }
+  // Halfway line and centre circle, so the picture reads as a pitch at a glance.
+  c.strokeStyle = rgba(TH.line || '#ffffff', 0.5);
+  c.beginPath(); c.moveTo(X(-f.W/2), Y(0)); c.lineTo(X(f.W/2), Y(0)); c.stroke();
+  c.beginPath(); c.arc(X(0), Y(0), Math.max(3, 60*sc), 0, 2*Math.PI); c.stroke();
+  // The mouth, in the colour the pitch marks it in.
+  c.strokeStyle = TH.good || '#3ec06a'; c.lineWidth = 3;
+  for (const sg of [-1, 1]){
+    c.beginPath(); c.moveTo(X(-f.goal/2), Y(sg*f.L/2)); c.lineTo(X(f.goal/2), Y(sg*f.L/2)); c.stroke();
+  }
+  c.fillStyle = TH.post || '#fff';
+  for (const po of stub.posts){
+    c.beginPath(); c.arc(X(po.x), Y(po.y), Math.max(1.5, po.r*sc), 0, 2*Math.PI); c.fill();
+  }
+  // ⚠️ A PLAYER AND A BALL AT TRUE SCALE. Numbers in units mean nothing until you can
+  // see one next to a body — "goal: 150" is a shooting gallery on Futsal and a letterbox
+  // on Colossus, and the picture is the only place that difference is visible.
+  c.fillStyle = TH.teamRed || '#e05a5a';
+  c.beginPath(); c.arc(X(0), Y(f.L*0.22), Math.max(1.5, PLAYER.r*sc), 0, 2*Math.PI); c.fill();
+  c.fillStyle = TH.teamBlue || '#5a7de0';
+  c.beginPath(); c.arc(X(0), Y(-f.L*0.22), Math.max(1.5, PLAYER.r*sc), 0, 2*Math.PI); c.fill();
+  c.fillStyle = TH.ball || '#fff';
+  c.beginPath(); c.arc(X(0), Y(0), Math.max(1, BALL.r*sc), 0, 2*Math.PI); c.fill();
+}
+function buildMapList(){
+  const host = $('mapList'); if (!host) return;
+  host.innerHTML = '';
+  const keys = Object.keys(maps);
+  if (!keys.length){
+    const p = document.createElement('div');
+    p.className = 'hint'; p.style.gridColumn = '1/-1'; p.style.textAlign = 'left';
+    p.textContent = 'None yet. Set a shape below and press "Save as a new field".';
+    host.appendChild(p);
+    return;
+  }
+  for (const k of keys){
+    const m = maps[k];
+    const el = document.createElement('div');
+    el.className = 'opt' + (k === mapEditKey ? ' sel' : '');
+    // ⚠️ Built as NODES, not as an innerHTML string. The name is typed by a person and
+    // ends up in the option tiles too, and `buildOpts` writes those with innerHTML.
+    // mapClean strips the angle brackets; this is the second half of the same rule.
+    const em = document.createElement('span'); em.className = 'emoji'; em.textContent = '✏️';
+    const nm = document.createElement('span'); nm.textContent = m.name;
+    const sz = document.createElement('small'); sz.textContent = m.W + '\u00d7' + m.L;
+    el.append(em, nm, sz);
+    el.onclick = () => { mapEditKey = k; mapEdit = mapClean(Object.assign({}, m)); buildMapMaker(); };
+    host.appendChild(el);
+  }
+}
+// Save the field being edited. ⚠️ An existing map is UPDATED IN PLACE under its own key,
+// because `sel.field`, the map votes and any saved replay all refer to a field by key —
+// re-keying an edit would orphan every vote already cast on it.
+function mapStore(asNew){
+  if (!mapEdit) return null;
+  mapEdit = mapClean(mapEdit);
+  let k = asNew || !mapEditKey ? mapKeyNew() : mapEditKey;
+  if ((asNew || !mapEditKey) && Object.keys(maps).length >= MAPMAKER.max){
+    toast('That is ' + MAPMAKER.max + ' fields — delete one first', 'err');
+    return null;
+  }
+  maps[k] = Object.assign({}, mapEdit);
+  mapEditKey = k;
+  saveMaps();
+  buildMapMaker();
+  buildMatchOpts();          // the Field picker gains (or renames) a tile straight away
+  return k;
 }
 function buildArcadeRows(){
   syncArcade();
@@ -10273,7 +10655,14 @@ function buildGeometry(w){
   w.arcs = [];
   w.posts = [];
 
-  const cB = 0.9; // lively, near-elastic boundary walls so you can pass off them (only the net kills momentum)
+  // ⚠️ Read OFF THE FIELD with the built-in value as the fallback, so a custom map's
+  // boards, net and posts are the same numbers on the same code path as every shipped
+  // court — a map maker that built its own geometry would be a second pitch
+  // implementation, and the first time the two disagreed the editor would be lying
+  // about the field it was making. Every FIELDS entry simply leaves them unset.
+  const cB = f.wallB != null ? f.wallB : 0.9;   // lively, near-elastic boundary walls so you can pass off them
+  const nB = f.netB  != null ? f.netB  : 0.2;   // ...and only the net kills momentum
+  const pR = f.postR != null ? f.postR : POST.r;
   // Boundary walls are `ballOnly`: they contain the BALL but players may step a
   // little past the line (HaxBall-style) to get around a wall-hugging ball.
   // Side walls (left & right), full length
@@ -10285,8 +10674,8 @@ function buildGeometry(w){
     const y = sign*halfL;
     w.walls.push({a:{x:-halfW+c,y}, b:{x:-gh,y}, bCoef:cB, ballOnly:true});
     w.walls.push({a:{x: gh,y}, b:{x: halfW-c,y}, bCoef:cB, ballOnly:true});
-    w.posts.push({x:-gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
-    w.posts.push({x: gh, y, vx:0, vy:0, r:POST.r, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
+    w.posts.push({x:-gh, y, vx:0, vy:0, r:pR, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
+    w.posts.push({x: gh, y, vx:0, vy:0, r:pR, invMass:0, bCoef:POST.bCoef, isPost:true, team: sign<0?1:0});
     // Net: box behind goal (walls). Depth = net.
     // `ballOnly` like every other boundary: the net catches the BALL, but a player
     // walks through it. It was the one surface that stopped you, so chasing a ball
@@ -10295,9 +10684,9 @@ function buildGeometry(w){
     // Containment is unaffected: integrate() still clamps players to halfL + 20,
     // far short of the net's back wall.
     const ny = y + sign*f.net;
-    w.walls.push({a:{x:-gh,y}, b:{x:-gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // left net wall
-    w.walls.push({a:{x: gh,y}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // right net wall
-    w.walls.push({a:{x:-gh,y:ny}, b:{x: gh,y:ny}, bCoef:0.2, isNet:true, ballOnly:true}); // back net wall
+    w.walls.push({a:{x:-gh,y}, b:{x:-gh,y:ny}, bCoef:nB, isNet:true, ballOnly:true}); // left net wall
+    w.walls.push({a:{x: gh,y}, b:{x: gh,y:ny}, bCoef:nB, isNet:true, ballOnly:true}); // right net wall
+    w.walls.push({a:{x:-gh,y:ny}, b:{x: gh,y:ny}, bCoef:nB, isNet:true, ballOnly:true}); // back net wall
   }
 
   // Corners: either chamfered (cut = straight diagonal → octagon) or rounded (arc).
@@ -18856,8 +19245,12 @@ function drawGoal(w, sign){
     }
   }
   // posts
+  // ⚠️ The radius is read off the POST THE PHYSICS BUILT, not off the constant — a
+  // custom field can set its own, and a post drawn at a size the ball does not bounce
+  // off is the one thing on the pitch you aim at being in the wrong place.
+  const pr = (world && world.posts && world.posts[0] && world.posts[0].r) || POST.r;
   for (const px of [-gh, gh]){
-    ctx.beginPath(); ctx.arc(wx(px), wy(y), POST.r*s, 0, 2*Math.PI);
+    ctx.beginPath(); ctx.arc(wx(px), wy(y), pr*s, 0, 2*Math.PI);
     ctx.fillStyle = TH.post; ctx.fill();
     ctx.lineWidth=Math.max(1,1.5*s); ctx.strokeStyle=col; ctx.stroke();
   }
@@ -20633,6 +21026,13 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     pollDropIn, dropInBlocked, dropOut, padSeatOrder, padsTakeSeats, DROPIN,
+    MAPMAKER, mapsPossible, mapClean, openMapMaker, buildMapMaker, mapStore, drawMapPreview,
+    get maps(){ return maps; }, get mapEdit(){ return mapEdit; }, set mapEdit(v){ mapEdit = v; },
+    get mapEditKey(){ return mapEditKey; }, set mapEditKey(v){ mapEditKey = v; },
+    loadMaps, saveMaps, applyMaps,
+    BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
+    chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT, kickoffToss, KICKOFF_TOUCH,
+    LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
     get updFound(){ return updFound; }, get updSeen(){ return updSeen; },
     set updLast(v){ _updLast = v; },
