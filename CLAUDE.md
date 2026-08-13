@@ -657,6 +657,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   borrows `DYN_FIELDS.pooltable.path`. ⚠️ A rect clip left pitch colour stranded in the
   cut corners of every rounded and chamfered court: outside the line, unreachable by any
   ball, and reading as playable.
+- **Download it and play offline** (`offlinePossible`, `downloadOffline`, `#offlineBtn`,
+  About card). The whole game is ONE FILE, so this is a copy of that file and nothing else —
+  no installer, no runtime, no packaging step. ⚠️ It matters most on **Linux**, where Firefox
+  has no install-as-app at all and Chrome's is inconsistent; a saved `.html` opens in every
+  browser on every desktop with nothing to set up.
+  ⚠️ **FETCHED, never `document.documentElement.outerHTML`.** That is the obvious way to save
+  a page and it is wrong: it is the page as it is RIGHT NOW — every class the menu has
+  toggled, every node the settings screen built, a match mid-run — so what lands on disk is a
+  snapshot of a running game rather than the game. Same reason `updCheck` fetches: it is the
+  file, not the page. ⚠️ And an `outerHTML` copy still *boots and plays*, so "the saved file
+  works" does not catch it — `tests/offline.mjs` dirties the DOM first and requires the
+  download to stay **byte-identical** to what the server sent.
+  ⚠️ `cache: 'reload'`, for the reason it is in `updCheck` too: it goes to the network and
+  refreshes the worker's cached copy, so what is saved is the current build rather than
+  whatever was cached when the tab opened.
+  ⚠️ The reply is **sanity-checked** before it is offered — a captive portal answers 200 with
+  a login page, and a file called `magnetball-<version>.html` that opens to a wifi sign-in is
+  worse than a refusal.
+  ⚠️ On a `file://` page the button is **relabelled, not hidden** ("You are playing the
+  offline copy"): a page there cannot fetch itself, and hiding the control leaves somebody
+  hunting for it. ⚠️ The hint says plainly that the **career and settings do not come with
+  it** — a file on disk is a different origin, so the browser keeps the saves apart — and
+  that the optional `assets/` artwork falls back if it is not beside the file.
 - **Add to home screen:** `#installBtn` appears only while `beforeinstallprompt` is
   live and hides on `appinstalled` or in standalone. ⚠️ The prompt cannot be asked for —
   it arrives once, as an event — so an always-on button is dead on iOS and after install,
@@ -1645,7 +1668,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 94 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 95 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
