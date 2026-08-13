@@ -181,6 +181,17 @@ Two more traps, both of which produced false results here:
   version of `cocktailkeys` passed only because the render loop happened to tick
   between two `evaluate` calls.
 
+**A statistical assertion is only reproducible on the engine it was tuned on.** The
+determinism bar here is same-engine (`docs/DETERMINISM-AUDIT.md`): a pinned seed reproduces
+bit-exactly in one browser build, and cross-engine equality is explicitly not a goal. CI runs
+a different Chromium from any dev machine — measured, `kqberry` seed 1 gives hive `[6,5]`
+locally and `[6,7]` on CI — so any threshold sitting near the noise passes locally and fails
+in CI. That kept `main` red for four consecutive merges while every dev run was green, which
+is the worst kind of red: real-looking, unreproducible, and eventually ignored. Sample more
+seeds and assert a **proportion** with real margin, and measure the axis that actually
+separates a good build from a broken one — for `kqberry` that is how many matches a full hive
+decides (2/8 vs 8/8), not how fast one fills, where the two builds overlap.
+
 **Two independent guards mean a single sabotage passes.** When a bug is fixed in two
 places — a guard at the call site and a guard in the callee — removing either one on its
 own leaves the other doing the job, and the suite goes green. That is not a weak test. Say

@@ -738,6 +738,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **Spawn after `botInit`** — that is where `w.rng` is seeded, and `placeBerry` has no
   `Math.random` fallback on purpose: a fallback would go non-deterministic silently.
   The float bob advances in `stepBerries`, never in a draw (the trails rule).
+  ⚠️ **The balance guard is a PROPORTION, measured on both builds.** `tests/kqberry.mjs`
+  runs eight seeded bot matches and requires a full hive to decide at most half of them:
+  shipping scores 2/8 (earliest 176s), a build that lets bots courier scores 8/8 (earliest
+  109s). ⚠️ Timing is the wrong axis and cost four red merges — the broken build's collapse
+  is slower than the original 90-second one, so a "hive inside 120s" rule caught only 2 of
+  its 8 runs, while CI's own noise on a good build produced one at 118s and failed. Same-
+  engine determinism means a seeded run reproduces on one browser build and not across two.
   ⚠️ **Bots finish berry runs, they do not courier them.** `botAssignBerry` gives at most
   `BOT.berryRunners` (1) bot a side a berry, never the chaser or the goalie, never while
   defending, and only one already inside `BOT.berryLastLeg` of the hive. Ungated they drove
