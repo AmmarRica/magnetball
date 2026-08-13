@@ -1141,6 +1141,8 @@
     /* 44px: these are the two things anyone opens About to press. */
     #updCheckBtn { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
+    .repname { width:100%; margin-top:4px; font-size:12px; padding:5px 7px; border-radius:7px;
+      border:1px solid var(--accent); background:rgba(128,128,128,.14); color:var(--text); }
     .reprow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
       background: rgba(128,128,128,.08); border:1px solid var(--edge); }
     .reptxt { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
@@ -1763,13 +1765,28 @@
          matches, from the menu, not from a screen that is covering the pitch. -->
     <div class="card collapsible collapsed" data-sec="replay">
       <h2>Replays</h2>
-      <label class="field">Saved replays <small id="repListSub" style="color:var(--muted);font-weight:400"></small></label>
-      <div id="repList"></div>
+      <!-- ⚠️ TABBED by kind. A goal and a whole match are different things you go looking
+           for at different moments — one to see a moment again, one to watch a game back —
+           and forty rows of both interleaved by time means scrolling past matches to find
+           goals. The chips come from SUBTABS like every other tabbed card. -->
+      <div class="subtabs" data-tabs="replay"></div>
+      <div class="subpane" data-pane="goals">
+        <label class="field">Saved goals <small id="repListSub" style="color:var(--muted);font-weight:400"></small></label>
+        <div id="repList"></div>
+      </div>
+      <div class="subpane" data-pane="matches">
+        <label class="field">Saved matches <small id="repMatchSub" style="color:var(--muted);font-weight:400"></small></label>
+        <div id="repMatchList"></div>
+      </div>
       <button class="ghost" id="repClearAll" type="button" style="display:none;margin-top:8px">Delete all saved replays</button>
+      <div style="height:14px"></div>
+      <label class="field">Record every goal</label>
+      <div class="opts" id="autoRecPick"></div>
+      <div class="hint always" style="text-align:left">Keeps every goal in the list above without you pressing anything &mdash; for showing the game to people, when stopping to save each one is the thing you cannot do. <b>Everything</b> keeps the whole match at full time as well. Saved here only, never downloaded; the oldest go when the list is full.</div>
       <div style="height:14px"></div>
       <label class="field">Watch a replay from a file</label>
       <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
-      <div class="hint always" style="text-align:left">Plays through to the end and comes straight back here. <b id="repSkipHint">Tap the screen to stop early.</b></div>
+      <div class="hint always" style="text-align:left">Holds on the last frame when it ends, so you can watch it again or scrub back. <b id="repSkipHint">Use &#10005; on the bar to come back here.</b></div>
       <div style="height:14px"></div>
       <label class="field">Where saved replays go</label>
       <div id="repPathInfo"></div>
@@ -2969,6 +2986,15 @@ const ARCADE = {
   // The operator's service key: holds the bookkeeping screen. F2 on a real cabinet.
   service: 'F2',
 };
+// Record every goal without being asked. ⚠️ Three states rather than a toggle: keeping the
+// GOALS is the demo case and costs ~40KB each, while keeping the whole MATCH as well is
+// ~800KB a game — a different order of magnitude, so it is a separate choice rather than
+// something that arrives with the first one.
+const AUTORECOPT = {
+  off:    { name:'Off',        emoji:'🚫', icon:'barrier' },
+  goals:  { name:'Goals',      emoji:'⚽', icon:'ball' },
+  all:    { name:'Everything', emoji:'🎞', icon:'clipboard' },
+};
 const ARCADEOPT = {
   free: { name:'Free play', emoji:'🆓', icon:'unlock' },
   coin: { name:'Coin-op',   emoji:'🪙', icon:'gift' },
@@ -3017,6 +3043,7 @@ const ICONS = {
   thumbup:   'M8.4 20V10.2l4-6.2c1.3 0 2.1.9 2.1 2.2V10h4.1c1.1 0 1.9 1 1.7 2.1l-1.2 6c-.2 1.1-1 1.9-2.1 1.9Z M8.4 10.2H4.6V20h3.8Z',
   thumbdown: 'M8.4 4v9.8l4 6.2c1.3 0 2.1-.9 2.1-2.2V14h4.1c1.1 0 1.9-1 1.7-2.1l-1.2-6C18.9 4.8 18.1 4 17 4Z M8.4 13.8H4.6V4h3.8Z',
   install:   'M12 3.6v10.2 M8 10.2l4 4 4-4 M4.6 16.4v2.2c0 .9.8 1.8 1.8 1.8h11.2c1 0 1.8-.9 1.8-1.8v-2.2',
+  pencil:    'M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3Z M14.6 6.4l3 3',
   save:      'M4.6 4.6h11.6l3.2 3.2v11.6H4.6Z M8.2 4.6h6.2v4.4H8.2Z M7.4 12.6h9.2v6.8H7.4Z',
   trophy:    'M7 4h10v4.6a5 5 0 0 1-10 0Z M7 5.6H4.2v1.3a3 3 0 0 0 2.9 3 M17 5.6h2.8v1.3a3 3 0 0 1-2.9 3 M12 13.6V17 M9 20h6 M10.4 17h3.2v3h-3.2Z',
   skull:     'M12 3.2a7 7 0 0 0-7 7v3.2l1.7 1.3V18h10.6v-3.3L19 13.4v-3.2a7 7 0 0 0-7-7Z M10.6 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M16.4 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M12 14.2l-1 2h2Z M9.4 18v2.6 M12 18v2.6 M14.6 18v2.6',
@@ -3206,7 +3233,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0505AM';
+const VERSION = '20260813.0620AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3222,6 +3249,19 @@ const VERSION = '20260813.0505AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.0620AM', title: 'Replays you can keep, name and find',
+    added: [
+      'Record every goal: turn it on and every goal is kept for you, so you can show the game to people and watch the lot back afterwards. Everything keeps the whole match too.',
+      'Name a saved replay, and the name is what the row is called and what the file is called when you export it.',
+      'Saved replays are now split into Goals and Matches, so you are not scrolling past one to find the other.',
+    ],
+    changed: [
+      'A replay you open from the menu holds on the last frame instead of closing itself \u2014 watch it again, scrub back or slow it down, and leave with the bar\u2019s \u2715 when you are done.',
+      'Nothing is written over it any more. The big REPLAY caption is only for the replay that cuts in after a goal.',
+      'Save clip records at a much higher bitrate, so the exported video is as sharp as the encoder allows.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0505AM', title: 'Replay fixes, and a replay length dial',
     added: [
       'A Replay starts slider in Game Feel \u2192 Camera: choose how far back a goal replay begins, from 2 to 15 seconds, so you see the build-up that made the goal and not just the shot.',
@@ -3464,7 +3504,7 @@ function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free',
+            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
             goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
@@ -4239,11 +4279,11 @@ function skipWord(){ return padOnly() ? 'press any button to skip'
 // ⚠️ Its own wording, not `skipWord()`. "Skip" is right over a goal replay you are
 // waiting out; in the Replays card you deliberately chose to watch this, so the verb is
 // "stop early". Same device checks, different sentence.
-function replayStopHint(){
-  return padOnly()        ? 'Press any button to stop early.'
-       : isTouchLayout()  ? 'Tap the screen to stop early.'
-                          : 'Click or press any key to stop early.';
-}
+// ⚠️ This describes the MENU replay, which has a transport bar — so it is the bar's exit
+// button, not "tap anywhere". Tapping the pitch there deliberately does nothing (a mis-tap
+// must not end something you sat down to watch), so the old wording was an instruction that
+// did not work. The goal replay's one-gesture skip is unchanged; it just has no hint here.
+function replayStopHint(){ return 'Use \u2715 on the bar to come back here.'; }
 
 // 3 variants per category — designed to be previewed and picked.
 const SFX = {
@@ -7428,6 +7468,7 @@ function openHow(){ dockOrFull('how'); }
 // on purpose, because those panes are exactly the cosmetic tables the icon set stays
 // out of, and a drawn hat next to a row of emoji hats would be the odd one out.
 const SUBTABS = {
+  replay: [['goals','Goals','ball'], ['matches','Matches','clipboard']],
   player: [['colour','🎨 Colour'], ['cap','🧢 Cap'], ['flag','🏴 Flags'],
            ['animal','🐻 Animals'], ['text','🔢 Text'], ['photo','📷 Photo'], ['eyes','👀 Eyes']],
   match:  [['game','Game','ball'], ['pitch','Pitch','stadium'],
@@ -8852,6 +8893,7 @@ function buildSettings(){
   buildAbout();
   buildNews();
   { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
+  if ($('autoRecPick')) buildOpts('autoRecPick', AUTORECOPT, 'autoRec');
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
   // created by this function, so a one-shot pass at startup left them unclassified
   // and permanently expanded — the exact clutter the component exists to remove.
@@ -10247,7 +10289,7 @@ let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
 let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
 let repGoalIdx = -1;     // where in repBuf the ball actually crossed
-const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60 };
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60, ended:false, restart:false, finish:null };
 
 // ============================================================
 //  THE WHOLE MATCH — a second, un-ringed buffer
@@ -10334,6 +10376,32 @@ function repFreeze(w){
   repPend = -1;
   lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx,
                  roster: w.players.map(repFilePlayer) };
+  // ⚠️ AUTO-RECORD FIRES HERE, not in `repOnGoal`. The first freeze happens the instant the
+  // ball crosses so the replay bar is never looking at nothing, and it stops AT the crossing
+  // — auto-saving that one would file away every goal with the net cut off the end. This is
+  // the freeze that has REP_TAIL on it, which is the complete goal.
+  if (autoRecOn() && !w.demo && !w.drillMode) autoRecSave(w);
+}
+// Save every goal without being asked — for demoing the game, where stopping to press Save
+// on each one is the thing you cannot do while people are playing.
+// ⚠️ LIBRARY ONLY, never a download. A file per goal would put an unasked-for save dialog on
+// screen mid-match on some browsers, and bury a downloads folder in a long session; the
+// library is already the place you watch and delete from, and rows can be exported one at a
+// time from there afterwards.
+function autoRecOn(){ return (sel.autoRec || 'off') !== 'off'; }
+function autoRecSave(w){
+  const doc = repFileBuild();
+  if (!doc) return;
+  doc.name = autoRecName(w);
+  repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {});
+}
+// A name you can find later: who scored, and the score it made. ⚠️ Built from the world at
+// the moment of the goal rather than left to the list to work out — a library row is read
+// weeks later, and by then "Goal · Classic · 3v3" is every row.
+function autoRecName(w){
+  const who = w.goalCamP && w.goalCamP.name ? w.goalCamP.name : null;
+  const line = w.score[0] + '-' + w.score[1];
+  return (who ? who + ' ' : '') + line;
 }
 function repOnGoal(w){
   if (!repBuf.length) return;
@@ -10381,21 +10449,24 @@ function drawReplayFrame(f){
   // insets the pitch to the right, so cw/2 would sit left of the play area.
   // ⚠️ Outside the rotation, and placed through screenPt: the label is UI, so it stays
   // the right way up while the pitch behind it turns.
-  const [cx, cy] = screenPt(wx(0), wy(0));
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.save();
-  ctx.shadowColor='rgba(0,0,0,.85)'; ctx.shadowBlur=14;
-  ctx.font = `${Math.round(Math.min(cw,ch)*0.075)}px 'Kenney', system-ui, -apple-system, sans-serif`;
-  ctx.fillStyle = TH.accent || '#21e6ff';
-  ctx.fillText('▶ REPLAY', cx, cy);
-  // ⚠️ No "tap to skip" while the transport is up: tapping the pitch deliberately does
-  // nothing there, so the hint would be an instruction that fails.
+  // ⚠️ NOTHING IS WRITTEN OVER A REPLAY YOU CHOSE TO WATCH. The label exists to explain an
+  // INTERRUPTION — the goal replay cuts in by itself, so it has to say what it is and how to
+  // get out. A replay opened from the menu is the thing you came for, it already has a
+  // transport bar naming it, and a word across the middle of the pitch is then just
+  // something sitting on top of what you are trying to watch.
   if (!replay.controls){
+    const [cx, cy] = screenPt(wx(0), wy(0));
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.85)'; ctx.shadowBlur=14;
+    ctx.font = `${Math.round(Math.min(cw,ch)*0.075)}px 'Kenney', system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = TH.accent || '#21e6ff';
+    ctx.fillText('▶ REPLAY', cx, cy);
     ctx.font = `12px 'Kenney', system-ui, -apple-system, sans-serif`;
     ctx.fillStyle = '#ffffff';
     ctx.fillText(skipWord(), cx, cy + Math.min(cw,ch)*0.075*0.72 + 6);
+    ctx.restore();
   }
-  ctx.restore();
   ctx.textBaseline='alphabetic';
 }
 // Skip a playing replay — the pending rAF tick then resolves the promise, so
@@ -10419,8 +10490,17 @@ function replayAbort(){
   if (replay.raf) cancelAnimationFrame(replay.raf);
   replay.raf = 0;
   replay.active = false;
+  replay.ended = false; replay.restart = false;
+  // ⚠️ SETTLE THE PROMISE. Cancelling the frame means the tick that would have called
+  // `finish()` never runs, so `playReplay`'s promise is orphaned — and `watchReplayFile`
+  // awaits it and restores the menu in a `finally`, which then never runs either. Lowering
+  // the flag was enough while the tick was left alive to notice; it is not once the frame is
+  // cancelled. `finish` is idempotent (it resolves once), so calling it here is safe even
+  // when the tick already did.
+  const fin = replay.finish; replay.finish = null;
   replay.controls = false;
   repCtlHide();
+  if (fin) fin();
 }
 function anyPadPressed(){
   const gps=(navigator.getGamepads&&navigator.getGamepads())||[];
@@ -10457,8 +10537,9 @@ function repCtlHide(){ const el = $('repCtl'); if (el) el.classList.add('hidden'
 function repCtlSync(){
   const pb = $('repPause');
   if (pb){
-    pb.innerHTML = (iconSvg(replay.paused ? 'play' : 'pause') || (replay.paused ? '▶' : '❚❚'));
-    pb.setAttribute('aria-label', replay.paused ? 'Resume' : 'Pause');
+    const showPlay = replay.paused || replay.ended;
+    pb.innerHTML = (iconSvg(showPlay ? 'play' : 'pause') || (showPlay ? '▶' : '❚❚'));
+    pb.setAttribute('aria-label', replay.ended ? 'Watch again' : replay.paused ? 'Resume' : 'Pause');
   }
   for (const b of document.querySelectorAll('#repSpeeds .repspd'))
     b.classList.toggle('sel', Math.abs(parseFloat(b.dataset.spd) - replay.speed) < 0.001);
@@ -10481,7 +10562,13 @@ function repCtlProgress(idx, total, goalAt, goals){
     list.forEach((g, i) => { host.children[i].style.left = (100 * g / total).toFixed(1) + '%'; });
   }
 }
-function repTogglePause(){ if (!replay.active) return; replay.paused = !replay.paused; repCtlSync(); }
+// ⚠️ Once a chosen replay has run out, this button is WATCH AGAIN rather than resume —
+// there is nothing left to un-pause, and "play" on a finished replay means start it over.
+function repTogglePause(){
+  if (!replay.active) return;
+  if (replay.ended){ replay.restart = true; replay.paused = false; repCtlSync(); return; }
+  replay.paused = !replay.paused; repCtlSync();
+}
 
 function playReplay(speed, opts){
   opts = opts || {};
@@ -10503,11 +10590,20 @@ function playReplay(speed, opts){
     juiceReset();
     replay.active = true;
     replay.paused = false;
+    replay.ended = false; replay.restart = false;
     replay.fps = lastReplay.fps || 60;
     replay.speed = speed || 0.55;
     replay.controls = !!opts.controls;
     if (replay.controls) repCtlShow();
-    const finish = () => { replay.controls = false; repCtlHide(); resolve(); };
+    // ⚠️ Idempotent, and PUBLISHED on `replay` so `replayAbort()` can settle this promise
+    // from outside. A replay torn down by the menu otherwise leaves its awaiter hanging.
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true; replay.finish = null;
+      replay.controls = false; repCtlHide(); resolve();
+    };
+    replay.finish = finish;
     let idx = 0, last = 0;
     function tick(t){
       if (!replay.active){ finish(); return; }
@@ -10528,6 +10624,8 @@ function playReplay(speed, opts){
       // nothing ever read it — so a decimated replay played back at however many times too
       // fast its decimation was. It only became visible with a whole-match file, which is
       // sampled at 30Hz by design and ran at double speed.
+      // Watch it again: the transport's play button asks for this once the replay has ended.
+      if (replay.restart){ replay.restart = false; replay.ended = false; idx = 0; last = t; }
       const fps = Math.max(1, replay.fps || 60);
       const dur = ((1/fps) / Math.max(0.05, replay.speed)) * 1000;
       // ⚠️ Paused, `last` tracks the clock instead of accumulating. Leaving it behind
@@ -10541,7 +10639,24 @@ function playReplay(speed, opts){
       // `drawReplayFrame` reads it. Belt and braces beside `replayAbort()`: a throw in here
       // is silent and strands the flag, which is far worse than a replay that stops.
       if (!world){ replay.active=false; finish(); return; }
-      if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; finish(); return; }
+      if (idx >= frames.length){
+        drawReplayFrame(frames[frames.length-1]);
+        // ⚠️ A replay you CHOSE to watch holds on the last frame instead of closing itself.
+        // Reaching the end is not a request to leave — you went looking for this one, and
+        // being thrown back to the menu the moment it finishes takes away watching it again,
+        // scrubbing back to the goal, or slowing it down, all of which the transport offers.
+        // Exit is the bar's own button. The goal replay is untouched: it interrupted the
+        // match, so ending and getting out of the way is exactly right.
+        if (replay.controls){
+          // ⚠️ Sync the bar the moment it ends, or the button still reads Pause on a replay
+          // that has nothing left to pause — and pressing it then looks like it did nothing.
+          if (!replay.ended) { replay.ended = true; repCtlSync(); }
+          if (replay.controls) repCtlProgress(frames.length - 1, frames.length, goalAt, lastReplay.goals);
+          replay.raf = requestAnimationFrame(tick);
+          return;
+        }
+        replay.active=false; finish(); return;
+      }
       drawReplayFrame(frames[idx]);
       if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
       replay.raf = requestAnimationFrame(tick);
@@ -10630,7 +10745,7 @@ function repMatchFileBuild(){
     frames,
   };
 }
-function repFilename(field, kind){
+function repFilename(field, kind, name){
   // ⚠️ Colons are illegal in filenames on Windows and awkward everywhere else, and the
   // name has to say "replay" out loud — with a plain `.json` extension the filename is
   // the only thing distinguishing this from every other JSON in the downloads folder.
@@ -10641,7 +10756,12 @@ function repFilename(field, kind){
   // ⚠️ The KIND is in the name too. A goal and a whole match are both "a replay of a match
   // on Classic", so without it a downloads folder holds two files you cannot tell apart
   // until you open them — and one of them is fifty times the size of the other.
-  return `magnetball-${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
+  // ⚠️ A player's own NAME leads the filename when there is one, sanitised to the characters
+  // every filesystem takes. The point of naming a replay is to find it again, and a
+  // downloads folder is exactly where you go looking.
+  const tag = String(name || '').trim().replace(/[^A-Za-z0-9 _-]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+  const head = tag ? tag + '-' : '';
+  return `magnetball-${head}${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -10720,6 +10840,9 @@ function repLibAdd(doc){
   const rec = {
     id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
     players: doc.players.length, frames: doc.frames.length, bytes: json.length,
+    // The player's own name for it, if it has one. Metadata, for the same reason `kind` is:
+    // the list is drawn from this record alone and must never read the frames.
+    name: doc.name || '',
     // ⚠️ Kind and rate go in the METADATA, not just the payload. The list is drawn from
     // this record alone — reading the frames to find out what a row is would put the 68ms
     // structured clone straight back — so anything the row shows has to be here.
@@ -10811,16 +10934,37 @@ function repLibLabel(rec){
   const match = rec.kind === 'match';
   const secs = (rec.frames && rec.fps) ? Math.round(rec.frames / rec.fps) : 0;
   const len = secs ? (secs >= 60 ? Math.floor(secs/60) + 'm ' + (secs%60) + 's' : secs + 's') : '';
-  return { title: (match ? 'Match' : 'Goal') + ' · ' + f + ' · ' + (rec.mode || '?'),
-           sub: [when, len, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB']
-                  .filter(Boolean).join(' · ') };
+  // ⚠️ A NAME REPLACES the generated title rather than being appended to it. The point of
+  // naming one is to find it, and "Kai 2-1 · Goal · Classic · 3v3" buries the half you chose
+  // behind the half the game chose; the court and mode are still a line below.
+  const auto = (match ? 'Match' : 'Goal') + ' · ' + f + ' · ' + (rec.mode || '?');
+  return { title: rec.name || auto,
+           sub: [rec.name ? auto : '', when, len, rec.players + ' players',
+                 Math.round(rec.bytes/1024) + ' KB'].filter(Boolean).join(' · ') };
+}
+// Rename a library row. ⚠️ Metadata only — the frames are a separate store and a rename must
+// not touch them, or every rename pays the structured-clone cost the two-store split exists
+// to avoid.
+function repLibRename(id, name){
+  // ⚠️ Read-modify-write inside ONE transaction. Two of these overlapping otherwise read the
+  // same record and the second write loses the first — and `oncomplete` is what `repLibTx`
+  // resolves on, so the get and the put are both done by the time a caller continues.
+  return repLibTx(REPLIB.store, 'readwrite', st => {
+    const g = st.get(id);
+    g.onsuccess = () => {
+      const rec = g.result;
+      if (!rec) return;
+      rec.name = String(name || '').slice(0, 60);
+      st.put(rec);
+    };
+  });
 }
 // Saving does BOTH: the file for keeping and sending, the library entry for watching and
 // deleting. The file is what the player asked for, so a library failure must not lose it.
 function saveReplayFile(kind){
   const doc = kind === 'match' ? repMatchFileBuild() : repFileBuild();
   if (!doc) return false;
-  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename(null, doc.kind));
+  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename(null, doc.kind, doc.name));
   repLibAdd(doc).then(() => buildReplayList()).catch(() => {});
   return true;
 }
@@ -10932,8 +11076,10 @@ async function watchReplayFile(back, pick){
   finally { if (back) back(); }
 }
 // From the menu's Replays card: plays to the end, then comes straight back to the card
-// it was started from. Stopping early lands in the same place — `playReplay` resolves on
-// a skip exactly as it does on the last frame, so there is one way back, not two.
+// it was started from. ⚠️ Only an EXIT comes back: running to the end holds on the last
+// frame instead, because you went looking for this replay and finishing it is not a request
+// to leave. `playReplay` therefore does not resolve on its own here — it settles when the
+// transport's ✕ (or `replayAbort`) says so.
 function watchReplayFromMenu(pick){
   return watchReplayFile(() => {
     dockOrFull('setup');
@@ -10950,80 +11096,122 @@ function watchReplayFromMenu(pick){
 // exactly how somebody loses the goal they saved. Press once for "Sure?", again to remove;
 // it disarms itself after three seconds so a half-press is not left waiting.
 function buildReplayList(){
-  const host = $('repList'); if (!host) return Promise.resolve();
+  const goalHost = $('repList'), matchHost = $('repMatchList');
+  if (!goalHost && !matchHost) return Promise.resolve();
   return repLibAll().then(rows => {
-    host.innerHTML = '';
+    // ⚠️ Split by KIND, not filtered twice. Older rows carry no `kind` at all — they are all
+    // goals, because that is all there was when they were written.
+    const goals = rows.filter(r => r.kind !== 'match');
+    const matches = rows.filter(r => r.kind === 'match');
     const bulk = $('repClearAll');
     if (bulk) bulk.style.display = rows.length ? '' : 'none';
-    const sub = $('repListSub');
-    if (sub) sub.textContent = rows.length
-      ? rows.length + (rows.length === 1 ? ' replay' : ' replays') + ' · ' +
-        Math.round(rows.reduce((n, r) => n + (r.bytes || 0), 0) / 1024) + ' KB'
-      : '';
-    if (!rows.length){
-      const e = document.createElement('div'); e.className = 'mvempty';
-      e.textContent = 'Nothing saved yet. Score a goal, then press Save goal on the replay bar, or save a goal or the whole match from the '
-        + 'result screen — it is kept here to watch again, and written to your downloads as a file you '
-        + 'can send or back up.';
-      host.appendChild(e); return;
-    }
-    for (const rec of rows){
-      const lab = repLibLabel(rec);
-      const row = document.createElement('div'); row.className = 'reprow'; row.dataset.id = rec.id;
-      const txt = document.createElement('div'); txt.className = 'reptxt';
-      const t = document.createElement('b'); t.textContent = lab.title;
-      const s = document.createElement('span'); s.textContent = lab.sub;
-      txt.append(t, s);
-      const acts = document.createElement('div'); acts.className = 'repacts';
-
-      const play = document.createElement('button'); play.className = 'repbtn';
-      play.type = 'button'; play.setAttribute('aria-label', 'Watch this replay');
-      play.innerHTML = iconSvg('play') || '▶';
-      // ⚠️ Straight through `watchReplayFromMenu` with the picker stood in. A library entry
-      // is just another source of a document, so it must not grow its own copy of
-      // "hide the menu, play it, come back".
-      // ⚠️ The frames are fetched HERE, not held in the list. `watchReplayFromMenu` takes a
-      // picker, and a picker is allowed to be async — which is exactly what lets the list
-      // stay metadata-only.
-      play.onclick = () => watchReplayFromMenu(() => repLibGet(rec.id).catch(e => {
-        toast('⚠ ' + e.message); return null;
-      }));
-
-      const down = document.createElement('button'); down.className = 'repbtn';
-      down.type = 'button'; down.setAttribute('aria-label', 'Save this replay as a file');
-      down.innerHTML = iconSvg('save') || '⤓';
-      down.onclick = () => repLibGet(rec.id)
-        .then(doc => downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }),
-                                  repFilename(rec.field, rec.kind)))
-        .catch(e => toast('⚠ ' + e.message));
-
-      const del = document.createElement('button'); del.className = 'repbtn del';
-      del.type = 'button'; del.setAttribute('aria-label', 'Delete this replay');
-      del.innerHTML = iconSvg('trash') || '✕';
-      let armed = false, dt = 0;
-      del.onclick = () => {
-        if (!armed){
-          armed = true; del.classList.add('arm'); del.textContent = 'Sure?';
-          dt = setTimeout(() => { armed = false; del.classList.remove('arm');
-                                  del.innerHTML = iconSvg('trash') || '✕'; }, 3000);
-          return;
-        }
-        clearTimeout(dt);
-        repLibDel(rec.id).then(() => buildReplayList()).catch(() => {});
-      };
-      acts.append(play, down, del);
-      row.append(txt, acts); host.appendChild(row);
-    }
+    fillRepPane(goalHost, goals, $('repListSub'), 'goal');
+    fillRepPane(matchHost, matches, $('repMatchSub'), 'match');
   }).catch(() => {
     // ⚠️ IndexedDB can be absent or blocked (private windows, locked-down browsers). Say so
     // and point at the thing that still works, rather than showing an empty list that looks
     // like nothing was ever saved.
-    host.innerHTML = '';
-    const e = document.createElement('div'); e.className = 'mvempty';
-    e.textContent = 'Saved replays are not available in this browser. Saving still writes a file, '
-      + 'and you can watch it with the button above.';
-    host.appendChild(e);
+    for (const h of [goalHost, matchHost]){
+      if (!h) continue;
+      h.innerHTML = '';
+      const e = document.createElement('div'); e.className = 'mvempty';
+      e.textContent = 'Saved replays are not available in this browser. Saving still writes a file, '
+        + 'and you can watch it with the button above.';
+      h.appendChild(e);
+    }
   });
+}
+function fillRepPane(host, rows, sub, kind){
+  if (!host) return;
+  host.innerHTML = '';
+  if (sub) sub.textContent = rows.length
+    ? rows.length + (rows.length === 1 ? ' replay' : ' replays') + ' · ' +
+      Math.round(rows.reduce((n, r) => n + (r.bytes || 0), 0) / 1024) + ' KB'
+    : '';
+  if (!rows.length){
+    const e = document.createElement('div'); e.className = 'mvempty';
+    e.textContent = kind === 'match'
+      ? 'No matches saved yet. Save match replay on the result screen keeps a whole game, kickoff to whistle — or turn on Record every goal below and pick Everything.'
+      : 'No goals saved yet. Score one and press Save goal on the replay bar, or turn on Record every goal below and they all land here.';
+    host.appendChild(e); return;
+  }
+  for (const rec of rows){
+    const lab = repLibLabel(rec);
+    const row = document.createElement('div'); row.className = 'reprow'; row.dataset.id = rec.id;
+    const txt = document.createElement('div'); txt.className = 'reptxt';
+    const t = document.createElement('b'); t.textContent = lab.title;
+    const sp = document.createElement('span'); sp.textContent = lab.sub;
+    txt.append(t, sp);
+    const acts = document.createElement('div'); acts.className = 'repacts';
+
+    const play = document.createElement('button'); play.className = 'repbtn';
+    play.type = 'button'; play.setAttribute('aria-label', 'Watch this replay');
+    play.innerHTML = iconSvg('play') || '▶';
+    // ⚠️ Straight through `watchReplayFromMenu` with the picker stood in. A library entry
+    // is just another source of a document, so it must not grow its own copy of
+    // "hide the menu, play it, come back".
+    // ⚠️ The frames are fetched HERE, not held in the list. `watchReplayFromMenu` takes a
+    // picker, and a picker is allowed to be async — which is exactly what lets the list
+    // stay metadata-only.
+    play.onclick = () => watchReplayFromMenu(() => repLibGet(rec.id).catch(e => {
+      toast('⚠ ' + e.message); return null;
+    }));
+
+    // Name it. ⚠️ An inline input rather than a `prompt()`: prompt is blocked outright in an
+    // installed PWA on some platforms, and it cannot be reached at all by a controller.
+    const ren = document.createElement('button'); ren.className = 'repbtn';
+    ren.type = 'button'; ren.setAttribute('aria-label', 'Name this replay');
+    ren.innerHTML = iconSvg('pencil') || '✎';
+    ren.onclick = () => {
+      if (row.querySelector('.repname')) return;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.className = 'repname'; inp.maxLength = 60;
+      inp.value = rec.name || '';
+      inp.placeholder = 'Name this replay';
+      const commit = (save) => {
+        if (!inp.parentNode) return;
+        const v = inp.value.trim();
+        inp.remove();
+        if (!save) return;
+        // ⚠️ Rebuild from the STORE, not from the row: the list is sorted and split by kind,
+        // and a name is what the row is titled by, so the rendered list has to come back
+        // from the record that was actually written.
+        repLibRename(rec.id, v).then(() => buildReplayList()).catch(() => {});
+      };
+      inp.onkeydown = (e) => {
+        if (e.key === 'Enter'){ e.preventDefault(); commit(true); }
+        else if (e.key === 'Escape'){ e.preventDefault(); commit(false); }
+      };
+      inp.onblur = () => commit(true);
+      txt.appendChild(inp);
+      inp.focus(); inp.select();
+    };
+
+    const down = document.createElement('button'); down.className = 'repbtn';
+    down.type = 'button'; down.setAttribute('aria-label', 'Save this replay as a file');
+    down.innerHTML = iconSvg('save') || '⤓';
+    down.onclick = () => repLibGet(rec.id)
+      .then(doc => downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }),
+                                repFilename(rec.field, rec.kind, rec.name)))
+      .catch(e => toast('⚠ ' + e.message));
+
+    const del = document.createElement('button'); del.className = 'repbtn del';
+    del.type = 'button'; del.setAttribute('aria-label', 'Delete this replay');
+    del.innerHTML = iconSvg('trash') || '✕';
+    let armed = false, dt = 0;
+    del.onclick = () => {
+      if (!armed){
+        armed = true; del.classList.add('arm'); del.textContent = 'Sure?';
+        dt = setTimeout(() => { armed = false; del.classList.remove('arm');
+                                del.innerHTML = iconSvg('trash') || '✕'; }, 3000);
+        return;
+      }
+      clearTimeout(dt);
+      repLibDel(rec.id).then(() => buildReplayList()).catch(() => {});
+    };
+    acts.append(play, ren, down, del);
+    row.append(txt, acts); host.appendChild(row);
+  }
 }
 // ⚠️ Where a saved replay lands. A page is NEVER told the download directory, so this
 // is the browser's default for the platform rather than a real path — said plainly in
@@ -11169,7 +11357,22 @@ async function recordAndShareClip(btn){
     }
     const stream = cv.captureStream(60);
     const mime = repMime();
-    const rec = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
+    // ⚠️ ASK FOR A REAL BITRATE. Left to itself MediaRecorder picks a conservative default
+    // — around 2.5Mbps for this size — and a canvas full of flat colour with hard edges is
+    // the worst case for that: the lines and the discs crawl and smear the moment anything
+    // moves. The pitch is also mostly static, so a high ceiling costs far less than the
+    // number suggests; the encoder spends it only where the picture actually changes.
+    // Scaled to the canvas so a phone does not pay a desktop's bitrate: ~0.25 bits per pixel
+    // per frame at 60fps, floored so a small window still gets a usable picture and capped
+    // so a 4K display does not produce a file nobody can send.
+    const px = Math.max(1, cv.width * cv.height);
+    const bps = Math.round(Math.min(48e6, Math.max(8e6, px * 60 * 0.25)));
+    const opts = mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps };
+    let rec;
+    // ⚠️ Falls back if the bitrate is refused. Some builds reject an option object they do
+    // not like outright, and a clip at the default rate beats no clip at all.
+    try { rec = new MediaRecorder(stream, opts); }
+    catch(_){ rec = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined); }
     const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise(r => rec.onstop = r);
     if (btn) btn.textContent = '● REC';
@@ -13392,6 +13595,14 @@ function finishMatch(w){
   w.endRamp = null;
   w.state = 'over';
   if (w.demo){ startDemo(); return; }       // wallpaper: just start another one
+  // ⚠️ 'all' also keeps the WHOLE MATCH, which is the point of the setting for a demo: the
+  // goals on their own are a highlight reel, and the match is the thing somebody asks to see
+  // afterwards. Gated separately from the goal saves because a match file is ~20x the size.
+  if ((sel.autoRec || 'off') === 'all' && !w.drillMode){
+    const doc = repMatchFileBuild();
+    if (doc){ doc.name = 'Final ' + w.score[0] + '-' + w.score[1];
+              repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {}); }
+  }
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
@@ -19635,7 +19846,7 @@ if (window.__MAGNETDEBUG) {
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,

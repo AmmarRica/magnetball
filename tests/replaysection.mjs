@@ -84,7 +84,12 @@ const page = async (w, h, mobile) => {
   // directory, so an absolute path read off the disk would be a fabrication.
   ok('the folder is a hint, not a fabricated absolute path',
      !/^\/(home|Users)\/[a-z]/i.test(folder) || folder.startsWith('~'), folder);
-  ok('the stop wording suits the device', /tap the screen/i.test(r.hint), r.hint);
+  // ⚠️ NOT per-device any more, and that is the fix rather than a regression. This hint
+  // describes the replay you open from the MENU, which has a transport bar — and tapping the
+  // pitch there deliberately does nothing, so a mis-tap cannot end something you sat down to
+  // watch. "Tap the screen to stop early" was therefore an instruction that did not work.
+  // The bar's ✕ is the way out and it is the same on every device.
+  ok('the stop wording names the way out', /on the bar/i.test(r.hint), r.hint);
   await p.close();
 }
 
@@ -133,12 +138,17 @@ const page = async (w, h, mobile) => {
   await p.close();
 }
 
-// ---- 2b. ...and it comes back, from the END and from an EXIT ---------------
-// ⚠️ Both, separately. They are one code path (`playReplay` resolves the same way for a
-// finished replay and a skipped one) and this is what proves it stayed that way.
+// ---- 2b. ...and the END and an EXIT are now DIFFERENT --------------------
+// ⚠️ They used to be one code path — `playReplay` resolved the same way for a finished
+// replay as for a skipped one, and this block proved it. That is deliberately no longer
+// true. A replay you opened from the menu HOLDS on its last frame: reaching the end is not
+// a request to leave, and closing took away watching it again, scrubbing back to the goal
+// or slowing it down, all of which the transport offers. So only an exit comes back, and
+// running to the end must NOT. ⚠️ Which also means `await`ing a finished chosen replay is a
+// hang rather than a wait — it cost the suite twenty minutes before this was rewritten.
 {
   const p = await page(420, 900, true);
-  for (const mode of ['end', 'exit']){
+  for (const mode of ['exit']){
     const r = await p.evaluate(async (mode) => {
       const M = window.__magnet;
       M.setMatchSeed(4); M.sel.mode = '1v1'; M.startMatch();
@@ -153,12 +163,45 @@ const page = async (w, h, mobile) => {
         came = { setup: !document.getElementById('setup').classList.contains('hidden'),
                  open: !document.querySelector('#setup .card[data-sec="replay"]').classList.contains('collapsed') };
       }, async () => doc);
-      if (mode === 'exit'){ await new Promise(r2 => setTimeout(r2, 100)); M.skipReplay(); }
+      await new Promise(r2 => setTimeout(r2, 100));
+      M.skipReplay();
       await run;
       return came;
     }, mode);
     ok(`back to the menu after the ${mode}`, r && r.setup, JSON.stringify(r));
     ok(`...with the Replays card open after the ${mode}`, r && r.open, JSON.stringify(r));
+  }
+  // ...and running to the END holds instead, with the menu still out of the way.
+  {
+    const held = await p.evaluate(async () => {
+      const M = window.__magnet;
+      M.setMatchSeed(4); M.sel.mode = '1v1'; M.startMatch();
+      const w = M.world; w.state='play'; w.stateT=1;
+      for (let i=0;i<120;i++) M.step(w);
+      M.repOnGoal(w);
+      const doc = M.repFileParse(JSON.stringify(M.repFileBuild()));
+      M.toMenu();
+      let cameBack = false;
+      M.watchReplayFile(() => { cameBack = true; }, async () => doc);
+      // Long enough for a 2-second replay to run out several times over.
+      await new Promise(r2 => setTimeout(r2, 5000));
+      const o = { ended: M.replay.ended, active: M.replay.active, cameBack,
+                  menuUp: !document.getElementById('setup').classList.contains('hidden') };
+      M.replayAbort();
+      await new Promise(r2 => setTimeout(r2, 150));
+      o.leftAfterExit = !M.replay.active;
+      // ⚠️ `cameBack` is the CALLBACK having run, not the menu being on screen — this
+      // block's `back` deliberately only sets a flag, so asserting on `#setup` here would
+      // fail for a reason that has nothing to do with the exit.
+      o.calledBack = cameBack;
+      return o;
+    });
+    ok('running to the end HOLDS it', held.ended && held.active,
+       JSON.stringify(held) + ' — a chosen replay stays on its last frame so it can be watched again');
+    ok('...without going back to the menu on its own', !held.cameBack && !held.menuUp,
+       JSON.stringify(held) + ' — closing itself is what took away scrubbing back and slowing it down');
+    ok('...and the exit is what returns you', held.leftAfterExit && held.calledBack,
+       JSON.stringify(held) + ' — replayAbort has to settle the promise, or the caller\'s finally never runs and the menu never comes back');
   }
   await p.close();
 }

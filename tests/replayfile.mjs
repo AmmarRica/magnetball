@@ -528,6 +528,11 @@ await p.close();
         o.menuGotOutOfTheWay = document.getElementById('setup').classList.contains('hidden');
       }
     }
+    // ⚠️ LEAVE IT DELIBERATELY. A replay opened from the menu now HOLDS on its last frame
+    // instead of closing itself, so this promise does not resolve until something exits —
+    // which is the point of that change, and which makes a bare `await done` here a hang
+    // rather than a wait. (It hung this suite for twenty minutes before the abort was added.)
+    M.replayAbort();
     await done;
     o.itPlayed = sawActive;
     o.drewTheCourt = ink;
@@ -657,6 +662,189 @@ await p.close();
   ok('clips are named per goal', o.namesAreUnique,
      'one fixed filename means each clip overwrites the last in the downloads folder');
   if (qerr.length) fails.push('save-clip page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  A REPLAY YOU CHOSE TO WATCH IS NOT AN INTERRUPTION
+// ============================================================================
+// Two things follow from that and both were wrong. It HELD nothing at the end — reaching
+// the last frame closed it and dropped you back on the menu, taking away watching it again,
+// scrubbing back, or slowing it down, all of which the transport already offers. And it drew
+// "REPLAY" across the middle of the pitch, which exists to explain the goal replay cutting
+// in by itself; on one you opened deliberately it is a word sitting on top of the thing you
+// came to look at.
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  // Build a short replay and stash it, without holding a live promise across the boundary.
+  await q.evaluate(async () => {
+    const M = window.__magnet;
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=false; M.sel.autoRec='off';
+    M.setMatchSeed(3); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<400;i++) M.step(w);
+    w.ball.x=0; w.ball.y=-w.bounds.halfL+4; w.ball.vy=-14; w.ball.lastKicker=w.players[0];
+    for (let i=0;i<200;i++) M.step(w);
+    window.__doc = M.repFileBuild();
+    M.toMenu();
+  });
+  await q.waitForTimeout(300);
+  await q.evaluate(() => { window.__magnet.watchReplayFromMenu(async () => window.__doc); });
+  await q.waitForTimeout(700);
+
+  // ⚠️ Measured as a DIFFERENCE between the same frame drawn both ways, not as an absolute
+  // count. The pitch's own markings — the halfway line, the centre circle — are drawn in a
+  // colour close to the accent and sit exactly where the caption would, so "few accent
+  // pixels in the middle band" is false on a correct build too: it read 103 with the label
+  // already gone. Drawing one frame with `controls` on and the same frame with it off
+  // isolates the caption and nothing else.
+  const mid = await q.evaluate(() => {
+    const M = window.__magnet;
+    const c = document.getElementById('game');
+    const band = () => {
+      const d = c.getContext('2d').getImageData(0, Math.round(c.height*0.40), c.width,
+                                                Math.round(c.height*0.20)).data;
+      let n = 0;
+      for (let i=0;i<d.length;i+=4) if (d[i]+d[i+1]+d[i+2] > 150) n++;
+      return n;
+    };
+    const f = M.lastReplay.frames[Math.floor(M.lastReplay.frames.length/2)];
+    const was = M.replay.controls;
+    M.replay.controls = true;  M.drawReplayFrame(f); const chosen = band();
+    M.replay.controls = false; M.drawReplayFrame(f); const interrupted = band();
+    M.replay.controls = was;
+    return { active: M.replay.active, controls: was, chosen, interrupted };
+  });
+
+  await q.waitForTimeout(6000);
+  const end = await q.evaluate(() => ({
+    ended: window.__magnet.replay.ended,
+    stillActive: window.__magnet.replay.active,
+    transportUp: !document.getElementById('repCtl').classList.contains('hidden'),
+    menuCameBack: !document.getElementById('setup').classList.contains('hidden'),
+    pauseLabel: document.getElementById('repPause').getAttribute('aria-label'),
+  }));
+  await q.evaluate(() => window.__magnet.repTogglePause());
+  await q.waitForTimeout(400);
+  const again = await q.evaluate(() => ({ ended: window.__magnet.replay.ended,
+                                          active: window.__magnet.replay.active }));
+  await q.evaluate(() => window.__magnet.replayAbort());
+  await q.waitForTimeout(200);
+  const gone = await q.evaluate(() => ({ active: window.__magnet.replay.active,
+                                         barGone: document.getElementById('repCtl').classList.contains('hidden') }));
+
+  ok('the chosen replay actually played', mid.active && mid.controls, JSON.stringify(mid));
+  ok('the caption IS drawn when a replay interrupts you', mid.interrupted > mid.chosen + 400,
+     'the goal replay drew ' + mid.interrupted + ' lit pixels against ' + mid.chosen + ' for a chosen one — if the caption is off in both, the check below passes for the wrong reason');
+  ok('...and NOT over one you chose to watch', mid.chosen < mid.interrupted * 0.75,
+     mid.chosen + ' lit pixels against ' + mid.interrupted + ' — the caption explains an interruption, and a replay you opened deliberately is not one');
+  ok('it HOLDS at the end', end.ended && end.stillActive && !end.menuCameBack,
+     JSON.stringify(end) + ' — reaching the last frame is not a request to leave, and closing itself takes away watching it again or scrubbing back');
+  ok('...with the transport still up', end.transportUp, JSON.stringify(end));
+  ok('...and the button offering another watch', end.pauseLabel === 'Watch again',
+     'button reads ' + JSON.stringify(end.pauseLabel) + ' — there is nothing left to un-pause, so pressing it would look like it did nothing');
+  ok('pressing it starts over', again.ended === false && again.active, JSON.stringify(again));
+  ok('the bar exit is what leaves', gone.active === false && gone.barGone, JSON.stringify(gone));
+  if (qerr.length) fails.push('watch-hold page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  AUTO-RECORD, NAMES, AND THE TWO TABS
+// ============================================================================
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  const o = await q.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    o.defaultsOff = M.defaultSel().autoRec === 'off';
+    o.tiles = Object.keys(M.AUTORECOPT).length;
+
+    // ---- OFF saves nothing, which is what makes the ON check mean anything ----
+    M.sel.autoRec = 'off'; M.sel.mode='1v1'; M.sel.lobby='off';
+    M.sel.autoReplay = false;
+    M.setMatchSeed(3); M.startMatch();
+    let w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<900;i++) M.step(w);
+    await new Promise(r=>setTimeout(r,400));
+    o.offSaved = (await M.repLibAll()).length;
+    o.offScored = w.score[0] + w.score[1];
+
+    // ---- ON saves every goal, unasked ----
+    M.sel.autoRec = 'goals';
+    M.setMatchSeed(3); M.startMatch();
+    w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<900;i++) M.step(w);
+    await new Promise(r=>setTimeout(r,500));
+    const rows = await M.repLibAll();
+    o.onSaved = rows.length;
+    o.onScored = w.score[0] + w.score[1];
+    o.allGoals = rows.every(r => r.kind === 'goal');
+    o.named = rows.every(r => r.name && /\d+-\d+/.test(r.name));
+    o.sampleName = rows[0] && rows[0].name;
+
+    // ---- renaming sticks, and leads the row ----
+    const id = rows[0].id;
+    await M.repLibRename(id, 'The good one');
+    const after = (await M.repLibAll()).find(r => r.id === id);
+    o.renamed = after.name === 'The good one';
+    o.renameLeadsTheRow = M.repLibLabel(after).title === 'The good one';
+    o.nameInFilename = /The-good-one/.test(M.repFilename('classic', 'goal', 'The good one'));
+    o.noNameStillFine = /magnetball-goal-replay/.test(M.repFilename('classic', 'goal', ''));
+
+    // ---- the two panes are filled by KIND ----
+    M.openLook('replay');
+    await M.buildReplayList();
+    o.goalsInGoalsPane = document.querySelectorAll('#repList .reprow').length === rows.length;
+    o.noMatchesYet = document.querySelectorAll('#repMatchList .reprow').length === 0;
+
+    // ---- 'all' also keeps the whole match ----
+    M.sel.autoRec = 'all';
+    M.setMatchSeed(4); M.startMatch();
+    w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<400;i++) M.step(w);
+    M.endMatch(w); M.finishMatch(w);
+    await new Promise(r=>setTimeout(r,500));
+    o.matchSaved = (await M.repLibAll()).some(r => r.kind === 'match');
+    await M.buildReplayList();
+    o.matchRowsNow = document.querySelectorAll('#repMatchList .reprow').length;
+    o.goalPaneHasNoMatches = [...document.querySelectorAll('#repList .reprow')]
+      .every(r => !/^Final/.test(r.querySelector('b').textContent));
+    M.sel.autoRec = 'off';
+    return o;
+  });
+
+  ok('auto-record defaults OFF', o.defaultsOff, 'it writes to storage on every goal, so it has to be asked for');
+  ok('...with three states', o.tiles === 3, o.tiles + ' — goals and whole matches are different orders of size');
+  ok('OFF really saves nothing', o.offSaved === 0 && o.offScored > 0,
+     o.offSaved + ' saved from ' + o.offScored + ' goals — if nothing was scored, the ON check below proves nothing either');
+  ok('ON saves every goal unasked', o.onSaved > 0 && o.onSaved === o.onScored,
+     o.onSaved + ' saved from ' + o.onScored + ' goals');
+  ok('...all of them goals', o.allGoals);
+  ok('...each with a findable name', o.named, 'e.g. ' + JSON.stringify(o.sampleName));
+  ok('renaming sticks', o.renamed);
+  ok('...and leads the row', o.renameLeadsTheRow,
+     'the point of naming one is to find it, so the name has to be the title rather than a suffix');
+  ok('...and reaches the filename', o.nameInFilename && o.noNameStillFine,
+     'a downloads folder is exactly where you go looking for a replay you named');
+  ok('goals fill the Goals pane', o.goalsInGoalsPane && o.noMatchesYet,
+     JSON.stringify({ goals:o.goalsInGoalsPane, matches:o.noMatchesYet }));
+  ok('Everything keeps the match too', o.matchSaved && o.matchRowsNow > 0,
+     'the goals alone are a highlight reel; the match is what somebody asks to see afterwards');
+  ok('...in the Matches pane, not the Goals one', o.goalPaneHasNoMatches,
+     'forty rows of both interleaved is the thing the tabs exist to stop');
+  if (qerr.length) fails.push('auto-record page errors: ' + qerr.slice(0,3).join(' | '));
   await q.close();
 }
 
