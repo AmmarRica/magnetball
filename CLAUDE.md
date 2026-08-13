@@ -96,6 +96,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **The MOVE STICK is found, not assumed** (`padStick`, `padStickAxes`, `padRest`, `PADAX`).
+  ⚠️ `axes[0]`/`axes[1]` is the left stick **only under the STANDARD mapping** — a pad
+  reporting a non-standard one numbers its axes however it likes. That is the same trap
+  `padKickHeld` documents for BUTTONS, one layer down, and it was reported from a Steam Deck
+  in a browser: the D-pad worked (12-15 happened to line up) and the stick did nothing at all.
+  Standard pads take the fast path and are untouched.
+  ⚠️ **A TRIGGER RESTS AT -1** and never centres, so an untouched one reads as a stick held
+  hard over — auto-detect that naively and the player drives into a wall for ever. Sticks
+  centre, triggers do not, so `padRest` keeps the smallest magnitude each axis has ever shown
+  and only a pair that both centre can be the stick. It settles within a frame of the pad
+  sitting still, which is what a pad does at boot.
+  ⚠️ The pair is taken **together** (i, i+1), never one axis from each stick.
+  ⚠️ The deck MENU reads it through the same helper — otherwise the menu is D-pad only on
+  exactly the pads the player is D-pad only on.
+  A hand binding (`sel.pad.axX/axY`, Controls → Move stick, push right then down) wins
+  outright, and the Controls screen shows the pad's **live axis values** because "the stick
+  does nothing" and "the stick is on axes 2 and 3" look identical from outside.
+  `tests/padstick.mjs`, whose fake pad puts two resting triggers *before* the real stick —
+  the layout that makes a wrong answer easy — and measures all eight directions as eight
+  DISTINCT headings, because "they all move" is true of a build that reports one direction
+  for everything.
 - **Goal posts are `POST.r` 4**, halved from 8. A post is a circle the ball bounces off,
   and at 8 it read as a bollard rather than a post — it also swallowed shots that were
   plainly inside the frame. Physics (`w.posts`) and the draw both take the radius from
@@ -1668,7 +1689,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 95 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 96 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

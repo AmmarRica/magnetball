@@ -1997,6 +1997,16 @@
       <h2>Button map</h2>
       <div class="opts" id="padRows" style="grid-template-columns:1fr"></div>
     </div>
+    <!-- ⚠️ The STICK gets its own card because binding an axis is not binding a button.
+         axes[0]/[1] is the left stick only under the standard mapping; a pad reporting a
+         non-standard one numbers its axes however it likes, which is why a Steam Deck could
+         move on the D-pad and not on the stick. The readout is here so it can be SEEN. -->
+    <div class="card">
+      <h2>Move stick</h2>
+      <div class="opts" id="padStickRows" style="grid-template-columns:1fr"></div>
+      <div id="padAxisLive" class="pathrows" style="margin-top:8px"></div>
+      <div class="hint" style="text-align:left">The game finds the stick by itself on almost every controller. If yours moves on the D-pad but not the stick, bind it here — you will be asked to push right, then down.</div>
+    </div>
     <button class="primary" id="padRebindAll">Rebind all ▶</button>
     <button class="ghost" id="padReset" style="margin-top:12px">Reset to default</button>
     <button class="ghost" id="padCfgBack" style="margin-top:12px">← Back</button>
@@ -3213,7 +3223,7 @@ const BALL   = { r:10, invMass:1.0, bCoef:0.55, damp:0.990 };
 const POST   = { r:4,  invMass:0.0, bCoef:0.55 };
 
 // ---------- State
-let padBind = { active:false, slot:null, queue:[], prev:[], _init:false };   // controller-remap capture state
+let padBind = { active:false, slot:null, queue:[], prev:[], _init:false, stick:false, axStep:0, axBase:null, axX:null, axWait:false };   // controller-remap capture state
 let profile = loadProfile();
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 // ============================================================
@@ -3241,7 +3251,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0745AM';
+const VERSION = '20260813.1015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3257,6 +3267,14 @@ const VERSION = '20260813.0745AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.1015AM', title: 'The stick works on every controller',
+    added: [],
+    changed: [
+      'The thumbstick now works on controllers that do not report a standard layout \u2014 the Steam Deck among them, where the D-pad moved you and the stick did nothing. All eight directions, diagonals included.',
+      'Controls now has a Move stick row you can bind by hand if your controller still needs it, and shows what it is actually reporting.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0745AM', title: 'Download it and play offline',
     added: [
       'Download the game: About \u2192 Play offline saves the whole thing as a single HTML file. Open it in any browser on Linux, Mac or Windows and it plays with no connection at all \u2014 nothing to install.',
@@ -8133,7 +8151,7 @@ $('ovSettings').onclick = () => openLook('theme');
 $('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false; padBind.stick=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -8342,7 +8360,9 @@ function pollDeckUI(){
     if (g){
       if (deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(!!sel.dockCollapsed);
       if (!sel.dockCollapsed){
-        const ax = g.axes[0]||0, ay = g.axes[1]||0;
+        // ⚠️ Through `padStick`, not axes[0]/[1]: on a pad with a non-standard mapping the
+        // menu would be D-pad only for exactly the same reason the player would not move.
+        const [ax, ay] = padStick(g);
         const up    = btn(g, DECK_BTN.UP)    || ay < -0.55;
         const down  = btn(g, DECK_BTN.DOWN)  || ay >  0.55;
         const left  = btn(g, DECK_BTN.LEFT)  || ax < -0.55;
@@ -9661,7 +9681,9 @@ function curSlotLabel(){ const s=PAD_SLOTS.find(x=>x[0]===padBind.slot); return 
 function openPadConfig(){ dockOrFull('padConfig', ()=>{ padBind.active=false; buildPadRows(); }); }
 function buildPadRows(){
   const g=firstPad();
-  $('padStatus').textContent = padBind.active ? ('Press the button for '+curSlotLabel())
+  $('padStatus').textContent =
+      padBind.stick  ? (padBind.axStep === 0 ? 'Push the stick RIGHT' : 'Now push the stick DOWN')
+    : padBind.active ? ('Press the button for '+curSlotLabel())
     : (g ? 'Tap a row to rebind, or "Rebind all"' : 'Connect a controller and press any button');
   const wrap=$('padRows'); if(!wrap) return; wrap.innerHTML='';
   PAD_SLOTS.forEach(([slot,lab])=>{
@@ -9675,6 +9697,58 @@ function buildPadRows(){
     el.onclick=()=>startBind([slot]);
     wrap.appendChild(el);
   });
+  buildStickRows();
+  buildAxisLive();
+}
+// The stick row, and a live look at what the pad is actually reporting. ⚠️ The readout is
+// the point as much as the binding: "the stick does nothing" and "the stick is on axes 2 and
+// 3" look identical from the outside, and this is what tells them apart without a debugger.
+function buildStickRows(){
+  const wrap = $('padStickRows'); if (!wrap) return;
+  wrap.innerHTML = '';
+  const g = firstPad();
+  const pm = sel.pad || {};
+  const bound = pm.axX != null && pm.axY != null;
+  const found = g ? padStickAxes(g) : null;
+  const el = document.createElement('div');
+  el.className = 'opt' + (padBind.stick ? ' sel' : '');
+  el.style.flexDirection='row'; el.style.justifyContent='space-between';
+  el.style.alignItems='center'; el.style.gap='10px';
+  const cur = padBind.stick
+    ? (padBind.axStep === 0 ? 'push the stick RIGHT…' : 'now push it DOWN…')
+    : bound ? ('Axes ' + pm.axX + ' and ' + pm.axY + ' · set by you')
+    : found ? ('Axes ' + found[0] + ' and ' + found[1] + ' · found automatically')
+    : '—';
+  el.innerHTML = `<span>Move stick</span><small>${cur}</small>`;
+  el.onclick = () => startStickBind();
+  wrap.appendChild(el);
+  if (bound){
+    const clr = document.createElement('div');
+    clr.className = 'opt';
+    clr.innerHTML = '<span>Use the automatic one again</span>';
+    clr.onclick = () => { const q = sel.pad || {}; delete q.axX; delete q.axY; saveSel(); buildPadRows(); };
+    wrap.appendChild(clr);
+  }
+}
+function buildAxisLive(){
+  const host = $('padAxisLive'); if (!host) return;
+  const g = firstPad();
+  host.innerHTML = '';
+  const row = (k, v) => {
+    const d = document.createElement('div'); d.className = 'pathrow';
+    const a2 = document.createElement('span'); a2.className = 'pathkey'; a2.textContent = k;
+    const b2 = document.createElement('span'); b2.className = 'pathval mono'; b2.textContent = v;
+    d.append(a2, b2); host.appendChild(d);
+  };
+  if (!g){ row('Controller', 'none connected'); return; }
+  row('Mapping', g.mapping || 'non-standard');
+  row('Axes', (g.axes || []).map((v, i) => i + ':' + (v || 0).toFixed(2)).join('  ') || 'none');
+}
+function startStickBind(){
+  if (!firstPad()){ $('padStatus').textContent = 'Connect a controller first'; return; }
+  padBind.active = true; padBind.stick = true; padBind.axStep = 0;
+  padBind.axBase = null; padBind.axX = null;
+  buildPadRows(); requestAnimationFrame(padConfigLoop);
 }
 function startBind(queue){
   if(!firstPad()){ $('padStatus').textContent='Connect a controller first'; return; }
@@ -9690,6 +9764,43 @@ function advanceBind(){
 function padConfigLoop(){
   if(!padBind.active) return;
   const g=firstPad();
+  // ⚠️ ONE AXIS AT A TIME, right then down. Asking for a single push and pairing it with its
+  // neighbour guesses; asking for both directions names them, and it is the only way to know
+  // which of the two is x without assuming the very numbering that is in question.
+  if (g && padBind.stick){
+    const ax = g.axes || [];
+    if (!padBind.axBase){ padBind.axBase = Array.from(ax, v => v || 0); }
+    else {
+      let best = -1, bestD = 0;
+      for (let i = 0; i < ax.length; i++){
+        const d = Math.abs((ax[i] || 0) - padBind.axBase[i]);
+        if (d > bestD){ bestD = d; best = i; }
+      }
+      if (bestD > 0.6 && best >= 0){
+        if (padBind.axStep === 0){
+          padBind.axX = best; padBind.axStep = 1; padBind.axBase = null;
+          buildPadRows();
+          // Wait for the stick to come home before reading the second push, or the same
+          // deflection answers both questions.
+          padBind.axWait = true;
+        } else if (best !== padBind.axX){
+          sel.pad = sel.pad || {};
+          sel.pad.axX = padBind.axX; sel.pad.axY = best;
+          saveSel();
+          padBind.stick = false; padBind.active = false; padBind.axStep = 0;
+          buildPadRows();
+          return;
+        }
+      }
+      if (padBind.axWait){
+        const home = ax.every((v, i) => Math.abs(v || 0) < 0.3 || i === padBind.axX ? Math.abs(v||0) < 0.3 : true);
+        if (home){ padBind.axWait = false; padBind.axBase = Array.from(ax, v => v || 0); }
+      }
+    }
+    buildAxisLive();
+    requestAnimationFrame(padConfigLoop);
+    return;
+  }
   if(g){
     if(!padBind._init){ padBind.prev=g.buttons.map(b=>!!(b&&(b.pressed||b.value>0.5))); padBind._init=true; }
     else {
@@ -11722,6 +11833,43 @@ function oneHandKick(p, mag, held, down){
   return held;
 }
 
+// ---------- WHICH TWO AXES ARE THE MOVE STICK -------------------------------
+// ⚠️ `axes[0]`/`axes[1]` is the left stick ONLY under the STANDARD Gamepad mapping. A pad
+// reporting a non-standard one numbers its axes however it likes — which is exactly the trap
+// `padKickHeld` already documents for BUTTONS, one layer down. Reported from a Steam Deck in
+// a browser: the D-pad worked (buttons 12-15 happened to line up) and the stick did nothing
+// at all, because the sticks were not on the first two axes.
+//
+// ⚠️ A TRIGGER RESTS AT -1 and never centres, so an untouched one reads as a stick held hard
+// over — pick it as the move axis and the player drives into a wall for ever. Sticks centre
+// and triggers do not, so the smallest magnitude an axis has ever shown is what separates
+// them. It settles within a frame or two of the pad sitting still, which is what a pad does
+// at boot, and it costs one comparison per axis per poll.
+const padRest = {};                       // per pad: the smallest |value| each axis has shown
+const PADAX = { centres: 0.35, pick: 0.28 };
+function padStickAxes(g){
+  const pm = sel.pad || {};
+  // A pair bound by hand wins outright — that is what binding is for.
+  if (pm.axX != null && pm.axY != null) return [pm.axX, pm.axY];
+  if (g.mapping === 'standard') return [0, 1];
+  const ax = g.axes || [];
+  const rest = padRest[g.index] || (padRest[g.index] = []);
+  for (let i = 0; i < ax.length; i++){
+    const v = Math.abs(ax[i] || 0);
+    if (rest[i] == null || v < rest[i]) rest[i] = v;
+  }
+  const centres = i => rest[i] != null && rest[i] < PADAX.centres;
+  // The lowest-numbered pair that both centre. On every pad seen so far the move stick comes
+  // before the look stick, and a pair is taken together so x and y cannot come from different
+  // sticks.
+  for (let i = 0; i + 1 < ax.length; i++) if (centres(i) && centres(i + 1)) return [i, i + 1];
+  return [0, 1];
+}
+function padStick(g){
+  if (!g || !g.axes) return [0, 0];
+  const [ix, iy] = padStickAxes(g);
+  return [g.axes[ix] || 0, g.axes[iy] || 0];
+}
 // ---------- Gamepad polling (Gamepad API). Left stick = move, A/X/RB/RT = kick.
 // Returns a pad-like object so it flows through applyHumanInput unchanged.
 function gamepadPad(index){
@@ -11729,7 +11877,7 @@ function gamepadPad(index){
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = gps[index];
   if (!g){ return { dx:0, dy:0, kick:false, invert:false }; }
-  let dx = g.axes[0]||0, dy = g.axes[1]||0;
+  let [dx, dy] = padStick(g);
   const pm = sel.pad || {};
   // The analog stick always works; mapped direction buttons (dpad by default) fill in.
   if (Math.hypot(dx,dy) < 0.18){
@@ -20046,7 +20194,7 @@ if (window.__MAGNETDEBUG) {
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
-    oneHandKick, ONEHAND, padTouchDown, replayAbort, repMime, repClipName, recordAndShareClip, saveClip, renderAwards, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
+    oneHandKick, ONEHAND, padTouchDown, padStick, padStickAxes, PADAX, buildStickRows, startStickBind, get padBind(){ return padBind; }, replayAbort, repMime, repClipName, recordAndShareClip, saveClip, renderAwards, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
 }
 })();
