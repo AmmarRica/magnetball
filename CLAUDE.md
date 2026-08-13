@@ -250,6 +250,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   shared multiplier so they stay in proportion. ⚠️ **Render only** — physics, kick range, hit
   tests and bots all read `p.r`, and `tests/bigcourt.mjs` steps the same seed with the floor on
   and forced to 1 and requires the world bit-identical. Exactly `1` on any ordinary court.
+- **Sound sets (`SFX_SETS`):** ⚠️ a set is a whole ROOM picked at once, which is why it
+  exists rather than six separate dials — a solenoid flipper thunk under a referee's pea
+  whistle is two places at the same time. **Pinball** is the fourth: plunger, flipper, pop
+  bumper, saucer, jackpot, and the knocker plus the score reels at full time. ⚠️ A new
+  variant inserted in the MIDDLE of an `SFX` array shifts every index above it, so the
+  other sets' `pick` values move with it — the pinball whistle went in before Chirp and
+  Space's `whistle` had to go 4 → 5. `SFX_LABELS` must stay the same length as its array.
 - **Audio:** ⚠️ **one pre-generated noise buffer**, windowed with `start(when, offset, duration)`.
   `noise()` used to fill a fresh `AudioBuffer` with `Math.random` on every call, and the loudest
   sounds call it most — the Ovation cheer is 27 calls, costing 2.2ms median on the main thread at
@@ -781,6 +788,148 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   drill has no `total`, so the shared `0/0` claimed it was complete and empty at once.
   ⚠️ The player is never moved to the next ball — walking to it is the drill.
   `tests/targetsdrill.mjs`.
+- **Map maker (`MAPMAKER`, `maps`, `mapClean`, `loadMaps`/`saveMaps`/`applyMaps`,
+  `openMapMaker`, `buildMapMaker`, `drawMapPreview`, `mapStore`; `#mapMaker`):** build a
+  field — size, corners, goal mouth, net depth, post size, wall and net liveliness.
+  ⚠️ **A CUSTOM FIELD IS JUST A `FIELDS` ENTRY**, folded into the same table at boot, and
+  that one decision is what makes the whole feature small. Everything downstream already
+  works from `FIELDS` and a field key — the picker, `buildGeometry`, `drawPitch`, all
+  fourteen `DYN_FIELDS`, the goal boxes, drills, `mapVoteKey` and the self-contained
+  replay files — so a separate "custom map" concept would have meant teaching every one
+  of those about a second kind of field. **No code anywhere asks whether a field is
+  user-made.**
+  ⚠️ **The preview is drawn from `buildGeometry`**, the match's own function — never from
+  the editor's own reading of the numbers. A hand-drawn preview is a second implementation
+  of the pitch, and the first time the two disagreed the editor would be lying about the
+  field it is making (same argument as Break the Targets calling `buildGeometry` for its
+  goals). A player and a ball sit on it at **true scale**, because "goal: 150" is a
+  shooting gallery on Futsal and a letterbox on Colossus and the picture is the only place
+  that difference shows.
+  ⚠️ **Wall/goal customisation reaches the physics through `buildGeometry` reading the
+  values OFF THE FIELD** with the built-in as the fallback (`f.wallB`/`f.netB`/`f.postR`),
+  so a custom court is the same numbers on the same code path as a shipped one; every
+  `FIELDS` entry simply leaves them unset. `drawGoal` now takes the post radius from
+  **`world.posts[0].r`**, not `POST.r` — a post drawn at a size the ball does not bounce
+  off is the one thing on the pitch you aim at being in the wrong place.
+  ⚠️ **Sanitised on the way IN** (`mapClean`), not on the way out: a saved file is read
+  back every launch and handed straight to `buildGeometry`, so one bad number from an
+  older build would be a broken pitch on every match from then on with nothing to point
+  at. The clamps are the *editor's* rails, not the physics' — nothing here can build a
+  field the engine cannot. `wallB` above 1.0 (a pinball table) is deliberately reachable;
+  the ball is still contained, because `clampBallInside` is the backstop it always was.
+  ⚠️ **A delete removes it from `FIELDS` too and drops `sel.field` to `classic`** —
+  `startMatch` reads `FIELDS[sel.field]` and would hand `undefined` to `buildGeometry`,
+  which is a blank screen rather than an error anybody can read. **Play saves first, and
+  saves IN PLACE**: an existing map keeps its key, because `sel.field`, the map votes and
+  every saved replay refer to a field *by key*, so re-keying an edit orphans every vote
+  cast on it.
+  ⚠️ **DESKTOP ONLY** (`mapsPossible` → `isDesktop`), asked for. The row is **hidden**,
+  not disabled, and re-answered on `resize` as well as every rebuild — nine sliders beside
+  a live plan view is a two-column layout, and on a phone it is nine full-width rows with
+  the picture scrolled off the top, so you would be tuning a shape you cannot see.
+  ⚠️ `loadMaps()` is called from the **bootstrap block**, under `loadArcade()`, not up
+  with `loadSel()`: `applyMaps` reads `sel.field` (so the save must be in) and `mapClean`
+  clamps against `POST`, declared below the map block. **Twelfth time this file's ordering
+  has been the whole point.**
+  ⚠️ A map name is typed by a person and lands in an option tile that `buildOpts` writes
+  with `innerHTML`, so `mapClean` **strips** `<>&` rather than escaping, and `buildMapList`
+  builds its rows as nodes.
+- **Bot player types and team strategies (`BOT_TYPES`, `BOT_PLANS`, `botTypeM`,
+  `botPlanOf`, `botDrawPlans`, `sel.botPlan`):** ⚠️ **A DIFFERENT AXIS FROM DIFFICULTY,
+  and keeping them apart is the point.** `botSkill` is a **ladder** — one 0..1 scalar with
+  every axis derived from it, so a tier can only ever be better than the one below. A type
+  is a **shape**: a poacher is not a better anchor, it is a player who does something
+  else. Feeding types into the same scalar would quietly make one difficulty stronger than
+  the tier above it, which is the exact bug the ladder was rebuilt to make impossible.
+  Nothing in `BOT_TYPES` reads or writes `skill`.
+  ⚠️ **Every value is a MULTIPLIER on a `BOT` number**, never a replacement, so the tuning
+  stays in one block. `botTypeM` is the one reader and returns 1 (or 0 for the additive aim
+  biases) for anything missing — `allround` carries no numbers at all, and an `undefined`
+  times a `BOT` value poisons a formation slot silently instead of failing where anyone
+  would look.
+  ⚠️ **Types bend BEHAVIOUR, never ABILITY.** There is deliberately no accuracy, reaction
+  or speed multiplier in the table: that would be a second difficulty dial hidden inside a
+  personality, and a "Poacher" that is simply a worse player is a bug wearing a name.
+  ⚠️ **The aim lean is ADDED to a candidate's score, never used to remove one** — a
+  playmaker that cannot shoot into an open goal is broken, not characterful — and it is
+  small (±0.16) because it competes with lane, progress and openness. A big one makes a
+  bot shoot from its own half because it is "a poacher".
+  ⚠️ **A plan is keyed by ROLE, not by seat index**: roles are re-matched every
+  `roleTicks` by who is nearest what, so a plan written against seat 2 describes a
+  different player every few seconds. The type is therefore **re-read at the end of
+  `botAssignRoles`** — a body dropping from support into defence has to start defending
+  like one.
+  ⚠️ `plan.line` and the type's own `depth` **multiply**, so "park the bus with a poacher
+  up top" stays expressible, which is most of what a plan is for. `plan.press` applies
+  **only while defending**, which is what makes it a press rather than a second
+  line-height dial.
+  ⚠️ **Mixed draws BOTH sides from one call** (`botDrawPlans`), second from what is left —
+  two independent draws off the same seed handed both teams the same plan often enough to
+  look broken, and identical shapes is the one outcome Mixed exists to rule out. Drawn off
+  the match seed through its own generator, so it takes nothing out of `w.rng`.
+  The picker's tiles are **built from `BOT_PLANS`** (names and blurbs read, never copied).
+  Full write-up: `docs/BOT-AI.md`.
+- **Hold to kick harder (`sel.charge`, `sel.chargeMs`, `chargeOn`, `chargeSecs`,
+  `chargeFrac`, `chargeMul`):** the wind-up has always been in the physics at a fixed 0.6s
+  for +90% and was the one part of the kick the menu never admitted to.
+  ⚠️ **TWO controls, not one.** "How long" and "whether" are different questions: somebody
+  who wants the power wants to tune the wind-up, and somebody who does not want to charge
+  every time they hold KICK to trap wants it gone. A slider with an off at one end cannot
+  say the second thing — zero seconds means *instant* full power, the opposite.
+  ⚠️ **`CHARGE.max` is the DEFAULT the slider is born at, not the value the game reads** —
+  `chargeSecs()` is what the physics and the wind-up ring both go through, so the dial
+  cannot move one and leave the other behind.
+  ⚠️ **`chargeMul` is the ONE place** a wound-up kick becomes a number. Six call sites had
+  their own copy of `1 + (chargeT / CHARGE.max) * CHARGE.bonus` — a trap release, a
+  one-touch, a snail boot, a body check and two draws — so a switch that had to reach all
+  six would have reached five, and the one left behind would keep charging invisibly. The
+  wind-up ring is gated on `chargeOn()` too, or it promises power that is not coming.
+- **Names thin out near the ball (`LABEL_BALL`, `labelBallFade`):** a *different rule*
+  from `LABEL_DIM`, for a different reason. That one is about **overlap** — a plate
+  literally on top of a disc — and can only fire once the damage is done. This one is
+  about the part of the pitch you are reading: everything happens within a body's length
+  or two of the ball, that is where four plates stack into a wall of text, and a name is
+  worth least exactly where the play is worth most. ⚠️ Measured in **world units** off the
+  nearest un-banked ball through `ix`/`iy`, so it means the same on Classic and Colossus
+  and does not move with the zoom. ⚠️ A **ramp**, not a switch, and `near` is above zero —
+  the plates recede, they do not vanish. The two rules compose by taking the quieter answer.
+- **Fireworks for the goal that WINS it (`FIREWORK`, `startFireworks`,
+  `advanceFireworks`, `w.fwT`):** every goal got the same confetti and then the pitch went
+  quiet, so the one that won the match looked like the one that made it 1-0.
+  ⚠️ **Shells over time, not one bigger burst** — a single larger explosion is over in the
+  same second the confetti was, and "keep the fireworks" is a question of duration.
+  ⚠️ Spawned from the **step loop** off **`fxRnd`**: a draw would run the show 2.4× fast at
+  144Hz (the trails rule), and drawing from `w.rng` would make how many sparks flew perturb
+  every later bot decision. Runs during `goal` **and** `over`, because those are the two
+  halves of one celebration — `step()` keeps integrating through the whistle while
+  `endRamp` winds the rate down, so the show slows with everything else. Cleared in
+  `resetKickoff`, so no match inherits an unfinished one.
+- **Who kicks off (`kickoffToss`):** the side that CONCEDED after a goal, and a **coin
+  toss** at the start. It was hard-coded to team 1 for the first whistle of every match
+  ever played — and since the warm-up lobby lets you walk onto either half, which side
+  that was had nothing to do with who was sitting there. ⚠️ Tossed off the **match seed**
+  rather than `Math.random`, and through **its own generator** rather than a draw from
+  `w.rng`: a pinned seed has to reproduce the whole match, and taking a number out of the
+  shared stream would shift every bot decision after it just to decide a kickoff.
+- **A TOUCH starts the match (`KICKOFF_TOUCH`):** the ball is frozen at kickoff
+  (`integrate(w, true, false)`), so walking into it did nothing at all — the body went
+  through the thing it was standing on and the match sat waiting for a button. Running
+  onto the ball and driving away with it is the ordinary way to start. Small margin on
+  purpose: contact, not proximity.
+- **Drills use the ball you PICKED** — `startDrill` takes `BALLS[sel.ball]`, not `BALL`. A
+  drill already borrows the sliders, the grip, the kick power and the magnet so it plays
+  like a match, and then handed you a differently sized, differently weighted ball to
+  practise with.
+- **Difficulty tiles are RISING BARS** (`iconTier`), generated from `DIFF`'s own length so
+  a new tier needs no new drawing. ⚠️ It shipped as equal **pips**, which say "four of
+  seven" — a position in a list. What a difficulty tile has to say is "steeper", and height
+  is the one property that means that without being read; seven identical dots also have to
+  be *counted* to be told apart, so at tile size the middle four looked alike. Same
+  argument the disc skins are built on.
+- **There is NO "Settings" tile under More**, and its absence is the point: the settings
+  *are* the menu — eleven cards of them, on the screen the tile was sitting on — so it was
+  a door onto the room you were already standing in. The detached panel is still reachable
+  from Display, where a window-management choice belongs.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.

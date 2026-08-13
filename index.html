@@ -2227,6 +2227,11 @@
    Pad binding                 "CONTROLLER BUTTON MAPPING"
    Map votes                   "MAP VOTES"
    Practice drills             "PRACTICE DRILLS"
+   Map maker (storage)         "MAP MAKER — fields you build yourself"
+   Map maker (editor)          "MAP MAKER — the editor"
+   Hold to kick harder         "HOLD TO KICK HARDER"
+   Bot types / strategies      "PLAYER TYPES AND TEAM STRATEGIES"
+   Fireworks                   "FIREWORKS — only for the goal"
 
    ── the match ────────────────────────────────────────────────────────────
    Match setup (startMatch)    "MATCH SETUP"
@@ -3451,7 +3456,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0245PM';
+const VERSION = '20260813.0640PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3467,6 +3472,23 @@ const VERSION = '20260813.0245PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.0640PM', title: 'Map maker, bot strategies, and eight more',
+    added: [
+      '<b>Map maker</b> \u2014 build your own field. Set the size, the corners, the goals, the posts and how lively the boards are, with a live plan view beside the sliders. Your fields sit alongside the built-in ones everywhere: the picker, the map votes, replays and drills. Desktop only.',
+      '<b>Bot strategies.</b> The AI sides now set up in one of six shapes \u2014 balanced, all-out attack, park the bus, counter, high press or possession \u2014 and the players in them come in types: poachers live high and shoot early, playmakers find room and look for the pass, terriers hound whoever has it. Pick one, or leave it on Mixed and each side gets its own. It is a shape, not a strength: every strategy is available at every difficulty.',
+      '<b>Hold to kick harder</b> is a setting now, in Game Feel \u2192 Ball. It has always been in the game; now you can say how long the wind-up takes, or turn it off if you hold KICK to carry the ball.',
+      '<b>Pinball sounds.</b> A whole table: the plunger on the kickoff, a flipper on the kick, a pop bumper off the boards, the saucer for the net, a jackpot for the goal and the knocker at full time.',
+    ],
+    changed: [
+      '<b>The goal that wins the match keeps celebrating</b>, with fireworks over the pitch through to the whistle. It used to look exactly like the one that made it 1-0.',
+      '<b>Names thin out near the ball</b>, so the part of the pitch you are actually reading is not covered in labels.',
+      '<b>The opening kickoff is a coin toss.</b> One side got the first ball of every match ever played.',
+      '<b>Running onto the ball starts the match</b> \u2014 you no longer have to stop and press KICK first.',
+      'Drills use the ball you picked, instead of always the standard one.',
+      'Difficulty tiles are rising bars rather than a row of identical dots.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0245PM', title: 'The thumbstick, for good this time',
     added: [],
     changed: [
