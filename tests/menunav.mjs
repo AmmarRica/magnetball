@@ -189,7 +189,12 @@ const r = await p.evaluate(async ()=>{
 
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
-ok(r.groups === 'feel,match,player,theme', `expected sub-tabs on feel, match, player and theme, got ${r.groups}`);
+// ⚠️ Five groups now. Replays joined them because a goal and a whole match are different
+// things you go looking for at different moments, and forty rows of both interleaved by time
+// means scrolling past matches to find goals. Asserted as an exact set on purpose: a group
+// arriving without its panes, or a pane without its chip, is how controls end up hidden while
+// `audit` and the menu search still find them.
+ok(r.groups === 'feel,match,player,replay,theme', `expected sub-tabs on feel, match, player, replay and theme, got ${r.groups}`);
 // ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
 // to come from one list, or a new slot arrives with a pane and no chip and its controls are
 // hidden while the audit and the menu search still find them.

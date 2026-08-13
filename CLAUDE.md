@@ -900,6 +900,49 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   60ms). ⚠️ `#repCtl` lives **outside `#hud`** — playback hides the HUD, and in there the bar
   was `hidden`-free and **zero pixels tall**. `tests/replaywatch.mjs` measures rendered
   boxes, never the class.
+- **A replay you CHOSE to watch is not an interruption** (`replay.controls`, `replay.ended`,
+  `replay.restart`). Two things follow, and both were wrong.
+  ⚠️ **It HOLDS on the last frame** instead of closing itself. Reaching the end is not a
+  request to leave — you went looking for that one — and closing took away watching it
+  again, scrubbing back to the goal, or slowing it down, all of which the transport already
+  offers. The bar's ✕ is what leaves, and the pause button becomes **Watch again**
+  (`repTogglePause` sets `replay.restart`, the tick honours it). The goal replay is
+  untouched: it interrupted the match, so getting out of the way is right.
+  ⚠️ Which means **`playReplayFile` with controls no longer resolves on its own** — it
+  settles when something exits. `watchReplayFile` awaits it and restores the menu in a
+  `finally`, which is exactly the wanted behaviour; a synchronous `await` on it in a test is
+  a hang (it cost this suite twenty minutes once).
+  ⚠️ **`replayAbort()` therefore SETTLES the promise** (`replay.finish`, idempotent). It
+  cancels the pending frame, so the tick that would have called `finish()` never runs, and
+  the awaiter — and the `finally` that puts the menu back — was orphaned. Lowering the flag
+  was enough only while the tick was left alive to notice.
+  ⚠️ **No "▶ REPLAY" caption over it.** The label exists to explain a replay that cut in by
+  itself; on one you opened it is a word sitting on top of what you came to watch.
+  ⚠️ `tests/replayfile.mjs` measures the caption as a **DIFFERENCE** between the same frame
+  drawn both ways, never an absolute pixel count — the halfway line and the centre circle
+  are drawn in a colour close to the accent and sit exactly where the caption would, so
+  "few accent pixels in the middle" read 103 with the label already gone.
+- **Auto-record** (`sel.autoRec`, `AUTORECOPT`, `autoRecSave`, `autoRecName`): keep every
+  goal without pressing anything — for demoing, where stopping to save each one is the thing
+  you cannot do. ⚠️ Fires from **`repFreeze`**, not `repOnGoal`: the first freeze happens the
+  instant the ball crosses so the replay bar is never looking at nothing, and it stops AT the
+  crossing, so auto-saving that one files away every goal with the net cut off the end. This
+  is the freeze that has `REP_TAIL` on it. ⚠️ **Library only, never a download** — a file per
+  goal puts an unasked-for save dialog on screen mid-match on some browsers and buries a
+  downloads folder in a long session. ⚠️ Three states, not a toggle: goals are ~40KB each and
+  a whole match ~800KB, so `all` is a separate choice rather than something that arrives with
+  the first one. Default **off**, since it writes to storage on every goal.
+- **Replays are NAMEABLE and the card is TABBED** (`repLibRename`, `SUBTABS.replay`,
+  `fillRepPane`). A name **replaces** the generated title rather than appending to it — the
+  point of naming one is to find it, and "Kai 2-1 · Goal · Classic · 3v3" buries the half you
+  chose behind the half the game chose — and it reaches the exported **filename**, because a
+  downloads folder is where you go looking. Auto-recorded ones are named at the moment of the
+  goal (scorer + scoreline), since a row read weeks later is otherwise the same row over and
+  over. ⚠️ The rename is an inline input, not a `prompt()`: prompt is blocked outright in an
+  installed PWA on some platforms and cannot be reached by a controller. ⚠️ `repLibRename`
+  does its read-modify-write **inside one transaction**, or two overlapping renames lose one.
+  Goals and matches get a pane each — forty rows of both interleaved by time means scrolling
+  past matches to find goals.
 - **Replay files on disk** (`REPFILE`, `repFileBuild`/`repFileParse`/`repFileWorld`,
   `saveReplayFile`, `playReplayFile`, `openReplayFile`). Save clip writes a **video** —
   right for sending someone, wrong for keeping: large, baked at whatever size the window
@@ -911,7 +954,8 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   screen at z-index 20 over the canvas, so a replay plays perfectly and is completely
   invisible — `watchReplayFile` calls `hideScreens()` first and puts the screen back in a
   `finally`, so a throw mid-playback still lands you somewhere. Ending and stopping early
-  come back the same way, because `playReplay` resolves identically for both.
+  come back DIFFERENTLY now: an exit returns you, and running to the end HOLDS on the last
+  frame instead — see the replay-you-chose entry above.
   ⚠️ `watchReplayFile(back, pick)` takes a picker override purely so a suite can drive it —
   a real file dialog can't be opened headlessly, and what's worth testing is what happens
   *around* the playback.
