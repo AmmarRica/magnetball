@@ -1131,7 +1131,7 @@
     /* About reuses the Replays card's key/value rows — same job, same shape. */
     #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px; }
     /* 44px: these are the two things anyone opens About to press. */
-    #updCheckBtn, #aboutNews { display:block; width:100%; min-height:44px; }
+    #updCheckBtn { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
     .reprow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
       background: rgba(128,128,128,.08); border:1px solid var(--edge); }
@@ -1747,12 +1747,6 @@
     </div>
 
 
-    <div class="card collapsible collapsed" data-sec="news">
-      <h2>What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></h2>
-      <div id="newsList"></div>
-      <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
-    </div>
-
     <!-- Replays. Its own section because loading one is something you do between
          matches, from the menu, not from a screen that is covering the pitch. -->
     <div class="card collapsible collapsed" data-sec="replay">
@@ -1776,7 +1770,14 @@
     </div>
     <!-- About. The version and the update check live HERE rather than under the title and
          above the fold: both are things you go looking for once, and neither is worth the
-         two permanent lines they cost at the top of every visit. -->
+         two permanent lines they cost at the top of every visit.
+         ⚠️ WHAT'S NEW LIVES HERE TOO, and the two were separate cards with a button in this
+         one whose whole job was to jump to the other. They answer one question — "what am I
+         running, and what changed in it" — so the version, the update check and the release
+         notes are three parts of one answer and were two chips in the jump bar, two rows in
+         the accordion and a hop between them. The changelog goes LAST because it is the
+         longest thing here by far and the two lines above it are what somebody opening
+         "About" came for. -->
     <div class="card collapsible collapsed" data-sec="about">
       <h2>About</h2>
       <div id="aboutInfo">
@@ -1787,8 +1788,11 @@
            only way a player can ASK. Never dead: offline it reports that it could not reach
            the server rather than doing nothing. -->
       <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
-      <button class="ghost" id="aboutNews" type="button" style="margin-top:8px">What&rsquo;s new in this version</button>
       <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
+      <div style="height:14px"></div>
+      <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
+      <div id="newsList"></div>
+      <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="online">
@@ -3183,7 +3187,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0015AM';
+const VERSION = '20260813.0140AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3199,7 +3203,7 @@ const VERSION = '20260813.0015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260813.0015AM', title: 'Standup arcade mode',
+  { v: '20260813.0140AM', title: 'Standup arcade mode',
     added: [
       'A new Display layout: Standup arcade. Four sets of controls on one keyboard, wired the way a real cabinet is, so four people can play against the AI or two a side with nothing but a keyboard encoder.',
       'The panel uses the arcade standard map, so a cabinet works with no setup: P1 on the arrows, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1 to 4 to start and 5 to 8 to insert a coin.',
@@ -3207,6 +3211,7 @@ const CHANGELOG = [
     ],
     changed: [
       'Goal replays now wait a moment longer before cutting in, so you get to see the ball in the net first.',
+      'What\u2019s new now lives inside About, alongside the version and the update check, instead of being a separate section you had to go to.',
     ],
     fixed: 'A handful of smaller fixes.' },
 
@@ -7976,7 +7981,6 @@ $('socialBack').onclick = closeSocial;
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
 $('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
-$('aboutNews').onclick = () => openSection('news');
 $('repPause').onclick = repTogglePause;
 $('repExit').onclick = skipReplay;
 $('repWatchBtn').onclick = () => watchReplayFromMenu();

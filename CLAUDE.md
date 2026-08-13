@@ -1268,14 +1268,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
-- **About card (`data-sec="about"`, `buildAbout`)** — the version (`#ver`) and
-  **Check for updates** (`#updCheckBtn`) live here, not under the title and above the fold:
-  both are things you go looking for once, and neither was worth the two permanent lines
-  they cost at the top of every visit. Plus a status line that names a waiting build and
-  counts down with it, and a link across to What's new. ⚠️ `buildAbout()` writes **text
-  only** — `#ver` is a child of `#aboutInfo` and the boot block fills it, so rebuilding that
-  subtree would blank it. ⚠️ With no server to ask (a `file://` page) the status says so
-  rather than claiming "up to date", which would be a guess presented as a fact.
+- **About card (`data-sec="about"`, `buildAbout`, `buildNews`)** — the version (`#ver`),
+  **Check for updates** (`#updCheckBtn`) and the **changelog** (`#newsList`), in that order.
+  Not under the title and above the fold: the version and the check are things you go
+  looking for once, and neither is worth the two permanent lines they cost at the top of
+  every visit.
+  ⚠️ **What's new is NOT its own card.** It was, with a button in About whose entire job was
+  to `openSection('news')` — so one question ("what am I running, and what changed in it")
+  was two rows in the accordion, two chips in the jump bar and a hop between them. The
+  changelog goes **last** because it is by far the longest thing in the card and the two
+  lines above it are what somebody opening "About" came for.
+  ⚠️ `buildAbout()` writes **text only** — `#ver` is a child of `#aboutInfo` and the boot
+  block fills it, so rebuilding that subtree would blank it. ⚠️ With no server to ask (a
+  `file://` page) the status says so rather than claiming "up to date", which would be a
+  guess presented as a fact.
 - **Forced updates (`UPD.graceDays` = 30, `#updBlock`, `updEnforce`):** a check on every
   launch and every return to the app, and after **30 days** with a newer build available the
   game **stops** until it is installed. ⚠️ The deadline is **persisted** (`magnetball.upd`

@@ -176,7 +176,10 @@ const page = async (seed, w = 900, h = 1000) => {
   const p = await page();
   const r = await p.evaluate(() => {
     const M = window.__magnet;
-    M.openSection('news');
+    // ⚠️ The changelog lives INSIDE the About card. They used to be two cards with a button
+    // in About whose only job was to jump to the other, and they answer one question — what
+    // am I running, and what changed in it.
+    M.openSection('about');
     const blocks = [...document.querySelectorAll('#newsList .relblock')];
     return {
       entries: M.CHANGELOG.length,
@@ -194,7 +197,13 @@ const page = async (seed, w = 900, h = 1000) => {
       // ...and nothing in it reads like an internal note.
       noJargon: !M.CHANGELOG.some(e => JSON.stringify(e).match(
         /flex|css|querySelector|IndexedDB|localStorage|refactor|TDZ|regex|z-index|predicate/i)),
-      inSearch: M.menuSearchIndex().some(x => x.sec === 'news'),
+      inSearch: M.menuSearchIndex().some(x => x.sec === 'about'),
+      // ...and there is no separate card left behind for it.
+      noNewsCard: !document.querySelector('#setup .card[data-sec="news"]'),
+      // The version and the update check are still in the same place as the notes.
+      versionWithIt: !!document.querySelector('#setup .card[data-sec="about"] #ver') &&
+                     !!document.querySelector('#setup .card[data-sec="about"] #updCheckBtn') &&
+                     !!document.querySelector('#setup .card[data-sec="about"] #newsList'),
     };
   });
   ok('the changelog renders every entry', r.rendered === r.entries && r.entries >= 2,
@@ -203,6 +212,9 @@ const page = async (seed, w = 900, h = 1000) => {
   ok('the running build is in it, at the top', r.hasCurrent && r.newestFirst);
   ok('your version is marked', /you have this/.test(r.marksYours), r.marksYours);
   ok('bug fixes are one generic line', r.oneFixLine);
+  ok('the changelog is IN the About card, not a card of its own', r.noNewsCard && r.versionWithIt,
+     JSON.stringify({ noNewsCard: r.noNewsCard, together: r.versionWithIt }) +
+     ' — the version, the update check and the release notes are three parts of one answer, and they were two accordion rows, two jump-bar chips and a button whose only job was to hop between them');
   ok('nothing in it is written for a developer', r.noJargon,
      'a changelog that itemises internals is one nobody reads twice');
   ok('the card is findable in the menu search', r.inSearch);
