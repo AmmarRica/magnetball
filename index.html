@@ -1129,7 +1129,15 @@
     .pathval.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     #repWatchBtn, #repClearAll { display:block; width:100%; margin:0 0 4px; }
     /* About reuses the Replays card's key/value rows — same job, same shape. */
-    #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px; }
+    /* ⚠️ The whole block is one 44px+ press target, so there is no small thing to hit. */
+    #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px;
+      cursor:pointer; border-radius:11px; padding:2px; margin-left:-2px; margin-right:-2px;
+      -webkit-tap-highlight-color: transparent; }
+    #aboutInfo:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    #aboutInfo:active .pathrow { border-color: var(--accent); }
+    .copyhint { font-family: var(--pix); font-size:10px; letter-spacing:.5px;
+      color: var(--muted); text-align:right; padding:0 10px; }
+    #aboutInfo.copied .copyhint { color: var(--accent); }
     /* 44px: these are the two things anyone opens About to press. */
     #updCheckBtn { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
@@ -1784,9 +1792,16 @@
          "About" came for. -->
     <div class="card collapsible collapsed" data-sec="about">
       <h2>About</h2>
-      <div id="aboutInfo">
+      <!-- ⚠️ ONE TAP COPIES IT. The version is the first thing anybody is asked for when
+           they report something, and reading a timestamp off a phone screen and retyping it
+           is exactly where it gets transcribed wrong — which has already cost one round of
+           "which build are you on". The whole block is the target so there is nothing to aim
+           at, and it copies the screen size and layout with it, because those are the next
+           two questions and neither is anything personal. -->
+      <div id="aboutInfo" role="button" tabindex="0" aria-label="Copy version details">
         <div class="pathrow"><span class="pathkey">Version</span><span class="pathval mono" id="ver"></span></div>
         <div class="pathrow"><span class="pathkey">Updates</span><span class="pathval" id="aboutUpd"></span></div>
+        <div class="copyhint" id="aboutCopyHint">Tap to copy</div>
       </div>
       <!-- ⚠️ An installed PWA has no reload button and no address bar, so "check now" is the
            only way a player can ASK. Never dead: offline it reports that it could not reach
@@ -3191,7 +3206,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0330AM';
+const VERSION = '20260813.0505AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3207,13 +3222,14 @@ const VERSION = '20260813.0330AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260813.0330AM', title: 'Replay fixes, and a replay length dial',
+  { v: '20260813.0505AM', title: 'Replay fixes, and a replay length dial',
     added: [
       'A Replay starts slider in Game Feel \u2192 Camera: choose how far back a goal replay begins, from 2 to 15 seconds, so you see the build-up that made the goal and not just the shot.',
     ],
     changed: [
       'Save clip now tells you what happened. If your browser cannot record video it says so and points you at Save replay, instead of playing the goal back and quietly saving nothing.',
       'Each saved clip gets its own filename, so a new one no longer overwrites the last.',
+      'Tap the version in About to copy it, along with your screen size and layout \u2014 the things worth pasting into a bug report.',
     ],
     fixed: 'Opening a saved replay from the menu could do nothing at all, and one-handed mode fired a shot whenever you changed direction. Both fixed, along with a handful of smaller things.' },
 
@@ -8716,6 +8732,16 @@ function buildSettings(){
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
   const acb=$('arcadeCfgBtn'); if (acb) acb.onclick=openArcadeCfg;
+  // The About block is a copy target. Bound here as well as at boot because buildSettings
+  // rebuilds nothing in it — but the handler is cheap and one binding site is one place to
+  // look, rather than two that can drift.
+  { const ai=$('aboutInfo');
+    if (ai && !ai._copyBound){
+      ai._copyBound = true;
+      ai.onclick = copyAbout;
+      // Keyboard and Steam Deck reach it the same way anything else with a role does.
+      ai.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); copyAbout(); } };
+    } }
   buildBallLookPick();
   const kp=$('kickPushPick');
   if (kp){ kp.innerHTML='';
@@ -11016,6 +11042,56 @@ function downloadPathHint(){
 // About: the version, and whether anything newer is waiting. ⚠️ Text only — `#ver` is a
 // child of `#aboutInfo` and the boot block writes it, so this must never rebuild that
 // subtree out from under it.
+// What a bug report actually needs, in one string. ⚠️ Version, update status, screen size
+// and layout — and NOTHING personal: no name, no photo, no stats, no career. It is the
+// answer to "which build, what were you looking at", which is the round trip this saves.
+function aboutReport(){
+  const cvEl = $('game');
+  const w = Math.round((cvEl && cvEl.clientWidth) || window.innerWidth);
+  const h = Math.round((cvEl && cvEl.clientHeight) || window.innerHeight);
+  const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) ||
+                     navigator.standalone === true;
+  return [
+    'Magnetball v' + VERSION,
+    'Updates: ' + (($('aboutUpd') || {}).textContent || '—'),
+    'Screen: ' + w + '\u00d7' + h + ' @' + dpr + (standalone ? ' (installed)' : ''),
+    'Layout: ' + viewMode() + (sel.sideView && sel.sideView !== 'off' ? ' · side view on' : ''),
+  ].join('\n');
+}
+// ⚠️ It REPORTS, including when it fails. `navigator.clipboard` needs a secure context, so
+// on a `file://` page or plain http it is simply absent — and a copy button that silently
+// does nothing is the Save clip mistake again. The `execCommand` path is the fallback that
+// covers those, and if even that fails the hint says so rather than claiming success.
+async function copyAbout(){
+  const el = $('aboutInfo'), hint = $('aboutCopyHint');
+  const say = (msg, good) => {
+    if (!hint) return;
+    hint.textContent = msg;
+    if (el) el.classList.toggle('copied', !!good);
+    setTimeout(() => { hint.textContent = 'Tap to copy'; if (el) el.classList.remove('copied'); }, 2000);
+  };
+  const text = aboutReport();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+      say('\u2713 Copied', true); return true;
+    }
+  } catch(_){ /* denied or unavailable — fall through to the old way */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    // Off-screen but focusable: `display:none` cannot be selected, and a visible one
+    // scrolls the card under the finger that just pressed it.
+    ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    ta.remove();
+    say(ok ? '\u2713 Copied' : '\u26a0 Could not copy', ok);
+    return !!ok;
+  } catch(_){ say('\u26a0 Could not copy', false); return false; }
+}
 function buildAbout(){
   const el = $('aboutUpd'); if (!el) return;
   const r = updRec();
@@ -19559,7 +19635,7 @@ if (window.__MAGNETDEBUG) {
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,

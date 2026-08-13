@@ -295,6 +295,62 @@ const page = async (seed, w = 900, h = 1000) => {
   // than claim to be up to date — which would be a guess presented as a fact.
   ok('with no server it says so', /no server/.test(r.status), r.status);
 
+  // ---- ⚠️ ONE TAP COPIES THE VERSION -------------------------------------
+  // The version is the first thing anybody is asked for in a report, and reading a
+  // timestamp off a phone and retyping it is where it gets transcribed wrong — which has
+  // already cost a round of "which build are you on".
+  {
+    const c = await p.evaluate(async () => {
+      const M = window.__magnet, o = {};
+      { const dm = document.getElementById('dmCollect'); if (dm) dm.click(); }
+      M.openLook('about');
+      await new Promise(r => setTimeout(r, 200));
+      const ai = document.getElementById('aboutInfo');
+      o.isATarget = ai.getAttribute('role') === 'button' && ai.tabIndex === 0;
+      // ⚠️ Scroll to it FIRST and hit-test its CENTRE. About is the last card, so its box
+      // is off-screen otherwise and elementFromPoint returns null — which fails for a
+      // reason that has nothing to do with the control. Same trap #lobbyStartBtn hit:
+      // `.click()` dispatches at the node and does no hit testing at all, so it would pass
+      // over a completely unpressable element.
+      ai.scrollIntoView({ block: 'center' });
+      await new Promise(r => setTimeout(r, 150));
+      const b = ai.getBoundingClientRect();
+      o.tall = Math.round(b.height);
+      const hit = document.elementFromPoint(b.left + b.width/2, b.top + b.height/2);
+      o.pressable = hit === ai || ai.contains(hit);
+      o.hitName = hit ? (hit.id || hit.className || hit.tagName) : 'null';
+      o.report = M.aboutReport();
+      o.hasVersion = o.report.indexOf(M.VERSION) >= 0;
+      // ⚠️ Nothing personal goes on a clipboard the player will paste into a bug report.
+      o.noProfile = !/data:image|photo/i.test(o.report) &&
+                    (!M.profile.name || o.report.indexOf(M.profile.name) < 0);
+      // ⚠️ PRESS IT, do not call the function. Calling `copyAbout()` directly exercises the
+      // copying and nothing about the wiring — verified: deleting the onclick binding
+      // altogether left this green. `.click()` still does no hit testing, which is why
+      // `pressable` above is a separate elementFromPoint check; between the two, an
+      // unreachable control and an unwired one both fail.
+      document.getElementById('aboutCopyHint').textContent = 'Tap to copy';
+      ai.click();
+      await new Promise(r => setTimeout(r, 250));
+      o.saidSo = document.getElementById('aboutCopyHint').textContent;
+      o.copied = /copied/i.test(o.saidSo);
+      await new Promise(r => setTimeout(r, 2100));
+      o.resets = document.getElementById('aboutCopyHint').textContent;
+      return o;
+    });
+    ok('the version block is a press target', c.isATarget, JSON.stringify(c));
+    ok('...that is actually pressable', c.pressable,
+       `a tap at its centre landed on ${c.hitName} — .click() does no hit testing, so it would pass over a control nothing can reach`);
+    ok('...and big enough to hit', c.tall >= 44, `${c.tall}px tall`);
+    ok('it copies the running version', c.hasVersion, JSON.stringify(c.report));
+    ok('...and nothing personal with it', c.noProfile, JSON.stringify(c.report));
+    ok('pressing it copies', c.copied === true,
+       `pressing the block left the hint reading ${JSON.stringify(c.saidSo)} — this is the wiring, not the copying: calling copyAbout() by hand passes with the onclick deleted`);
+    ok('...and SAYS it worked', /copied/i.test(c.saidSo),
+       `hint read ${JSON.stringify(c.saidSo)} — a copy button that does nothing visible reads as broken, which is the Save clip lesson`);
+    ok('...then goes back to the invitation', /tap to copy/i.test(c.resets), c.resets);
+  }
+
   // The status follows the record, and counts down with it.
   const live = await p.evaluate((DAY) => {
     const M = window.__magnet;

@@ -1278,6 +1278,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   was two rows in the accordion, two chips in the jump bar and a hop between them. The
   changelog goes **last** because it is by far the longest thing in the card and the two
   lines above it are what somebody opening "About" came for.
+  ⚠️ **The version block is a ONE-TAP COPY** (`#aboutInfo`, `aboutReport`, `copyAbout`).
+  The version is the first thing anybody is asked for in a report, and reading a timestamp
+  off a phone and retyping it is exactly where it gets transcribed wrong — which has already
+  cost a round of "which build are you on". The whole block is the target so there is
+  nothing small to aim at, and it carries the screen size and the layout, because those are
+  the next two questions; **nothing personal** goes on the clipboard — no name, no photo, no
+  stats. ⚠️ It **reports failure**: `navigator.clipboard` needs a secure context and is
+  simply absent on a `file://` or plain-http page, so there is an `execCommand` fallback and
+  the hint says "could not copy" rather than nothing — the Save clip lesson.
+  ⚠️ The suite **presses the element** rather than calling `copyAbout()`, which was verified
+  by deleting the onclick and watching a direct call stay green; reachability is a separate
+  `elementFromPoint` check, because `.click()` does no hit testing.
   ⚠️ `buildAbout()` writes **text only** — `#ver` is a child of `#aboutInfo` and the boot
   block fills it, so rebuilding that subtree would blank it. ⚠️ With no server to ask (a
   `file://` page) the status says so rather than claiming "up to date", which would be a
