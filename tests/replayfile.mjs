@@ -88,7 +88,9 @@ ok('players carry what it takes to draw them',
 ok('and nothing else', made.player0 && !('vx' in made.player0) && !('ms' in made.player0) && !('aiTarget' in made.player0),
    Object.keys(made.player0 || {}).join());
 ok('it is small', made.bytes < 200000, made.bytes + ' bytes');
-ok('the filename is safe on every OS', /^magnetball-replay-classic-[\d-]+\.json$/.test(made.filename) && !made.filename.includes(':'),
+// ⚠️ The KIND is in the name: a goal and a whole match off the same court are otherwise
+// the same filename twice, and one of them is twenty times the size of the other.
+ok('the filename is safe on every OS, and says which kind', /^magnetball-(goal|match)-replay-classic-[\d-]+\.json$/.test(made.filename) && !made.filename.includes(':'),
    made.filename);
 ok('the look is recorded', made.look && typeof made.look === 'object');
 ok('it stamps the build and the date', made.build && made.saved);
@@ -252,6 +254,409 @@ await p.close();
     return { noDoc: M.repFileBuild() === null, noSave: M.saveReplayFile() === false };
   });
   ok('no replay yet → no file, no throw', empty.noDoc && empty.noSave, JSON.stringify(empty));
+  await q.close();
+}
+
+// ============================================================
+//  THE WHOLE MATCH, and the two kinds kept apart
+// ============================================================
+// A goal replay is the last few seconds; a match replay is kickoff to the whistle. They come
+// out of two different buffers on purpose — the goal one wants every frame of a few seconds,
+// the match one wants a watchable record of several minutes without carrying a quarter of a
+// million objects to get it — but they are the same format and the same code path from
+// `saveReplayFile` down, so a file of either kind loads the same way.
+{
+  const q = await b.newPage({ viewport:{ width:1000, height:700 } });
+  const qerr = []; q.on('pageerror', e => qerr.push(e.message));
+  q.on('console', m => { if (m.type()==='error' && !/ERR_TUNNEL|Failed to load/.test(m.text())) qerr.push(m.text()); });
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  const m = await q.evaluate(() => {
+    const M = window.__magnet; const o = {};
+    const dm = document.getElementById('dmCollect'); if (dm) dm.click();
+    M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
+    M.setMatchSeed(21); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (let i = 0; i < 3600; i++) M.step(w);        // a minute of match
+
+    const doc = M.repMatchFileBuild(), goalDoc = M.repFileBuild();
+    o.kinds = [goalDoc && goalDoc.kind, doc && doc.kind];
+    o.frames = doc.frames.length; o.fps = doc.fps;
+    // ⚠️ The length is checked against the STEPS taken, not against the frame count on its
+    // own: a buffer that recorded a tenth of the match would still have "some frames".
+    o.seconds = +(doc.frames.length / doc.fps).toFixed(1);
+    o.coversTheMatch = Math.abs(o.seconds - 3600/60) < 1.5;
+    // Every goal is marked, and the count agrees with the score — the one cross-check that
+    // does not read the same number twice.
+    o.goals = (doc.goals || []).length;
+    o.scoreTotal = doc.score[0] + doc.score[1];
+    o.goalsMatchScore = o.goals === o.scoreTotal && o.goals > 0;
+    o.goalsInRange = (doc.goals || []).every(g => g >= 0 && g < doc.frames.length);
+    // A match file is much bigger than a goal file, which is the whole reason they are
+    // separate buttons — and a check that they are not accidentally the same buffer.
+    o.matchBytes = JSON.stringify(doc).length;
+    o.goalBytes = goalDoc ? JSON.stringify(goalDoc).length : 0;
+    o.goalSeconds = goalDoc ? +(goalDoc.frames.length / goalDoc.fps).toFixed(1) : 0;
+    // ⚠️ Compared on TIME COVERED, not on bytes. A minute of match at 30Hz is only about
+    // four times a 7.6-second goal at 60Hz in size, so a byte-ratio threshold is really a
+    // statement about how long the test match happened to be.
+    o.matchIsBigger = o.seconds > o.goalSeconds * 3;
+    o.rowsEqual = new Set(doc.frames.map(r => r.length)).size === 1;
+    o.parses = (() => { try { M.repFileParse(JSON.stringify(doc)); return true; }
+                        catch(e){ return 'ERR ' + e.message; } })();
+
+    // ⚠️ A ROSTER CHANGE mid-match must not break the file. `w.players` grows when a
+    // controller drops in and evenUpSides adds a bot to match, so a row captured after that
+    // is longer than one captured before — and a file whose rows disagree with its own
+    // player count either fails to parse (the good outcome) or indexes past the end of a
+    // row and fails as a BLANK SCREEN. Driven by actually adding a body and stepping on.
+    const before = M.repMatchBuf.length;
+    const joiner = M.mkPlayer(0, 'Late', '#ffffff', 'none', 'bot', 'none', 'googly');
+    joiner.x = 0; joiner.y = 200; w.players.push(joiner);
+    for (let i = 0; i < 600; i++) M.step(w);
+    const doc2 = M.repMatchFileBuild();
+    o.grew = M.repMatchBuf.length > before;
+    o.afterRowsEqual = new Set(doc2.frames.map(r => r.length)).size === 1;
+    o.afterRowLen = doc2.frames[0].length;
+    o.afterPlayers = doc2.players.length;
+    o.rowFitsPlayers = o.afterRowLen === 2 + o.afterPlayers * 3;
+    o.afterParses = (() => { try { M.repFileParse(JSON.stringify(doc2)); return true; }
+                             catch(e){ return 'ERR ' + e.message; } })();
+    // The back-fill keeps the WHOLE match, not just the part after the join.
+    o.afterSeconds = +(doc2.frames.length / doc2.fps).toFixed(1);
+    o.keptTheStart = o.afterSeconds > o.seconds;
+    window.__matchDoc = doc2;
+    return o;
+  });
+
+  ok('a goal file and a match file say which they are', JSON.stringify(m.kinds) === '["goal","match"]',
+     JSON.stringify(m.kinds));
+  ok('the match file covers the whole match', m.coversTheMatch,
+     `${m.frames} frames at ${m.fps}fps is ${m.seconds}s of a 60s match`);
+  ok('every goal is marked, and the count agrees with the score', m.goalsMatchScore,
+     `${m.goals} marks against a score totalling ${m.scoreTotal} — a progress line through five goals that marks only the first is worse than one that marks none`);
+  ok('...and every mark is inside the recording', m.goalsInRange, JSON.stringify(m.goals));
+  ok('a match file covers far more than a goal file', m.matchIsBigger,
+     `${m.seconds}s against ${m.goalSeconds}s (${Math.round(m.matchBytes/1024)}KB against ${Math.round(m.goalBytes/1024)}KB) — if they were close, both buttons are saving the same buffer`);
+  ok('every row is the same length', m.rowsEqual);
+  ok('and it parses', m.parses === true, String(m.parses));
+
+  ok('a body joining mid-match still produces a valid file', m.afterParses === true, String(m.afterParses));
+  ok('...with every row the same length', m.afterRowsEqual);
+  ok('...matching its own player count', m.rowFitsPlayers,
+     `rows are ${m.afterRowLen} long for ${m.afterPlayers} players — a file whose rows disagree either fails to parse or indexes past the end of a row, which fails as a blank screen rather than as an error anybody can read`);
+  ok('...and the start of the match is still in it', m.keptTheStart,
+     `${m.afterSeconds}s after the join against ${m.seconds}s before it — back-filling the new slot is what keeps the whole match instead of restarting at the substitution`);
+
+  // ⚠️ PAST THE CAP IT HALVES ITS OWN RATE rather than stopping. A "first to 5" match has no
+  // time limit at all, so a buffer that simply stopped would save the first few minutes of a
+  // long match and call it the match — and every check above would still pass, because a
+  // truncated recording is a valid file covering a shorter match. Driven by lowering the cap
+  // so the path is actually taken, and measured as "does it still cover the elapsed time".
+  const cap = await q.evaluate(() => {
+    const M = window.__magnet; const o = {};
+    const was = M.REPMATCH.max;
+    M.REPMATCH.max = 400;                       // reached after 800 steps at 30Hz
+    M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
+    M.setMatchSeed(31); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    const STEPS = 6000;
+    let peak = 0;
+    for (let i = 0; i < STEPS; i++){ M.step(w); peak = Math.max(peak, M.repMatchBuf.length); }
+    const doc = M.repMatchFileBuild();
+    o.peak = peak; o.cap = 400;
+    o.neverExceeded = peak <= 400;
+    o.every = M.repMatchEvery;
+    o.halved = M.repMatchEvery > M.REPMATCH.every;
+    o.seconds = +(doc.frames.length / doc.fps).toFixed(1);
+    o.wantSeconds = STEPS/60;
+    // The whole point: coarser, but still the WHOLE match.
+    o.stillCoversIt = Math.abs(o.seconds - o.wantSeconds) < o.wantSeconds*0.1;
+    o.goalsInRange = (doc.goals || []).every(g => g >= 0 && g < doc.frames.length);
+    o.goals = (doc.goals || []).length;
+    M.REPMATCH.max = was;
+    return o;
+  });
+  ok('the buffer never exceeds its cap', cap.neverExceeded, `peaked at ${cap.peak} against a cap of ${cap.cap}`);
+  ok('...and the rate actually halved', cap.halved,
+     `sampling every ${cap.every} steps — if it never halved, the check below is testing an ordinary short recording`);
+  ok('...while still covering the whole match', cap.stillCoversIt,
+     `${cap.seconds}s recorded of a ${cap.wantSeconds}s match — a buffer that STOPPED at the cap would save the first part and call it the match, and every other check here would still pass because a truncated recording is a perfectly valid file`);
+  ok('...with the goal marks carried across the halving', cap.goalsInRange,
+     `${cap.goals} marks, some outside the recording — the indices have to be rescaled with the buffer or they point at the wrong moment`);
+
+  // ⚠️ PLAYBACK HONOURS THE RECORDED RATE. `fps` has been in every payload since the sheet
+  // ones were capped at 120 frames and nothing ever read it, so a decimated replay played
+  // back at however many times too fast its decimation was. A match file is 30Hz by design,
+  // so it ran at double speed. Measured as frames consumed against wall-clock.
+  const paced = await q.evaluate(async () => {
+    const M = window.__magnet;
+    const doc = window.__matchDoc;
+    // ⚠️ Clear any replay the stepping above set off first. `playReplayFile` returns
+    // immediately when one is already active, and stepping through several goals starts an
+    // auto-replay for each — so without this both runs come back at 0ms and the comparison
+    // is between two numbers that never measured anything.
+    M.skipReplay();
+    await new Promise(r => setTimeout(r, 120));
+    const run = (fps) => new Promise(res => {
+      const d = { ...doc, fps, frames: doc.frames.slice(0, 30) };
+      const t0 = performance.now();
+      M.playReplayFile(d, 1).then(() => res(performance.now() - t0));
+      setTimeout(() => { M.skipReplay(); }, 3000);   // never hang the suite
+    });
+    const fast = await run(60), slow = await run(30);
+    return { fast: Math.round(fast), slow: Math.round(slow), wasActive: M.replay.active };
+  });
+  ok('the pacing probe actually played something', paced.fast > 60,
+     `the fps-60 run finished in ${paced.fast}ms for 30 frames, which is 0.5s of replay — anything much less means playReplayFile bailed and the comparison below is between two zeroes`);
+  ok('playback runs at the rate the file was recorded at', paced.slow > paced.fast * 1.6,
+     `30 frames took ${paced.fast}ms at fps 60 and ${paced.slow}ms at fps 30 — the same frames at half the rate must take twice as long, or a 30Hz match replay plays at double speed`);
+
+  if (qerr.length) fails.push('match-replay page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================
+//  WHERE THE BUTTONS ARE
+// ============================================================
+// ⚠️ Save clip is END OF MATCH ONLY. Recording one plays the replay back through
+// MediaRecorder for its whole length, which mid-match is several seconds of the game being
+// unavailable while you are still playing it — and a video is the thing you send someone,
+// which is an end-of-match errand. The two REPLAY saves both live on the result screen and
+// are different things: one goal, or the whole match.
+{
+  const q = await b.newPage({ viewport:{ width:1000, height:800 } });
+  const qerr = []; q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  const ui = await q.evaluate(() => {
+    const M = window.__magnet; const o = {};
+    const dm = document.getElementById('dmCollect'); if (dm) dm.click();
+    const bar = document.getElementById('replayBar');
+    o.barExists = !!bar;
+    o.barButtons = bar ? [...bar.querySelectorAll('button')].map(b => b.textContent.trim()) : [];
+    o.noClipOnTheBar = !document.querySelector('#replayBar #clipBtn');
+    // ...and the bar still offers the goal save, or removing the clip took the wrong one.
+    o.barSavesTheGoal = !!document.getElementById('repSaveBtn');
+
+    // The result screen, built by the real path.
+    M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
+    M.setMatchSeed(7); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (let i = 0; i < 900; i++) M.step(w);
+    M.endMatch(w); M.finishMatch(w);
+    const ov = document.getElementById('overlay');
+    o.resultButtons = [...ov.querySelectorAll('button')].map(b => b.textContent.trim());
+    const has = (t) => o.resultButtons.some(x => x.indexOf(t) >= 0);
+    o.clipAtTheEnd = has('Save clip');
+    o.goalAtTheEnd = has('Save goal replay');
+    o.matchAtTheEnd = has('Save match replay');
+    o.twoDistinctSaves = o.goalAtTheEnd && o.matchAtTheEnd;
+    return o;
+  });
+
+  ok('the replay bar exists to test', ui.barExists);
+  ok('SAVE CLIP IS NOT ON THE IN-MATCH REPLAY BAR', ui.noClipOnTheBar,
+     `the bar carries ${JSON.stringify(ui.barButtons)} — recording a clip plays the replay back through MediaRecorder for its whole length, which mid-match is the game being unavailable while you are still playing it`);
+  ok('...but the bar still saves the goal', ui.barSavesTheGoal,
+     `the bar carries ${JSON.stringify(ui.barButtons)} — removing the clip must not take the replay save with it`);
+  ok('Save clip IS on the result screen', ui.clipAtTheEnd,
+     `the result screen carries ${JSON.stringify(ui.resultButtons)} — moving it off the bar is only right if it turns up where there is nothing to interrupt`);
+  ok('...next to TWO different replay saves', ui.twoDistinctSaves,
+     `the result screen carries ${JSON.stringify(ui.resultButtons)} — a goal and a whole match are different things and each needs its own button, or one of them is unreachable`);
+
+  if (qerr.length) fails.push('button-placement page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  ⚠️ A REPLAY THAT OUTLIVES ITS WORLD STRANDS THE WHOLE FEATURE
+// ============================================================================
+// `toMenu()` sets `world = null`, and leaving a match mid-celebration is an ordinary thing
+// to do. The pending tick of a live auto-replay then read `world.field` off null and threw
+// — and a throw inside a rAF callback is SILENT: `finish()` never ran, so `replay.active`
+// stayed true for the rest of the page. After that, `playReplayFile` returned at its very
+// first line, so opening a saved .json from the menu played nothing and dropped you straight
+// back on the menu you started from, with no error and nothing on screen to say why.
+// `loop()` checks the same flag, so the game itself was frozen behind it too.
+//
+// Measured on a PHONE viewport, because that is where it was reported and where `toMenu()`
+// takes the branch that nulls the world (on a desktop-sized window the menu is a left dock
+// and the match keeps playing).
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+
+  const o = await q.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=true;
+    M.setMatchSeed(3); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<400;i++) M.step(w);
+    w.ball.x=0; w.ball.y=-w.bounds.halfL+4; w.ball.vy=-14; w.ball.lastKicker=w.players[0];
+    for (let i=0;i<120;i++) M.step(w);
+    const doc = M.repFileBuild();
+    o.builtAFile = !!(doc && doc.frames && doc.frames.length);
+
+    // Leave the match. On this viewport that nulls the world.
+    M.toMenu();
+    await new Promise(r => setTimeout(r, 300));
+    o.worldIsGone = M.world === null;
+    // ⚠️ THE ASSERTION. Nothing may be left holding the replay flag.
+    o.flagIsClear = M.replay.active === false;
+
+    // Now watch a saved file, the way the Replays card does.
+    let ink = 0, sawActive = false;
+    const c = document.getElementById('game');
+    const done = M.watchReplayFromMenu(async () => doc);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 4000){
+      await new Promise(r => setTimeout(r, 50));
+      if (M.replay.active){
+        sawActive = true;
+        const d = c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+        let n = 0; for (let i=0;i<d.length;i+=4*97) if (d[i]+d[i+1]+d[i+2] > 40) n++;
+        ink = Math.max(ink, n);
+        o.menuGotOutOfTheWay = document.getElementById('setup').classList.contains('hidden');
+      }
+    }
+    await done;
+    o.itPlayed = sawActive;
+    o.drewTheCourt = ink;
+    o.cameBack = !document.getElementById('setup').classList.contains('hidden');
+    return o;
+  });
+
+  // ⚠️ TWO INDEPENDENT GUARDS, so removing EITHER one alone still passes here — the tick's
+  // `if (!world)` and `toMenu`'s `replayAbort()` each fix it on their own. That is not a weak
+  // test: with both removed the block below fails on the flag, on the ink, and with the real
+  // "Cannot read properties of null (reading 'field')" page error. Verified that way round.
+  ok('a file was built to watch', o.builtAFile);
+  ok('leaving the match really did take the world away', o.worldIsGone,
+     'if the world survived, the check below passes without exercising anything');
+  ok('...and left NOTHING holding the replay flag', o.flagIsClear,
+     'replay.active stayed true after toMenu() — the pending tick threw on a null world, which is silent inside a rAF, so finish() never ran. Everything downstream then quietly does nothing');
+  ok('a saved replay actually plays', o.itPlayed,
+     'playReplayFile returns at its first line while replay.active is set, so this is the symptom: press Watch, nothing happens');
+  ok('...and DRAWS THE COURT', o.drewTheCourt > 200,
+     `only ${o.drewTheCourt} lit samples — "it played" is also true of a blank canvas, which is exactly what a throw in drawReplayFrame leaves behind`);
+  ok('...with the menu out of the way while it does', o.menuGotOutOfTheWay === true,
+     'on a phone #setup is a full-bleed fixed screen over the canvas, so a replay under it is invisible however well it renders');
+  ok('...and the menu back afterwards', o.cameBack,
+     'the caller\'s finally is what restores it');
+  if (qerr.length) fails.push('replay-outlives-world page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  THE REPLAY LEAD-IN IS A DIAL
+// ============================================================================
+// Six seconds was a constant, and a replay that starts mid-move shows the shot without the
+// build-up that made it. ⚠️ The ring buffer is sized FROM the dial — a build that only fed
+// it to the playback would replay the same six seconds however the slider was set, and
+// every "the setting exists" check would still pass.
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const o = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const run = (secs) => {
+      M.sel.repSecs = secs;
+      M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(3); M.startMatch();
+      const w = M.world; w.state='play'; w.stateT=2;
+      for (let i=0;i<900;i++) M.step(w);        // well past any cap
+      return { cap: M.repMaxFrames(), held: M.repBuf.length };
+    };
+    o.short = run(2); o.def = run(6); o.long = run(15);
+    M.sel.repSecs = -5; o.clampLow  = M.repSecs();
+    M.sel.repSecs = 99; o.clampHigh = M.repSecs();
+    M.sel.repSecs = null; o.defaults = M.repSecs();
+    M.sel.repSecs = 6;
+    o.hasSlider  = !!document.querySelector('#setup .subpane[data-pane="camera"] #repSecs');
+    o.findable   = M.menuSearchIndex().some(x => /replay starts/i.test(x.t));
+    return o;
+  });
+  ok('the dial really sizes the buffer', o.short.held < o.def.held && o.def.held < o.long.held,
+     `${o.short.held} / ${o.def.held} / ${o.long.held} frames held at 2s / 6s / 15s — if these match, the slider is decoration and the replay is the same length whatever it says`);
+  ok('...to about the seconds it promises', Math.abs(o.def.held - 6*60) < 130,
+     `${o.def.held} frames for 6s + the tail`);
+  ok('it clamps both ends and has a default', o.clampLow === 2 && o.clampHigh === 15 && o.defaults === 6,
+     JSON.stringify({ low:o.clampLow, high:o.clampHigh, def:o.defaults }));
+  ok('the control is in Game Feel -> Camera', o.hasSlider);
+  ok('...and the search reaches it', o.findable);
+  if (qerr.length) fails.push('replay-lead page errors: ' + qerr.slice(0,3).join(' | '));
+  await q.close();
+}
+
+// ============================================================================
+//  SAVE CLIP HAS TO SAY WHAT IT DID
+// ============================================================================
+// ⚠️ Every exit in `recordAndShareClip` was a bare `return` or a swallowed `catch`, and
+// `saveClip` wrote its status to `$('clipBtn')` — the in-match bar's button, which was
+// DELETED when Save clip moved to the result screen. So on a browser with no recorder the
+// button played the goal back, saved nothing, and said nothing: indistinguishable from a
+// dead button, which is how it was reported.
+{
+  const q = await b.newPage({ viewport:{ width:1280, height:800 } });
+  const qerr = [];
+  q.on('pageerror', e => qerr.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const o = await q.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    // There is no #clipBtn any more — that is the whole reason the status went nowhere.
+    o.noStaleButton = !document.getElementById('clipBtn');
+    // With nothing to record with, it must return a REASON rather than nothing.
+    const realMR = window.MediaRecorder;
+    delete window.MediaRecorder;
+    const btn = document.createElement('button'); btn.textContent = 'Save clip';
+    const reason = await M.recordAndShareClip(btn);
+    o.reportsNoSupport = typeof reason === 'string' && reason.length > 0;
+    o.reasonText = reason;
+    o.pointsSomewhere = /save replay/i.test(reason || '');
+    window.MediaRecorder = realMR;
+    // ...and with no goal at all, saveClip must tell the button it was handed.
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.startMatch();
+    const before = btn.textContent;
+    await M.saveClip(btn);
+    o.wroteToTheButtonPassedIn = btn.textContent !== before;
+    o.buttonText = btn.textContent;
+    // The result screen's own button hands itself in, or none of the above reaches a player.
+    o.resultPassesItself = /saveClip\s*\(\s*sh\s*\)/.test(M.renderAwards.toString());
+    // mp4 is asked for FIRST, so any browser that can encode one gets one.
+    o.prefersMp4 = M.repMime.toString().indexOf("'video/mp4'") < M.repMime.toString().indexOf('webm');
+    // A clip is named per-goal, not one fixed name that overwrites itself.
+    o.namesAreUnique = M.repClipName('mp4') !== 'magnetball-goal.mp4' &&
+                       /magnetball-clip-.*\.mp4$/.test(M.repClipName('mp4'));
+    return o;
+  });
+  ok('the stale #clipBtn really is gone', o.noStaleButton,
+     'if it still existed the old lookup would work and this would all pass for the wrong reason');
+  ok('no recorder produces a REASON, not silence', o.reportsNoSupport,
+     `returned ${JSON.stringify(o.reasonText)} — a bare return here is a button that does nothing and says nothing`);
+  ok('...and points at what does work', o.pointsSomewhere,
+     `${JSON.stringify(o.reasonText)} — Save replay is on the same screen and always works`);
+  ok('saveClip reports to the button it is HANDED', o.wroteToTheButtonPassedIn,
+     `button still reads ${JSON.stringify(o.buttonText)} — it used to look up an element that no longer exists, so every message went to null`);
+  ok('...and the result screen hands its own in', o.resultPassesItself,
+     'otherwise saveClip falls back to the missing #clipBtn and the player sees nothing');
+  ok('mp4 is preferred over webm', o.prefersMp4);
+  ok('clips are named per goal', o.namesAreUnique,
+     'one fixed filename means each clip overwrites the last in the downloads folder');
+  if (qerr.length) fails.push('save-clip page errors: ' + qerr.slice(0,3).join(' | '));
   await q.close();
 }
 

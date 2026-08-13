@@ -363,7 +363,18 @@ const r = await p.evaluate(()=>{
   // Head-to-head, new AI both sides, EACH PAIR PLAYED BOTH WAYS ROUND. That matters:
   // driving one side manually gives it about a 17-point edge, so a one-sided harness
   // reported normal-vs-normal at 0.33 and made every other number suspect.
+  //
+  // ⚠️ AUTO-REPLAY OFF, and it is not a tidiness flag. These duels are a synchronous
+  // `for` loop of `M.step(w)` with no `await` in it, so a `playReplay()` promise can
+  // never resolve inside one — the goal state simply keeps ticking, `replay.active`
+  // stays true for the rest of the duel, and a MEASURED 910 of 3,600 steps went on
+  // celebrating rather than playing. That is a quarter of every match thrown away
+  // before a single bot decision is counted, and it made the whole ladder a coin flip
+  // at six duels: a change elsewhere that only moved the goal hold by a second flipped
+  // `ladderIsMonotone` while nothing about the bots had changed at all. A replay is not
+  // bot behaviour and has no business in a measurement of bot behaviour.
   {
+    M.sel.autoReplay = false;
     const h2h = (A,B,mode,seed,secs) => {
       M.setMatchSeed(seed); M.sel.mode=mode; M.sel.diff=B; M.sel.length='5';
       M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;
@@ -379,16 +390,25 @@ const r = await p.evaluate(()=>{
       return { weak:w.score[0], strong:w.score[1] };
     };
     // score(weak, strong) with both orientations, so the harness bias cancels.
+    // ⚠️ GOAL DIFFERENCE is what gets asserted, and the win rate is only reported.
+    // A win rate throws away almost all of the signal — a 1-0 and a 6-0 are the same
+    // number — and at a sample size a test suite can afford that is the difference
+    // between a measurement and a coin flip: normal-vs-hard comes out at exactly 0.500
+    // on wins over twelve duels while the same duels read 59-45 on goals. Both metrics
+    // agree on every rung over a wide offline sweep; only one of them resolves at
+    // twelve. ⚠️ Two modes, not one — 1v1 and 2v2 reward different things, and a
+    // ladder that only holds at one team size is not a ladder.
     const duel = (weak, strong) => {
-      let sw=0, n=0;
-      for (let s=0;s<3;s++){
-        const f = h2h(weak, strong, '2v2', 9000+s*211, 60);          // strong on team 1
-        const r = h2h(strong, weak, '2v2', 9000+s*211, 60);          // strong on team 0
+      let sw=0, n=0, gf=0, ga=0;
+      for (const mode of ['1v1','2v2']) for (let s=0;s<3;s++){
+        const f = h2h(weak, strong, mode, 9000+s*211, 60);          // strong on team 1
+        const r = h2h(strong, weak, mode, 9000+s*211, 60);          // strong on team 0
         n += 2;
         sw += f.strong > f.weak ? 1 : f.strong === f.weak ? 0.5 : 0;
         sw += r.weak   > r.strong ? 1 : r.weak === r.strong ? 0.5 : 0;
+        gf += f.strong + r.weak; ga += f.weak + r.strong;            // the strong side's goals
       }
-      return +(sw/n).toFixed(2);
+      return { win:+(sw/n).toFixed(3), gf, ga, gd: gf - ga };
     };
     o.ladder = {
       selfIsFair:     duel('normal','normal'),
@@ -396,15 +416,18 @@ const r = await p.evaluate(()=>{
       rookieVsInsane: duel('rookie','insane'),
       normalVsHard:   duel('normal','hard'),
     };
-    // A symmetric matchup must come out even once the bias is cancelled.
-    o.harnessIsFair = Math.abs(o.ladder.selfIsFair - 0.5) <= 0.2;
-    // Only the gaps this sample size can actually resolve are asserted. Six duels
-    // put rookie-vs-normal anywhere from 0.17 to 0.66 run to run, so asserting it
-    // would be a coin flip dressed up as a test; it is reported, not enforced.
-    // A wider offline sweep (2 modes × 4 seeds) reads: rookie<easy 0.72,
-    // rookie<normal 0.66, normal<hard 0.84, rookie<insane 0.75.
-    o.ladderIsMonotone = o.ladder.rookieVsInsane > 0.5 &&
-                         o.ladder.normalVsHard   > 0.5;
+    // A symmetric matchup must come out even once the bias is cancelled — on BOTH
+    // metrics, which is the control that says goal difference is not just a number
+    // that happens to point the right way.
+    o.harnessIsFair = Math.abs(o.ladder.selfIsFair.win - 0.5) <= 0.2 &&
+                      o.ladder.selfIsFair.gd === 0;
+    // Every rung, now that the measurement can resolve them. A wider offline sweep
+    // (3 modes × 6 seeds, 36 duels a rung) reads, as goals for-against for the
+    // stronger side: rookie<normal 69-35, rookie<insane 80-39, normal<hard 65-50,
+    // hard<insane 72-59, easy<hard 68-52 — every rung the right way up.
+    o.ladderIsMonotone = o.ladder.rookieVsNormal.gd > 0 &&
+                         o.ladder.rookieVsInsane.gd > 0 &&
+                         o.ladder.normalVsHard.gd   > 0;
     // Every AI-side knob derives from ONE scalar, so a tier can't be better at one
     // thing and worse at another.
     const sk = Object.keys(M.DIFF).map(k=>M.botSkill(M.DIFF[k]));
@@ -416,6 +439,7 @@ const r = await p.evaluate(()=>{
     o.decideRateIsUniform = new Set(sk.map(x=>x.decide)).size === 1;
     // `power` fed a bot-only kick that no longer exists.
     o.powerKnobRetired = Object.keys(M.DIFF).every(k=>M.DIFF[k].power === undefined);
+    M.sel.autoReplay = true;          // put the setting back; nothing below wants it off
   }
 
   // ================= Config lives in one block =================

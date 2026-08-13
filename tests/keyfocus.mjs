@@ -104,11 +104,21 @@ o.arrowsDrivePlayer = await (async ()=>{
 })();
 
 // --- Game Feel is split into ball vs player groups, and nothing went missing
+// ⚠️ The split is now expressed as TABS rather than as `.subhead` text. This used to assert
+// that subheads reading "ball controls" and "player controls" existed; the card was broken
+// into five panes and the chip row became the heading, so the subheads went. The claim being
+// made has not changed — the sliders are still grouped ball vs player — so it is checked
+// where the grouping now lives, which is a stronger reading of the same thing: a chip you can
+// press against a pane that holds the right sliders.
 o.groups = await p.evaluate(()=>{
   const M=window.__magnet; M.buildSettings();
   const ball=[...document.querySelectorAll('#feelSlidersBall label')].map(l=>l.textContent.toLowerCase());
   const player=[...document.querySelectorAll('#feelSlidersPlayer label')].map(l=>l.textContent.toLowerCase());
-  return { ball, player, subheads:[...document.querySelectorAll('.subhead')].map(s=>s.textContent) };
+  const paneOf = id => { const pn = document.getElementById(id).closest('.subpane');
+                         return pn ? pn.dataset.pane : null; };
+  const chips = [...document.querySelectorAll('.subtabs[data-tabs="feel"] .subchip')].map(c=>c.dataset.pane);
+  return { ball, player, chips,
+           ballPane: paneOf('feelSlidersBall'), playerPane: paneOf('feelSlidersPlayer') };
 });
 o.ballGroupRight = ['kick power','max ball speed','ball glide','ball magnet','trap window']
   .every(w => o.groups.ball.some(t=>t.includes(w)));
@@ -117,8 +127,10 @@ o.playerGroupRight = ['acceleration','float','sensitivity']
 o.noneLost = o.groups.ball.length + o.groups.player.length === 8;
 o.noCrossover = !o.groups.player.some(t=>t.includes('ball')) &&
                 !o.groups.ball.some(t=>t.includes('sensitivity'));
-o.hasSubheads = o.groups.subheads.some(t=>/ball controls/i.test(t)) &&
-                o.groups.subheads.some(t=>/player controls/i.test(t));
+// Each set of sliders is in its own pane, and each pane has a chip to reach it by — a pane
+// with no chip hides its controls while querySelectorAll still finds them.
+o.hasSubheads = o.groups.ballPane === 'ball' && o.groups.playerPane === 'player' &&
+                o.groups.chips.includes('ball') && o.groups.chips.includes('player');
 
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');

@@ -290,6 +290,83 @@ const L = await live.evaluate(async ()=>{
   o.settled = +(M.cam.s/o.base).toFixed(3);
   o.releasesAfterResize = M.cam.s <= o.base*1.02;
   o.goalCamT = +M.goalCam.t.toFixed(3);
+
+  // ---- ⚠️ A REPLAY GETS THE ORIGINAL SIZE, AND SO DOES THE MATCH AFTER IT ----
+  // `applyGoalCam` stands down while a replay is on screen, but the STEP LOOP is not running
+  // either — `loop()` returns immediately — so `advanceGoalCam` never ticks and `goalCam.t`
+  // sits frozen at whatever it had reached. The moment the replay ended the loop resumed, the
+  // guard stopped applying, and the whole 1.8x push came straight back for a second and a
+  // tenth of kickoff. Measured: 1.000 for one frame and 1.799 on the next.
+  // ⚠️ Driven through the REAL auto-replay, not by setting `replay.active` by hand: the fix
+  // lives on the path that STARTS a replay, so a probe that flipped the flag would sail past
+  // it. The buffer is filled first, because the auto-replay does not fire without frames and
+  // the whole trace then shows a goal with no replay in it at all.
+  M.sel.autoReplay = true;
+  M.goalCamReset();
+  M.setMatchSeed(3); M.startMatch();
+  const w2 = M.world; w2.state='play'; w2.stateT=2;
+  await wait(80);
+  o.repBase = +M.cam.s.toFixed(5);
+  await wait(2500);                                    // let the rolling buffer fill
+  w2.ball.x = 0; w2.ball.y = -w2.bounds.halfL + 4; w2.ball.vx = 0; w2.ball.vy = -14;
+  w2.ball.lastKicker = w2.players[0];
+  let sawGoalZoom = 0, duringReplay = [], afterReplay = [], sawReplay = false, done = false;
+  // ⚠️ The SHAKE and the FLASH ride along — but they have to be PUT THERE first, and that
+  // is the whole lesson of this block. Both decay in `decayJuice()`, which is step-locked,
+  // and `loop()` returns immediately while a replay owns the canvas, so anything they hold
+  // when playback starts is frozen for its whole length and discharged over the kickoff.
+  // The catch is that on an ordinary goal there is nothing to freeze: shake peaks near 5.8
+  // and is at zero within ~430ms, while the replay does not begin until GOALHOLD.replayAt
+  // (3.0s). A probe that samples the natural path therefore measures zero on a build with
+  // the release and zero on one without it — which is exactly what happened, and the
+  // sabotage sailed through four green assertions. What is real is a kick landing late in
+  // the celebration (play continues through it), so that is what gets reproduced: the juice
+  // is topped back up on the last frame before playback, the way a late shot would.
+  let shakeBefore = 0, shakeDuring = [], shakeAfter = [], flashDuring = [], flashAfter = [];
+  let injected = false;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 11000){
+    await wait(40);
+    const rel = M.cam.s / o.repBase;
+    // A late kick, one frame before the replay takes over.
+    if (!sawReplay && !injected && w2.state === 'goal' && w2.stateT > M.GOALHOLD.replayAt - 0.12){
+      injected = true; M.shake = 6; M.flash = 0.9;
+    }
+    if (M.replay.active){ sawReplay = true; duringReplay.push(rel);
+                          shakeDuring.push(M.shake); flashDuring.push(M.flash); }
+    else if (sawReplay){ done = true; afterReplay.push(rel);
+                         shakeAfter.push(M.shake); flashAfter.push(M.flash); }
+    else { sawGoalZoom = Math.max(sawGoalZoom, rel); shakeBefore = Math.max(shakeBefore, M.shake); }
+    if (done && afterReplay.length > 40) break;
+  }
+  o.sawReplay = sawReplay;
+  o.goalZoomBefore = +sawGoalZoom.toFixed(3);
+  o.duringReplayMax = duringReplay.length ? +Math.max(...duringReplay).toFixed(3) : 0;
+  o.afterReplayMax  = afterReplay.length ? +Math.max(...afterReplay).toFixed(3) : 0;
+  o.afterSamples = afterReplay.length;
+  // The zoom has to have HAPPENED first, or "no zoom during the replay" is true of a build
+  // with the goal camera switched off entirely.
+  o.zoomedBeforeTheReplay = o.goalZoomBefore > 1.3;
+  o.replayIsOriginalSize  = o.duringReplayMax < 1.02;
+  o.matchStaysOriginalSize = o.afterReplayMax < 1.02;
+  // ---- ...and so does the SHAKE and the FLASH ----
+  o.shakeAtGoal    = +shakeBefore.toFixed(2);
+  o.shakeInReplay  = shakeDuring.length ? +Math.max(...shakeDuring).toFixed(2) : 0;
+  o.shakeAfter     = shakeAfter.length  ? +Math.max(...shakeAfter).toFixed(2)  : 0;
+  o.flashInReplay  = flashDuring.length ? +Math.max(...flashDuring).toFixed(3) : 0;
+  o.flashAfter     = flashAfter.length  ? +Math.max(...flashAfter).toFixed(3)  : 0;
+  // The goal has to have SHAKEN in the first place, and the late kick has to have LANDED,
+  // or every check below is true of a build with Screen shake switched off entirely.
+  o.shookAtTheGoal    = o.shakeAtGoal > 1;
+  o.lateKickLanded    = injected;
+  o.replayIsSteady    = o.shakeInReplay < 0.3 && o.flashInReplay < 0.02;
+  o.matchStaysSteady  = o.shakeAfter < 0.3 && o.flashAfter < 0.02;
+  // ⚠️ And the juice must still WORK afterwards. `juiceReset()` is a reset, not a
+  // switch-off, and a build that simply pinned shake at zero for good would sail through
+  // every assertion above — which is most of what they measure.
+  M.shake = 0; M.addShake(13);
+  o.juiceStillWorks = M.shake > 1;
+  M.shake = 0;
   return o;
 });
 await live.close();
@@ -299,6 +376,15 @@ const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(L.animatesUnaided, `the push never moved cam.s in the running game (peak ${L.peak}x) — applyGoalCam only runs inside computeCam, and nothing calls that per frame`);
 ok(Math.abs(L.peak - 1.8) < 0.15, `the live push peaked at ${L.peak}x, not the 1.8x default`);
 ok(L.releasesAfterResize, `a resize during the celebration baked the zoom in: still ${L.settled}x of base two seconds later, with goalCam.t back at ${L.goalCamT} — this is the "stuck zoomed until I hit fullscreen" bug`);
+ok(L.sawReplay, `the auto-replay never fired (${L.afterSamples} samples after it), so the two checks below prove nothing — the rolling buffer has to have frames in it`);
+ok(L.zoomedBeforeTheReplay, `the goal never zoomed in the first place (peak ${L.goalZoomBefore}x), so "no zoom during the replay" would also be true of a build with the goal camera switched off`);
+ok(L.replayIsOriginalSize, `the replay played at ${L.duringReplayMax}x of the fitted size — a replay frames itself`);
+ok(L.matchStaysOriginalSize, `the match came back at ${L.afterReplayMax}x and eased out over the kickoff — standing the camera down FOR the replay is only half of it, because the step loop is not running either, so goalCam.t stays frozen and the whole push reapplies the instant the loop resumes`);
+ok(L.shookAtTheGoal, `the goal never shook (peak ${L.shakeAtGoal}), so the checks below would also pass with Screen shake switched off entirely`);
+ok(L.lateKickLanded, `the late kick was never injected, so "the replay is steady" is measuring the natural path — where shake is already zero three seconds before playback starts, on a build with the release AND on one without it. That is a vacuous pass, and it happened`);
+ok(L.replayIsSteady, `the replay played with shake ${L.shakeInReplay} and flash ${L.flashInReplay} still live — decayJuice is step-locked and loop() returns early during playback, so a kick landing late in the celebration is frozen there for the whole replay`);
+ok(L.matchStaysSteady, `the match came back with shake ${L.shakeAfter} and flash ${L.flashAfter} — a wobble and a coloured wash discharging over a kickoff, with nothing on screen that caused them`);
+ok(L.juiceStillWorks, `a kick after the replay produced no shake at all — juiceReset() is a reset, not a switch-off, and pinning shake at zero would pass every check above`);
 ok(r.startsLevel, 'a fresh match did not start on a level camera');
 ok(r.live && r.followsTheScorer, 'the goal camera did not latch onto the scorer');
 ok(r.stillWithoutStep, 'the push advanced inside a DRAW — a 144Hz screen would run it fast');
@@ -327,7 +413,7 @@ ok(r.dropsTheSubject, 'the camera kept following its subject into the ease-out')
 ok(r.noSnapOnRelease, `the view jumped ${r.panJump}px when the scorer was moved to their kickoff spot — the release is dragging the camera across the pitch`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-console.log(JSON.stringify(r, null, 1));
+console.log(JSON.stringify({ ...r, live: L }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\ngoalcam OK');

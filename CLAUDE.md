@@ -485,10 +485,160 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the **6.56px** the ball is actually drawn at on a 390×844 phone — so the feature did
   nothing at all for the people most likely to switch it on. `tests/ball3d.mjs` asserts
   engagement against the real drawn radius.
-  ⚠️ The roll DIRECTION comes from the ball's velocity, and the last heading is kept in a
-  **module variable, never on the ball**: a draw that wrote to the world would be
-  reachable from the sim on the next step, and `tests/determinism.mjs` hashes the world.
+  ⚠️ **The roll is a SIGNED distance about a LATCHED axis** (`ball.roll`, `ball.rollAx`),
+  advanced by `advanceBallSpin` in the step loop and only *read* by the painter. It
+  first took its axis from the live velocity inside the draw, which was wrong twice
+  over: a bounce flipping the heading by 180° jumped half a turn of texture across the
+  ball in one frame, and a ball rebounding off a wall should *unroll* the way it came.
+  The axis is re-latched only when travel goes more than 60° off it — a real change of
+  direction rather than a rebound along the same line.
+  ⚠️ **`rollAx` is a direction on the PITCH**, and `drawOneBall` paints inside `uprightAt`,
+  which has already cancelled the pitch's quarter-turn — so the call site adds `cam.rot`
+  back. Without it, deck view and the side camera had the ball rolling ninety degrees
+  across its own direction of travel, which is the replay-at-ninety-degrees bug again.
+  ⚠️ **It rolls FORWARDS**, and it shipped backwards. Seen from above, the face of a
+  rolling ball travels the way the ball is going (the contact point is what stands
+  still), so the phase is SUBTRACTED from the longitude. A backwards scroll changes
+  exactly as many pixels as a forwards one, so every assertion in the suite passed with
+  it wrong until one measured the *sign* of a known mark's movement.
+  ⚠️ **The texture's vertical axis is sin(LATITUDE), not latitude.** An orthographic
+  sphere puts latitude φ at screen y = r·sin(φ), and the painter stretches the strip's
+  full height linearly onto the ball's full height in one `drawImage` per slice — so a
+  strip baked in φ piles the polar rows up at the top and bottom of the circle and pulls
+  the equator apart. That was the "terrible texture": every pattern came out as a
+  vertical smear. Baking in sin(φ) makes the linear stretch exactly right and costs
+  nothing per frame.
+  ⚠️ **TWO PRINTS, one per hemisphere** (`BALL3D.prints`, `patch: 90`), and it shipped as
+  sixteen small identical ones on a regular 90° grid. That single decision caused **both**
+  halves of the second bug report. Sixteen identical marks 90° apart is a periodic lattice,
+  so between frames the eye locks onto whichever copy is nearest and reads the motion
+  backwards about as often as forwards — a filmstrip of the ball rolling right was near
+  indistinguishable from one of it rolling left. And a look's `draw` is a complete disc
+  design, so sixteen little copies is not the design you picked: the football came out as a
+  mass of small pentagons. At 90° a print spans exactly half the wrap and the whole of
+  sin(latitude), so two tile the sphere with no gap and no overlap.
+  ⚠️ **The two prints are DIFFERENT** — the second turned a quarter and mirrored — so the
+  pattern's period is a full turn rather than half of one. That moves the point where the
+  roll can start reading backwards from π/2 radians a frame out to π, which at the physical
+  rate is a ball travelling 31 units a step: the top of the range. `tests/ball3d.mjs`
+  measures it as "half a turn differs, a full turn matches".
+  ⚠️ **The design is laid in by COLUMNS at asin(x) of longitude** (`BALL3D.cols`). The strip
+  is indexed by longitude and the painter puts longitude at screen x = `r·sin(lon)`, so a
+  design laid in linearly is stretched by **π/2** across the middle of the ball — a round
+  dot rendered as a 1.46:1 oval. The asin pre-warp cancels the painter's sin at the print's
+  home orientation, leaving the design looking like itself; roll it away and the sin then
+  compresses it toward the limb, which is the real sphere behaviour. The suite measures the
+  sphere at rest against the **flat painter**, which is the thing it has to agree with.
+  ⚠️ The **rate is ω = v/R**, off the ball's own radius, not a constant. It was 0.055
+  against a radius of 10 — half the physical rate — so the ball under-turned for the ground
+  it covered and read as sliding. Nothing asserted it until a sabotage of that constant
+  passed.
+  ⚠️ `BALL3D.wrap` (π×tex) makes the *stored* strip isotropic so a print is not resampled
+  unevenly. It is **not** what makes a print come out round on the ball — the wrap width
+  cancels between the bake and the painter, both of which derive from it. Believed
+  otherwise for one commit; the suite's sabotage of that value *passing* is what showed it.
   Render only — the suite proves the world bit-identical with it on and off.
+- **Side view (`sel.sideView`, `SIDE`, `sideNow`, `drawBodiesSide`):** a showcase camera —
+  the pitch turned goal-to-goal, the ground plane squashed as though seen from beside the
+  touchline, and every body standing up off it as a cylinder with the ball a real sphere
+  above its shadow.
+  ⚠️ **An OBLIQUE SQUASH, and that is load-bearing rather than a shortcut.** Every pitch
+  painter in the file works from a RECTANGLE — `drawPitch` computes `L,T,R,B` and hands it
+  to `drawGrass`, to `vjPaintVideo` and to all fourteen `DYN_FIELDS` painters as
+  `L,T,W,H` — and an oblique y-squash maps a rectangle to a rectangle, so the grass clip,
+  the goal boxes, the markings, the pool table's cushion path and every animated field
+  keep working with **no change at all**. A true perspective does not preserve rectangles
+  and would mean rewriting all fourteen field painters, both goal pockets and every
+  marking, for a camera nobody plays with. `tests/sideview.mjs` measures the rectangle on
+  the pitch corners.
+  ⚠️ **REPLAYS AND THE ATTRACT DEMO ONLY, with no "always" option**, and the reason is the
+  input rather than taste: `pitchHorizontal()` is what `applySeatRotation` reads to decide
+  which way a stick points, and it is answered on a **layout change**, not per frame — so a
+  camera turning the pitch a quarter-turn behind its back would hand a player a stick 90°
+  wrong. The side view therefore sets `cam.rot` **itself inside `computeCam`** and never
+  touches that predicate. A replay has no input but "skip" and the demo has no humans at
+  all, so the question never arises. The suite drives the real `applySeatRotation` with the
+  camera live and requires every seat unmoved.
+  ⚠️ **Answered ONCE PER FRAME into `sideNow`** (top of `render()`, and again in
+  `drawReplayFrame` — that path never goes through `render()`, because `loop()` returns
+  early while a replay is active). Half a frame squashed and half flat is a mess, and
+  `replay.active` genuinely flips between one frame and the next.
+  ⚠️ The squash is the **FIRST call in `pitchXform`**, which makes it the LAST thing applied
+  on the way to the screen: it is a foreshortening of the SCREEN, so it lands after the
+  quarter-turn. Squashed before the turn it would flatten the pitch's length instead of its
+  width. `screenPt` composes them the same way round, and the suite asserts the two agree
+  by finding real ink at the point `screenPt` names — a drift between them puts every label
+  somewhere its body is not.
+  ⚠️ **The BALL must not ride the squash** — a sphere is a circle from every angle, so
+  `drawBodiesSide` undoes it about the ball's own centre. Squashed it reads as a discus,
+  and it is the object everybody is tracking. The suite's assertion is the **contrast**
+  between a round ball and a squashed disc, because "the ball is round" is also true of a
+  build with no squash at all.
+  ⚠️ Bodies paint **FAR TO NEAR and the ball sorts into the same list**, which is why this
+  replaces `drawDiscs` *and* `drawBall` rather than sitting between them: every disc and
+  then the ball puts the ball in front of a player standing between it and the camera.
+  Sorted on the real on-screen y through `screenPt`, never on a world axis — which world
+  axis runs into the screen depends on the turn.
+  ⚠️ **The ground shadow is WIDER than the body** (`SIDE.shadowR`). The wall is drawn from
+  the top face down and round the bottom of the base ellipse, so it covers the whole
+  footprint: a shadow at the body's own radius is painted over completely, and the first
+  build had one nobody could see. The spill is the part that reads.
+  ⚠️ The dot tails stay on the ground; the ball's **streak and the kick sparks are lifted
+  with the ball**, or the streak does not meet the thing it is a streak of.
+  ⚠️ `applyGoalCam` now **stands down during a replay**. It was enough to say that in
+  `advanceGoalCam`'s `want` while nothing on the replay path called `computeCam`; the side
+  view has to (it refits for the squash), and `goalCam.t` is frozen at 1 there because the
+  step loop that eases it out is not running.
+  ⚠️ **Render only** — the suite hashes the world over 600 steps with it on and off, with
+  `demo` true in **both** runs (it is read from inside `step()`, so switching it is not a
+  control). `tests/sideview.mjs`.
+- **A PLAYER MAY NEVER LEAVE THE VIEW, in any mode.** `integrate`'s clamp to
+  `bounds.halfW/halfL + 20` used to sit behind `if (!w.drillMode)`, which was safe only
+  while every drill called `drillBoundary()` and got four solid walls that held a body in
+  by collision. **Break the Targets does not** — it calls the match's own `buildGeometry`
+  so its goals cannot drift from a real one's, and every boundary that produces is
+  `ballOnly`, which contains the ball and deliberately lets a player step out. So there
+  was nothing holding the player on the pitch and you could walk off the screen and never
+  come back. ⚠️ The clamp reads **`w.bounds`**, not `w.field`: that is the rectangle the
+  drill actually laid out and the one `renderDrill` and `clampBallInside` already work
+  from, so the line you are held at is the line on the grass. `tests/targetsdrill.mjs`
+  holds the stick down for 900 steps rather than placing a body outside and calling the
+  clamp — which would pass on a build where the clamp is never reached.
+- **`advanceBallSpin(w)` is called from `step()` AND `stepDrill()`.** It lived inline in
+  `step()`, which a drill never runs, so in every drill the ball's pattern was frozen
+  solid however hard it was hit — a ball that has stopped being a ball. Step loop only,
+  never a draw (the trails rule).
+  ⚠️ **ONE signed quantity drives BOTH looks**: `along`, the travel projected onto
+  `rollAx`. It feeds `roll` for the sphere and `rot` for the flat pattern, so the two can
+  never disagree about which way the ball is turning.
+  ⚠️ **`rollAx` is CANONICALISED** into the right half of the pitch's frame (`canonRollAx`
+  — along +x, or +y when travel is exactly sideways to that). That is what makes the sign
+  of `along` mean anything: forward along the axis is always the same direction, so a ball
+  going one way rolls positively and a ball coming back rolls negatively. Latched, and
+  re-latched only past 60° off — a real turn rather than a rebound along the same line.
+  ⚠️ **`rot` is driven by `along`, never by SPEED**, and it shipped as `sp*0.03`. `sp` is a
+  magnitude, so the flat pattern turned the same way in every direction — a wheel rolling
+  right reads clockwise and it stayed clockwise when the ball came back left. That was the
+  whole of "the ball rotates the opposite way to where it is rolling", and it is the look
+  **nearly everybody sees**, because `sel.ball3d` is off by default. The first fix went
+  only to the sphere and the report came straight back.
+  ⚠️ `tests/ball3d.mjs` holds it from **both ends** — the sign of `rot` per direction, and
+  that a positive `rot` really is clockwise on screen. Either alone is half the claim and
+  neither alone is the complaint.
+- **The Sheep ball is a SILHOUETTE, not a set of marks**, and that took three goes. Drawn
+  as its dark parts on a white ball — first a ring of seven fleece nubs plus a head, an ear
+  and two legs, then a bigger head with four legs and a tail — it came out as a field of
+  same-sized dark spots, which is a cow. Nothing at the nine pixels a ball is actually
+  drawn at can be read as a head, an ear and a leg; a whole animal **outline** can. So the
+  ink covers the ball and the fleece is put back in the **paper** colour — which is why
+  `look.draw` is handed that colour at all (`paintBallLook`'s fourth argument), and the one
+  look that needs it. ⚠️ The surround is held back to `SHEEP.surround` (0.62) rather than
+  solid, and that is playability rather than looks: solid, the ball's own dark rim merges
+  with a dark surround, the disc's edge disappears, and the ball reads as much smaller than
+  the circle that actually collides. It also has to stay the brightest thing on the pitch.
+  `tests/balllook.mjs` measures all three, and counts fleece **regions** for the `solo`
+  check — the obvious "how much of the disc is pale" does not discriminate at all (sixteen
+  small sheep score 0.669 against one big one's 0.622, so the tiled build scored higher).
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
@@ -709,6 +859,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
+- **The auto-replay waits LONGER than the plain goal hold** (`GOALHOLD`,
+  `autoReplayReady`). ⚠️ **Two waits, not one.** A replay that cuts in the moment the ball
+  crosses takes the goal away from you in order to show it back, and the thing anybody wants
+  to see first is the net. It also has to clear `REP_TAIL` by a real margin — the tail is
+  captured on a delay, so a replay starting too early is a replay of the approach with the
+  goal cut off the end. With no replay coming there is nothing to wait for and the plain hold
+  is exactly what it always was, so kickoff timing on a normal goal is untouched.
+  ⚠️ **`autoReplayReady` is ONE predicate**, because the answer is needed twice — to pick how
+  long to hold, and to decide what to do when the hold runs out — and two copies drift into a
+  hold that waits for a replay that never comes.
+  ⚠️ A **synchronous test harness must switch auto-replay off**: `playReplay()` returns a
+  promise, and a `for` loop of `step(w)` with no `await` in it can never resolve one, so the
+  goal state just keeps ticking. `tests/botai.mjs` was losing **910 of 3,600 steps** a duel
+  to this, which is where its ladder's run-to-run swing was coming from.
 - **Goal replays keep a TAIL** (`REP_TAIL` 1.6s, `repPend`, `lastReplay.goalAt`). ⚠️ The
   goal state still integrates ("ball flies into the net; players can keep moving"), so those
   frames were already in the rolling buffer and `repOnGoal` threw them away by freezing at
@@ -781,6 +945,84 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Its render check measures **coverage over a known fill**, and varies the players and
   the ball **independently**: "two frames look different" passed with the players pinned at
   the origin, because the ball alone moved.
+- **The on-screen thumbstick is DIGITAL** (`sel.touchDigital`, default on; `TOUCHDIG`,
+  `digitalVec`, `touchIsDigital`). Eight directions and nothing between them: you are
+  holding a direction or you are not, and a half-push is full speed.
+  ⚠️ It produces the **keyboard's own shape** — `-1`, `0` or `+1` per axis — because
+  `pollKeys` has always written exactly that into the same `pads.p1` fields, and
+  `applyHumanInput` already normalises a diagonal so two arrow keys at once is not 41%
+  faster than one. Copying that shape puts the touch stick down the same path rather than
+  giving it a second, parallel one; normalising here as well would scale a diagonal twice.
+  ⚠️ **EIGHT-way, not four.** Four makes a diagonal unreachable, and the keyboard has been
+  eight-way since it existed, so four here would mean the two input methods no longer agree
+  about what the game can be told.
+  ⚠️ Snapped in **`onMove`**, never in `applyHumanInput` — every input method goes through
+  that, so the snapping would reach controllers too, and a real stick has an in-between that
+  ought to mean something. `tests/digitalpad.mjs` stubs `navigator.getGamepads` and drives a
+  pad seat for exactly that reason.
+  ⚠️ **TWO readings on the pad, and they are different things.** `rawX/rawY` is where the
+  THUMB is and exists only so `drawPad` can keep the marker under the finger holding it (the
+  same rule that keeps a live thumbstick off the tilt UI layer); `dx/dy` is what the game is
+  told. A pip on the rim shows which of the eight is being applied, because either side of a
+  sector boundary the thumb looks identical and there are only eight answers.
+- **Standup arcade (`sel.display === 'arcade'`, `ARCADE`, `arcadePad`):** a fourth layout
+  beside Auto, Steam Deck and Cocktail — an upright cabinet with four sets of controls,
+  everybody stood shoulder to shoulder facing one screen. Four people against the AI, or
+  two a side.
+  ⚠️ **THE KEYBOARD IS THE WIRING**, and that is how cabinets are actually built rather
+  than a shortcut: a JAMMA harness runs into a keyboard encoder (an I-PAC, a Zero Delay)
+  and every stick and button on the panel arrives as a keystroke. The map is **MAME's own
+  defaults**, so a cab wired by anybody who has ever wired one works with no setup —
+  P1 on the arrows with LCtrl/LAlt/Space, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1-4
+  to start, 5-8 to insert a coin, F2 for service.
+  ⚠️ **The four panels are VIRTUAL GAMEPADS, not a new seat type.**
+  `connectedGamepadIndices` and `gamepadPad` are the two functions the whole seat machinery
+  already goes through — assignment, drop-in, names, the warm-up lobby, `evenUpSides` — so a
+  cabinet inherits every one of them instead of growing a parallel path to keep in step.
+  ⚠️ **Bound to `e.code`, never `e.key`**, and a numpad key's `e.key` is never its own name:
+  NumLock ON, `Numpad6` reports `"6"` — which is **P2's coin slot** — and NumLock OFF it
+  reports `"ArrowRight"`, which is **P1's stick**. So an `e.key` build cross-wires two panels
+  whichever way the encoder leaves the lock. `code` is also the physical switch regardless of
+  layout, so a cab built in France works.
+  ⚠️ **`keyboardDrivesGame()` returns false here.** The keyboard IS the panel and every seat
+  already reads it through `arcadePad`; leaving the ordinary keyboard seat live as well hands
+  P1's stick to two players at once — the seat it was given and whoever holds `human1`.
+  ⚠️ **Not a touch layout**, however narrow the cab's monitor: `isTouchLayout` is what draws
+  the on-screen thumbsticks, and on a cabinet those are two controls nobody can press sitting
+  on top of the pitch. `viewMode()` answers `'arcade'`.
+  ⚠️ **`pollLobbyStart` and `pollSubReady` are the one place the virtual-pad trick does NOT
+  carry a cabinet for free** — they reach into the Gamepad API directly, because START is not
+  part of the shape a pad reports here. `arcadeStartHeld`/`arcadeFireHeld` answer for them.
+  Without that the warm-up lobby had **no way out at all**: four people stood at a live START
+  switch waiting on the 30-second auto-start.
+  ⚠️ Calibration is untouched — `needsCalibration` is cocktail-only, and on a cabinet
+  everybody faces the same screen, so there is nothing to discover.
+  **Credits** (`ARCADEBK`, `arcade`, `arcadeCoin`, `arcadeSpend`, `sel.arcadePlay`): coin-op
+  needs a credit, free play does not.
+  ⚠️ **Free play still COUNTS THE PLAY** — an operator wants to know how much the machine is
+  used whether or not it is charging for it.
+  ⚠️ **The takings are kept OUT of `sel`.** `saveSel()` serialises all of `sel` to
+  localStorage and `syncAdopt()` shallow-merges it between the game and the settings window;
+  a merge is exactly the wrong thing to do to a counter. Same argument as the VJ decks.
+  ⚠️ A coin is **edge-triggered on keydown** with an `e.repeat` guard, never polled — a coin
+  slot leant on is otherwise free credits for as long as somebody leans on it.
+  ⚠️ **START only starts a game when `arcadeIdle()`** — nothing running, the attract demo, or
+  a finished match. Mid-match it is the lobby's ready button, and hijacking it takes the game
+  off four people because one of them leant on the panel. Deliberately **not** `updCanShow`,
+  which asks a similar question and counts a PAUSED match as fine: an update prompt over a
+  pause is, a fresh game over one is not.
+  ⚠️ `loadArcade()` is called **directly under its own declaration**, not up with `loadSel()`
+  in the bootstrap — `arcade` is a `let` further down, and a call from up there reads it in
+  the temporal dead zone and takes the page out. **Tenth TDZ bite in this file.**
+  The operator screen (`#arcadeCfg`, `openArcadeCfg`, `buildArcadeRows`, `syncArcade`) is
+  reachable from the Display card **and from the service key**, because a cabinet has no
+  menu — the person opening it is stood in front of the machine with the coin door open and
+  the panel is their only input. It names the **switches** (`arcadeKeyName`: "Num 8",
+  "L-Ctrl") rather than the codes, since it is read by somebody wiring a harness. The reset
+  **arms then confirms**, like the replay and photo deletes. ⚠️ `syncArcade` is its own
+  function rather than a `buildArcadeRows()` call: it runs on every coin and every game, and
+  rebuilding the panel map for a number that changed relayouts the screen under the
+  operator's finger. `tests/arcade.mjs`.
 - **Cocktail calibration is for CONTROLLER seats** — `needsCalibration(p)`, the one
   predicate the on-screen button, the pad poll and the button's label all read.
   Cocktail is a tabletop layout where people sit on different edges, and what has to be
@@ -986,7 +1228,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   controls simply were not there on four palettes.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
-  declares the groups, `showSubTab(group, pane)` switches. Nav tiles are grouped Play / Progress
+  declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
+  `theme` and `feel`.
+  ⚠️ **Game Feel is tabbed too** — Ball / Player / Effects / Camera / Advanced. Nineteen
+  controls in one list is how the Tilt parallax toggle came to sit *sixteenth* in it and get
+  reported as a missing feature; the chip row is the heading now, which is why the three
+  `.subhead` groups it replaced are gone rather than repeated inside the panes.
+  ⚠️ The **preset row and the reset button stay OUTSIDE the panes**: both act on the whole
+  card, and filing a set-everything control under one fifth of the things it sets is worse
+  than leaving it above the chips. `#matchCard` keeps KICK OFF and Warm-up outside its own
+  tabs for the same reason.
+  ⚠️ Order inside the **Effects** pane is load-bearing: Screen shake, then Tilt, then the
+  rest, then the Hit stop slider — `tests/tilt.mjs` pins tilt as directly after Screen shake
+  and above every slider in the card, and the Camera pane (which holds Goal zoom) therefore
+  has to come after Effects in the DOM. Nav tiles are grouped Play / Progress
   / Help; `#jumpBar` chips jump to a section and are built from the cards themselves.
   ⚠️ A pane with no chip **hides** its controls while `querySelectorAll` still finds them —
   `audit` checks for orphan panes for exactly that reason. Sticky order is chips → KICK OFF →
@@ -1013,14 +1268,32 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
-- **About card (`data-sec="about"`, `buildAbout`)** — the version (`#ver`) and
-  **Check for updates** (`#updCheckBtn`) live here, not under the title and above the fold:
-  both are things you go looking for once, and neither was worth the two permanent lines
-  they cost at the top of every visit. Plus a status line that names a waiting build and
-  counts down with it, and a link across to What's new. ⚠️ `buildAbout()` writes **text
-  only** — `#ver` is a child of `#aboutInfo` and the boot block fills it, so rebuilding that
-  subtree would blank it. ⚠️ With no server to ask (a `file://` page) the status says so
-  rather than claiming "up to date", which would be a guess presented as a fact.
+- **About card (`data-sec="about"`, `buildAbout`, `buildNews`)** — the version (`#ver`),
+  **Check for updates** (`#updCheckBtn`) and the **changelog** (`#newsList`), in that order.
+  Not under the title and above the fold: the version and the check are things you go
+  looking for once, and neither is worth the two permanent lines they cost at the top of
+  every visit.
+  ⚠️ **What's new is NOT its own card.** It was, with a button in About whose entire job was
+  to `openSection('news')` — so one question ("what am I running, and what changed in it")
+  was two rows in the accordion, two chips in the jump bar and a hop between them. The
+  changelog goes **last** because it is by far the longest thing in the card and the two
+  lines above it are what somebody opening "About" came for.
+  ⚠️ **The version block is a ONE-TAP COPY** (`#aboutInfo`, `aboutReport`, `copyAbout`).
+  The version is the first thing anybody is asked for in a report, and reading a timestamp
+  off a phone and retyping it is exactly where it gets transcribed wrong — which has already
+  cost a round of "which build are you on". The whole block is the target so there is
+  nothing small to aim at, and it carries the screen size and the layout, because those are
+  the next two questions; **nothing personal** goes on the clipboard — no name, no photo, no
+  stats. ⚠️ It **reports failure**: `navigator.clipboard` needs a secure context and is
+  simply absent on a `file://` or plain-http page, so there is an `execCommand` fallback and
+  the hint says "could not copy" rather than nothing — the Save clip lesson.
+  ⚠️ The suite **presses the element** rather than calling `copyAbout()`, which was verified
+  by deleting the onclick and watching a direct call stay green; reachability is a separate
+  `elementFromPoint` check, because `.click()` does no hit testing.
+  ⚠️ `buildAbout()` writes **text only** — `#ver` is a child of `#aboutInfo` and the boot
+  block fills it, so rebuilding that subtree would blank it. ⚠️ With no server to ask (a
+  `file://` page) the status says so rather than claiming "up to date", which would be a
+  guess presented as a fact.
 - **Forced updates (`UPD.graceDays` = 30, `#updBlock`, `updEnforce`):** a check on every
   launch and every return to the app, and after **30 days** with a newer build available the
   game **stops** until it is installed. ⚠️ The deadline is **persisted** (`magnetball.upd`
@@ -1082,6 +1355,85 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `const PHOTOLIB` is declared with `PHOTO`, near the top — `buildPhotoPane()` runs
   during the bootstrap and draws the grid, and declared beside `REPLIB` it was in the
   temporal dead zone there. **Eighth TDZ bite in this file.** `tests/photolib.mjs`.
+- **One-handed play: a RELEASE is the FINGER LIFTING**, not the stick reading low
+  (`ONEHAND`, `oneHandKick`, `padTouchDown`). It armed and fired off magnitude alone, so
+  sweeping a thumb from one direction to the opposite one — across the middle of the stick,
+  never lifting — crossed the deadzone and fired a shot. Crossing the centre is *how you
+  turn round*, so this went off constantly. The digital thumbstick made it certain rather
+  than likely (it snaps hard to `(0,0)` below `TOUCHDIG.dead`) but the analogue one had the
+  same flaw. ⚠️ `padTouchDown(pad)` answers **`null`** for anything that is not an on-screen
+  stick — a gamepad and the keyboard write into the same `pads` fields and have no finger to
+  report — and `null` keeps the magnitude rule, because a stick springing back to centre IS
+  the release there. `tests/onehand.mjs`, which drives the **real** `onDown`/`onMove`/`onUp`
+  on a **phone-sized second page**: writing to `pads.p1` cannot test this at all (the fix
+  reads `pad.move.id`, which only the touch handlers set), and the suite's main page is
+  1280×800 where `zoneForTouch` never returns `move`.
+- **A replay must never outlive its world** (`replayAbort`, and the `if (!world)` guard in
+  `playReplay`'s tick). `toMenu()` sets `world = null`, and leaving a match mid-celebration
+  is an ordinary thing to do — so the pending tick of a live auto-replay read `world.field`
+  off null and threw. ⚠️ **A throw inside a rAF callback is SILENT**: `finish()` never ran,
+  so `replay.active` stayed **true for the rest of the page**. After that `playReplayFile`
+  returned at its first line, so opening a saved `.json` from the menu played nothing and
+  dropped you straight back on the menu, with no error and nothing on screen to say why —
+  and `loop()` checks the same flag, so the game was frozen behind it too.
+  ⚠️ **Two independent guards on purpose**, and the suite is verified with **both** removed:
+  either alone fixes it, so a sabotage of one passes and that is not a weak test.
+  `tests/replayfile.mjs`, measured on a **phone** viewport — that is the branch of `toMenu`
+  that nulls the world, since a desktop-sized window keeps the match running in a dock.
+- **The replay lead-in is a DIAL** (`REP_LEAD`, `repSecs()`, `repMaxFrames()`, Game Feel →
+  Camera). Six seconds was a constant, and a replay that starts mid-move shows the shot
+  without the build-up that made it. ⚠️ **The ring buffer is sized FROM the dial** — a build
+  that only fed it to the playback would replay the same six seconds however the slider was
+  set, and every "the setting exists" check would still pass, so the suite measures frames
+  actually held at 2s / 6s / 15s. ⚠️ `repMaxFrames()` is a **function**, and the ring sheds
+  with `while` not `if`: turning the dial down mid-match leaves the buffer far over its new
+  cap, and one frame a capture would take seconds to catch up.
+  ⚠️ `const REP_LEAD` is declared with the **feel constants near the top**, beside `GOALCAM`,
+  not with the replay code it belongs to — the slider wiring calls `syncRepSecs()` during
+  the bootstrap, and from there a `const` two-thirds of the way down is in the temporal dead
+  zone and takes the page out. **Eleventh TDZ bite in this file.**
+- **Save clip REPORTS what it did.** Every exit in `recordAndShareClip` was a bare `return`
+  or a swallowed `catch`, and `saveClip` wrote its status to `$('clipBtn')` — the in-match
+  bar's button, **deleted** when Save clip moved to the result screen. So on a browser with
+  no recorder it played the goal back, saved nothing and said nothing, which is a dead button
+  as far as anyone can tell. It now returns a reason, the button is **passed in** (the result
+  screen hands its own), and a recording failure beats the leaderboard sheet's status,
+  because the recording is what the player pressed for. ⚠️ The container is named off
+  `blob.type`, never off what `repMime()` asked for, or a webm gets handed over called
+  `.mp4`; mp4 is first in the candidate list so any browser that can encode one does.
+  ⚠️ Clips are named per goal — one fixed filename means each overwrites the last.
+- **TWO replays, and a clip — three different things** (`repBuf` vs `repMatchBuf` vs
+  `saveClip`). The rolling ring holds the last few seconds, which is a **goal**. A second
+  un-ringed buffer holds the **match**, kickoff to whistle. The clip is a **video**.
+  ⚠️ **Save clip is END OF MATCH ONLY.** Recording one plays the replay back through
+  `MediaRecorder` for its full length, which mid-match is several seconds of the game being
+  unavailable while you are still playing it — and a video is the thing you send someone,
+  which is an end-of-match errand. The in-match bar keeps Replay and Save goal.
+  ⚠️ The match buffer is **SAMPLED** (`REPMATCH.every`, 30Hz): plenty to watch a top-down
+  match back, and a third of the memory and the file of the same match at 60. A full 5-minute
+  4v4 measures **9,000 frames / 807KB**, against 41KB for a goal.
+  ⚠️ Past `REPMATCH.max` it **HALVES ITS OWN RATE in place** rather than stopping. "First to
+  5" has no time limit, so a buffer that stopped would save the first six minutes of a
+  fifteen-minute match and call it the match — and every check would still pass, because a
+  truncated recording is a perfectly valid file of a shorter match. The goal marks are
+  rescaled with it.
+  ⚠️ **STABLE SLOTS**, which is why this is not just a longer ring. `w.players` GROWS —
+  drop-in adds a body at a goal and `evenUpSides` matches it — so a row captured after that
+  is longer than one captured before. A body that arrives takes the next slot and every
+  earlier frame is **back-filled** with where it was standing (on the touchline, which is
+  where it was); a body that leaves keeps its slot and is recorded on the bench. Every row is
+  then the same length and the replay tells the truth about both.
+  ⚠️ The goal buffer snapshots its **roster** at freeze time for the same reason: the world
+  can hold one more player than the frames do by the time anybody presses Save.
+  ⚠️ `drawReplayFrame` is driven by the **frame's** bodies, not the live world's — the world
+  is only consulted for what each one looks like, with a fallback. It used to map over
+  `world.players` and index past the end of `f.p`, which took the page down.
+  ⚠️ **Playback honours the recorded `fps`**, and for a long time it did not. That field has
+  been written into every payload since the sheet ones were capped at 120 frames and nothing
+  ever read it, so a decimated replay played back at however many times too fast its
+  decimation was. Invisible until a 30Hz match file ran at double speed.
+  ⚠️ The progress line marks **every** goal, not one: a line through five goals that marks
+  only the first reads as "this is where the goal is". `tests/replayfile.mjs`.
 - **Replay library (`REPLIB`, IndexedDB):** ⚠️ it exists because **a page cannot delete your
   downloads**. Once a Blob is in the Downloads folder it belongs to the OS — no web API can
   list, move or remove it — so "delete a replay" is only meaningful for a copy the page owns.
@@ -1148,6 +1500,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   The followed player is read through `ix`/`iy`, and the origin shift is rotated by `cam.rot`
   or deck view puts them off to one side. Stands down while a replay owns the framing, and
   rides the Screen shake & effects dial.
+  ⚠️ **The SHAKE and the FLASH are released with it** (`juiceReset()`, called beside
+  `goalCamReset()` in `playReplay`) — same mechanism, since `decayJuice()` is step-locked
+  and `loop()` returns early during playback. ⚠️ **Defensive rather than a twin of the
+  camera bug**, and recorded that way on purpose: on an ordinary goal shake is at zero
+  within ~430ms while a replay does not start until `GOALHOLD.replayAt` (3.0s), so nothing
+  is carried in. The real case is narrow — play continues through the celebration, so a
+  kick landing in its last moments tops the shake back up and *that* would be frozen for
+  the length of the replay and discharged over the kickoff. `tests/goalcam.mjs` has to
+  inject that late kick to test it at all; sampling the natural path reads zero on a build
+  with the release and on one without.
+  ⚠️ **A REPLAY RELEASES IT, it does not merely suspend it.** `applyGoalCam` standing down
+  while `replay.active` is only half the job: `loop()` returns immediately during playback,
+  so `advanceGoalCam` never ticks either and `goalCam.t` sits frozen at whatever it reached.
+  The instant the replay ended, the loop resumed and the whole 1.8× push came back for a
+  second and a tenth of kickoff — measured at 1.000 for one frame and **1.799** on the next.
+  `playReplay` calls `goalCamReset()` on the way in: by the time you come back the ball is on
+  the centre spot and there is nothing left to push in on. `tests/goalcam.mjs` drives the real
+  auto-replay for this, not a hand-set `replay.active`, because the fix lives on the path that
+  STARTS a replay — and it fills the rolling buffer first, or the auto-replay never fires and
+  the whole trace is a goal with no replay in it.
   ⚠️ **`render()` calls `computeCam()` EVERY FRAME, and that is load-bearing.**
   `applyGoalCam` lives inside `computeCam`, and `computeCam` used to be called only from
   `resize()` — so the push never animated in the running game at all (measured: `cam.s`
@@ -1222,7 +1594,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 83 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 94 suites; `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

@@ -910,7 +910,8 @@
     .repprog { position: relative; height: 4px; border-radius: 3px; background: rgba(128,128,128,.30); }
     #repProgFill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); }
     /* Where the ball actually crossed. Everything right of it is the tail. */
-    #repProgGoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
+    #repProgGoal { position: absolute; inset: 0; pointer-events: none; }
+    .repgoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
       border-radius: 1px; }
     .repctlrow { display: flex; align-items: center; gap: 8px; }
     .repspeeds { display: flex; gap: 6px; margin: 0 auto; }
@@ -1128,9 +1129,17 @@
     .pathval.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     #repWatchBtn, #repClearAll { display:block; width:100%; margin:0 0 4px; }
     /* About reuses the Replays card's key/value rows — same job, same shape. */
-    #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px; }
+    /* ⚠️ The whole block is one 44px+ press target, so there is no small thing to hit. */
+    #aboutInfo { display:flex; flex-direction:column; gap:6px; margin:2px 0 10px;
+      cursor:pointer; border-radius:11px; padding:2px; margin-left:-2px; margin-right:-2px;
+      -webkit-tap-highlight-color: transparent; }
+    #aboutInfo:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    #aboutInfo:active .pathrow { border-color: var(--accent); }
+    .copyhint { font-family: var(--pix); font-size:10px; letter-spacing:.5px;
+      color: var(--muted); text-align:right; padding:0 10px; }
+    #aboutInfo.copied .copyhint { color: var(--accent); }
     /* 44px: these are the two things anyone opens About to press. */
-    #updCheckBtn, #aboutNews { display:block; width:100%; min-height:44px; }
+    #updCheckBtn { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
     .reprow { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
       background: rgba(128,128,128,.08); border:1px solid var(--edge); }
@@ -1301,12 +1310,16 @@
          reachable in every layout, cocktail included, where the PITCH turns but the
          screen does not. -->
     <button id="lobbyStartBtn" class="hidden">START ▶</button>
+    <!-- ⚠️ NO "Save clip" in here. Recording one plays the replay back through
+         MediaRecorder for its full length, which mid-match is several seconds of the game
+         being unavailable while you are still playing it; and the video is the thing you
+         send someone, which is an end-of-match errand rather than a mid-match one. It
+         lives on the result screen, where there is nothing to interrupt. -->
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
-      <button id="clipBtn">⇪ Save clip</button>
       <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at
            your screen's size in your theme, and can be watched again from Watch. -->
-      <button id="repSaveBtn">⤓ Save replay</button>
+      <button id="repSaveBtn">⤓ Save goal</button>
     </div>
   </div>
 
@@ -1578,6 +1591,10 @@
       <label class="field">Handed</label>
       <div class="opts" id="handed"></div>
       <div style="height:14px"></div>
+      <label class="field">Thumbstick <small style="color:var(--muted)">(touch)</small></label>
+      <div class="opts" id="touchDigPick"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Digital gives you eight directions and nothing between them, like a D-pad or the arrow keys: you are either holding a direction or you are not, and a half-push does not mean half speed. Analogue is the old behaviour, where how far you push is how fast you go. A diagonal runs at the same speed as a straight line either way. Controllers are always analogue — a real stick has an in-between and it should mean something.</div>
+      <div style="height:14px"></div>
       <label class="field">Stick sensitivity <small id="sensVal" style="color:var(--accent);font-weight:700">1.0×</small></label>
       <input id="sens" class="slider" type="range" min="60" max="160" step="10" value="100" />
       <div class="hint" style="text-align:left; margin-top:4px">Lower = push further for full speed</div>
@@ -1613,6 +1630,10 @@
       <h2>Display</h2>
       <label class="field">Layout <small id="displayDetected" style="color:var(--muted);font-weight:400"></small></label>
       <div class="opts" id="displayPick"></div>
+      <div id="arcadeBox" style="margin-top:10px; display:none">
+        <div class="hint" style="text-align:left">An upright cabinet with four sets of controls, all wired to the keyboard the way an arcade encoder does it. Four people play against the AI, or two a side.</div>
+        <button class="ghost" id="arcadeCfgBtn" style="margin-top:8px">🕹 Arcade settings</button>
+      </div>
       <div id="cocktailBox" style="margin-top:10px; display:none">
         <div class="hint" style="text-align:left">For a screen lying flat on a table with people stood around it. Tell it where each player is sitting and their "up" will point into the table instead of off the top of the screen.</div>
         <button class="ghost" id="cocktailCfgBtn" style="margin-top:8px">🎛 Configure player sides</button>
@@ -1654,22 +1675,34 @@
 
     <div class="card collapsible collapsed" data-sec="feel">
       <h2>Game Feel</h2>
+      <!-- ⚠️ The preset row sits OUTSIDE the tabs, and the reset button at the foot does
+           too: both act on the WHOLE card, so filing a set-everything control under one
+           fifth of the things it sets would be worse than leaving it above the chips. The
+           Match card keeps KICK OFF and Warm-up outside its own tabs for the same reason. -->
       <label class="field">Preset</label>
       <div class="opts" id="feelPresets"></div>
 
-      <div class="subhead">⚽ Ball controls</div>
+      <!-- ⚠️ Nineteen controls, so five things you might be here for rather than one list.
+           As one list the Tilt parallax toggle sat sixteenth in it and was reported as a
+           missing feature; the chip row is now the heading, which is why the three
+           `.subhead` groups this replaced are gone rather than repeated inside the panes. -->
+      <div class="subtabs" data-tabs="feel"></div>
+
+      <div class="subpane" data-pane="ball">
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
       <div id="feelSlidersBall"></div>
+      </div>
 
-      <div class="subhead">🕹️ Player controls</div>
+      <div class="subpane" data-pane="player">
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
       <div id="feelSlidersPlayer"></div>
+      </div>
 
-      <div class="subhead">🎬 Presentation</div>
+      <div class="subpane" data-pane="effects">
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
@@ -1677,18 +1710,21 @@
       <div class="opts" id="tiltPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Tilt the phone and the pitch and the players shift by slightly different amounts, so the pitch reads as something you're looking into rather than a flat picture. About ten pixels at full tilt — enough to feel, not enough to fight. Neutral is wherever you're actually holding the phone, so it works lying down. Render only: it never moves the ball or a player, only where they're drawn. Off automatically if your system asks for reduced motion.</div>
       <div style="height:10px"></div>
-      <label class="field">Ball rolls in 3D</label>
-      <div class="opts" id="ball3dPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
-      <div style="height:10px"></div>
       <label class="field">Floating stat text</label>
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
+      <div style="height:10px"></div>
+      <label class="field">Ball rolls in 3D</label>
+      <div class="opts" id="ball3dPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
       <div style="height:10px"></div>
       <label class="field">Hit stop <small id="hitStopVal" style="color:var(--accent)"></small></label>
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
       <div style="height:10px"></div>
+      </div>
+
+      <div class="subpane" data-pane="camera">
       <label class="field">Goal zoom <small id="goalZoomVal" style="color:var(--accent)"></small></label>
       <input id="goalZoom" class="slider" type="range" min="100" max="800" step="5" />
       <div style="height:6px"></div>
@@ -1698,7 +1734,18 @@
       <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
+      <div style="height:6px"></div>
+      <label class="field">Replay starts <small id="repSecsVal" style="color:var(--accent)"></small></label>
+      <input id="repSecs" class="slider" type="range" min="2" max="15" step="1" />
+      <div class="hint" style="text-align:left; margin-top:4px">How far back a goal replay begins &mdash; the build-up you see before the shot. Longer keeps more of the move that made the goal; shorter gets you back to the kickoff sooner. The ball hitting the net is always kept on the end.</div>
       <div style="height:10px"></div>
+      <label class="field">Replay camera</label>
+      <div class="opts" id="sideViewPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Watch replays and the idle demo match from beside the touchline instead of straight down: the pitch turns so goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow. Render only — nothing about the match changes, and the two views replay the same recording. Deliberately not offered for playing a match in: a body in front of the ball is good television and a bad time on the ball.</div>
+      <div style="height:10px"></div>
+      </div>
+
+      <div class="subpane" data-pane="advanced">
       <label class="field">Match speed <small id="mspeedVal" style="color:var(--accent)"></small></label>
       <input id="mspeed" class="slider" type="range" min="50" max="200" step="5" />
       <div style="height:10px"></div>
@@ -1706,15 +1753,11 @@
       <div class="opts" id="debugPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Ball and player speed plus your current feel numbers, bottom-left while you play.</div>
 
+      </div>
+
       <button class="ghost" id="feelReset" style="margin-top:14px">Reset to defaults</button>
     </div>
 
-
-    <div class="card collapsible collapsed" data-sec="news">
-      <h2>What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></h2>
-      <div id="newsList"></div>
-      <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
-    </div>
 
     <!-- Replays. Its own section because loading one is something you do between
          matches, from the menu, not from a screen that is covering the pitch. -->
@@ -1730,7 +1773,7 @@
       <div style="height:14px"></div>
       <label class="field">Where saved replays go</label>
       <div id="repPathInfo"></div>
-      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from the <b>Save replay</b> button on the replay bar during a match, and from the result screen.</div>
+      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save goal</b> on the replay bar during a match, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen.</div>
     </div>
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
@@ -1739,19 +1782,36 @@
     </div>
     <!-- About. The version and the update check live HERE rather than under the title and
          above the fold: both are things you go looking for once, and neither is worth the
-         two permanent lines they cost at the top of every visit. -->
+         two permanent lines they cost at the top of every visit.
+         ⚠️ WHAT'S NEW LIVES HERE TOO, and the two were separate cards with a button in this
+         one whose whole job was to jump to the other. They answer one question — "what am I
+         running, and what changed in it" — so the version, the update check and the release
+         notes are three parts of one answer and were two chips in the jump bar, two rows in
+         the accordion and a hop between them. The changelog goes LAST because it is the
+         longest thing here by far and the two lines above it are what somebody opening
+         "About" came for. -->
     <div class="card collapsible collapsed" data-sec="about">
       <h2>About</h2>
-      <div id="aboutInfo">
+      <!-- ⚠️ ONE TAP COPIES IT. The version is the first thing anybody is asked for when
+           they report something, and reading a timestamp off a phone screen and retyping it
+           is exactly where it gets transcribed wrong — which has already cost one round of
+           "which build are you on". The whole block is the target so there is nothing to aim
+           at, and it copies the screen size and layout with it, because those are the next
+           two questions and neither is anything personal. -->
+      <div id="aboutInfo" role="button" tabindex="0" aria-label="Copy version details">
         <div class="pathrow"><span class="pathkey">Version</span><span class="pathval mono" id="ver"></span></div>
         <div class="pathrow"><span class="pathkey">Updates</span><span class="pathval" id="aboutUpd"></span></div>
+        <div class="copyhint" id="aboutCopyHint">Tap to copy</div>
       </div>
       <!-- ⚠️ An installed PWA has no reload button and no address bar, so "check now" is the
            only way a player can ASK. Never dead: offline it reports that it could not reach
            the server rather than doing nothing. -->
       <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
-      <button class="ghost" id="aboutNews" type="button" style="margin-top:8px">What&rsquo;s new in this version</button>
       <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
+      <div style="height:14px"></div>
+      <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
+      <div id="newsList"></div>
+      <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
     </div>
 
     <div class="card collapsible collapsed" data-sec="online">
@@ -1877,11 +1937,35 @@
          from. Deliberately NOT on the result screen: loading a file is something you
          do between matches, not with one frozen behind the overlay. -->
     <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.json)</button>
-    <div class="hint" style="text-align:left; margin-top:6px">Opens a replay saved with <b>Save replay</b>. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
+    <div class="hint" style="text-align:left; margin-top:6px">Opens a saved replay, of one goal or of a whole match. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
     <button class="ghost" id="socialBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== CONTROLLER CONFIG ===================== -->
+  <!-- ===================== ARCADE OPERATOR ===================== -->
+  <!-- The bookkeeping an operator actually wants: what went in the slot, how many games
+       came out of it, and whether the machine is taking money at all. Reachable from the
+       Display card and from the service key (F2) on the panel itself. -->
+  <div id="arcadeCfg" class="screen hidden">
+    <div class="logo"><h1 style="font-size:26px">ARCADE</h1><p id="arcadeStatus">Standup cabinet · four panels</p></div>
+    <div class="card">
+      <h2>Takings</h2>
+      <div id="arcadeBook"></div>
+      <div class="hint" style="text-align:left">Kept on this machine only — it is never sent anywhere. Free play still counts the games, because how much a cabinet gets used is worth knowing whether or not it is charging for it.</div>
+      <div style="height:14px"></div>
+      <label class="field">Mode</label>
+      <div class="opts" id="arcadePlayPick"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">Coin-op needs a credit to start a game — press a coin key (5 to 8, one per player) to add one. Free play starts whenever somebody presses START.</div>
+    </div>
+    <div class="card">
+      <h2>Panel</h2>
+      <div id="arcadeKeys"></div>
+      <div class="hint" style="text-align:left">MAME's own defaults, so a cabinet wired with any keyboard encoder works with no setup. Bound to the physical switch rather than the printed character, so the numpad stick and the coin keys never collide and the layout the machine is set to does not matter.</div>
+    </div>
+    <button class="ghost" id="arcadeClear" style="margin-top:12px">Reset the counters</button>
+    <button class="ghost" id="arcadeBack" style="margin-top:12px">← Back</button>
+  </div>
+
   <div id="padConfig" class="screen hidden">
     <div class="logo"><h1 style="font-size:26px">CONTROLLER</h1><p id="padStatus">Press a direction on your controller to bind it</p></div>
     <div class="card">
@@ -2063,6 +2147,8 @@
    ── drawing ──────────────────────────────────────────────────────────────
    Render entry                "let cam = { s:1, ox:0"
    Goal camera                 "Goal camera ---"
+   Side view (showcase cam)    "SIDE VIEW — the showcase camera"
+   Side view bodies            "The side view's bodies ---"
    Pitch surfaces              "Pitch surfaces ---"
    Pitch wear                  "Wear that accumulates"
    Dynamic fields              "Dynamic visual themes"
@@ -2755,6 +2841,138 @@ const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
 };
+// ============================================================
+//  SIDE VIEW — the showcase camera
+// ============================================================
+// A broadcast-style camera for SHOWING the game rather than playing it: the pitch turns
+// so goal-to-goal runs left→right, the ground plane is squashed as though seen from
+// beside the touchline, and every body stands up off it as a cylinder.
+//
+// ⚠️ An OBLIQUE SQUASH, not a perspective projection, and that is the load-bearing
+// choice rather than a shortcut. Every pitch painter in this file works from a
+// RECTANGLE — `drawPitch` computes `L,T,R,B` and hands it to `drawGrass`, to
+// `vjPaintVideo` and to all fourteen `DYN_FIELDS` painters as `L,T,W,H` — and an
+// oblique y-squash maps a rectangle to a rectangle. So the grass clip, the goal boxes,
+// the markings, the pool table's cushion path and every animated field keep working
+// with no change at all. A true perspective does NOT preserve rectangles, so it would
+// mean rewriting all fourteen field painters, both goal pockets and every marking, for
+// a camera nobody plays with.
+//
+// ⚠️ REPLAYS AND THE IDLE ATTRACT MATCH ONLY, and there is deliberately no "always on"
+// option. `pitchHorizontal()` is what `applySeatRotation` reads to decide which way a
+// stick points, and it is answered once on a layout change — not per frame — so a
+// camera that turned the pitch a quarter-turn behind the input's back would hand a
+// player a stick that is 90° wrong. A replay has no input but "skip" and the attract
+// demo has no humans in it at all, so the question never arises. That is also exactly
+// what was asked for: a view for showing the game off, not for playing a match in.
+const SIDE = {
+  sq:     0.52,   // ground-plane squash — the camera sits ~31° above the horizon
+  h:      1.15,   // cylinder height, in body radii
+  head:   40,     // world units of extra headroom, so a standing body can't clip the top
+  wallHi: 0.86,   // wall shading just under the top face...
+  wallLo: 0.38,   // ...and at the base
+  shadow: 0.5,    // ground-shadow alpha
+  // ⚠️ WIDER than the body, and that is the point rather than a look. The wall covers the
+  // whole footprint — it is drawn from the top face down and round the bottom of the base
+  // ellipse — so a shadow at the body's own radius is painted over completely and the
+  // first build had one nobody could see. The spill is the part that reads.
+  shadowR: 1.3,
+};
+const SIDEOPT = {
+  off:  { name:'Top-down',  emoji:'⬜', icon:'barrier' },
+  show: { name:'Side view', emoji:'🎥', icon:'stadium' },
+};
+// ⚠️ Answered ONCE PER FRAME into `sideNow`, never asked again mid-frame: half a frame
+// squashed and half of it flat would be a mess, and `replay.active` genuinely does flip
+// between one frame and the next.
+let sideNow = false;
+function sideViewWant(){
+  if ((sel.sideView || 'off') === 'off') return false;
+  if (!world || world.drillMode) return false;
+  return replay.active || !!world.demo;
+}
+// Screen pixels a body of DRAWN radius r stands off the ground.
+function sideLift(r){ return SIDE.h * r; }
+function sideBallLift(w){
+  const b = w && w.ball; if (!b) return 0;
+  return sideLift(b.r * cam.s * cam.body);
+}
+// ============================================================
+//  DIGITAL THUMBSTICK
+// ============================================================
+// The on-screen stick reports one of EIGHT directions and nothing between them, exactly as
+// the keyboard already does — hold a direction or do not.
+//
+// ⚠️ It is the same shape the keyboard produces, deliberately: `pollKeys` writes ±1 into
+// `pads.p1`, and `applyHumanInput` already normalises a diagonal so two arrow keys at once
+// is not 41% faster than one. Producing -1/0/+1 here means the touch stick goes down that
+// same path rather than getting a second, parallel one — and a diagonal comes out at full
+// speed rather than at √2 of it.
+//
+// ⚠️ EIGHT-way, not four. Four would make a diagonal unreachable, and the keyboard has been
+// eight-way since it existed (left and up held together is a diagonal), so four here would
+// mean the two input methods no longer agree about what the game can be told.
+const TOUCHDIG = {
+  // How far the thumb has to travel from where it landed before it counts, as a fraction of
+  // the stick radius. Small, because the stick recentres wherever you touch down: a big
+  // deadzone on a control that starts under your thumb just reads as lag.
+  dead: 0.22,
+};
+const TOUCHDIGOPT = {
+  on:  { name:'Digital', emoji:'🎮', icon:'gamepad' },
+  off: { name:'Analogue', emoji:'🕹️', icon:'run' },
+};
+function touchIsDigital(){ return (sel.touchDigital || 'on') !== 'off'; }
+// The stick's reading, snapped to the nearest eighth. ⚠️ Returns -1, 0 or +1 per axis and
+// nothing else — the normalising is `applyHumanInput`'s job, and doing it here as well would
+// scale a diagonal twice.
+function digitalVec(dx, dy){
+  if (Math.hypot(dx, dy) < TOUCHDIG.dead) return [0, 0];
+  const k = Math.round(Math.atan2(dy, dx) / (Math.PI/4));
+  return [Math.round(Math.cos(k*Math.PI/4)), Math.round(Math.sin(k*Math.PI/4))];
+}
+// ============================================================
+//  STANDUP ARCADE — a cabinet, four players, one keyboard
+// ============================================================
+// A fourth layout beside Auto, Steam Deck and Cocktail: an upright cabinet with four sets
+// of controls, everyone stood shoulder to shoulder facing the same screen.
+//
+// ⚠️ THE KEYBOARD IS THE WIRING, and that is not a shortcut — it is how arcade cabinets are
+// actually built. A JAMMA harness runs into a keyboard encoder (an I-PAC, a Zero Delay), and
+// every stick and button on the panel arrives at the browser as a keystroke. So the map here
+// is MAME's own default, which means a cabinet wired by anybody who has ever wired one works
+// with no configuration at all: P1 on the arrows with LCtrl/LAlt/Space, P2 on RDFG with A/S/Q,
+// P3 on IJKL, P4 on the numpad, 1-4 to start and 5-8 to insert a coin.
+//
+// ⚠️ The four players are presented as VIRTUAL GAMEPADS rather than as new seat types.
+// `connectedGamepadIndices` and `gamepadPad` are the two functions the whole seat machinery
+// already goes through — assignment, drop-in, names, the warm-up lobby, evening the sides up
+// — so a cabinet inherits every one of them instead of growing a parallel path that has to
+// be kept in step. Nothing downstream knows the difference.
+// ⚠️ Bound to `e.code`, not `e.key`, and for two reasons that both matter on a cabinet.
+// P4's stick is the NUMPAD, and a numpad key reports the same `e.key` as the number row —
+// "6" is "6" either way — so P4 pressing right would also drop a coin in P2's slot. And a
+// panel is FIXED HARDWARE: `code` is the physical switch regardless of the keyboard layout
+// the machine happens to be set to, so a cabinet built in France still works.
+const ARCADE = {
+  seats: [
+    { up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight',
+      fire:['ControlLeft','AltLeft','Space'],      start:'Digit1', coin:'Digit5' },
+    { up:'KeyR',    down:'KeyF',      left:'KeyD',      right:'KeyG',
+      fire:['KeyA','KeyS','KeyQ'],                 start:'Digit2', coin:'Digit6' },
+    { up:'KeyI',    down:'KeyK',      left:'KeyJ',      right:'KeyL',
+      fire:['ShiftRight','Enter','Comma'],         start:'Digit3', coin:'Digit7' },
+    { up:'Numpad8', down:'Numpad2',   left:'Numpad4',   right:'Numpad6',
+      fire:['Numpad0','NumpadDecimal','NumpadEnter'], start:'Digit4', coin:'Digit8' },
+  ],
+  maxSeats: 4,
+  // The operator's service key: holds the bookkeeping screen. F2 on a real cabinet.
+  service: 'F2',
+};
+const ARCADEOPT = {
+  free: { name:'Free play', emoji:'🆓', icon:'unlock' },
+  coin: { name:'Coin-op',   emoji:'🪙', icon:'gift' },
+};
 const TILTOPT = {
   on:  { name:'Tilt 3D',  emoji:'📐', icon:'phone' },
   off: { name:'Flat',     emoji:'⬛', icon:'barrier' },
@@ -2837,6 +3055,8 @@ const ICONS = {
   duo:       'M7.4 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M16.6 4.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z M2.8 20v-1.6a4.6 4.6 0 0 1 4.6-4.6 4.6 4.6 0 0 1 4.6 4.6V20 M12.2 20v-1.6a4.6 4.6 0 0 1 4.4-4.6 4.6 4.6 0 0 1 4.6 4.6V20',
   gamepad:   'M8.2 7.4h7.6a5.6 5.6 0 0 1 5.4 4.2l.9 3.6a2.7 2.7 0 0 1-5 1.9l-1-1.7H8l-1 1.7a2.7 2.7 0 0 1-5-1.9l.9-3.6a5.6 5.6 0 0 1 5.3-4.2Z M7 10.6v3.2 M5.4 12.2h3.2 M15.4 11.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z M17.8 13.6a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z',
   snail:     'M13 7.6a5.4 5.4 0 1 0 0 10.8 5.4 5.4 0 0 0 0-10.8Z M13 10.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Z M7.6 18.4H3.6c0-2.2 1.4-3.4 3.2-3.6 M4.6 14.8 2.8 12 M6.4 14.4 5.6 11.2',
+  // --- presentation
+  camera:    'M3.4 8.6h3.2l1.6-2.4h7.6l1.6 2.4h3.2v10H3.4Z M12 10.4a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z M18.2 10.8h1',
   // --- rules
   barrier:   'M3 8.6h18v6.8H3Z M3 8.6l6 6.8 M9 8.6l6 6.8 M15 8.6l6 6.8 M5.4 15.4V20 M18.6 15.4V20',
   run:       'M13.6 3.4a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z M9.4 20.6l2.2-5.2-2.6-2.6.8-4.6 3.2-1 2.6 3 3 1 M11 12.8 6.6 14 M14.2 15.4l2.6 5.2',
@@ -2986,7 +3206,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260811.0625PM';
+const VERSION = '20260813.0505AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3002,6 +3222,96 @@ const VERSION = '20260811.0625PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.0505AM', title: 'Replay fixes, and a replay length dial',
+    added: [
+      'A Replay starts slider in Game Feel \u2192 Camera: choose how far back a goal replay begins, from 2 to 15 seconds, so you see the build-up that made the goal and not just the shot.',
+    ],
+    changed: [
+      'Save clip now tells you what happened. If your browser cannot record video it says so and points you at Save replay, instead of playing the goal back and quietly saving nothing.',
+      'Each saved clip gets its own filename, so a new one no longer overwrites the last.',
+      'Tap the version in About to copy it, along with your screen size and layout \u2014 the things worth pasting into a bug report.',
+    ],
+    fixed: 'Opening a saved replay from the menu could do nothing at all, and one-handed mode fired a shot whenever you changed direction. Both fixed, along with a handful of smaller things.' },
+
+  { v: '20260813.0140AM', title: 'Standup arcade mode',
+    added: [
+      'A new Display layout: Standup arcade. Four sets of controls on one keyboard, wired the way a real cabinet is, so four people can play against the AI or two a side with nothing but a keyboard encoder.',
+      'The panel uses the arcade standard map, so a cabinet works with no setup: P1 on the arrows, P2 on RDFG, P3 on IJKL, P4 on the numpad, 1 to 4 to start and 5 to 8 to insert a coin.',
+      'An arcade settings screen with the takings on it — coins in, credits waiting and games played — plus free play or coin-op, and the full panel map. Open it from the Display card or with F2 on the cabinet itself.',
+    ],
+    changed: [
+      'Goal replays now wait a moment longer before cutting in, so you get to see the ball in the net first.',
+      'What\u2019s new now lives inside About, alongside the version and the update check, instead of being a separate section you had to go to.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.1105PM', title: 'Replays at the right size',
+    added: [],
+    changed: [
+      'Goal replays play at the normal size — the goal zoom no longer carries into them.',
+      'And the match picks back up at the normal size too, instead of starting the next kickoff zoomed in and slowly pulling out.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0910PM', title: 'A digital thumbstick',
+    added: [],
+    changed: [
+      'The on-screen thumbstick is now digital: eight directions and nothing between them, like a D-pad. You are either holding a direction or you are not, and a half-push no longer means half speed.',
+      'Analogue is still there if you preferred it — Controls, under Thumbstick. Controllers are always analogue either way.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0640PM', title: 'Game Feel, in tabs',
+    added: [],
+    changed: [
+      'The Game Feel card is now five tabs — Ball, Player, Effects, Camera and Advanced — instead of one list of nineteen settings you had to scroll through to find anything.',
+      'The preset row and Reset to defaults stay put on every tab, since they set everything at once.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0230PM', title: 'Save the whole match',
+    added: [
+      'The result screen can now save the WHOLE match as a replay, not just the last goal — every goal in it is marked on the progress bar so you can jump between them.',
+    ],
+    changed: [
+      'Save clip is now on the result screen only. Recording one plays the goal back to film it, which is not something to do in the middle of a match.',
+      'The replay bar during a match now says Save goal, because that is what it saves.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0955AM', title: 'The 3D ball rolls properly',
+    added: [],
+    changed: [
+      'The rolling 3D ball now shows the ball look you picked, full size, wrapped round it — instead of sixteen small copies of it, which is why it never quite looked like your ball.',
+      'And because those sixteen copies all looked alike, it was impossible to tell which way the ball was turning. It now clearly rolls the way it is going, at the speed its travel calls for.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0525AM', title: 'The ball turns the right way',
+    added: [],
+    changed: [
+      'The ball\'s markings now turn with the ball instead of always turning the same way, so it no longer looks like it is rolling backwards half the time.',
+      'Knock the ball back the way it came and its markings unwind rather than carrying on round.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
+  { v: '20260812.0210AM', title: 'The ball rolls properly',
+    added: [],
+    changed: [
+      'The rolling 3D ball was rolling backwards, and its markings were stretched into smears. They now wrap round it properly and roll the way the ball is going.',
+      'A ball that bounces straight off a wall now rolls back the way it came instead of the pattern jumping.',
+      'The sheep ball is a sheep you can actually make out, at any size.',
+    ],
+    fixed: 'The ball sat frozen in drills instead of rolling, and in Break the Targets you could walk off the pitch and off the screen. Plus a handful of smaller fixes.' },
+
+  { v: '20260811.0940PM', title: 'Watch from the touchline',
+    added: [
+      'Replays and the idle demo match can be shown from beside the pitch instead of straight down: goal-to-goal runs left to right, the ground tilts away from you, and every player stands up off it as a cylinder with the ball a real sphere above its shadow.',
+      'Off by default — turn it on in Game Feel under Presentation. It only ever changes how a replay or the demo is DRAWN, never how a match plays, and it is deliberately not offered for playing in: a player standing in front of the ball makes good television and a bad time on the ball.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260811.0625PM', title: 'A ball that rolls',
     added: [
       'The ball can roll like a real sphere: its markings wrap round it, squash up at the edge and go over the horizon, following whichever way it is travelling.',
@@ -3153,9 +3463,9 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off',
-            goalZoom:180, goalZoomSpd:10,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free',
+            goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             look: { palette:'neon', field:'none', discs:'none', ball:'classic', trail:'dots' },
@@ -4392,6 +4702,10 @@ const FLOAT = {
   gap: 15,         // stagger when one player earns several at once
   size: 11,        // font px — screen, not world (see drawFloaters)
   max: 20,         // hard cap; oldest goes
+  // Nominal body radius, in world units, used only to clear a standing body in the side
+  // view. A floater stores a POINT and not which body earned it (it outlives the body's
+  // position on purpose — it stays where the thing happened), so there is no p.r to read.
+  anchorR: 14,
 };
 // ⚠️ ROLLING-SPHERE BALL. Declared up here with FLOAT/GOALCAM because `paintBall` runs
 // during the bootstrap (the picker tiles are the real painter) and a const further down
@@ -4410,9 +4724,38 @@ const BALL3D = {
   // for the people most likely to turn it on. Below 5 the flat path degrades to a plain
   // dot anyway, so that is the honest boundary rather than a number picked by eye.
   minPx: 5,
-  tex: 96,        // texture height (= ball diameter in texture space)
-  reps: 3,        // pattern instances per 360° of wrap
-  inst: 0.42,     // each instance's radius, as a fraction of `tex`
+  tex: 128,       // texture height: sin(latitude) from -1 to +1
+  // ⚠️ The roll rate is the PHYSICAL one, ω = v/R, taken from the ball's own radius rather
+  // than a constant — see advanceBallSpin. It was 0.055 against a radius of 10, so the ball
+  // turned at half the rate its travel called for and read as sliding rather than rolling.
+  // The wrap is π×tex wide so the STORED strip is isotropic: `tex` pixels covers sin(lat)
+  // −1…+1, which is tex/2 pixels per radian of latitude at the equator, and π·tex pixels
+  // covers 2π radians of longitude, which is the same. A print therefore sits in a square
+  // box in the strip and is not resampled unevenly when it is baked.
+  // ⚠️ It is NOT what makes a print come out round on the BALL — that is the bake's patch
+  // box against the painter's own scale factors, and the wrap width cancels between them
+  // because both are computed from it. Believed otherwise for one commit, and the suite's
+  // sabotage of this value passing is what showed it.
+  wrap: (t) => Math.round(Math.PI * t),
+  // ⚠️ TWO PRINTS, ONE PER HEMISPHERE, and it was sixteen small ones on a regular grid.
+  // That is the whole of "it looks like it is rolling the wrong way, and it isn't my texture
+  // rolling in 3D": sixteen IDENTICAL marks spaced 90° apart in longitude make a periodic
+  // lattice, so the eye locks onto whichever copy is nearest between frames and reads the
+  // motion backwards about as often as forwards — a filmstrip of the ball rolling right and
+  // one of it rolling left were near indistinguishable. And a look's drawing is a complete
+  // disc design, so sixteen little copies of it is not the design you picked: the football
+  // came out as a mass of small pentagons rather than as a football.
+  // At 90° a print spans exactly half the wrap and the whole of sin(latitude), so two of
+  // them tile the sphere with no gap and no overlap, and the design comes back full size.
+  patch: 90,      // angular radius of one printed instance, in DEGREES
+  cols: 72,       // columns the design is sliced into for the asin warp — bake-time only
+  // ⚠️ The two prints are made DIFFERENT — the second turned a quarter and mirrored — so
+  // the pattern's period is a full turn rather than half of one. That is what pushes the
+  // point where the roll can start reading backwards from π/2 radians a frame out to π: at
+  // the physical roll rate that is a ball travelling at 31 units a step, which is the top of
+  // the speed range. Two identical hemispheres would alias from 15 upwards.
+  // [longitude in turns, the look's own rotation in turns, mirrored?]
+  prints: [[0.0, 0, false], [0.5, 0.25, true]],
 };
 // ⚠️ Declared HERE, with BALL3D, and not down beside the painter that fills it.
 // `clearSwatchCache` empties this and runs from `applyTheme` during the bootstrap, so a
@@ -4421,6 +4764,21 @@ const BALL3D = {
 // TDZ throws a ReferenceError rather than returning 'undefined'. That took the whole page
 // down, and it is the NINTH time this file has been bitten by a late const.
 const ballTexCache = new Map();
+// How much of the LEAD-UP a goal replay keeps, as a player dial. ⚠️ Six seconds was a
+// constant, and it starts the replay mid-move — you see the shot but not the build-up that
+// made it, which reads as the replay starting too late in the play. `repSecs()` clamps and
+// defaults in one place, and the ring buffer is sized from it, so turning the dial up really
+// does keep more of the approach rather than just replaying the same frames slower.
+// ⚠️ Declared HERE, with the feel constants, and not down with the replay code it belongs
+// to: the slider wiring calls `syncRepSecs()` during the bootstrap, and from there a `const`
+// two-thirds of the way down the file is in the temporal dead zone and takes the whole page
+// out with "Cannot access 'REP_LEAD' before initialization". ELEVENTH TDZ bite in this file
+// — same as GOALCAM directly below, which is why they now sit together.
+const REP_LEAD = { min: 2, max: 15, def: 6 };
+function repSecs(){
+  const v = sel.repSecs;
+  return v == null ? REP_LEAD.def : Math.max(REP_LEAD.min, Math.min(REP_LEAD.max, v));
+}
 const GOALCAM = {
   // ⚠️ THIRD TUNING, and the shape is what took three goes rather than the numbers.
   // It shipped at 5.0x over 1.15s: 5x is most of the pitch gone, and 1.15s of a 1.8s
@@ -6045,6 +6403,9 @@ function buildOpts(containerId, obj, key, extra){
       // ⚠️ Asked HERE, inside the tap that turned it on: iOS only grants the sensor from a
       // user gesture, and a request made at boot is refused outright.
       if (key==='tilt') tiltReset();
+      // The operator screen's headline says whether the machine is taking money, so a
+      // change of mode has to redraw it — the tiles rebuild themselves, the rest doesn't.
+      if (key==='arcadePlay') syncArcade();
     };
     wrap.appendChild(el);
   });
@@ -6661,6 +7022,8 @@ function buildMatchOpts(){
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
+  buildOpts('sideViewPick', SIDEOPT, 'sideView');
+  buildOpts('touchDigPick', TOUCHDIGOPT, 'touchDigital');
   buildOpts('balls', BALLS, 'ball');
   buildOpts('pitches', PITCH, 'pitch');
   buildOpts('handed', HANDED, 'handed');
@@ -6786,6 +7149,19 @@ function syncGoalCamSliders(){
   if (sp) sp.oninput = () => { sel.goalZoomSpd = +sp.value; saveSel(); syncGoalCamSliders(); };
   syncGoalCamSliders();
 }
+// ⚠️ Declared with the other feel sliders and wired the same way — the dial is read by
+// `repMaxFrames()` on every capture, so moving it takes effect on the next goal rather
+// than at the next match.
+function syncRepSecs(){
+  const r=$('repSecs'), rv=$('repSecsVal');
+  if (r) r.value = repSecs();
+  if (rv) rv.textContent = repSecs() + 's before the goal';
+}
+{
+  const r=$('repSecs');
+  if (r) r.oninput = () => { sel.repSecs = +r.value; saveSel(); syncRepSecs(); };
+  syncRepSecs();
+}
 const hsEl = $('hitStop'), hsValEl = $('hitStopVal');
 if (hsEl){
   const showHS = () => { if (hsValEl) hsValEl.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; };
@@ -6885,7 +7261,109 @@ updatePadInfo();
 if (!PANEL) checkDailyLogin();   // grant + show today's reward on the first visit each day
 
 // Reflect connected gamepads on the setup screen.
+// ============================================================
+//  ARCADE CABINET — pads, credits, bookkeeping
+// ============================================================
+function arcadeMode(){ return sel.display === 'arcade'; }
+function arcadeFreePlay(){ return (sel.arcadePlay || 'free') === 'free'; }
+// How many of the four panels are wired up. Fixed at four: a cabinet has the sticks it has,
+// and a seat nobody is standing at costs nothing — `evenUpSides` fills it with a bot.
+function arcadeSeats(){ return ARCADE.maxSeats; }
+// A panel, read as a pad. ⚠️ Returns the same shape `gamepadPad` does, so it flows through
+// `applyHumanInput` and every seat function unchanged — that is the whole design.
+// ⚠️ -1/0/+1 per axis, like `pollKeys` and the digital thumbstick: a stick on a cabinet is a
+// four-microswitch assembly and has no in-between at all.
+function arcadePad(i){
+  const s2 = ARCADE.seats[i];
+  if (!s2) return { dx:0, dy:0, kick:false, invert:false };
+  let dx = 0, dy = 0;
+  if (codes[s2.left]) dx -= 1;
+  if (codes[s2.right]) dx += 1;
+  if (codes[s2.up]) dy -= 1;
+  if (codes[s2.down]) dy += 1;
+  return { dx, dy, kick: s2.fire.some(c => codes[c]), invert:false };
+}
+// ---- credits and the takings ------------------------------------------------
+// ⚠️ Persisted, and kept OUT of `sel`. `saveSel()` serialises all of `sel` to localStorage
+// and `syncAdopt()` shallow-merges it between the game and the settings window — takings are
+// a record of what happened, not a preference, and a merge is exactly the wrong thing to do
+// to a counter. Same argument that keeps the VJ decks out of `sel`.
+const ARCADEBK = { key: 'magnetball.arcade' };
+let arcade = { credits: 0, coins: 0, plays: 0 };
+function loadArcade(){
+  try { const v = JSON.parse(localStorage.getItem(ARCADEBK.key) || 'null');
+        if (v && typeof v === 'object') arcade = { credits:v.credits|0, coins:v.coins|0, plays:v.plays|0 }; }
+  catch(_){}
+}
+function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(arcade)); } catch(_){} }
+// ⚠️ Loaded HERE, right under the declaration, and deliberately not up with `loadSel()` in
+// the bootstrap: `arcade` is a `let` further down the file, so a call from up there reads it
+// in the temporal dead zone and takes the whole page out. That has happened nine times in
+// this file already.
+loadArcade();
+// A coin goes in. Counted whether or not anybody plays: the takings are what went into the
+// slot, and a credit walked away from is still a coin the operator has.
+function arcadeCoin(n){
+  arcade.coins += 1; arcade.credits += 1; saveArcade();
+  syncArcade();
+  toast('CREDIT ' + arcade.credits + (n != null ? '  ·  P' + (n+1) : ''));
+  return arcade.credits;
+}
+// Spend one to start. ⚠️ Free play still COUNTS THE PLAY — an operator wants to know how
+// much the machine is used whether or not it is taking money for it.
+function arcadeSpend(){
+  if (!arcadeMode()) return true;
+  if (!arcadeFreePlay()){
+    if (arcade.credits <= 0){ toast('INSERT COIN'); return false; }
+    arcade.credits -= 1;
+  }
+  arcade.plays += 1; saveArcade(); syncArcade();
+  return true;
+}
+// A panel's START and its fire buttons, as HELD switches. ⚠️ `pollLobbyStart` and
+// `pollSubReady` reach into the Gamepad API DIRECTLY rather than going through `gamepadPad`,
+// because START is not part of the shape a pad reports here — so those two are the one place
+// the virtual-pad trick does not carry a cabinet for free, and they have to ask this instead.
+// Without it the warm-up lobby had no way out on a cabinet at all: four people stood at the
+// machine with a live START switch that did nothing, waiting on the 30-second auto-start.
+function arcadeStartHeld(i){ const s2 = ARCADE.seats[i]; return !!(s2 && codes[s2.start]); }
+function arcadeFireHeld(i){ const s2 = ARCADE.seats[i]; return !!(s2 && s2.fire.some(c => codes[c])); }
+// Is there a game in progress that START would be taking off somebody? The ATTRACT DEMO is
+// not one — it is what the cabinet does while nobody is playing, which is exactly when START
+// means "start" — and neither is a finished match sitting on its result screen.
+// ⚠️ Deliberately NOT `updCanShow`, which asks a similar question and also counts a PAUSED
+// match: an update prompt over a pause screen is fine, and starting a fresh game over one
+// takes four people's match away from them.
+function arcadeIdle(){
+  if (!running || !world) return true;
+  return !!world.demo || world.state === 'over';
+}
+// The coin and START keys, edge-triggered off keydown rather than polled — a coin is an
+// event, and polling one would bank a credit every frame the switch is held.
+function arcadeKeyDown(e){
+  if (e.repeat) return false;
+  if (e.code === ARCADE.service){ openArcadeCfg(); return true; }
+  for (let i = 0; i < ARCADE.seats.length; i++){
+    const s2 = ARCADE.seats[i];
+    if (e.code === s2.coin){ arcadeCoin(i); return true; }
+    // ⚠️ START only starts a match from the MENU. Mid-match it is the pause/ready button the
+    // lobby and drop-in already listen for, and hijacking it here would take the game away
+    // from four people because one of them leant on the panel.
+    if (e.code === s2.start){
+      if (arcadeIdle()){ tryKickOff(); return true; }
+      return false;
+    }
+  }
+  return false;
+}
+// The one way a PLAYER asks for a game. Everything else that reaches startMatch — the attract
+// demo, the next season round, a drill — is the machine doing something rather than somebody
+// paying for it, so those are not charged.
+function tryKickOff(){ if (arcadeSpend()) startMatch(); }
 function connectedGamepadIndices(){
+  // A cabinet's four panels, presented as four pads. Everything downstream — seat handout,
+  // drop-in, the warm-up lobby, evening the sides up — goes through this one list.
+  if (arcadeMode()) return Array.from({ length: arcadeSeats() }, (_, i) => i);
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const out = [];
   for (let i=0;i<gps.length;i++){
@@ -6957,6 +7435,15 @@ const SUBTABS = {
   // ⚠️ Built from SLOT_KEYS, never a hand-written copy of it: the chips and the panes have to
   // come from the same list or a new slot arrives with a pane and no chip, and its controls
   // are then hidden while `audit` and the menu search still find them.
+  // ⚠️ Game Feel carries nineteen controls, which was one list long enough that the
+  // Tilt parallax toggle sat sixteenth in it and got reported as a MISSING feature. The
+  // preset row and the reset button stay OUTSIDE these, because both act on the whole
+  // card — filing a set-everything control under one fifth of the things it sets is
+  // worse than leaving it above the chips, and the Match card keeps KICK OFF and Warm-up
+  // outside its own tabs for the same reason.
+  feel:   [['ball','Ball','ball'], ['player','Player','run'],
+           ['effects','Effects','flame'], ['camera','Camera','camera'],
+           ['advanced','Advanced','gear']],
   theme:  [['bundle', '✨ Bundle']].concat(
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
@@ -7427,7 +7914,11 @@ buildPhotoPane();
 buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
 applyShowMode();   // a locked menu has to come back locked after a reload
 
-$('playBtn').onclick = startMatch;
+// ⚠️ Through tryKickOff, not straight to startMatch: on a cabinet a play costs a credit, and
+// the two ways in (this button and a panel's START) must charge the same way. Everything
+// else that calls startMatch — the attract demo, a season round, a drill — is the machine
+// doing something rather than a player asking for a game, and is not charged.
+$('playBtn').onclick = tryKickOff;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
 // useful for trying controls, or for picking sides with no controller connected.
@@ -7542,12 +8033,12 @@ $('lbRefresh').onclick = () => buildLeaderboard(true);
 $('shopBack').onclick = toMenu;
 $('cocktailReset').onclick = () => { sel.cocktailSides = {}; saveSel(); buildCocktailRows(); };
 $('cocktailBack').onclick = () => openLook('display');
+$('arcadeBack').onclick = () => openLook('display');
 $('socialBack').onclick = closeSocial;
 // ⚠️ Closes Watch first. A replay draws to the game canvas, and the Watch screen is a
 // full-bleed overlay on top of it — left open, the file loads, plays to the end and you
 // see none of it.
 $('repLoadBtn').onclick = () => watchReplayFile(() => openSocial());
-$('aboutNews').onclick = () => openSection('news');
 $('repPause').onclick = repTogglePause;
 $('repExit').onclick = skipReplay;
 $('repWatchBtn').onclick = () => watchReplayFromMenu();
@@ -7585,7 +8076,7 @@ $('ovSettings').onclick = () => openLook('theme');
 $('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
-function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
+function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false;
   const tt=$('tutTip'); if(tt) tt.classList.add('hidden');
   teardownSocial();                       // stop the feed's observer/RAF when leaving Social
   // ensure any docked panel is fully torn down when screens change
@@ -7849,7 +8340,10 @@ $('settingsBtn').onclick = () => {
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
 $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
-$('clipBtn').onclick = () => { if (!replay.active) saveClip(); };
+// ⚠️ Guarded: the button is only on the result screen now, so it does not exist while the
+// replay bar is the only thing on screen. An unguarded `$(id).onclick` here threw during
+// the bootstrap and took the rest of the wiring with it.
+{ const cb = $('clipBtn'); if (cb) cb.onclick = () => { if (!replay.active) saveClip(); }; }
 // ⚠️ Says what happened on the button itself rather than through a toast: this one
 // writes a file, and a download that produces no visible response reads as a dead
 // button on any browser that saves without asking.
@@ -7907,7 +8401,11 @@ function sideQuarter(side){ return {bottom:0, left:1, top:2, right:3}[side] || 0
 function seatSide(n){ return (sel.cocktailSides && sel.cocktailSides[n]) || ['bottom','top','left','right'][(n-1)%4]; }
 // Steam Deck view: landscape pitch, menu docked left, driven entirely by a pad.
 function isDeck(){ return sel.display==='deck'; }
-function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
+// ⚠️ Arcade is its own mode and NOT 'mobile', however narrow the cabinet's monitor is. An
+// upright cab has no touchscreen, so on-screen thumbsticks there are two controls nobody can
+// press sitting on top of the pitch — `isTouchLayout` is what draws them.
+function viewMode(){ return sel.display==='cocktail' ? 'cocktail' : sel.display==='arcade' ? 'arcade'
+                          : isDeck() ? 'deck' : (isDesktop() ? 'desktop' : 'mobile'); }
 function isTouchLayout(){ return viewMode()==='mobile'; }   // only phones show on-screen thumbsticks
 // Is the warm-up lobby worth OFFERING at all? It exists to do three things: test a
 // stick before the whistle, walk onto the side you want, and tell a cocktail seat
@@ -8022,6 +8520,91 @@ function applyDisplayMode(){
   if (isDeck() && !PANEL) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
   else { if (world) resize(); setTimeout(deckFocusReset, 0); }
 }
+// ---- the operator's screen -------------------------------------------------
+// ⚠️ Reachable TWO ways on purpose: from the Display card, and from the service key on the
+// panel itself (F2, MAME's own). A cabinet has no menu — the person opening it is stood in
+// front of the machine with the coin door open, and the only input they have is the panel.
+function openArcadeCfg(){ dockOrFull('arcadeCfg', buildArcadeRows); }
+// A key code as it is printed on a panel. ⚠️ The bindings are `e.code` — a name a
+// programmer reads — and the map on screen is for somebody wiring a harness, so "Numpad8"
+// has to come out as "Num 8" and "ControlLeft" as "L-Ctrl".
+function arcadeKeyName(code){
+  if (/^Key(.)$/.test(code)) return RegExp.$1;
+  if (/^Digit(.)$/.test(code)) return RegExp.$1;
+  if (/^Numpad(\d)$/.test(code)) return 'Num ' + RegExp.$1;
+  if (code === 'NumpadDecimal') return 'Num .';
+  if (code === 'NumpadEnter') return 'Num Enter';
+  if (/^Arrow(.+)$/.test(code)) return RegExp.$1;
+  if (code === 'ControlLeft') return 'L-Ctrl';
+  if (code === 'AltLeft') return 'L-Alt';
+  if (code === 'ShiftRight') return 'R-Shift';
+  if (code === 'Comma') return ',';
+  return code;
+}
+// The headline and the takings. ⚠️ Its own function rather than a `buildArcadeRows()` call,
+// because it runs on every coin and every game started — rebuilding the whole panel map for
+// a number that changed would relayout the screen under the operator's finger.
+function syncArcade(){
+  const st = $('arcadeStatus');
+  if (st) st.textContent = arcadeFreePlay()
+    ? 'Free play  ·  ' + arcade.plays + (arcade.plays === 1 ? ' game' : ' games')
+    : 'Credits ' + arcade.credits + '  ·  ' + arcade.coins + (arcade.coins === 1 ? ' coin' : ' coins');
+  const book = $('arcadeBook');
+  if (!book) return;
+  book.innerHTML = '';
+  [['Coins in', arcade.coins], ['Credits waiting', arcade.credits], ['Games played', arcade.plays]]
+    .forEach(([lab, n]) => {
+      const row = document.createElement('div'); row.className = 'ckrow';
+      const l = document.createElement('span'); l.className = 'cklab'; l.textContent = lab;
+      const v = document.createElement('span'); v.className = 'cksides'; v.textContent = String(n);
+      row.append(l, v); book.appendChild(row);
+    });
+}
+function buildArcadeRows(){
+  syncArcade();
+  buildOpts('arcadePlayPick', ARCADEOPT, 'arcadePlay');
+  const keys = $('arcadeKeys');
+  if (keys){
+    keys.innerHTML = '';
+    ARCADE.seats.forEach((s2, i) => {
+      const row = document.createElement('div'); row.className = 'ckrow';
+      const l = document.createElement('span'); l.className = 'cklab'; l.textContent = 'Player ' + (i+1);
+      const v = document.createElement('span'); v.className = 'cksides';
+      v.style.fontSize = '11px'; v.style.color = 'var(--muted)';
+      v.textContent = [s2.up, s2.left, s2.down, s2.right].map(arcadeKeyName).join(' ')
+        + '  ·  ' + s2.fire.map(arcadeKeyName).join('/')
+        + '  ·  Start ' + arcadeKeyName(s2.start)
+        + '  ·  Coin ' + arcadeKeyName(s2.coin);
+      row.append(l, v); keys.appendChild(row);
+    });
+    const row = document.createElement('div'); row.className = 'ckrow';
+    const l = document.createElement('span'); l.className = 'cklab'; l.textContent = 'Service';
+    const v = document.createElement('span'); v.className = 'cksides';
+    v.style.fontSize = '11px'; v.style.color = 'var(--muted)';
+    v.textContent = arcadeKeyName(ARCADE.service) + '  ·  opens this screen';
+    row.append(l, v); keys.appendChild(row);
+  }
+  // ⚠️ Arm-then-confirm, the same as the replay and photo deletes: the takings are the
+  // one number on this screen that cannot be got back, and it is a button an operator
+  // presses with a coin door open and a queue waiting.
+  const cl = $('arcadeClear');
+  if (cl){
+    cl.textContent = 'Reset the counters';
+    cl.dataset.armed = '';
+    cl.onclick = () => {
+      if (!cl.dataset.armed){
+        cl.dataset.armed = '1';
+        cl.textContent = 'Clear ' + arcade.coins + ' coins and ' + arcade.plays + ' games?';
+        setTimeout(() => { if (cl.dataset.armed){ cl.dataset.armed = ''; cl.textContent = 'Reset the counters'; } }, 3000);
+        return;
+      }
+      arcade = { credits: 0, coins: 0, plays: 0 };
+      saveArcade();
+      cl.dataset.armed = ''; cl.textContent = 'Reset the counters';
+      syncArcade();
+    };
+  }
+}
 function openCocktailCfg(){ dockOrFull('cocktailCfg', buildCocktailRows); }
 function buildCocktailRows(){
   const wrap=$('cocktailRows'); if(!wrap) return; wrap.innerHTML='';
@@ -8110,7 +8693,7 @@ function buildSettings(){
   // Display: Auto (mobile/desktop by screen) vs Cocktail (players around a flat screen).
   const dp=$('displayPick');
   if (dp){ dp.innerHTML='';
-    [['auto','🖥 Auto'],['deck','🎮 Steam Deck'],['cocktail','🍸 Cocktail']].forEach(([k,lab])=>{
+    [['auto','🖥 Auto'],['deck','🎮 Steam Deck'],['cocktail','🍸 Cocktail'],['arcade','🕹 Standup arcade']].forEach(([k,lab])=>{
       const on=(sel.display||'auto')===k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
       el.onclick=()=>{
@@ -8123,10 +8706,12 @@ function buildSettings(){
     });
   }
   const dd=$('displayDetected');
-  if (dd) dd.textContent = sel.display==='cocktail' ? '· cocktail'
+  if (dd) dd.textContent = sel.display==='arcade' ? '· standup cabinet · 4 panels on the keyboard'
+    : sel.display==='cocktail' ? '· cocktail'
     : isDeck() ? '· landscape pitch · Select opens the menu'
     : (isDesktop()?'· desktop detected':'· mobile detected');
   const cbx=$('cocktailBox'); if (cbx) cbx.style.display = sel.display==='cocktail' ? '' : 'none';
+  const abx=$('arcadeBox'); if (abx) abx.style.display = sel.display==='arcade' ? '' : 'none';
   // Pitch direction — which way goal-to-goal runs. Independent of the layout.
   const op=$('orientPick');
   if (op){ op.innerHTML='';
@@ -8146,6 +8731,17 @@ function buildSettings(){
   const fb=$('fsBtn'); if (fb) fb.onclick = () => toggleFullscreen(true);
   updateFsUI();
   const ccb=$('cocktailCfgBtn'); if (ccb) ccb.onclick=openCocktailCfg;
+  const acb=$('arcadeCfgBtn'); if (acb) acb.onclick=openArcadeCfg;
+  // The About block is a copy target. Bound here as well as at boot because buildSettings
+  // rebuilds nothing in it — but the handler is cheap and one binding site is one place to
+  // look, rather than two that can drift.
+  { const ai=$('aboutInfo');
+    if (ai && !ai._copyBound){
+      ai._copyBound = true;
+      ai.onclick = copyAbout;
+      // Keyboard and Steam Deck reach it the same way anything else with a role does.
+      ai.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); copyAbout(); } };
+    } }
   buildBallLookPick();
   const kp=$('kickPushPick');
   if (kp){ kp.innerHTML='';
@@ -8179,6 +8775,7 @@ function buildSettings(){
     if (hs){ hs.value = hitStopFrames();
       if (hv) hv.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; } }
   syncGoalCamSliders();          // same reason: a preset, a reset or a cross-tab sync
+  syncRepSecs();                 // ...and the replay lead-in
   const dbp=$('debugPick');
   if (dbp){ dbp.innerHTML='';
     [['off','Off'],['on','🐞 On']].forEach(([k,lab])=>{
@@ -8669,14 +9266,17 @@ async function lbSubmit(){
 // file passes Infinity and keeps every frame at the full 60fps.
 // Two copies of this drifted apart the moment the file format wanted more frames than
 // the sheet could hold, which is exactly the duplication this repo keeps paying for.
-function repEncodeFrames(src, cap){
+// `baseFps` is the rate the SOURCE was captured at — 60 for the goal ring, less for the
+// match buffer, which samples as it goes. Without it a match buffer already at 30Hz would
+// be reported as 60 and play back at double speed.
+function repEncodeFrames(src, cap, baseFps){
   const step = Math.max(1, Math.ceil(src.length / (cap || Infinity))), frames = [];
   for (let i=0; i<src.length; i+=step){
     const f = src[i], row = [Math.round(f.bx), Math.round(f.by)];
     for (const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), pl.k?1:0);
     frames.push(row);
   }
-  return { frames, fps: Math.round(60/step) };
+  return { frames, fps: Math.max(1, Math.round((baseFps || 60)/step)) };
 }
 // The inverse: flat rows back into the {bx,by,p:[{x,y,k}]} shape playReplay wants.
 function repDecodeFrames(rows, players){
@@ -9049,7 +9649,8 @@ function padResetMap(){ sel.pad = Object.assign({}, defaultSel().pad); saveSel()
 // ============================================================
 // Cocktail hands seats to pads whether or not you flipped the toggle; the lobby, the
 // kickoff assignment and mid-match drop-in all ask this same question.
-function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail'; }
+// ⚠️ Arcade always: a cabinet's panels ARE the seats, and there is no toggle to forget.
+function padsTakeSeats(){ return sel.controllers === 'on' || sel.display === 'cocktail' || sel.display === 'arcade'; }
 // ⚠️ The ONE order controllers take seats in: Co-op fills your side first (N humans vs
 // N AI), Versus interleaves you → opponent → teammate. Used by the kickoff assignment
 // AND by drop-in, so a pad that joins at minute three lands in exactly the seat it
@@ -9461,6 +10062,24 @@ function decayJuice(){
   shake = shake > 0.3 ? shake * 0.85 : 0;
   flash = flash > 0.01 ? flash * 0.88 : 0;
 }
+// The celebration is over — put the screen back. Called when a REPLAY takes the canvas,
+// beside `goalCamReset()`, and the mechanism is the same one: these decay in `decayJuice()`,
+// which is step-locked, and `loop()` returns immediately while `replay.active` — so nothing
+// winds them down for the whole of playback and whatever they hold comes back the frame the
+// loop resumes.
+// ⚠️ DEFENSIVE, and deliberately recorded as such rather than dressed up as the goal-camera
+// bug's twin — a probe that pinned the ball in the goal mouth made it look like one, and the
+// numbers it produced were its own doing. Measured on a natural goal, shake peaks at ~5.8 and
+// is at ZERO within ~430ms, while a replay does not start until `GOALHOLD.replayAt` (3.0s),
+// so the ordinary path carries nothing in. What is real is the narrow case: play continues
+// through the celebration, so a kick landing in the last moments of it tops the shake back up
+// (measured going 3.57 → 4.74 mid-celebration) and that residue would otherwise be frozen for
+// the length of the replay and discharged over the kickoff. Small, but a wobble with nothing
+// on screen to justify it.
+// ⚠️ `hitStop` cannot be pending here at all — it is at most twelve frames against a
+// three-second hold — but it is frozen by the same early return, and leaving one of the three
+// behind is how this comes back.
+function juiceReset(){ shake = 0; flash = 0; hitStop = 0; }
 
 // ⚠️ FRAME RATE IS A WALL-CLOCK MEASUREMENT, so unlike everything else it is counted in
 // loop() off real time and NOT step-locked — the sim rate is fixed at 1/60 by design, so a
@@ -9590,26 +10209,78 @@ function loop(t){
 //  replay (reliable, offline, theme-aware), and MediaRecorder captures that
 //  playback into a shareable clip. No external libraries.
 // ============================================================
-const REP_SECONDS = 6;
+const REP_SECONDS = REP_LEAD.def;      // the default; live length is repSecs()
 // ⚠️ A goal replay that STOPS the instant the ball crosses the line stops before the thing
 // you wanted to see. `checkGoal` sets `state='goal'` and the goal state still integrates
 // ("ball flies into the net; players can keep moving"), so the interesting second and a
 // half — the ball hitting the net and settling, the celebration starting — was being
 // captured into the rolling buffer and then thrown away, because `repOnGoal` froze at the
 // crossing. The freeze is DELAYED by this much instead.
+// How long the ball sits in the net before the game moves on, and how long before an
+// auto-replay cuts in. ⚠️ The replay wait is the LONGER of the two on purpose — see the
+// goal branch in step(). It also has to clear REP_TAIL, because the tail is captured on a
+// delay and a replay that starts before it is finished is a replay of the approach with the
+// goal cut off the end.
+const GOALHOLD = { hold: 1.8, replayAt: 3.0 };
+// Is an auto-replay actually going to fire for this goal? ⚠️ ONE predicate, because the
+// answer is needed twice — once to pick how long to hold the celebration and once to decide
+// what to do when that runs out — and two copies would drift into a hold that waits for a
+// replay that never comes.
+function autoReplayReady(w){
+  const ending = w.goalsTarget && Math.max(w.score[0], w.score[1]) >= w.goalsTarget;
+  return !!(sel.autoReplay && !vj.on && !w.demo && !ending && !w.overtime
+            && !(w.party && w.party.multi) && !w._autoReplayed
+            && lastReplay && lastReplay.frames && lastReplay.frames.length
+            && lastReplay.players === w.players.length);
+}
 const REP_TAIL = 1.6;
 const REP_TAIL_F = Math.round(REP_TAIL / STEP);
 // The buffer holds the lead-up PLUS the tail, so keeping the tail does not cost you the
 // approach play — a goal replay is the full REP_SECONDS before and REP_TAIL after.
-const REP_MAX = Math.round((REP_SECONDS + REP_TAIL) / STEP);
+// ⚠️ A FUNCTION, not a constant — the lead-in is a dial now, and a fixed cap would mean
+// turning it up changed nothing at all because the ring would still drop the oldest frames
+// at six seconds. Recomputed per capture, so a change to the slider takes effect on the very
+// next goal rather than at the next match.
+function repMaxFrames(){ return Math.round((repSecs() + REP_TAIL) / STEP); }
+const REP_MAX = Math.round((REP_SECONDS + REP_TAIL) / STEP);   // the default-sized ring
 let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
 let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
 let repGoalIdx = -1;     // where in repBuf the ball actually crossed
-const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false };
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60 };
+
+// ============================================================
+//  THE WHOLE MATCH — a second, un-ringed buffer
+// ============================================================
+// The rolling buffer above holds the last few seconds, which is a GOAL. This one holds the
+// match: kickoff to the whistle, so the result screen can offer both. They are separate
+// buffers rather than one big one because they want opposite things — the goal replay wants
+// every frame of a few seconds, the match replay wants a watchable record of several minutes
+// without carrying a quarter of a million objects around to get it.
+//
+// ⚠️ Sampled, not every step. 30Hz is plenty to watch a top-down match back, and it is a
+// third of the memory and a third of the file of the same match at 60. `repEncodeFrames`
+// already carries an `fps` for exactly this — see the playback note there, because storing
+// it and honouring it turned out to be two different things.
+//
+// ⚠️ Past the cap it HALVES ITS OWN RATE in place rather than stopping or dropping the
+// start. A "first to 5" match has no time limit at all, so a buffer that simply stopped
+// would quietly save the first six minutes of a fifteen-minute match and call it the match.
+// Halving costs a little smoothness and keeps the whole thing.
+const REPMATCH = {
+  every: 2,        // capture one step in N: 30Hz
+  max:   12000,    // frames before the rate halves — about 6½ minutes at 30Hz
+};
+let repMatchBuf = [];       // the whole match, sampled
+let repMatchEvery = REPMATCH.every;
+let repMatchTick = 0;
+let repMatchGoals = [];     // frame indices where the ball crossed
+let repMatchSlots = [];     // the bodies, in a STABLE order — see repMatchCapture
 
 function repReset(){
   repBuf = []; lastReplay = null; repPend = -1; repGoalIdx = -1;
+  repMatchBuf = []; repMatchEvery = REPMATCH.every; repMatchTick = 0;
+  repMatchGoals = []; repMatchSlots = [];
   const b=$('replayBar'); if(b) b.classList.add('hidden');
 }
 function repCapture(w){
@@ -9617,12 +10288,52 @@ function repCapture(w){
   repBuf.push({ bx:w.ball.x, by:w.ball.y, p: w.players.map(pl => ({ x:pl.x, y:pl.y, k:!!pl.kick })) });
   // ⚠️ The goal index has to shift with the buffer, or the marker drifts one frame per
   // capture once the ring starts rolling.
-  if (repBuf.length > REP_MAX){ repBuf.shift(); if (repGoalIdx > 0) repGoalIdx--; }
+  // ⚠️ `while`, not `if`: turning the dial DOWN mid-match leaves the ring over its new cap
+  // by many frames, and shedding one a capture would take seconds to catch up.
+  while (repBuf.length > repMaxFrames()){ repBuf.shift(); if (repGoalIdx > 0) repGoalIdx--; }
   if (repPend > 0){ repPend--; if (repPend === 0) repFreeze(w); }
+  repMatchCapture(w);
 }
+// ⚠️ STABLE SLOTS, and this is the whole reason the match buffer is not just a longer
+// version of the ring. `w.players` GROWS: drop-in lets a controller join at a goal and
+// `evenUpSides` adds a bot to match, so a row captured after that is longer than one
+// captured before it — and `repFileParse` rejects a file whose rows disagree with its
+// player count, which is the good outcome. The bad one is a file that loads and indexes
+// past the end of a row, which fails as a blank screen rather than as an error.
+// So a body that arrives takes the next slot and every EARLIER frame is back-filled with
+// where it was standing at the time (out on the touchline, which is where it was), and a
+// body that leaves keeps its slot and is recorded wherever it now is — on the bench. Every
+// row is then the same length and the replay tells the truth about both.
+function repMatchCapture(w){
+  // The warm-up lobby is not the match, and the idle attract demo is not worth the memory.
+  if (w.demo || w.state === 'warmup') return;
+  if (++repMatchTick < repMatchEvery) return;
+  repMatchTick = 0;
+  for (const p of w.players){
+    if (repMatchSlots.indexOf(p) >= 0) continue;
+    repMatchSlots.push(p);
+    for (const f of repMatchBuf) f.p.push({ x:p.x, y:p.y, k:false });
+  }
+  repMatchBuf.push({ bx:w.ball.x, by:w.ball.y,
+                     p: repMatchSlots.map(p => ({ x:p.x, y:p.y, k:!!p.kick })) });
+  if (repMatchBuf.length >= REPMATCH.max){
+    const half = [];
+    for (let i = 0; i < repMatchBuf.length; i += 2) half.push(repMatchBuf[i]);
+    repMatchGoals = repMatchGoals.map(g => g >> 1);
+    repMatchBuf = half;
+    repMatchEvery *= 2;
+  }
+}
+// ⚠️ The ROSTER is snapshotted with the frames, not read off the live world when the file is
+// built. `w.players` grows: drop-in adds a body at a GOAL, which is exactly when this buffer
+// freezes, so by the time anybody presses Save the world can hold one more player than the
+// frames do — and `repFileBuild` was pairing that longer player list with the shorter rows.
+// The result parses as "frames do not match the player count" if you are lucky, and indexes
+// past the end of a row if you are not, which fails as a blank screen.
 function repFreeze(w){
   repPend = -1;
-  lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
+  lastReplay = { players: w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx,
+                 roster: w.players.map(repFilePlayer) };
 }
 function repOnGoal(w){
   if (!repBuf.length) return;
@@ -9630,7 +10341,9 @@ function repOnGoal(w){
   // nothing, then keep capturing and freeze again with the tail included. The auto-replay
   // fires at 1.8s, comfortably after REP_TAIL, so what it plays is the complete version.
   repGoalIdx = repBuf.length - 1;
-  lastReplay = { players:w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx };
+  lastReplay = { players:w.players.length, frames: repBuf.slice(), goalAt: repGoalIdx,
+                 roster: w.players.map(repFilePlayer) };
+  repMatchGoals.push(repMatchBuf.length - 1);   // ...and mark it on the match record too
   repPend = REP_TAIL_F;
   const b=$('replayBar'); if(b) b.classList.remove('hidden');
 }
@@ -9638,7 +10351,14 @@ function drawReplayFrame(f){
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
   const fake = {
     field: world.field, bounds: world.bounds, cb: world.cb, magnet: 0, state:'play',
-    players: world.players.map((pl,i)=>({ ...pl, x:f.p[i].x, y:f.p[i].y, kick:f.p[i].k, trap:false, chargeT:0 })),
+    // ⚠️ Driven by the FRAME's bodies, not by the live world's. The frame is the authority
+    // for how many there were; `world.players` is whatever is on the pitch right now, and
+    // the two can disagree — a body joining while a replay is on screen made this index past
+    // the end of `f.p` and take the page down with "cannot read properties of undefined".
+    // The world is only consulted for what each body LOOKS like, and falls back if it is
+    // short, because a replay drawn in the wrong colours still beats a stack trace.
+    players: f.p.map((fp,i)=>({ ...(world.players[i] || world.players[0]),
+                                x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0 })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
   // ⚠️ The SAME transform render() applies, through the same `pitchXform` — deck view
@@ -9646,9 +10366,16 @@ function drawReplayFrame(f){
   // replay came back at ninety degrees to the match it was a replay OF. It is two passes
   // for the same reason render() is: the ground and the bodies carry different offsets,
   // and a replay of a tilted pitch has to be tilted the same way or the shadows detach.
+  // ⚠️ The side camera is asked and the camera refitted HERE too, not just in render():
+  // this path does not go through render() at all (loop() returns early while a replay
+  // is active), so without it a replay would be drawn with whatever cam.sq the last
+  // ordinary frame left behind — which is 1, because `replay.active` was false then.
+  sideNow = sideViewWant();
+  computeCam();
   const [rgx, rgy] = tiltGround(), [rbx, rby] = tiltLift();
   ctx.save(); pitchXform(rgx, rgy); drawPitch(fake); ctx.restore();
-  ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore();
+  if (sideNow) drawBodiesSide(fake, rbx, rby);
+  else { ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore(); }
   // Big, centred REPLAY label + skip hint so it's clear what's happening.
   // Centre on the PITCH (wx/wy(0)), not the raw canvas — a docked desktop panel
   // insets the pitch to the right, so cw/2 would sit left of the play area.
@@ -9675,6 +10402,26 @@ function drawReplayFrame(f){
 // the goal → kickoff flow continues immediately. (Don't cancel the rAF here, or
 // the promise would never resolve and the match would hang in the goal state.)
 function skipReplay(){ if (replay.active) replay.active = false; }
+// End a replay OUTRIGHT, from outside its own loop. ⚠️ `skipReplay` is not enough here: it
+// only lowers the flag and leaves the pending tick to notice, and that tick is exactly what
+// cannot run any more once the world it was drawing has been thrown away.
+//
+// ⚠️ THIS IS WHAT THE MENU OWES A REPLAY. `toMenu()` sets `world = null`, and leaving a
+// match mid-celebration is an ordinary thing to do — so the next tick of a live auto-replay
+// read `world.field` off null and threw. A throw inside a rAF callback kills the chain
+// silently: `finish()` never ran, so `replay.active` stayed TRUE FOR THE REST OF THE PAGE.
+// Everything downstream then quietly did nothing, because `replay.active` is the flag they
+// all check — `playReplayFile` returns at its first line, so opening a saved .json from the
+// menu played nothing at all and dropped you straight back on the menu you started from,
+// with no error and nothing on screen to say why. `loop()` also returns early on that flag,
+// so the game itself was frozen behind it.
+function replayAbort(){
+  if (replay.raf) cancelAnimationFrame(replay.raf);
+  replay.raf = 0;
+  replay.active = false;
+  replay.controls = false;
+  repCtlHide();
+}
 function anyPadPressed(){
   const gps=(navigator.getGamepads&&navigator.getGamepads())||[];
   for (const g of gps){ if(!g) continue; for (const b of g.buttons){ if (b && (b.pressed || b.value>0.5)) return true; } }
@@ -9718,13 +10465,20 @@ function repCtlSync(){
 }
 // A line under the transport, with a tick where the ball actually crossed. On a goal
 // replay everything after that tick is the tail — the net, and the moment after.
-function repCtlProgress(idx, total, goalAt){
+function repCtlProgress(idx, total, goalAt, goals){
   const fill = $('repProgFill'); if (fill) fill.style.width = (100 * (idx+1) / total).toFixed(1) + '%';
-  const mark = $('repProgGoal');
-  if (mark){
-    const show = goalAt != null && goalAt >= 0 && goalAt < total - 1;
-    mark.style.display = show ? '' : 'none';
-    if (show) mark.style.left = (100 * goalAt / total).toFixed(1) + '%';
+  // ⚠️ EVERY goal, not one. A goal replay has exactly one and always did; a whole match has
+  // as many as were scored, and a progress line through five goals that marks only the first
+  // is worse than one that marks none — it reads as "this is where the goal is".
+  const host = $('repProgGoal');
+  if (host){
+    const list = (goals && goals.length ? goals : (goalAt != null && goalAt >= 0 ? [goalAt] : []))
+      .filter(g => g >= 0 && g < total - 1);
+    while (host.childElementCount > list.length) host.removeChild(host.lastChild);
+    while (host.childElementCount < list.length){
+      const m = document.createElement('i'); m.className = 'repgoal'; host.appendChild(m);
+    }
+    list.forEach((g, i) => { host.children[i].style.left = (100 * g / total).toFixed(1) + '%'; });
   }
 }
 function repTogglePause(){ if (!replay.active) return; replay.paused = !replay.paused; repCtlSync(); }
@@ -9734,8 +10488,22 @@ function playReplay(speed, opts){
   return new Promise(resolve=>{
     if (!lastReplay || !lastReplay.frames.length || lastReplay.players !== (world?world.players.length:-1)){ resolve(); return; }
     const frames = lastReplay.frames, goalAt = lastReplay.goalAt;
+    // ⚠️ THE CELEBRATION IS OVER once you have watched it back. `applyGoalCam` already stands
+    // down while a replay is on screen, but the step loop is not running either — so
+    // `advanceGoalCam` never ticks and `goalCam.t` sits frozen at whatever it reached. The
+    // moment the replay ended the loop resumed, the guard stopped applying, and the full
+    // 1.8x push came back for a second and a tenth of kickoff: measured as 1.000 for one
+    // frame and then 1.799 on the next. Standing the camera down for the duration was only
+    // half the fix; it has to be RELEASED, because by the time you come back the ball is on
+    // the centre spot and there is nothing left to push in on.
+    goalCamReset();
+    // ...and the shake and the flash, for exactly the same reason: they decay in the step
+    // loop, which is not running either, so they hold at full strength for the whole replay
+    // and discharge into the kickoff. See juiceReset().
+    juiceReset();
     replay.active = true;
     replay.paused = false;
+    replay.fps = lastReplay.fps || 60;
     replay.speed = speed || 0.55;
     replay.controls = !!opts.controls;
     if (replay.controls) repCtlShow();
@@ -9755,14 +10523,27 @@ function playReplay(speed, opts){
       // action, which means it correctly runs in slow motion along with the replay.
       // ⚠️ The step is recomputed EVERY tick, not once up front — the speed buttons change
       // it mid-playback, and a `dur` captured at the start would ignore them.
-      const dur = (STEP / Math.max(0.05, replay.speed)) * 1000;
+      // ⚠️ ...and it is the RECORDING's frame rate, not a flat 1/60. `fps` has been written
+      // into every replay payload since the sheet ones were capped at 120 frames, and
+      // nothing ever read it — so a decimated replay played back at however many times too
+      // fast its decimation was. It only became visible with a whole-match file, which is
+      // sampled at 30Hz by design and ran at double speed.
+      const fps = Math.max(1, replay.fps || 60);
+      const dur = ((1/fps) / Math.max(0.05, replay.speed)) * 1000;
       // ⚠️ Paused, `last` tracks the clock instead of accumulating. Leaving it behind
       // would bank the paused seconds and fast-forward the moment you resumed.
       if (replay.paused) last = t;
-      else while (t - last >= dur){ last += dur; idx++; advanceDynField(); }
+      // The field advances by the SIM steps a frame covers, not once per frame, or an
+      // animated theme crawls at half pace through a 30Hz recording.
+      else while (t - last >= dur){ last += dur; idx++;
+        for (let k = 0; k < Math.max(1, Math.round(60/fps)); k++) advanceDynField(); }
+      // ⚠️ The world can be pulled out from under a replay — `toMenu()` nulls it — and
+      // `drawReplayFrame` reads it. Belt and braces beside `replayAbort()`: a throw in here
+      // is silent and strands the flag, which is far worse than a replay that stops.
+      if (!world){ replay.active=false; finish(); return; }
       if (idx >= frames.length){ drawReplayFrame(frames[frames.length-1]); replay.active=false; finish(); return; }
       drawReplayFrame(frames[idx]);
-      if (replay.controls) repCtlProgress(idx, frames.length, goalAt);
+      if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
       replay.raf = requestAnimationFrame(tick);
     }
     replay.raf = requestAnimationFrame(tick);
@@ -9808,7 +10589,7 @@ function repFileBuild(){
   if (!lastReplay || !lastReplay.frames || !lastReplay.frames.length || !world) return null;
   const { frames, fps } = repEncodeFrames(lastReplay.frames, Infinity);
   return {
-    format: REPFILE.format, v: REPFILE.v,
+    format: REPFILE.format, v: REPFILE.v, kind: 'goal',
     build: VERSION, saved: new Date().toISOString(),
     field: world.fieldKey || sel.field,
     mode: sel.mode,
@@ -9821,11 +10602,35 @@ function repFileBuild(){
     // moment after — and the transport marks it on the progress line.
     goalAt: (lastReplay.goalAt != null && lastReplay.goalAt >= 0) ? lastReplay.goalAt : -1,
     fps,
-    players: world.players.map(repFilePlayer),
+    players: lastReplay.roster || world.players.map(repFilePlayer),
     frames,
   };
 }
-function repFilename(field){
+// The WHOLE match, out of the match buffer. ⚠️ Its players come from `repMatchSlots`, not
+// from `world.players`: the slots are what the rows were recorded against, and after a
+// drop-in the two lists differ — which is exactly the case that produces a file whose rows
+// do not match its own player count.
+function repMatchFileBuild(){
+  if (!repMatchBuf.length || !world) return null;
+  const { frames, fps } = repEncodeFrames(repMatchBuf, Infinity, 60/repMatchEvery);
+  return {
+    format: REPFILE.format, v: REPFILE.v, kind: 'match',
+    build: VERSION, saved: new Date().toISOString(),
+    field: world.fieldKey || sel.field,
+    mode: sel.mode,
+    look: { ...(sel.look||{}) },
+    score: world.score ? world.score.slice() : [0,0],
+    // Every goal in the match, so the transport can mark them all on the progress line.
+    // `goalAt` stays as the FIRST of them, so an older build that only knows that field
+    // still gets a sensible mark rather than nothing.
+    goals: repMatchGoals.slice(),
+    goalAt: repMatchGoals.length ? repMatchGoals[0] : -1,
+    fps,
+    players: repMatchSlots.map(repFilePlayer),
+    frames,
+  };
+}
+function repFilename(field, kind){
   // ⚠️ Colons are illegal in filenames on Windows and awkward everywhere else, and the
   // name has to say "replay" out loud — with a plain `.json` extension the filename is
   // the only thing distinguishing this from every other JSON in the downloads folder.
@@ -9833,7 +10638,10 @@ function repFilename(field){
   // than the one loaded now.
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
   const f = field || (world && world.fieldKey) || sel.field;
-  return `magnetball-replay-${f}-${t}.${REPFILE.ext}`;
+  // ⚠️ The KIND is in the name too. A goal and a whole match are both "a replay of a match
+  // on Classic", so without it a downloads folder holds two files you cannot tell apart
+  // until you open them — and one of them is fifty times the size of the other.
+  return `magnetball-${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -9912,6 +10720,10 @@ function repLibAdd(doc){
   const rec = {
     id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
     players: doc.players.length, frames: doc.frames.length, bytes: json.length,
+    // ⚠️ Kind and rate go in the METADATA, not just the payload. The list is drawn from
+    // this record alone — reading the frames to find out what a row is would put the 68ms
+    // structured clone straight back — so anything the row shows has to be here.
+    kind: doc.kind || 'goal', fps: doc.fps || 60,
   };
   return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
     meta.put(rec); blob.put({ id: rec.id, json });
@@ -9992,15 +10804,23 @@ function repLibLabel(rec){
   const f = (FIELDS[rec.field] && FIELDS[rec.field].name) || rec.field;
   let when = '';
   try { const d = new Date(rec.saved); if (isFinite(d)) when = d.toLocaleString(); } catch(_){}
-  return { title: f + ' · ' + (rec.mode || '?'),
-           sub: [when, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB'].filter(Boolean).join(' · ') };
+  // ⚠️ The KIND leads the title. A goal and a whole match off the same court in the same
+  // mode are otherwise the same row twice, and the only visible difference is a size in KB
+  // — which is a thing to work out rather than a thing to read.
+  // ⚠️ Older rows carry no `kind` at all; they are all goals, because that is all there was.
+  const match = rec.kind === 'match';
+  const secs = (rec.frames && rec.fps) ? Math.round(rec.frames / rec.fps) : 0;
+  const len = secs ? (secs >= 60 ? Math.floor(secs/60) + 'm ' + (secs%60) + 's' : secs + 's') : '';
+  return { title: (match ? 'Match' : 'Goal') + ' · ' + f + ' · ' + (rec.mode || '?'),
+           sub: [when, len, rec.players + ' players', Math.round(rec.bytes/1024) + ' KB']
+                  .filter(Boolean).join(' · ') };
 }
 // Saving does BOTH: the file for keeping and sending, the library entry for watching and
 // deleting. The file is what the player asked for, so a library failure must not lose it.
-function saveReplayFile(){
-  const doc = repFileBuild();
+function saveReplayFile(kind){
+  const doc = kind === 'match' ? repMatchFileBuild() : repFileBuild();
   if (!doc) return false;
-  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename());
+  downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename(null, doc.kind));
   repLibAdd(doc).then(() => buildReplayList()).catch(() => {});
   return true;
 }
@@ -10051,7 +10871,9 @@ async function playReplayFile(doc, speed, opts){
   try {
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length),
-                   goalAt: (doc.goalAt != null ? doc.goalAt : -1) };
+                   goalAt: (doc.goalAt != null ? doc.goalAt : -1),
+                   goals: Array.isArray(doc.goals) ? doc.goals : null,
+                   fps: doc.fps || 60 };
     computeCam();
     await playReplay(speed || 1, opts);
   } finally {
@@ -10140,7 +10962,7 @@ function buildReplayList(){
       : '';
     if (!rows.length){
       const e = document.createElement('div'); e.className = 'mvempty';
-      e.textContent = 'Nothing saved yet. Score a goal, then press Save replay on the replay bar or the '
+      e.textContent = 'Nothing saved yet. Score a goal, then press Save goal on the replay bar, or save a goal or the whole match from the '
         + 'result screen — it is kept here to watch again, and written to your downloads as a file you '
         + 'can send or back up.';
       host.appendChild(e); return;
@@ -10172,7 +10994,7 @@ function buildReplayList(){
       down.innerHTML = iconSvg('save') || '⤓';
       down.onclick = () => repLibGet(rec.id)
         .then(doc => downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }),
-                                  repFilename(rec.field)))
+                                  repFilename(rec.field, rec.kind)))
         .catch(e => toast('⚠ ' + e.message));
 
       const del = document.createElement('button'); del.className = 'repbtn del';
@@ -10220,6 +11042,56 @@ function downloadPathHint(){
 // About: the version, and whether anything newer is waiting. ⚠️ Text only — `#ver` is a
 // child of `#aboutInfo` and the boot block writes it, so this must never rebuild that
 // subtree out from under it.
+// What a bug report actually needs, in one string. ⚠️ Version, update status, screen size
+// and layout — and NOTHING personal: no name, no photo, no stats, no career. It is the
+// answer to "which build, what were you looking at", which is the round trip this saves.
+function aboutReport(){
+  const cvEl = $('game');
+  const w = Math.round((cvEl && cvEl.clientWidth) || window.innerWidth);
+  const h = Math.round((cvEl && cvEl.clientHeight) || window.innerHeight);
+  const dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) ||
+                     navigator.standalone === true;
+  return [
+    'Magnetball v' + VERSION,
+    'Updates: ' + (($('aboutUpd') || {}).textContent || '—'),
+    'Screen: ' + w + '\u00d7' + h + ' @' + dpr + (standalone ? ' (installed)' : ''),
+    'Layout: ' + viewMode() + (sel.sideView && sel.sideView !== 'off' ? ' · side view on' : ''),
+  ].join('\n');
+}
+// ⚠️ It REPORTS, including when it fails. `navigator.clipboard` needs a secure context, so
+// on a `file://` page or plain http it is simply absent — and a copy button that silently
+// does nothing is the Save clip mistake again. The `execCommand` path is the fallback that
+// covers those, and if even that fails the hint says so rather than claiming success.
+async function copyAbout(){
+  const el = $('aboutInfo'), hint = $('aboutCopyHint');
+  const say = (msg, good) => {
+    if (!hint) return;
+    hint.textContent = msg;
+    if (el) el.classList.toggle('copied', !!good);
+    setTimeout(() => { hint.textContent = 'Tap to copy'; if (el) el.classList.remove('copied'); }, 2000);
+  };
+  const text = aboutReport();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+      say('\u2713 Copied', true); return true;
+    }
+  } catch(_){ /* denied or unavailable — fall through to the old way */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    // Off-screen but focusable: `display:none` cannot be selected, and a visible one
+    // scrolls the card under the finger that just pressed it.
+    ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    ta.remove();
+    say(ok ? '\u2713 Copied' : '\u26a0 Could not copy', ok);
+    return !!ok;
+  } catch(_){ say('\u26a0 Could not copy', false); return false; }
+}
 function buildAbout(){
   const el = $('aboutUpd'); if (!el) return;
   const r = updRec();
@@ -10252,27 +11124,49 @@ function repMime(){
   for (const m of cands){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
   return '';
 }
-async function saveClip(){
-  if (!lastReplay || !lastReplay.frames.length) return;
-  const btn = $('clipBtn'); const label = btn ? btn.textContent : '';
+// ⚠️ The BUTTON is passed in. It used to look up `#clipBtn`, which was the in-match replay
+// bar's button — and that button was removed when Save clip moved to the result screen, so
+// every message this function produces was written to `null`. Combined with the silent
+// returns in `recordAndShareClip`, pressing Save clip could do nothing whatsoever and say
+// nothing about it.
+async function saveClip(btn){
+  btn = btn || $('clipBtn');
+  if (!lastReplay || !lastReplay.frames.length){
+    if (btn){ const l = btn.textContent; btn.textContent = '⚠ No goal to clip';
+              setTimeout(()=>{ if (btn.textContent!==l) btn.textContent = l; }, 2200); }
+    return;
+  }
+  const label = btn ? btn.textContent : '';
   // 1) record + share/download the video (its own early-returns can't skip the
   //    sheet post below, since it's a separate call).
-  await recordAndShareClip(btn);
+  const vid = await recordAndShareClip(btn);
   // 2) push the goal into the local Social feed (real, works offline).
   try { addToFeed(clipFromLastReplay()); } catch(e){}
   // 3) always post the replay DATA (re-simulatable frames, not the video) to the
   //    Replays sheet, and show whether it landed.
   const res = await lbSubmitReplay();
   let status;
-  if (res.ok) status = '✓ Saved to sheet';
+  // ⚠️ A recording problem is the thing the player actually pressed for, so it wins over
+  // whatever the leaderboard sheet did — that is a background errand they did not ask about.
+  if (vid) status = vid;
+  else if (res.ok) status = '✓ Saved to sheet';
   else if (res.reason === 'no-endpoint') status = '⚠ Sheet not connected';
   else if (res.reason === 'no-replay') status = label;
   else status = '⚠ Sheet save failed';
   if (btn){ btn.textContent = status; setTimeout(()=>{ if (btn.textContent===status) btn.textContent = label; }, 2800); }
 }
+// ⚠️ IT REPORTS. Every exit here used to be a bare `return` or a swallowed `catch`, so on a
+// browser with no recorder Save clip played the goal back and saved nothing, and said nothing
+// — indistinguishable from a broken button, which is exactly how it was reported. Returns ''
+// when a file really was produced, or a short reason for the caller to show.
 async function recordAndShareClip(btn){
   try {
-    if (!cv.captureStream || !window.MediaRecorder){ await playReplay(); return; }
+    if (!cv.captureStream || !window.MediaRecorder){
+      // Nothing to record with. Still show the goal, and say why no file appeared —
+      // and point at the thing that DOES work everywhere, since it is on the same screen.
+      await playReplay();
+      return '⚠ No video support — use Save replay';
+    }
     const stream = cv.captureStream(60);
     const mime = repMime();
     const rec = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
@@ -10284,18 +11178,39 @@ async function recordAndShareClip(btn){
     try { rec.requestData(); } catch(e){}
     rec.stop(); await stopped;
     const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
-    if (!blob.size) return;               // encoder produced nothing — don't share an empty file
+    if (!blob.size) return '⚠ Recording came out empty';
+    // ⚠️ The container is whatever the browser will ENCODE, not what we asked for. `repMime`
+    // puts mp4 first and every browser that can make one takes it; the rest give webm, which
+    // is a video file and plays in anything modern. Naming it off `blob.type` rather than off
+    // the request is what stops a webm being handed over called ".mp4".
     const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
-    const file = new File([blob], 'magnetball-goal.'+ext, { type: blob.type });
+    const file = new File([blob], repClipName(ext), { type: blob.type });
     if (navigator.canShare && navigator.canShare({ files:[file] })){
       try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
-      catch(e){ /* user cancelled the share sheet */ }
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download=file.name; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      catch(e){
+        // Cancelling a share sheet is a choice, not a failure — but it does mean no file
+        // exists, so fall back to a download rather than claiming it saved.
+        if (e && e.name === 'AbortError') return '· Share cancelled';
+        clipDownload(file);
+        return '';
+      }
+      return '';
     }
-  } catch(e){ /* recording unsupported / failed — silently ignore */ }
+    clipDownload(file);
+    return '';
+  } catch(e){ return '⚠ Could not record — use Save replay'; }
+}
+function clipDownload(file){
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a'); a.href=url; a.download=file.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+// Named like the replay files, so a clip and the replay of the same goal sit together in a
+// downloads folder instead of every clip being "magnetball-goal" and overwriting the last.
+// Same timestamp shape as `repFilename`, which is where that reasoning is written down.
+function repClipName(ext){
+  const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  return 'magnetball-clip-' + t + '.' + ext;
 }
 
 function step(w){
@@ -10306,13 +11221,18 @@ function step(w){
   if (w.state === 'goal'){
     // ⚠️ Substitutions happen HERE and only here — one hook in the goal state rather than
     // a call at each of the five places that set it, because one of those five is always
-    // the one somebody forgets. Latched so a 1.8s celebration is one substitution window.
+    // the one somebody forgets. Latched so the celebration is one substitution window.
     if (!w._subDone){ w._subDone = true; runSubs(w); }
-    if (w.stateT > 1.8){
-      const ending = w.goalsTarget && Math.max(w.score[0],w.score[1]) >= w.goalsTarget;
+    // ⚠️ TWO waits, not one. A replay that cuts in the moment the ball crosses takes the
+    // goal away from you to show it back — and the thing anyone wants to see first is the
+    // net. It also has to clear REP_TAIL by a real margin: the tail is captured on a delay,
+    // so a replay that starts too early plays a version of the goal that stops at the
+    // crossing. Without a replay coming there is nothing to wait for, so the plain hold is
+    // unchanged and kickoff timing is exactly what it always was.
+    const rep = autoReplayReady(w);
+    if (w.stateT > (rep ? GOALHOLD.replayAt : GOALHOLD.hold)){
       if (w.overtime) endMatch(w);                 // golden goal — first goal in OT wins
-      else if (sel.autoReplay && !vj.on && !w.demo && !ending && !(w.party&&w.party.multi) && lastReplay && lastReplay.frames && lastReplay.frames.length
-               && lastReplay.players === w.players.length && !w._autoReplayed){
+      else if (rep){
         w._autoReplayed = true;                    // slow-mo instant replay, then kick off
         playReplay(0.5).then(()=>{ if (world===w){ resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; } });
       } else { resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; }
@@ -10405,12 +11325,7 @@ function step(w){
   else if (w.state==='over' && w.endRamp != null) integrate(w, false, false);
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
-  // Visual ball spin — rolls while moving, plus any spin from carrying/redirecting; decays.
-  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
-    const sp=Math.hypot(bl.vx,bl.vy);
-    bl.rot = (bl.rot||0) + (bl.spin||0) + sp*0.03;
-    bl.spin = (bl.spin||0) * 0.90;
-  }
+  advanceBallSpin(w);
   if (active) stepBerries(w);   // float bob + respawn of banked berries (never in a draw)
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
@@ -10419,6 +11334,60 @@ function step(w){
 }
 
 // Play a wall/net sound once per frame when the ball bounces (flags set in collideWall).
+// Visual ball spin — rolls while moving, plus any spin from carrying or redirecting, and
+// it decays. Advanced in the step loop, never in a draw (the trails rule).
+//
+// ⚠️ Its own function because `stepDrill` needs it too, and did not have it. This lived
+// inline in `step()`, which a drill never runs — so in every drill the ball's pattern was
+// frozen solid: you could knock it the length of the pitch off a wall and the markings
+// never turned once. It reads as a ball that has stopped being a ball.
+//
+// ⚠️ TWO separate quantities, because the flat look and the sphere want different things.
+//   `rot`  is a 2D spin for `paintBallLook`, unsigned and always increasing — a
+//          stylisation, since a ball rolling on a pitch has no spin about the vertical
+//          axis at all.
+//   `roll` is a SIGNED distance rolled about `rollAx`, the axis the sphere actually turns
+//          on. It has to be signed: a ball that bounces straight back off a wall rolls
+//          back the way it came, and the sphere path used to take its direction from the
+//          live heading instead — so the instant a bounce flipped that heading by 180°,
+//          half a turn of texture jumped across the ball. The axis is only re-latched when
+//          travel goes more than 60° off it, which is a genuine change of direction rather
+//          than a rebound along the same line.
+// ⚠️ The axis is CANONICALISED into the right half of the pitch's own frame — pointing
+// along +x, or along +y when travel is exactly sideways to that. That is what makes the
+// SIGN of `along` mean something: forward along the axis is always the same direction, so
+// a ball going one way rolls positively and a ball going back rolls negatively.
+// Without it `rollAx` just tracked the heading, `along` was positive whichever way the
+// ball was going, and the flat pattern turned the same way in every direction — which is
+// what "the ball rotates the opposite way to where it is rolling" was. A wheel rolling
+// right reads clockwise, and this stayed clockwise when the ball came back left.
+function canonRollAx(vx, vy){
+  if (vx < 0 || (vx === 0 && vy < 0)){ vx = -vx; vy = -vy; }
+  return Math.atan2(vy, vx);
+}
+function advanceBallSpin(w){
+  for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
+    if (!bl) continue;
+    const sp = Math.hypot(bl.vx, bl.vy);
+    let along = 0;                                // signed travel along the roll axis
+    if (sp > 0.15){                               // at rest it keeps the axis it had
+      const ax = bl.rollAx;
+      const a0 = ax == null ? null : bl.vx*Math.cos(ax) + bl.vy*Math.sin(ax);
+      if (a0 == null || Math.abs(a0) < sp*0.5){   // >60° off the axis: a real turn
+        bl.rollAx = canonRollAx(bl.vx, bl.vy);
+        along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
+      } else along = a0;
+      // ⚠️ ω = v/R, the real rolling-without-slipping rate, off the ball's OWN radius. A
+      // magic constant here was half the physical rate, so the ball under-turned for the
+      // ground it covered and read as sliding.
+      bl.roll = (bl.roll||0) + along/(bl.r || 10);
+    }
+    // ⚠️ `along`, never `sp`. The flat look reads `rot` as a 2D turn of the pattern and a
+    // player reads that turn as a wheel, so it has to reverse when the ball reverses.
+    bl.rot = (bl.rot||0) + (bl.spin||0) + along*0.03;   // the flat look keeps its own rate
+    bl.spin = (bl.spin||0) * 0.90;
+  }
+}
 function ballSounds(w){
   const b = w.ball;
   const sp = Math.hypot(b.vx,b.vy) || 1;
@@ -10440,17 +11409,37 @@ function applyHumanInput(p, pad){
     p.inX = ix/mag * m; p.inY = iy/mag * m;
     p.faceX = ix/mag; p.faceY = iy/mag;
   } else { p.inX=0; p.inY=0; }
-  p.kick = sel.oneHand ? oneHandKick(p, mag, pad.kick) : pad.kick;
+  // ⚠️ `padTouchDown` and not the magnitude — see oneHandKick. `null` means "this pad
+  // cannot say", which is every pad that is not an on-screen stick.
+  p.kick = sel.oneHand ? oneHandKick(p, mag, pad.kick, padTouchDown(pad)) : pad.kick;
+}
+// Is a FINGER on this stick right now? Answers `null` for anything that is not an
+// on-screen thumbstick — a gamepad and the keyboard write into the same `pads` fields but
+// have no touch to report, and `null` is a third answer rather than "no".
+function padTouchDown(pad){
+  return pad && pad.move ? pad.move.id != null : null;
 }
 // One-handed play: steer with your thumb, LET GO to shoot where you were heading.
 // Releasing the stick synthesises a KICK press. The pulse is shorter than TAP_HOLD
 // on purpose — a release is a shot, never a trap. The real KICK button still works,
 // so this only adds a way to fire.
+// ⚠️ A RELEASE IS THE FINGER LIFTING, not the stick reading low. It armed and fired off
+// magnitude alone, so sweeping your thumb from one direction to the opposite one — across
+// the middle of the stick, never lifting — passed through the deadzone and fired a shot.
+// That is not an edge case: crossing the centre is how you turn round. The digital stick
+// made it certain rather than likely, because it snaps hard to (0,0) below TOUCHDIG.dead
+// instead of easing through a small magnitude, but the flaw was there in the analogue one
+// too and any thumb passing near the centre would trip it.
+// ⚠️ `down === null` — a gamepad or the keyboard, which write into the same pad fields and
+// have no finger to report — keeps the magnitude rule, because a stick springing back to
+// centre IS the release there and there is nothing else to read.
 const ONEHAND = { arm:0.45, pulse:0.09, cool:0.14 };
-function oneHandKick(p, mag, held){
+function oneHandKick(p, mag, held, down){
   if (p._ohCool > 0) p._ohCool -= STEP;
-  if (mag > ONEHAND.arm) p._ohArmed = true;
-  else if (p._ohArmed && !(p._ohCool > 0)){        // thumb came off a live stick
+  const live = down === null ? mag > ONEHAND.arm : (down && mag > ONEHAND.arm);
+  const letGo = down === null ? mag <= ONEHAND.arm : !down;
+  if (live) p._ohArmed = true;
+  else if (letGo && p._ohArmed && !(p._ohCool > 0)){   // thumb came off a live stick
     p._ohArmed = false; p._ohPulse = ONEHAND.pulse; p._ohCool = ONEHAND.cool;
   }
   if (p._ohPulse > 0){ p._ohPulse -= STEP; return true; }
@@ -10460,6 +11449,7 @@ function oneHandKick(p, mag, held){
 // ---------- Gamepad polling (Gamepad API). Left stick = move, A/X/RB/RT = kick.
 // Returns a pad-like object so it flows through applyHumanInput unchanged.
 function gamepadPad(index){
+  if (arcadeMode()) return arcadePad(index);
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = gps[index];
   if (!g){ return { dx:0, dy:0, kick:false, invert:false }; }
@@ -10545,10 +11535,24 @@ function integrate(w, ballFrozen, playersFrozen){
       ball.invMass = im; ball.vx = 0; ball.vy = 0;
     }
     // …but keep them from wandering off: clamp to the pitch + a small step-out margin.
-    if (!w.drillMode){
+    // ⚠️ A DRILL IS NOT EXEMPT, and it used to be. This whole block sat behind
+    // `if (!w.drillMode)`, which was true enough while every drill called
+    // `drillBoundary()` and got four solid walls that held a player in by collision.
+    // Break the Targets does not: it calls the match's own `buildGeometry` so its goals
+    // cannot drift from a real one's, and every boundary that produces is `ballOnly` —
+    // which contains the ball and deliberately lets a player step out. So there was
+    // nothing at all keeping the player on the pitch, and you could walk off the screen
+    // and never come back. A player must never leave the view, in any mode.
+    // ⚠️ Read off `w.bounds`, not `w.field`: that is the rectangle the drill actually
+    // laid out and the one `renderDrill` and `clampBallInside` already work from, so the
+    // line you are held at is the line on the screen. Every drill sets it, and so does
+    // `buildGeometry`.
+    {
       // 20 is the in-play step-out margin (getting round a wall-hugging ball). In
       // warm-up it opens up, because stepping outside is how you sit a match out.
-      const halfW=w.field.W/2, halfL=w.field.L/2, M = w.state==='warmup' ? LOBBY.outMargin : 20;
+      const bd = w.bounds;
+      const halfW = bd ? bd.halfW : w.field.W/2, halfL = bd ? bd.halfL : w.field.L/2;
+      const M = w.state==='warmup' ? LOBBY.outMargin : 20;
       for (const p of discs){
         if (p.x < -(halfW+M)){ p.x=-(halfW+M); if(p.vx<0)p.vx=0; }
         else if (p.x > halfW+M){ p.x=halfW+M; if(p.vx>0)p.vx=0; }
@@ -11084,7 +12088,11 @@ function drawFloaters(sx, sy, bx, by){
     // font is set, or the width is taken against whatever font happened to be current.
     const half = ctx.measureText(f.text).width / 2 + 4;
     const x = Math.max(half, Math.min(cw - half, px + sx + bx));
-    const y = Math.max(FLOAT.size + 2, py + sy + by - climb - f.tier * FLOAT.gap);
+    // ⚠️ Plus the body height in the side view. `screenPt` lands on the GROUND, and out
+    // there a body stands a full radius and a bit above it, so an unadjusted label would
+    // sit across the middle of the player it is naming.
+    const stand = sideNow ? sideLift(FLOAT.anchorR * cam.s * cam.body) : 0;
+    const y = Math.max(FLOAT.size + 2, py + sy + by - climb - stand - f.tier * FLOAT.gap);
     ctx.globalAlpha = a;
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)';
     ctx.strokeText(f.text, x, y);
@@ -11221,7 +12229,8 @@ function pollLobbyStart(w){
       // "the lobby ended before the ball could move".
       // Nobody is stranded by this: Select (8) is still bound, and `#lobbyStartBtn` is
       // on screen for the whole of warm-up whatever is connected.
-      pressed = !!(g && (btn(g, START_BTN) || btn(g, 8)));
+      pressed = arcadeMode() ? arcadeStartHeld(p.padIndex)
+                             : !!(g && (btn(g, START_BTN) || btn(g, 8)));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
@@ -11424,7 +12433,9 @@ function pollSubReady(w){
   for (const p of benchHumans(w)){
     if (p.ctrl !== 'gamepad') continue;
     const g = gps[p.padIndex];
-    const pressed = !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
+    const pressed = arcadeMode()
+      ? (arcadeStartHeld(p.padIndex) || arcadeFireHeld(p.padIndex))
+      : !!(g && (btn(g, START_BTN) || btn(g, 8) || padKickHeld(g)));
     const key = 'sub' + p.padIndex, was = _startPrev[key];
     _startPrev[key] = pressed;
     if (!pressed || was) continue;
@@ -12431,7 +13442,9 @@ function finishMatch(w){
   // there for when somebody wants to swap sides or sit one out.
   $('ovResume').textContent = '↻ Restart';
   $('ovResume').style.display = '';
-  $('ovResume').onclick = () => restartMatch(w);
+  // ⚠️ Charged too. Another game is another game, and a cabinet where "Restart" is free
+  // takes one coin an evening.
+  $('ovResume').onclick = () => { if (arcadeSpend()) restartMatch(w); };
   // ⚠️ Through iconSvg with the emoji as the fallback — the result screen's buttons
   // are functional marks, so they follow the same rule the option tiles do.
   $('ovRematch').innerHTML = (iconSvg('person') || '🧍') + '<span>Warm-up</span>';
@@ -12819,18 +13832,24 @@ function renderAwards(w){
     foot.appendChild(rep);
     if (typeof MediaRecorder!=='undefined'){
       const sh=document.createElement('button'); sh.textContent='⬇ Save clip';
-      sh.onclick=()=>saveClip(); foot.appendChild(sh);
+      sh.onclick=()=>saveClip(sh); foot.appendChild(sh);
     }
-    // ⚠️ Offered next to Save clip, because they are not the same thing and the
-    // difference is worth a button: the clip is a video to send someone, this is the
-    // match data to keep and watch again from Watch → Load replay.
-    const rf=document.createElement('button'); rf.textContent='⤓ Save replay';
-    rf.onclick=(e)=>{
-      const b=e.currentTarget, was=b.textContent;
-      b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
-      setTimeout(()=>{ if (b.textContent!==was) b.textContent=was; }, 2200);
+    // ⚠️ THREE things and they are all different, which is why all three get a button.
+    // The clip is a VIDEO of the last goal, to send someone. The other two are the match
+    // DATA, which re-renders at your screen's size in your theme and can be watched again:
+    // one of the last goal, one of the whole match. The two replays are the same format and
+    // the same code path — only the buffer they come out of differs.
+    const saver = (label, kind) => {
+      const b=document.createElement('button'); b.textContent=label;
+      b.onclick=(e)=>{
+        const el=e.currentTarget, was=el.textContent;
+        el.textContent = saveReplayFile(kind) ? '✓ Saved' : '⚠ Nothing to save';
+        setTimeout(()=>{ if (el.textContent!==was) el.textContent=was; }, 2200);
+      };
+      foot.appendChild(b);
     };
-    foot.appendChild(rf);
+    saver('⤓ Save goal replay', 'goal');
+    saver('⤓ Save match replay', 'match');
     host.appendChild(foot);
   }
 }
@@ -13690,7 +14709,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 // ============================================================
 //  RENDER
 // ============================================================
-let cam = { s:1, ox:0, oy:0, body:1 };   // body = render-only size floor, see MIN_BODY_PX
+let cam = { s:1, ox:0, oy:0, body:1, sq:1 };   // body = render-only size floor, see MIN_BODY_PX; sq = SIDE view squash
 // ---------- Goal camera ------------------------------------------------------
 // On a goal the view pushes in on whoever last touched the ball and eases back out
 // when the celebration ends. Render layer only — it moves `cam`, which no physics,
@@ -13734,6 +14753,12 @@ function advanceGoalCam(w){
 function goalCamEase(){ const t = goalCam.t; return t*t*(3 - 2*t); }
 // Apply to a camera that has already been fitted to the pitch.
 function applyGoalCam(){
+  // ⚠️ A replay owns its own framing — the same rule `advanceGoalCam`'s `want` already
+  // states. It used to be enough to say it there, because nothing on the replay path
+  // called computeCam at all; the side view does (it has to refit the camera for the
+  // squash), and without this guard a goal replay would inherit the 1.8× push frozen at
+  // full strength, since the step loop that eases it back out is not running.
+  if (replay.active) return;
   const g = goalCamEase();
   if (g <= 0.0001) return;
   // ⚠️ ix/iy, not the raw position — mid-step they differ by up to a full step of
@@ -13800,15 +14825,32 @@ function computeCam(){
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
   // wide screen is actually used. render() applies the matching canvas rotation, so
   // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
-  if (pitchHorizontal()){
+  // The showcase camera always turns the pitch — a side view of a portrait pitch that
+  // was not turned would be a view along the goal-to-goal axis, which is a view of one
+  // goal. ⚠️ It sets cam.rot ITSELF rather than going through pitchHorizontal(): that
+  // predicate is also what applySeatRotation reads to decide which way a stick points,
+  // and it is answered on a layout change rather than per frame. See SIDE.
+  if (sideNow){
     cam.rot = -Math.PI/2;
+    cam.sq  = SIDE.sq;
+    // Squashing the ground plane lets the pitch be BIGGER, not smaller — the vertical
+    // extent it needs is the pitch's width times the squash, plus the headroom a body
+    // standing up needs above the far touchline.
+    cam.s = Math.min(availW/worldH, availH/(worldW*SIDE.sq + SIDE.head));
+  } else if (pitchHorizontal()){
+    cam.rot = -Math.PI/2;
+    cam.sq  = 1;
     cam.s = Math.min(availW/worldH, availH/worldW);
   } else {
     cam.rot = 0;
+    cam.sq  = 1;
     cam.s = Math.min(availW/worldW, availH/worldH);
   }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
+  // Push the pitch down by half the headroom, so the room a standing body needs is at
+  // the TOP of the frame where the far touchline is, not split evenly above and below.
+  if (sideNow) cam.oy += SIDE.head * cam.s * 0.5;
   applyGoalCam();
   // ⚠️ RENDER ONLY. On the huge courts the whole pitch still has to fit on screen, so
   // cam.s falls far enough that a player disc is 2 pixels across — measured 2.1px on
@@ -13824,6 +14866,9 @@ function computeCam(){
 
 function wx(x){ return cam.ox + x*cam.s; }
 function wy(y){ return cam.oy + y*cam.s; }
+// The side view's ground-plane squash, in SCREEN space. Applied about cam.oy so the
+// pitch centre stays put while the plane flattens.
+function sideSquashY(y){ return cam.sq === 1 ? y : cam.oy + (y - cam.oy)*cam.sq; }
 // Draw screen-upright content at a point inside the rotated pitch (name plates,
 // cap glyphs) — without this they'd lie on their side in deck view.
 function uprightAt(x, y, fn){
@@ -13833,10 +14878,12 @@ function uprightAt(x, y, fn){
 // True on-screen point for a camera-space point — applies the same quarter-turn
 // render() does, so overlap tests measure what the player actually sees.
 function screenPt(px, py){
-  if (!cam.rot) return [px, py];
+  if (!cam.rot) return [px, sideSquashY(py)];
   const dx = px - cam.ox, dy = py - cam.oy;
   const c = Math.cos(cam.rot), sn = Math.sin(cam.rot);
-  return [cam.ox + dx*c - dy*sn, cam.oy + dx*sn + dy*c];
+  // ⚠️ The squash comes AFTER the turn, in the same order pitchXform composes them:
+  // it is a foreshortening of the screen, not of the pitch's own axes.
+  return [cam.ox + dx*c - dy*sn, sideSquashY(cam.oy + dx*sn + dy*c)];
 }
 // Circle vs axis-aligned rect (screen space): nearest point on the rect to the
 // centre, then a plain radius check.
@@ -14064,6 +15111,7 @@ function stepDrill(w){
   else { p.chargeT = 0; p.holdT = 0; }
   // physics (no goals; checkGoal is skipped because state!=='play')
   integrate(w, false, false);
+  advanceBallSpin(w);   // ⚠️ a drill's ball rolls too — it used to sit frozen, see there
   ballSounds(w);
   updateDrill(w);
 }
@@ -14308,12 +15356,23 @@ function renderDrill(){
 // ⚠️ ONE place. render() draws the ground and the bodies as two passes so they can carry
 // different offsets, and drawReplayFrame needs the same turn — three hand-written copies
 // of it is how the replay came to be drawn at ninety degrees to the match it replayed.
+// ⚠️ The side view's squash is the FIRST call here, which makes it the LAST thing
+// applied on the way from the world to the screen — ctx transforms compose inwards, so a
+// later call is nearer the drawing. It has to be that way round: it is a foreshortening
+// of the SCREEN, so it must land after the quarter-turn, not before it (squashed before
+// the turn and it would flatten the pitch's length instead of its width).
+// The shake and tilt offsets are inside it, so they foreshorten too — which is right: a
+// shake of a ground plane seen at 31° is a shake of that plane, not of the monitor.
 function pitchXform(dx, dy){
+  if (cam.sq !== 1){ ctx.translate(0, cam.oy); ctx.scale(1, cam.sq); ctx.translate(0, -cam.oy); }
   ctx.translate(dx, dy);
   if (cam.rot){ ctx.translate(cam.ox, cam.oy); ctx.rotate(cam.rot); ctx.translate(-cam.ox, -cam.oy); }
 }
 function render(){
   if (!world) return;
+  // ⚠️ Answered once, HERE, before anything reads it — see SIDE. Cleared for a drill on
+  // the way past, so `sideNow` can never be left true from an earlier frame.
+  sideNow = sideViewWant();
   if (world.drillMode){ renderDrill(); return; }
   // ⚠️ EVERY FRAME, and its absence was a real bug with two halves. `applyGoalCam`
   // lives inside `computeCam`, and `computeCam` was called only from `resize()` — so
@@ -14342,6 +15401,20 @@ function render(){
   ctx.save(); pitchXform(sx + gx, sy + gy);
   drawPitch(world);
   ctx.restore();
+  if (sideNow){
+    // The dot tails are marks ON the ground, so they stay on the squashed plane. The
+    // ball's streak and the kick sparks are lifted with the ball: a streak that does not
+    // meet the thing it is a streak of is the same "sticker" problem the tilt shadows
+    // have, and here the gap would be a whole body height.
+    ctx.save(); pitchXform(sx + bx, sy + by); drawDiscTrails(world); ctx.restore();
+    const bl = sideBallLift(world);
+    // ⚠️ Outside pitchXform, so the lift is real screen pixels and not a squashed
+    // fraction of one. (pitchXform's first act is the squash — see there.)
+    ctx.save(); ctx.translate(0, -bl); pitchXform(sx + bx, sy + by);
+    drawFx(); drawBallTrail(world);
+    ctx.restore();
+    drawBodiesSide(world, sx + bx, sy + by);
+  } else {
   ctx.save(); pitchXform(sx + bx, sy + by);
   drawFx();                   // sparks happen at body height, so they ride the body layer
   drawBallTrail(world);
@@ -14352,6 +15425,7 @@ function render(){
   // off-pitch until it respawns; skip it rather than draw a halo out in the void.
   if (world.extraBalls) for (const eb of world.extraBalls){ if (!eb.banked) drawBall({ ball: eb }); }
   ctx.restore();
+  }
   // ⚠️ After the restore, so the pitch's quarter-turn in deck view cannot lie the text
   // on its side. It takes the body layer's shake and tilt by hand instead.
   drawFloaters(sx, sy, bx, by);
@@ -17019,25 +18093,29 @@ const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
 // By index, NOT on the player — the replay rebuilds its player objects every frame,
 // which re-seeds anything stored there and the fade never converges.
 let labelA = [];
+// Sitting this one out: drawn faded, on the sideline, so it reads as "waiting" rather
+// than "missing". Its own function because the side view draws the bodies in depth order
+// and still wants the bench exactly as it is — flat on the touchline, behind everything.
+function drawBenchDiscs(w){
+  if (!w.bench || !w.bench.length) return;
+  const s = cam.s;
+  ctx.globalAlpha = 0.45;
+  for (const p of w.bench){
+    const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
+    uprightAt(x, y, (px, py) => {
+      ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
+      ctx.fillStyle = TH.discRim; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, r, 0, 2*Math.PI);
+      ctx.fillStyle = TH.dim || '#4a6076'; ctx.fill();
+      paintFace(ctx, px, py, r, p);
+    });
+  }
+  ctx.globalAlpha = 1;
+}
 function drawDiscs(w){
   const s = cam.s;
   if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
-  // Sitting this one out: drawn faded, on the sideline, so it reads as "waiting"
-  // rather than "missing".
-  if (w.bench && w.bench.length){
-    ctx.globalAlpha = 0.45;
-    for (const p of w.bench){
-      const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
-      uprightAt(x, y, (px, py) => {
-        ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
-        ctx.fillStyle = TH.discRim; ctx.fill();
-        ctx.beginPath(); ctx.arc(px, py, r, 0, 2*Math.PI);
-        ctx.fillStyle = TH.dim || '#4a6076'; ctx.fill();
-        paintFace(ctx, px, py, r, p);
-      });
-    }
-    ctx.globalAlpha = 1;
-  }
+  drawBenchDiscs(w);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
@@ -17045,6 +18123,88 @@ function drawDiscs(w){
     uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s*cam.body, s, i));
   }
 }
+
+// ---------- The side view's bodies ------------------------------------------
+// Everything standing on the pitch, painted FAR TO NEAR as cylinders. The rest of the
+// side view is free — see SIDE for why an oblique squash costs nothing — but depth
+// order is not: two bodies at the same screen height need the nearer one on top, and
+// that includes the ball, which is why this replaces both drawDiscs and drawBall rather
+// than sitting between them. (Drawing every disc and then the ball puts the ball in
+// front of a player who is standing between it and the camera.)
+function drawBodiesSide(w, dx, dy){
+  const s = cam.s, sq = cam.sq;
+  ctx.save(); pitchXform(dx, dy);
+  drawBenchDiscs(w);
+  const list = [];
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i];
+    list.push({ p, i, ball:null, x: wx(ix(p)), y: wy(iy(p)), r: p.r*s*cam.body });
+  }
+  for (const b of [w.ball].concat(w.extraBalls || [])){
+    if (!b || b.banked) continue;
+    list.push({ p:null, i:-1, ball:b, x: wx(ix(b)), y: wy(iy(b)), r: b.r*s*cam.body });
+  }
+  // ⚠️ Sorted on the REAL on-screen y (`screenPt`, which carries both the quarter-turn
+  // and the squash), never on a world axis: which world axis runs into the screen
+  // depends on the turn, and hard-coding one is how the replay came to be drawn at
+  // ninety degrees to its own match.
+  for (const e of list) e.d = screenPt(e.x, e.y)[1];
+  list.sort((a, b) => a.d - b.d);
+  for (const e of list){
+    const lift = sideLift(e.r);
+    uprightAt(e.x, e.y, (x, y) => {
+      // ⚠️ y - lift/sq, not y - lift: inside this frame a step of 1 lands sq pixels up
+      // the screen, so the division is what makes the cylinder SIDE.h radii tall rather
+      // than barely half that.
+      const top = y - lift/sq;
+      sideShadow(x, y, e.r);
+      if (e.ball){
+        // ⚠️ A sphere is a circle from EVERY angle, so the ball is the one thing here
+        // that must not ride the squash — undone about the ball's own centre, which
+        // leaves it where the squashed ground puts it but perfectly round. A squashed
+        // ball reads as a discus, and it is the object everybody is tracking.
+        ctx.save(); ctx.translate(x, top); ctx.scale(1, 1/sq); ctx.translate(-x, -top);
+        drawOneBall(e.ball, x, top, e.r, s);
+        ctx.restore();
+      } else {
+        sideWall(x, y, e.r, lift, e.p);
+        drawOneDisc(w, e.p, x, top, e.r, s, e.i);
+      }
+    });
+  }
+  ctx.restore();
+}
+// The ground the body is standing on. ⚠️ Drawn from here rather than left to
+// drawOneDisc/drawOneBall, whose own shadow sits a fraction of a radius below the art:
+// with the art a whole body height up, that shadow would hang in mid-air under the top
+// face instead of marking the spot.
+function sideShadow(x, y, r){
+  ctx.save(); ctx.globalAlpha = SIDE.shadow;
+  ctx.beginPath(); ctx.arc(x, y, r*SIDE.shadowR, 0, 2*Math.PI);
+  ctx.fillStyle = TH.shadow; ctx.fill();
+  ctx.restore();
+}
+// The side of the cylinder: the strip between the ground footprint and the raised top
+// face. Both ends are the same ellipse the guide ring already is under the squash — a
+// cylinder seen obliquely is two ellipses and the wall between them — so this is the
+// footprint's BOTTOM half swept up to the top face, and nothing here has to know what
+// the disc skin above it drew.
+function sideWall(x, y, r, lift, p){
+  const sq = cam.sq, top = y - lift/sq;
+  ctx.beginPath();
+  ctx.moveTo(x - r, top);
+  ctx.lineTo(x - r, y);
+  ctx.arc(x, y, r, Math.PI, 0, true);      // round the BOTTOM of the footprint
+  ctx.lineTo(x + r, top);
+  ctx.closePath();
+  const col = p && p.team === 0 ? TH.teamRed : TH.teamBlue;
+  const g = ctx.createLinearGradient(0, top, 0, y + r*sq);
+  g.addColorStop(0, shade(col, SIDE.wallHi));
+  g.addColorStop(1, shade(col, SIDE.wallLo));
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = TH.discRim; ctx.lineWidth = Math.max(1, r*0.10); ctx.stroke();
+}
+
 function drawOneDisc(w, p, x, y, r, s, idx){
   {
     // Shadow. ⚠️ The body layer is lifted off the ground by the tilt parallax (see
@@ -17052,9 +18212,13 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // STANDS — a shadow that travels with the body is a sticker, and the gap opening and
     // closing between the two is the whole reason the effect reads as height.
     // The offset is screen-space because uprightAt has already cancelled the pitch turn.
+    // ⚠️ Skipped in the side view, where the art is a whole body height off the ground
+    // and drawBodiesSide has already marked the spot the body is standing on.
     const [slx, sly] = tiltLift();
-    ctx.beginPath(); ctx.arc(x - slx, y + r*0.28 - sly, r*0.95, 0, 2*Math.PI);
-    ctx.fillStyle=TH.shadow; ctx.fill();
+    if (!sideNow){
+      ctx.beginPath(); ctx.arc(x - slx, y + r*0.28 - sly, r*0.95, 0, 2*Math.PI);
+      ctx.fillStyle=TH.shadow; ctx.fill();
+    }
     const teamCol = p.team===0 ? TH.teamRed : TH.teamBlue;
     // A theme can own what a player LOOKS like, not just what colour they are.
     const skin = discSkin();
@@ -17263,9 +18427,13 @@ function drawBall(w){
   uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
 }
 function drawOneBall(b, x, y, r, s){
-  // Anchored to the ground, exactly as the discs' is — see drawOneDisc.
+  // Anchored to the ground, exactly as the discs' is — see drawOneDisc. Skipped in the
+  // side view for the same reason: drawBodiesSide has already put a shadow on the spot,
+  // and this one would ride up with the lifted ball.
   const [slx, sly] = tiltLift();
-  ctx.beginPath(); ctx.arc(x - slx, y + r*0.3 - sly, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  if (!sideNow){
+    ctx.beginPath(); ctx.arc(x - slx, y + r*0.3 - sly, r*0.9, 0, 2*Math.PI); ctx.fillStyle=TH.shadow; ctx.fill();
+  }
   // The snail must never be mistaken for the scoring ball — it's the sudden-death
   // objective. Amber shell with a spiral, deliberately unlike the white ball.
   if (b.isSnail){
@@ -17321,13 +18489,19 @@ function drawOneBall(b, x, y, r, s){
   }
   // Chunky rim, shaded sphere, and the chosen pattern rolling with the ball
   // (rot advances with speed in step()). Same painter the picker tiles use.
-  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.vx, b.vy);
+  // ⚠️ PLUS cam.rot. `rollAx` is a direction on the PITCH, and `uprightAt` has already
+  // cancelled the pitch's quarter-turn — so in deck view, or under the side camera, an
+  // unrotated axis had the ball rolling ninety degrees across its own direction of travel.
+  paintBall(ctx, x, y, r, b.rot || 0, sel.look.ball, null, b.roll || 0, (b.rollAx || 0) + cam.rot);
   if (warped) ctx.restore();
 }
 // ---------- Ball looks. Every one is DRAWN, never an image: the ball is 9-15px
 // across and a sprite at that size is mush, while a path stays crisp at any zoom
 // and can roll with the real spin. `c` is a context, so the picker tiles and the
 // pitch share one implementation and can't drift.
+// The Sheep is the one look drawn as a silhouette rather than a mark — see its entry for
+// why, and why the surround is held back instead of solid.
+const SHEEP = { surround: 0.62 };
 const BALL_LOOKS = {
   classic: { name:'Classic', draw:(c,r,rot)=>{
     ballPent(c, 0, 0, r*0.36, -Math.PI/2 + rot); c.fill();
@@ -17389,19 +18563,33 @@ const BALL_LOOKS = {
   // so the fleece is the ball itself and the spot ink draws only what is not fleece:
   // the scalloped edge, the head and the legs. Trying to draw a whole sheep in one
   // ink filled the circle and it read as a blob.
-  sheep:   { name:'Sheep', draw:(c,r,rot)=>{
+  // ⚠️ A SILHOUETTE, not a set of marks, and that is what took three goes. Every earlier
+  // build drew the sheep's dark PARTS on a white ball — first a ring of seven fleece nubs
+  // plus a head, an ear and two legs, then a bigger head with four legs and a tail — and
+  // both of them came out as a field of same-sized dark spots on a white circle, which is
+  // a cow. Nothing at nine pixels can be read as a head, an ear and a leg; a whole animal
+  // OUTLINE can. So the ink covers the ball and the fleece is put BACK in the paper
+  // colour: a woolly body, a head, two ears, and the surround is the field around it.
+  // ⚠️ The surround is drawn at SHEEP.surround alpha and not solid, and that is about
+  // playability rather than looks. Solid, the ball's dark rim merges with a dark surround
+  // and the disc's edge disappears — so what a player sees is a small pale blob and the
+  // ball reads as much smaller than the circle that actually collides. Held back, the full
+  // disc still reads at radius r, the ball is still the brightest thing on the pitch, and
+  // the silhouette is legible at every size the ball is ever drawn.
+  sheep:   { name:'Sheep', draw:(c,r,rot,paper)=>{
     c.save(); c.rotate(rot);
-    // ⚠️ The fleece is NUBS, not scallops, and it stops short of the head. Drawn as
-    // big arcs all the way round they closed into a ring of teeth and the ball read
-    // as a cog; and anything put on the rim is lost, because ballRim is dark too.
-    for (let k=0;k<7;k++){
-      const a = -Math.PI*0.78 + k*(Math.PI*1.46/6);
-      c.beginPath(); c.arc(Math.cos(a)*r*0.82, Math.sin(a)*r*0.82, r*0.17, 0, 7); c.fill(); }
-    // Head and ear, held clear of the rim so white fleece surrounds them.
-    c.beginPath(); c.ellipse(r*0.50, -r*0.30, r*0.30, r*0.23, 0.42, 0, 2*Math.PI); c.fill();
-    c.beginPath(); c.ellipse(r*0.32, -r*0.52, r*0.15, r*0.09, -0.35, 0, 2*Math.PI); c.fill();
-    for (const lx of [-r*0.34, r*0.20]){
-      c.beginPath(); c.ellipse(lx, r*0.56, r*0.09, r*0.22, 0, 0, 2*Math.PI); c.fill(); }
+    c.globalAlpha = SHEEP.surround;
+    c.beginPath(); c.arc(0, 0, r*1.02, 0, 7); c.fill();
+    c.globalAlpha = 1;
+    // ⚠️ Nothing to put the fleece back with means no silhouette — the picker tiles and the
+    // pitch both pass one, but a caller that does not gets the marks version rather than a
+    // grey disc with nothing in it.
+    if (!paper){ c.restore(); return; }
+    c.fillStyle = paper;
+    c.beginPath(); c.ellipse(-r*0.14, 0, r*0.78, r*0.55, 0, 0, 2*Math.PI); c.fill();   // fleece
+    c.beginPath(); c.ellipse(r*0.62, 0, r*0.27, r*0.22, 0, 0, 2*Math.PI); c.fill();     // head
+    for (const s of [-1, 1])                                                            // ears
+      { c.beginPath(); c.ellipse(r*0.52, s*r*0.41, r*0.16, r*0.10, s*0.7, 0, 2*Math.PI); c.fill(); }
     c.restore(); } },
   stripe:  { name:'Stripe', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
@@ -17446,13 +18634,18 @@ const BALL_LOOKS = {
 const BALL_LOOK_KEYS = Object.keys(BALL_LOOKS);
 // The pattern, clipped to the ball and painted in the theme's spot colour. Shared by
 // the pitch and the picker so a tile can never show something the ball doesn't.
-function paintBallLook(c, x, y, r, rot, key, spot){
+// ⚠️ A look is handed the PAPER colour as well as the ink. Almost none of them want it —
+// they draw a mark in one ink on the ball and that is the whole job — but the Sheep is the
+// one whose subject is a SILHOUETTE rather than a mark, so it has to be able to put the
+// fleece back. Without it the only way to invert is a compositing trick that erases the
+// ball fill underneath as well and punches a hole through to the pitch.
+function paintBallLook(c, x, y, r, rot, key, spot, paper){
   const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
   c.save();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
   c.translate(x, y);
   c.fillStyle = spot;
-  look.draw(c, r, rot || 0);
+  look.draw(c, r, rot || 0, paper);
   c.restore();
 }
 // ---------- The ball as a rolling sphere -------------------------------------
@@ -17462,50 +18655,76 @@ function paintBallLook(c, x, y, r, rot, key, spot){
 // dither ramp and the nebula are both cached for exactly this reason.
 // ⚠️ Keyed on the INK as well as the look, because slots mix: the same look can be asked
 // for over another palette, and a texture baked in the old spot colour would be wrong.
-function ballSphereTex(key, spot){
-  const ck = key + '|' + spot;
+// ⚠️ The strip's vertical axis is sin(LATITUDE), not latitude, and getting that wrong was
+// the whole reason this looked like a smear rather than a ball. An orthographic sphere puts
+// latitude φ at screen y = r·sin(φ), and `paintBallSphere` stretches the strip's full height
+// linearly onto the ball's full height in one drawImage per slice — so a strip whose rows
+// were even in φ piled the polar rows up at the top and bottom of the circle and pulled
+// everything near the equator apart. Baking in sin(φ) makes that linear stretch exactly
+// right, and it costs nothing per frame because it happens once.
+function ballSphereTex(key, spot, paper){
+  const ck = key + '|' + spot + '|' + paper;
   let t = ballTexCache.get(ck);
   if (t) return t;
   const look = BALL_LOOKS[key] || BALL_LOOKS.classic;
-  const D = BALL3D.tex, TW = D * 2;
+  const D = BALL3D.tex, TW = BALL3D.wrap(D);
   const cv = document.createElement('canvas');
   // TWICE the wrap width, so a slice sampled near the seam never reads past the end.
   cv.width = TW * 2; cv.height = D;
   const cc = cv.getContext('2d');
-  cc.fillStyle = spot;
-  // The pattern repeated across the strip. A look draws a disc-shaped arrangement, so a
-  // single instance would leave most of the wrap blank and the ball would roll through
-  // empty patches.
-  for (let cp = 0; cp < 2; cp++)
-    for (let k = 0; k < BALL3D.reps; k++){
-      cc.save();
-      cc.translate(cp*TW + (k + 0.5) * (TW / BALL3D.reps), D/2);
-      cc.fillStyle = spot;
-      look.draw(cc, D * BALL3D.inst, 0);
-      cc.restore();
+  const A = BALL3D.patch * Math.PI/180;
+  const PS = Math.round(D * 0.9);
+  for (const [lonTurns, rotTurns, mir] of BALL3D.prints){
+    // One instance of the look, baked flat. ⚠️ Per PRINT, not once for all of them: the two
+    // carry different rotations and one is mirrored, which is what stops the sphere being
+    // self-similar at half a turn.
+    const pcv = document.createElement('canvas'); pcv.width = pcv.height = PS;
+    const pc = pcv.getContext('2d');
+    pc.save(); pc.translate(PS/2, PS/2);
+    if (mir) pc.scale(-1, 1);
+    pc.fillStyle = spot; pc.strokeStyle = spot;
+    look.draw(pc, PS/2, rotTurns * 2*Math.PI, paper);
+    pc.restore();
+    // ⚠️ The design is laid in by COLUMNS, each at asin(x) of longitude, and that warp is
+    // what makes a print look like ITSELF when it is facing you. The strip is indexed by
+    // longitude and the painter puts longitude at screen x = r·sin(lon) — so a design laid
+    // in linearly comes out stretched by π/2 across the middle of the ball, which is why a
+    // round dot rendered as a 1.46:1 oval. Pre-warping by asin cancels the painter's sin at
+    // the print's home orientation and leaves the design undistorted; roll it away and the
+    // painter's sin then compresses it toward the limb, which is the real sphere behaviour.
+    // Vertically it stays linear, because the strip's height already IS sin(latitude) and
+    // an orthographic sphere puts latitude φ at y = r·sin(φ).
+    const hh = Math.max(1, Math.sin(A) / 2 * D);
+    const N = BALL3D.cols, cx = lonTurns * TW;
+    for (const off of [-TW, 0, TW, TW*2]) for (let i = 0; i < N; i++){
+      const f0 = i/N*2 - 1, f1 = (i+1)/N*2 - 1;         // design x, -1..1
+      const l0 = Math.asin(Math.max(-1, Math.min(1, f0 * Math.sin(A))));
+      const l1 = Math.asin(Math.max(-1, Math.min(1, f1 * Math.sin(A))));
+      const u0 = off + cx + l0/(2*Math.PI)*TW, u1 = off + cx + l1/(2*Math.PI)*TW;
+      cc.drawImage(pcv, i/N*PS, 0, PS/N, PS, u0, D/2 - hh, Math.max(0.6, u1-u0), hh*2);
     }
+  }
   t = { cv, TW, D };
   ballTexCache.set(ck, t);
   return t;
 }
-// ⚠️ Render-only, and OUTSIDE the world. The roll direction comes from the ball's
-// velocity, but a ball at rest has no direction — so the last heading is remembered in a
-// module variable rather than written onto the ball. Writing it to the world would make
-// a DRAW mutate the sim, which `tests/determinism.mjs` hashes for.
-let ballHeading = 0;
-function paintBallSphere(c, x, y, r, rot, key, spot, vx, vy){
-  const sp = Math.hypot(vx || 0, vy || 0);
-  if (sp > 0.15) ballHeading = Math.atan2(vy, vx);
-  const t = ballSphereTex(key, spot);
+// ⚠️ `roll` and `ax` are read, never derived here. They are advanced in the step loop by
+// `advanceBallSpin` — see there for why the roll has to be a SIGNED distance about a
+// latched axis rather than taken from the live heading. A draw computing the axis from
+// `vx/vy` was the earlier design and it had two faults at once: the direction was
+// backwards, and a bounce flipping the heading by 180° jumped half a turn of texture
+// across the ball in one frame.
+function paintBallSphere(c, x, y, r, roll, ax, key, spot, paper){
+  const t = ballSphereTex(key, spot, paper);
   // ⚠️ SLICES SCALE WITH SIZE. A fixed 26 costs the same at 9px as at 70px, and the
   // warm-up lobby can field fourteen balls at once — measured, a fixed count put that
   // frame well past its budget. At the size a ball is actually drawn on a phone the
   // extra slices are below a pixel each and change nothing you can see.
   const N = Math.max(8, Math.min(BALL3D.slices, Math.round(r * 0.9)));
-  const phase = rot || 0;
+  const phase = roll || 0;
   c.save();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
-  c.translate(x, y); c.rotate(ballHeading);
+  c.translate(x, y); c.rotate(ax || 0);
   for (let i = 0; i < N; i++){
     // Longitudes of this slice's two edges, over the visible hemisphere.
     const lonA = -Math.PI/2 + (i / N) * Math.PI;
@@ -17516,7 +18735,13 @@ function paintBallSphere(c, x, y, r, rot, key, spot, vx, vy){
     const dA = r * Math.sin(lonA), dB = r * Math.sin(lonB);
     const dw = dB - dA;
     if (dw <= 0.01) continue;
-    let u = ((lonA + phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
+    // ⚠️ MINUS the phase, and the sign is the whole "it rolls backwards" bug. A mark baked
+    // at texture coordinate u₀ shows up wherever `u` evaluates to u₀ — with `+ phase` that
+    // is `lon = 2π·u₀ − phase`, which slides the mark toward SMALLER x as the roll grows,
+    // i.e. backwards out of the direction of travel. Seen from above, the face of a rolling
+    // ball travels forwards (the contact point is what stands still), so the mark has to
+    // move to larger x.
+    let u = ((lonA - phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
     const sx = u * t.TW, sw = t.TW * (lonB - lonA) / (2*Math.PI);
     c.drawImage(t.cv, sx, 0, sw, t.D, dA, -r, dw, r*2);
   }
@@ -17544,16 +18769,17 @@ function ballSpotInk(P){
 }
 // One ball, start to finish, on any context — rim, body, pattern, 3D shade. The
 // picker tiles call this too, so they are the ball rather than a picture of it.
-// `vx/vy` are optional and only the sphere path reads them: they give the roll its
-// DIRECTION. A picker tile passes none, so a tile rolls along its own x — which is what
+// `roll`/`rollAx` are optional and only the sphere path reads them: the signed distance
+// rolled and the axis it rolled about, both kept on the ball by `advanceBallSpin`. A
+// picker tile passes neither, so it falls back to `rot` about its own x — which is what
 // you want in a 64px square anyway.
-function paintBall(c, x, y, r, rot, key, pal, vx, vy){
+function paintBall(c, x, y, r, rot, key, pal, roll, rollAx){
   const P = pal || TH;
   const spot = ballSpotInk(P);
   c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
-  if (ballIs3D(r)) paintBallSphere(c, x, y, r, rot, key, spot, vx, vy);
-  else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot);
+  if (ballIs3D(r)) paintBallSphere(c, x, y, r, roll == null ? rot : roll, rollAx || 0, key, spot, P.ball);
+  else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot, P.ball);
   else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=spot; c.fill(); }
   const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
   g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
@@ -17687,7 +18913,7 @@ function onDown(id, x, y){
   const z = zoneForTouch(x,y);
   const pad = pads[z.pad];
   if (z.kind==='move'){
-    pad.move.id = id; pad.move.cx = x; pad.move.cy = y; pad.dx=0; pad.dy=0;
+    pad.move.id = id; pad.move.cx = x; pad.move.cy = y; pad.dx=0; pad.dy=0; pad.rawX=0; pad.rawY=0;
   } else {
     pad.kick = true; pad.kickId = id;
   }
@@ -17701,14 +18927,22 @@ function onMove(id, x, y){
       let dx = x - pad.move.cx, dy = y - pad.move.cy;
       const mag = Math.hypot(dx,dy);
       if (mag > R){ dx = dx/mag*R; dy = dy/mag*R; }
-      pad.dx = dx/R; pad.dy = dy/R;
+      // ⚠️ TWO readings, and they are different things. `rawX/rawY` is where the THUMB is and
+      // exists only so the marker can stay under the finger holding it (see drawPad); `dx/dy`
+      // is what the GAME is told, which on a digital stick is one of eight directions. Snapped
+      // here rather than at `applyHumanInput` so `pads.dx/dy` means exactly one thing —
+      // `pollKeys` writes the same -1/0/+1 into the same fields, and the drawing, the lobby's
+      // idle clock and the tests all read them.
+      pad.rawX = dx/R; pad.rawY = dy/R;
+      if (touchIsDigital()){ const q = digitalVec(pad.rawX, pad.rawY); pad.dx = q[0]; pad.dy = q[1]; }
+      else { pad.dx = pad.rawX; pad.dy = pad.rawY; }
     }
   }
 }
 function onUp(id){
   for (const key of ['p1','p2']){
     const pad = pads[key];
-    if (pad.move.id === id){ pad.move.id=null; pad.dx=0; pad.dy=0; }
+    if (pad.move.id === id){ pad.move.id=null; pad.dx=0; pad.dy=0; pad.rawX=0; pad.rawY=0; }
     if (pad.kickId === id){ pad.kick=false; pad.kickId=null; }
   }
 }
@@ -17748,12 +18982,21 @@ window.addEventListener('mouseup', () => onUp(mouseDownId));
 // Typing must never double as gameplay input.
 function typingInField(t){ return !!(t && /input|textarea|select/i.test(t.tagName)); }
 function keyboardDrivesGame(){
+  // ⚠️ Arcade: the keyboard IS the panel, and every seat already reads it through arcadePad.
+  // Leaving the ordinary keyboard seat live as well would give P1's stick to two players at
+  // once — the seat it was assigned AND whoever holds human1.
+  if (sel.display === 'arcade') return false;
   if (sel.display !== 'cocktail') return true;
   // Cocktail means pads round a table — but only if there ARE pads. With none
   // connected, taking the keyboard away leaves nothing driving the player at all.
   return connectedGamepadIndices().length === 0;
 }
 const keys = {};
+// ⚠️ A parallel map on `e.code`. `keys` is keyed on the CHARACTER, which is what the ordinary
+// keyboard seat wants (WASD should be WASD wherever the letters are printed) — but a cabinet
+// panel is fixed hardware and needs the physical switch: the numpad and the number row report
+// the same character, so P4's stick and the coin slots would be the same four keys. See ARCADE.
+const codes = {};
 window.addEventListener('keydown', e => {
   if (replay.active){
     // With the transport up the keyboard drives it instead: space pauses, Escape leaves.
@@ -17764,6 +19007,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   keys[e.key.toLowerCase()] = true;
+  if (e.code) codes[e.code] = true;
+  // Coins and START are edge-triggered, so they are handled on the press rather than polled.
+  if (arcadeMode() && !typingInField(e.target) && arcadeKeyDown(e)) { e.preventDefault(); return; }
   const kickKey = e.key === ' ' || e.key === 'x' || e.key === 'X';
   if (kickKey && keyboardDrivesGame() && !typingInField(e.target)){
     pads.p1.kick = true; e.preventDefault();
@@ -17775,6 +19021,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys[e.key.toLowerCase()] = false;
+  if (e.code) codes[e.code] = false;
   // Always release, even if the press was ignored — otherwise a kick can stick on.
   if (e.key === ' ' || e.key === 'x' || e.key === 'X') pads.p1.kick = false;
 });
@@ -17827,8 +19074,19 @@ function drawPad(pad, isP2){
   const bx = pad.move.cx, by = pad.move.cy;
   ctx.globalAlpha = 0.22; dot(bx,by,JOY_R,'#000'); ctx.globalAlpha=1;
   ring(bx,by,JOY_R,TH.padRing,2);
-  const kx = bx + pad.dx*JOY_R, ky = by + pad.dy*JOY_R;
+  // ⚠️ Drawn from the RAW thumb position, never from the snapped one. A control being touched
+  // is attached to your finger and must not float away from it — the same rule that keeps a
+  // live thumbstick off the tilt-parallax UI layer.
+  const rx = pad.rawX != null ? pad.rawX : pad.dx, ry = pad.rawY != null ? pad.rawY : pad.dy;
+  const kx = bx + rx*JOY_R, ky = by + ry*JOY_R;
   dot(kx,ky,JOY_R*0.42,TH.padRing);
+  // ...and on a digital stick, a pip on the rim for the direction actually being applied. The
+  // knob alone cannot say: either side of a sector boundary the thumb looks the same, and the
+  // whole point of the control is that there are only eight answers.
+  if (touchIsDigital() && (pad.dx || pad.dy)){
+    const m = Math.hypot(pad.dx, pad.dy);
+    dot(bx + pad.dx/m*JOY_R, by + pad.dy/m*JOY_R, JOY_R*0.18, TH.padRing);
+  }
 }
 // ⚠️ The thumb markers sit on the SURROUND, not on the court, so their ink is picked from the
 // surround's lightness instead of being hardcoded white. Highlighter, Sorry! and Specimen all
@@ -17957,6 +19215,11 @@ function showResult(title, sub){
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
   setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
+  // ⚠️ FIRST, before anything here can take the world away from a replay that is still
+  // drawing it. Leaving mid-celebration is ordinary, and the tick that survives it reads
+  // `world.field` off null, throws inside its own rAF, and strands `replay.active` true for
+  // the rest of the page. See replayAbort().
+  replayAbort();
   // Desktop shell: the main menu is just the left dock — the match on the right
   // keeps playing. If nothing is live (or it just ended) fall back to the idle demo.
   if (dockCapable()){
@@ -18004,7 +19267,7 @@ if ('serviceWorker' in navigator) {
 // ---------------------------------------------------------------------------
 const ROUTE_OF = { setup:'home', how:'how', drills:'drills',
   season:'season', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
-  rogue:'rogue', cocktailCfg:'cocktail', padConfig:'controller' };
+  rogue:'rogue', cocktailCfg:'cocktail', arcadeCfg:'arcade', padConfig:'controller' };
 const ROUTES = {
   home:        toMenu,
   settings:    () => openLook('theme'),   // deep-link: main menu, Theme section
@@ -18017,6 +19280,7 @@ const ROUTES = {
   social:      openSocial,
   rogue:       openRogue,
   cocktail:    openCocktailCfg,
+  arcade:      openArcadeCfg,
   controller:  openPadConfig,
 };
 var _navLock = false;                         // true while applying a route (suppresses re-push)
@@ -18367,9 +19631,12 @@ if (window.__MAGNETDEBUG) {
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
+    REPMATCH, repMatchFileBuild, repMatchCapture, get repMatchBuf(){ return repMatchBuf; },
+    get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
+    repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    CHANGELOG, buildNews, newsShow, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
-    REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
+    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
     drawReplayFrame,
@@ -18420,6 +19687,10 @@ if (window.__MAGNETDEBUG) {
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, needsCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,
     openCocktailCfg, buildCocktailRows, applyHumanInput, drawControls,
+    ARCADE, ARCADEOPT, arcadeMode, arcadeFreePlay, arcadeSeats, arcadePad, arcadeKeyDown,
+    arcadeCoin, arcadeSpend, tryKickOff, openArcadeCfg, buildArcadeRows, syncArcade,
+    arcadeStartHeld, arcadeFireHeld, arcadeIdle,
+    loadArcade, saveArcade, get arcade(){ return arcade; }, set arcade(v){ arcade = v; },
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     DOT_GAP, DOT_MAX, DOT_FADE, BALL_PATH, BALL_LEN_MAX, BALL_MIN_SPD,
     TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,
@@ -18427,6 +19698,7 @@ if (window.__MAGNETDEBUG) {
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     BALL3D, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; },
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
+    advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
@@ -18438,7 +19710,7 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, resetTrails, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
@@ -18477,6 +19749,9 @@ if (window.__MAGNETDEBUG) {
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
+    TOUCHDIG, TOUCHDIGOPT, touchIsDigital, digitalVec, onDown, onMove, onUp, drawPad, padFor, gamepadPad, get keys(){ return keys; },
+    SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
+    get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
@@ -18487,7 +19762,7 @@ if (window.__MAGNETDEBUG) {
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
-    oneHandKick, ONEHAND, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
+    oneHandKick, ONEHAND, padTouchDown, replayAbort, repMime, repClipName, recordAndShareClip, saveClip, renderAwards, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
 }
 })();

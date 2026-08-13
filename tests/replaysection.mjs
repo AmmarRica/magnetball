@@ -72,7 +72,9 @@ const page = async (w, h, mobile) => {
   const folder = (r.rows.find(x => /folder/i.test(x[0])) || [])[1] || '';
   const named  = (r.rows.find(x => /named/i.test(x[0])) || [])[1] || '';
   ok('it states the folder', folder.length > 3 && folder === r.pathHint, folder);
-  ok('it states the filename', /^magnetball-replay-.*\.json$/.test(named), named);
+  // The kind is in the name now — a goal and a whole match off the same court are otherwise
+  // the same filename twice, and one is twenty times the size of the other.
+  ok('it states the filename', /^magnetball-(goal|match)-replay-.*\.json$/.test(named), named);
   // ⚠️ Built from the REAL filename, minus the timestamp — an example typed by hand is
   // an example that goes stale the next time the naming changes.
   ok('the example matches what actually gets written',
