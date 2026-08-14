@@ -84,6 +84,25 @@
     .screen.hidden { display: none; }
 
     .logo { margin: 26px 0 20px; text-align: center; }
+    /* ⚠️ A LANDSCAPE PHONE IS THE WORST LAYOUT IN THE APP, and it was measured rather
+       than guessed: at 844×390 the first screen was logo + your record + the search box,
+       and KICK OFF sat at y=393 on a 390px-tall viewport — three pixels below the fold,
+       on the screen whose entire job is starting a match.
+       ⚠️ Fixed by ORDER, not by hiding anything. `#matchCard` is `display: contents`, so
+       its header is a flex ITEM of the scroll column — which means one `order: -1` puts
+       KICK OFF above the logo with no DOM change and nothing removed from the page. The
+       logo then shrinks to a single line, because a wordmark is worth less than the
+       button on a screen 390 pixels tall.
+       ⚠️ The 44px chips are deliberately NOT shrunk back here. They cost a tenth of a
+       short screen and that is the trade being made: the accessibility floor wins, and
+       the reorder is what buys the room. */
+    @media (max-height: 470px) and (orientation: landscape) {
+      #setup > .logo { margin: 6px 0 8px; }
+      #setup > .logo h1 { font-size: 20px; }
+      #setup > .logo p { display: none; }
+      #matchCard > h2 { order: -1; }
+      #recordCard { order: 1; }        /* your record is a summary; it can wait */
+    }
     .logo h1 {
       font-family: var(--display);
       font-size: clamp(22px, 6.8vw, 36px); line-height: 1.15; letter-spacing: 1px;
@@ -206,10 +225,20 @@
     /* Progressive disclosure for help text. The paragraph is kept VERBATIM — it is
        folded away, never rewritten or dropped — and the toggle sits on the label so
        the row still reads as one control. */
-    .infobtn { display: inline-flex; align-items: center; justify-content: center;
+    /* ⚠️ 44px OF HIT AREA, 20px OF INK. The accessibility floor for a touch target is
+       44px and this measured 20 — the worst control on the page, and there are 31 of
+       them — but padding the button itself would space every label out by 24px and
+       relayout eleven cards. So the box stays 20 and an ::after pseudo-element,
+       absolutely positioned and centred, carries the extra reach. The glyph does not
+       move a pixel and the row still reads as one control.
+       ⚠️ `position: relative` on the button is what the pseudo-element is measured
+       against; without it the pad would be positioned against the page. */
+    .infobtn { position: relative; display: inline-flex; align-items: center; justify-content: center;
       width: 20px; height: 20px; margin-left: 6px; padding: 0; vertical-align: -4px;
       background: none; border: 0; border-radius: 50%; cursor: pointer;
       color: var(--muted); opacity: .8; }
+    .infobtn::after { content: ''; position: absolute; left: 50%; top: 50%;
+      width: 44px; height: 44px; transform: translate(-50%, -50%); }
     .infobtn:hover { color: var(--cyan); opacity: 1; }
     .infobtn.on { color: var(--cyan); opacity: 1; background: rgba(33,230,255,.12); }
     .infobtn .ic { width: 15px; height: 15px; }
@@ -265,9 +294,13 @@
       scrollbar-width: none; }
     #jumpBar::-webkit-scrollbar { display: none; }
     #jumpBar:empty { display: none; }
+    /* ⚠️ 44px tall. It measured 27, and it is the row you navigate the whole menu with.
+       Grown with min-height and centred content rather than more vertical padding, so
+       the chip's own text stays where it was and only the pressable box changes. */
     .jumpchip { flex: 0 0 auto; font-family: var(--pix); font-size: 10px; color: var(--muted);
       background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 999px;
-      padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+      padding: 6px 11px; cursor: pointer; white-space: nowrap;
+      min-height: 44px; display: inline-flex; align-items: center; }
     .jumpchip:hover { border-color: var(--cyan); color: var(--text); }
     .jumpchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
     /* Sub-tabs inside a card: one pane visible at a time. */
@@ -287,10 +320,12 @@
       border-bottom: 1px solid var(--edge);
       overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
     .subtabs::-webkit-scrollbar { display: none; }
+    /* ⚠️ 44px tall, same reason as .jumpchip — it measured 31 and it is how you move
+       between the panes of every tabbed card. */
     .subchip { flex: 0 0 auto;   /* one row that scrolls, never a second row — see .subtabs */
       font-family: var(--pix); font-size: 11px; color: var(--muted);
       background: rgba(127,127,127,.12); border: 1px solid var(--edge); border-radius: 9px;
-      padding: 7px 11px; cursor: pointer;
+      padding: 7px 11px; cursor: pointer; min-height: 44px;
       display: inline-flex; align-items: center; gap: 6px; }
     .subchip .ic { width: 15px; height: 15px; }
     .subchip:hover { border-color: var(--cyan); color: var(--text); }
@@ -879,10 +914,12 @@
     .scorebug .rd { color: var(--overlay-red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
     .scorebug .bl { color: var(--overlay-blue); text-shadow: 0 0 10px rgba(33,230,255,.6); }
     .scorebug .tm { font-size: 12px; color: var(--overlay-yellow); min-width: 46px; text-align:center; }
+    /* ⚠️ 44px, up from 40. They sit next to a live ball, which is the one place a
+       near-miss costs you something — a mis-tap here is a tap on the pitch. */
     #pauseBtn, #resetBtn, #fsHudBtn {
       pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
-      color: var(--overlay-ink); width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
+      color: var(--overlay-ink); width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer;
     }
 
     /* Goal replay / clip-share buttons — appear under the scorebug after a goal */
@@ -1165,7 +1202,10 @@
     .votetally svg.ic { width:14px; height:14px; display:block; flex:0 0 auto; }
     .votetally .voten { line-height:1; }
     .votetally .votedot { color: var(--muted); margin:0 2px; }
+    /* ⚠️ 44px tall. It measured 47×31 and it is on the result screen, where the whole
+       point is a quick verdict before the next match starts by itself. */
     .votebtn { font-size:17px; line-height:1; padding:5px 13px; cursor:pointer;
+      min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:5px;
       border-radius:9px; border:1px solid var(--edge); background: rgba(128,128,128,.14); }
     .votebtn:active { transform: translateY(1px); }
     .votebtn.up:hover { border-color: var(--go); }
@@ -1673,6 +1713,10 @@
 
     <div class="card collapsible collapsed" data-sec="sound">
       <h2>Sound</h2>
+      <!-- ⚠️ Master, Volume and the Set row sit OUTSIDE the tabs, and for the reason the
+           Game Feel presets do: all three act on the WHOLE card. A set fills in every one
+           of the six panes at once, so filing it under one of them would hide a
+           set-everything control inside a sixth of the things it sets. -->
       <label class="field">Master</label>
       <div class="opts" id="sndMaster"></div>
       <div style="height:12px"></div>
@@ -1681,7 +1725,12 @@
       <div style="height:14px"></div>
       <label class="field">Set</label>
       <div class="opts" id="sfxSetPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">A set fills in all five below at once. It's the same slot the Theme card shows.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">A set fills in all six below at once. It's the same slot the Theme card shows.</div>
+      <!-- ⚠️ 46 controls in one list, 1.85 screenfuls on a phone, and the only way to
+           compare two Net sounds was to scroll past 38 other tiles. The panes are the
+           six SFX categories, so the chip row IS the heading each one used to have and
+           `SUBTABS.sound` is built from `SFX_CATS` rather than listing them again. -->
+      <div class="subtabs" data-tabs="sound"></div>
       <div id="sndCats"></div>
     </div>
 
@@ -1856,16 +1905,17 @@
       <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
     </div>
 
+    <!-- ⚠️ NO DEAD CONTROLS. This card used to ship a disabled Room code box and two
+         tiles reading "Host · soon" and "Join · soon" — the only things in the whole
+         menu that could not be pressed. A control that does nothing is worse than no
+         control: it is a promise the page cannot keep, it is the one thing a new player
+         is drawn to precisely because it looks like the interesting feature, and it
+         costs a row in the menu search index for something nobody can reach. The card
+         stays, because "is there online?" is a real question and it deserves a real
+         answer — but it is now a SENTENCE, not a form. -->
     <div class="card collapsible collapsed" data-sec="online">
       <h2>Online</h2>
-      <div class="hint" style="text-align:left">Local and vs-bot only for now. Online is not built.</div>
-      <div style="height:10px"></div>
-      <label class="field">Room code</label>
-      <input id="roomCode" type="text" maxlength="6" placeholder="Coming soon" autocomplete="off" disabled />
-      <div class="opts" style="margin-top:10px">
-        <div class="opt" style="opacity:.55;cursor:not-allowed"><span class="emoji">🎮</span><span>Host</span><small>soon</small></div>
-        <div class="opt" style="opacity:.55;cursor:not-allowed"><span class="emoji">🔗</span><span>Join</span><small>soon</small></div>
-      </div>
+      <div class="hint always" style="text-align:left">There is no online play. Every mode here is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. If you want to play somebody who is not in the room, the closest thing is a <b>saved replay</b>: they re-render at full quality on any device and are about 25KB, so a match is something you can send.</div>
     </div>
 
     <button class="ghost" id="settingsReset" style="margin-top:2px">↺ Reset all settings to default</button>
@@ -1956,7 +2006,9 @@
       <p class="shopnote">Buying coins isn't live yet — I'd rather ship the game first and add a payment
         option only once it's worth it. If you want to support early, the best thing you can do is
         <b>play, share a clip, and tell a friend</b>. 🙏</p>
-      <button class="ghost" id="shopSupport" style="margin-top:4px">💛 Coming soon — thanks for playing</button>
+      <!-- ⚠️ Was a button reading "Coming soon". Same rule as the Online card: the
+           paragraph above already says everything it said, and a button that cannot be
+           pressed reads as a broken page rather than as an honest one. -->
     </div>
     <button class="ghost" id="shopBack" style="margin-top:12px">← Back</button>
   </div>
@@ -2821,6 +2873,17 @@ function applyDailyReward(rw){
   if (rw.t==='rp'){ stats.points += rw.n; saveStats(stats); }
   else { const key = rw.t+':'+rw.k; login.granted = login.granted||[]; if (login.granted.indexOf(key)<0) login.granted.push(key); saveLogin(); }
 }
+// ⚠️ NOT ON A BRAND-NEW PLAYER'S FIRST EVER LOAD. With fresh storage the very first
+// thing anybody saw was a retention modal — "Day 1 · 1-day streak · keep logging in!" —
+// over a menu they had not looked at yet, for a game they had not played. A streak
+// counter means nothing to somebody with nothing to keep, and it is the one screen
+// standing between them and the ball.
+// ⚠️ The gate is "has played a match", not "has visited before": a second visit by
+// somebody who bounced off the first one is the same wasted modal. The reward is still
+// GRANTED at the usual moment — it is only the modal that waits, so nobody loses a day
+// by kicking off before it would have appeared, and the Daily tile under More shows it
+// whenever they go looking.
+function dailyModalWanted(){ return (stats && (stats.played|0) > 0); }
 function checkDailyLogin(){
   const today = todayStr();
   if (login.last === today) return false;         // already claimed today
@@ -2831,7 +2894,7 @@ function checkDailyLogin(){
   // refresh UI so the new unlock shows immediately
   if (typeof renderStats==='function') renderStats();
   if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
-  showDailyModal(idx);
+  if (dailyModalWanted()) showDailyModal(idx);
   return true;
 }
 function rewardIcon(rw, size){
@@ -3456,7 +3519,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0640PM';
+const VERSION = '20260813.0910PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3472,6 +3535,18 @@ const VERSION = '20260813.0640PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.0910PM', title: 'Easier to hit, easier to find',
+    added: [],
+    changed: [
+      '<b>Everything you tap is big enough to tap.</b> The info buttons that reveal help text were the smallest controls on the page at 20px \u2014 and there are 31 of them \u2014 with the menu tabs, the section chips, the pause and fullscreen buttons and the map-vote thumbs all under the size a thumb needs. All of them now clear it.',
+      '<b>The Sound card is tabbed</b>, like Game Feel and Theme. It was 46 controls in one list, and comparing two net sounds meant scrolling past 38 other things.',
+      '<b>Landscape on a phone is usable.</b> KICK OFF sat just below the fold on the screen whose whole job is starting a match; it is now the first thing on it.',
+      '<b>A brand-new player is not met by a daily-streak popup.</b> The reward is still yours \u2014 it just waits until you have played a match, because a streak counter means nothing before you have anything to keep.',
+      '<b>Turning off screen shake &amp; effects now turns off the effects.</b> It used to leave the goal camera, the confetti, the celebration slow motion, the auto-replay and every animated pitch running. If your device asks for reduced motion, they all start off \u2014 and the toggle still turns them back on.',
+      'Dropped the two controls in the menu that could not be pressed. The Online card says plainly that there is no online play instead of showing a dead room-code box.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0640PM', title: 'Map maker, bot strategies, and eight more',
     added: [
       '<b>Map maker</b> \u2014 build your own field. Set the size, the corners, the goals, the posts and how lively the boards are, with a live plan view beside the sliders. Your fields sit alongside the built-in ones everywhere: the picker, the map votes, replays and drills. Desktop only.',
@@ -4746,6 +4821,16 @@ const SFX_SETS = {
   // is two rooms at once, which is the whole reason sets exist rather than six dials.
   pinball: { name:'Pinball',   emoji:'🕹️', pick:{ whistle:4, fulltime:5, crowd:8, kick:5, wall:5, net:5 } },
 };
+// The six categories, in the order the Sound card lists them.
+// ⚠️ Declared HERE, with the rest of the sound tables, and NOT down beside FEEL_SLIDERS
+// where it used to live: `SUBTABS` builds the Sound card's chip row out of this list, and
+// `SUBTABS` is a top-level const whose initialiser runs immediately — so from down there
+// this was in the temporal dead zone and took the whole page out on boot. THIRTEENTH time
+// this file's declaration order has been the entire bug.
+const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['fulltime','Full time (end of match)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
+// One drawn icon per sound category, for that chip row.
+const SFX_CHIP_ICON = { whistle:'play', fulltime:'clock', crowd:'people',
+                        kick:'boot', wall:'wall', net:'target' };
 // The categories come from SFX itself — a sixth one must not need remembering here.
 function sfxCatKeys(){ return Object.keys(SFX); }
 function sfxSetKey(){
@@ -5244,6 +5329,23 @@ function tiltOn(){
 // changes about never.
 const _reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 function prefersReducedMotion(){ return !!(_reduceMQ && _reduceMQ.matches); }
+// ============================================================
+//  ONE PREDICATE FOR "MAY THIS MOVE"
+// ============================================================
+// ⚠️ `sel.juice` was read directly in sixteen places and `prefers-reduced-motion` in
+// exactly one — the tilt parallax — so a system asking for less motion still got screen
+// shake, the goal flash, the goal camera's push, confetti, fireworks, the celebration
+// slow motion, an auto-replay cutting in and fourteen animated pitches. Everything that
+// moves for effect goes through `motionOK()` now, which is what makes the Screen shake &
+// effects toggle mean what it says rather than about two thirds of what it says.
+// ⚠️ It is deliberately NOT `sel.juice && !prefersReducedMotion()`. That would make the
+// toggle unusable on exactly the devices whose owners might want to turn it back on —
+// the setting would sit there doing nothing. The OS preference instead decides the
+// DEFAULT, once, on a first run (see the bootstrap): quiet unless you ask, and your
+// answer is then honoured for good.
+// ⚠️ Hit stop stays out of this on purpose, the same reason it is out of the toggle: a
+// freeze-frame is the absence of motion, not a burst of it, and it has its own dial.
+function motionOK(){ return !!sel.juice; }
 // The screen-space offset for the two layers. ⚠️ ONE function, so "which way is the
 // parallax" cannot come to mean two different things in the ground pass and the body pass
 // — and so the shadow can cancel the body's lift exactly (see drawOneDisc).
@@ -7707,6 +7809,12 @@ function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(a
 // the bootstrap: `arcade` is a `let` further down the file, so a call from up there reads it
 // in the temporal dead zone and takes the whole page out. That has happened nine times in
 // this file already.
+// ⚠️ On a FIRST RUN ONLY, a system asking for reduced motion turns the effects off by
+// default. Not an override — `motionOK()` deliberately reads nothing but `sel.juice`, so
+// the toggle keeps working on exactly the devices whose owners might want it back. The
+// same "no saved settings yet" test `isFirstRun` uses, and it must run BEFORE anything
+// calls `saveSel()`, or the key exists and this never fires again.
+try { if (prefersReducedMotion() && !localStorage.getItem('magnetball.sel')) sel.juice = false; } catch(e){}
 loadArcade();
 // ⚠️ Here and not with `loadSel()`: `applyMaps` reads `sel.field` (so the save must
 // already be in) and `mapClean` clamps against `POST`, which is declared below the map
@@ -7854,6 +7962,12 @@ const SUBTABS = {
   // card — filing a set-everything control under one fifth of the things it sets is
   // worse than leaving it above the chips, and the Match card keeps KICK OFF and Warm-up
   // outside its own tabs for the same reason.
+  // ⚠️ Built from `SFX_CATS`, never a second list of the categories: a seventh sound
+  // category must arrive with its chip, or its pane is hidden while the menu search and
+  // `audit` both still find the controls inside it. The chip label is the SHORT name —
+  // the category's own label carries a parenthetical ("Whistle (kickoff / reset)") that
+  // is useful as a heading and far too long for a chip.
+  sound:  SFX_CATS.map(([k, lab]) => [k, lab.replace(/\s*\(.*$/, ''), SFX_CHIP_ICON[k]]),
   feel:   [['ball','Ball','ball'], ['player','Player','run'],
            ['effects','Effects','flame'], ['camera','Camera','camera'],
            ['advanced','Advanced','gear']],
@@ -8518,7 +8632,6 @@ $('repWatchBtn').onclick = () => watchReplayFromMenu();
   };
 })();
 $('rogueBack').onclick = toMenu;
-$('shopSupport').onclick = () => { const b=$('shopSupport'); b.textContent='💛 Thank you! Have fun out there.'; };
 $('padCfgBtn').onclick = openPadConfig;
 $('padCfgBack').onclick = () => { padBind.active=false; toMenu(); };
 $('padReset').onclick = padResetMap;
@@ -8822,7 +8935,6 @@ $('settingsReset').onclick = () => {
   resetSettings(alsoAppearance);
 };
 
-const SFX_CATS = [['whistle','Whistle (kickoff / reset)'],['fulltime','Full time (end of match)'],['crowd','Crowd (goal)'],['kick','Pass / kick'],['wall','Wall bounce'],['net','Net']];
 // `g` is which half of Game Feel the slider belongs under: what the BALL does vs
 // what YOU do. They used to be one undifferentiated stack of eight.
 const FEEL_SLIDERS = [
@@ -9463,9 +9575,13 @@ function buildSettings(){
   $('vol').value=sel.snd.vol; $('volVal').textContent=sel.snd.vol+'%';
   $('vol').oninput=()=>{ sel.snd.vol=+$('vol').value; $('volVal').textContent=sel.snd.vol+'%'; Aud.setVol(sel.snd.vol); saveSel(); };
   buildSlotPicker('sfx', $('sfxSetPick'));
+  // ⚠️ One `.subpane` per category, with the category's full label kept as the heading
+  // inside it — the chip carries the short name and the heading carries the "(kickoff /
+  // reset)" part, which is the bit that says what the sound is actually FOR.
   const cc=$('sndCats'); cc.innerHTML='';
   for(const [cat,label] of SFX_CATS){
-    const lab=document.createElement('label'); lab.className='field'; lab.style.marginTop='14px'; lab.textContent=label; cc.appendChild(lab);
+    const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.pane=cat;
+    const lab=document.createElement('label'); lab.className='field'; lab.textContent=label; pane.appendChild(lab);
     const row=document.createElement('div'); row.className='opts';
     SFX_LABELS[cat].forEach((nm,idx)=>{
       const el=document.createElement('div'); el.className='opt'+(sel.snd[cat]===idx?' sel':'');
@@ -9473,7 +9589,8 @@ function buildSettings(){
       el.onclick=()=>{ sel.snd[cat]=idx; saveSel(); buildSettings(); playSfx(cat); };
       row.appendChild(el);
     });
-    cc.appendChild(row);
+    pane.appendChild(row);
+    cc.appendChild(pane);
   }
   buildFeelPresets();
   buildFeelSliders();
@@ -10796,11 +10913,11 @@ let lastT = 0, acc = 0;
 let shake = 0, flash = 0, flashCol = '#ffffff', hitStop = 0;
 // Global shake scale (0.5 = half). Lower = gentler; also caps the peak amplitude.
 const SHAKE_SCALE = 0.5;
-function addShake(a){ if (!sel.juice) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
+function addShake(a){ if (!motionOK()) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
 function goalBurst(w, team){
   hitStop = Math.max(hitStop, hitStopFrames());   // its own dial — see hitStopFrames
   goalCamStart(w, w.goalCamP);                    // push in on whoever put it there
-  if (!sel.juice) return;
+  if (!motionOK()) return;
   addShake(13);
   flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9;
 }
@@ -10933,13 +11050,17 @@ function loop(t){
     // it is meant to sell — the winner going in — stopped reading as special because
     // the other four looked the same. The final-whistle ramp above is separate, and
     // so is the replay, which has its own clock.
-    : (sel.juice && world && world.state==='goal' && world.finalGoal) ? 0.45 : 1;
+    : (motionOK() && world && world.state==='goal' && world.finalGoal) ? 0.45 : 1;
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < 5){
     step(world);
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
-    advanceDynField();      // ...and so does an animated theme's field
+    if (motionOK()) advanceDynField();   // ...and so does an animated theme's field, when
+                                        // motion is wanted: fourteen of them drift, scroll
+                                        // or twinkle under the play, and the toggle that
+                                        // claims to stop the effects has to stop those too
+                                        // (they still PAINT, they just hold still)
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
     pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
@@ -10979,7 +11100,11 @@ const GOALHOLD = { hold: 1.8, replayAt: 3.0 };
 // replay that never comes.
 function autoReplayReady(w){
   const ending = w.goalsTarget && Math.max(w.score[0], w.score[1]) >= w.goalsTarget;
-  return !!(sel.autoReplay && !vj.on && !w.demo && !ending && !w.overtime
+  // ⚠️ Rides `motionOK()` too. An auto-replay is the whole picture cutting away and
+  // moving without being asked, which is squarely what a reduced-motion preference is
+  // about — and it is unskippable for its first frames. Watching one you CHOSE from the
+  // menu is untouched, because you chose it.
+  return !!(sel.autoReplay && motionOK() && !vj.on && !w.demo && !ending && !w.overtime
             && !(w.party && w.party.multi) && !w._autoReplayed
             && lastReplay && lastReplay.frames && lastReplay.frames.length
             && lastReplay.players === w.players.length);
@@ -14180,7 +14305,7 @@ function scoreGoal(w, team){
   playSfx('crowd');              // crowd cheer on a goal
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
   fx.length = 0;
-  for (let i=0;i<(sel.juice?40:26);i++) spawnConfetti(ball_x(w), ball_y(w));
+  for (let i=0;i<(motionOK()?40:26);i++) spawnConfetti(ball_x(w), ball_y(w));
   goalBurst(w, team);   // shake + flash + hit-stop
   repOnGoal(w);   // freeze the last few seconds for replay / clip share
   // The one goal that gets the slow motion: the one nobody plays on from.
@@ -14203,8 +14328,8 @@ function scoreMultiBall(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(sel.juice?24:14);i++) spawnConfetti(ball.x, ball.y);
-  if (sel.juice){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }  // light burst, no hit-stop so play flows
+  for (let i=0;i<(motionOK()?24:14);i++) spawnConfetti(ball.x, ball.y);
+  if (motionOK()){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }  // light burst, no hit-stop so play flows
 
   // Winning goal → freeze into the result, same as a normal match end.
   if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
@@ -14270,7 +14395,7 @@ function kqBerry(w, berry, team){
   // delivered. The event that kills the target is the right place to unlatch it.
   for (const q of w.players) if (q.aiBerry === berry) q.aiBerry = null;
   playSfx('net');
-  if (sel.juice){ addShake(5); for (let i=0;i<10;i++) spawnConfetti(berry.x, berry.y); }
+  if (motionOK()){ addShake(5); for (let i=0;i<10;i++) spawnConfetti(berry.x, berry.y); }
   updateScoreUI();
   if (w.hive[team] >= BERRY.cells) kqHiveFull(w, team);
 }
@@ -14282,8 +14407,8 @@ function kqHiveFull(w, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('🫐 HIVE FULL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(sel.juice?30:14);i++) spawnConfetti(0, team===0 ? w.field.L/2 : -w.field.L/2);
-  if (sel.juice){ addShake(12); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9; }
+  for (let i=0;i<(motionOK()?30:14);i++) spawnConfetti(0, team===0 ? w.field.L/2 : -w.field.L/2);
+  if (motionOK()){ addShake(12); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9; }
   w.state='goal'; w.stateT=0;
   repOnGoal(w);
   setTimeout(()=>endMatch(w), 1400);
@@ -14313,8 +14438,8 @@ function snailHome(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('🐌 SNAIL HOME!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(sel.juice?34:16);i++) spawnConfetti(ball.x, ball.y);
-  if (sel.juice){ addShake(14); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.95; }
+  for (let i=0;i<(motionOK()?34:16);i++) spawnConfetti(ball.x, ball.y);
+  if (motionOK()){ addShake(14); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.95; }
   w.state='goal'; w.stateT=0;
   repOnGoal(w);
   setTimeout(()=>endMatch(w), 1400);
@@ -14332,8 +14457,8 @@ function kqGoal(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(sel.juice?24:14);i++) spawnConfetti(ball.x, ball.y);
-  if (sel.juice){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }
+  for (let i=0;i<(motionOK()?24:14);i++) spawnConfetti(ball.x, ball.y);
+  if (motionOK()){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }
 
   if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
     w.state='goal'; w.stateT=0;
@@ -15934,7 +16059,7 @@ function goalCamReset(){ goalCam = { t:0, x:0, y:0, p:null, live:false }; }
 // `p` is the player to follow — the last toucher, whichever side they were on, since
 // that is who the moment belongs to. Falls back to the ball.
 function goalCamStart(w, p){
-  if (!sel.juice) return;                      // rides the Screen shake & effects dial
+  if (!motionOK()) return;                     // rides the Screen shake & effects dial
   if (goalZoom() <= 1.0001) return;            // the dial at 1.0x means no push at all
   goalCam.live = true; goalCam.p = p || null;
   goalCam.x = p ? p.x : w.ball.x;
@@ -20051,7 +20176,7 @@ function ballPent(c, cx, cy, rad, rot){
 // ---------- Ball squash & stretch (game-feel): stretch along the impact axis,
 // squash across it, then spring back. `amt` 0..1 scales the effect.
 function ballSquash(b, nx, ny, amt){
-  if (!sel.juice) return;
+  if (!motionOK()) return;
   const a = Math.max(b.sqT||0, Math.max(0.25, Math.min(1, amt||0.6)));
   b.sqT = a; b.sqAng = Math.atan2(ny, nx);
 }
@@ -20109,13 +20234,13 @@ function advanceFireworks(w){
   w.fwNext = (w.fwNext || 0) - STEP;
   if (w.fwNext > 0) return;
   w.fwNext = FIREWORK.every;
-  if (!sel.juice && fx.length > 60) return;      // shake-off players still get a show, just a lean one
+  if (!motionOK() && fx.length > 60) return;      // shake-off players still get a show, just a lean one
   const b = w.bounds || { halfW: 240, halfL: 380 };
   // Over the pitch, never dead centre on the ball — the net is what you are looking at.
   const x = (fxRnd()*2 - 1) * b.halfW * 0.78;
   const y = (fxRnd()*2 - 1) * b.halfL * 0.72;
   const col = FIREWORK.cols[(fxRnd()*FIREWORK.cols.length)|0];
-  const n = sel.juice ? FIREWORK.sparks : Math.round(FIREWORK.sparks * 0.55);
+  const n = motionOK() ? FIREWORK.sparks : Math.round(FIREWORK.sparks * 0.55);
   const turn = fxRnd() * Math.PI * 2;
   for (let i = 0; i < n; i++){
     // A RING with a little jitter, rather than n independent angles: independent angles
@@ -20131,7 +20256,7 @@ function advanceFireworks(w){
 }
 // A quick expanding ring — used for first-touch / clean-control feedback.
 function spawnTouchFx(x,y,col,r1){
-  if (!sel.juice) return;
+  if (!motionOK()) return;
   fx.push({ring:true, x,y, life:0.34, max:0.34, r0:6, r1:r1||28, c:col||'#ffffff'});
 }
 // ⚠️ THE PARTICLES AGE HERE, next to step(world) — not in drawFx, where all of this used
@@ -21055,6 +21180,7 @@ if (window.__MAGNETDEBUG) {
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
+    motionOK, prefersReducedMotion, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
     get updFound(){ return updFound; }, get updSeen(){ return updSeen; },
     set updLast(v){ _updLast = v; },

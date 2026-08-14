@@ -1493,6 +1493,64 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   hardcoded white, and Highlighter, Sorry!, Specimen and now Warp all letterbox in a light
   colour — a white ring at 0.16 alpha on a white surround is nothing at all, so the resting
   controls simply were not there on four palettes.
+- **Tap targets clear 44px** — measured, not assumed. ⚠️ `.infobtn` was **20px** and there
+  are **31** of them, which made the control that reveals the help text the hardest thing on
+  the page to hit. It is fixed with an absolutely positioned **`::after` pad**, not by
+  padding the button: padding it spaces every label out by 24px and relayouts eleven cards,
+  and the glyph must not move. `.jumpchip` (27) and `.subchip` (31) grow by `min-height`
+  with centred content, so the chip text stays put. HUD pause/fullscreen 40 → 44, because
+  they sit next to a live ball and a near-miss there is a tap on the pitch. ⚠️ The range
+  **sliders** were checked and left alone — the element box measures small but the browser
+  gives the thumb its own hit area, so changing them would have been a fix for a problem
+  that was not there. ⚠️ Measuring any of this is blocked by a modal over the page: the
+  first probe read a 1px hit area because `elementFromPoint` was returning the Daily Reward
+  card.
+- **The Daily Reward modal waits for a first match** (`dailyModalWanted`). With fresh
+  storage the very first thing anybody saw was a retention modal — "Day 1 · 1-day streak" —
+  over a menu they had not looked at, for a game they had not played. ⚠️ The reward is still
+  **granted** at the usual moment; only the modal waits, so nobody loses a day by kicking off
+  first. ⚠️ Gated on "has played", not "has visited before": a second visit by somebody who
+  bounced off the first one is the same wasted modal.
+- **`motionOK()` is the ONE predicate for "may this move".** ⚠️ `sel.juice` was read
+  directly in sixteen places and `prefers-reduced-motion` in exactly one — the tilt parallax
+  — so a system asking for less motion still got screen shake, the goal flash, the goal
+  camera, confetti, fireworks, the celebration slow-mo, an auto-replay cutting in and
+  fourteen animated pitches. Everything that moves for effect goes through it now, which is
+  what makes the Screen shake & effects toggle mean what it says.
+  ⚠️ It is deliberately **not** `sel.juice && !prefersReducedMotion()`: that makes the
+  toggle useless on exactly the devices whose owners might want it back. The OS preference
+  decides the **default**, once, on a first run (no `magnetball.sel` yet) — and the line has
+  to run **before** anything calls `saveSel()`, or the key exists and it never fires again.
+  ⚠️ **Hit stop stays out**, the same reason it is out of the toggle: a freeze-frame is the
+  absence of motion, not a burst of it, and it has its own dial. ⚠️ An animated field still
+  **paints** when motion is off, it just holds still — `advanceDynField()` is what is gated,
+  not `paint`.
+- **NO DEAD CONTROLS.** The Online card shipped a disabled Room-code box and two tiles
+  reading "Host · soon" / "Join · soon", and the Shop a "Coming soon" button — the only
+  things in the menu that could not be pressed. A dead control is a promise the page cannot
+  keep, it is what a new player is drawn to *because* it looks like the interesting feature,
+  and it costs a row in `menuSearchIndex` for something nobody can reach. The Online card
+  stays, because "is there online?" is a real question — it is a **sentence** now, pointing
+  at saved replays as the nearest thing.
+- **Landscape phone is fixed by ORDER, not by hiding anything.** At 844×390 KICK OFF sat at
+  **y = 393** on a 390px-tall viewport — three pixels below the fold, on the screen whose
+  whole job is starting a match. ⚠️ `#matchCard` is `display: contents`, so its header is a
+  flex **item** of the scroll column: one `order: -1` in a short-viewport media query puts it
+  above the logo with no DOM change and nothing removed. Measured at **26** afterwards. Your
+  record moves below it (`order: 1`) because it is a summary rather than a control.
+  ⚠️ The 44px chips are deliberately **not** shrunk back on short screens — that would undo
+  the tap-target fix above, and the reorder is what buys the room instead.
+- **The Sound card is TABBED**, one pane per SFX category — 46 controls and **1.85 → 0.76
+  screenfuls**. ⚠️ `SUBTABS.sound` is **built from `SFX_CATS`**, never a second list of the
+  categories: a seventh sound must arrive with its chip, or its pane is hidden while the menu
+  search and `audit` both still find the controls in it. The chip carries the short name and
+  the pane heading keeps the parenthetical ("Whistle (kickoff / reset)"), which is the half
+  that says what the sound is *for*. ⚠️ Master, Volume and the Set row stay **outside** the
+  tabs, for the reason the Game Feel presets do: a set fills in all six panes at once.
+  ⚠️ Moving `SFX_CATS` up beside the other sound tables was mandatory rather than tidying —
+  `SUBTABS` is a top-level `const` whose initialiser runs immediately, so reading it from its
+  old home 3,000 lines below put it in the temporal dead zone and took the page out on boot.
+  **THIRTEENTH TDZ bite in this file.**
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
