@@ -1450,7 +1450,7 @@
       <div style="height:14px"></div>
       <label class="field">Bot strategy</label>
       <div class="opts" id="botPlans"></div>
-      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. This is a <b>shape</b>, not a strength: every strategy is available at every difficulty, and picking one does not make the bots better or worse, only different to play against. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. This is a <b>shape</b>, not a strength: picking one does not make the bots better or worse, only different to play against, and every strategy is available at every difficulty. <b>Standard</b> is the stock AI and the default, so <b>Difficulty</b> stays the thing that decides how hard a match is. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
@@ -3519,7 +3519,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.0910PM';
+const VERSION = '20260813.1120PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3535,6 +3535,14 @@ const VERSION = '20260813.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260813.1120PM', title: 'Bot strategies are opt-in now',
+    added: [],
+    changed: [
+      '<b>Bot strategy starts on Standard</b> &mdash; the stock AI, exactly as it has always played. The six shapes are still all there and still free to pick at any difficulty; they just no longer arrive on their own, so <b>Difficulty</b> stays the thing that decides how hard a match is.',
+      'Fixed the player name plates flickering very slightly while they faded near the ball.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.0910PM', title: 'Easier to hit, easier to find',
     added: [],
     changed: [
@@ -3860,7 +3868,14 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
-            botPlan:'auto',                                // AI shape: 'auto' deals one per side
+            // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
+            // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
+            // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
+            // strategy setting. Measured — `tests/botai.mjs` failed its ladder check
+            // (reversals over 50%) the moment Mixed became the default. A shape
+            // randomiser belongs behind an explicit choice; out of the box, picking Pro
+            // has to be the thing that decides how hard the match is.
+            botPlan:'standard',                            // AI shape; 'auto' deals one per side
             charge:'on', chargeMs:600,                     // hold to kick harder: on, full power at 0.6s
             goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
@@ -11068,6 +11083,7 @@ function loop(t){
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
     advanceFx();            // ...and the sparks, for exactly the same reason
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
+    advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -12867,7 +12883,7 @@ function enterWarmup(w){
     w.players = w.players.concat(w.bench);
     w.bench = [];
     applySeatRotation(w.players);
-    labelA = w.players.map(()=>1);
+    labelA = w.players.map(()=>1); labelT = [];
   }
   w.state = 'warmup'; w.stateT = 0; w.endRamp = null;
   w.ball.vx = 0; w.ball.vy = 0;
@@ -13210,7 +13226,7 @@ function lobbyStart(w){
   // Seat rotation is per-seat-ordinal, so it has to be recomputed after a reshuffle.
   applySeatRotation(w.players);
   w.players.forEach(p => { p.ms = freshMs(); });
-  labelA = w.players.map(()=>1);
+  labelA = w.players.map(()=>1); labelT = [];
   botInit(w);
   w.lobby = null;
   resetKickoff(w, true);
@@ -15171,6 +15187,20 @@ const BOT = {
 // a name. What a type changes is where a body stands, how much space it keeps, how far
 // it will chase, and what it looks for when it kicks.
 //
+// ⚠️ NOT ON BY DEFAULT, and the reason is measured. `influence` drags a formation slot
+// toward the ball, so a big one makes the TARGET move fast — and a target that moves fast
+// is a bot that keeps changing direction. `tests/botai.mjs` counts exactly that (velocity
+// reversals per bot per minute, ceiling 0.5) and the first tuning pushed 4v4 to **0.50**,
+// right on the bar: the oscillation the whole approach-geometry section was rebuilt to
+// kill, arriving through a new door. Softening the multipliers fixed that and broke
+// `shapeBreathes` instead — the formation stopped responding to the phase at all — which
+// is two assertions being traded against each other by guessing at constants, which is
+// how this AI got broken twice before.
+// So `BOT_PLANS.standard` carries NO types, it is the default, and it reproduces the
+// shipped AI exactly. Everything below is a choice you make, not a change that arrives.
+// Tuning it properly needs a balance harness that measures both axes at once, in
+// daylight — see docs/TODO.md.
+//
 // depth      × how far up the pitch its formation slot sits
 // influence  × how hard that slot is dragged toward the ball
 // space      × teammate repulsion (low = happy in a crowd, high = finds room)
@@ -15202,6 +15232,13 @@ const BOT_TYPE_KEYS = Object.keys(BOT_TYPES);
 // `depth` rather than overriding it: "park the bus with a poacher up top" has to still
 // leave the poacher the highest player on that side.
 const BOT_PLANS = {
+  // ⚠️ THE DEFAULT, and it deliberately carries no types at all: every role is
+  // `allround` (which itself carries no numbers), line and press are 1, so every
+  // multiplier resolves to 1 and this is the shipped AI, bit for bit. It exists so the
+  // difficulty ladder is what it always was unless you ask for something else.
+  standard: { name:'Standard', desc:'The stock AI', emoji:'⚽', icon:'ball',
+              line:1.00, press:1.00,
+              roles:{ chaser:'allround', support:'allround', defender:'allround', goalie:'allround' } },
   balanced: { name:'Balanced', desc:'A bit of everything', emoji:'⚖️', icon:'swords',
               line:1.00, press:1.00,
               roles:{ chaser:'allround', support:'playmaker', defender:'anchor', goalie:'anchor' } },
@@ -15239,12 +15276,14 @@ for (const k of BOT_PLAN_KEYS)
 function botDrawPlans(w){
   const pick = sel.botPlan || 'auto';
   if (pick !== 'auto' && BOT_PLANS[pick]) return [BOT_PLANS[pick], BOT_PLANS[pick]];
+  // ⚠️ `standard` is excluded from the draw: it is the "leave the AI alone" entry, and
+  // dealing it as one of the shapes would make Mixed sometimes mean "no shape at all".
+  const pool = BOT_PLAN_KEYS.filter(k => k !== 'standard');
   const rnd = mulberry32((w.seed|0) ^ 0x165667b1);
-  const n = BOT_PLAN_KEYS.length;
-  const a = Math.min(n-1, (rnd()*n)|0);
-  const rest = BOT_PLAN_KEYS.filter((_, i) => i !== a);
+  const a = Math.min(pool.length-1, (rnd()*pool.length)|0);
+  const rest = pool.filter((_, i) => i !== a);
   const b = Math.min(rest.length-1, (rnd()*rest.length)|0);
-  return [BOT_PLANS[BOT_PLAN_KEYS[a]], BOT_PLANS[rest[b]]];
+  return [BOT_PLANS[pool[a]], BOT_PLANS[rest[b]]];
 }
 // ⚠️ THE ONE PLACE a type multiplier is read, so a missing key is 1 rather than NaN —
 // `allround` deliberately carries no numbers at all, and an undefined times a BOT value
@@ -19456,6 +19495,19 @@ function labelBallFade(d){
 // By index, NOT on the player — the replay rebuilds its player objects every frame,
 // which re-seeds anything stored there and the fade never converges.
 let labelA = [];
+// ⚠️ The TARGET the draw last computed, eased toward in the step loop. Two arrays and
+// not one, because the target is a render-time question (it needs screen-space overlap)
+// while the easing is a per-step decay like every other one in this file — and mixing
+// them is what made a draw change the picture it was drawing.
+let labelT = [];
+// Next to decayJuice(), never in a draw. See advanceTrails for the rule.
+function advanceLabels(){
+  for (let i = 0; i < labelT.length; i++){
+    if (labelT[i] == null) continue;
+    const prev = labelA[i] == null ? labelT[i] : labelA[i];
+    labelA[i] = prev + (labelT[i] - prev) * LABEL_FADE;
+  }
+}
 // Sitting this one out: drawn faded, on the sideline, so it reads as "waiting" rather
 // than "missing". Its own function because the side view draws the bodies in depth order
 // and still wants the bench exactly as it is — flat on the touchline, behind everything.
@@ -19477,7 +19529,7 @@ function drawBenchDiscs(w){
 }
 function drawDiscs(w){
   const s = cam.s;
-  if (labelA.length !== w.players.length) labelA = w.players.map(()=>1);
+  if (labelA.length !== w.players.length){ labelA = w.players.map(()=>1); labelT = []; }
   drawBenchDiscs(w);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
@@ -19669,10 +19721,21 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         }
         if (d2 < Infinity) near = labelBallFade(Math.sqrt(d2));
       }
+      // ⚠️ THE DRAW RECORDS THE TARGET AND READS THE EASED VALUE. It used to do the
+      // easing here — `labelA[idx] = prev + (target-prev)*FADE`, written back on every
+      // draw — which is the trails rule wearing a name plate: two draws of ONE frame
+      // produced two different pictures, so a paused screen kept changing and every
+      // pixel test that renders twice was measuring the fade rather than the thing it
+      // was checking. It survived while the target was binary (0.05 or 1) because it
+      // converged and then sat still; the moment the near-ball ramp made the target
+      // continuous it never settled, and `tests/floaters.mjs` and `tests/surfaces.mjs`
+      // both caught it. The easing now happens once per STEP, in advanceLabels().
       const target = Math.min(blocked ? LABEL_DIM : 1, near);
-      const prev = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
-      const a = prev + (target - prev) * LABEL_FADE;
-      if (idx != null) labelA[idx] = a;
+      if (idx != null){
+        if (labelT[idx] == null) labelA[idx] = target;   // first sight: no fade-in from nowhere
+        labelT[idx] = target;
+      }
+      const a = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
       if (a > 0.004){
         // The NAME carries the team colour; the box stays the neutral plate. Raw
         // team colours on that plate drop to 3.06:1 on some themes, so the tint is
@@ -19692,7 +19755,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
 // Two different shapes on purpose: dots for players, one line for the ball.
 let ballTrail = [];
 let discTrails = [];                      // per-player dot history, index-aligned to w.players
-function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; }
+function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; labelT = []; }
 
 const DOT_GAP      = 9;    // world units between player dots
 const DOT_MAX      = 12;   // dots kept per player
@@ -21142,7 +21205,7 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
-    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, advanceLabels, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,

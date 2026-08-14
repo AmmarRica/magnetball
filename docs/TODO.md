@@ -5,7 +5,128 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260813.0910PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260813.1120PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+---
+
+## 🎒 SKIPPED — carried over from the 13 Aug session
+
+Everything shipped that day went out without its test suite, because the ask at the time was
+speed over process. This is the debt that created, plus the things that were offered and never
+started. **Nothing here is a known bug** — the features were verified by hand (boot, play, ball
+containment on all 31 fields, every sound, every ball look / disc skin / animated field) — but
+none of it is *held* by anything, which in this repo is where regressions come from.
+
+### A0. What running the suite actually found — fixed, 96/96
+The batch shipped without tests. Running them afterwards found **three real regressions**,
+which is the argument for the rest of section A rather than an aside.
+
+- [x] **The name plates' fade was being eased INSIDE THE DRAW**, so two draws of one frame
+  produced two different pictures. It survived for as long as the target was binary (0.05
+  or 1) because it converged and then sat still; the moment the near-ball ramp made the
+  target continuous it never settled. `tests/floaters.mjs` and `tests/surfaces.mjs` both
+  caught it — a paused screen kept changing, and every pixel test that renders twice was
+  measuring the fade instead of the thing it was checking. The draw now records the target
+  and `advanceLabels()` eases it in the step loop, next to `decayJuice()`. **The trails
+  rule, wearing a name plate.**
+- [x] **Bot types broke the difficulty ladder.** ⚠️ The exact failure the design claims to
+  prevent, and it was claimed on reasoning rather than measurement. `influence` drags a
+  formation slot toward the ball, so a big multiplier makes the TARGET move fast — and a
+  target that moves fast is a bot that keeps changing direction. `botai`'s reversal count
+  hit **0.50 against a ceiling of 0.5** at 4v4. Softening the multipliers fixed that and
+  broke `shapeBreathes` instead, which is two assertions being traded against each other by
+  guessing at constants at one in the morning — how this AI got broken twice before.
+  **Resolved by making types opt-in:** `BOT_PLANS.standard` carries no types at all, is the
+  default, and reproduces the shipped AI bit for bit. The feature is fully available, it
+  just no longer arrives. Retuning it so a shape can be the default is a daylight job with
+  a harness that measures both axes at once — see A/bot-strategies below.
+- [x] **Two suites were asserting behaviour I had deliberately changed** — `icons` still
+  counted circular pips, `menunav` still expected a Settings nav tile and five tab groups.
+  Both updated; `icons` now measures the bar HEIGHTS, which is the actual claim, since
+  counting filled marks passes on the pip build too.
+- [-] `ball3d` and `replayfile` failed only when the suite ran six-up: both carry timing
+  assertions and were measuring CPU contention. They pass serially. Worth knowing before
+  the parallel runner in section B lands — **it will need those two pinned or serialised.**
+
+### A. Nine features shipped with no suite
+Each of these has a written-down reason it is built the way it is (in `CLAUDE.md`), and no test
+enforcing it. Ranked by how quietly it would break.
+
+- [ ] **Map maker** (`tests/mapmaker.mjs`). The one that most needs it: a custom field is folded
+  into `FIELDS`, so a bug here reaches the picker, `buildGeometry`, all fourteen animated
+  themes, drills, map votes and replay files. Must cover — the preview comes from
+  `buildGeometry` and not a second drawing; `mapClean` clamps on the way IN; a delete drops
+  `sel.field` to `classic` rather than handing `undefined` to `buildGeometry`; Play saves in
+  place and keeps its key; `wallB` above 1.0 still contains the ball; the row is hidden on a
+  phone and re-answered on resize; a `<` in a typed name cannot reach `innerHTML`.
+- [ ] **Bot types and strategies** (`tests/botplans.mjs`), and **retune them so a shape could
+  be the default**. They are opt-in right now precisely because the ladder broke — see A0.
+  ⚠️ The assertion that matters is the one the design exists for: **a type must not change
+  strength**, and the second one is that it must not make bots oscillate (`botai` measures
+  velocity reversals per bot per minute, ceiling 0.5; `influence` is the multiplier that
+  costs it). Both at once, or tuning one just breaks the other. Run the same seeds with
+  every plan against a fixed opponent and require the win rates to stay inside a band — a
+  type that quietly makes a tier stronger is precisely the bug the difficulty ladder was
+  rebuilt to make impossible. Also: `botTypeM` returns 1 (or 0) for a missing key rather than
+  `undefined`; Mixed never deals both sides the same plan; the type is re-read when a role
+  changes; `plan.press` does nothing while attacking.
+- [ ] **Hold to kick harder** (`tests/charge.mjs`). Six call sites were collapsed into
+  `chargeMul`. ⚠️ The test has to drive all six — trap release, one-touch, snail boot, body
+  check, and both draws — because "the switch works" is true of a build where five of them
+  read it and the sixth kept charging invisibly.
+- [ ] **Names thin near the ball** (extend `tests/labels.mjs`). Measured in world units, so it
+  must be checked on two very different courts; and it is a ramp, so sample it at several
+  distances rather than just at the ball. ⚠️ `labels.mjs` was updated this session to drive
+  `advanceLabels()` between draws instead of repeating the draw — a suite that settles the
+  fade by re-rendering now settles nothing at all.
+- [ ] **Fireworks on the winning goal** (`tests/fireworks.mjs`). ⚠️ Must assert they do NOT run
+  on an ordinary goal — "fireworks appeared" passes on a build that fires them every time.
+  Also that they are spawned from the step loop (hash the world with them on and off) and
+  that `resetKickoff` clears an unfinished show.
+- [ ] **Kickoff toss + touch-to-start** (extend `tests/kickoff.mjs`). The toss must reproduce
+  from a pinned seed and must NOT consume from `w.rng` — assert the rest of the match is
+  bit-identical with the toss forced either way. Touch-to-start needs a body walked onto the
+  ball with KICK never pressed.
+- [ ] **Pinball sounds** (extend whichever suite covers `SFX`). The real trap is mechanical: a
+  variant inserted in the MIDDLE of an array shifts every index above it, so every other set's
+  `pick` moves. Assert `SFX_LABELS[cat].length === SFX[cat].length` for every category and
+  that no set's `pick` is out of range. (Verified by hand this session; not held.)
+- [ ] **Drills use the picked ball** (extend `tests/targetsdrill.mjs`). One line: start a drill
+  with a non-default ball and compare the radius.
+- [ ] **Tonight's UX batch** (`tests/taptargets.mjs` + extend `tests/menunav.mjs`).
+  ⚠️ Measuring a tap target is blocked by any modal over the page — the first probe this
+  session read a 1px hit area because `elementFromPoint` was returning the Daily Reward card.
+  A suite must dismiss it (or assert it is absent) first. Also: the Sound card's panes match
+  `SFX_CATS` exactly; KICK OFF is above the fold at 844×390; `motionOK()` is false under
+  `reducedMotion: 'reduce'` on fresh storage and the toggle still turns it back on.
+
+### B. Offered and never started
+- [ ] **Parallel worker pool for `tests/run.mjs`.** The runner is strictly serial at ~8.9
+  minutes with more than half of that idle. Running the 96 suites six-up finishes in a
+  fraction of it — done ad hoc with `xargs -P 6` this session, so the shape is known; it just
+  needs to live in `run.mjs` with ordered output and a failure summary.
+  ⚠️ **`ball3d` and `replayfile` must be pinned or serialised** — both carry timing
+  assertions and both went red six-up while passing serially, which is a parallel runner
+  that reports CPU contention as a bug.
+- [ ] **Menu layout, the rest of the recommendation.** Sound tabs are done. Still open: move
+  Replays / About / VJ / Online out of the settings accordion into More's nav grid, and fold
+  the Ball card into Theme (it is one slot the Theme card already shows).
+
+### C. Environment / infra
+- [ ] **The suites cannot be run with a bare `node tests/run.mjs` here.** Playwright 1.62.1
+  wants chromium build 1234; `/opt/pw-browsers` has 1194. `tests/_browser.mjs` already has the
+  escape hatch — `CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` — but nothing
+  says so, and the failure reads as "run npx playwright install", which is wrong and will not
+  work behind the network policy. Put it in `tests/README.md`, or have `_browser.mjs` fall back
+  to whatever is actually installed.
+
+### D. Waiting on the owner
+- [ ] **Steam Deck thumbstick — unconfirmed.** Three diagnoses were wrong before the current
+  fix (which stops trying to identify *the* stick and reads every axis pair that behaves like
+  one on a non-standard pad). `padReport()` now rides the About block's one-tap copy: id,
+  mapping, whether a seat was handed out, the chosen axes, every live axis value, held
+  buttons. **One paste of that line, with the stick pushed hard right, closes this.** Until it
+  arrives the fix is unverified on the actual hardware.
 
 ---
 
@@ -143,7 +264,8 @@ tabs or search.
   the idle auto-start resets on movement. On-screen START, opt-in via a third Warm-up lobby
   option (`Controllers` / `Everyone` / `Skip`); the default is the old behaviour exactly.
   Routes through `lobbyStart()`, so it cannot disagree with the on-screen side preview.
-- [ ] 2. Dead controls · 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
+- [x] 2. Dead controls — see "Two shipped Coming soon stubs" below; both cut.
+- [ ] 3. Leaderboard labels · 5. Preset vocabulary · 6. Rules/Presentation
 - [ ] 7. Search: help text, synonyms, fuzzy · 10. Polish batch
 - [x] 8. Reduce motion — **`motionOK()`, and everything that moves for effect reads it.**
   `sel.juice` was read directly in sixteen places and the media query in exactly one, so the
@@ -1538,8 +1660,9 @@ what was asked for and not a fourth tuning pass:
 - [x] **Reset scope option** — "Reset settings" now offers an opt-in second confirm to also reset
   the player name/appearance (colour, flag/animal, eyes, cap). Default still keeps your look;
   `resetSettings(alsoAppearance)` + `defaultProfile()`.
-- [ ] **Shop "buying"** — the `💛 Coming soon` support button (`#shopSupport`) is a stub; either wire
-  a real (non-purchase) action or keep as honest placeholder.
+- [x] **Shop "buying" — CUT.** The `#shopSupport` button was removed. The paragraph above it
+  already said everything the button said, and a control that cannot be pressed reads as a
+  broken page rather than an honest one.
 - [x] **Skins no longer lie** — the sprite options pointed at files that don't exist and silently
   did nothing. They now probe on demand (never on settings open, which would 404 every build) and
   render as disabled "needs art" once known missing, reverting any stale selection. *Shipping the
@@ -1560,16 +1683,21 @@ what was asked for and not a fourth tuning pass:
   checks every one still resolves to exactly one place — plus that the index has not quietly
   grown a line number, which is the failure a reviewer would wave through. Splitting the file
   is still not on the table.
-- [ ] **Two shipped "Coming soon" stubs** — `#shopSupport` and the Online-rooms card (`#roomCode`,
-  disabled). Honest, but they're dead UI in a shipped build; decide keep-or-cut.
+- [x] **Both cut.** `#shopSupport` and the Online card's disabled `#roomCode` box and its
+  Host/Join "soon" tiles are gone. The Online card stays as a SENTENCE — "is there online?"
+  is a real question and deserves a real answer — pointing at saved replays as the nearest
+  thing. Dead UI is a promise the page cannot keep, it is what a new player is drawn to
+  *because* it looks like the interesting feature, and it costs a row in `menuSearchIndex`
+  for something nobody can reach.
 
 ## 🚧 Parked — needs a decision or is blocked
 - [-] **Leaderboard writes** — closed by design. No hosted backend (Google Sheet only, read via
   public gviz JSON). Writing scores/replays needs a hosted endpoint (Apps Script), which is ruled
   out, so the board is **read-only**: it shows only your local score + the offline sample.
   `lbSubmit`/`lbSubmitReplay` stay no-ops. Revisit only if the no-backend rule changes.
-- [ ] **Online rooms (host / join by code)** — the Settings → Online card is a "coming soon" stub
-  (`#roomCode` disabled). Real online play is an XL, backend-touching feature — see ROADMAP Tier 3.
+- [ ] **Online rooms (host / join by code)** — still parked, and the stub is now gone rather
+  than disabled: the Online card is an honest sentence. Real online play is an XL,
+  backend-touching feature — see ROADMAP Tier 3.
 
 ## 🧪 Testing / infra
 - [x] **Full-feature audit suite** (`tests/audit.mjs`) — asks two questions of every setting:

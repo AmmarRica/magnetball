@@ -127,8 +127,13 @@ const r = await p.evaluate(async ()=>{
   o.tileCount = tiles.length;
   // No tile lost or duplicated in the regrouping, and every one still has a handler.
   o.tileIds = tiles.map(t=>t.id).sort().join(',');
+  // ⚠️ There is NO `settingsBtn`, and its absence is the assertion. The settings ARE the
+  // menu — eleven cards of them, on the screen the tile was sitting on — so a tile whose
+  // whole job was `openSection('theme')` was a door onto the room you were already
+  // standing in. The detached panel is still reachable from Display, where a
+  // window-management choice belongs.
   o.expectedIds = ['dailyBtn','drillsBtn','howBtn','lbBtn','rogueBtn','seasonBtn',
-                   'settingsBtn','shopBtn','socialBtn','statsBtn','tutBtn'].join(',');
+                   'shopBtn','socialBtn','statsBtn','tutBtn'].join(',');
   o.allTilesKept = o.tileIds === o.expectedIds;
   o.everyTileWired = tiles.every(t => typeof t.onclick === 'function');
   o.everyTileInAGroup = tiles.every(t => !!t.closest('.navgroup'));
@@ -194,7 +199,10 @@ const ok=(c,m)=>{ if(!c) fail.push(m); };
 // means scrolling past matches to find goals. Asserted as an exact set on purpose: a group
 // arriving without its panes, or a pane without its chip, is how controls end up hidden while
 // `audit` and the menu search still find them.
-ok(r.groups === 'feel,match,player,replay,theme', `expected sub-tabs on feel, match, player, replay and theme, got ${r.groups}`);
+// ⚠️ `sound` is in this set now: 46 controls in one list was 1.85 screenfuls on a phone,
+// and comparing two net sounds meant scrolling past 38 other tiles. Its chips are BUILT
+// from `SFX_CATS`, so a seventh category cannot arrive with a pane and no chip.
+ok(r.groups === 'feel,match,player,replay,sound,theme', `expected sub-tabs on feel, match, player, replay, sound and theme, got ${r.groups}`);
 // ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
 // to come from one list, or a new slot arrives with a pane and no chip and its controls are
 // hidden while the audit and the menu search still find them.
@@ -222,7 +230,7 @@ ok(r.feelLastChipHit, `the last Game Feel chip (${r.feelLastChipPane}) is not hi
 ok(r.feelLastPaneOpened, `pressing the last chip did not open the ${r.feelLastChipPane} pane`);
 ok(r.feelWholeCardVisible, 'the preset row or the reset button vanished on some tab');
 ok(r.everyGroupLabelled, `a nav group has no label: ${JSON.stringify(r.navLabels)}`);
-ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
+ok(r.tileCount === 10, `expected 10 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);
 ok(r.everyTileWired, 'a nav tile lost its click handler');
 ok(r.everyTileInAGroup, 'a nav tile is outside every group');

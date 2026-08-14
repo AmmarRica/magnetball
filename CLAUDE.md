@@ -863,6 +863,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   up top" stays expressible, which is most of what a plan is for. `plan.press` applies
   **only while defending**, which is what makes it a press rather than a second
   line-height dial.
+  ⚠️ **NOT ON BY DEFAULT.** `BOT_PLANS.standard` carries no types at all, is the default,
+  and reproduces the shipped AI bit for bit. Measured: `influence` drags a formation slot
+  toward the ball, so a big multiplier makes the TARGET move fast, and a fast-moving target
+  is a bot that keeps changing direction — `tests/botai.mjs` counts exactly that (velocity
+  reversals per bot per minute, ceiling 0.5) and the first tuning hit **0.50** at 4v4.
+  Softening the multipliers cleared it and broke `shapeBreathes` instead. Depth, chase and
+  press are safe to lean on hard; `influence` is not.
+  ⚠️ **Mixed excludes `standard`** — it is the "leave the AI alone" entry, so dealing it as
+  one of the shapes would make Mixed sometimes mean no shape at all.
   ⚠️ **Mixed draws BOTH sides from one call** (`botDrawPlans`), second from what is left —
   two independent draws off the same seed handed both teams the same plan often enough to
   look broken, and identical shapes is the one outcome Mixed exists to rule out. Drawn off
@@ -884,6 +893,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   one-touch, a snail boot, a body check and two draws — so a switch that had to reach all
   six would have reached five, and the one left behind would keep charging invisibly. The
   wind-up ring is gated on `chargeOn()` too, or it promises power that is not coming.
+- **The name plates' fade is eased in `advanceLabels()`, NEVER in the draw.** ⚠️ The trails
+  rule wearing a name plate: `drawDiscs` used to write `labelA[idx] = prev + (target-prev)*
+  LABEL_FADE` on every draw, so two draws of ONE frame produced two different pictures. It
+  survived while the target was binary (`LABEL_DIM` or 1) because it converged and then sat
+  still — the moment the near-ball ramp below made the target continuous it never settled,
+  and `tests/floaters.mjs` and `tests/surfaces.mjs` both went red on "two identical renders
+  differ". The draw records the target into `labelT` (a render-time question: it needs
+  screen-space overlap) and the step loop eases `labelA` toward it. Two arrays, on purpose.
 - **Names thin out near the ball (`LABEL_BALL`, `labelBallFade`):** a *different rule*
   from `LABEL_DIM`, for a different reason. That one is about **overlap** — a plate
   literally on top of a disc — and can only fire once the damage is done. This one is

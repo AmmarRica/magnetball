@@ -120,13 +120,27 @@ const r = await p.evaluate(async ()=>{
   o.unknownIconFallsBack = /class="emoji"/.test(M.optGlyph({ icon:'nope', emoji:'🎩' }));
 
   // ---- the difficulty ramp is a ramp --------------------------------------
-  // Seven unrelated pictures told you nothing about order. Filled pips do.
-  const filled = n => { host.innerHTML = M.iconSvg(`tier${n}of7`);
-    return host.querySelectorAll('circle[fill="currentColor"]').length; };
+  // Seven unrelated pictures told you nothing about order.
+  // ⚠️ RISING BARS, not equal pips, and the suite has to measure the HEIGHTS as well as
+  // the count — that is the whole change. A pip row says "four of seven", which is a
+  // position in a list; what a difficulty tile has to say is "steeper", and height is
+  // the one property that means that without being read. Counting filled marks alone
+  // passes on the pip build too, so it is not the assertion this needs.
+  const bars = n => { host.innerHTML = M.iconSvg(`tier${n}of7`);
+    return [...host.querySelectorAll('rect')]; };
+  const filled = n => bars(n).filter(r => r.getAttribute('fill') === 'currentColor').length;
   o.ramp = [1,2,3,4,5,6,7].map(filled);
   o.rampIsMonotonic = o.ramp.every((v,i) => v === i+1);
-  o.rampTotal = (host.innerHTML = M.iconSvg('tier3of7'), host.querySelectorAll('circle').length);
+  o.rampTotal = bars(3).length;
   o.rampShowsAllSteps = o.rampTotal === 7;
+  // Each bar is strictly taller than the one to its left, so the shape reads as a slope
+  // rather than as a count.
+  const hs = bars(7).map(r => +r.getAttribute('height'));
+  o.rampHeights = hs.map(h => Math.round(h*10)/10);
+  o.rampRises = hs.every((h,i) => i === 0 || h > hs[i-1]);
+  // ...and the difference is worth having: the tallest is well over twice the shortest,
+  // which is what makes the middle tiers distinguishable at tile size.
+  o.rampSpread = Math.round((hs[hs.length-1] / hs[0]) * 100) / 100;
 
   host.remove();
   return o;
@@ -150,7 +164,9 @@ ok(r.unmappedKeepsEmoji, 'an entry with no icon lost its emoji instead of keepin
 ok(r.mappedUsesSvg, 'an entry WITH an icon did not render one');
 ok(r.unknownIconFallsBack, 'an unknown icon name rendered nothing rather than falling back to the emoji');
 ok(r.rampIsMonotonic, `the difficulty ramp is not a ramp: ${JSON.stringify(r.ramp)}`);
-ok(r.rampShowsAllSteps, `a difficulty tile shows ${r.rampTotal} pips, not the full 7 — the ramp only reads if the empty steps are drawn too`);
+ok(r.rampShowsAllSteps, `a difficulty tile shows ${r.rampTotal} bars, not the full 7 — the ramp only reads if the empty steps are drawn too`);
+ok(r.rampRises, `the bars do not rise left to right: ${JSON.stringify(r.rampHeights)} — equal-height marks say "four of seven", which is a position in a list, not "steeper"`);
+ok(r.rampSpread >= 2, `tallest bar is only ${r.rampSpread}x the shortest — at tile size the middle tiers have to be told apart without counting them`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify(r, null, 1));

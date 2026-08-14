@@ -16,7 +16,13 @@ const r = await p.evaluate(async ()=>{
   M.sel.autoReplay=false;
 
   // Settle the fade by rendering repeatedly, then read the player's label alpha.
-  const settle = (w, frames=90) => { for(let i=0;i<frames;i++) M.drawDiscs(w); };
+  // ⚠️ ONE DRAW, then the STEP LOOP eases the fade. It used to be 90 draws, back when the
+  // easing was written inside `drawDiscs` — which was the bug `tests/floaters.mjs` and
+  // `tests/surfaces.mjs` caught: two draws of one frame produced two different pictures,
+  // so a paused screen kept changing. The draw now only records the target and
+  // `advanceLabels()` (next to decayJuice, in the step loop) does the easing, so driving
+  // this by repeating the DRAW would settle nothing at all.
+  const settle = (w, frames=90) => { M.drawDiscs(w); for(let i=0;i<frames;i++){ M.advanceLabels(); M.drawDiscs(w); } };
   const alphaOf = (w, q) => M.labelA[w.players.indexOf(q)];
   const far = (w, list) => list.forEach((q,i)=>{ q.x = 400 + i*40; q.y = 400; });
 
@@ -72,9 +78,11 @@ const r = await p.evaluate(async ()=>{
   const foes = w.players.filter(x=>x.team===1);
   me.x=0; me.y=100; foes.forEach((q,i)=>{q.x=400+i*40; q.y=400;});
   mate.x=400; mate.y=400; w.ball.x=-350; w.ball.y=-350;
-  for(let i=0;i<90;i++) M.drawDiscs(w);
+  settle(w);
   mate.x=me.x; mate.y=me.y - 30/M.cam.s;   // upright run, so screen-up is world -y
-  M.drawDiscs(w);
+  // ⚠️ ONE draw to record the new target, then ONE ease — that is a single frame, and
+  // the point of this check is that a single frame does not jump straight to the floor.
+  M.drawDiscs(w); M.advanceLabels();
   const aNow = M.labelA[w.players.indexOf(me)];
   o.oneFrameAlpha = +aNow.toFixed(3);
   o.gradual = aNow > M.LABEL_DIM + 0.3;   // still well above the floor after 1 frame
@@ -87,14 +95,14 @@ const r = await p.evaluate(async ()=>{
   const rMe = rw.players[0];
   rw.players.forEach((q,i)=>{ if(i) { q.x=400+i*40; q.y=400; } });
   rMe.x=0; rMe.y=100; rw.ball.x=-350; rw.ball.y=-350;
-  for(let i=0;i<60;i++) M.drawDiscs(rw);
+  M.drawDiscs(rw); for(let i=0;i<60;i++){ M.advanceLabels(); M.drawDiscs(rw); }
   o.replayClear = +M.labelA[0].toFixed(3);
   // Now park a disc on the plate and re-render through FRESH player objects each
   // frame, the way playReplay does.
   const blocker = { ...rw.players[1], x: rMe.x, y: rMe.y - 30/M.cam.s };
   for(let i=0;i<90;i++){
     const fake = { ...rw, players: rw.players.map((pl,ix)=> ix===1 ? {...blocker} : {...pl}) };
-    M.drawDiscs(fake);
+    M.drawDiscs(fake); M.advanceLabels();
   }
   o.replayBlocked = +M.labelA[0].toFixed(3);
   o.replayFades = o.replayClear > 0.9 && Math.abs(o.replayBlocked - M.LABEL_DIM) < 0.02;
