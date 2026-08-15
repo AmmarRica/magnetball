@@ -3533,7 +3533,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260814.0210AM';
+const VERSION = '20260814.0450AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3549,6 +3549,18 @@ const VERSION = '20260814.0210AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260814.0450AM', title: 'Pick anything up and play',
+    added: [
+      '<b>SELECT turns your controls a quarter turn.</b> Stand wherever you like &mdash; press it until "up" on your stick is up on the screen, and the controller icon in the corner turns with you so you can see what it did. Each controller has its own, and it is remembered.',
+    ],
+    changed: [
+      '<b>The keyboard and the first controller now drive the same player.</b> Plugging a pad in used to take the keys away entirely.',
+      '<b>Every button kicks</b>, apart from Start and Select. Nothing to learn and nothing to bind &mdash; and it works on controllers that number their buttons oddly, where the old fixed list could miss.',
+      'The warm-up prompts moved <b>off the pitch</b> to a row underneath it, instead of floating over the players.',
+      '<b>A fresh start is a green pitch and numbered players</b> now, so a reset gives you a plain football game rather than the neon one.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260814.0210AM', title: 'Controllers just work now',
     added: [],
     changed: [
@@ -3897,7 +3909,7 @@ const CHANGELOG = [
 // stops either way, so nothing about the save, the presets or the physics changes — but
 // "45" told a player nothing, while "4.5" is a number you can aim at.
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
@@ -3913,7 +3925,11 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
-            look: { palette:'neon', field:'none', discs:'none', ball:'classic', trail:'dots' },
+            // ⚠️ GRASS AND NUMBERS, asked for: a plain green pitch with numbered players is
+            // what "a football game" looks like before you have chosen anything, and it is
+            // what a reset should give you back. `neon` was a striking first impression and
+            // a strange default — it is one tap away in Theme.
+            look: { palette:'grass', field:'none', discs:'none', ball:'classic', trail:'dots' },
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
@@ -9074,6 +9090,31 @@ function pitchHorizontal(){
   const o = sel.orient || 'auto';
   return o === 'h' || (o === 'auto' && isDeck());
 }
+// ============================================================
+//  SELECT TURNS YOUR CONTROLS A QUARTER TURN
+// ============================================================
+// ⚠️ **STAND WHEREVER YOU LIKE.** Four people round one screen do not all face the same
+// way, and up to now the only answer was cocktail's calibration — a mode you had to be in,
+// with a two-step wizard, set once. This is the same idea reduced to one button: press
+// SELECT and your stick turns 90°, press it four times and you are back. It is per PAD, so
+// everybody sets their own, and it composes with whatever the layout already decided
+// rather than replacing it.
+// ⚠️ Kept in `sel` so it SURVIVES the match. Somebody who has stood themselves the right
+// way round has told the game something about the room, not about that kickoff, and making
+// them do it again every match is worse than not having it.
+// ⚠️ Keyed by PAD INDEX, not by seat: a pad is a person standing somewhere, and seats are
+// handed out in an order that changes with the mode and with who joined when.
+function seatRotOf(padIndex){
+  const r = (sel.seatRot || {})[padIndex];
+  return typeof r === 'number' ? (((r % 4) + 4) % 4) : 0;
+}
+function bumpSeatRot(padIndex){
+  if (!sel.seatRot) sel.seatRot = {};
+  sel.seatRot[padIndex] = (seatRotOf(padIndex) + 1) % 4;
+  saveSel();
+  if (world) applySeatRotation(world.players);
+  return sel.seatRot[padIndex];
+}
 // Re-run on any layout/direction change or a live match steers 90° off.
 function applySeatRotation(players){
   if (!players) return;
@@ -9081,8 +9122,29 @@ function applySeatRotation(players){
   for (const p of players){
     if (p.ctrl !== 'bot'){
       slot++;
-      p.rotQuarter = (sel.display === 'cocktail') ? sideQuarter(seatSide(slot)) : pitchHorizontal() ? 1 : 0;
+      const base = (sel.display === 'cocktail') ? sideQuarter(seatSide(slot)) : pitchHorizontal() ? 1 : 0;
+      // ⚠️ ADDED to the layout's own quarter-turn, never replacing it — a deck in landscape
+      // has already turned the pitch, and somebody standing at the side of it wants a
+      // quarter turn ON TOP of that rather than instead of it.
+      p.rotQuarter = (base + (p.ctrl === 'gamepad' ? seatRotOf(p.padIndex) : 0)) % 4;
     } else p.rotQuarter = 0;
+  }
+}
+// Edge-triggered, every frame, wherever you are — the lobby, mid-match, the celebration.
+// ⚠️ SELECT is no longer an alternative START. It was bound there because Start is buried
+// under a menu on some pads, but a button cannot be both "begin" and "turn me round", and
+// of the two this is the one you need while standing in the wrong place. Start (9) still
+// starts, and `#lobbyStartBtn` is on screen throughout warm-up.
+const _selPrev = {};
+function pollSeatRotate(){
+  if (!padsTakeSeats() || arcadeMode()) return;
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  for (const i of connectedGamepadIndices()){
+    const g = gps[i];
+    const now = !!(g && btn(g, 8));
+    const was = _selPrev[i];
+    _selPrev[i] = now;
+    if (now && !was) bumpSeatRot(i);
   }
 }
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
@@ -10649,7 +10711,13 @@ function startMatch(){
   // firstRunLineup. Deliberately after the seat/name assignment above, because it
   // overwrites the names, and deliberately before `_startQuiet`, which owns the
   // attract demo's own look and must keep winning.
-  if (!_startQuiet && isFirstRun()) firstRunLineup(players);
+  // ⚠️ NO FIRST-RUN CONTINENT LINEUP. A brand-new install used to field one continent
+  // against another, every bot in a country flag. It is a good first impression and it
+  // contradicts what a default is now asked to be — **a green pitch and numbered
+  // players**, which is what a reset gives back. The call is gone rather than switched
+  // off, because a dead branch is worse than a deletion; `CONTINENTS` and `placedFlags`
+  // stay, since they are what prove every entry in `FLAGS` is reachable from the pickers
+  // and `tests/continents.mjs` checks exactly that.
 
   // The idle demo is bot vs bot, so dressing both sides in YOUR colours makes the
   // menu look like your own team playing itself. Give each side its own country.
@@ -11102,6 +11170,14 @@ function loop(t){
     // the other four looked the same. The final-whistle ramp above is separate, and
     // so is the replay, which has its own clock.
     : (motionOK() && world && world.state==='goal' && world.finalGoal) ? 0.45 : 1;
+  // ⚠️ THE KEYBOARD IS POLLED ONCE PER FRAME, HERE, and not from `drawControls`. It used to
+  // sit inside that draw behind `players.some(p => p.ctrl === 'human1')` — so the moment a
+  // controller took seat one (`ctrl` becomes `'gamepad'`) there was no `human1` on the
+  // pitch, the keyboard was never read at all, and plugging a pad in silently took the keys
+  // away. Reading input in a draw is also the trails smell: it is per-frame work, and this
+  // is where per-frame work goes.
+  pollKeys();
+  pollSeatRotate();       // SELECT turns a seat's controls a quarter turn — once per frame
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < 5){
@@ -12450,7 +12526,16 @@ function step(w){
       const menu = deckMenuOwnsPad();
       if (p.ctrl==='human1') applyHumanInput(p, menu ? null : pads.p1);
       else if (p.ctrl==='human2') applyHumanInput(p, menu ? null : pads.p2);
-      else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null : gamepadPad(p.padIndex));
+      // ⚠️ THE KEYBOARD AND THE FIRST CONTROLLER DRIVE THE SAME PLAYER, at the same time.
+      // A pad taking seat one used to set `ctrl='gamepad'`, which silently took the
+      // keyboard away — so plugging a controller in meant losing the keys, and there was
+      // no way to use both. They are MERGED for that one seat now (see `mergePads`), which
+      // also removes the reason the keyboard had to stand down on a Steam Deck: the old
+      // hazard was arrow keys driving a DIFFERENT body from the stick, and there is only
+      // one body here.
+      else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null :
+        (p === firstHumanSeat(w) ? mergePads(gamepadPad(p.padIndex), pads.p1)
+                                 : gamepadPad(p.padIndex)));
       // Waiting bots don't play — they're stood off the touchline until the whistle.
       // ⚠️ `_subTo` suppresses the AI while a bot walks on through the gate — walkTo sets
       // the position directly, so a thinking bot would fight it and jitter on the touchline.
@@ -12559,6 +12644,30 @@ function ballSounds(w){
 }
 
 // ---------- Human input mapping from a pad
+// The seat the keyboard shares. ⚠️ The FIRST human in seat order, not `w.players[0]` —
+// the warm-up lobby can put you on either half, and a spectator match has no human at
+// index 0 at all.
+function firstHumanSeat(w){
+  if (!w || !w.players) return null;
+  for (const p of w.players) if (p.ctrl === 'gamepad' || p.ctrl === 'human1') return p;
+  return null;
+}
+// ⚠️ TWO INPUTS, ONE SEAT — the louder wins each axis and KICK is an OR, which is the same
+// idiom `padStick` already uses to combine a stick with its D-pad. Adding them instead
+// would make holding both directions travel at double speed, and preferring one would make
+// the other feel broken whenever the first was touched.
+function mergePads(a, b){
+  if (!a) return b; if (!b) return a;
+  const pick = (x, y) => Math.abs(y || 0) > Math.abs(x || 0) ? (y || 0) : (x || 0);
+  return {
+    dx: pick(a.dx, b.dx), dy: pick(a.dy, b.dy),
+    kick: !!(a.kick || b.kick),
+    // `invert` and the touch fields belong to whichever pad is actually being held; the
+    // keyboard has neither, so the controller's answer stands.
+    invert: a.invert || b.invert,
+    move: a.move || b.move,
+  };
+}
 function applyHumanInput(p, pad){
   if (!pad){ p.inX=0; p.inY=0; p.kick=false; return; }
   let ix = pad.dx, iy = pad.dy;
@@ -12713,12 +12822,33 @@ function gamepadPad(index){
 // set rather than "nothing": on a pad that reports a non-standard mapping an exact
 // index can point at a button that does not exist, and the kick then silently never
 // fires. A bound button is honoured exactly, because that is what binding is for.
+// Kept for the Controls screen's "these kick by default" hint and for the suites; the
+// live answer is `padKickHeld`, which now takes ANY button that is not Start, Select or
+// the D-pad. See the note there.
 const KICK_FALLBACK = [0, 2, 5, 7, 1];       // A, X, RB, RT, B under standard mapping
+// ⚠️ **EVERY BUTTON KICKS**, so there is nothing to learn and nothing to look up. A pad
+// that reports a non-standard mapping numbers its buttons however it likes, so any fixed
+// list is a guess — the old one (A, X, RB, RT, B under the standard mapping) landed on
+// whatever those indices happened to be, and on the wrong pad kicked with nothing at all.
+// "Press any button" cannot be wrong on any pad.
+// ⚠️ THREE EXCLUSIONS, and each is a button that already means something else:
+//   • START (9) begins the match;
+//   • SELECT (8) turns your controls a quarter turn — see pollSeatRotate;
+//   • the D-PAD (12-15) is a DIRECTION. It is a button as far as the API is concerned, so
+//     an unqualified "any button kicks" makes every step you take fire a shot, which is
+//     not what anybody means by simplifying the controls.
+// A button bound by hand in Controls still wins outright: that is a deliberate choice and
+// this is the default for people who have not made one.
+const KICK_NEVER = new Set([8, 9, 12, 13, 14, 15]);
 function padKickHeld(g){
   if (!g) return false;
   const k = (sel.pad || {}).kick;
   if (k != null) return btn(g, k);
-  for (const i of KICK_FALLBACK) if (btn(g, i)) return true;
+  const bs = g.buttons || [];
+  for (let i = 0; i < bs.length; i++){
+    if (KICK_NEVER.has(i)) continue;
+    if (btn(g, i)) return true;
+  }
   return false;
 }
 function btn(g,i){ const b=g.buttons[i]; return !!(b && (b.pressed || b.value>0.4)); }
@@ -13473,8 +13603,11 @@ function pollLobbyStart(w){
       // "the lobby ended before the ball could move".
       // Nobody is stranded by this: Select (8) is still bound, and `#lobbyStartBtn` is
       // on screen for the whole of warm-up whatever is connected.
+      // ⚠️ START ONLY. Select used to work here as well; it turns your controls a quarter
+      // turn now (see pollSeatRotate), and a button cannot be both "begin the match" and
+      // "I am standing the other way round".
       pressed = arcadeMode() ? arcadeStartHeld(p.padIndex)
-                             : !!(g && (btn(g, START_BTN) || btn(g, 8)));
+                             : !!(g && btn(g, START_BTN));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
@@ -16949,22 +17082,64 @@ function drawLobby(w){
       });
     });
   }
-  // --- Per-player prompt, floating above each human.
+  // --- Per-player prompt. Collected here, DRAWN OUTSIDE THE PITCH below (see the note).
+  const prompts = [];
   if (!L.calib) for (const p of hs){
-    const [sx, sy] = screenPt(wx(p.x), wy(p.y));
+    const [sx] = screenPt(wx(p.x), wy(p.y));
     const seat = hs.indexOf(p) + 1;
     const needCal = sel.display === 'cocktail' && !p.calibrated;
     const txt = needCal ? 'START = SET DIRECTIONS'
               : p === host ? 'START = KICK OFF'
               : L.ready.has(p) ? 'READY' : 'START = READY';
-    uprightAt(sx, sy - p.r*cam.s - 48, (x, y) => {          // above the name plate, not on it
-      ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      const wd = ctx.measureText(txt).width + 12;
-      ctx.fillStyle = T.nameBg; ctx.fillRect(x - wd/2, y - 8, wd, 16);
-      ctx.fillStyle = L.ready.has(p) ? readableInk(T.good || '#3ec06a', T.nameBg) : T.nameText;
-      ctx.fillText(txt, x, y);
-      ctx.font = `8px ${LOBBY_FONT}`; ctx.fillStyle = T.hudSub || T.nameText;
-      ctx.fillText('P' + seat, x, y - 16);
+    prompts.push({ p, seat, txt, sx, ready: L.ready.has(p) });
+  }
+  // ⚠️ **THE PROMPTS SIT OUTSIDE THE PITCH**, in one row under the touchline, rather than
+  // floating over each player's head. On the pitch they were text printed across the thing
+  // you are trying to look at — worst of all in deck/side view, where `uprightAt` keeps the
+  // words upright while the pitch is turned, so a label ran vertically down the middle of
+  // the field. Below the line they are a row of P1..P4 you read once and then ignore, and
+  // the pitch is just the pitch.
+  // ⚠️ Below the touchline, or ABOVE it if there is no room down there — a short window
+  // (a landscape phone) has the pitch nearly filling the canvas, and a row clamped to the
+  // bottom edge would sit on the on-screen controls.
+  if (prompts.length){
+    // ⚠️ Measured to the back of the NET, not to the goal line — the net pocket hangs
+    // below the touchline, and a row placed off the line alone sits on top of it.
+    const back = w.field.L/2 + (w.field.net || 0);
+    const [, pb] = screenPt(wx(0), wy(back));
+    const [, pt] = screenPt(wx(0), wy(-back));
+    const lo = Math.max(pb, pt), hi = Math.min(pb, pt);
+    // ⚠️ CLAMPED DOWNWARD, never flipped to the top. A first attempt moved the row above
+    // the pitch when it would not fit below — and the top is where the "PRESS START"
+    // headline lives, so on a tall pitch the two printed through each other. Sliding it up
+    // to the last few pixels of the canvas keeps it below the play in every case, which is
+    // the whole point of taking it off the pitch.
+    const y = Math.max(14, Math.min(lo + 22, ch - 14));
+    // Recorded so a suite can check WHERE this landed. A pixel probe cannot: the prompt
+    // plates and the players' NAME plates are the same colour, and the name plates are
+    // legitimately on the pitch, so counting plate-coloured pixels over the play measures
+    // the wrong feature (1,265 of them on a build where the prompts are plainly below).
+    L._promptY = y;
+    ctx.font = `9px ${LOBBY_FONT}`;
+    const widths = prompts.map(q => ctx.measureText(q.txt).width + 26);
+    const total = widths.reduce((a, b) => a + b, 0) + (prompts.length - 1) * 8;
+    let x = Math.max(6, cw/2 - total/2);
+    prompts.forEach((q, i) => {
+      const wd = widths[i];
+      ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      // ⚠️ `beginPath()` FIRST. `roundRectPath` only appends, so without it every plate
+      // stays in the path and each `fill()` repaints all the earlier ones — over the text
+      // already drawn in them. Four boxes came out with only the last one's words in it.
+      ctx.beginPath();
+      ctx.fillStyle = T.nameBg;
+      roundRectPath(x, y - 11, wd, 22, 6); ctx.fill();
+      ctx.fillStyle = T.hudSub || T.nameText;
+      ctx.font = `8px ${LOBBY_FONT}`;
+      ctx.fillText('P' + q.seat, x + 13, y);
+      ctx.fillStyle = q.ready ? readableInk(T.good || '#3ec06a', T.nameBg) : T.nameText;
+      ctx.font = `9px ${LOBBY_FONT}`;
+      ctx.fillText(q.txt, x + 20 + (wd - 26) / 2, y);
+      x += wd + 8;
     });
   }
   // --- The headline. One line, always the same place, so "what do I press?" is
@@ -16985,12 +17160,16 @@ function drawLobby(w){
     if (!cal && L.idle != null){
       ctx.font = `10px ${LOBBY_FONT}`;
       ctx.fillStyle = TH.hudSub || TH.hudText;
-      ctx.fillText('STARTING IN ' + Math.max(0, Math.ceil(L.idle)) + 'S', cw/2, y0 + 26);
+      ctx.fillText('STARTING IN ' + Math.max(0, Math.ceil(L.idle)) + 'S', cw/2, y0 + 24);
     }
+    // ⚠️ STACKED, not both at y0+2x. The countdown sat at +26 and this at +22 — four
+    // pixels apart, so whenever a second player was in the lobby the two lines were
+    // printed through each other and neither could be read.
     if (hs.length > 1){
       ctx.font = `9px ${LOBBY_FONT}`;
       ctx.fillStyle = TH.hudSub || TH.hudText;
-      ctx.fillText('STAND ON THE SIDE YOU WANT TO PLAY — BOTS FILL THE REST', cw/2, y0 + 22);
+      ctx.fillText('STAND ON THE SIDE YOU WANT TO PLAY — BOTS FILL THE REST', cw/2,
+                   y0 + (L.idle != null ? 40 : 24));
     }
   }
   // --- Calibration: ONE arrow at a time, with a ring that fills as it's held.
@@ -17061,7 +17240,8 @@ function drawPadFlairs(){
   const y = ch - debugFloor() - size;
   let x = cw - pad - size;
   for (let i = pads2.length - 1; i >= 0; i--){
-    const on = padAnyPressed(pads2[i]);
+    const idx = pads2[i];
+    const on = padAnyPressed(idx);
     if (on){
       ctx.fillStyle = TH.hudText || '#ffffff';
       ctx.globalAlpha = 0.92;
@@ -17071,7 +17251,21 @@ function drawPadFlairs(){
     const art = flairTinted(on ? '#000000' : (TH.hudText || '#ffffff'));
     if (art){
       ctx.globalAlpha = on ? 1 : 0.5;
-      ctx.drawImage(art, x, y, size, size);
+      // ⚠️ THE ICON TURNS WITH THE SEAT. This row is the only place the rotation is
+      // visible at all — the setting lives in `sel` and there is no other readout — so
+      // after pressing SELECT you can see which way the pad now thinks "up" is without
+      // walking to the pitch and testing it. Turned about its own centre, which is why
+      // the translate is to the middle of the tile rather than its corner.
+      const q = seatRotOf(idx);
+      if (q){
+        ctx.save();
+        ctx.translate(x + size/2, y + size/2);
+        ctx.rotate(q * Math.PI / 2);
+        ctx.drawImage(art, -size/2, -size/2, size, size);
+        ctx.restore();
+      } else {
+        ctx.drawImage(art, x, y, size, size);
+      }
       ctx.globalAlpha = 1;
     }
     x -= size + gap;
@@ -20533,12 +20727,13 @@ function keyboardDrivesGame(){
   // Leaving the ordinary keyboard seat live as well would give P1's stick to two players at
   // once — the seat it was assigned AND whoever holds human1.
   if (sel.display === 'arcade') return false;
-  // ⚠️ A DECK OR A COCKTAIL TABLE IS PLAYED WITH A PAD, so the keyboard seat stands down —
-  // but ONLY once a pad is actually connected, or taking it away leaves nothing driving the
-  // player at all. On a Steam Deck this matters twice over: Steam Input commonly sends the
-  // D-pad as ARROW KEYS, so leaving the keyboard live alongside the pad seat drives one
-  // player from the stick and another from the D-pad.
-  if (sel.display !== 'cocktail' && !isDeck()) return true;
+  // ⚠️ COCKTAIL only. A Steam Deck used to stand the keyboard down too, because Steam Input
+  // commonly sends the D-pad as ARROW KEYS and that drove one player from the stick and
+  // ANOTHER from the D-pad. That hazard is gone: the keyboard and the first controller are
+  // merged into one seat now (see `mergePads`), so both land on the same body and pressing
+  // either is simply the same player moving. Cocktail keeps standing down because there
+  // genuinely is no in-front-of-the-keyboard seat at a table people sit around.
+  if (sel.display !== 'cocktail') return true;
   return connectedGamepadIndices().length === 0;
 }
 const keys = {};
@@ -20593,7 +20788,7 @@ function drawControls(){
   // player (or a fully-controller match) gets no on-screen thumbstick.
   const hasP1 = world && world.players.some(p=>p.ctrl==='human1');
   const hasP2 = world && world.players.some(p=>p.ctrl==='human2');
-  if (hasP1) pollKeys();                 // keep keyboard live even without on-screen pads
+  // (the keyboard is polled once per frame in loop() — see the note there)
   // Desktop / cocktail: no touchscreen, so hide the on-screen thumbsticks entirely.
   if (!isTouchLayout()) return;
   if (hasP1){
@@ -21251,7 +21446,7 @@ if (window.__MAGNETDEBUG) {
     advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, padKickHeld, KICK_FALLBACK, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, padKickHeld, KICK_FALLBACK, KICK_NEVER, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
@@ -21298,7 +21493,7 @@ if (window.__MAGNETDEBUG) {
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
-    drawOneDisc, motionOK, prefersReducedMotion, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
+    drawOneDisc, motionOK, prefersReducedMotion, firstHumanSeat, mergePads, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
     get updFound(){ return updFound; }, get updSeen(){ return updSeen; },
     set updLast(v){ _updLast = v; },

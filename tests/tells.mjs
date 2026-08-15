@@ -117,6 +117,10 @@ const r = await p.evaluate(async ()=>{
     const g=(x0)=>{ const d2=c2.getImageData(x0, Math.round(sy*DPR)-R, R, R*2).data;
       let n=0; for(let i=0;i<d2.length;i+=4) if(d2[i]+d2[i+1]+d2[i+2]>330) n++; return n; };
     return [ g(Math.round(sx*DPR)-R), g(Math.round(sx*DPR)) ]; };
+  // ⚠️ Pinned, for the reason goalbox is: the wind-up ring is measured as BRIGHT ink over
+  // the pitch, and `grass` — the default now — is a light surface with mown stripes, so the
+  // probe's brightness threshold is met by the turf whether the ring is pulsing or not.
+  M.applyBundle('neon'); M.drawPitch(w);
   const series=[];
   for (let i=0;i<24;i++){ me.holdT += 1/60; M.drawPitch(w); M.drawDiscs(w); series.push(ringInk()); }
   o.ringLow = Math.min(...series); o.ringHigh = Math.max(...series);

@@ -32,7 +32,11 @@ const keyDrive = async () => {
     const M=window.__magnet, w=M.world, me=w.players.find(q=>q.ctrl==='human1');
     if (!me) return { moved:false, seatIsHuman:false };
     me.x=0; me.y=60; me.vx=0; me.vy=0;
-    for(let i=0;i<25;i++){ M.drawControls(); M.step(w); }
+    // ⚠️ `pollKeys()` explicitly. It used to be called from inside `drawControls`, so a
+    // loop of draws was enough to drive the keyboard — but only when a `human1` seat
+    // existed, which is exactly why a controller in seat one silently killed the keys. It
+    // now runs once per frame in `loop()`, which a synchronous harness has to stand in for.
+    for(let i=0;i<25;i++){ M.pollKeys(); M.drawControls(); M.step(w); }
     return { moved: Math.hypot(me.vx,me.vy) > 0.3, seatIsHuman:true, dy: me.y-60 };
   });
   await p.keyboard.up('ArrowUp');
@@ -41,7 +45,7 @@ const keyDrive = async () => {
 const spaceKicks = async () => {
   await p.keyboard.down('Space');
   const r = await p.evaluate(()=>{ const M=window.__magnet;
-    M.drawControls && M.drawControls(); return M.pads.p1.kick === true; });
+    M.pollKeys(); M.drawControls && M.drawControls(); return M.pads.p1.kick === true; });
   await p.keyboard.up('Space');
   return r;
 };

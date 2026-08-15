@@ -24,6 +24,12 @@ const r = await p.evaluate(async ()=>{
   const dist = (a,c) => Math.abs(a[0]-c[0])+Math.abs(a[1]-c[1])+Math.abs(a[2]-c[2]);
 
   const clear = () => {
+    // ⚠️ THE PALETTE IS PINNED, not inherited. This measures the goal box by sampling
+    // pixels, and the default palette is `grass` — whose MOWN STRIPES put ink inside the
+    // box region and read as "the box is filled rather than outlined". The suite was
+    // silently relying on the old `neon` default; a suite that samples pixels has to say
+    // which palette it is sampling.
+    M.applyBundle('neon');
     M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.setMatchSeed(3); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2;
     w.players.forEach(q=>{ q.x=620; q.y=620; q.vx=0; q.vy=0; });   // nothing on the pitch

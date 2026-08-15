@@ -200,7 +200,14 @@ await d.close();
 ok('a Steam Deck takes a pad seat with NO toggle', deck.takesSeats && deck.gotAPadSeat,
    JSON.stringify(deck) + ' — controllers is "' + deck.controllersSetting + '" here on purpose: a Deck is a controller and there is nothing else to play it with, so requiring the toggle left the stick dead until configured');
 ok('...and the stick drives that seat', deck.stickMoves, JSON.stringify(deck));
-ok('...with the keyboard stood down', deck.keyboardStandsDown,
+// ⚠️ THE KEYBOARD NO LONGER STANDS DOWN ON A DECK, and that reverses this check on
+// purpose. The old hazard was arrow keys (Steam Input commonly sends the D-pad as those)
+// driving a DIFFERENT body from the stick. The keyboard and the first controller are
+// merged into one seat now, so both land on the same player and pressing either is simply
+// that player moving — which is also what somebody holding a Deck actually wants.
+// Cocktail still stands it down, because a table people sit around genuinely has no
+// in-front-of-the-keyboard seat; `tests/cocktailkeys.mjs` holds that end.
+ok('...and the keyboard stays live, merged into the same seat', deck.keyboardStandsDown === false,
    'Steam Input commonly sends the D-pad as ARROW KEYS, so leaving the keyboard seat live drives one player from the stick and another from the D-pad');
 ok('...but back again with no pad connected', deck.keyboardBackWithNoPad,
    'a deck-layout window on a desktop would otherwise have nothing driving the player');

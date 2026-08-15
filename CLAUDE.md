@@ -96,6 +96,59 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **THE KEYBOARD AND THE FIRST CONTROLLER DRIVE ONE PLAYER** (`firstHumanSeat`,
+  `mergePads`). ⚠️ A pad taking seat one sets `ctrl = 'gamepad'`, which silently took the
+  keyboard away — and it was worse than that: `pollKeys()` was called from inside
+  `drawControls` behind `players.some(p => p.ctrl === 'human1')`, so with a pad in seat one
+  there was no `human1` on the pitch and **the keyboard was not read at all**. It is polled
+  once per frame in `loop()` now, which is where per-frame work belongs (reading input in a
+  draw is the trails smell).
+  ⚠️ **MERGED, not one-or-the-other**: the louder wins each axis and KICK is an OR, the same
+  idiom `padStick` uses for a stick and its D-pad. Adding them would make holding both
+  travel at double speed; preferring one makes the other feel broken.
+  ⚠️ **The FIRST human seat only.** The keyboard joining every pad seat would drive four
+  players with one keypress. And it is `firstHumanSeat(w)`, not `w.players[0]` — the lobby
+  can put you on either half.
+  ⚠️ This is why **the keyboard no longer stands down on a Steam Deck**: the old hazard was
+  Steam Input's arrow keys driving a DIFFERENT body from the stick, and there is only one
+  body now. Cocktail still stands it down — a table people sit around has no
+  in-front-of-the-keyboard seat.
+- **SELECT TURNS YOUR CONTROLS A QUARTER TURN** (`seatRotOf`, `bumpSeatRot`,
+  `pollSeatRotate`, `sel.seatRot`). Four people round one screen do not face the same way,
+  and the only previous answer was cocktail's calibration wizard — a mode you had to be in,
+  set once. ⚠️ **Per PAD, not per seat**: a pad is a person standing somewhere, and seats
+  are handed out in an order that changes with the mode and with who joined when.
+  ⚠️ **ADDED to the layout's own quarter-turn**, never replacing it — a deck in landscape
+  has already turned the pitch, and somebody at the side of it wants a turn on top of that.
+  ⚠️ **Kept in `sel`, so it survives the match**: standing yourself the right way round is
+  something you told the game about the ROOM.
+  ⚠️ **The bottom-right controller icon turns with it** (`drawPadFlairs`) — that row is the
+  only readout the feature has, so without it you press SELECT and have to walk to the
+  pitch to find out what it did.
+  ⚠️ Select is therefore **no longer an alternative START**. Start (9) still starts, and
+  `#lobbyStartBtn` is on screen throughout warm-up.
+- **EVERY BUTTON KICKS** (`padKickHeld`, `KICK_NEVER`) — nothing to learn, nothing to bind,
+  and it cannot be wrong on a pad that numbers its buttons oddly, which is what the old
+  fixed list (`KICK_FALLBACK`) risked. ⚠️ **Three exclusions, and the D-PAD is the one that
+  is easy to miss**: it is a button as far as the Gamepad API is concerned, so an
+  unqualified "any button kicks" fires a shot on every step you take. Start begins the
+  match and Select turns your controls. A hand binding still wins outright.
+- **The warm-up prompts are OFF THE PITCH**, in one row under the touchline (`drawLobby`,
+  `L._promptY`). They floated over each player's head, which in deck/side view meant a line
+  of text running down the middle of the field — `uprightAt` keeps words upright while the
+  pitch is turned. ⚠️ Measured to the back of the NET, not the goal line, or the row sits on
+  the pocket; and **clamped downward, never flipped to the top**, because the top is where
+  the "PRESS START" headline lives. ⚠️ `beginPath()` before each plate: `roundRectPath` only
+  appends, so without it every `fill()` repaints the earlier plates over their own text —
+  four boxes came out with only the last one's words in them.
+- **The default is a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
+  `grass`, `defaultProfile().flag` = `num1`). ⚠️ The first-run continent lineup is **not
+  applied any more** — it dressed a brand-new install in country flags, which is the
+  opposite of "players are numbered". `CONTINENTS` and `placedFlags` stay, because they are
+  what prove every `FLAGS` entry is reachable from the pickers.
+  ⚠️ Two suites were inheriting the old `neon` default rather than pinning a palette:
+  `goalbox` and `tells` both sample PIXELS, and grass's mown stripes put ink where they
+  were looking. A suite that samples pixels has to say which palette it is sampling.
 - **A CONNECTED CONTROLLER TAKES A SEAT, out of the box** (`sel.controllers`, default
   **`on`**). ⚠️ It shipped as `off`, and the failure was reported as *"4 controllers are not
   showing and can't join"*: four pads connected drew four controller icons, listed

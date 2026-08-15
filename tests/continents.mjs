@@ -64,71 +64,38 @@ const fresh = async () => {
     o.thinnest = Math.min(...M.CONTINENT_KEYS.map(k => M.CONTINENTS[k].keys.length));
     o.everyContinentCanFieldASide = o.thinnest >= biggest;
 
+    // ========================================================================
+    //  THE LINEUP IS NO LONGER APPLIED — a first match is NUMBERED
+    // ========================================================================
+    // ⚠️ This half of the suite used to assert the opposite: that a brand-new install
+    // fielded one continent against another, with every bot in a country flag. That is a
+    // nice first impression and it contradicts what a default is now asked to be — **a
+    // green pitch and numbered players**, which is what a reset gives back. The table
+    // checks above are KEPT, because `placedFlags()` is what proves every entry in
+    // `FLAGS` is reachable from the pickers, and that is worth having whether or not
+    // anything fields them automatically.
     o.firstRunSeen = M.isFirstRun();
-    // ⚠️ ONE SHOT. It fires on your first match and never again — not "every match
-    // until you change a setting", which would hand a player happy with the defaults a
-    // different team every time and break the guarantee that a bot's look is stable
-    // across a restart (`tests/botlook.mjs`).
-    M.sel.mode = '4v4'; M.setMatchSeed(77); M.startMatch();
-    o.consumedAfterOne = !M.isFirstRun();
-    const dressed = w => w.players.filter(q => q.ctrl === 'bot')
-      .every(q => M.CONTINENT_KEYS.some(c => M.CONTINENTS[c].keys.includes(q.flag)));
-    o.firstMatchDressed = dressed(M.world);
-    M.setMatchSeed(78); M.startMatch();
-    o.secondMatchPlain = !dressed(M.world);
-
-    // Twenty lineups, because it is a draw: one sample says nothing about "never the
-    // same continent against itself".
-    // ⚠️ The record is CLEARED between them, because the lineup is a ONE-SHOT — it
-    // fires on your first match and never again, so twenty `startMatch` calls in a row
-    // would dress the first and leave nineteen wearing shirt numbers. Clearing the key
-    // is simulating twenty different fresh devices, which is the population this draws
-    // from. (Getting this wrong is how the suite first crashed: it read a name off a
-    // flag that was never assigned.)
-    const continentOf = key => M.CONTINENT_KEYS.find(c => M.CONTINENTS[c].keys.includes(key));
-    const runs = [];
-    for (let i = 0; i < 20; i++){
-      localStorage.removeItem(M.FIRSTRUN_KEY);
-      M.sel.mode = '4v4'; M.setMatchSeed(i + 1); M.startMatch();
-      const w = M.world;
-      // ⚠️ BOTS ONLY. Your own seat keeps your profile — name, colour, flag, photo —
-      // because none of that is the game's to overwrite on your first match.
-      const side = t => w.players.filter(q => q.team === t && q.ctrl === 'bot');
-      const conts = t => [...new Set(side(t).map(q => continentOf(q.flag)))];
-      runs.push({
-        flags0: side(0).map(q => q.flag), flags1: side(1).map(q => q.flag),
-        names0: side(0).map(q => q.name),
-        c0: conts(0), c1: conts(1),
-      });
-    }
-    // ⚠️ ...and the human seat is measured too, so "leave the player alone" is a claim
-    // this suite makes rather than a comment in the source.
     localStorage.removeItem(M.FIRSTRUN_KEY);
+    M.sel.mode = '4v4'; M.setMatchSeed(77); M.startMatch();
+    const continentOf = key => M.CONTINENT_KEYS.find(c => M.CONTINENTS[c].keys.includes(key));
+    const bots = () => M.world.players.filter(q => q.ctrl === 'bot');
+    o.firstMatchNumbered = bots().every(q => /^num\d$/.test(q.flag));
+    o.firstMatchNoFlags  = bots().every(q => !continentOf(q.flag));
+    // ...and it stays that way on the next one, so this is the rule rather than a
+    // one-shot that happened to be spent.
+    M.setMatchSeed(78); M.startMatch();
+    o.secondMatchNumbered = bots().every(q => /^num\d$/.test(q.flag));
+    // ⚠️ Your own seat is still yours — name, colour, flag — which was true of the
+    // lineup too and has to stay true without it.
     M.profile.name = 'Ammar'; M.profile.flag = 'none';
     M.sel.mode = '4v4'; M.setMatchSeed(99); M.startMatch();
     {
-      const you = M.world.players.find(q => q.ctrl === 'human1');
+      const you = M.world.players.find(q => q.ctrl === 'human1' || q.ctrl === 'gamepad');
       o.yourName = you.name; o.yourFlag = you.flag;
       o.youAreLeftAlone = you.name === 'Ammar' && you.flag === 'none';
-      o.botsStillDressed = M.world.players.filter(q => q.ctrl === 'bot')
-        .every(q => !!continentOf(q.flag));
     }
-    o.oneContinentPerSide = runs.every(x => x.c0.length === 1 && x.c1.length === 1 &&
-                                            x.c0[0] && x.c1[0]);
-    o.neverSelfMatched = runs.every(x => x.c0[0] !== x.c1[0]);
-    o.noRepeatedCountry = runs.every(x => new Set(x.flags0).size === x.flags0.length &&
-                                          new Set(x.flags1).size === x.flags1.length);
-    // Names follow the flag, so the pitch reads as nations rather than P2/P3.
-    o.namesAreCountries = runs.every(x => x.names0.every((n, i) =>
-      n === M.FLAGS[x.flags0[i]].name));
-    // It genuinely varies — a "draw" that always returns the same pair is a constant.
-    o.distinctPairings = new Set(runs.map(x => [x.c0[0], x.c1[0]].sort().join('/'))).size;
-    o.varies = o.distinctPairings > 1;
-    o.sample = runs[0];
-    // On grass: the default surface, which this must not have disturbed.
+    // The default surface and the profile are untouched by any of this.
     o.pitch = M.sel.pitch;
-    // ...and NOTHING was written to the profile — a lineup is a match dressing, not a
-    // change to who you are.
     o.profileFlag = M.profile.flag;
     return o;
   });
@@ -141,25 +108,24 @@ const fresh = async () => {
   ok('every continent can field the biggest side the game plays', r.everyContinentCanFieldASide,
      `thinnest continent has ${r.thinnest}, biggest side is ${r.biggestSide}`);
   ok('a cleared device reads as a first run', r.firstRunSeen);
-  ok('the first match is dressed by continent', r.firstMatchDressed);
-  ok('...and it is a ONE SHOT — used up after that match', r.consumedAfterOne);
-  ok('...so the second match is back to shirt numbers', r.secondMatchPlain,
-     'the lineup fires every match, so no bot look is stable across a restart');
-  ok('each side is drawn from ONE continent', r.oneContinentPerSide, JSON.stringify(r.sample));
-  ok('a continent never plays itself', r.neverSelfMatched, JSON.stringify(r.sample));
-  ok('no country is fielded twice on a side', r.noRepeatedCountry, JSON.stringify(r.sample));
-  ok('names follow the flags', r.namesAreCountries, JSON.stringify(r.sample.names0));
-  ok('the pairing varies across matches', r.varies, `${r.distinctPairings} distinct pairings in 20`);
+  // ⚠️ These four used to assert the OPPOSITE — a first match dressed by continent. The
+  // lineup is not applied any more: a default is a green pitch and numbered players.
+  ok('a first match is NUMBERED, not flagged', r.firstMatchNumbered && r.firstMatchNoFlags,
+     'a brand-new install used to field one continent against another, which is the opposite of "players are numbered"');
+  ok('...and so is the next one', r.secondMatchNumbered,
+     'this is the rule now, not a one-shot that happened to be spent');
   ok('it is still on grass', r.pitch === 'normal', r.pitch);
   ok('YOUR seat keeps your own name and flag', r.youAreLeftAlone,
      `you came out as ${r.yourName} / ${r.yourFlag}`);
-  ok('...while the bots around you are still dressed', r.botsStillDressed);
-  ok('the profile is untouched', r.profileFlag !== r.sample.flags0[0] || r.profileFlag === 'none',
-     'profile.flag = ' + r.profileFlag);
+  ok('the profile is untouched', r.profileFlag === 'none', 'profile.flag = ' + r.profileFlag);
   await p.close();
 }
 
-// ---- 3. it stops the moment anything is changed -----------------------------
+// ---- 3. nothing dresses the bots, before or after a saved setting ----------
+// ⚠️ This block used to prove the first-run override STOPPED once you changed a setting.
+// There is no override any more, so what it proves now is the stronger version: bots wear
+// shirt numbers on a cleared device and after a saved setting alike. `isFirstRun` itself is
+// kept and still checked, because the mechanic is sound and something may want it again.
 {
   const p = await fresh();
   const r = await p.evaluate(() => {
@@ -168,30 +134,20 @@ const fresh = async () => {
     localStorage.removeItem(M.FIRSTRUN_KEY);
     M.sel.mode = '4v4'; M.setMatchSeed(4); M.startMatch();
     o.beforeFlags = M.world.players.filter(q => q.ctrl === 'bot').map(q => q.flag);
-    o.beforeDressed = o.beforeFlags.every(f => !!continentOf(f));
+    o.beforePlain = o.beforeFlags.every(f => !continentOf(f));
 
-    // The player changes ONE thing. This is the whole trigger.
     M.sel.diff = 'hard'; M.saveSel();
-    // ⚠️ Cleared FIRST, so what is being measured is the saved setting and not the
-    // one-shot having already been spent by the match above — two separate reasons
-    // for the override to stop, and this block is about the second one.
     localStorage.removeItem(M.FIRSTRUN_KEY);
     o.nowSaved = !M.isFirstRun();
 
     M.setMatchSeed(4); M.startMatch();
     o.afterFlags = M.world.players.filter(q => q.ctrl === 'bot').map(q => q.flag);
-    o.afterNames = M.world.players.filter(q => q.ctrl === 'bot').map(q => q.name);
-    o.afterDressed = o.afterFlags.every(f => !!continentOf(f));
-    // ⚠️ Asserted as "not every body is wearing a country", not as "the flags differ".
-    // Two draws differ from each other by chance alone, so a flags-differ check passes
-    // on a build where the override never stopped.
-    o.overrideStopped = !o.afterDressed;
+    o.afterPlain = o.afterFlags.every(f => !continentOf(f));
     return o;
   });
-  ok('the first run really is dressed by continent', r.beforeDressed, JSON.stringify(r.beforeFlags));
+  ok('a cleared device fields numbered bots', r.beforePlain, JSON.stringify(r.beforeFlags));
   ok('saving a setting ends the first run', r.nowSaved);
-  ok('...and the lineup stops being overridden', r.overrideStopped,
-     'still dressed by continent after the player changed a setting: ' + JSON.stringify(r.afterFlags));
+  ok('...and they are still numbered afterwards', r.afterPlain, JSON.stringify(r.afterFlags));
   await p.close();
 }
 
