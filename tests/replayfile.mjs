@@ -714,6 +714,12 @@ await p.close();
       for (let i=0;i<d.length;i+=4) if (d[i]+d[i+1]+d[i+2] > 150) n++;
       return n;
     };
+    // ⚠️ A DARK PALETTE, PINNED. `band()` counts pixels brighter than 150 summed across
+    // RGB, which on `grass` — the default now — is satisfied by the turf itself: both
+    // readings saturated at exactly 49,341 and the caption's own pixels vanished into
+    // them. The guard below caught it, which is what it is for. A suite that samples
+    // pixels has to say which palette it is sampling.
+    M.applyBundle('neon');
     const f = M.lastReplay.frames[Math.floor(M.lastReplay.frames.length/2)];
     const was = M.replay.controls;
     M.replay.controls = true;  M.drawReplayFrame(f); const chosen = band();

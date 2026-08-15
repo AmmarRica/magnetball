@@ -146,9 +146,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   applied any more** — it dressed a brand-new install in country flags, which is the
   opposite of "players are numbered". `CONTINENTS` and `placedFlags` stay, because they are
   what prove every `FLAGS` entry is reachable from the pickers.
-  ⚠️ Two suites were inheriting the old `neon` default rather than pinning a palette:
-  `goalbox` and `tells` both sample PIXELS, and grass's mown stripes put ink where they
-  were looking. A suite that samples pixels has to say which palette it is sampling.
+  ⚠️ **THREE suites were inheriting the old `neon` default rather than pinning a palette**,
+  and all three sample PIXELS: `goalbox` and `tells` (grass's mown stripes put ink where
+  they were looking) and `replayfile`, whose caption probe counts anything brighter than
+  150 summed across RGB — which a light green pitch satisfies on its own, so both readings
+  saturated at exactly **49,341** and the caption vanished into them. That one was caught
+  by the suite's OWN guard ("if the caption is off in both, the check below passes for the
+  wrong reason"), which is the argument for writing guards like it. **A suite that samples
+  pixels has to say which palette it is sampling.**
 - **A CONNECTED CONTROLLER TAKES A SEAT, out of the box** (`sel.controllers`, default
   **`on`**). ⚠️ It shipped as `off`, and the failure was reported as *"4 controllers are not
   showing and can't join"*: four pads connected drew four controller icons, listed
