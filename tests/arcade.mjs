@@ -66,7 +66,14 @@ const seats = await p.evaluate(() => {
   const M = window.__magnet, S = M.sel, o = {};
   // ⚠️ No gamepad is stubbed anywhere in this file. The point is that a cabinet needs none.
   o.realPads = ((navigator.getGamepads && navigator.getGamepads()) || []).filter(Boolean).length;
-  o.controllersSetting = S.controllers;          // left at its default, deliberately
+  // ⚠️ Controllers set to OFF **explicitly**, which is a sharper claim than the one this
+  // used to make. It relied on `sel.controllers` DEFAULTING to 'off' as its contrast, and
+  // that default has since flipped to 'on' — because four pads plugged into an ordinary
+  // desktop drew four icons and could not join. Leaning on a default meant this suite
+  // stopped testing anything the moment the default moved; setting it by hand says what
+  // was always meant: **the arcade layout hands out seats even with Controllers OFF**.
+  S.controllers = 'off';
+  o.controllersSetting = S.controllers;
   o.takesSeats = M.padsTakeSeats();
   o.indices = M.connectedGamepadIndices();
   o.keyboardStandsDown = M.keyboardDrivesGame() === false;
@@ -87,10 +94,14 @@ const seats = await p.evaluate(() => {
   o.botsFacing = M.world.players.filter(q => q.ctrl === 'bot').length;
 
   // The layout is what makes any of this true — with it off, nothing above holds.
+  // ⚠️ Controllers is still OFF here, which is what makes this a control: with it ON a
+  // plain desktop takes seats too (by design, since the four-controller fix), and this
+  // would be measuring that rather than the layout.
   S.display = 'auto';
   o.offAgain = { seats: M.padsTakeSeats(), idx: M.connectedGamepadIndices().length,
                  kbd: M.keyboardDrivesGame() };
   S.display = 'arcade';
+  S.controllers = 'on';
   return o;
 });
 

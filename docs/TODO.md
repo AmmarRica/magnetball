@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260814.0120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260814.0210AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -16,6 +16,33 @@ speed over process. This is the debt that created, plus the things that were off
 started. **Nothing here is a known bug** — the features were verified by hand (boot, play, ball
 containment on all 31 fields, every sound, every ball look / disc skin / animated field) — but
 none of it is *held* by anything, which in this repo is where regressions come from.
+
+### A-1. "4 controllers are not showing and can't join" — fixed
+Reported with a screenshot: four pads connected, four controller icons drawn bottom-right,
+"4 controllers detected" in the Input line, the warm-up lobby up, and nobody able to join.
+
+- [x] **`sel.controllers` defaulted to `off`**, and `padsTakeSeats()` is the only thing that
+  reads it. Every surface that could reassure a player said the controllers were there; the
+  one function deciding whether they play said no — so the fix was a setting whose existence
+  nothing on screen implies. ⚠️ **The same shape as the Steam Deck bug one layer up:** the
+  game could SEE the controller and still gave it nothing to drive. That one was fixed for
+  the Deck specifically and the general case was left standing, which is the lesson.
+- [x] Defaults to `on`. No third "auto" state, even though that is what it now means: a seat
+  is only ever handed out when a pad actually exists, so `on` and `auto` are identical and
+  the extra tile would be a distinction without a difference.
+- [x] `tests/fourpads.mjs`. ⚠️ "A seat exists" is not the claim — a seat driven by the wrong
+  pad, or four pads sharing one, looks identical from `w.players`, so every pad is pushed on
+  its own and has to move its own body and nobody else's. Two measurement traps recorded in
+  it: bots parked at 9e4 are dragged back onto the touchline by `integrate`'s clamp and can
+  land on a seat; and seats 100 units apart simply COLLIDE, which scored a tidy 65.1/14.7 on
+  all four pads and looks exactly like consistent cross-talk.
+- [x] **Three suites had been leaning on the old default rather than setting it.** `arcade`
+  used it as the contrast proving "the layout turns seats on, not the setting" — it sets
+  `controllers = 'off'` by hand now, which is the sharper claim it always meant. `padstick`
+  asserted "a plain desktop is untouched", which the fix deliberately reverses; what is
+  actually Deck-specific is the KEYBOARD standing down, so that is what it checks. And
+  `forceupdate` requires a release note to carry at least two lines, which caught a
+  changelog entry written as one.
 
 ### A0. What running the suite actually found — fixed
 The batch shipped without tests. Running them afterwards found **three real regressions**,

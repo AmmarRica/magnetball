@@ -181,9 +181,17 @@ const deck = await d.evaluate(() => {
   navigator.getGamepads = () => [];
   o.keyboardBackWithNoPad = M.keyboardDrivesGame() === true;
   navigator.getGamepads = () => [P];
-  // And a plain desktop is untouched.
+  // ⚠️ WHAT IS DECK-SPECIFIC IS THE KEYBOARD STANDING DOWN, not the seat.
+  // This used to assert that a plain desktop with a pad takes NO seat, as the contrast
+  // that made the Deck path special. That contrast is gone by design: four controllers
+  // plugged into an ordinary desktop drew four icons, said "4 controllers detected" and
+  // could not join, so a connected pad now takes a seat everywhere. What still separates
+  // a Deck is that the keyboard hands its seat over — Steam Input commonly sends the
+  // D-pad as ARROW KEYS, so leaving the keyboard live alongside the pad seat drives one
+  // player from the stick and another from the D-pad.
   M.sel.display = 'auto';
-  o.desktopUnchanged = M.padsTakeSeats() === false && M.keyboardDrivesGame() === true;
+  o.desktopTakesSeatsToo = M.padsTakeSeats() === true;
+  o.desktopKeepsKeyboard = M.keyboardDrivesGame() === true;
   return o;
 });
 await d.close();
@@ -196,7 +204,10 @@ ok('...with the keyboard stood down', deck.keyboardStandsDown,
    'Steam Input commonly sends the D-pad as ARROW KEYS, so leaving the keyboard seat live drives one player from the stick and another from the D-pad');
 ok('...but back again with no pad connected', deck.keyboardBackWithNoPad,
    'a deck-layout window on a desktop would otherwise have nothing driving the player');
-ok('a plain desktop is untouched', deck.desktopUnchanged, JSON.stringify(deck));
+ok('a plain desktop takes a pad seat too', deck.desktopTakesSeatsToo,
+   JSON.stringify(deck) + ' — a connected controller plays everywhere now; four of them on a desktop used to draw four icons, report "4 controllers detected" and drive nothing');
+ok('...but KEEPS its keyboard, which is what makes a Deck different', deck.desktopKeepsKeyboard,
+   'on a Deck the keyboard hands its seat over, because Steam Input commonly sends the D-pad as ARROW KEYS and leaving it live drives one player from the stick and another from the D-pad');
 
 ok('the pad takes a seat', r.gotASeat, JSON.stringify(r));
 ok('a NON-STANDARD pad still finds its stick', JSON.stringify(r.detected) === '[2,3]',
