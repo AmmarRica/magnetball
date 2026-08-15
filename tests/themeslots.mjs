@@ -111,23 +111,33 @@ const r = await p.evaluate(async ()=>{
   o.sfxThrew = threw;
 
   // ---- one state, two cards -------------------------------------------------
+  // ⚠️ The BALL half of this used to live here too, against the standalone Ball card.
+  // That card is gone: it held exactly one control and its own help text admitted it was
+  // the Theme card's Ball slot, so a second door onto one tile cost a card, a jump chip
+  // and a search row while giving a player two places to change one thing. The check that
+  // replaces it is that there is now exactly ONE place — a duplicate coming back is the
+  // regression, and `#slot_ball` still has to drive the slot on its own.
   M.applyBundle('neon');
   M.buildSettings();
   const ballTiles = sel => [...document.querySelectorAll(sel + ' .opt')];
   const idx = M.BALL_LOOK_KEYS.indexOf('eight');
   ballTiles('#slot_ball')[idx].click(); await wait(80);
   o.themeCardWrites = M.SLOTS.ball.get() === 'eight';
-  o.ballCardFollowed = ballTiles('#ballLookPick')[idx].classList.contains('sel');
-  // ...and the other way round.
-  const idx2 = M.BALL_LOOK_KEYS.indexOf('beach');
-  ballTiles('#ballLookPick')[idx2].click(); await wait(80);
-  o.ballCardWrites = M.SLOTS.ball.get() === 'beach';
-  o.themeCardFollowed = ballTiles('#slot_ball')[idx2].classList.contains('sel');
-  // Sound is shown twice too.
+  o.themeCardMarks = ballTiles('#slot_ball')[idx].classList.contains('sel');
+  o.noDuplicateBallCard = !document.getElementById('ballLookPick') &&
+                          !document.querySelector('.card[data-sec="ball"]');
+  // ...and the other way round, on the slot that IS still shown twice: Sound. The Sound
+  // card owns the categories one at a time and the Theme card shows the set, so this is
+  // the pairing that still has to stay in step.
   const sfxKeys = Object.keys(M.SFX_SETS), si = sfxKeys.indexOf('space');
   ballTiles('#sfxSetPick')[si].click(); await wait(80);
   o.sndCardWrites = M.sfxSetKey() === 'space';
   o.sfxSlotFollowed = ballTiles('#slot_sfx')[si].classList.contains('sel');
+  // ...and back the other way, so neither card is merely a mirror of the other.
+  const si2 = sfxKeys.indexOf('pinball');
+  ballTiles('#slot_sfx')[si2].click(); await wait(80);
+  o.sfxSlotWrites = M.sfxSetKey() === 'pinball';
+  o.sndCardFollowed = ballTiles('#sfxSetPick')[si2].classList.contains('sel');
 
   // ---- every option in every slot renders without throwing ------------------
   // Including the mixes a bundle would never produce — that's the whole point of
@@ -203,8 +213,11 @@ ok(r.setRestoresName, 'applying a set did not restore its name');
 ok(r.sfxCats === 'crowd,fulltime,kick,net,wall,whistle', `sound categories drifted: ${r.sfxCats}`);
 ok(r.setsCoverEveryCat, 'a sound set is missing a category, or names a variant with no sound/label');
 ok(r.sfxThrew.length === 0, `a set names a sound that throws: ${JSON.stringify(r.sfxThrew)}`);
-ok(r.themeCardWrites && r.ballCardFollowed, 'the Theme card ball slot did not move the Ball card');
-ok(r.ballCardWrites && r.themeCardFollowed, 'the Ball card did not move the Theme card slot');
+ok(r.themeCardWrites && r.themeCardMarks, 'the Theme card ball slot did not drive the ball look');
+ok(r.noDuplicateBallCard,
+   'a second Ball card is back — it held one control and its own help text admitted it was the Theme card\'s Ball slot, so it cost a card, a jump chip and a search row to give a player two places to change one thing');
+ok(r.sfxSlotWrites && r.sndCardFollowed,
+   'the Theme card sound slot did not move the Sound card — this is the pairing that IS still shown twice, so it is the one that has to stay in step');
 ok(r.sndCardWrites && r.sfxSlotFollowed, 'the Sound card set did not move the Theme card slot');
 ok(r.mixed.length === 0, `a slot option or mix failed to render: ${JSON.stringify(r.mixed)}`);
 ok(r.persists, `the slots were not saved: ${JSON.stringify(r.saved)}`);

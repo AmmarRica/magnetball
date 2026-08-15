@@ -17,7 +17,7 @@ started. **Nothing here is a known bug** — the features were verified by hand 
 containment on all 31 fields, every sound, every ball look / disc skin / animated field) — but
 none of it is *held* by anything, which in this repo is where regressions come from.
 
-### A0. What running the suite actually found — fixed, 96/96
+### A0. What running the suite actually found — fixed
 The batch shipped without tests. Running them afterwards found **three real regressions**,
 which is the argument for the rest of section A rather than an aside.
 
@@ -44,6 +44,15 @@ which is the argument for the rest of section A rather than an aside.
   counted circular pips, `menunav` still expected a Settings nav tile and five tab groups.
   Both updated; `icons` now measures the bar HEIGHTS, which is the actual claim, since
   counting filled marks passes on the pip build too.
+- [x] **Folding the Ball card broke three suites, and that was the right kind of failure.**
+  `audit`, `balllook` and `themeslots` all pointed at `#ballLookPick`, which no longer
+  exists. Repointed at `#slot_ball` — the one place now — and the assertions inverted where
+  they had to: `balllook` asserted the card EXISTS and now asserts it does not, and
+  `themeslots`' "one state, two cards" block lost its ball half (there is no second card to
+  drift from) and gained the reverse direction on the pairing that IS still shown twice,
+  Sound. ⚠️ Worth noting the shape: removing a duplicate makes every test of "the two agree"
+  vacuous, so each one has to be replaced with a test of the new invariant rather than
+  deleted.
 - [-] `ball3d` and `replayfile` failed only when the suite ran six-up: both carry timing
   assertions and were measuring CPU contention. They pass serially. Worth knowing before
   the parallel runner in section B lands — **it will need those two pinned or serialised.**

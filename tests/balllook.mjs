@@ -19,7 +19,13 @@ const r = await p.evaluate(async ()=>{
                     !document.getElementById('ballSkinPick') &&
                     !document.getElementById('playerSkinPick');
   o.noSkinSettings = M.sel.ballSkin === undefined && M.sel.playerSkin === undefined;
-  o.ballCardExists = !!document.querySelector('[data-sec="ball"]');
+  // ⚠️ There is NO standalone Ball card, and that is the assertion now. It held exactly
+  // one control — this picker — and its own help text admitted what it was ("the Ball slot
+  // of your Theme"), so it cost a card, a jump chip and a search row to give a player two
+  // places to change one thing with no way to tell which was authoritative. The Theme
+  // card's Ball pane (`#slot_ball`, exercised below) is the one place.
+  o.noSeparateBallCard = !document.querySelector('[data-sec="ball"]') &&
+                         !document.getElementById('ballLookPick');
   o.ballLookDefault = M.sel.look.ball === 'classic';
 
   // ---- Every look paints, and they all differ from one another
@@ -69,7 +75,7 @@ const r = await p.evaluate(async ()=>{
 
   // ---- The picker builds one tile per look, each painting a real ball
   M.buildBallLookPick(); await wait(60);
-  const tiles=[...document.querySelectorAll('#ballLookPick .opt')];
+  const tiles=[...document.querySelectorAll('#slot_ball .opt')];
   o.tileCount = tiles.length;
   o.oneTilePerLook = tiles.length === M.BALL_LOOK_KEYS.length;
   o.tilesArePainted = tiles.every(t=>{ const cv=t.querySelector('canvas'); if(!cv) return false;
@@ -120,7 +126,7 @@ const r = await p.evaluate(async ()=>{
   tiles[pick].click(); await wait(60);
   o.pickWrites = M.sel.look.ball === 'eight';
   o.pickPersists = (JSON.parse(localStorage.getItem('magnetball.sel')||'{}')).look.ball === 'eight';
-  o.pickMarksTile = [...document.querySelectorAll('#ballLookPick .opt')][pick].classList.contains('sel');
+  o.pickMarksTile = [...document.querySelectorAll('#slot_ball .opt')][pick].classList.contains('sel');
   return o;
 });
 
@@ -258,7 +264,7 @@ const skinFetches = requested.filter(u=>/assets\/(ball|player)\//.test(u));
 
 console.log(JSON.stringify({ ...r, ...r2, sheep, pitch, skinFetches }, null, 1));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const must = ['skinsCardGone','noSkinSettings','ballCardExists','ballLookDefault','allPaint',
+const must = ['skinsCardGone','noSkinSettings','noSeparateBallCard','ballLookDefault','allPaint',
   'allDistinct','plainIsStillABall','patternedDiffersFromPlain','staysInsideTheBall',
   'rotationChangesIt','plainIgnoresRotation','oneTilePerLook','tilesArePainted','noEmojiTiles',
   'noDisabledTiles','pickWrites','pickPersists','pickMarksTile','pitchShowsLook',
