@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260813.1120PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260814.0120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -48,19 +48,31 @@ which is the argument for the rest of section A rather than an aside.
   assertions and were measuring CPU contention. They pass serially. Worth knowing before
   the parallel runner in section B lands — **it will need those two pinned or serialised.**
 
-### A. Nine features shipped with no suite
+### A. Nine features shipped with no suite — ALL COVERED NOW
 Each of these has a written-down reason it is built the way it is (in `CLAUDE.md`), and no test
 enforcing it. Ranked by how quietly it would break.
 
-- [ ] **Map maker** (`tests/mapmaker.mjs`). The one that most needs it: a custom field is folded
+- [x] **Map maker** — `tests/mapmaker.mjs`. The one that most needed it: a custom field is folded
   into `FIELDS`, so a bug here reaches the picker, `buildGeometry`, all fourteen animated
   themes, drills, map votes and replay files. Must cover — the preview comes from
   `buildGeometry` and not a second drawing; `mapClean` clamps on the way IN; a delete drops
   `sel.field` to `classic` rather than handing `undefined` to `buildGeometry`; Play saves in
   place and keeps its key; `wallB` above 1.0 still contains the ball; the row is hidden on a
   phone and re-answered on resize; a `<` in a typed name cannot reach `innerHTML`.
-- [ ] **Bot types and strategies** (`tests/botplans.mjs`), and **retune them so a shape could
-  be the default**. They are opt-in right now precisely because the ladder broke — see A0.
+- [x] **Bot types and strategies** — `tests/botplans.mjs`, and they were retuned.
+  ⚠️ **The suite found two real faults and overturned a design claim.** (1) `influence` was
+  the axis causing oscillation; dropping it entirely and leaning harder on every other axis
+  measures **0.36** reversals against a ceiling of 0.5 — better margin than the shipped AI,
+  with types further apart than the version that broke. (2) **Counter inverted the ladder**
+  (Insane -5 against Rookie over twelve matches while every other shape ran +3 to +23),
+  because its chaser was a poacher: a high-skill bot chasing with a shot bias sees more
+  long-range shots and takes them, which is worse the better it is at finding them. The
+  chaser is a ball-winner now, which is also what the word means. (3) The claim that a plan
+  is "a shape, not a strength" is FALSE and was withdrawn — Park the bus finishes about +16
+  on goal difference against the stock AI and Counter about -9, the lever is `depth`, and
+  depth is also most of what makes a strategy a strategy, so the two cannot be separated by
+  tuning. What the suite pins instead is the invariant that matters: **the difficulty ladder
+  holds inside every plan.** The old ask — They are opt-in right now precisely because the ladder broke — see A0.
   ⚠️ The assertion that matters is the one the design exists for: **a type must not change
   strength**, and the second one is that it must not make bots oscillate (`botai` measures
   velocity reversals per bot per minute, ceiling 0.5; `influence` is the multiplier that
@@ -70,30 +82,30 @@ enforcing it. Ranked by how quietly it would break.
   rebuilt to make impossible. Also: `botTypeM` returns 1 (or 0) for a missing key rather than
   `undefined`; Mixed never deals both sides the same plan; the type is re-read when a role
   changes; `plan.press` does nothing while attacking.
-- [ ] **Hold to kick harder** (`tests/charge.mjs`). Six call sites were collapsed into
+- [x] **Hold to kick harder** — `tests/charge.mjs`, driving all six call sites. Six call sites were collapsed into
   `chargeMul`. ⚠️ The test has to drive all six — trap release, one-touch, snail boot, body
   check, and both draws — because "the switch works" is true of a build where five of them
   read it and the sixth kept charging invisibly.
-- [ ] **Names thin near the ball** (extend `tests/labels.mjs`). Measured in world units, so it
+- [x] **Names thin near the ball** — `tests/labels.mjs` extended. Measured in world units, so it
   must be checked on two very different courts; and it is a ramp, so sample it at several
   distances rather than just at the ball. ⚠️ `labels.mjs` was updated this session to drive
   `advanceLabels()` between draws instead of repeating the draw — a suite that settles the
   fade by re-rendering now settles nothing at all.
-- [ ] **Fireworks on the winning goal** (`tests/fireworks.mjs`). ⚠️ Must assert they do NOT run
+- [x] **Fireworks on the winning goal** — `tests/fireworks.mjs`. ⚠️ Must assert they do NOT run
   on an ordinary goal — "fireworks appeared" passes on a build that fires them every time.
   Also that they are spawned from the step loop (hash the world with them on and off) and
   that `resetKickoff` clears an unfinished show.
-- [ ] **Kickoff toss + touch-to-start** (extend `tests/kickoff.mjs`). The toss must reproduce
+- [x] **Kickoff toss + touch-to-start** — in `tests/fireworks.mjs` alongside the shells. The toss must reproduce
   from a pinned seed and must NOT consume from `w.rng` — assert the rest of the match is
   bit-identical with the toss forced either way. Touch-to-start needs a body walked onto the
   ball with KICK never pressed.
-- [ ] **Pinball sounds** (extend whichever suite covers `SFX`). The real trap is mechanical: a
+- [x] **Pinball sounds** — the index/length check lives in `tests/taptargets.mjs`'s Sound block. The real trap is mechanical: a
   variant inserted in the MIDDLE of an array shifts every index above it, so every other set's
   `pick` moves. Assert `SFX_LABELS[cat].length === SFX[cat].length` for every category and
   that no set's `pick` is out of range. (Verified by hand this session; not held.)
-- [ ] **Drills use the picked ball** (extend `tests/targetsdrill.mjs`). One line: start a drill
+- [x] **Drills use the picked ball** — covered by `tests/mapmaker.mjs`'s drill run. One line: start a drill
   with a non-default ball and compare the radius.
-- [ ] **Tonight's UX batch** (`tests/taptargets.mjs` + extend `tests/menunav.mjs`).
+- [x] **The UX batch** — `tests/taptargets.mjs`.
   ⚠️ Measuring a tap target is blocked by any modal over the page — the first probe this
   session read a 1px hit area because `elementFromPoint` was returning the Daily Reward card.
   A suite must dismiss it (or assert it is absent) first. Also: the Sound card's panes match
@@ -101,19 +113,30 @@ enforcing it. Ranked by how quietly it would break.
   `reducedMotion: 'reduce'` on fresh storage and the toggle still turns it back on.
 
 ### B. Offered and never started
-- [ ] **Parallel worker pool for `tests/run.mjs`.** The runner is strictly serial at ~8.9
-  minutes with more than half of that idle. Running the 96 suites six-up finishes in a
-  fraction of it — done ad hoc with `xargs -P 6` this session, so the shape is known; it just
-  needs to live in `run.mjs` with ordered output and a failure summary.
+- [x] **Parallel worker pool for `tests/run.mjs` — done.** 98 suites in **254s**, down from
+  ~535s serial. Output is printed in list order however the results arrive, so two runs
+  diff. `MB_JOBS=1` forces serial for reproducing a flake.
   ⚠️ **`ball3d` and `replayfile` must be pinned or serialised** — both carry timing
   assertions and both went red six-up while passing serially, which is a parallel runner
   that reports CPU contention as a bug.
-- [ ] **Menu layout, the rest of the recommendation.** Sound tabs are done. Still open: move
-  Replays / About / VJ / Online out of the settings accordion into More's nav grid, and fold
-  the Ball card into Theme (it is one slot the Theme card already shows).
+- [x] **Fold the Ball card into Theme — done.** It held exactly ONE control and its own
+  help text admitted what it was ("This is the Ball slot of your Theme, so changing it here
+  changes it there"). A second door onto one tile costs a card, a jump chip and a search
+  row, and gives a player two places to change one thing with no way to tell which is
+  authoritative.
+- [-] **Move Replays / About / VJ / Online into More's nav grid — NOT DOING, and the
+  recommendation is withdrawn rather than deferred.** It was made when the menu was a flat
+  list of long cards. Since then the accordion opens one card at a time and the sticky jump
+  bar navigates between them, which is the same "one thing at a time" the nav grid would
+  give — so the move now buys nothing and costs a second navigation concept for the same
+  content. It is also not a cheap change: `openSection`, `hideScreens`, `buildSettings`,
+  `menuSearchIndex`, `audit` and `showmode` all treat a `.card.collapsible` differently from
+  a `.screen`, so four cards would become four screens with six systems to teach about them.
+  Reopen it only if a card grows past a screenful again, which is the condition that made it
+  a good idea the first time.
 
 ### C. Environment / infra
-- [ ] **The suites cannot be run with a bare `node tests/run.mjs` here.** Playwright 1.62.1
+- [x] **A bare `node tests/run.mjs` works again.** Playwright 1.62.1
   wants chromium build 1234; `/opt/pw-browsers` has 1194. `tests/_browser.mjs` already has the
   escape hatch — `CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` — but nothing
   says so, and the failure reads as "run npx playwright install", which is wrong and will not

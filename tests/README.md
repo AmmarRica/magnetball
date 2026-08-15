@@ -16,6 +16,29 @@ node tests/run.mjs deck      # only suites matching "deck"
 node tests/deck.mjs          # a single suite
 ```
 
+The runner is **parallel** — each suite drives its own headless browser and then spends
+most of its life waiting on it, so a serial run leaves the machine idle. 98 suites take
+about **254s** six-up against ~535s one at a time. Output is printed in list order however
+the results arrive, so two runs diff cleanly.
+
+```bash
+MB_JOBS=1 node tests/run.mjs   # force serial, for reproducing a flake
+MB_JOBS=10 node tests/run.mjs  # a bigger box; every worker is a Chromium, so this is memory too
+```
+
+⚠️ **`ball3d` and `replayfile` are run LAST, alone.** Both assert on how long something
+takes ("a small ball costs less than a big one"), and under a full pool they measure CPU
+contention instead — both went red six-up and green serially, which is a runner reporting
+load as a bug. A new suite with a timing assertion belongs in that list in `run.mjs`.
+
+⚠️ **If a bare run dies with "Looks like Playwright was just installed or updated… run npx
+playwright install", nothing was installed.** Playwright pins a browser REVISION per
+release, so an upgrade — or a prebuilt image whose browsers were fetched by a different
+version — leaves it looking for a build that is not on disk, and behind a network policy
+that blocks the CDN the suggested command cannot work either. `_browser.mjs` now falls back
+to the newest chromium actually present under `PLAYWRIGHT_BROWSERS_PATH`; `CHROME_PATH`
+still overrides it.
+
 If you have a browser already on disk, point at it instead of downloading one:
 
 ## Three traps that bite every new suite
@@ -149,6 +172,11 @@ version, so it refreshes with it).
 | `matchend` | Full time eases play to a standstill before the result screen: the whistle goes and the state turns `over` at once (so nothing more can score) but the screen waits, per-250ms travel decays to under 15% of its peak and the sim is genuinely stopped once the screen is up; the result is two team panels reading players → score → awards, every player and ribbon under its own team, the winner marked, numbers equal to the tally; plus Warm-up reachable with the Match section collapsed and with no controller connected, and Reset look restoring the default profile live | Full time also has its **own** whistle — a progressive triple (BEE-BEE-BEEEEP) asserted by intercepting `Aud.tone`/`Aud.noise` on the exported `Aud` object rather than parsing source: exactly three separated blasts, short-short-long with the last 3× the first, gliding in pitch, fitting inside the wind-down, different from the kickoff peep, every variant audible, and every themed sound set naming one.
 | `smooth` | Movement reads the same on every screen: with the sim held to the same 120 steps, four different refresh rates give an identical ball streak, disc-dot count and shake/flash decay (with a per-frame-decay probe proving the suite can still see the old bug); mid-step the streak starts at the **drawn** ball rather than overshooting it to the sim position; and interpolation measurably smooths on-screen motion (judder 0.01 vs 2.0 raw, 1 frozen frame vs 168 at 144Hz)  ⚠️ **Blast Zone** adds three traps worth knowing. The silhouette ring must sit at **0.62r**: the KO star's points end at 0.86, so probing at 0.88 reads near-zero for the star *and* the bubble. The **player indicator had to become a rim arc** — a filled backing plate covers every probe angle and both sides measured 32/32, the rule defeated by the borrowed idea. And "the sky has stars" cannot be counted as bright pixels in the void: the nebula bloom alone reads 6,612 of them, so **emptying the star list still passed** — it is measured by diffing a paint against one with the star list empty, which was found by running that sabotage and watching a different assertion fail |
 | `botai` | Bot AI, all steps: seeded determinism and no `Math.random`; bots write **only** the fields a human's input writes; the oscillation limit cycle is gone; intercept converges and stays on the pitch; goalie/roles/formation slots are distinct and stable; lane checks, apertures and aim candidates behave; bank kicks land within 4 units mean using the **real** wall restitution and ball radius (21.5 for a naive mirror); bots follow the player's trap setting; the difficulty ladder is monotone on GOAL DIFFERENCE across two team sizes, checked both ways round with auto-replay off |
+| `mapmaker` | **Build your own field.** A custom field is just a `FIELDS` entry, so a bug here reaches the picker, `buildGeometry`, all fourteen animated themes, drills, map votes and replay files. Holds: the saved map IS a FIELDS entry; ⚠️ **the preview comes from `buildGeometry`**, checked by measuring the CORNER quadrant pixel-against-pixel — a rounded and a chamfered court remove almost the same AREA, so the first metric scored them 1 sample apart and a coverage count would call a hand-drawn preview correct; `mapClean` clamps on the way IN and a cleaned field still builds; a typed name cannot carry markup; the custom boards/net/posts reach the PHYSICS while a built-in court keeps the shipped values; a `wallB` above 1 still contains the ball; a delete drops `sel.field` to `classic`; an edit saves IN PLACE; desktop-only, hidden not disabled, re-answered on resize |
+| `botplans` | **Bot types and team strategies.** ⚠️ Pins the ABSENCE of an `influence` type axis — it drags a formation slot toward the ball, so bending it makes the target move fast and the bots oscillate (0.58 against `botai`'s ceiling of 0.5). ⚠️ The headline check is **the difficulty ladder holds INSIDE every plan**, not "no plan is stronger": that claim was measured and is false (Park the bus ≈ +16 on goal difference against the stock AI, Counter ≈ -9; the lever is `depth`, which is also most of what makes a strategy a strategy). Insane must beat Rookie under every shape, played BOTH WAYS ROUND — a mirror check written first scored plans at ±8 and was measuring which half of the pitch the seeds favoured. Also: a missing multiplier is 1 and never `undefined`; no ability axis; press applies only while defending; the type is re-read when a role changes; Mixed never deals a pair twice or deals `standard` |
+| `charge` | **Hold to kick harder.** ⚠️ Drives all SIX call sites that used to carry their own copy of the formula — trap release, one-touch, body check, snail boot and both draws — charged against uncharged, and then again with the switch OFF where the two must come out IDENTICAL. That second half is the one that catches a site still carrying a copy, because the charged-vs-uncharged comparison passes on that build too. Also: two controls not one (zero seconds would mean INSTANT full power); `chargeSecs()` clamps; the wind-up ring is gated on the switch; the wind-up is capped by the DIAL, measured in the sim |
+| `fireworks` | **The winning goal, the kickoff toss, and touch-to-start.** ⚠️ Fireworks must NOT run on an ordinary goal — "fireworks appeared" is true of the build this replaced — so the check is the DIFFERENCE between a 1-0 and the goal that wins it. ⚠️ The toss must take nothing out of `w.rng`: forced both ways on one seed, the rest of the world has to be bit-identical. ⚠️ Touch-to-start is driven with KICK never pressed, plus a control that standing away does not start it |
+| `taptargets` | **The UX batch.** ⚠️ Reach is PROBED outward from each control's centre, not read off CSS — `.infobtn`'s box is deliberately still 20px and the extra reach is an `::after` pad. ⚠️ **A modal over the page makes every target measure 1px**, because `elementFromPoint` returns whatever is on top; the daily-modal check is first in the file so a failure there explains the rest. Also: the info pad does not swallow its own click; the Sound panes match `SFX_CATS`; KICK OFF is above the fold at 844×390; the menu ships no dead controls and none in the search index; and reduced motion defaults quiet **while the toggle still turns it back on**, which is the half that matters |
 
 ## Writing a suite
 

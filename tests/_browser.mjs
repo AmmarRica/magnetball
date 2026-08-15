@@ -8,12 +8,40 @@
 const mod = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const pkg = await import(mod);
 export const chromium = (pkg.default ?? pkg).chromium;
+
+// ⚠️ FALL BACK TO WHATEVER CHROMIUM IS ACTUALLY INSTALLED. Playwright pins a browser
+// REVISION per release, so a Playwright upgrade — or a prebuilt image whose browsers were
+// fetched by a different version — leaves it looking for a build that is not on disk. The
+// failure it prints is "Looks like Playwright was just installed or updated… run npx
+// playwright install", which is misleading twice over: nothing was installed, and behind a
+// network policy that blocks the CDN the suggested command cannot work either. The suites
+// then look broken when the only problem is a version number.
+// CHROME_PATH still wins, because pinning a specific binary is a deliberate act.
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+function installedChromium(){
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (!root || !existsSync(root)) return null;
+  // Newest revision first, so a box with several keeps up to date rather than pinning old.
+  const dirs = readdirSync(root)
+    .filter(d => /^chromium(-\d+)?$/.test(d))
+    .sort((a, b) => (+(b.split('-')[1] || 0)) - (+(a.split('-')[1] || 0)));
+  for (const d of dirs){
+    for (const rel of ['chrome-linux/chrome', 'chrome-mac/Chromium.app/Contents/MacOS/Chromium',
+                       'chrome-win/chrome.exe']){
+      const p = join(root, d, rel);
+      if (existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+const FALLBACK = process.env.CHROME_PATH || installedChromium();
 // --allow-file-access-from-files: suites load the page over file:// and several
 // sample canvas pixels. Country-flag SVGs drawn from assets/ would otherwise taint
 // the canvas and make getImageData throw a SecurityError.
 export const LAUNCH = {
   args: ['--allow-file-access-from-files'],
-  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
+  ...(FALLBACK ? { executablePath: FALLBACK } : {}),
 };
 
 // Opening the Leaderboard makes a real cross-origin fetch to a public Google

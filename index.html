@@ -1450,7 +1450,7 @@
       <div style="height:14px"></div>
       <label class="field">Bot strategy</label>
       <div class="opts" id="botPlans"></div>
-      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. This is a <b>shape</b>, not a strength: picking one does not make the bots better or worse, only different to play against, and every strategy is available at every difficulty. <b>Standard</b> is the stock AI and the default, so <b>Difficulty</b> stays the thing that decides how hard a match is. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. Every strategy is available at every difficulty, and <b>Difficulty</b> still decides how good the bots are within whichever one you pick. The shapes are not all equally effective, though &mdash; the same as in the real game, a deep defensive side is hard to beat and an all-out attacking one leaves gaps &mdash; so treat this as picking an opponent, not a slider. <b>Standard</b> is the stock AI and the default. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
@@ -1704,12 +1704,13 @@
       <div class="hint" style="text-align:left; margin-top:4px">There's a ⛶ in the top bar mid-match too. <b>F11</b> works as usual.</div>
     </div>
 
-    <div class="card collapsible collapsed" data-sec="ball">
-      <h2>Ball</h2>
-      <label class="field">Look <small style="color:var(--muted);font-weight:400">(cosmetic only)</small></label>
-      <div class="opts tilewrap" id="ballLookPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Every ball is drawn, not an image, so it stays crisp at any size and rolls with real spin. Physics comes from <b>Match → Ball</b>, not from here. This is the Ball slot of your <b>Theme</b>, so changing it here changes it there.</div>
-    </div>
+<!-- ⚠️ THERE IS NO "Ball" CARD, and its absence is the point — the same argument that
+         removed the Settings nav tile. It held exactly ONE control, the ball-look picker,
+         and its own help text admitted what it was: "This is the Ball slot of your Theme,
+         so changing it here changes it there." A second door onto one tile costs a card in
+         the accordion, a chip in the jump bar and a row in the search index, and gives a
+         player two places to change one thing and no way to tell which is authoritative.
+         The Theme card's Ball pane is the one place now. -->
 
     <div class="card collapsible collapsed" data-sec="sound">
       <h2>Sound</h2>
@@ -3519,7 +3520,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260813.1120PM';
+const VERSION = '20260814.0120AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3535,6 +3536,16 @@ const VERSION = '20260813.1120PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260814.0120AM', title: 'Bot strategies, properly balanced',
+    added: [],
+    changed: [
+      '<b>Counter-attack plays like a counter-attack.</b> Its ball-winner was set up as a poacher, which made it the one strategy where a harder difficulty actually did <i>worse</i>. Every strategy now gets harder when you turn the difficulty up, which was the whole idea.',
+      '<b>The strategies read more distinctly</b> \u2014 poachers sit higher, playmakers find more room, terriers hound harder \u2014 and the bots stopped twitching while doing it.',
+      'The strategy picker no longer claims they are all equally strong. They are not, any more than in the real game: a deep defensive side is hard to beat and an all-out attacking one leaves gaps. Difficulty is still what decides how good the bots are.',
+      'Folded the one-control <b>Ball</b> card into <b>Theme</b>, where the same setting already lived.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260813.1120PM', title: 'Bot strategies are opt-in now',
     added: [],
     changed: [
@@ -7358,7 +7369,10 @@ function buildAnimalPicker(){ buildRecentRow('animalRecent','animal',ANIMAL_KEYS
                               buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
 // Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
 // pattern reads. No emoji, no image — what you see is what rolls.
-function buildBallLookPick(){ buildSlotPicker('ball', $('ballLookPick')); }
+// ⚠️ Guarded: the standalone Ball card is gone (see the markup), so this host may not
+// exist. It stays as a function because `/settings` and the theme rebuild both call it,
+// and a missing element is a no-op rather than a throw that takes the rebuild with it.
+function buildBallLookPick(){ const h = $('ballLookPick'); if (h) buildSlotPicker('ball', h); }
 // One tile strip for one theme slot, painted into whatever host is handed over —
 // the Theme card stacks all five, the Ball and Sound cards each show one of them
 // again. Same builder, same state, so a card can't drift from the theme.
@@ -15186,23 +15200,25 @@ const BOT = {
 // inside a personality, and a "Poacher" that is simply a worse player is a bug wearing
 // a name. What a type changes is where a body stands, how much space it keeps, how far
 // it will chase, and what it looks for when it kicks.
+// ⚠️ THAT IS NOT THE SAME AS "every plan is equally strong", and it was written down as
+// though it were. Measured (`tests/botplans.mjs`, each plan against the stock AI over
+// twelve matches with the sides swapped): Park the bus finishes about +16 on goal
+// difference and Counter about -9. The lever is `depth` — a body sitting deep defends
+// its own goal, which in this game simply wins more matches, and depth is also most of
+// what makes a strategy a strategy. So the two cannot be separated by tuning, and the
+// honest position is the football one: **strategies differ in effectiveness, and which
+// one is best depends on the opponent.** Neither the menu nor this comment claims
+// otherwise any more.
+// ⚠️ What IS guaranteed, and what the suite pins, is that **the difficulty ladder still
+// holds inside every plan**: a harder tier is still harder whatever shape is set. That is
+// the invariant that matters, because Difficulty is the control a player reaches for.
 //
-// ⚠️ NOT ON BY DEFAULT, and the reason is measured. `influence` drags a formation slot
-// toward the ball, so a big one makes the TARGET move fast — and a target that moves fast
-// is a bot that keeps changing direction. `tests/botai.mjs` counts exactly that (velocity
-// reversals per bot per minute, ceiling 0.5) and the first tuning pushed 4v4 to **0.50**,
-// right on the bar: the oscillation the whole approach-geometry section was rebuilt to
-// kill, arriving through a new door. Softening the multipliers fixed that and broke
-// `shapeBreathes` instead — the formation stopped responding to the phase at all — which
-// is two assertions being traded against each other by guessing at constants, which is
-// how this AI got broken twice before.
-// So `BOT_PLANS.standard` carries NO types, it is the default, and it reproduces the
-// shipped AI exactly. Everything below is a choice you make, not a change that arrives.
-// Tuning it properly needs a balance harness that measures both axes at once, in
-// daylight — see docs/TODO.md.
+// ⚠️ `BOT_PLANS.standard` carries NO types at all, is the DEFAULT, and reproduces the
+// shipped AI bit for bit. That is a product call rather than a technical one — picking
+// **Difficulty** has to stay the thing that decides how hard a match is, so a shape that
+// arrives on its own would make it mean less. Everything here is a choice you make.
 //
 // depth      × how far up the pitch its formation slot sits
-// influence  × how hard that slot is dragged toward the ball
 // space      × teammate repulsion (low = happy in a crowd, high = finds room)
 // chase      × how close the ball must be before an off-ball player commits to it
 // press      × how far out it will hunt a carrier
@@ -15210,18 +15226,28 @@ const BOT = {
 //              being unable to play the other one. Small on purpose: these compete
 //              with lane, progress and openness, and a big bias makes a bot shoot
 //              from its own half because it is "a poacher".
+// ⚠️ THERE IS NO `influence` MULTIPLIER HERE, and its absence is the most important line
+// in this table. `influence` drags a formation slot toward the ball, so bending it makes
+// the TARGET move fast — and a target that moves fast is a bot that keeps changing
+// direction. Measured on the real ladder (`tests/botai.mjs` counts velocity reversals per
+// bot per minute, ceiling 0.5): the first tuning bent it by up to ±30% and hit **0.58** at
+// 4v4, which is the oscillation the whole approach-geometry section was rebuilt to kill,
+// arriving through a new door. Dropping it entirely and leaning HARDER on every other axis
+// measures **0.36** — better margin than the shipped AI, with types that are further apart
+// than the version which broke. The differentiation lives in depth, space, chase, press
+// and the aim biases, all of which are free; the one axis that costs is simply not used.
 const BOT_TYPES = {
   allround: { name:'All-rounder', desc:'No lean either way' },
   poacher:  { name:'Poacher',     desc:'Lives high, shoots early',
-              depth:1.22, influence:0.85, space:1.25, chase:0.9,  press:0.7, shot:+0.16, pass:-0.06 },
+              depth:1.30, space:1.30, chase:0.9,  press:0.7, shot:+0.16, pass:-0.06 },
   playmaker:{ name:'Playmaker',   desc:'Finds room, looks for the pass',
-              depth:1.05, influence:0.80, space:1.35, chase:1.0,  press:0.9, shot:-0.10, pass:+0.16 },
+              depth:1.05, space:1.45, chase:1.0,  press:0.9, shot:-0.10, pass:+0.16 },
   anchor:   { name:'Anchor',      desc:'Sits deep, clears its lines',
-              depth:0.72, influence:1.15, space:0.90, chase:0.85, press:0.8, shot:-0.12, pass:+0.06 },
+              depth:0.62, space:0.90, chase:0.8,  press:0.8, shot:-0.12, pass:+0.06 },
   sweeper:  { name:'Sweeper',     desc:'Covers the space behind',
-              depth:0.82, influence:1.30, space:1.10, chase:1.3,  press:1.1, shot:-0.08, pass:+0.10 },
+              depth:0.78, space:1.10, chase:1.45, press:1.1, shot:-0.08, pass:+0.10 },
   terrier:  { name:'Terrier',     desc:'Hounds whoever has it',
-              depth:1.02, influence:1.25, space:0.72, chase:1.6,  press:1.6, shot:-0.02, pass:+0.02 },
+              depth:1.02, space:0.72, chase:1.8,  press:1.8, shot:-0.02, pass:+0.02 },
 };
 const BOT_TYPE_KEYS = Object.keys(BOT_TYPES);
 // A PLAN is a team-level shape: a line height, a global press, and which type each
@@ -15248,9 +15274,16 @@ const BOT_PLANS = {
   bus:      { name:'Park the bus', desc:'Deep, narrow, hard to break down', emoji:'🚌', icon:'wall',
               line:0.72, press:0.75,
               roles:{ chaser:'terrier', support:'anchor', defender:'anchor', goalie:'anchor' } },
+  // ⚠️ The CHASER is not the poacher, and that is both the meaning of the word and a
+  // measured fix. A counter-attacking side wins the ball FIRST and breaks afterwards, so
+  // the body going for it is a ball-winner and the poacher is the one ahead of the play.
+  // Written the other way round it was the one plan that INVERTED the difficulty ladder
+  // (Insane finished -5 against Rookie over twelve matches while every other shape ran
+  // +3 to +23): a high-skill bot chasing with a shot bias and a high line sees more
+  // long-range shots and takes them, which is worse the better it is at finding them.
   counter:  { name:'Counter', desc:'Sit off, then break at speed', emoji:'🏹', icon:'bolt',
               line:0.86, press:0.80,
-              roles:{ chaser:'poacher', support:'playmaker', defender:'anchor', goalie:'anchor' } },
+              roles:{ chaser:'sweeper', support:'poacher', defender:'anchor', goalie:'anchor' } },
   press:    { name:'High press', desc:'Hunt it back the moment it is lost', emoji:'🔥', icon:'run',
               line:1.14, press:1.55,
               roles:{ chaser:'terrier', support:'terrier', defender:'sweeper', goalie:'anchor' } },
@@ -15780,7 +15813,7 @@ function botFormationSpot(w, p, phase){
   // has it, so a high-press team collapses onto the carrier and a bus sits off and
   // keeps its shape — and when they are attacking, both look like themselves again.
   const press = phase === 'defend' ? botPlanOf(w, p.team).press * botTypeM(p, 'press') : 1;
-  const infl  = clamp(BOT.ballInfluence[role] * botTypeM(p, 'influence') * press, 0.05, 0.92);
+  const infl  = clamp(BOT.ballInfluence[role] * press, 0.05, 0.92);
   const baseY = -attackDir*halfL + attackDir * (2*halfL) * clamp(depth, 0.04, 0.94);
   const baseX = lane * halfW * BOT.slotSpread;
   return { x: clamp(baseX*(1-infl) + ball.x*infl, -halfW+p.r+6, halfW-p.r-6),
@@ -21236,14 +21269,14 @@ if (window.__MAGNETDEBUG) {
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
     pollDropIn, dropInBlocked, dropOut, padSeatOrder, padsTakeSeats, DROPIN,
-    MAPMAKER, mapsPossible, mapClean, openMapMaker, buildMapMaker, mapStore, drawMapPreview,
+    MAPMAKER, POST, mapsPossible, mapClean, openMapMaker, buildMapMaker, mapStore, drawMapPreview,
     get maps(){ return maps; }, get mapEdit(){ return mapEdit; }, set mapEdit(v){ mapEdit = v; },
     get mapEditKey(){ return mapEditKey; }, set mapEditKey(v){ mapEditKey = v; },
     loadMaps, saveMaps, applyMaps,
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
-    motionOK, prefersReducedMotion, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
+    drawOneDisc, motionOK, prefersReducedMotion, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
     get updFound(){ return updFound; }, get updSeen(){ return updSeen; },
     set updLast(v){ _updLast = v; },

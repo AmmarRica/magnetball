@@ -863,13 +863,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   up top" stays expressible, which is most of what a plan is for. `plan.press` applies
   **only while defending**, which is what makes it a press rather than a second
   line-height dial.
-  ⚠️ **NOT ON BY DEFAULT.** `BOT_PLANS.standard` carries no types at all, is the default,
-  and reproduces the shipped AI bit for bit. Measured: `influence` drags a formation slot
-  toward the ball, so a big multiplier makes the TARGET move fast, and a fast-moving target
-  is a bot that keeps changing direction — `tests/botai.mjs` counts exactly that (velocity
-  reversals per bot per minute, ceiling 0.5) and the first tuning hit **0.50** at 4v4.
-  Softening the multipliers cleared it and broke `shapeBreathes` instead. Depth, chase and
-  press are safe to lean on hard; `influence` is not.
+  ⚠️ **THERE IS NO `influence` AXIS**, and its absence is the most important line in the
+  table. It drags a formation slot toward the ball, so bending it makes the TARGET move
+  fast, and a fast-moving target is a bot that keeps changing direction — `tests/botai.mjs`
+  counts exactly that (velocity reversals per bot per minute, ceiling 0.5) and the first
+  tuning hit **0.58** at 4v4. Dropping it entirely and leaning HARDER on every other axis
+  measures **0.36**: better margin than the shipped AI, with types further apart than the
+  version that broke. Depth, space, chase, press and the aim biases are free; that one is not.
+  ⚠️ **A PLAN IS NOT STRENGTH-NEUTRAL, and the claim that it was has been withdrawn.**
+  Measured (`tests/botplans.mjs`, each plan against the stock AI over twelve matches with
+  the sides swapped): Park the bus finishes about **+16** on goal difference and Counter
+  about **-9**. The lever is `depth` — a body sitting deep defends its own goal, which
+  simply wins more matches — and depth is also most of what makes a strategy a strategy, so
+  the two cannot be separated by tuning. The menu says so now: strategies differ in
+  effectiveness, the same as in the real game.
+  ⚠️ **What IS guaranteed is that the DIFFICULTY LADDER HOLDS INSIDE EVERY PLAN**, and that
+  is what the suite pins. It caught a real inversion: Counter's chaser was a poacher, and a
+  high-skill bot chasing with a shot bias sees more long-range shots and takes them — worse
+  the better it is at finding them — so Insane finished **-5** against Rookie under that
+  shape while every other one ran +3 to +23. The chaser is a ball-winner now, which is also
+  what "counter-attack" means.
+  ⚠️ **`standard` is the DEFAULT**, carries no types at all, and reproduces the shipped AI
+  bit for bit — a product call, so that picking **Difficulty** stays the thing that decides
+  how hard a match is.
   ⚠️ **Mixed excludes `standard`** — it is the "leave the AI alone" entry, so dealing it as
   one of the shapes would make Mixed sometimes mean no shape at all.
   ⚠️ **Mixed draws BOTH sides from one call** (`botDrawPlans`), second from what is left —
@@ -1568,6 +1584,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `SUBTABS` is a top-level `const` whose initialiser runs immediately, so reading it from its
   old home 3,000 lines below put it in the temporal dead zone and took the page out on boot.
   **THIRTEENTH TDZ bite in this file.**
+- **There is NO "Ball" card**, for the reason there is no Settings tile: it held exactly
+  one control — the ball-look picker — and its own help text admitted what it was ("This is
+  the Ball slot of your Theme, so changing it here changes it there"). A second door onto
+  one tile costs a card, a jump chip and a search row, and leaves a player two places to
+  change one thing with no way to tell which is authoritative. `buildBallLookPick` is
+  guarded, because `/settings` still calls it.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
@@ -1936,7 +1958,8 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 96 suites; `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 98 suites IN PARALLEL (254s, against ~535s serial; `MB_JOBS=1`
+forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
