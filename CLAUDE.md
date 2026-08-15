@@ -96,6 +96,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   undo a deliberate choice. `tests/padkick.mjs`.
   ⚠️ It reads the pad every step, so setting `p.kick`/`p.inX` directly in a test gets overwritten —
   drive `pads.p1` or call `handleBallControl` instead.
+- **A CONNECTED CONTROLLER TAKES A SEAT, out of the box** (`sel.controllers`, default
+  **`on`**). ⚠️ It shipped as `off`, and the failure was reported as *"4 controllers are not
+  showing and can't join"*: four pads connected drew four controller icons, listed
+  themselves in the Input hint as "4 controllers detected", brought up the warm-up lobby —
+  and handed out **zero seats**, because `padsTakeSeats()` is the only thing that reads this
+  and every other surface reads something else. The player is then hunting for a setting
+  whose existence nothing on screen implies. **Same shape as the Steam Deck bug one layer
+  up: the game could SEE the controller and still gave it nothing to drive.**
+  ⚠️ There is deliberately **no third "auto" state**, even though `on` now means exactly
+  that: a seat is only ever handed out when a pad actually exists (`startMatch` breaks out
+  of the seat loop the moment it runs out of pads), so `on` and an `auto` would behave
+  identically and the extra tile would be a distinction without a difference. `off`
+  ("Touch") stays a real answer — a phone player with a stray Bluetooth pad, or somebody who
+  prefers the keyboard with a controller plugged in.
+  ⚠️ `tests/fourpads.mjs` asserts what "it works" actually means: not that a seat exists,
+  but that **each pad moves its own body and nobody else's** — a seat driven by the wrong
+  pad, or four pads sharing one, looks identical from `w.players`. Two measurement traps
+  are recorded there: bots parked at 9e4 are dragged back onto the touchline by
+  `integrate`'s clamp and can land on a seat, and seats spaced 100 units apart simply
+  COLLIDE (a tidy 65.1/14.7 on all four pads looks like consistent cross-talk and is
+  physics).
 - **A STEAM DECK IS A CONTROLLER, so it takes a pad seat untold** (`padsTakeSeats`,
   `keyboardDrivesGame`). ⚠️ This is what was actually wrong when "the joystick does nothing on
   Steam Deck" was reported — not the axis numbering below it. `padsTakeSeats()` listed

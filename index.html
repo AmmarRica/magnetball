@@ -3103,9 +3103,22 @@ const CB    = { off:{ name:'Off', emoji:'🎨' }, on:{ name:'On', emoji:'🔶' }
 // Extra human seats are filled by connected gamepads when this is on, spread
 // across both teams (you → opponent → teammate → …) so N controllers give
 // N humans; the rest are bots. Groundwork for full 4v4-with-controllers.
+// ⚠️ **DEFAULTS TO `on`, AND THAT IS THE FIX FOR "my controllers cannot join".** It shipped
+// as `off`, so a desktop with four pads plugged in showed four controller icons, listed
+// them in the Input hint, drew the warm-up lobby — and handed out ZERO seats, because
+// `padsTakeSeats()` reads this and every one of those surfaces reads something else. The
+// player is then hunting for a setting whose existence nothing on screen implies.
+// ⚠️ There is deliberately no third "auto" state, even though that is what this now means:
+// a seat is only ever handed out when a pad actually exists (`startMatch` breaks out of the
+// loop the moment it runs out of pads), so `on` and an `auto` would behave identically and
+// the extra tile would be a distinction without a difference. `off` stays a real answer —
+// it is what a phone player with a stray Bluetooth pad wants, and what somebody who prefers
+// the keyboard with a controller plugged in wants.
+// ⚠️ Same shape of bug as the Steam Deck one, one layer up: the game could SEE the
+// controller and still gave it nothing to drive.
 const CONTROLLERS = {
-  off: { name:'Touch',       emoji:'📱' },
   on:  { name:'Controllers', emoji:'🎮' },
+  off: { name:'Touch',       emoji:'📱' },
 };
 // Where extra controllers sit: against you, or alongside you (N humans vs N AI).
 const COOP = {
@@ -3520,7 +3533,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260814.0120AM';
+const VERSION = '20260814.0210AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3536,6 +3549,13 @@ const VERSION = '20260814.0120AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260814.0210AM', title: 'Controllers just work now',
+    added: [],
+    changed: [
+      '<b>Plug a controller in and it plays.</b> Up to four of them, with no setting to find first. They showed up in the menu, they were counted in the Input line, they even brought up the warm-up lobby &mdash; and then none of them could actually join, because controllers were switched off by default. If you want them ignored (a phone with a stray Bluetooth pad, or you prefer the keyboard), <b>Match &rarr; Players &rarr; Input</b> still has a Touch option.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260814.0120AM', title: 'Bot strategies, properly balanced',
     added: [],
     changed: [
@@ -3875,7 +3895,7 @@ const CHANGELOG = [
 // stops either way, so nothing about the save, the presets or the physics changes — but
 // "45" told a player nothing, while "4.5" is a number you can aim at.
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'off', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
