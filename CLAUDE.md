@@ -1240,6 +1240,60 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Bots may write **only** `inX/inY/faceX/faceY/kick` and their own `ai*` scratch fields; the
   kick impulse runs along player→ball, so a bot aims by *where it stands*, not by facing.
   `tests/botai.mjs` enforces both by diffing the whole player object.
+- **A BALL AT REST ON THE BOARDS USED TO FREEZE THE CHASER FOR EVER** (`BOT.stuckTicks`,
+  `stuckMove`, `escapeTicks`, `botWallTangent`, `p.aiStuckT`/`aiEscapeT`).
+  ⚠️ **A DEAD END, not a hiccup**, and that is the whole design of the fix. The strike
+  waypoint is `ball - aim*standR`; for a ball on a touchline with the aim pointing at a
+  goal, that spot is **off the pitch**, so `runBot`'s target clamp drags it back to a
+  point the bot is already standing on. `botArrive` then reports "arrived" and writes a
+  **zero stick**, while `align` (0.66 measured) never reaches `strikeEnter` (0.85), so it
+  cannot commit either. Measured: **23 of 28** resting places round the boundary froze the
+  chaser for 877 of 900 steps with the ball untouched.
+  ⚠️ **RANDOMNESS IS THE WRONG FIX, and it was asked about directly.** The bot sits in a
+  stable equilibrium — a nudge is walked straight back out of — so a jitter makes the
+  freeze intermittent rather than gone, and intermittent is the version nobody can test.
+  Everything here is counted, never rolled.
+  ⚠️ **ONE MECHANISM: while stuck, the aim becomes the WALL'S TANGENT.** Everything
+  downstream is already right once the aim is reachable — the waypoint slides along the
+  boundary back inside the pitch, `align` reaches the threshold, the state machine commits
+  and the ordinary kick fires with **every guard intact**. A first attempt drove *through*
+  the ball with the own-goal guard switched off; it freed all 28 and put one in its own
+  net.
+  ⚠️ **`botWallTangent` is purely geometric and ignores which way the bot attacks.** Two
+  earlier versions did not: "up-field along the touchline" drives the ball INTO the end
+  wall when it is already resting on the attacking end, and "out along the goal line" only
+  wedges it further into a corner. The wall it is stuck on decides the AXIS; the direction
+  is away from the nearer end of that axis. ⚠️ On a goal line it runs **out**, never in:
+  inside the mouth's width nothing holds the ball on the line any more, and pushing it
+  sideways in there walks it into the net — seven own goals in the sweep when it pointed
+  the other way.
+  ⚠️ **LATCHED (`escapeTicks`), and without that the fix does not work at all.** The
+  escape makes the bot walk round the ball, and walking is movement — an un-latched flag
+  clears on the first step, the aim snaps back and the bot returns to the clamped point.
+  Measured as a limit cycle: 16 of 28 never freed, *worse* than the build before it. Two
+  thresholds, never one — the same rule `strikeEnter`/`strikeExit` follow.
+  ⚠️ **The escape target is EXEMPT from the clamp**, which is the same clamp that built
+  the dead end. It also aims the shot: lining up to shove a ball along its own goal line
+  needs the bot LEVEL with it, and clamped 8 units up-field the kick (which fires along
+  player→ball) picks up a backward component and scores. `integrate` still holds every
+  body to bounds+20, so nothing leaves the view.
+  ⚠️ **ARMED ON THE DEAD END ITSELF** — "the strike waypoint is outside the box the
+  target gets clamped into" — never merely on "nothing is moving", so it cannot fire in
+  open play at all.
+  ⚠️ **AND NOT IN KILLER QUEEN**, which is a scope boundary rather than a bug dodged.
+  That mode's balance is a measured proportion over eight seeded matches — how often a
+  full hive rather than the ball decides it — and it turns on how much the ball is knocked
+  about, because a loose ball bumps the floaty berries goalward. A chaser working balls
+  off the boards changes exactly that: **5 of 8** matches ended on a hive against a ceiling
+  of 4, and **7 of 8** with only the aim override and no kick at all — so it is the CHANGE
+  the mode cannot take, not the kick. A frozen chaser costs far less there, where the
+  berries and the snail give every bot other work.
+  ⚠️ **A CORNER has no answer but the kick** — pushing along either wall needs the bot
+  standing outside the other one, so no standoff point exists at all. It belts it and lets
+  it come back off the boards (`wallB` 0.9), guarded on the **own goal mouth**, which is
+  the one place that must never fire. `tests/botstuck.mjs`, whose metric is **time to free
+  the ball** and never "the bot stood still" — after the fix a bot stands still plenty,
+  because that is football.
 - **Determinism:** the bar is **same-engine reproducibility** and the audit is CLOSED at it
   (`docs/DETERMINISM-AUDIT.md`) — a pinned seed reproduces a match bit-exactly in one browser;
   cross-engine equality is explicitly not a goal, so the fixed-point work is parked. What still

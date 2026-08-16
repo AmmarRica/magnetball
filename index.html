@@ -3601,7 +3601,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0719PM';
+const VERSION = '20260816.0838PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3617,6 +3617,13 @@ const VERSION = '20260816.0719PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0838PM', title: 'Bots no longer freeze on a loose ball',
+    added: [],
+    changed: [
+      '<b>A ball resting against the boards no longer stops a bot dead.</b> If the ball came to rest on a line or in a corner, the bot chasing it could stand and stare at it for the rest of the match. It now notices that nothing is happening and goes and shifts the ball along the boards, the way you would.',
+      'It will not do that inside its own goal mouth, so it cannot bundle the ball into its own net getting out of trouble.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0719PM', title: 'Carry your game to another device',
     added: [
       '<b>Export and import your whole game as one file.</b> About \u2192 Move this game to another device writes a <b>.json</b> holding every setting including Game Feel, your player, your record and unlocks, custom maps, drill times and a run in progress. Import it on the other device and it takes over. Saved replays and your photo library are too big to travel; the photo you are wearing does.',
@@ -15842,6 +15849,35 @@ const BOT = {
   carryMax: 40,              // ...and never carry longer than this (ticks)
   windup: 16,                // start holding KICK this far out, so a trap has time to arm
 
+  // --- The stalemate breaker. ⚠️ A ball resting against the boards is a DEAD END, not a
+  // hiccup: the strike waypoint sits behind the ball along the aim, which for a ball on
+  // the touchline is outside the pitch, so the clamp below pulls it back to a point the
+  // bot is already standing on. `botArrive` then reports "arrived" and writes a zero
+  // stick, while `align` (0.66 in the measured case) never reaches `strikeEnter` (0.85),
+  // so the bot can never commit either. It stands there for ever. Measured: 23 of 28
+  // resting places round the boundary froze the chaser for 877 of 900 steps.
+  // ⚠️ The answer is NOT randomness. The bot is in a stable equilibrium — a small random
+  // nudge is walked straight back out of, so a jitter would make the freeze intermittent
+  // rather than fixed, and intermittent is the version nobody can test. What breaks it is
+  // noticing that nothing is happening and doing the thing a person does with a ball
+  // pinned on the line: barge in and hit it off the boards.
+  stuckTicks: 34,            // ~0.55s of nobody moving before the chaser barges in
+  stuckMove: 0.30,           // speed under this is "not moving", world units per step
+  // ⚠️ NEAR THE BALL, or it is not a stalemate — it is a bot standing somewhere on
+  // purpose. Without this it fired across the whole pitch, and Killer Queen showed why:
+  // there the ball often rests untouched while everyone shepherds berries, so every
+  // chaser read as stuck, belted the ball about, and knocked BERRIES into the hives. The
+  // mode's own balance guard caught it at 5 of 8 matches ending on a full hive against a
+  // ceiling of 4. The freeze this exists for is always close range — 35 units, measured.
+  stuckNear: 140,            // ...and no further than this from the ball
+  // ⚠️ LATCHED, and without this the fix does not work at all. The escape makes the bot
+  // walk round the ball, and walking is movement — so an un-latched flag clears on the
+  // first step, the aim snaps back to the goal, the strike spot goes off the pitch again
+  // and the bot returns to the clamped point to stall. Measured as a limit cycle: 16 of
+  // 28 resting places never freed, worse than the version before it. Two thresholds,
+  // never one, which is the same rule `strikeEnter`/`strikeExit` follow.
+  escapeTicks: 120,          // ~2s to get round the ball and hit it, once committed
+
   // --- Steering weights (summed, then clamped to a unit stick).
   wSeek: 1.0,
   wSeparate: 0.85,           // teammate repulsion — this is what stops ball-swarming
@@ -16093,6 +16129,7 @@ function botInitPlayer(p, i){
   p.aiStateT = BOT.dwell;              // free to pick a state on the first think
   p.aiCommitT = 0; p.aiCarryT = 0;
   p.aiTarget = { x: p.x, y: p.y };
+  p.aiStuckT = 0; p.aiEscapeT = 0;
   p.aiAim = { x: 0, y: p.team === 0 ? -1 : 1 };
   p.aiAimPt = { x: 0, y: 0 };
   p.aiKind = 'goal';                   // what the current aim IS: goal | pass | bank | clear
@@ -16176,6 +16213,29 @@ function botWallAvoid(w, p, out){
   out.x = x; out.y = y;
 }
 
+// Which way to shove a ball that is resting against the boards: ALONG the boundary it is
+// touching, never into it and never through it.
+// ⚠️ Purely geometric, and it takes no notice of which way the bot is attacking. Two
+// earlier versions did and both left holes. Pushing "up-field" along a touchline drives
+// the ball INTO the end wall whenever it is already resting on the attacking end; pushing
+// "away from the middle" along an end wall wedges it further into the CORNER. The rule
+// that covers every case is: the wall it is stuck on decides the AXIS (the free one is
+// the other), and the direction is away from whichever end of that axis is nearer — so a
+// ball on a touchline runs back up the pitch, one on a goal line runs out along it, and
+// one in a corner comes out of the corner.
+// ⚠️ On an end wall this can push the ball ACROSS its own goal mouth, which is safe on
+// purpose: it moves in x only, and scoring needs the goal LINE crossed. `behindBall` is
+// still guarding the kick regardless.
+function botWallTangent(w, ball){
+  const dx = w.field.W/2 - Math.abs(ball.x);          // room left to the nearer touchline
+  const dy = w.field.L/2 - Math.abs(ball.y);          // ...and to the nearer goal line
+  if (dx < dy) return { x: 0, y: ball.y >= 0 ? -1 : 1 };   // on a touchline: run in y
+  // ⚠️ On a goal line, OUT along it rather than in toward the middle. In is the goal
+  // MOUTH, and once the ball is inside the mouth's width nothing holds it on the line any
+  // more — pushing it sideways in there walks it straight into the net. Measured: seven
+  // own goals across the boundary sweep when this pointed the other way.
+  return { x: ball.x >= 0 ? 1 : -1, y: 0 };
+}
 // ============================================================
 //  PREDICTION — where the ball WILL be, not where it is.
 // ============================================================
@@ -16653,7 +16713,7 @@ function runBot(w, p){
     const ca = Math.cos(p.aiAimErr), sa = Math.sin(p.aiAimErr);
     p.aiAim.x = ax*ca - ay*sa; p.aiAim.y = ax*sa + ay*ca;
   }
-  const aimx = p.aiAim.x, aimy = p.aiAim.y;
+  let aimx = p.aiAim.x, aimy = p.aiAim.y;   // `let`: the stalemate breaker below swaps it for the wall's tangent
 
   // --- Intercept: aim at where the ball WILL be. Low tiers deliberately don't —
   // that is the anticipation limit, and it is a real difficulty axis.
@@ -16663,7 +16723,64 @@ function runBot(w, p){
   // kicks from. It is never discarded. The old code placed it 27 units out and threw
   // it away inside 43, so the bot could never arrive — that was the oscillation.
   const standR = p.r + ball.r + BOT.standoff;
-  const strikeX = meet.x - aimx*standR, strikeY = meet.y - aimy*standR;
+  let strikeX = meet.x - aimx*standR, strikeY = meet.y - aimy*standR;
+  // The box `runBot` clamps its target into, hoisted because the stalemate detector below
+  // is defined in terms of it.
+  const mW = w.field.W/2 - p.r - 4, mL = w.field.L/2 - p.r - 4;
+
+  // --- STALEMATE BREAKER. Counted every tick, not at the decision rate, because it is
+  // measuring whether anything is happening at all. Only the CHASER: it is the one whose
+  // job is to go and get the ball, so "walk at it" is always a sane answer for it and
+  // never for a defender holding a line. Play only — at kickoff the ball is frozen by
+  // design and every bot is legitimately standing still.
+  // ⚠️ ARMED ON THE DEAD END ITSELF — "the strike waypoint is outside the box the target
+  // gets clamped into" — and not merely on "nothing is moving". That distinction is not
+  // tidiness: gated on stillness alone it fired all over Killer Queen, where the ball
+  // often rests untouched while everyone shepherds berries, so chasers belted it about
+  // and knocked BERRIES into the hives. The mode's own balance guard caught it at 5 of 8
+  // matches ending on a full hive against a ceiling of 4. Tested against the precondition
+  // it cannot fire in open play at all, because in open play the waypoint is reachable.
+  const wedged = Math.abs(strikeX) > mW || Math.abs(strikeY) > mL;
+  // ⚠️ NOT IN KILLER QUEEN, and this is a scope boundary rather than a bug being dodged.
+  // That mode's balance is a measured proportion over eight seeded matches — how often a
+  // full hive, rather than the ball, decides it — and it turns on how much the ball is
+  // knocked about, because a loose ball bumps the floaty berries toward the goals. A
+  // chaser that starts working balls off the boards changes exactly that: 5 of 8 matches
+  // ended on a hive against a ceiling of 4, and 7 of 8 with only the aim override and no
+  // kick at all. So it is the CHANGE the mode cannot take, not the kick. A frozen chaser
+  // matters far less there anyway — the berries and the snail give every bot other work.
+  const idle = w.state === 'play' && iAmChaser && !p.trap && wedged &&
+               !(w.mode && w.mode.kq) &&
+               Math.hypot(p.vx, p.vy) < BOT.stuckMove &&
+               Math.hypot(ball.vx, ball.vy) < BOT.stuckMove &&
+               Math.hypot(ball.x - p.x, ball.y - p.y) < BOT.stuckNear;
+  p.aiStuckT = idle ? (p.aiStuckT || 0) + 1 : 0;
+  if (p.aiStuckT > BOT.stuckTicks) p.aiEscapeT = BOT.escapeTicks;
+  // ...and it ends the moment the ball is genuinely away, rather than running its clock
+  // out and steering by the boards while play has restarted.
+  if (Math.hypot(ball.vx, ball.vy) > BOT.stuckMove * 3) p.aiEscapeT = 0;
+  if (p.aiEscapeT > 0) p.aiEscapeT--;
+  const stuck = p.aiEscapeT > 0;
+
+  // ⚠️ WHILE STUCK, AIM ALONG THE BOARDS. This is the whole fix, and it is one line
+  // rather than a special case threaded through the target, the clamp and the kick —
+  // because everything downstream is already correct once the aim is reachable. The dead
+  // end is geometric: the strike waypoint is `ball - aim*standR`, and for a ball resting
+  // on a wall with the aim pointing at a goal, that spot is off the pitch. Swap the aim
+  // for the wall's own TANGENT and the waypoint slides along the boundary, back inside
+  // the pitch, where the bot can stand — so `align` reaches `strikeEnter`, the state
+  // machine commits, and the ordinary kick fires. Every existing guard survives untouched,
+  // `behindBall` included.
+  // ⚠️ A first attempt instead drove THROUGH the ball and kicked with the own-goal guard
+  // switched off. It freed all 28 resting places and put one in its own net: a ball at
+  // rest in the middle of your own goal mouth is a ball you must not shove forwards.
+  if (stuck){
+    const t = botWallTangent(w, ball);
+    aimx = t.x; aimy = t.y;
+    // ...and the waypoint moves with it, or the bot lines up on the old one.
+    strikeX = meet.x - aimx*standR; strikeY = meet.y - aimy*standR;
+  }
+
 
   // --- Alignment, with two thresholds. dot(bot->ball, aim): 1 means we are exactly
   // behind the ball and a straight run sends it where we want.
@@ -16757,10 +16874,19 @@ function runBot(w, p){
 
   // Clamp inside the pitch so bots never pin themselves on a wall chasing a point
   // that sits outside the field. A lagged bot holds its previous target instead.
-  const mW = w.field.W/2 - p.r - 4, mL = w.field.L/2 - p.r - 4;
   if (p.aiLag <= 0){
-    p.aiTarget.x = clamp(target.x, -mW, mW);
-    p.aiTarget.y = clamp(target.y, -mL, mL);
+    // ⚠️ THE ESCAPE IS EXEMPT, and that is not a loophole — the clamp is what built the
+    // dead end in the first place, and here it also aims the shot wrongly. Lining up to
+    // shove a ball along its own goal line needs the bot LEVEL with it; clamped 8 units
+    // up-field instead, the kick (which fires along player→ball) picks up a backward
+    // component and puts the ball in its own net. Measured: exactly one own goal in the
+    // boundary sweep, from the middle of the mouth, and it disappears with this.
+    // `integrate` still holds every body to bounds + 20, so nothing can leave the view.
+    if (stuck){ p.aiTarget.x = target.x; p.aiTarget.y = target.y; }
+    else {
+      p.aiTarget.x = clamp(target.x, -mW, mW);
+      p.aiTarget.y = clamp(target.y, -mL, mL);
+    }
   }
   // The kickoff line binds bots exactly like humans, so they don't spend the
   // countdown grinding against the invisible wall.
@@ -16791,6 +16917,18 @@ function runBot(w, p){
   // `behindBall` is the own-goal guard — the impulse runs along player->ball.
   const sum = p.r + ball.r, kr = (w.kickRange || PLAYER.kickRange);
   const behindBall = align > 0.15;
+  // ⚠️ THE CORNER HAS NO ANSWER BUT THE KICK. Everywhere else the tangent aim gives a
+  // strike spot that is inside the pitch, so the ordinary machinery does the work with
+  // every guard intact. In a corner it does not exist: pushing along either wall needs
+  // the bot standing outside the other one. What a person does there is belt it and let
+  // it come back off the boards, and `wallB` 0.9 means it does.
+  // ⚠️ Guarded on the OWN GOAL MOUTH, which is the one place this must never fire —
+  // inside the mouth's width nothing holds the ball on the line, so a shot along the
+  // boards is a shot into the net. That case is reachable by the tangent anyway.
+  const ownLineY = (p.team === 0 ? 1 : -1) * (w.field.L/2);
+  const inOwnMouth = Math.abs(ball.x) < w.field.goal/2 + p.r &&
+                     Math.abs(ball.y - ownLineY) < w.field.net + p.r;
+  const escapeKick = stuck && !inOwnMouth && dBall < sum + kr;
   if (p.aiState === 'carry'){
     // Release when we're facing the aim, or when the trap window is nearly spent.
     const faceAim = p.faceX*aimx + p.faceY*aimy;
@@ -16811,7 +16949,8 @@ function runBot(w, p){
   } else if (w.trapOff){
     // One-touch: the flag stops a single press firing every frame, and the branch
     // that owns it clears it on release.
-    p.kick = p.aiState === 'strike' && dBall < sum + kr && behindBall && !p.kickUsed;
+    p.kick = (p.aiState === 'strike' && dBall < sum + kr && behindBall && !p.kickUsed) ||
+             (escapeKick && !p.kickUsed);
   } else {
     // Casual: a press near the ball only becomes a trap after TAP_HOLD (0.14s ≈ 9
     // ticks), so the wind-up has to start BEFORE contact — pressing at contact gave
@@ -16819,7 +16958,7 @@ function runBot(w, p){
     // is exactly the trade a human makes to take a touch.
     // `kickUsed` is deliberately not consulted here: the casual path never clears it,
     // so gating on it left the bot pressing KICK 8 times in 30 seconds.
-    p.kick = p.aiState === 'strike' && behindBall && dBall < sum + kr + BOT.windup;
+    p.kick = (p.aiState === 'strike' && behindBall && dBall < sum + kr + BOT.windup) || escapeKick;
   }
   if (p.kick && p.aiState === 'strike'){ p.faceX = aimx; p.faceY = aimy; }
 }
