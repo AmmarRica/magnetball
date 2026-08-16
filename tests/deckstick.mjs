@@ -66,17 +66,31 @@ const runShape = async (shape) => {
     M.sel.display = 'deck'; M.applyDisplayMode();
     o.controllersSetting = M.sel.controllers;
     o.takesSeats = M.padsTakeSeats();
-    M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
+    M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(7); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 2;
     const me = M.firstHumanSeat(w);
     o.gotAPadSeat = !!me && me.ctrl === 'gamepad';
     if (!o.gotAPadSeat) return o;
-    w.players.filter(q => q !== me).forEach(q => { q.x = 9e3; q.y = 9e3; });
-    w.ball.x = 9e3; w.ball.y = 9e3;
+
+    // ⚠️ PARKING AT 9e3 DOES NOT PARK ANYTHING, and that cost a red merge here. Both
+    // clamps are hard containment backstops — `clampBallInside` for the ball,
+    // `integrate`'s bounds+20 for a body — so a thing shoved off to 9e3 is dragged back
+    // to the touchline on the very next step, and the 1v1 opponent then chases the ball
+    // around the pitch and into the body being measured. It read as a merge that doubled
+    // the speed (62 alone against 162 together) and it was a collision.
+    // The others are re-pinned to a far corner AFTER every step instead, and the match
+    // seed is pinned, so where they end up is not a lottery. Same trap `fourpads` records.
+    const others = w.players.filter(q => q !== me);
+    const PX = w.bounds.halfW * 0.95, PY = -w.bounds.halfL * 0.95;
+    const stow = () => {
+      others.forEach((q, i) => { q.x = PX; q.y = PY + i * 40; q.vx = 0; q.vy = 0; });
+      w.ball.x = PX; w.ball.y = PY - 40; w.ball.vx = 0; w.ball.vy = 0;
+    };
+    stow();
 
     // Let the rest-detector see a settled pad before anything is pushed. On shape B and C
     // that is what tells it the triggers never centre.
-    for (let i = 0; i < 8; i++) M.step(w);
+    for (let i = 0; i < 8; i++){ M.step(w); stow(); }
 
     const [AX, AY] = window.__stick;
     const push = (dx, dy, useKeys) => {
@@ -87,7 +101,7 @@ const runShape = async (shape) => {
       } else {
         window.__pad.axes[AX] = dx; window.__pad.axes[AY] = dy;
       }
-      for (let i = 0; i < 25; i++){ M.pollKeys(); M.step(w); }
+      for (let i = 0; i < 25; i++){ M.pollKeys(); M.step(w); stow(); }
       window.__pad.axes[AX] = 0; window.__pad.axes[AY] = 0;
       M.keys['arrowright'] = M.keys['arrowleft'] = M.keys['arrowdown'] = M.keys['arrowup'] = false;
       const d = Math.hypot(me.x, me.y);
@@ -109,7 +123,7 @@ const runShape = async (shape) => {
       // ...and holding both does not travel at double speed.
       me.x = 0; me.y = 0; me.vx = 0; me.vy = 0;
       window.__pad.axes[AX] = 1; M.keys['arrowright'] = true;
-      for (let i = 0; i < 25; i++){ M.pollKeys(); M.step(w); }
+      for (let i = 0; i < 25; i++){ M.pollKeys(); M.step(w); stow(); }
       window.__pad.axes[AX] = 0; M.keys['arrowright'] = false;
       // ⚠️ DISTANCE against DISTANCE. Comparing `me.x` here against `o.stick[0].moved`
       // (a hypot) is comparing two different quantities — and on a deck the pitch is
