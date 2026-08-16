@@ -1576,6 +1576,46 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
     inside the canvas (the body is outside the touchline, so a centred label loses its last
     words — which are the side). `tests/dropin.mjs`.
+- **THE LOBBY KEYBOARD: walk onto letters to spell your own name** (`LOBBYKB`,
+  `buildLobbyKeys`, `stepLobbyKeys`, `kbPress`, `lobbyKbCommit`, `drawLobbyKeys`,
+  `lobbyReach`, `w.kb`). Laid out below the back of the net, then you walk into a half.
+  ⚠️ **OUTSIDE THE PITCH, and that placement is what makes it work** rather than being a
+  decoration: `lobbySideOf` answers −1 for any body past the touchline, so standing on
+  the keys is *undecided* and walking into a half is still the side pick the lobby
+  already had. On the pitch it would be a second meaning for standing somewhere,
+  fighting the one the lobby exists for.
+  ⚠️ **A DWELL, never a footstep.** A key is a body and a half across, so walking over one
+  crosses it in ~0.18s while standing presses at `LOBBYKB.dwell`; without that, crossing
+  the keyboard on the way to the pitch spells a word. Latched until the body LEAVES that
+  key, or standing still types sixty letters a second.
+  ⚠️ **The first press CLEARS** — you are writing your name, not appending to "You".
+  ⚠️ **`integrate`'s clamp has to open up to reach it**, and `lobbyReach(w)` is the one
+  place that box is worked out — `computeCam` frames *the same numbers*, so "a player may
+  never leave the VIEW" survives the keyboard being outside the pitch. A test that
+  teleports a body onto a key passes on a build where the clamp was never widened at all.
+  ⚠️ **The frame is a SPAN with a midpoint, not twice the far edge.** The keyboard is
+  below the pitch and nothing is above it, so doubling reserved an empty band the size of
+  the keyboard over the top goal and shrank the pitch by half as much again for nothing.
+  Under the quarter-turn the vertical world axis is the HORIZONTAL screen one, so the
+  recentring offset swaps axes with it. Both terms are zero without a keyboard.
+  ⚠️ **Two screen-space reservations, for the reason `padTop` already existed**: the
+  lobby's headline block at the top and the fixed `#lobbyStartBtn` at the bottom. The
+  first build drew the bottom two rows of keys underneath the one button the lobby exists
+  to get you past, and packing the pitch tighter then brought the top goal's net up into
+  the headline.
+  ⚠️ **Committed at the whistle, not per keystroke** — `saveProfile`/`saveSel` are
+  synchronous localStorage writes and `kbPress` is reached from inside `step()`. Walking
+  the alphabet would be a write a frame, and "step into the court" is what confirms it.
+  ⚠️ The profile seat is **`firstHumanSeat(w)`, not `ctrl === 'human1'`**: a pad taking
+  seat one sets `ctrl` to `'gamepad'`, so on any machine with a controller there is no
+  `human1` at all and the typed name went into the Player names box instead of the
+  profile. Same trap the keyboard/controller merge is built on.
+  ⚠️ Bots never type, excluded by `ctrl` and never by where a body is — they walk on and
+  off in the lobby and the bench is outside the touchline too. `syncProfileToWorld` also
+  leaves a seat mid-edit alone (`p.kbTyped`), or a profile sync puts "You" back under the
+  player's feet. ⚠️ Advanced in the step loop, never a draw (the trails rule), and drawn
+  on the GROUND layer before the bodies or a player standing on a key is under it.
+  `tests/lobbykb.mjs`.
 - **The warm-up ball is LIVE, and there is one per half plus one per person.**
   `integrate(w, false, false)` in the warmup branch — it passed `true` and froze the
   ball, which made the one control you most need to test the one control you could

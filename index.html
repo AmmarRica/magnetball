@@ -3093,6 +3093,29 @@ const LOBBY = {
   // but still bounded, so nobody wanders off the screen.
   outMargin: 74,
 };
+// ---------- The lobby keyboard: walk on a letter to spell your own name ------
+// ⚠️ IT IS OUTSIDE THE PITCH, and that is what makes it work at all. `lobbySideOf`
+// answers −1 for any body past the touchline, so standing on the keys is "undecided"
+// — you spell your name out here and then walk INTO a half, which is the side pick
+// the lobby already had. On the pitch it would be a second meaning for standing
+// somewhere, fighting the one the lobby is for.
+// ⚠️ A DWELL, not a footstep. Keys are a body and a half across, so walking past one
+// at speed crosses it in about 0.18s; standing on it presses at `dwell`. Typing has
+// to be something you do on purpose, or crossing the keyboard to reach the pitch
+// spells a word. Latched until the body LEAVES that key, so standing still is one
+// press and not sixty.
+// ⚠️ The first press CLEARS the name rather than appending — you are writing your
+// name, not adding to "You".
+// ⚠️ Bots never type. They walk on and off in the lobby, and the bench sits outside
+// the touchline, so the exclusion is by `ctrl`, never by where a body happens to be.
+const LOBBYKB = {
+  rows: ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'],
+  keyW: 48, keyH: 44, gap: 7,
+  clear: 58,         // world units between the back of the net and the top row
+  dwell: 0.40,       // seconds standing on a key before it presses
+  maxLen: 12,        // the same cap the name box uses
+  wideW: 3.2,        // DEL and SPACE, in key widths
+};
 // The surface, as MULTIPLIERS on your own Game Feel rather than as replacements for
 // it. ⚠️ These used to be absolute numbers, and `pAccel`/`pDamp` were taken from the
 // table on Ice and Mud and from the sliders only on Grass — so the Speed and Grip
@@ -3553,7 +3576,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0333AM';
+const VERSION = '20260816.0404AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3569,6 +3592,13 @@ const VERSION = '20260816.0333AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0404AM', title: 'Spell your name with your feet',
+    added: [
+      '<b>A keyboard in the warm-up lobby.</b> It sits on the grass outside the pitch: stand on a letter for a moment to type it, DEL and SPACE included, and your name changes over your head as you go. Then walk into the half you want to play on, the way you always did.',
+      'The pitch is drawn smaller during warm-up so the keyboard fits beside it. Walking past a letter does not type it \u2014 you have to stop on it \u2014 so crossing the keyboard on your way to the pitch will not spell anything.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0333AM', title: 'Quieter stat labels',
     added: [],
     changed: [
@@ -5644,7 +5674,9 @@ function syncProfileToWorld(){
     if (p.ctrl !== 'human1') return;
     p.color = profile.color; p.cap = profile.cap;
     p.flag  = profile.flag;  p.eyes = profile.eyes;
-    if (!custom[i]) p.name = profile.name || 'You';   // a typed seat name still wins
+    // ⚠️ `p.kbTyped` too: a name being spelled out on the lobby keyboard is mid-edit,
+    // and a profile sync landing on it would put 'You' back under the player's feet.
+    if (!custom[i] && !p.kbTyped) p.name = profile.name || 'You';   // a typed seat name still wins
   });
 }
 function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} normalizeLook(); }
@@ -13042,11 +13074,18 @@ function integrate(w, ballFrozen, playersFrozen){
       const bd = w.bounds;
       const halfW = bd ? bd.halfW : w.field.W/2, halfL = bd ? bd.halfL : w.field.L/2;
       const M = w.state==='warmup' ? LOBBY.outMargin : 20;
+      // ⚠️ In warm-up the box has to reach the far edge of the lobby KEYBOARD, which is
+      // laid out past the back of the net — held to the touchline margin, the letters
+      // would be furniture nobody can walk to. `lobbyReach` is the one place that box is
+      // worked out, and `computeCam` frames the same numbers, so the rule that a player
+      // never leaves the VIEW survives the keyboard being outside the pitch.
+      const reach = w.state==='warmup' ? lobbyReach(w) : { hx: halfW+M, hy: halfL+M };
+      const LX = reach.hx, LY = reach.hy;
       for (const p of discs){
-        if (p.x < -(halfW+M)){ p.x=-(halfW+M); if(p.vx<0)p.vx=0; }
-        else if (p.x > halfW+M){ p.x=halfW+M; if(p.vx>0)p.vx=0; }
-        if (p.y < -(halfL+M)){ p.y=-(halfL+M); if(p.vy<0)p.vy=0; }
-        else if (p.y > halfL+M){ p.y=halfL+M; if(p.vy>0)p.vy=0; }
+        if (p.x < -LX){ p.x=-LX; if(p.vx<0)p.vx=0; }
+        else if (p.x > LX){ p.x=LX; if(p.vx>0)p.vx=0; }
+        if (p.y < -LY){ p.y=-LY; if(p.vy<0)p.vy=0; }
+        else if (p.y > LY){ p.y=LY; if(p.vy>0)p.vy=0; }
       }
     }
     applyKickoffLine(w, discs);
@@ -13175,6 +13214,7 @@ function enterWarmup(w){
   w.players.forEach(p => { p._lobT = undefined; p._lobTo = null; });
   benchBots(w);
   addLobbyWall(w);
+  buildLobbyKeys(w);
   syncLobbyBalls(w);
   // Humans start spread along the halfway line so nobody is pre-committed to a side.
   const hs = lobbyHumans(w), n = hs.length;
@@ -13184,6 +13224,95 @@ function enterWarmup(w){
     p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
   });
   resetTrails();
+}
+// Laid out below the back of the net, centred on the pitch's own axis, so it is the
+// same shape on a 400-wide Futsal court and a 1200-wide Colossus. Built once on the way
+// into warm-up: it is fixed furniture, and rebuilding it per frame would put layout
+// arithmetic in a draw.
+function buildLobbyKeys(w){
+  const K = LOBBYKB, keys = [];
+  const top = w.field.L/2 + (w.field.net || 0) + K.clear;
+  const step = K.keyW + K.gap, rowH = K.keyH + K.gap;
+  K.rows.forEach((row, ri) => {
+    const x0 = -(row.length*K.keyW + (row.length-1)*K.gap) / 2;
+    for (let i = 0; i < row.length; i++)
+      keys.push({ ch: row[i], label: row[i], x: x0 + i*step, y: top + ri*rowH, w: K.keyW, h: K.keyH });
+  });
+  // DEL and SPACE, wide enough to be walked onto without aiming.
+  const cw2 = K.keyW * K.wideW, ctrl = [['\b', 'DEL'], [' ', 'SPACE']];
+  const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
+  ctrl.forEach(([ch, label], i) =>
+    keys.push({ ch, label, x: -tot/2 + i*(cw2 + K.gap), y: top + K.rows.length*rowH, w: cw2, h: K.keyH }));
+  let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+  for (const k of keys){ L = Math.min(L, k.x); T = Math.min(T, k.y);
+                         R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
+  w.kb = { keys, L, T, R, B };
+}
+function kbKeyAt(kb, x, y){
+  for (const k of kb.keys)
+    if (x >= k.x && x <= k.x + k.w && y >= k.y && y <= k.y + k.h) return k;
+  return null;
+}
+// How far out a body may stand, which has to reach the far edge of the keyboard or the
+// feature is furniture nobody can walk to. ⚠️ Symmetric, and the camera below uses the
+// same numbers — the rule is that a player may never leave the VIEW, so the box they are
+// held in and the box that is framed have to be the one box.
+function lobbyReach(w){
+  const bd = w.bounds || { halfW: w.field.W/2, halfL: w.field.L/2 };
+  let hx = bd.halfW + LOBBY.outMargin, hy = bd.halfL + LOBBY.outMargin;
+  if (w.kb){
+    hx = Math.max(hx, Math.max(-w.kb.L, w.kb.R) + 20);
+    hy = Math.max(hy, Math.max(-w.kb.T, w.kb.B) + 20);
+  }
+  return { hx, hy };
+}
+// ⚠️ STEP LOOP, never a draw — the dwell is a clock, and the trails rule is that
+// anything advancing over time lives here. No randomness at all, so it cannot touch
+// `w.rng` and cannot break determinism.
+function stepLobbyKeys(w){
+  const kb = w.kb; if (!kb) return;
+  for (const p of w.players){
+    if (p.ctrl === 'bot'){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
+    const k = kbKeyAt(kb, p.x, p.y);
+    if (!k){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
+    if (p.kbKey !== k){ p.kbKey = k; p.kbT = 0; p.kbDone = false; }
+    p.kbT += STEP;
+    if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbPress(p, k.ch); }
+  }
+}
+function kbPress(p, ch){
+  // ⚠️ The first press starts from EMPTY. You are writing your name, not appending to
+  // whatever the game called you.
+  const cur = p.kbTyped ? String(p.name || '') : '';
+  p.kbTyped = true;
+  if (ch === '\b') p.name = cur.slice(0, -1);
+  else if (cur.length < LOBBYKB.maxLen) p.name = cur + ch;
+  else p.name = cur;
+}
+// ⚠️ PERSISTED AT THE WHISTLE, not per keystroke. `saveProfile`/`saveSel` are
+// synchronous localStorage writes and `kbPress` is reached from inside `step()`; walking
+// the alphabet would be a write a frame. Committing where the lobby ends also makes
+// "step into the court" the thing that confirms it, which is what the flow already says.
+// ⚠️ A seat that typed nothing is left completely alone — it must not overwrite a name
+// somebody set in the Player names box.
+function lobbyKbCommit(w){
+  if (!w.kb) return;
+  const list = seatNameList();
+  let seats = false;
+  // ⚠️ `firstHumanSeat`, NOT `ctrl === 'human1'`. A pad taking seat one sets `ctrl` to
+  // 'gamepad', so on any machine with a controller plugged in there is no `human1` on the
+  // pitch at all — and the profile seat's typed name went into the Player names box
+  // instead of into the profile, which is the same trap the keyboard/controller merge is
+  // built on. This is the one helper in the file that means "you".
+  const you = firstHumanSeat(w);
+  w.players.forEach((p, i) => {
+    if (!p.kbTyped) return;
+    const nm = String(p.name || '').trim().slice(0, LOBBYKB.maxLen);
+    p.name = nm || (p === you ? (profile.name || 'You') : 'P' + (i + 1));
+    if (p === you){ profile.name = p.name; saveProfile(); }
+    else { list[i] = p.name; seats = true; }
+  });
+  if (seats) { sel.names = list.map(s => s || '').join('\n'); saveSel(); }
 }
 // ---------- Warm-up balls, and the wall that keeps them home -----------------
 // The lobby is where you test a stick, and one ball between six people is a queue
@@ -13211,6 +13340,7 @@ function addLobbyWall(w){
 function clearLobbyProps(w){
   if (w.walls) for (let i = w.walls.length - 1; i >= 0; i--) if (w.walls[i].lobbyWall) w.walls.splice(i, 1);
   if (w.extraBalls) for (let i = w.extraBalls.length - 1; i >= 0; i--) if (w.extraBalls[i].lobbyBall) w.extraBalls.splice(i, 1);
+  w.kb = null;   // the lobby keyboard is furniture, and this is where the pitch is laid out for play
 }
 // How many balls the room should have right now: one per half, plus one per person
 // in it. ⚠️ Counted off `lobbyHumans`, so a controller waking up mid-lobby brings a
@@ -13400,6 +13530,7 @@ function stepWarmup(w){
   const L = w.lobby;
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
   stepLobbyBots(w);
+  stepLobbyKeys(w);
   // Live side preview — the number under each half comes straight from where people
   // are standing, so it can't disagree with what happens when Start is pressed.
   // ⚠️ Read from lobbyPlan, NOT from lobbySideOf. The plan is the single source of
@@ -13480,6 +13611,7 @@ function spawnLobbyBot(w, team, seat, used){
 }
 // Resolve the sides people picked, balance them with bots, and kick off.
 function lobbyStart(w){
+  lobbyKbCommit(w);
   const { a, b, out, need0, need1 } = lobbyPlan(w);
   a.forEach(p => p.team = 0); b.forEach(p => p.team = 1);
   const bots = w.players.filter(p => p.ctrl === 'bot');
@@ -16519,17 +16651,43 @@ function computeCam(){
   // Reserve headroom at the top for the HUD (scorebug, pause/gear, replay bar) so
   // the top goal + net never render underneath it — otherwise a ball driven into
   // the top net looks like it vanishes behind the buttons.
-  const padTop = isDeck() ? 64 : 96;
+  let padTop = isDeck() ? 64 : 96;
+  // ⚠️ ...and the lobby's headline block at the top, for the same reason as the two
+  // reservations below. It is three stacked lines ending at `ch*0.085 + 40`, and packing
+  // the pitch tight enough to fit the keyboard under it brought the top goal's NET up
+  // into them. Scales with the window, so a landscape phone (where the default 96 is
+  // already more than the block needs) is unchanged.
+  if (world.state === 'warmup') padTop = Math.max(padTop, Math.round(ch*0.085) + 56);
   // Phones: keep the bottom of the pitch clear of the thumbsticks. The joystick
   // sits 70px up from the bottom with radius JOY_R, so that band is under a thumb
   // whenever the player is actually playing. Reserving it doesn't shrink the pitch
   // on a tall screen — width is what binds there — it lifts it out of the dead
   // space under the HUD and away from your hands.
-  const padBot = isTouchLayout() ? Math.round(70 + JOY_R*0.9) : 0;
+  let padBot = isTouchLayout() ? Math.round(70 + JOY_R*0.9) : 0;
+  // ⚠️ The lobby's own reservation, for the same reason as `padTop`: `#lobbyStartBtn` is
+  // a fixed DOM button 148px up from the bottom, and the warm-up keyboard is laid out
+  // below the pitch — so without this the bottom rows of letters render underneath the
+  // one button the lobby exists to get you past. Capped as a fraction of the window, or
+  // a landscape phone reserves most of its own height.
+  if (world.state === 'warmup' && world.kb) padBot = Math.max(padBot, Math.min(210, Math.round(ch*0.28)));
   const availW = Math.max(80, cw - padL);
   const availH = Math.max(80, ch - padTop - padBot);
-  const worldW = f.W + 60;
-  const worldH = f.L + f.net*2 + 60;
+  // ⚠️ The warm-up keyboard sits outside the pitch, so the frame has to grow to hold it —
+  // which is what makes the pitch itself smaller in the lobby. A player may never leave
+  // the view, and `lobbyReach` clamps a body to this same box.
+  // ⚠️ Framed as a real SPAN with a midpoint, not as twice the far edge. The keyboard is
+  // below the pitch and nothing is above it, so doubling reserved an empty band the size
+  // of the keyboard over the top goal and shrank the pitch by half as much again for
+  // nothing. With no keyboard the span is symmetric and every number below is exactly
+  // what it was.
+  const kb = world.kb && world.state === 'warmup' ? world.kb : null;
+  const topY = Math.min(-(f.L/2 + f.net), kb ? kb.T : Infinity);
+  const botY = Math.max(  f.L/2 + f.net,  kb ? kb.B : -Infinity);
+  const leftX = Math.min(-f.W/2, kb ? kb.L : Infinity);
+  const rightX = Math.max( f.W/2, kb ? kb.R : -Infinity);
+  const midY = (topY + botY)/2, midX = (leftX + rightX)/2;
+  const worldW = (rightX - leftX) + 60;
+  const worldH = (botY - topY) + 60;
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
   // wide screen is actually used. render() applies the matching canvas rotation, so
   // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
@@ -16556,6 +16714,15 @@ function computeCam(){
   }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
+  // ⚠️ Recentre on the SPAN's midpoint rather than on world (0,0). `wx`/`wy` put world
+  // (0,0) at (cam.ox, cam.oy), and `screenPt` then rotates about that same point — so
+  // under the quarter-turn the vertical world axis is the HORIZONTAL screen one and the
+  // offset has to swap axes with it. Both terms are zero without a keyboard, which is
+  // every other state in the game.
+  if (midX || midY){
+    if (cam.rot){ cam.ox -= midY*cam.s; cam.oy += midX*cam.s; }
+    else        { cam.ox -= midX*cam.s; cam.oy -= midY*cam.s; }
+  }
   // Push the pitch down by half the headroom, so the room a standing body needs is at
   // the TOP of the frame where the far touchline is, not split evenly above and below.
   if (sideNow) cam.oy += SIDE.head * cam.s * 0.5;
@@ -17115,6 +17282,10 @@ function render(){
   ctx.save(); pitchXform(sx + gx, sy + gy);
   drawPitch(world);
   ctx.restore();
+  // ⚠️ On the ground layer and BEFORE the bodies, or a player standing on a key is drawn
+  // underneath it. Screen space (the pitch transform is restored), so it carries the
+  // ground's own tilt/shake offset by hand — the same thing drawFloaters does.
+  if (world.state === 'warmup') drawLobbyKeys(world, sx + gx, sy + gy);
   if (sideNow){
     // The dot tails are marks ON the ground, so they stay on the squashed plane. The
     // ball's streak and the kick sparks are lifted with the ball: a streak that does not
@@ -17195,6 +17366,59 @@ function drawSubPrompts(w){
 // ---------- Warm-up lobby overlay -------------------------------------------
 // Drawn in SCREEN space, over the pitch: the two halves tinted with a live head
 // count, a prompt per player, and (mid-calibration) one big arrow at a time.
+// The keyboard itself. Drawn as POLYGONS from the four world corners of each key rather
+// than as rects: deck view and the side camera turn and squash the pitch, and a screen
+// rect would sit at an angle to the ground it is painted on.
+// ⚠️ Draw only. The dwell it fills comes from `p.kbT`, which the step loop owns.
+function drawLobbyKeys(w, ox, oy){
+  const kb = w.kb; if (!kb) return;
+  const T = TH;
+  // One pass over the bodies rather than a search per key.
+  const fill = new Map();
+  for (const p of w.players){
+    if (!p.kbKey || p.ctrl === 'bot') continue;
+    const f = Math.min(1, (p.kbT || 0) / LOBBYKB.dwell);
+    if (f > (fill.get(p.kbKey) || 0)) fill.set(p.kbKey, f);
+  }
+  const ink = T.line || '#ffffff';
+  ctx.save();
+  ctx.lineJoin = 'round';
+  for (const k of kb.keys){
+    const pts = [[k.x, k.y], [k.x + k.w, k.y], [k.x + k.w, k.y + k.h], [k.x, k.y + k.h]]
+      .map(([x, y]) => screenPt(wx(x), wy(y)));
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0] + ox, pts[0][1] + oy);
+    for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0] + ox, pts[i][1] + oy);
+    ctx.closePath();
+    const f = fill.get(k) || 0;
+    // The plate brightens as the dwell fills, so a key being pressed says so before it
+    // fires — without it, standing on a letter is 0.4s of nothing happening.
+    ctx.fillStyle = rgba(ink, 0.08 + 0.30*f);
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, 1 + 2*f);
+    ctx.strokeStyle = rgba(ink, 0.35 + 0.45*f);
+    ctx.stroke();
+    // ⚠️ `uprightAt`, like every other word the lobby draws: the pitch may be turned a
+    // quarter and letters are the one thing that must not turn with it.
+    const [lx, ly] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
+    uprightAt(lx + ox, ly + oy, (x, y) => {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${k.ch.length === 1 && k.ch !== ' ' ? 18 : 11}px ${LOBBY_FONT}`;
+      ctx.fillStyle = rgba(ink, 0.55 + 0.45*f);
+      ctx.fillText(k.label, x, y);
+    });
+  }
+  // What it is for, once, above the top row — nobody walks off the pitch expecting a
+  // keyboard, so the row of letters has to introduce itself.
+  const [cx, cy] = screenPt(wx(0), wy(kb.T - LOBBYKB.clear*0.45));
+  uprightAt(cx + ox, cy + oy, (x, y) => {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `10px ${LOBBY_FONT}`;
+    ctx.fillStyle = T.hudSub || T.hudText;
+    ctx.fillText('STAND ON A LETTER TO SPELL YOUR NAME', x, y);
+  });
+  ctx.restore();
+}
 function drawLobby(w){
   const L = w.lobby; if (!L) return;
   const hs = lobbyHumans(w), host = lobbyHost(w);
@@ -17255,7 +17479,15 @@ function drawLobby(w){
     const back = w.field.L/2 + (w.field.net || 0);
     const [, pb] = screenPt(wx(0), wy(back));
     const [, pt] = screenPt(wx(0), wy(-back));
-    const lo = Math.max(pb, pt), hi = Math.min(pb, pt);
+    // ⚠️ Below the KEYBOARD too, when there is one — it is laid out past the back of the
+    // net, which is exactly where this row used to sit, and the two printed through each
+    // other. Measured off its four CORNERS in screen space rather than off its world
+    // bottom edge: deck view turns the pitch a quarter-turn, so which corner is lowest on
+    // screen is not something the world coordinates can answer.
+    const ys = [pb, pt];
+    if (w.kb) for (const [kx, ky] of [[w.kb.L, w.kb.T], [w.kb.R, w.kb.T], [w.kb.L, w.kb.B], [w.kb.R, w.kb.B]])
+      ys.push(screenPt(wx(kx), wy(ky))[1]);
+    const lo = Math.max.apply(null, ys), hi = Math.min(pb, pt);
     // ⚠️ CLAMPED DOWNWARD, never flipped to the top. A first attempt moved the row above
     // the pitch when it would not fit below — and the top is where the "PRESS START"
     // headline lives, so on a tall pitch the two printed through each other. Sliding it up
@@ -21653,6 +21885,7 @@ if (window.__MAGNETDEBUG) {
     TOUCHDIG, TOUCHDIGOPT, touchIsDigital, digitalVec, onDown, onMove, onUp, drawPad, padFor, gamepadPad, get keys(){ return keys; },
     SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
+    LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
