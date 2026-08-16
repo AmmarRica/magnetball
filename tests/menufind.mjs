@@ -164,7 +164,7 @@ const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(r.colossus.length >= 1 && /colossus/i.test(r.colossus[0].label),
    `searching "coloss" did not find Colossus: ${JSON.stringify(r.colossus)}`);
 ok(/match/i.test(r.colossus[0].where || ''), `a result does not say where it lives: ${JSON.stringify(r.colossus[0])}`);
-ok(r.killer.some(h=>/killer queen/i.test(h.label)), `searching "killer" missed Killer Queen: ${JSON.stringify(r.killer)}`);
+ok(r.killer.some(h=>/killer lobsters/i.test(h.label)), `searching "killer" missed Killer Lobsters: ${JSON.stringify(r.killer)}`);
 ok(r.theme.length >= 1, 'searching a section name found nothing');
 ok(r.nothing.length === 0, `nonsense returned ${r.nothing.length} results`);
 ok(r.oneChar.length > 0 && r.oneChar.length <= 9, `a single character returned ${r.oneChar.length} results — the cap is not applied`);

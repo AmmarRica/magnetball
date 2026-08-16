@@ -1622,7 +1622,7 @@
         <div style="height:14px"></div>
         <label class="field">Turn to face where I'm going</label>
         <div class="opts" id="spinPick"></div>
-        <div class="hint" style="text-align:left; margin-top:4px">Only changes themes whose players have a front — Shrimp, Videoball arrowheads. Off keeps your body pointing up the pitch, which some people find easier to track. A round theme (Pool, Mono) looks the same either way, and every theme draws a ring at your real size regardless.</div>
+        <div class="hint" style="text-align:left; margin-top:4px">Only changes themes whose players have a front — Shrimp, VideoSoccer arrowheads. Off keeps your body pointing up the pitch, which some people find easier to track. A round theme (Pool, Mono) looks the same either way, and every theme draws a ring at your real size regardless.</div>
       </div>
       <div class="subpane" data-pane="cap">
         <label class="field">Cap</label>
@@ -2190,7 +2190,7 @@
       <p style="margin-top:12px"><b>🧲 Magnet.</b> Off by default — the ball is a free puck. <b>Ball magnet</b> (Game Feel, 0–100) adds a passive stick that carries the ball at your feet without holding KICK. Most people leave it at 0.</p>
       <p style="margin-top:12px"><b>⏱ Kickoff.</b> Both teams hold their own half until the ball is played. The <b>centre circle is a gate</b>: stand in it and you may cross the line early, so you can turn and pass backwards instead of only forwards. Stray over the line anywhere else and you're pushed back. Turn the whole rule off in the Match card.</p>
       <p style="margin-top:12px"><b>🏆 Ranked.</b> Matches against bots earn <b>RP</b> and climb the ladder (Wood → Legend); harder bots are worth more. <b>Training</b> is free practice with no clock. A timed game that's level at the whistle goes to <b>sudden-death overtime</b> — first goal wins.</p>
-      <p style="margin-top:12px"><b>🐌 Killer Queen.</b> Two balls at once. The normal one scores as usual and re-serves from the centre, but nothing else resets — no kickoff, players hold position. The second is the <b>snail</b>: huge, heavy, and it can only be shoved, never kicked. Push it into their goal and the match ends there and then, whatever the score.</p>
+      <p style="margin-top:12px"><b>🐌 Killer Lobsters.</b> Two balls at once. The normal one scores as usual and re-serves from the centre, but nothing else resets — no kickoff, players hold position. The second is the <b>snail</b>: huge, heavy, and it can only be shoved, never kicked. Push it into their goal and the match ends there and then, whatever the score.</p>
       <p style="margin-top:12px"><b>🧊 Surfaces.</b> Grass grips. <b>Ice</b> slides and takes an age to stop. <b>Mud</b> grabs and kills the roll. Both wear in as you play — mud churns and ice picks up skate cuts where the traffic is.</p>
       <p style="margin-top:12px"><b>👥 2-Player.</b> Lay the phone flat between you. Player 1 uses the bottom controls, Player 2 the top (rotated) ones.</p>
       <p style="margin-top:12px"><b>🎮 Controllers.</b> Set <b>Input</b> to Controllers and connect gamepads (press a button to wake them). Each pad takes a seat — you first, then an opponent, then a teammate — so 2 pads is 1v1, 8 pads a full 4v4. Left stick moves, <b>A / RT</b> kicks. Empty seats stay bots. <b>Extra controllers → Co-op</b> fills your side first instead.</p>
@@ -2994,7 +2994,11 @@ const MODES = {
   '4v4':  { name:'4 v 4',   emoji:'🏟️', icon:'stadium', per:4, twoP:false, desc:'You + 3 bots' },
   'duo':  { name:'Duo',     emoji:'👯', icon:'duo', per:2, twoP:false, duo:true, desc:'Steer 2 at once' },
   'local':{ name:'2-Player',emoji:'🎮', icon:'gamepad', per:1, twoP:true,  desc:'Same phone' },
-  'kq':   { name:'Killer Queen', emoji:'🐌', icon:'snail', per:3, twoP:false, kq:true, desc:'Snail wins it' },
+  // ⚠️ The KEY stays `kq` and the theme's stays `videoball`. Keys are what `sel.party`,
+  // `sel.look`, `THEME_BUNDLES`, the map votes and every saved replay file refer to, so
+  // renaming one orphans a setting somebody already chose. Only the NAME is user-facing,
+  // which is why it lives in exactly one place and is read from here rather than copied.
+  'kq':   { name:'Killer Lobsters', emoji:'🐌', icon:'snail', per:3, twoP:false, kq:true, desc:'Snail wins it' },
   'train':{ name:'Training',emoji:'🎯', icon:'target', per:0, twoP:false, train:true, desc:'Free practice' },
 };
 
@@ -3601,7 +3605,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0838PM';
+const VERSION = '20260816.0858PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3617,6 +3621,13 @@ const VERSION = '20260816.0838PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0858PM', title: 'Two new names',
+    added: [],
+    changed: [
+      '<b>Killer Queen is now Killer Lobsters.</b> Same mode, same snail, same hive \u2014 only the name.',
+      '<b>The Videoball theme is now VideoSoccer.</b> Same court and same arrowhead players. If you had either of them picked, they are still picked.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0838PM', title: 'Bots no longer freeze on a loose ball',
     added: [],
     changed: [
@@ -4595,7 +4606,7 @@ const THEMES = {
       hudText:'#f2f4f6', hudSub:'#b8bcc0', accent:'#f2f4f6', padRing:'rgba(255,255,255,0.5)' },
   },
   videoball: {
-    name: 'Videoball', emoji: '🔺',
+    name: 'VideoSoccer', emoji: '🔺',
     ui: { scan:false,
       grad:'linear-gradient(180deg, #0e3b3a 0%, #0a2c2b 100%)',
       bg:'#0a2c2b', panel:'rgba(14,59,58,0.94)', edge:'#1f6b69', text:'#eafcfb', muted:'#9dcecc',
@@ -8441,7 +8452,7 @@ function menuSearchIndex(){
     const keep = (el) => shownInShowMode(sec, paneOf(el));
     add(secName, card, sec, secName, null, null, 'Section');
     // A setting is its label; an option is the thing you would actually be looking
-    // for ("Killer Queen", "Colossus"), so both are indexed and options rank higher.
+    // for ("Killer Lobsters", "Colossus"), so both are indexed and options rank higher.
     for (const lb of card.querySelectorAll('label.field'))
       if (keep(lb)) add(lb.textContent, lb, sec, secName, group, paneOf(lb), 'Setting');
     for (const op of card.querySelectorAll('.opt'))
@@ -19498,7 +19509,7 @@ DYN_FIELDS.paddock = {
 // The VIDEOBALL court: warm cream bands running goal-to-goal on a teal table. The
 // bands are the whole read — they give the eye a ruler for how far the ball moved.
 DYN_FIELDS.vbcourt = {
-  name: 'Videoball court',
+  name: 'VideoSoccer court',
   paint(c, st, L, T, W, H, w){
     const base = TH.dynCourtA || '#f2e0b8', alt = TH.dynCourtB || '#e8d19b';
     c.fillStyle = base; c.fillRect(L, T, W, H);

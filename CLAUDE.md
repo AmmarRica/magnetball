@@ -632,7 +632,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   duplicate of it that nobody noticed for a build. Check the registry before adding to it.
   `tests/tennis.mjs` measures the court is one solid colour with the bodies taken off the
   list first — a player standing on a sample point reads as a stripe.
-  `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
+  `videoball` (shown as **VideoSoccer**) = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
   alone, overhanging it (nose 1.55r, wings 1.05r), so the shape on screen was a third bigger
@@ -1153,6 +1153,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   *are* the menu — eleven cards of them, on the screen the tile was sitting on — so it was
   a door onto the room you were already standing in. The detached panel is still reachable
   from Display, where a window-management choice belongs.
+- **A MODE'S AND A THEME'S KEY IS NOT ITS NAME.** `MODES.kq` is shown as **Killer
+  Lobsters** and `THEMES.videoball` as **VideoSoccer**; both keys stayed put when they
+  were renamed. Keys are what `sel.party`, `sel.look`, `THEME_BUNDLES`, the map votes
+  and every saved replay file refer to, so re-keying one orphans a setting somebody
+  already chose — the same argument the map maker records for saving a map IN PLACE.
+  The name is user-facing and lives in exactly one place, read from the registry and
+  never copied, which is what made each rename a one-line change.
+  ⚠️ Code comments still cite VIDEOBALL, the arcade game the theme's arrowheads and
+  motion tells were taken from. Those are design lineage and are still correct.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
@@ -1163,7 +1172,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   speed and "kickable" quietly means "weightless". `p.snailKicked` latches until KICK is
   released. Measured on Colossus: one kick moves it 22 units, **twice** a full-speed body
   check, while the same kick sends the ball 453.
-- **Killer Queen berries:** `BERRY` + `makeBerry`/`placeBerry`/`kqBerry`/`kqHiveFull`/`stepBerries`.
+- **Killer Lobsters berries** (`MODES.kq`, still keyed `kq`): `BERRY` + `makeBerry`/`placeBerry`/`kqBerry`/`kqHiveFull`/`stepBerries`.
   Six floaty purple bodies you shepherd into the end you ATTACK — the same end as the ball and
   the snail, so "your hive" is never the opposite way round from everything else in the mode.
   A berry crossing the line **banks** (`checkGoal` dispatches it *before* the snail and `kqGoal`)
