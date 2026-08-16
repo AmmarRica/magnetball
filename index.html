@@ -3553,7 +3553,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0309AM';
+const VERSION = '20260816.0333AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3569,6 +3569,13 @@ const VERSION = '20260816.0309AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0333AM', title: 'Quieter stat labels',
+    added: [],
+    changed: [
+      '<b>The labels over a player no longer repeat themselves.</b> SHOT, CLEARANCE and the rest could print two or three times over the same player in a second \u2014 a ball rebounding off a wall really is another strike, so the game was right and the text was noise. The same label now waits two seconds before it can appear over that player again. Your match stats are unchanged: every shot is still counted, it is just not announced twice.',
+      'A different label is never held back, so the GOAL! straight after a SHOT still shows.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0309AM', title: 'Tennis',
     added: [
       '<b>A tennis theme.</b> A blue court, a green surround, white lines and an acid-yellow ball \u2014 the tennis palette on the ordinary pitch, not a tennis court. Theme \u2192 Background \u2192 Tennis.',
@@ -5328,6 +5335,7 @@ const FLOAT = {
   rise: 30,        // SCREEN pixels it drifts up over its life
   lift: 24,        // screen pixels it starts above the disc
   gap: 15,         // stagger when one player earns several at once
+  cool: 2,         // seconds before the SAME player may show the SAME label again
   size: 11,        // font px — screen, not world (see drawFloaters)
   max: 20,         // hard cap; oldest goes
   // Nominal body radius, in world units, used only to clear a standing body in the side
@@ -13524,9 +13532,37 @@ function lobbyStart(w){
 // drawing from `w.rng` would make how many labels appeared perturb every later bot
 // decision. The stagger is counted, not rolled.
 let floaters = [];
-function clearFloaters(){ floaters.length = 0; }
+// ⚠️ ONE OF EACH LABEL PER PLAYER PER `FLOAT.cool` SECONDS, and it was reported as the
+// same word printed over somebody two and three times. Every `addFloater` hangs off the
+// line that counts the stat, and those lines fire as often as the game really happens:
+// a ball that rebounds straight back off a wall or a body is a second legitimate strike
+// a few frames later, so a bot pinned against the boards genuinely takes four shots in
+// under a second and got four SHOTs stacked over its head. The play was right and the
+// caption was noise.
+// ⚠️ Per (PLAYER, LABEL), never per player. A blanket cooldown would swallow the GOAL!
+// half a second after the SHOT that scored it, which is the one label nobody may miss —
+// and SHOT and CLEARANCE firing together on one strike is two different things being
+// said, not a repeat.
+// ⚠️ The STAT IS UNTOUCHED. Only the caption is held back, so the result screen still
+// counts every shot — which keeps the invariant this system is built on pointing the
+// way it always did: a label can never claim something the result screen will not also
+// show. It may now stay quiet about something the result screen does show.
+// ⚠️ Counted on `advanceFloaters`' own clock, which is the step loop (the trails rule) —
+// and the same clock a floater's LIFETIME already runs on, so this adds no coupling that
+// was not there. Reset together with the labels themselves in `clearFloaters`, and the
+// map goes with it: a clock rewound to zero under timestamps from the old match reads as
+// "cooling down" for ever.
+let floatClock = 0;
+let floatLast = new WeakMap();     // player -> { LABEL: floatClock when it last showed }
+function clearFloaters(){ floaters.length = 0; floatClock = 0; floatLast = new WeakMap(); }
 function addFloater(p, text, col){
   if (!p || sel.popups === 'off') return;
+  // ⚠️ `text in seen`, not `seen[text] || 0` — the clock starts AT zero, so a label shown
+  // on the first step stores 0, and a falsy test would let it straight through again.
+  let seen = floatLast.get(p);
+  if (!seen){ seen = {}; floatLast.set(p, seen); }
+  if (text in seen && floatClock - seen[text] < FLOAT.cool) return;
+  seen[text] = floatClock;
   // Stagger against whatever this player already has up, so two in the same instant
   // do not print on top of each other.
   let n = 0;
@@ -13537,6 +13573,10 @@ function addFloater(p, text, col){
   while (floaters.length > FLOAT.max) floaters.shift();
 }
 function advanceFloaters(){
+  // ⚠️ BEFORE the early return. The cooldown clock has to keep running through the quiet
+  // stretch when nothing is on screen, or a label shown once would hold its cooldown for
+  // the rest of the match — the whole point is the gap between two of them.
+  floatClock += STEP;
   if (!floaters.length) return;
   for (const f of floaters) f.t += STEP;
   // Filtered in place rather than reallocated: this runs every step.

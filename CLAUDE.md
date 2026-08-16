@@ -299,6 +299,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **TOUCHES is excluded**, the same argument that keeps it off the result screen: it
   is the one stat every player always has, so a label per touch is a permanent smear of
   text that tells you nothing.
+  ⚠️ **ONE OF EACH LABEL PER PLAYER PER `FLOAT.cool` (2s)**, and it was reported as
+  the same word printed over somebody two and three times. Every label hangs off the
+  line that counts the stat, and those lines fire as often as the game really happens:
+  a ball rebounding straight back off a wall or a body is a second legitimate strike a
+  few frames later, so a bot pinned against the boards genuinely takes four shots in
+  under a second. The play was right and the caption was noise.
+  ⚠️ Per **(player, label)**, never per player — a blanket cooldown would swallow the
+  GOAL! half a second after the SHOT that scored it, and SHOT plus CLEARANCE on one
+  strike is two different things being said rather than a repeat.
+  ⚠️ **The STAT is untouched**: only the caption is held back, so the result screen
+  still counts every shot. That keeps this system's invariant pointing the way it
+  always did — a label can never claim something the result screen will not also show;
+  it may now stay quiet about something the result screen does show.
+  ⚠️ Counted on `advanceFloaters`' own clock, incremented **before** its early return
+  (through the quiet stretch a label shown once would otherwise hold its cooldown for
+  ever), and reset in `clearFloaters` **together with the map** — a clock rewound to
+  zero under timestamps from the last match reads as cooling down permanently.
   ⚠️ Ages in `advanceFloaters()` next to `decayJuice()`, **never in a draw** — the trails
   rule. ⚠️ **No randomness at all**: these are spawned from inside `step()`, so
   `Math.random` would break the determinism rule outright and `w.rng` would make how many

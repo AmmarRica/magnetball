@@ -251,6 +251,81 @@ const drawn = await p.evaluate(() => {
   return o;
 });
 
+// ============================================================== the 2s cooldown ==
+// ⚠️ REPORTED: the same word printed over a player two and three times. Every label
+// hangs off the line that counts the stat, and those lines fire as often as the game
+// really happens — a ball rebounding straight back off a wall or a body is a second
+// legitimate strike a few frames later, so a bot pinned against the boards genuinely
+// takes four shots in under a second. The play was right and the caption was noise.
+//
+// ⚠️ The claim is pinned from BOTH ends. A cooldown that simply dropped every repeat
+// would pass "no two SHOTs in a row" while having deleted the feature, so the label
+// coming BACK after the gap matters as much as it being held. And the STAT must be
+// untouched: only the caption is quiet, or this would silently rewrite match records.
+const cool = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  o.cool = M.FLOAT.cool;
+  M.sel.popups = 'on';
+  M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.setMatchSeed(3); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const [a, b2] = w.players;
+  const texts = () => M.floaters.map(f => f.text);
+  const tick = n => { for (let i = 0; i < n; i++) M.advanceFloaters(); };
+  const secs = t => Math.round(t * 60) + 1;      // steps to clear a gap of t seconds
+
+  // Same player, same label, back to back.
+  M.clearFloaters();
+  M.addFloater(a, 'SHOT', '#fff'); M.addFloater(a, 'SHOT', '#fff'); M.addFloater(a, 'SHOT', '#fff');
+  o.burst = texts().filter(t => t === 'SHOT').length;
+
+  // A DIFFERENT label on the same player is not held — the GOAL! half a second after
+  // the SHOT that scored it is the one nobody may miss.
+  M.addFloater(a, 'GOAL!', '#fff');
+  o.otherLabelPasses = texts().includes('GOAL!');
+
+  // The same label on a different player is not held either.
+  M.addFloater(b2, 'SHOT', '#fff');
+  o.otherPlayerPasses = texts().filter(t => t === 'SHOT').length === 2;
+
+  // ⚠️ Still held just BEFORE the gap is up, and through the whole quiet stretch where
+  // nothing is on screen — the clock has to keep running past `advanceFloaters`' own
+  // early return, or a label shown once holds its cooldown for the rest of the match.
+  M.clearFloaters();
+  M.addFloater(a, 'CLEARANCE', '#fff');
+  tick(secs(M.FLOAT.cool) - 20);
+  o.emptyMidway = M.floaters.length === 0;       // it expired long ago; nothing on screen
+  M.addFloater(a, 'CLEARANCE', '#fff');
+  o.heldJustBefore = texts().length === 0;
+  tick(30);
+  M.addFloater(a, 'CLEARANCE', '#fff');
+  o.showsAfterTheGap = texts().includes('CLEARANCE');
+
+  // A fresh match is not muted by the last one.
+  M.clearFloaters();
+  M.addFloater(a, 'SAVE', '#fff');
+  M.clearFloaters();
+  M.addFloater(a, 'SAVE', '#fff');
+  o.resetClears = texts().includes('SAVE');
+
+  // ⚠️ THE STAT IS UNTOUCHED. Four real strikes a few frames apart: the label is held
+  // back, the record is not. Driven through the REAL `noteKick`, which is where both
+  // the counter and the caption live — checking `addFloater` alone would say nothing
+  // about the stats.
+  M.clearFloaters();
+  const me = w.players.find(q => q.ms) || a;
+  const before = me.ms.shots;
+  const dir = me.team === 0 ? -1 : 1;
+  for (let k = 0; k < 4; k++){
+    M.noteKick(w, me, 8, 0, dir);                // power > 4, straight at their goal
+    tick(6);
+  }
+  o.shotsCounted = me.ms.shots - before;
+  o.shotLabels = texts().filter(t => t === 'SHOT').length;
+  o.statIsUntouched = o.shotsCounted === 4 && o.shotLabels === 1;
+  M.clearFloaters();
+  return o;
+});
+
 ok('a goal moves the stat AND puts a label on the scorer', r.goalMatchesStat,
    `goals +${r.goalStat}, label ${r.goalLabel}`);
 ok('...and an assist on the team-mate', r.assistMatchesStat,
@@ -281,9 +356,28 @@ ok('the fixture put the body off the right edge', drawn.edgeIsOffScreen,
    `body drew at screen x ${drawn.edgeScreenX}, canvas ${innerWidthOf(drawn)} — not far enough out to test the clamp`);
 ok('...and the label is clamped fully inside the canvas', drawn.stayedOnScreen,
    `spanned x ${JSON.stringify(drawn.edgeSpan)}, width ${drawn.edgeLabelWidth}`);
+// ⚠️ The GAP IS TWO SECONDS, asserted as an absolute. Every timing check below derives
+// its tick counts FROM `FLOAT.cool`, which makes them scale-invariant — they prove the
+// mechanism honours its own constant and nothing more. A sabotage setting the constant
+// to 30 passed all of them, so the number that was actually asked for is pinned here.
+ok('the gap is two seconds', cool.cool === 2, `FLOAT.cool = ${cool.cool}`);
+ok('the same label on the same player fires ONCE in a burst', cool.burst === 1,
+   `${cool.burst} of 3 got through — a ball rebounding off a wall is a second legitimate strike, so the play was right and the caption was noise`);
+ok('...but a DIFFERENT label on that player still fires', cool.otherLabelPasses,
+   'a blanket per-player cooldown would swallow the GOAL! half a second after the SHOT that scored it');
+ok('...and the same label on a different player still fires', cool.otherPlayerPasses);
+ok('the fixture really was quiet in the middle of the gap', cool.emptyMidway,
+   'if a label were still on screen the next check would be measuring the cap, not the cooldown');
+ok('...still held just before the gap is up', cool.heldJustBefore);
+ok('...and BACK once it passes', cool.showsAfterTheGap,
+   `FLOAT.cool = ${cool.cool}s — a cooldown that never lets the label back has deleted the feature and passes every check above`);
+ok('a reset clears the cooldown with the labels', cool.resetClears,
+   'a clock rewound to zero under timestamps from the last match reads as cooling down for ever');
+ok('THE STAT IS UNTOUCHED', cool.statIsUntouched,
+   `${cool.shotsCounted} shots counted, ${cool.shotLabels} label — only the caption is held back, so nobody's match record changes`);
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
-console.log(JSON.stringify({ ...r, ...drawn }, null, 1));
+console.log(JSON.stringify({ ...r, ...drawn, cool }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL floaters\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS floaters');
