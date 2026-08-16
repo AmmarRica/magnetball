@@ -3115,6 +3115,15 @@ const LOBBYKB = {
   dwell: 0.40,       // seconds standing on a key before it presses
   maxLen: 12,        // the same cap the name box uses
   wideW: 3.2,        // DEL and SPACE, in key widths
+  // ⚠️ The team-size stepper REPEATS while you stand on it, and the letters do not.
+  // Opposite rules on purpose: a letter you meant once is a letter, so it latches until
+  // you step off — but going 1v1 to 6v6 through a latch is eleven trips on and off a
+  // square, which is not a control, it is a chore.
+  // ⚠️ 66, not 84. The two squares are pinned to the top and bottom of the letter
+  //  block, so their size is what sets the GAP between them — and the team-size
+  //  readout lives in that gap. At 84 the words sat on the minus square's own edge.
+  pad: 66,           // the + and − squares, world units
+  repeat: 0.34,      // seconds between repeats while a foot stays on one
 };
 // The surface, as MULTIPLIERS on your own Game Feel rather than as replacements for
 // it. ⚠️ These used to be absolute numbers, and `pAccel`/`pDamp` were taken from the
@@ -3576,7 +3585,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0404AM';
+const VERSION = '20260816.0550AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3592,6 +3601,13 @@ const VERSION = '20260816.0404AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0550AM', title: 'Team size, on the pitch',
+    added: [
+      '<b>A + and a \u2212 square beside the warm-up keyboard.</b> Stand on them to add or remove a bot a side, so a 1v1 becomes a 3v3 without going back to the menu. The size you are about to play reads out between the two squares, and the bots walk on and off as you change it.',
+      'Holding your foot on a square keeps counting, rather than making you step off and back on for every one.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0404AM', title: 'Spell your name with your feet',
     added: [
       '<b>A keyboard in the warm-up lobby.</b> It sits on the grass outside the pitch: stand on a letter for a moment to type it, DEL and SPACE included, and your name changes over your head as you go. Then walk into the half you want to play on, the way you always did.',
@@ -13243,10 +13259,29 @@ function buildLobbyKeys(w){
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
   ctrl.forEach(([ch, label], i) =>
     keys.push({ ch, label, x: -tot/2 + i*(cw2 + K.gap), y: top + K.rows.length*rowH, w: cw2, h: K.keyH }));
-  let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+  // The team-size stepper, RIGHT of the letters: + at the top, − at the bottom, with the
+  // size read out between them. It is how you turn a 1v1 into a 3v3 without going back
+  // to the menu, which is the one thing the lobby could not do.
+  let lettersR = -Infinity;
+  for (const k of keys) lettersR = Math.max(lettersR, k.x + k.w);
+  const rowsB = top + K.rows.length*rowH + K.keyH;
+  const px = lettersR + K.gap*3;
+  keys.push({ act:  1, label: '+', x: px, y: top,             w: K.pad, h: K.pad, rep: true });
+  keys.push({ act: -1, label: '\u2212', x: px, y: rowsB - K.pad, w: K.pad, h: K.pad, rep: true });
+  // ⚠️ THE WHOLE BLOCK IS RECENTRED, letters and stepper together. The letters alone are
+  // centred on the pitch's axis and the stepper hangs off one side, so the block's own
+  // middle is not x = 0 — and `computeCam` frames the SPAN, so an off-centre block slides
+  // the pitch sideways to balance it. Centring the block here means the pitch stays where
+  // it has always been and the camera's horizontal offset stays exactly zero.
+  let L = Infinity, R = -Infinity;
+  for (const k of keys){ L = Math.min(L, k.x); R = Math.max(R, k.x + k.w); }
+  const shift = -(L + R)/2;
+  for (const k of keys) k.x += shift;
+  L = Infinity; R = -Infinity;
+  let T = Infinity, B = -Infinity;
   for (const k of keys){ L = Math.min(L, k.x); T = Math.min(T, k.y);
                          R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
-  w.kb = { keys, L, T, R, B };
+  w.kb = { keys, L, T, R, B, padX: px + shift, padW: K.pad, midY: (top + rowsB)/2 };
 }
 function kbKeyAt(kb, x, y){
   for (const k of kb.keys)
@@ -13277,8 +13312,28 @@ function stepLobbyKeys(w){
     if (!k){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
     if (p.kbKey !== k){ p.kbKey = k; p.kbT = 0; p.kbDone = false; }
     p.kbT += STEP;
-    if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbPress(p, k.ch); }
+    if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbHit(w, p, k); }
+    // ⚠️ Only a `rep` key comes back round. Winding `kbT` back to the dwell rather than
+    // to zero is what makes the repeat rate `LOBBYKB.repeat` instead of a second dwell.
+    else if (p.kbDone && k.rep && p.kbT >= LOBBYKB.dwell + LOBBYKB.repeat){
+      p.kbT = LOBBYKB.dwell; kbHit(w, p, k);
+    }
   }
+}
+function kbHit(w, p, k){
+  if (k.act) lobbySizeBump(w, k.act);
+  else kbPress(p, k.ch);
+}
+// ⚠️ Clamped to the CURRENT floor, not just to 1. `lobbyPlan` will not field fewer
+// bodies a side than the humans standing on that half, so a stored value below that
+// floor is a number nothing reads — press − four times against the floor and + would
+// then do nothing four times, which reads as a broken control.
+function lobbySizeBump(w, d){
+  if (!w.lobby) return;
+  const plan = lobbyPlan(w);
+  const floor = Math.max(1, plan.a.length, plan.b.length);
+  const cur = w.lobby.per != null ? w.lobby.per : plan.per;
+  w.lobby.per = Math.max(floor, Math.min(LOBBY.maxPerSide, cur + d));
 }
 function kbPress(p, ch){
   // ⚠️ The first press starts from EMPTY. You are writing your name, not appending to
@@ -13492,7 +13547,26 @@ function walkTo(p, to, sp){
 }
 function stepLobbyBots(w){
   const plan = lobbyPlan(w);
-  const bots = w.players.filter(p => p.ctrl === 'bot');
+  let bots = w.players.filter(p => p.ctrl === 'bot');
+  // ⚠️ BUILT TO ORDER, so the stepper shows the bodies and not only the number. A 1v1
+  // world holds one bot, and `lobbyStart` used to be the only thing that ever made more
+  // — so turning the dial up to 3v3 changed the count under each half while the pitch
+  // stayed empty, and the lobby's one promise is that the preview cannot disagree with
+  // what Start does. ⚠️ Safe from inside `step()` because `spawnLobbyBot` is fully
+  // deterministic: `pickNames` indexes arithmetically and `randEyes` is `(i*3+1) % n`.
+  // Nothing here touches `Math.random` or `w.rng`.
+  const need = plan.need0 + plan.need1;
+  if (bots.length < need){
+    const used = new Set(w.players.map(p => p.name));
+    const side = w.field.W/2 + LOBBY.benchGap;
+    for (let i = bots.length; i < need; i++){
+      const bot = spawnLobbyBot(w, 0, w.players.length, used);
+      bot.x = (i % 2 ? -side : side); bot.y = 0; bot.vx = 0; bot.vy = 0;
+      bot.ms = freshMs();
+      w.players.push(bot);
+    }
+    bots = w.players.filter(p => p.ctrl === 'bot');
+  }
   // Which side each bot is wanted on, in roster order, so a bot doesn't swap halves
   // every time somebody shuffles. -1 means "not needed".
   const want = [];
@@ -13601,7 +13675,11 @@ function lobbyPlan(w){
   // The MODE sets the floor, so two people in a 4v4 still get a 4v4 rather than
   // silently dropping to 1v1 — picking a side chooses your team, not the match size.
   const modePer = (w.mode && w.mode.per) || 1;
-  const per = Math.max(1, Math.min(LOBBY.maxPerSide, Math.max(modePer, a.length, b.length)));
+  // ⚠️ The lobby's own size, set on the +/− stepper, OVERRIDES the mode — that is the
+  // whole point of the control. It is still floored by the humans on a side, so the
+  // stepper can never strand somebody who has picked a half.
+  const want = (w.lobby && w.lobby.per != null) ? w.lobby.per : modePer;
+  const per = Math.max(1, Math.min(LOBBY.maxPerSide, Math.max(want, a.length, b.length)));
   return { a, b, out, per, need0: per - a.length, need1: per - b.length };
 }
 // A bot built to order when the mode's roster can't cover the side people chose.
@@ -17403,11 +17481,26 @@ function drawLobbyKeys(w, ox, oy){
     const [lx, ly] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
     uprightAt(lx + ox, ly + oy, (x, y) => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `${k.ch.length === 1 && k.ch !== ' ' ? 18 : 11}px ${LOBBY_FONT}`;
+      ctx.font = `${k.act ? 26 : (k.ch.length === 1 && k.ch !== ' ' ? 18 : 11)}px ${LOBBY_FONT}`;
       ctx.fillStyle = rgba(ink, 0.55 + 0.45*f);
       ctx.fillText(k.label, x, y);
     });
   }
+  // The size the stepper is actually going to produce, between the two squares.
+  // ⚠️ Read from `lobbyPlan`, never from `w.lobby.per` — the plan floors the size at the
+  // humans standing on a half, so the stored value and the fielded one can differ and
+  // the readout has to be the one that comes true. Same rule the side counts follow.
+  const per = lobbyPlan(w).per;
+  const [mx, my] = screenPt(wx(kb.padX + kb.padW/2), wy(kb.midY));
+  uprightAt(mx + ox, my + oy, (x, y) => {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `15px ${LOBBY_FONT}`;
+    ctx.fillStyle = T.hudText;
+    ctx.fillText(per + 'V' + per, x, y - 7);
+    ctx.font = `8px ${LOBBY_FONT}`;
+    ctx.fillStyle = T.hudSub || T.hudText;
+    ctx.fillText('TEAM SIZE', x, y + 9);
+  });
   // What it is for, once, above the top row — nobody walks off the pitch expecting a
   // keyboard, so the row of letters has to introduce itself.
   const [cx, cy] = screenPt(wx(0), wy(kb.T - LOBBYKB.clear*0.45));
@@ -21885,7 +21978,7 @@ if (window.__MAGNETDEBUG) {
     TOUCHDIG, TOUCHDIGOPT, touchIsDigital, digitalVec, onDown, onMove, onUp, drawPad, padFor, gamepadPad, get keys(){ return keys; },
     SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
-    LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit,
+    LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit, lobbySizeBump,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,

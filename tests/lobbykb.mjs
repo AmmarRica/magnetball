@@ -151,6 +151,94 @@ const r = await p.evaluate(() => {
   return o;
 });
 
+// ---- 8. the TEAM SIZE stepper: + and − squares right of the letters -----------------
+// ⚠️ The point of it is turning a 1v1 into a 3v3 without going back to the menu, so the
+// checks are about what gets FIELDED, not about a number in `w.lobby`. And it repeats
+// while you stand on it, which is the opposite rule from the letters — going 1v1 to 6v6
+// through a latch would be eleven trips on and off a square.
+const step = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.mode = '1v1'; M.sel.lobby = 'on'; M.setMatchSeed(4); M.startMatch();
+  const w = M.world;
+  const me = M.firstHumanSeat(w);
+  const plus = w.kb.keys.find(k => k.act === 1), minus = w.kb.keys.find(k => k.act === -1);
+  o.hasBoth = !!plus && !!minus;
+  // RIGHT of every letter, which is where they were asked for.
+  const letterR = Math.max.apply(null, w.kb.keys.filter(k => !k.act).map(k => k.x + k.w));
+  o.rightOfLetters = plus.x >= letterR && minus.x >= letterR;
+  o.stacked = plus.y < minus.y && Math.abs(plus.x - minus.x) < 1;
+
+  const stand = (k, steps) => { for (let i = 0; i < steps; i++){ me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = 0; me.vy = 0; M.step(w); } };
+  const off = () => { for (let i = 0; i < 4; i++){ me.x = 0; me.y = -200; me.vx = 0; me.vy = 0; M.step(w); } };
+  const dwellSteps = Math.ceil(M.LOBBYKB.dwell * 60) + 4;
+
+  o.startPer = M.lobbyPlan(w).per;
+  o.botsAtStart = w.players.filter(q => q.ctrl === 'bot').length;
+  stand(plus, dwellSteps); off();
+  o.afterOnePress = M.lobbyPlan(w).per;
+  // ⚠️ It REPEATS while a foot stays on it — measured against one press, not against a
+  // constant, so the check survives the repeat rate being retuned.
+  stand(plus, 150); off();
+  o.afterHold = M.lobbyPlan(w).per;
+  o.repeats = o.afterHold > o.afterOnePress + 1;
+  o.cappedAt = M.LOBBY.maxPerSide;
+  stand(plus, 900); off();
+  o.holdsAtCap = M.lobbyPlan(w).per === M.LOBBY.maxPerSide;
+
+  // ...and the bodies really are there, not just the number under each half.
+  o.botsAtCap = w.players.filter(q => q.ctrl === 'bot').length;
+  const pl = M.lobbyPlan(w);
+  o.previewShowsBodies = o.botsAtCap >= pl.need0 + pl.need1;
+
+  // − brings it back down.
+  stand(minus, 900); off();
+  o.afterMinus = M.lobbyPlan(w).per;
+  o.minusWorks = o.afterMinus < o.afterHold;
+
+  // ⚠️ FLOORED by the humans on a half, and pressing + right afterwards has to respond
+  // AT ONCE. A stored value allowed to sink below the floor is a control that ignores
+  // the next four presses, which reads as broken.
+  // ⚠️ Driven through `lobbySizeBump` rather than by walking, and the reason is the
+  // feature itself: standing on the stepper puts you PAST THE TOUCHLINE, which the lobby
+  // reads as sitting this one out — so the body pressing − is not one of the bodies the
+  // floor counts, and a walked version of this can never raise the floor above what the
+  // OTHER humans hold. The walked path is covered by the − check above.
+  const hs = w.players.filter(q => q.ctrl !== 'bot');
+  hs.forEach(q => { q.y = w.field.L * 0.25; q.x = 0; });   // both humans onto one half
+  for (let i = 0; i < 4; i++) M.step(w);
+  o.humansOneSide = M.lobbyPlan(w).a.length;
+  for (let i = 0; i < 12; i++) M.lobbySizeBump(w, -1);
+  o.flooredAt = M.lobbyPlan(w).per;
+  o.floorHolds = o.flooredAt === Math.max(1, o.humansOneSide);
+  M.lobbySizeBump(w, 1);
+  o.plusAfterFloor = M.lobbyPlan(w).per;
+  o.respondsAtOnce = o.plusAfterFloor === o.flooredAt + 1;
+
+  // What actually gets fielded is the whole claim.
+  w.lobby.per = 3;
+  hs.forEach((q, i) => { q.y = i ? -w.field.L*0.25 : w.field.L*0.25; });
+  for (let i = 0; i < 4; i++) M.step(w);
+  M.lobbyStart(w);
+  o.fielded = [w.players.filter(q => q.team === 0).length, w.players.filter(q => q.team === 1).length];
+  o.fieldedThreeAside = o.fielded[0] === 3 && o.fielded[1] === 3;
+  return o;
+});
+
+// ⚠️ Bots are now spawned from inside `step()`, so two lobbies on one seed have to come
+// out identical — `spawnLobbyBot` is deterministic (`pickNames` indexes arithmetically,
+// `randEyes` is `(i*3+1) % n`), and this is what holds that.
+const det = await p.evaluate(() => {
+  const M = window.__magnet;
+  const run = () => {
+    M.sel.mode = '1v1'; M.sel.lobby = 'on'; M.setMatchSeed(12); M.startMatch();
+    const w = M.world; w.lobby.per = 5;
+    for (let i = 0; i < 200; i++) M.step(w);
+    return w.players.map(q => `${q.name}:${q.ctrl}:${q.x.toFixed(3)}:${q.y.toFixed(3)}`).join('|');
+  };
+  const a = run(), b = run();
+  return { same: a === b, sample: a.slice(0, 90) };
+});
+
 // ---- 6. framing: on screen, clear of the chrome, and the pitch really is smaller ----
 const view = await p.evaluate(() => {
   const M = window.__magnet, o = {};
@@ -220,7 +308,8 @@ await ph.close();
 
 // -------------------------------------------------------------------- report --
 ok('the warm-up lobby has a keyboard', r.state === 'warmup' && r.hasKb, JSON.stringify({ state: r.state, kb: r.hasKb }));
-ok('...with a key per letter plus DEL and SPACE', r.keyCount === 28, `${r.keyCount} keys: ${r.letters}`);
+ok('...with a key per letter, DEL and SPACE, and the two stepper squares', r.keyCount === 30,
+   `${r.keyCount} keys: ${r.letters}`);
 ok('every key is OUTSIDE the pitch', r.allOutside,
    `nearest is ${r.nearestKey} units past the back of the net — on the pitch it would be a second meaning for standing somewhere, fighting the side pick the lobby is for`);
 ok('...so standing on one is not a side pick', r.sideOnKeyboard === -1,
@@ -250,6 +339,23 @@ ok('the typed name is committed to the PROFILE at the whistle', r.committedProfi
 ok('the keyboard is gone once play starts', r.kbGoneInPlay && r.stateAfterStart !== 'warmup',
    JSON.stringify({ state: r.stateAfterStart, kb: !r.kbGoneInPlay }));
 
+ok('the stepper is two squares RIGHT of the letters', step.hasBoth && step.rightOfLetters && step.stacked,
+   JSON.stringify({ both: step.hasBoth, right: step.rightOfLetters, stacked: step.stacked }));
+ok('one press adds a body a side', step.afterOnePress === step.startPer + 1,
+   `${step.startPer} then ${step.afterOnePress}`);
+ok('...and holding REPEATS', step.repeats,
+   `one press ${step.afterOnePress}, held ${step.afterHold} — the opposite rule from the letters, because going 1v1 to 6v6 through a latch is eleven trips on and off a square`);
+ok('...up to the per-side cap and no further', step.holdsAtCap, `capped at ${step.cappedAt}`);
+ok('the bots are really THERE, not just counted', step.previewShowsBodies,
+   `${step.botsAtCap} bots on the sheet — the lobby's one promise is that the preview cannot disagree with what Start does, and a 1v1 world holds one bot`);
+ok('− takes them away again', step.minusWorks, `${step.afterHold} then ${step.afterMinus}`);
+ok('the size is floored by the humans on a half', step.floorHolds,
+   `${step.humansOneSide} humans on one side, floor held at ${step.flooredAt}`);
+ok('...and + responds at once against that floor', step.respondsAtOnce,
+   `${step.flooredAt} then ${step.plusAfterFloor} — a stored value allowed to sink below the floor ignores the next four presses, which reads as a broken control`);
+ok('a 1v1 becomes a real 3v3', step.fieldedThreeAside, JSON.stringify(step.fielded));
+ok('two lobbies on one seed are identical', det.same,
+   `${det.sample} — bots are spawned from inside step() now, so spawnLobbyBot has to stay deterministic`);
 ok('every key is on screen', view.onScreen,
    `${JSON.stringify(view.worst)} in a ${JSON.stringify(view.canvas)} canvas — a player may never leave the view, and the keys are where they are walking`);
 ok('the Start button does not sit on the keys', view.buttonShown && !view.buttonHitsAKey,
@@ -265,7 +371,7 @@ ok('a phone frames it too', phone.state === 'warmup' && phone.onScreen,
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ r, view, phone }, null, 1));
+console.log(JSON.stringify({ r, step, det, view, phone }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL lobbykb\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS lobbykb');

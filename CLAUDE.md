@@ -1615,6 +1615,32 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   leaves a seat mid-edit alone (`p.kbTyped`), or a profile sync puts "You" back under the
   player's feet. ⚠️ Advanced in the step loop, never a draw (the trails rule), and drawn
   on the GROUND layer before the bodies or a player standing on a key is under it.
+  ⚠️ **THE TEAM-SIZE STEPPER lives on the same board** — a `+` and a `−` square to the
+  right of the letters, with the size it will actually field read out between them. It is
+  how a 1v1 becomes a 3v3 without going back to the menu, which is the one thing the
+  lobby could not do.
+  ⚠️ **It REPEATS while you stand on it and the letters do not.** Opposite rules on
+  purpose: a letter you meant once is a letter, so it latches until you step off, but
+  going 1v1 to 6v6 through a latch is eleven trips on and off a square.
+  ⚠️ `w.lobby.per` **overrides the mode** in `lobbyPlan`, and is still floored by the
+  humans standing on a half — clamped at bump time, not just when read, or pressing `−`
+  four times against the floor makes the next four `+` presses do nothing, which reads as
+  a broken control. The readout is drawn from `lobbyPlan(w).per`, never from the stored
+  value, so it cannot promise a size the plan will not field.
+  ⚠️ **`stepLobbyBots` builds bots TO ORDER**, because a 1v1 world holds one bot and
+  `lobbyStart` used to be the only thing that ever made more — so the dial changed the
+  count under each half while the pitch stayed empty, and the lobby's one promise is that
+  the preview cannot disagree with what Start does. Safe from inside `step()` only because
+  `spawnLobbyBot` is fully deterministic (`pickNames` indexes arithmetically, `randEyes`
+  is `(i*3+1) % n`); nothing there touches `Math.random` or `w.rng`.
+  ⚠️ **The whole block is recentred, letters and stepper together.** The letters alone are
+  centred on the pitch's axis and the stepper hangs off one side, so the block's middle is
+  not x = 0 — and `computeCam` frames the SPAN, so an off-centre block slides the pitch
+  sideways to balance it.
+  ⚠️ Standing on the stepper puts you PAST THE TOUCHLINE, which the lobby already reads as
+  sitting this one out — so the body pressing `−` is never one of the bodies the floor
+  counts. That is consistent rather than a bug, and it is why the floor is tested through
+  `lobbySizeBump` rather than by walking.
   `tests/lobbykb.mjs`.
 - **The warm-up ball is LIVE, and there is one per half plus one per person.**
   `integrate(w, false, false)` in the warmup branch — it passed `true` and froze the
