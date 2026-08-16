@@ -1065,15 +1065,57 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   and `tests/floaters.mjs` and `tests/surfaces.mjs` both went red on "two identical renders
   differ". The draw records the target into `labelT` (a render-time question: it needs
   screen-space overlap) and the step loop eases `labelA` toward it. Two arrays, on purpose.
-- **Names thin out near the ball (`LABEL_BALL`, `labelBallFade`):** a *different rule*
+- **The wind-up ring is SOLID, and the size is a dial** (`kickRingMul`, `KICKRING`,
+  `sel.kickRing`, Game Feel → Player). ⚠️ It used to PULSE at `3.5 + f*8` Hz, so a full
+  charge strobed it nearly twelve times a second — reported as *"holding kick would have
+  the circle around the player flash instead of staying solid"*. Brightness and width
+  carry the charge on their own. An even earlier version swept round like a loading bar
+  and was dropped for reading as progress; solid is the third answer and the quiet one.
+  ⚠️ **`tests/tells.mjs` was PINNING the pulse** (`ringHigh > ringLow * 1.25`, "it
+  flashes, never sweeps") — the check is inverted now, and still requires the ring to be
+  a full circle and to actually be inked, or "it does not flicker" is true of no ring.
+  ⚠️ The ring is a **TELL, not the reach**: the real range is `p.r + ball.r +
+  PLAYER.kickRange`, which is 2.6r on the defaults, and the ring has always been drawn
+  well inside that. The dial moves the DRAWING only — `tests/gamesave.mjs` steps 900
+  frames at the smallest and largest setting and requires the world bit-identical, so it
+  can never become a hidden gameplay lever.
+- **A GAME SAVE, as one JSON file** (`SAVEFILE`, `buildSaveDoc`, `parseSaveDoc`,
+  `applySaveDoc`, `exportSaveFile`, `pickSaveDoc`; About card). Settings including Game
+  Feel, your player, your record and unlocks, custom maps, drill times, and a season or
+  Gauntlet run in progress.
+  ⚠️ **A whole save rather than a settings export**, which is a deliberate widening of
+  the ask: a settings file would move the game's *look* to the new device and none of the
+  reasons you play it.
+  ⚠️ **THE EXCLUSIONS MATTER MORE THAN THE INCLUSIONS.** `magnetball.upd` is the
+  forced-update record — the date a newer build was first *seen*, which `updEnforce`
+  counts thirty days from and which bites **offline**. Importing another device's copy
+  could arrive already overdue and lock the game on a build with nothing wrong with it,
+  so it is on `SAVEFILE.skip` and never written. `lastver` and `firstrun` describe the
+  install rather than the player; `sync`/`login`/`html` are plumbing.
+  ⚠️ **Saved replays and the photo library are NOT in it**, and the hint says so — they
+  are IndexedDB and run to megabytes, and a save file you cannot email is not a save
+  file. The photo you are *wearing* travels, because it is part of `profile`.
+  ⚠️ **Only keys on the list are ever written**, so a save from an older build leaves
+  today's newer records alone and a doctored file cannot reach a key that is not there.
+  ⚠️ Import **arms then confirms** and then **reloads** — `sel`, `profile` and `stats`
+  were read into live objects at boot and half the menu is built from them, so writing
+  storage under a running page leaves the game showing the old save.
+  ⚠️ Magic string + version, for the reason the replay files carry one: the picker will
+  hand us any JSON on the disk. Every refusal is a sentence somebody can act on.
+  `tests/gamesave.mjs`.
+- **Names thin out near the ball (`LABEL_BALL`, `labelBallFade`):**- **Names thin out near the ball (`LABEL_BALL`, `labelBallFade`):** a *different rule*
   from `LABEL_DIM`, for a different reason. That one is about **overlap** — a plate
   literally on top of a disc — and can only fire once the damage is done. This one is
   about the part of the pitch you are reading: everything happens within a body's length
   or two of the ball, that is where four plates stack into a wall of text, and a name is
   worth least exactly where the play is worth most. ⚠️ Measured in **world units** off the
   nearest un-banked ball through `ix`/`iy`, so it means the same on Classic and Colossus
-  and does not move with the zoom. ⚠️ A **ramp**, not a switch, and `near` is above zero —
-  the plates recede, they do not vanish. The two rules compose by taking the quieter answer.
+  and does not move with the zoom. ⚠️ A **ramp**, not a switch — the plates thin out as they approach rather than
+  snapping off at a line. ⚠️ But `near` is **ZERO** now, and `LABEL_DIM` with it: the
+  earlier call here was that plates should "recede, not vanish", and it was reversed on
+  request. Right on top of the ball is where a name is worth least and the play is worth
+  most, so it goes completely; `drawDiscs` skips a plate under `a > 0.004`, so a target of
+  0 stops it being drawn at all. The two rules compose by taking the quieter answer.
 - **Fireworks for the goal that WINS it (`FIREWORK`, `startFireworks`,
   `advanceFireworks`, `w.fwT`):** every goal got the same confetti and then the pitch went
   quiet, so the one that won the match looked like the one that made it 1-0.

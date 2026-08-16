@@ -124,7 +124,20 @@ const r = await p.evaluate(async ()=>{
   const series=[];
   for (let i=0;i<24;i++){ me.holdT += 1/60; M.drawPitch(w); M.drawDiscs(w); series.push(ringInk()); }
   o.ringLow = Math.min(...series); o.ringHigh = Math.max(...series);
-  o.ringPulses = o.ringHigh > o.ringLow * 1.25;
+  // ⚠️ SOLID, and this check is INVERTED from what it used to be. It read
+  // `ringHigh > ringLow * 1.25` — the ring was required to PULSE, as the alternative to
+  // an earlier version that swept round like a loading bar. Holding kick at a full
+  // charge strobed it at 11.5Hz, which was reported as the circle round the player
+  // flashing, so brightness and width now carry the charge on their own. Twenty-four
+  // frames at one charge have to put the SAME ink on the pitch every time.
+  o.ringSolid = o.ringHigh <= Math.max(2, o.ringLow * 1.02);
+  // ...and it is really being drawn, or "it does not flicker" is true of no ring at all.
+  o.ringInked = o.ringLow > 8;
+  // The dial moves it: the ring at the largest setting covers more than at the smallest.
+  const inkAt = v => { M.sel.kickRing = v; M.drawPitch(w); M.drawDiscs(w); return ringInk(); };
+  o.ringAtMin = inkAt(M.KICKRING.min);
+  o.ringAtMax = inkAt(M.KICKRING.max);
+  M.sel.kickRing = M.KICKRING.def;
   // Part-charged: a sweeping arc would ink one side far more than the other.
   me.chargeT = M.CHARGE.max*0.35; me.holdT = 0.35;
   M.drawPitch(w); M.drawDiscs(w);
@@ -215,7 +228,7 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.chargeVisible > 20 &&              // wind-up reads on the disc
-           r.ringPulses && r.ringIsFullCircle &&  // it flashes, never sweeps
+           r.ringSolid && r.ringInked && r.ringIsFullCircle &&  // solid, drawn, never a sweep
            r.layoutIsTouch && r.padDrawsSomething &&        // the pad is on screen at all
            r.padRingPulses && r.padRingIsFullCircle &&    // ...and it flashes too
            r.trailsClearedOnStart && r.allThemesRead &&
@@ -223,7 +236,9 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
 if(!ok) console.log('checks:', {
   movingTail:r.movingTail>12, parked:r.parkedTail<=2, speedScales:r.movingTail>r.slowTail,
   fastBall:r.fastBall>12, ballScales:r.slowBall<r.fastBall, charge:r.chargeVisible>20,
-  reset:r.trailsClearedOnStart, themes:r.allThemesRead });
+  reset:r.trailsClearedOnStart, themes:r.allThemesRead,
+  ringSolid:r.ringSolid, ringInked:r.ringInked, ringFull:r.ringIsFullCircle,
+  ringDial:[r.ringAtMin, r.ringAtMax] });
 if(!ok && !r.allThemesRead) console.log('per-theme:', JSON.stringify(r.perTheme));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

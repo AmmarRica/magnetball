@@ -1377,11 +1377,13 @@
          being unavailable while you are still playing it; and the video is the thing you
          send someone, which is an end-of-match errand rather than a mid-match one. It
          lives on the result screen, where there is nothing to interrupt. -->
+    <!-- ⚠️ NO SAVE BUTTON HERE. This bar comes up mid-match, in the seconds between a
+         goal and the kickoff, and saving a file is not something to be offered while
+         there is a match to get back to. Saving lives where there is nothing to
+         interrupt: on the replay TRANSPORT (a replay you sat down to watch) and on the
+         result screen, which has both a goal save and a match save. -->
     <div id="replayBar" class="hidden">
       <button id="replayBtn">⟲ Replay</button>
-      <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at
-           your screen's size in your theme, and can be watched again from Watch. -->
-      <button id="repSaveBtn">⤓ Save goal</button>
     </div>
   </div>
 
@@ -1393,6 +1395,10 @@
     <div class="repctlrow">
       <button id="repPause" type="button" aria-label="Pause">❚❚</button>
       <div class="repspeeds" id="repSpeeds"></div>
+      <!-- The replay ITSELF, not a video of it: a few tens of KB that re-render at your
+           screen's size in your theme. Here rather than on the in-match bar, because a
+           replay you chose to watch is not interrupting anything. -->
+      <button id="repSaveBtn" type="button" aria-label="Save this replay">⤓ Save</button>
       <button id="repExit" type="button" aria-label="Stop watching">✕</button>
     </div>
   </div>
@@ -1877,7 +1883,7 @@
       <div style="height:14px"></div>
       <label class="field">Where saved replays go</label>
       <div id="repPathInfo"></div>
-      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save goal</b> on the replay bar during a match, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen.</div>
+      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save</b> on the playback bar while you are watching one, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen. They are deliberately not offered in the middle of a match.</div>
     </div>
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
@@ -1920,6 +1926,16 @@
       <label class="field">Play offline</label>
       <button class="ghost" id="offlineBtn" type="button">⤓ Download the game</button>
       <div class="hint always" style="text-align:left">Saves the whole game as a single HTML file. Open it in any browser &mdash; double-click it, or drag it onto a window &mdash; and it plays with no connection at all, on Linux, Mac or Windows. <b>Your career and settings do not come with it:</b> a file on your disk is a different origin to a website, so the browser keeps their saves apart. Put the file next to a copy of the <code>assets</code> folder if you want the flags, animals and pixel font as well; without it they fall back to drawn shapes and a system font.</div>
+      <div style="height:14px"></div>
+      <!-- ⚠️ Next to "Download the game", because they are the same errand: a file you
+           take with you. This one is the SAVE rather than the game — settings, your
+           player, your record, unlocks, maps, drill times and a run in progress. -->
+      <label class="field">Move this game to another device</label>
+      <div class="row">
+        <button class="ghost" id="saveExportBtn" type="button">⤓ Export save</button>
+        <button class="ghost" id="saveImportBtn" type="button">⤒ Import save…</button>
+      </div>
+      <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
       <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList"></div>
@@ -3585,7 +3601,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0648PM';
+const VERSION = '20260816.0719PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3601,6 +3617,17 @@ const VERSION = '20260816.0648PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0719PM', title: 'Carry your game to another device',
+    added: [
+      '<b>Export and import your whole game as one file.</b> About \u2192 Move this game to another device writes a <b>.json</b> holding every setting including Game Feel, your player, your record and unlocks, custom maps, drill times and a run in progress. Import it on the other device and it takes over. Saved replays and your photo library are too big to travel; the photo you are wearing does.',
+      '<b>A size dial for the ring round your player</b> while you hold kick, in Game Feel \u2192 Player. It changes the drawing only \u2014 a bigger ring is not a longer kick.',
+    ],
+    changed: [
+      '<b>That ring no longer flashes.</b> It was pulsing up to twelve times a second at a full charge; it is solid now, and gets brighter and thicker as the kick winds up. This is the thing the last release mistook for screen shake.',
+      '<b>Names over players disappear completely near the ball</b> instead of fading to a faint smudge, so the part of the pitch you are actually reading stays clear.',
+      'The save-replay button is gone from the bar that appears between a goal and the kickoff. Saving lives where there is nothing to interrupt: on the playback bar while you watch a replay, and on the result screen.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0648PM', title: 'The kick no longer blinks',
     added: [],
     changed: [
@@ -4014,7 +4041,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -5347,6 +5374,16 @@ const KICKOFF_TOUCH = 1.5;
 // dial cannot move one and leave the other behind.
 const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
 const CHARGE_MS = { min:100, max:2000, step:50 };
+// ⚠️ How big the wind-up ring is drawn, as a multiple of the player's own radius. It is
+// a TELL, not a reach: the real kick range is `p.r + ball.r + PLAYER.kickRange`, which on
+// the default numbers is 2.6r, and the ring has always been drawn well inside that. This
+// dial moves the drawing only — nothing here touches the physics, so a bigger ring never
+// means a longer kick.
+const KICKRING = { min: 100, max: 300, step: 5, def: 142 };
+function kickRingMul(){
+  const v = sel.kickRing == null ? KICKRING.def : +sel.kickRing;
+  return Math.max(KICKRING.min, Math.min(KICKRING.max, v || KICKRING.def)) / 100;
+}
 function chargeOn(){ return sel.charge !== 'off'; }
 function chargeSecs(){
   const v = sel.chargeMs == null ? CHARGE.max*1000 : +sel.chargeMs;
@@ -9140,6 +9177,43 @@ $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 // ⚠️ Says what happened on the button itself rather than through a toast: this one
 // writes a file, and a download that produces no visible response reads as a dead
 // button on any browser that saves without asking.
+// ⚠️ Says what happened ON THE BUTTON, like Save replay and Download the game: these
+// write files, and a download that produces no visible response reads as dead.
+{ const eb = $('saveExportBtn'); if (eb) eb.onclick = (e) => {
+    const b = e.currentTarget, was = b.textContent;
+    const err = exportSaveFile();
+    b.textContent = err ? ('\u26a0 ' + err) : '\u2713 Saved';
+    setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2600);
+  };
+}
+// ⚠️ ARMS, THEN CONFIRMS, and then reloads. An import replaces your settings, your
+// record and your unlocks with somebody else's file and cannot be undone — the same
+// two-press rule the replay and photo deletes use, and for a bigger reason.
+// ⚠️ The reload is the point rather than tidiness: `sel`, `profile` and `stats` were
+// read into live objects at boot, and half the menu is built from them, so writing
+// storage underneath a running page would leave the game showing the old save until
+// something happened to rebuild it.
+{ const ib = $('saveImportBtn'); if (ib){
+    let armed = 0;
+    ib.onclick = async (e) => {
+      const b = e.currentTarget;
+      if (Date.now() > armed){
+        armed = Date.now() + 4000;
+        b.textContent = '⚠ Replace everything?';
+        setTimeout(() => { if (Date.now() > armed - 50){ b.textContent = '⤒ Import save…'; armed = 0; } }, 4000);
+        return;
+      }
+      armed = 0; b.textContent = '⤒ Import save…';
+      try {
+        const doc = await pickSaveDoc();
+        if (!doc) return;
+        const n = applySaveDoc(doc);
+        b.textContent = `\u2713 ${n} restored — reloading`;
+        setTimeout(() => location.reload(), 700);
+      } catch(err){ toast('\u26a0 ' + (err.message || 'Could not read that save')); }
+    };
+  }
+}
 $('repSaveBtn').onclick = (e) => {
   const b = e.currentTarget, was = b.textContent;
   b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
@@ -9167,6 +9241,10 @@ const FEEL_SLIDERS = [
   {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
   {g:'ball', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
+  // ⚠️ The ring is a wind-up TELL, not the reach — see kickRingMul. This moves the
+  // drawing only, so winding it up never lengthens a kick.
+  {g:'player', label:'Kick ring size', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
+   min:KICKRING.min, max:KICKRING.max, step:KICKRING.step, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
 ];
 // Reveal a settings section (theme/display/ball/sound/feel) inline on the main
@@ -11905,6 +11983,109 @@ function downloadBlob(blob, filename){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 // ============================================================
+//  THE GAME SAVE — everything this device knows about you, in one JSON file
+// ============================================================
+// One file you can carry to another device: settings (Game Feel and all of it), your
+// player, your record, unlocks, custom maps, drill times and a season or Gauntlet run in
+// progress.
+//
+// ⚠️ IT IS A WHOLE SAVE, NOT A SETTINGS EXPORT, and that is a deliberate widening of the
+// ask: a settings file that left your unlocks behind would move the game's *look* to the
+// new device and none of the reasons you play it.
+//
+// ⚠️ THE EXCLUSIONS MATTER MORE THAN THE INCLUSIONS.
+//   `magnetball.upd` is the forced-update record — the date a newer build was first SEEN,
+//   which `updEnforce` counts thirty days from and which bites offline. Carrying another
+//   device's copy of that across could arrive already overdue and lock the game on a
+//   build that has nothing wrong with it, so it is never written by an import.
+//   `magnetball.lastver` (which changelog you have seen) and `magnetball.firstrun` are
+//   about this install rather than about you, and `magnetball.sync`/`login`/`html` are
+//   plumbing.
+//
+// ⚠️ SAVED REPLAYS AND THE PHOTO LIBRARY ARE NOT IN IT, and the file says so. They live
+// in IndexedDB and run to megabytes; a save file you cannot email is not a save file. The
+// photo you are WEARING travels, because it is part of `profile`.
+//
+// ⚠️ Written and read as PLAIN JSON with a magic string, for the reason the replay files
+// carry one: the picker will hand us any JSON on the disk, so `format` is the only thing
+// between somebody's `package.json` and a wrecked save.
+const SAVEFILE = {
+  format: 'magnetball-save', v: 1,
+  keys: ['sel', 'profile', 'stats', 'drills', 'season', 'rogue', 'maps', 'mapvotes',
+         'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
+  skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html'],
+};
+function buildSaveDoc(){
+  const data = {};
+  for (const k of SAVEFILE.keys){
+    const raw = localStorage.getItem('magnetball.' + k);
+    if (raw == null) continue;
+    // Stored as the PARSED value, not as a string of a string — a save file is meant to
+    // be readable, and double-encoding it makes every value an unreadable blob.
+    try { data[k] = JSON.parse(raw); } catch(e){ data[k] = raw; }
+  }
+  return { format: SAVEFILE.format, v: SAVEFILE.v, version: VERSION,
+           at: new Date().toISOString(), data };
+}
+function saveFilename(){
+  const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  const who = String((profile && profile.name) || 'player').replace(/[^a-z0-9]+/gi,'-').slice(0,16);
+  return `magnetball-save-${who}-${t}.json`;
+}
+function exportSaveFile(){
+  try {
+    const doc = buildSaveDoc();
+    if (!Object.keys(doc.data).length) return 'Nothing saved on this device yet';
+    downloadBlob(new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }), saveFilename());
+    return null;
+  } catch(e){ return e.message || 'Could not write the file'; }
+}
+// Throws with something a person can act on. Every refusal here is a sentence, not a
+// stack trace on a menu.
+function parseSaveDoc(text){
+  let doc;
+  try { doc = JSON.parse(text); }
+  catch(e){ throw new Error('That file is not JSON'); }
+  if (!doc || doc.format !== SAVEFILE.format) throw new Error('That is not a Magnetball save file');
+  if (!(doc.v <= SAVEFILE.v)) throw new Error('That save was written by a newer version of the game');
+  if (!doc.data || typeof doc.data !== 'object') throw new Error('That save file has no data in it');
+  return doc;
+}
+// ⚠️ Only the keys the FILE carries are written, and only ones this build knows about —
+// so a save from an older build leaves today's newer records alone rather than deleting
+// them, and a doctored file cannot write a key that is not on the list.
+function applySaveDoc(doc){
+  let n = 0;
+  for (const k of SAVEFILE.keys){
+    if (!(k in doc.data)) continue;
+    const v = doc.data[k];
+    try { localStorage.setItem('magnetball.' + k, typeof v === 'string' ? v : JSON.stringify(v)); n++; }
+    catch(e){ throw new Error('This device would not store the save (out of space?)'); }
+  }
+  return n;
+}
+let _saveInput = null, _savePick = null;
+function pickSaveDoc(){
+  if (!_saveInput){
+    _saveInput = document.createElement('input');
+    _saveInput.type = 'file'; _saveInput.accept = '.json,application/json';
+    _saveInput.style.display = 'none';
+    // ⚠️ Settles on CANCEL as well as change: dismissing the dialog fires no `change`,
+    // and the caller re-arms its button in a `finally`. Same trap `pickReplayDoc` records.
+    const settle = v => { const r = _savePick; _savePick = null; if (r) r(v); };
+    _saveInput.onchange = async () => {
+      const f = _saveInput.files && _saveInput.files[0];
+      _saveInput.value = '';
+      if (!f) return settle(null);
+      try { settle(parseSaveDoc(await f.text())); }
+      catch(e){ toast('\u26a0 ' + e.message); settle(null); }
+    };
+    _saveInput.oncancel = () => settle(null);
+    document.body.appendChild(_saveInput);
+  }
+  return new Promise(res => { _savePick = res; _saveInput.click(); });
+}
+// ============================================================
 //  THE REPLAY LIBRARY — because a page cannot delete your downloads
 // ============================================================
 // ⚠️ "Delete a replay" is IMPOSSIBLE for a downloaded file. Once a Blob has gone to the
@@ -12262,7 +12443,7 @@ function fillRepPane(host, rows, sub, kind){
     const e = document.createElement('div'); e.className = 'mvempty';
     e.textContent = kind === 'match'
       ? 'No matches saved yet. Save match replay on the result screen keeps a whole game, kickoff to whistle — or turn on Record every goal below and pick Everything.'
-      : 'No goals saved yet. Score one and press Save goal on the replay bar, or turn on Record every goal below and they all land here.';
+      : 'No goals saved yet. Score one and save it from the result screen, or turn on Record every goal below and they all land here.';
     host.appendChild(e); return;
   }
   for (const rec of rows){
@@ -20217,7 +20398,13 @@ function spriteImg(path){
 
 // Name plates duck out of the way when they'd cover a disc or the ball: 5% while
 // blocked, back to full once clear, eased so it reads as a fade rather than a blink.
-const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
+// ⚠️ ZERO, and it was 0.05. A plate lying over a disc or sitting in the thick of the
+// play is meant to get OUT OF THE WAY, and 5% of a plate is still a smudge on the one
+// part of the pitch you are reading. Asked for explicitly: at the strongest point of
+// either rule the name is gone, not faint. `drawDiscs` already skips a plate under
+// `a > 0.004`, so a target of 0 stops it being drawn at all rather than drawing nothing
+// visible at full cost.
+const LABEL_DIM = 0, LABEL_FADE = 0.18;
 // ⚠️ AND THEY THIN OUT NEAR THE BALL, which is a different rule from the one above and
 // is there for a different reason. That one is about OVERLAP — a plate literally sitting
 // on top of a disc — and it can only fire once the damage is done. This one is about the
@@ -20230,7 +20417,12 @@ const LABEL_DIM = 0.05, LABEL_FADE = 0.18;
 // gap, so a player running past the ball does not make their own name blink. `near` is
 // deliberately above zero — the plates recede, they do not vanish, because a name you can
 // still just read is the whole point of having one.
-const LABEL_BALL = { far: 190, near: 0.12 };
+// ⚠️ `near` is ZERO, and it was 0.12. The earlier note here said the plates should
+// "recede, not vanish"; that call was reversed on request — right on top of the ball is
+// exactly where a name is worth least and the play is worth most, so it goes completely.
+// It is still a RAMP: the fade runs from `far` down to nothing, so plates thin out as
+// they approach rather than snapping off at a line.
+const LABEL_BALL = { far: 190, near: 0 };
 // How much a plate should show given the distance from it to the nearest ball.
 function labelBallFade(d){
   if (!(d < LABEL_BALL.far)) return 1;
@@ -20412,20 +20604,22 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.beginPath(); ctx.arc(x, y, r*1.12, 0, 2*Math.PI); ctx.stroke();
       ctx.restore();
     }
-    // Wind-up tell — the WHOLE ring pulses while you hold kick, faster and brighter
-    // as it charges. It used to sweep round like a loading bar, which read as
-    // progress rather than as a player winding up.
+    // Wind-up tell — a SOLID ring round the player while you hold kick, brighter and
+    // thicker as it charges.
+    // ⚠️ IT USED TO PULSE, and that was reported as "holding kick makes the circle
+    // around the player flash instead of staying solid". The oscillator ran at
+    // `3.5 + f*8` Hz, so a full charge strobed the ring nearly twelve times a second —
+    // which is not a wind-up, it is a fault light. Brightness and width alone say
+    // "charging" perfectly well and say it without flashing. (An earlier version swept
+    // round like a loading bar and was dropped for reading as progress rather than as a
+    // player winding up; solid is the third answer and the quiet one.)
     // ⚠️ Gated on the switch as well as the hold: with charging off the ring would still
     // close round a player holding KICK to trap, promising power that is not coming.
     if (chargeOn() && (p.kick || (p.chargeT||0) > 0.01)){
-      const rr = r*1.42, lw = Math.max(2, r*0.16);
+      const rr = r*kickRingMul(), lw = Math.max(2, r*0.16);
       const f = chargeFrac(p);
-      // Phase comes from chargeT, not a wall clock: same charge always looks the
-      // same, and nothing here depends on frame timing.
-      const hz = 3.5 + f*8;
-      const pulse = 0.30 + 0.70 * (0.5 + 0.5*Math.sin((p.holdT||0) * hz * 2*Math.PI));
       ctx.beginPath(); ctx.arc(x, y, rr, 0, 2*Math.PI);
-      ctx.strokeStyle = rgba(TH.kickRing, 0.18 + 0.82*pulse*(0.25 + 0.75*f));
+      ctx.strokeStyle = rgba(TH.kickRing, 0.34 + 0.56*f);
       ctx.lineWidth = lw * (1 + f*0.45);
       ctx.stroke();
     }
@@ -22003,6 +22197,8 @@ if (window.__MAGNETDEBUG) {
     SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit, lobbySizeBump,
+    SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS,
+    KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,

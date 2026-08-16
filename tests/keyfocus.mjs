@@ -117,14 +117,19 @@ o.groups = await p.evaluate(()=>{
   const paneOf = id => { const pn = document.getElementById(id).closest('.subpane');
                          return pn ? pn.dataset.pane : null; };
   const chips = [...document.querySelectorAll('.subtabs[data-tabs="feel"] .subchip')].map(c=>c.dataset.pane);
-  return { ball, player, chips,
+  return { ball, player, chips, declared: M.FEEL_SLIDERS.length,
            ballPane: paneOf('feelSlidersBall'), playerPane: paneOf('feelSlidersPlayer') };
 });
 o.ballGroupRight = ['kick power','max ball speed','ball glide','ball magnet','trap window']
   .every(w => o.groups.ball.some(t=>t.includes(w)));
 o.playerGroupRight = ['acceleration','float','sensitivity']
   .every(w => o.groups.player.some(t=>t.includes(w)));
-o.noneLost = o.groups.ball.length + o.groups.player.length === 8;
+// ⚠️ Counted from `FEEL_SLIDERS` itself, not hard-coded. It was `=== 8` and went red
+// the moment a ninth slider arrived, which is a suite failing for the arrival of a
+// setting rather than for anything being lost. What it means to say is that every
+// slider the game declares lands in exactly one of the two groups.
+o.sliderCount = o.groups.declared;
+o.noneLost = o.groups.ball.length + o.groups.player.length === o.sliderCount;
 o.noCrossover = !o.groups.player.some(t=>t.includes('ball')) &&
                 !o.groups.ball.some(t=>t.includes('sensitivity'));
 // Each set of sliders is in its own pane, and each pane has a chip to reach it by — a pane
