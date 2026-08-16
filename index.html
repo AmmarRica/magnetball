@@ -1099,6 +1099,28 @@
     #ovHint { font-family: var(--pix); font-size:10px; color: var(--muted);
       letter-spacing:.5px; margin-top:10px; text-align:center; }
     #ovStats { width:100%; max-width:820px; margin:14px auto 0; }
+    /* THE SCORELINE, SIDE BY SIDE, AT THE TOP — see renderMatchStats for why it is
+       here rather than one big number inside each team's panel. It is a flex ROW with
+       no wrap at any width: the panels below stack on a phone, and a score that
+       stacked with them would put the two halves of one number a screen apart. */
+    .ovscore { display:flex; flex-wrap:nowrap; align-items:stretch; justify-content:center;
+      gap:8px; width:100%; margin:0 0 12px; }
+    .ovsteam { flex:1 1 0; min-width:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:5px; padding:9px 6px;
+      border-radius:12px; border:1px solid var(--edge); border-top-width:3px;
+      background: rgba(128,128,128,.06); }
+    .ovsteam[data-team="0"] { border-top-color: var(--red); }
+    .ovsteam[data-team="1"] { border-top-color: var(--cyan); }
+    .ovsteam.win { background: rgba(128,128,128,.14); }
+    .ovsname { font-family: var(--pix); font-size:11px; letter-spacing:1px;
+      text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      max-width:100%; }
+    .ovsteam[data-team="0"] .ovsname { color: var(--red); }
+    .ovsteam[data-team="1"] .ovsname { color: var(--cyan); }
+    .ovsnum { font-family: var(--pix); font-size:44px; line-height:1; color: var(--text); }
+    .ovsteam.win .ovsnum { color: var(--accent); }
+    .ovsdash { flex:0 0 auto; align-self:center; font-family: var(--pix);
+      font-size:20px; color: var(--muted); }
     /* The heading IS the fold control — see renderMatchStats. 44px so it's a real
        touch target rather than a 14px line of small caps. */
     button.statshead {
@@ -1124,10 +1146,8 @@
       text-align:center; margin-bottom:7px; }
     .tpanel[data-team="0"] .tpname { color: var(--red); }
     .tpanel[data-team="1"] .tpname { color: var(--cyan); }
-    .tpscore { font-family: var(--pix); font-size:38px; line-height:1; text-align:center;
-      color: var(--text); margin:10px 0 8px; }
-    .tpanel.twin .tpscore { color: var(--accent); }
-    .tpawards { display:flex; flex-direction:column; gap:5px; }
+    /* ⚠️ There is no per-panel score any more — it is the .ovscore row up top. */
+    .tpawards { display:flex; flex-direction:column; gap:5px; margin-top:7px; }
     .tpawards:empty { display:none; }
     /* Two panels of eight numeric columns don't fit a phone — stack them there.
        ⚠️ And drop the `flex:1 1 0` when they do. Side by side that equalises their
@@ -3608,7 +3628,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0935PM';
+const VERSION = '20260816.1135PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3624,6 +3644,13 @@ const VERSION = '20260816.0935PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.1135PM', title: 'The final score, side by side',
+    added: [],
+    changed: [
+      '<b>The full-time score is now one line at the top of the result screen, both teams next to each other.</b> It used to be a big number inside each team’s panel — and on a phone those panels sit one above the other, so the two halves of the score ended up a screen apart with a table of stats in between.',
+      'The score is no longer repeated in small grey text under the title, since it is right there in full size.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0935PM', title: 'A record for every name',
     added: [
       '<b>The machine now keeps a record for each name that plays on it.</b> Played, won, lost, goals for and against, a streak and its own rating \u2014 one entry per name, so a device can hold a room full of people rather than one lifetime total. Spell your name on the warm-up keyboard or type it into Player names and every match under it is kept. It is in your Record card, best rating first, and it travels in your game save.',
@@ -15501,11 +15528,14 @@ function finishMatch(w){
   // half you walked into, so a match won from the top half said YOU LOSE.
   const mine = youTeam(w);
   const [myG, oppG] = yourScore(w);
-  // ⚠️ The SCORELINE stays in team order, deliberately. The scorebug is colour-coded
-  // red-then-blue and has read that way for the whole match, so reordering it here to
-  // put your goals first would show a number the player never saw. The title carries
-  // the perspective; the scoreline carries the match.
-  const line = `${w.score[0]} – ${w.score[1]}`;
+  // ⚠️ THE SCORELINE IS NOT IN THE SUBTITLE ANY MORE — it is the side-by-side row at
+  // the top of #ovStats (see renderMatchStats). Printing it here as well is the same
+  // two numbers said twice within an inch of each other, and the small grey copy was
+  // the one that got read because it came first. What is left in the sub is what the
+  // scoreline cannot say: RP, and which mechanism decided a Killer Lobsters match.
+  // It stays in TEAM order up there, for the reason it always did: the scorebug is
+  // colour-coded red-then-blue and has read that way all match, so putting your goals
+  // first would show a number the player never saw. The title carries the perspective.
   // In a 2-player match the labels are about WHICH HUMAN, so they follow the seats
   // rather than the teams — human2 can end up on team 0 through the lobby too.
   if (w.forceWin != null){
@@ -15515,15 +15545,15 @@ function finishMatch(w){
     const mineWon = w.forceWin === mine;
     if (byHive){
       title = mineWon ? 'HIVE FULL! 🫐' : (w.mode.twoP ? 'PLAYER 2 FILLED THE HIVE' : 'HIVE LOST 🫐');
-      sub = `${line}   ·   hive win`;
+      sub = 'hive win';
     } else {
       title = mineWon ? 'SNAIL HOME! 🐌' : (w.mode.twoP ? 'PLAYER 2 RODE THE SNAIL' : 'SNAIL LOST 🐌');
-      sub = `${line}   ·   snail win`;
+      sub = 'snail win';
     }
   }
-  else if (myG === oppG){ title='DRAW'; sub=line; }
-  else if (myG > oppG){ title='YOU WIN! 🏆'; sub=line; }
-  else { title = w.mode.twoP ? 'PLAYER 2 WINS' : 'YOU LOSE'; sub=line; }
+  else if (myG === oppG){ title='DRAW'; sub=''; }
+  else if (myG > oppG){ title='YOU WIN! 🏆'; sub=''; }
+  else { title = w.mode.twoP ? 'PLAYER 2 WINS' : 'YOU LOSE'; sub=''; }
   // `myG` is human1's side, so Player 1 vs Player 2 falls straight out of it — no
   // second reading of the teams needed.
   if (w.mode.twoP && w.forceWin == null && myG !== oppG){
@@ -15533,7 +15563,7 @@ function finishMatch(w){
   if (!w.mode.twoP && !w.train && !w.watch){
     const delta = recordResult(w);
     const sign = delta>0 ? '+' : '';
-    sub += `   ·   ${sign}${delta} RP`;
+    sub += (sub ? '   ·   ' : '') + `${sign}${delta} RP`;
   }
   showResult(title, sub);
   $('ovTitle').classList.remove('slam'); void $('ovTitle').offsetWidth; $('ovTitle').classList.add('slam');
@@ -15701,13 +15731,41 @@ function statLine(ms){
   for (const s of STAT_MORE){ const v = ms[s.k] || 0; if (v > 0) bits.push(plural(v, s.one, s.many)); }
   return bits.join(' · ');
 }
-// One panel per team, side by side, each reading top-down: the team's PLAYERS and
-// their numbers, then that team's SCORE, then the AWARDS its players won. Every
-// team's stuff sits under that team's colour, so you read your own side down one
-// column instead of hunting for your name in a shared table.
+// THE SCORELINE FIRST, THE TWO SCORES SIDE BY SIDE, then one panel per team reading
+// top-down: the team's PLAYERS and their numbers, then the AWARDS its players won.
+// Every team's stuff sits under that team's colour, so you read your own side down
+// one column instead of hunting for your name in a shared table.
+//
+// ⚠️ THE SCORE IS ONE ROW AT THE TOP, not a big number inside each panel, and that
+// is the fix for what a phone actually did with it: the panels stack below 720px, so
+// the two halves of the scoreline ended up a full panel apart — HOME's 1 above a
+// table and a stack of ribbons, AWAY's 2 somewhere below the fold. A score is a
+// COMPARISON, and a comparison you have to scroll between is not one. The row is
+// `flex-wrap: nowrap` at every width for the same reason.
+// ⚠️ It stays in TEAM order, red then blue, exactly as the scorebug has read all
+// match — the title carries whether that is a win for you.
 function renderMatchStats(w){
   const host = $('ovStats'); if (!host) return; host.innerHTML='';
   if (!w || w.drillMode || w.tutorial || !w.players || !w.players.length) return;
+  const won = w.score[0] === w.score[1] ? -1 : (w.score[0] > w.score[1] ? 0 : 1);
+  const teamName = t => w.mode && w.mode.twoP ? (t === 0 ? 'PLAYER 1' : 'PLAYER 2')
+                                              : (t === 0 ? 'HOME' : 'AWAY');
+  // --- the scoreline, side by side, above everything
+  const bar = document.createElement('div'); bar.className = 'ovscore';
+  for (const team of [0, 1]){
+    if (team === 1){
+      const dash = document.createElement('div'); dash.className='ovsdash'; dash.textContent='–';
+      bar.appendChild(dash);
+    }
+    const box = document.createElement('div');
+    box.className = 'ovsteam' + (team === won ? ' win' : '');
+    box.dataset.team = team;
+    const nm = document.createElement('div'); nm.className='ovsname'; nm.textContent = teamName(team);
+    const nu = document.createElement('div'); nu.className='ovsnum'; nu.textContent = String(w.score[team]);
+    box.append(nm, nu);
+    bar.appendChild(box);
+  }
+  host.appendChild(bar);
   // ⚠️ The per-player table FOLDS on a phone. A 3v3 result measured 882px of #ovStats
   // inside an 844px window, which is most of why the Restart / Warm-up / Main Menu
   // buttons sat below the fold. What anybody wants in the first second is who won, by
@@ -15734,7 +15792,6 @@ function renderMatchStats(w){
   // its own. computeAwards stays the single source of who won what.
   const awards = (w.drillMode || w.tutorial) ? [] : computeAwards(w);
   const panels = document.createElement('div'); panels.className='teampanels';
-  const won = w.score[0] === w.score[1] ? -1 : (w.score[0] > w.score[1] ? 0 : 1);
 
   for (const team of [0, 1]){
     // Sorted by the same MVP score the awards use, so the panel and its award
@@ -15749,8 +15806,7 @@ function renderMatchStats(w){
     panel.dataset.team = team;
 
     const name = document.createElement('div'); name.className='tpname';
-    name.textContent = w.mode && w.mode.twoP ? (team===0 ? 'PLAYER 1' : 'PLAYER 2')
-                                             : (team===0 ? 'HOME' : 'AWAY');
+    name.textContent = teamName(team);
     panel.appendChild(name);
 
     // --- players + their numbers
@@ -15781,12 +15837,7 @@ function renderMatchStats(w){
     }
     panel.appendChild(tbl);
 
-    // --- score
-    const sc = document.createElement('div'); sc.className='tpscore';
-    sc.textContent = String(w.score[team]);
-    panel.appendChild(sc);
-
-    // --- awards won by this team
+    // --- awards won by this team (the score is the .ovscore row at the top)
     const mine = awards.filter(a => a.p.team === team);
     const aw = document.createElement('div'); aw.className='tpawards';
     for (const a of mine) aw.appendChild(awardRow(a));
@@ -21910,6 +21961,11 @@ function showOverlay(title, sub, resumable){
   $('ovTitle').textContent = title;
   $('ovTitle').classList.remove('slam');
   $('ovSub').textContent = sub;
+  // ⚠️ An empty subtitle takes no room. `#overlay` is a flex column with a gap, so a
+  // `<p>` holding nothing still costs a gap's worth of space above the scoreline —
+  // which is exactly the case a match result now hits, because the scoreline moved
+  // into #ovStats and the sub is empty unless there is RP or a snail to report.
+  $('ovSub').style.display = sub ? '' : 'none';
   { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
     const st=$('ovStats'); if (st) st.innerHTML='';
     const vt=$('ovVote'); if (vt) vt.innerHTML=''; }    // awards/stats/vote only on a match result

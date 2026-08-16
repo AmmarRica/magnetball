@@ -109,9 +109,16 @@ const r = await p.evaluate(() => {
     o.titleSaysWin = /YOU WIN/i.test(o.topWinTitle);
     // ⚠️ ...and the scoreline stays in TEAM order, matching the colour-coded scorebug
     // the player has been watching all match. Reordering it to put your goals first
-    // would print a number they never saw.
-    o.topWinSub = (document.querySelector('#overlay p') || {}).textContent || '';
-    o.subKeepsTeamOrder = /0\s*[–-]\s*5/.test(o.topWinSub);
+    // would print a number they never saw. It is the side-by-side .ovscore row at the
+    // top of the stats block now, which lets this check the ATTRIBUTION as well as the
+    // order: team 0's box has to hold team 0's goals however the lobby seated you.
+    o.topWinScore = [...document.querySelectorAll('#ovStats .ovsteam')]
+      .map(x => x.dataset.team + ':' + x.querySelector('.ovsnum').textContent).join(' ');
+    o.subKeepsTeamOrder = o.topWinScore === '0:0 1:5';
+    // ...and it is not ALSO in the subtitle, which was the same two numbers said twice.
+    o.topWinSub = (() => { const s = document.getElementById('ovSub');
+      return s.getBoundingClientRect().height > 0 ? s.textContent : ''; })();
+    o.scoreNotDoubled = !/\d\s*[–-]\s*\d/.test(o.topWinSub);
   }
   {
     const w = matchOn(-1);
@@ -180,7 +187,9 @@ ok('a 4-0 defeat from the top half is still a LOSS', r.topLossCounted, JSON.stri
 ok('...with those goals the right way round too', r.topLossGoals, JSON.stringify(r.topLoss));
 ok('the bottom half is unchanged by the fix', r.bottomStillRight, JSON.stringify(r.bottomWin));
 ok('the result screen says YOU WIN for a win from the top half', r.titleSaysWin, `it said "${r.topWinTitle}"`);
-ok('...and the scoreline stays in team order, matching the scorebug', r.subKeepsTeamOrder, r.topWinSub);
+ok('...and the scoreline stays in team order, matching the scorebug', r.subKeepsTeamOrder,
+   `${r.topWinScore} — the side-by-side score is per team, so team 0's box must hold team 0's goals however the lobby seated you`);
+ok('...and is not repeated under the title', r.scoreNotDoubled, `subtitle "${r.topWinSub}"`);
 ok('...and still says YOU LOSE for a defeat', r.titleSaysLose, `it said "${r.topLossTitle}"`);
 ok('a Killer Lobsters snail win from the top half is a win', r.kqSnailWinCounted, JSON.stringify(r.kqWin));
 ok('...and the screen says so', r.kqTitleSaysWin, `it said "${r.kqTitle}"`);

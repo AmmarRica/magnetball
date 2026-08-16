@@ -137,13 +137,19 @@ const r = await p.evaluate(async ()=>{
   const panels=[...document.querySelectorAll('#ovStats .tpanel')];
   o.panelCount = panels.length;
   o.panelTeams = panels.map(x=>x.dataset.team).join(',');
-  // Each panel reads top-down: players, then score, then awards.
-  o.orderIsPlayersScoreAwards = panels.every(pan=>{
+  // Each panel reads top-down: the team's name, its players, then its awards. The
+  // SCORE is not in here — it is the side-by-side .ovscore row above the panels, so
+  // that on a phone (where these stack) the two numbers stay next to each other.
+  o.orderIsNamePlayersAwards = panels.every(pan=>{
     const kids=[...pan.children].map(x=>x.className.split(' ')[0]);
-    return kids.indexOf('statstbl') < kids.indexOf('tpscore')
-        && kids.indexOf('tpscore')  < kids.indexOf('tpawards');
+    return kids.indexOf('tpname')   < kids.indexOf('statstbl')
+        && kids.indexOf('statstbl') < kids.indexOf('tpawards');
   });
-  o.scores = panels.map(x=>x.querySelector('.tpscore').textContent).join('-');
+  const bar = document.querySelector('#ovStats .ovscore');
+  o.scoreBarFirst = !!bar && document.getElementById('ovStats').querySelector('.ovscore, .tpanel') === bar;
+  o.scores = [...document.querySelectorAll('#ovStats .ovsteam')].map(x=>x.querySelector('.ovsnum').textContent).join('-');
+  o.scoreTeams = [...document.querySelectorAll('#ovStats .ovsteam')].map(x=>x.dataset.team).join(',');
+  o.noPanelScores = document.querySelectorAll('#ovStats .tpscore').length === 0;
   // Every player sits in their own team's panel, and nowhere else.
   o.playersUnderOwnTeam = panels.every(pan =>
     [...pan.querySelectorAll('.statsrow:not(.shead)')].every(row => row.dataset.team === pan.dataset.team));
@@ -203,8 +209,11 @@ ok(r.rampCleared, 'the ramp was left running after the screen appeared');
 
 ok(r.panelCount === 2, `expected two team panels, got ${r.panelCount}`);
 ok(r.panelTeams === '0,1', `panels are not team 0 then team 1: ${r.panelTeams}`);
-ok(r.orderIsPlayersScoreAwards, 'a panel is not ordered players → score → awards');
-ok(r.scores === '3-1', `panel scores do not match the scoreline: ${r.scores}`);
+ok(r.orderIsNamePlayersAwards, 'a panel is not ordered name → players → awards');
+ok(r.scoreBarFirst, 'the scoreline is not the first thing in the stats block');
+ok(r.scores === '3-1' && r.scoreTeams === '0,1',
+   `the side-by-side scoreline does not match the match: ${r.scores} (${r.scoreTeams})`);
+ok(r.noPanelScores, 'the score is still being printed inside the panels as well');
 ok(r.playersUnderOwnTeam, `a player is listed under the wrong team panel (rows: ${r.rowsPerPanel})`);
 ok(r.rowsPerPanel === '2,2', `expected 2 players a side, got ${r.rowsPerPanel}`);
 ok(r.totalAwards > 0, 'no awards rendered, so the grouping check proves nothing');

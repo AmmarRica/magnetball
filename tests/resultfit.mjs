@@ -167,7 +167,7 @@ async function openResult(w, h, mobile){
       // be rebuilt, and so a screen reader / find-in-page still has the numbers.
       rowsInDom: rows(), rowsVisibleFolded: shown(),
       // The score and the ribbons are the RESULT, not a breakdown of it — they stay.
-      scoresFolded: [...host.querySelectorAll('.tpscore')].filter(s => s.getBoundingClientRect().height > 0).length,
+      scoresFolded: [...host.querySelectorAll('.ovsnum')].filter(s => s.getBoundingClientRect().height > 0).length,
       ribbonsFolded: [...host.querySelectorAll('.awrow')].filter(s => s.getBoundingClientRect().height > 0).length,
     };
     head.click();
@@ -192,6 +192,55 @@ async function openResult(w, h, mobile){
   ok('fold: nothing is lost when open', fold.prose >= 4, fold.prose + ' prose lines');
   ok('fold: folding actually saves height', fold.openH > fold.hiddenH + 150,
      fold.hiddenH + ' folded vs ' + fold.openH + ' open');
+
+  // ---- THE SCORELINE IS SIDE BY SIDE, AND ABOVE EVERYTHING ---------------
+  // ⚠️ The score used to be one big number inside each team's panel, and the panels
+  // STACK below 720px — so on a phone the two halves of the scoreline ended up a whole
+  // panel apart, HOME's number above a table and a stack of ribbons and AWAY's below
+  // the fold. A score is a comparison, and a comparison you scroll between is not one.
+  //
+  // ⚠️ "They are side by side" is measured against the PANELS being stacked in the same
+  // render. Without that the check passes on a desktop-shaped page, which is exactly
+  // the layout that never had the problem.
+  const bar = await p.evaluate(() => {
+    const host = document.getElementById('ovStats');
+    const boxes = [...host.querySelectorAll('.ovsteam')].map(x => {
+      const r = x.getBoundingClientRect();
+      return { team: x.dataset.team, top: Math.round(r.top), left: Math.round(r.left),
+               right: Math.round(r.right), bottom: Math.round(r.bottom),
+               num: x.querySelector('.ovsnum').textContent, win: x.classList.contains('win') };
+    });
+    const pans = [...host.querySelectorAll('.tpanel')].map(x => {
+      const r = x.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+    });
+    return {
+      boxes, pans,
+      // the row itself must never wrap, at any width
+      nowrap: getComputedStyle(host.querySelector('.ovscore')).flexWrap,
+      // ...and the panels below it really are stacked here
+      panelsStacked: pans.length === 2 && pans[1].top >= pans[0].bottom - 1,
+      // nothing prints the score twice
+      dupes: host.querySelectorAll('.tpscore').length,
+      subShown: (() => { const s = document.getElementById('ovSub');
+        return s.getBoundingClientRect().height > 0 ? s.textContent : ''; })(),
+    };
+  });
+  ok('phone: two score boxes, in team order', bar.boxes.length === 2 &&
+     bar.boxes[0].team === '0' && bar.boxes[1].team === '1',
+     JSON.stringify(bar.boxes.map(x => x.team)));
+  ok('phone: the panels below really are stacked', bar.panelsStacked,
+     JSON.stringify(bar.pans) + ' — if they were side by side this fixture is not the phone case');
+  ok('phone: ...but the two scores are SIDE BY SIDE', bar.boxes.length === 2 &&
+     bar.boxes[0].right <= bar.boxes[1].left &&
+     bar.boxes[0].top < bar.boxes[1].bottom && bar.boxes[1].top < bar.boxes[0].bottom,
+     JSON.stringify(bar.boxes) + ' — a scoreline you have to scroll between is not a comparison');
+  ok('phone: the row cannot wrap', bar.nowrap === 'nowrap', bar.nowrap);
+  ok('phone: ...and they sit above both panels', bar.boxes.every(b2 => b2.bottom <= bar.pans[0].top + 1),
+     JSON.stringify({ boxes: bar.boxes.map(x => x.bottom), firstPanel: bar.pans[0].top }));
+  ok('phone: the score is not printed twice', bar.dupes === 0 && !/\d\s*[–-]\s*\d/.test(bar.subShown),
+     `${bar.dupes} panel scores, subtitle "${bar.subShown}" — two numbers said twice within an inch of each other`);
+  ok('phone: the winner is marked', bar.boxes.filter(x => x.win).length === 1,
+     JSON.stringify(bar.boxes.map(x => [x.num, x.win])));
 
   // ---- and the point of all of it: the folded screen FITS ----------------
   const fits = await p.evaluate(() => {

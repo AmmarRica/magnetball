@@ -38,9 +38,25 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   down, so it can't also be what measures the wind-down. `step()` integrates during `over` **only**
   while `endRamp != null`, otherwise the pitch freezes solid and there's nothing to see.
   Tests wanting the screen immediately call `endMatch` then `finishMatch`.
-- **Result screen:** one panel per team (`renderMatchStats` → `.tpanel`), each reading players →
-  score → that team's awards. `computeAwards` stays the one source of who won what; `awardRow`
-  is the one place a ribbon is built. `renderAwards` now only holds the replay/clip footer.
+- **Result screen:** the SCORELINE (`.ovscore`), then one panel per team
+  (`renderMatchStats` → `.tpanel`), each reading name → players → that team's awards.
+  `computeAwards` stays the one source of who won what; `awardRow` is the one place a
+  ribbon is built. `renderAwards` now only holds the replay/clip footer.
+  ⚠️ **THE SCORE IS ONE ROW AT THE TOP, not a big number inside each panel.** The panels
+  **stack below 720px**, so on a phone the two halves of the scoreline ended up a whole
+  panel apart — HOME's number above a table and a stack of ribbons, AWAY's below the
+  fold. A score is a **comparison**, and a comparison you have to scroll between is not
+  one. `.ovscore` is therefore `flex-wrap: nowrap` at every width, and the winner's box
+  carries `.win`. ⚠️ Still in **TEAM order**, red then blue, exactly as the scorebug has
+  read all match — the title carries whether that is a win for *you*.
+  ⚠️ **And it is not in the subtitle any more.** `finishMatch` used to put `3 – 1` in
+  `#ovSub` as well, which is the same two numbers said twice within an inch of each
+  other — and the small grey copy was the one that got read, because it came first. What
+  is left up there is what the scoreline cannot say: RP, and which mechanism decided a
+  Killer Lobsters match. `showOverlay` **hides an empty `#ovSub`**, or the `<p>` still
+  costs `#overlay`'s flex gap above the score. `tests/resultfit.mjs` measures "side by
+  side" against **the panels being stacked in the same render** — without that the check
+  passes on a desktop-shaped page, which is the layout that never had the problem.
   ⚠️ **Three SPELLED columns, and the rest is prose.** `STAT_COLS` is Goals / Assists / Saves;
   `STAT_MORE` + `statLine()` put everything else under the name as words, **only when non-zero**.
   It shipped as eight acronym columns — `G A SH SV CL KP PST TCH` — with the key that decodes
