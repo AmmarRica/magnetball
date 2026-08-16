@@ -189,7 +189,7 @@ enforcing it. Ranked by how quietly it would break.
 
 ---
 
-## 🔺 Videoball arrowheads get a body
+## 🔺 VideoSoccer arrowheads get a body
 - [x] **The ring is the player.** The arrowhead was drawn alone and overhung the collision
   circle in every direction (nose 1.55r, wings 1.05r), so the shape on screen was a third
   bigger than the shape the physics used. A team-coloured ring at exactly `r`, triangle
@@ -448,7 +448,7 @@ Three findings, two of them real bugs that shipped.
   one browser; cross-engine equality is not a goal. Fixed-point work (Phases 2–3) parked, not
   pending. All eight §8 questions answered and recorded.
 - [x] `tests/determinism.mjs` turns Checkpoint 1 into a permanent guard: the whole world hashed
-  at frame 3,600 across two runs on one seed, in 4v4 and Killer Queen.
+  at frame 3,600 across two runs on one seed, in 4v4 and Killer Lobsters.
 - [x] ⚠️ It immediately found two leaks, which is the point of a throwing stub over a counter:
   `spawnKickFx` and the audio noise fill both reached `Math.random` from inside `step()`. Both
   now have their own seeded stream (`fxRnd`, `audRnd`) — not `w.rng`, or how many sparks flew
@@ -469,7 +469,7 @@ Three findings, two of them real bugs that shipped.
   ⚠️ Render only, and proven so: same seed, floor on vs forced to 1, world bit-identical.
   Exactly 1 on any ordinary court. Colossus benefits too (1.57×).
 
-## 🫐 Killer Queen berries and the hive
+## 🫐 Killer Lobsters berries and the hive
 - [x] **Six floaty purple berries** you shepherd into the end you attack. Light (`invMass 2.6`)
   and barely damped (`0.994`), so a shoulder barge sends one drifting a long way. Spawned
   mirrored top and bottom in a ring off the goals and off the centre spot.
@@ -498,7 +498,7 @@ Three findings, two of them real bugs that shipped.
 - [ ] If it's worth another go, the lesson is that the ball streak was the offender, not the
   player tails, and the linger was worse than the length.
 
-## 🔺 Videoball is themed like Videoball
+## 🔺 VideoSoccer is themed like VideoSoccer
 - [x] Cream banded court, arrowhead players pointing where they FACE (so a still frame shows
   intent), on the existing theme-slot mechanism.
 
@@ -875,7 +875,7 @@ Three findings, two of them real bugs that shipped.
 
 ## 🎧 VJ Mode — video decks + DJ decks
 - [x] **Audit first: VJ Mode did not exist.** The brief described extending it; the repo had
-  nothing — no `<video>`, no decks, no tap tempo, no crossfader. "VIDEOBALL" is a theme
+  nothing — no `<video>`, no decks, no tap tempo, no crossfader. "VIDEOSOCCER" is a theme
   palette and the `Deck:` commits are Steam Deck. Built both halves from scratch.
 - [x] **Five slots of a mixer, one AudioContext, in the GAME tab.** `sfxBus → mainMix →
   master → limiter`. Two contexts across two tabs cannot be mixed and drift within seconds,
@@ -1047,7 +1047,7 @@ cocktail is on). Keyboard-only matches skip it entirely.
   that cost real time: `p.kickUsed` is only cleared on the one-touch path, and duplicated
   knowledge rots (the category→name chain broke a test).
 - [x] **TERMINOLOGY** — card rows were stale (Game Feel is three groups now; Sound has five
-  per-effect toggles; Your Player gained Text), Killer Queen was missing from the mode list, and
+  per-effect toggles; Your Player gained Text), Killer Lobsters was missing from the mode list, and
   the theme list omitted GBA.
 - [x] **ROADMAP** — Tier 1 and 2 still "recommended" eleven things that shipped long ago; marked
   ✅ with a note. "Amiga visual theme" was never a theme name. Added a Shipped block for the AI
@@ -1080,7 +1080,7 @@ cocktail is on). Keyboard-only matches skip it entirely.
 - [x] **Players default to a number, not a country.** A pitch now reads like a team
   sheet: you are 1, your bots take 2 upward, and the opposition numbers from 1 again
   the way a real match does. Countryballs and animals are still there, opt-in.
-- [x] **Text faceplates** — the HaxBall avatar tradition, 48 of them, sharing the
+- [x] **Text faceplates** — the top-down-football avatar tradition, 48 of them, sharing the
   faceplate slot with flags and animals: two complete 0–9 runs (plain and circled)
   usable as shirt numbers, plus every glyph from the posted list (`⠀ _௵ ௸௸ ₧ ⁇⁇ ∴∵ 〄
   ⓞ № ツ ░░ ⠀*` and the Indic and Braille rows). They're drawn as text, not blitted,
@@ -1346,7 +1346,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   one-handed), 🎬 Presentation (shake, auto-replay, match speed, debug readout). It was one
   undifferentiated stack of eight sliders.
 
-## 🎞 Render interpolation, Killer Queen, docs
+## 🎞 Render interpolation, Killer Lobsters, docs
 - [x] **Match speed 0.5× was juddering.** The sim runs in fixed 1/60 chunks and the renderer drew
   the newest state with no interpolation, so at 0.5× the accumulator only crossed the threshold
   every *other* frame. Measured on painted pixels: **35 of 70 frames completely frozen** at 0.5×
@@ -1355,7 +1355,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   variance. Physics is untouched — this is Phase 1 item 1 of the determinism audit, render-side only.
   Teleports (kickoff, re-serve, snail home) are excluded by a 120-unit guard, well above the
   fastest legal one-step motion (~61).
-- [x] **Killer Queen re-serves at the centre spot.** It used to spit the ball back out of the goal
+- [x] **Killer Lobsters re-serves at the centre spot.** It used to spit the ball back out of the goal
   mouth it had just entered, so every goal put the ball straight back on a goal line. Nothing else
   about the mode changed — still no kickoff, players still hold position. The serve nudges clear of
   the snail rather than spawning inside it.
@@ -1363,7 +1363,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   heaviest thing on the pitch, but it shifts.
 - [x] **How to Play refreshed.** It still described the magnet as living "in setup" (it's in Game
   Feel), quoted a fixed half-second trap (it's a slider), and said nothing about one-handed mode,
-  the centre-circle kickoff gate, ball control, surfaces, Killer Queen, co-op or `/settings`. Also
+  the centre-circle kickoff gate, ball control, surfaces, Killer Lobsters, co-op or `/settings`. Also
   merged two paragraphs that both explained the magnet. The Kickoff rule hint said "nobody crosses
   halfway", which stopped being true when the circle became a gate.
 
@@ -1496,7 +1496,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   replay rebuilds its player objects every frame (`{...pl}`), so the value was re-seeded each frame
   and never converged. Alpha now lives in an index-keyed array (`labelA`), like the trails.
   Covered by `tests/demo.mjs` and a replay case in `tests/labels.mjs`.
-- [x] **Killer Queen mode** (🐌, Match → Mode) — 3v3 with **two balls at once**. The regular ball
+- [x] **Killer Lobsters mode** (🐌, Match → Mode) — 3v3 with **two balls at once**. The regular ball
   scores normally but **nothing resets between goals**: no kickoff, no re-serve at centre, players
   hold position; the ball is spat back out of the mouth (with a short `_goalCd`) so it re-enters
   play from where it went in instead of scoring every frame. The second ball is the **snail** —
@@ -1504,9 +1504,9 @@ two and `tests/cocktailnopad.mjs` the third.)_
   shell so it can't be confused with the ball. It **never resets position**, including at kickoff.
   Push it home and the match **ends instantly**, regardless of the scoreline: `w.forceWin` overrides
   both `endMatch`'s title and `recordResult`'s W/L (goals for/against stay the true tally).
-  Only the primary ball is kickable, so the snail can only be shouldered — the Killer Queen
-  tug-of-war. Covered by `tests/killerqueen.mjs` (22 assertions).
-- [x] **Motion tells, VIDEOBALL-style** — two deliberately different shapes so a frozen frame reads:
+  Only the primary ball is kickable, so the snail can only be shouldered — the Killer Lobsters
+  tug-of-war. Covered by `tests/killerlobsters.mjs` (22 assertions).
+- [x] **Motion tells, VIDEOSOCCER-style** — two deliberately different shapes so a frozen frame reads:
   players leave a line of small, evenly **spaced dots**; the ball leaves a single thick **line**
   whose **length scales with how hard it was struck**, tinted with the striking team's colour
   (`ball.lastKickTeam`). Dots are spaced by distance travelled rather than per frame, so the count
@@ -1514,7 +1514,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   so a bounce bends it instead of cutting through a wall. Also a **charge arc** that fills with
   `chargeT` — the wind-up used to be visible only on the touch HUD, so a controller player had no
   warning of a big shot. Trails clear on match start and kickoff.
-  _(An earlier version added aim-direction arrows on each disc; removed — too noisy, and Videoball
+  _(An earlier version added aim-direction arrows on each disc; removed — too noisy, and VideoSoccer
   conveys facing through the player shape itself.)_ Covered by `tests/tells.mjs` (pixel sampling).
 - [x] **Unlocked customizations shown up top** — a summary pinned to the head of *Your Player*:
   overall progress bar + `have / total`, a per-category chip row (Caps · Countryballs · Animals ·

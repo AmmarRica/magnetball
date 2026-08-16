@@ -1,4 +1,4 @@
-// Killer Queen mode: two balls at once, a very heavy snail that never resets its
+// Killer Lobsters mode: two balls at once, a very heavy snail that never resets its
 // position, a regular ball that keeps playing through goals, and an instant win for
 // whoever pushes the snail home.
 import { chromium, LAUNCH } from './_browser.mjs';

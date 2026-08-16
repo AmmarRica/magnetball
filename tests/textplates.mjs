@@ -1,4 +1,4 @@
-// Players wear shirt NUMBERS by default, and the text faceplates (the HaxBall
+// Players wear shirt NUMBERS by default, and the text faceplates (the top-down-football
 // avatar tradition) are a real, pickable category that actually paints.
 import { chromium, LAUNCH } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);

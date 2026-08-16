@@ -82,7 +82,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   containment backstop (the ball must NEVER leave the pitch except through the goal mouth — verify on
   every field after physics changes). Collisions: `collideDiscs`, `collideWall`, `collideArc`.
   Multi-ball extras live in `world.extraBalls`. Walls/arcs flagged `ballOnly` contain the
-  **ball** but not players — that's every boundary INCLUDING the net, so the HaxBall-style
+  **ball** but not players — that's every boundary INCLUDING the net, so the classic
   step-out margin is uniform all the way round. What actually holds a player in is
   `integrate`'s clamp to `halfL/halfW + 20`, never a wall. `tests/netpass.mjs`.
 - **Input:** touch pads (`pads.p1/p2`, `onDown/onMove/onUp`), keyboard (`pollKeys`), gamepads
@@ -463,7 +463,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   marks — a red DOT against a green BAR. ⚠️ Red vs green is the one pair a colour-blind player
   cannot separate, so the difference is the SILHOUETTE and the colour rides on top; the square
   is **inscribed** in the guide ring (`SLEEVE.sq`), never circumscribed — a square drawn to `r`
-  puts its corners at 1.41`r`, which is the Videoball arrowhead mistake with a different shape.
+  puts its corners at 1.41`r`, which is the VideoSoccer arrowhead mistake with a different shape.
   ⚠️ The court dots are a **muted maroon** and twice a body across: a field of bright red
   circles under a team drawn as a bright red circle is a field of decoys. `tests/dyntheme.mjs`
   measures both — coverage at 0.9`r` all the way round for the dot, only on the diagonals for
@@ -632,7 +632,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   duplicate of it that nobody noticed for a build. Check the registry before adding to it.
   `tests/tennis.mjs` measures the court is one solid colour with the bodies taken off the
   list first — a player standing on a sample point reads as a stripe.
-  `videoball` (shown as **VideoSoccer**) = a cream-banded court with arrowhead players that point where they FACE, so a
+  `vsoccer` (shown as **VideoSoccer**) = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
   alone, overhanging it (nose 1.55r, wings 1.05r), so the shape on screen was a third bigger
@@ -1153,15 +1153,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   *are* the menu — eleven cards of them, on the screen the tile was sitting on — so it was
   a door onto the room you were already standing in. The detached panel is still reachable
   from Display, where a window-management choice belongs.
-- **A MODE'S AND A THEME'S KEY IS NOT ITS NAME.** `MODES.kq` is shown as **Killer
-  Lobsters** and `THEMES.videoball` as **VideoSoccer**; both keys stayed put when they
-  were renamed. Keys are what `sel.party`, `sel.look`, `THEME_BUNDLES`, the map votes
-  and every saved replay file refer to, so re-keying one orphans a setting somebody
-  already chose — the same argument the map maker records for saving a map IN PLACE.
-  The name is user-facing and lives in exactly one place, read from the registry and
-  never copied, which is what made each rename a one-line change.
-  ⚠️ Code comments still cite VIDEOBALL, the arcade game the theme's arrowheads and
-  motion tells were taken from. Those are design lineage and are still correct.
+- **NO OTHER PRODUCT'S NAME APPEARS ANYWHERE**, comments and test prose included —
+  asked for directly, on the grounds that a game should not carry somebody else's title.
+  The two that were there are gone from the source, not just from the screen: `THEMES`'
+  arrowhead entry is `vsoccer` (**VideoSoccer**) with `DYN_FIELDS.vscourt`, and the snail
+  mode is **Killer Lobsters**.
+  ⚠️ **RE-KEYING NEEDS A FOLD.** Keys are what `sel.look`, `THEME_BUNDLES`, the map votes
+  and every saved replay refer to, so renaming one strands a save on a theme that no
+  longer exists — which surfaces as the DEFAULT palette and reads to a player as *"my
+  theme was reset"*. `normalizeLook()` folds both old keys, as pure string swaps with no
+  registry lookup (it runs during the bootstrap, and those registries are declared far
+  below it — the same reason the seabed fold is written that way). `tests/themeslots.mjs`
+  holds it, and caught the first attempt: a blanket search-and-replace over the file had
+  rewritten the fold's own legacy literal, leaving `if (x === 'vsoccer') x = 'vsoccer'`.
+  ⚠️ **What is deliberately KEPT**: the Steam Deck, MAME's default key map, JAMMA, I-PAC,
+  Google's sheets endpoint and the Instagram-styled feed. Those name a device the game
+  supports, a wiring standard a cabinet builder needs, and a service the code actually
+  calls — factual and necessary, which is a different thing from naming your content after
+  somebody's game.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
@@ -1289,7 +1298,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **ARMED ON THE DEAD END ITSELF** — "the strike waypoint is outside the box the
   target gets clamped into" — never merely on "nothing is moving", so it cannot fire in
   open play at all.
-  ⚠️ **AND NOT IN KILLER QUEEN**, which is a scope boundary rather than a bug dodged.
+  ⚠️ **AND NOT IN KILLER LOBSTERS**, which is a scope boundary rather than a bug dodged.
   That mode's balance is a measured proportion over eight seeded matches — how often a
   full hive rather than the ball decides it — and it turns on how much the ball is knocked
   about, because a loose ball bumps the floaty berries goalward. A chaser working balls

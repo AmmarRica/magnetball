@@ -1,4 +1,4 @@
-// Killer Queen berries + hive.
+// Killer Lobsters berries + hive.
 //
 // A berry is a floaty purple body you shepherd into the end you attack. Reaching it
 // BANKS the berry into that side's hive instead of scoring; fill every cell and the
@@ -264,7 +264,7 @@ const r = await p.evaluate(async ()=>{
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(r.count === r.declaredCount, `${r.count} berries in play, not the declared ${r.declaredCount}`);
-ok(r.snailStillThere, 'the snail vanished when berries were added — Killer Queen still needs both');
+ok(r.snailStillThere, 'the snail vanished when berries were added — Killer Lobsters still needs both');
 ok(r.notTheBall, 'the match ball is flagged as a berry');
 ok(r.bothHalves, 'every berry spawned in one half — they are meant to be mirrored');
 ok(r.offTheGoals, 'a berry spawned outside the spawn ring, on a goal or the centre spot');

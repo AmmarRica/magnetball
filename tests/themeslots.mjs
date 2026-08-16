@@ -179,6 +179,21 @@ const r = await p.evaluate(async ()=>{
   o.legacyBallKept = M.sel.look.ball === 'cross';          // yours beats the bundle's
   o.legacySoundAdopted = M.sfxSetKey() === 'space';        // untouched sound follows the theme
   o.legacyKeysGone = M.sel.theme === undefined && M.sel.ballLook === undefined;
+  // ⚠️ RENAMED KEYS, not just renamed names. The arrowhead theme and its court were
+  // re-keyed as well as re-titled, so a save naming the old ones has to be folded or it
+  // lands on a theme that no longer exists — which shows up as the DEFAULT palette and
+  // reads as "my theme was reset". Caught exactly that way: the first build's fold was a
+  // no-op and the save came back as Grass.
+  M.sel.look = { palette: 'videoball', field: 'vbcourt', discs: 'arrow', ball: 'plain', trail: 'dots' };
+  M.normalizeLook();
+  o.renamedKeyFolded = M.sel.look.palette === 'vsoccer' && M.sel.look.field === 'vscourt';
+  // ⚠️ NOT `currentBundle()`. The sound slot is derived from `sel.snd`, which the legacy
+  // check above deliberately left on another set, so the mix reads as Custom for a reason
+  // that has nothing to do with this fold — the first version of this check failed on it.
+  // What matters is that the folded key names a REAL theme.
+  o.renamedThemeReal = (M.THEMES[M.sel.look.palette] || {}).name === 'VideoSoccer';
+  o.renamedFieldReal = !!M.DYN_FIELDS[M.sel.look.field];
+  o.oldKeysGone = !M.THEMES.videoball && !M.DYN_FIELDS.vbcourt;
   // A hand-picked whistle is NOT overwritten by the migration.
   M.sel.theme = 'pool'; delete M.sel.look; M.applySfxSet('classic'); M.sel.snd.whistle = 2;
   M.normalizeLook();
@@ -225,6 +240,9 @@ ok(r.noLegacyKeys, 'the old theme/ballLook keys are still being written');
 ok(r.legacyBecomesBundle, `a legacy save did not migrate to its bundle: ${JSON.stringify(r.migrated)}`);
 ok(r.legacyBallKept, `a legacy ball look was lost: ${JSON.stringify(r.migrated)}`);
 ok(r.legacySoundAdopted, 'an untouched sound did not follow the migrated theme');
+ok(r.renamedKeyFolded && r.renamedThemeReal && r.renamedFieldReal,
+   `a save naming the old arrowhead keys did not fold: ${JSON.stringify({ folded: r.renamedKeyFolded, theme: r.renamedThemeReal, field: r.renamedFieldReal })} — an unfolded key lands on the DEFAULT palette, which reads to a player as "my theme was reset"`);
+ok(r.oldKeysGone, 'the old keys are still in the registries, so nothing proves the rename happened');
 ok(r.legacyKeysGone, 'migration left the legacy keys behind to be read again');
 ok(r.handPickedWhistleKept, 'migration overwrote a hand-picked sound');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));

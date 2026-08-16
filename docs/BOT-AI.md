@@ -202,7 +202,7 @@ feel — and each group carries the measurement that produced its values.
   a bot released a carried ball while it was still swinging round and shot somewhere it had
   not aimed — which cost the stronger tiers most, because they trap most: rookie beat insane
   83% of the time.
-- **Bots finish berry runs, they do not courier them.** Ungated, they drove Killer Queen
+- **Bots finish berry runs, they do not courier them.** Ungated, they drove Killer Lobsters
   berries the length of the pitch and 7 of 8 bot matches ended on a full hive inside 90
   seconds with the ball barely involved.
 - **A synchronous test harness must switch auto-replay off.** `playReplay()` returns a

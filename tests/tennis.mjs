@@ -70,8 +70,8 @@ const r = await p.evaluate(() => {
   o.noBundleRow = !M.THEME_BUNDLES || !M.THEME_BUNDLES.tennis;
   // ...and the set that was withdrawn is gone from every registry, not merely unlisted.
   // A leftover entry is a tile in the pickers offering exactly what was rejected.
-  // ⚠️ Named EXACTLY, never matched by pattern. A `/tennis|court/` sweep flags `vbcourt`
-  // (Videoball's) and `BALL_LOOKS.tennis`, which has been in the file all along and is
+  // ⚠️ Named EXACTLY, never matched by pattern. A `/tennis|court/` sweep flags `vscourt`
+  // (VideoSoccer's) and `BALL_LOOKS.tennis`, which has been in the file all along and is
   // not this theme's — the withdrawn ball look was a DUPLICATE of it, which is its own
   // small lesson about checking the registry before adding to it.
   o.strayField = Object.keys(M.DYN_FIELDS).filter(k => k === 'tenniscourt');

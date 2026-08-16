@@ -85,7 +85,7 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
 
 ## Modes & match types
 - **Team sizes:** 1v1 · 2v2 · 3v3 · 4v4 · **Duo** (steer 2) · **2-Player** (same phone) ·
-  **Killer Queen** · **Training**.
+  **Killer Lobsters** · **Training**.
 - **Party modifiers:** Big ball · Low-gravity · Sudden death · **Multi-ball**.
 - **Game modes:** **Cup Run** (Season) · **Gauntlet** · **Drills** · **Tutorial**.
 
@@ -95,7 +95,7 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
   **Streak** · **Coins** (shop currency) · **Unlocks**.
 
 ## Themes (by name)
-**GBA · Neon · Flat · Grass · Mono · Videoball · Paper** *(Paper = the light one)*.
+**GBA · Neon · Flat · Grass · Mono · VideoSoccer · Paper** *(Paper = the light one)*.
 
 ---
 

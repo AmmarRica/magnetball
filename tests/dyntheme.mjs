@@ -237,13 +237,13 @@ const r = await p.evaluate(async ()=>{
   o.picksBack = ['warp','pool'].every(k => { M.applyBundle(k); M.render(); return M.currentBundle() === k; });
   M.applyBundle('neon');
 
-  // ---- VIDEOBALL arrowheads: the RING is the player ------------------------
+  // ---- VIDEOSOCCER arrowheads: the RING is the player ------------------------
   // ⚠️ A disc is a circle of radius r, and that circle is what collides. The first
   // build drew the arrowhead alone, overhanging it in every direction (nose 1.55r,
   // wings 1.05r), so the shape on screen was a third bigger than the shape in the
   // physics. The ring is drawn at exactly r and the triangle is inscribed in it.
   {
-    M.applyBundle('videoball');
+    M.applyBundle('vsoccer');
     M.sel.mode='1v1'; M.sel.kickoffRule='off'; M.setMatchSeed(3); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2;
     const me=w.players[0];
@@ -257,7 +257,7 @@ const r = await p.evaluate(async ()=>{
       const d = c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data;
       return [d[0],d[1],d[2]];
     };
-    // ⚠️ Do NOT compare against one background sample. The Videoball court is BANDED,
+    // ⚠️ Do NOT compare against one background sample. The VideoSoccer court is BANDED,
     // so "differs from the pixel over there" is true of half the empty court and the
     // probe reports the arrowhead overhanging when it is a cream stripe. Test for the
     // player's own ink instead: the ring and the arrowhead are team-coloured, the

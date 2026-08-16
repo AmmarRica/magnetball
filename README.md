@@ -1,6 +1,6 @@
 # ⚽ Magnetball
 
-A fast, **mobile-first, touch-first** physics soccer game — HaxBall-style discs, built to be played
+A fast, **mobile-first, touch-first** physics soccer game — the classic style discs, built to be played
 with two thumbs on a phone (and great on desktop and arcade "cocktail" setups too). It's a **single
 self-contained `index.html`**: no build step, no dependencies, no server. Graphics are drawn on a
 `<canvas>`, sound is synthesized with the Web Audio API, and it installs & runs offline as a PWA.
@@ -24,7 +24,7 @@ self-contained `index.html`**: no build step, no dependencies, no server. Graphi
   a goalie, an elastic formation, intercept prediction, lane-checked passing and bank shots off
   the boards. Fully deterministic: same seed, same match.
 - **Modes:** Season/Cup ladder · **Gauntlet** roguelike run (lives + stacking perks) ·
-  **Killer Queen** · 24 practice drills with ghost coaching · guided tutorial ·
+  **Killer Lobsters** · 24 practice drills with ghost coaching · guided tutorial ·
   **party modifiers** (big ball / low-gravity / sudden-death / multi-ball).
 - **Progression:** RP + Wood→Legend ranks, **Elo MMR**, and **210 cosmetics** —
   85 countryball flags, 48 text plates, 36 caps, 31 eye styles, 10 animals — most gated behind

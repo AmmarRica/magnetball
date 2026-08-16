@@ -3,7 +3,7 @@
 // THE RULE: a player is a CIRCLE of radius r, and that circle is what collides. A
 // skin may draw anything it likes inside it — a pool ball, an arrowhead, a shrimp —
 // but the body has to stay legible, or you cannot judge a challenge you are about to
-// take. The Videoball arrowhead shipped without a ring and the shape on screen was a
+// take. The VideoSoccer arrowhead shipped without a ring and the shape on screen was a
 // third bigger than the shape in the physics.
 //
 // ⚠️ So the ring is drawn by drawOneDisc, AFTER the skin paints — structural, not

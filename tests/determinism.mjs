@@ -102,7 +102,7 @@ const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(r.matchMoved, 'the world never changed over 3,600 steps — this suite proved nothing');
 ok(r.reproducible, `the same seed gave two different matches: ${r.at3600}`);
 ok(r.seedMatters, 'two different seeds gave the identical match — the seed is not reaching the sim');
-ok(r.kqReproducible, `Killer Queen did not reproduce on one seed: ${r.kqAt3600}`);
+ok(r.kqReproducible, `Killer Lobsters did not reproduce on one seed: ${r.kqAt3600}`);
 ok(r.noMathRandomInStep, `Math.random was called from inside step(): ${r.leak}`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

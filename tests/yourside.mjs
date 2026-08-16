@@ -121,7 +121,7 @@ const r = await p.evaluate(() => {
     o.titleSaysLose = /YOU LOSE/i.test(o.topLossTitle);
   }
 
-  // ---- 4. Killer Queen decides by forceWin, and that is a team too ---------
+  // ---- 4. Killer Lobsters decides by forceWin, and that is a team too ---------
   {
     const w = matchOn(-1);
     const before = snap();
@@ -182,7 +182,7 @@ ok('the bottom half is unchanged by the fix', r.bottomStillRight, JSON.stringify
 ok('the result screen says YOU WIN for a win from the top half', r.titleSaysWin, `it said "${r.topWinTitle}"`);
 ok('...and the scoreline stays in team order, matching the scorebug', r.subKeepsTeamOrder, r.topWinSub);
 ok('...and still says YOU LOSE for a defeat', r.titleSaysLose, `it said "${r.topLossTitle}"`);
-ok('a Killer Queen snail win from the top half is a win', r.kqSnailWinCounted, JSON.stringify(r.kqWin));
+ok('a Killer Lobsters snail win from the top half is a win', r.kqSnailWinCounted, JSON.stringify(r.kqWin));
 ok('...and the screen says so', r.kqTitleSaysWin, `it said "${r.kqTitle}"`);
 ok('guest names reach the pitch', /Ash/.test(r.guestNamesApplied || ''), r.guestNamesApplied);
 ok('...but never the save', r.noGuestInSave, r.statsBlob);

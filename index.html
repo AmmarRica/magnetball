@@ -2361,7 +2361,7 @@
    Dynamic fields              "Dynamic visual themes"
    Disc skins                  "Theme-owned player looks"
    Sea creatures               "The seabed creatures"
-   Motion tells                "Motion tells (VIDEOBALL)"
+   Motion tells                "Motion tells (VIDEOSOCCER)"
    Ball looks                  "Ball looks. Every one is DRAWN"
    Squash & stretch            "Ball squash & stretch"
    Particles                   "FX (kick sparks, confetti)"
@@ -2774,7 +2774,7 @@ const ANIMALS = {
 };
 const ANIMAL_KEYS = Object.keys(ANIMALS);
 
-// Text faceplates — the HaxBall avatar tradition: a glyph or two instead of a
+// Text faceplates — the top-down-football avatar tradition: a glyph or two instead of a
 // picture. They share the faceplate slot with flags and animals, and they are drawn
 // as TEXT over the plate, so they scale cleanly at any disc size.
 // Two complete 0-9 runs are usable as shirt numbers; the Indic and Braille rows are
@@ -2994,7 +2994,7 @@ const MODES = {
   '4v4':  { name:'4 v 4',   emoji:'🏟️', icon:'stadium', per:4, twoP:false, desc:'You + 3 bots' },
   'duo':  { name:'Duo',     emoji:'👯', icon:'duo', per:2, twoP:false, duo:true, desc:'Steer 2 at once' },
   'local':{ name:'2-Player',emoji:'🎮', icon:'gamepad', per:1, twoP:true,  desc:'Same phone' },
-  // ⚠️ The KEY stays `kq` and the theme's stays `videoball`. Keys are what `sel.party`,
+  // ⚠️ The KEY stays `kq` and the theme's stays `vsoccer`. Keys are what `sel.party`,
   // `sel.look`, `THEME_BUNDLES`, the map votes and every saved replay file refer to, so
   // renaming one orphans a setting somebody already chose. Only the NAME is user-facing,
   // which is why it lives in exactly one place and is read from here rather than copied.
@@ -3016,7 +3016,7 @@ const EXAMPLE_NAMES = ['Ash','Rio','Kit','Nova','Wren','Bex','Juno','Sol','Pike'
 // snail 22 units — TWICE what a full-speed body check does, so kicking it is clearly
 // worth doing — while the same kick sends the ball 453, twenty times further.
 const SNAIL = { rMul:1.5, invMass:0.16, bCoef:0.25, damp:0.915, kick:0.72 };
-// Killer Queen berries: light, floaty things you shepherd into your own hive. They
+// Killer Lobsters berries: light, floaty things you shepherd into your own hive. They
 // are physics bodies like any other ball, so nothing new had to be taught to
 // moveBall — what makes them FLOATY is a low mass and a damp close to 1, so they
 // drift on after a nudge instead of settling.
@@ -3069,7 +3069,7 @@ const MUD_BAKE_A = 0.30;
 // bots wait off the touchline, teams are chosen by standing on a side, and a
 // cocktail player can calibrate which way "up" is from where they're sitting.
 const LOBBY = {
-  // integrate() already clamps every player to halfW + 20 — the HaxBall-style
+  // integrate() already clamps every player to halfW + 20 — the classic
   // step-out margin. Benching further out than that just had the physics drag them
   // back in every frame, so the bench sits exactly at the line the game allows.
   benchGap: 20,        // how far outside the touchline a waiting bot stands
@@ -3605,7 +3605,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0858PM';
+const VERSION = '20260816.0909PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3621,11 +3621,11 @@ const VERSION = '20260816.0858PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260816.0858PM', title: 'Two new names',
+  { v: '20260816.0909PM', title: 'Two new names',
     added: [],
     changed: [
-      '<b>Killer Queen is now Killer Lobsters.</b> Same mode, same snail, same hive \u2014 only the name.',
-      '<b>The Videoball theme is now VideoSoccer.</b> Same court and same arrowhead players. If you had either of them picked, they are still picked.',
+      '<b>The snail mode is now called Killer Lobsters.</b> Same mode, same snail, same hive \u2014 only the name.',
+      '<b>The arrowhead theme is now called VideoSoccer.</b> Same court and same players. If you had it picked, it is still picked.',
     ],
     fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0838PM', title: 'Bots no longer freeze on a loose ball',
@@ -4137,7 +4137,7 @@ const THEMES = {
       // the crossing itself becomes the effect.
       flipFx:true },
   },
-  // ⚠️ SMASH BROS, taken as a DESIGN LANGUAGE rather than as characters — there is no
+  // ⚠️ THE PLATFORM-FIGHTER LOOK, taken as a DESIGN LANGUAGE rather than as characters — there is no
   // borrowed art here, only the four ideas that platform fighter actually got right and
   // that a top-down football game can use:
   //   1. the STAGE FLOATS. Battlefield is a bright platform in an enormous dark void,
@@ -4605,14 +4605,14 @@ const THEMES = {
       obstacle:'#c8c8c8', good:'#e8e8e8', warn:'#9a9a9a', dim:'#3a3d40', cone:'#cfcfcf',
       hudText:'#f2f4f6', hudSub:'#b8bcc0', accent:'#f2f4f6', padRing:'rgba(255,255,255,0.5)' },
   },
-  videoball: {
+  vsoccer: {
     name: 'VideoSoccer', emoji: '🔺',
     ui: { scan:false,
       grad:'linear-gradient(180deg, #0e3b3a 0%, #0a2c2b 100%)',
       bg:'#0a2c2b', panel:'rgba(14,59,58,0.94)', edge:'#1f6b69', text:'#eafcfb', muted:'#9dcecc',
       red:'#ff7a1a', blue:'#2f7fff', cyan:'#19c3c0', magenta:'#ff4da6', green:'#3ddc84', yellow:'#ffd23d',
       accent:'#ff7a1a', go:'#3ddc84', field:'#062018', onAccent:'#062018' },
-    // Videoball look: one flat vivid field (identical stripe colours = solid), bold
+    // VideoSoccer look: one flat vivid field (identical stripe colours = solid), bold
     // orange-vs-blue teams, crisp white geometry, no glow, no scanlines.
     pitch: { glow:false, fieldBg:'#0a2c2b', court:'#0f8a8a', stripeA:'#12908f', stripeB:'#12908f',
       netPocket:'rgba(255,255,255,0.10)', line:'rgba(255,255,255,0.95)', centerDot:'rgba(255,255,255,.85)',
@@ -5245,7 +5245,7 @@ const SLOT_KEYS = Object.keys(SLOTS);
 const THEME_BUNDLES = {
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
-  videoball: { field:'vbcourt',   discs:'arrow', ball:'plain', sfx:'classic' },
+  vsoccer:   { field:'vscourt',   discs:'arrow', ball:'plain', sfx:'classic' },
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
   chalk:     { field:'dither',    discs:'chalk',       ball:'classic', sfx:'classic' },
   sleeve:    { field:'sleeve',    discs:'sleeve',      ball:'plain',   sfx:'classic' },
@@ -5313,6 +5313,12 @@ function normalizeLook(){
     delete sel.theme;
   }
   if (sel.ballLook){ L.ball = sel.ballLook; delete sel.ballLook; }
+  // ⚠️ The arrowhead theme and its court were renamed, KEY AND ALL, so a save that names
+  // the old ones would land on a theme that no longer exists and show as Custom. Pure
+  // string swaps with no registry lookup, for the reason the seabed fold below records:
+  // this runs during the bootstrap, and those registries are declared far below it.
+  if (L.palette === 'videoball') L.palette = 'vsoccer';
+  if (L.field === 'vbcourt') L.field = 'vscourt';
   // The seabed skin was one entry that drew shrimp vs crab, then shrimp vs lobster.
   // It is three creatures and three pairings now, so an old save naming the vanished
   // key gets the theme's current pairing instead of no skin at all.
@@ -5415,7 +5421,7 @@ function chargeFrac(p){ return chargeOn() ? Math.min(1, (p.chargeT||0) / chargeS
 function chargeMul(p){ return 1 + chargeFrac(p) * CHARGE.bonus; }
 const KICK_SLOW = 0.45;                   // accel multiplier while holding kick (Circle) — no free cruising
 // Fraction of the striker's velocity a one-shot kick carries into the ball, so a
-// running shot is more powerful and directional than a standing one (HaxBall-like).
+// running shot is more powerful and directional than a standing one (classic top-down football).
 const KICK_CARRY = 0.5;
 // Trap-and-release: humans hold KICK to stick the ball to their feet, then let go to shoot.
 // ⚠️ `spin` is an ANGULAR RATE, not a snap. The trap used to plant the ball on your
@@ -5925,7 +5931,7 @@ function recordResult(w){
   const diffIdx = Object.keys(DIFF).indexOf(sel.diff);          // 0..N (rookie..insane)
   const mine = youTeam(w);
   const [my, opp] = yourScore(w);
-  // Killer Queen: a snail home decides the match outright, so the result is taken
+  // Killer Lobsters: a snail home decides the match outright, so the result is taken
   // from forceWin rather than the scoreline. Goals for/against stay the real tally.
   const won  = w.forceWin != null ? w.forceWin === mine : my > opp;
   const lost = w.forceWin != null ? w.forceWin !== mine : my < opp;
@@ -9977,7 +9983,7 @@ function buildSettings(){
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
-// "Pro" = HaxBall-authentic — no magnet, no trap (instant one-shot kick), floatier
+// "Pro" = purist — no magnet, no trap (instant one-shot kick), floatier
 // acceleration and a higher ball speed cap for a raw, high-skill feel.
 const FEEL_PRESETS = {
   casual: { label:'Casual', emoji:'😊', magnet:0,  trapOff:false, accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, sens:1.0, trap:50 },
@@ -11172,7 +11178,7 @@ function buildGeometry(w){
   const nB = f.netB  != null ? f.netB  : 0.2;   // ...and only the net kills momentum
   const pR = f.postR != null ? f.postR : POST.r;
   // Boundary walls are `ballOnly`: they contain the BALL but players may step a
-  // little past the line (HaxBall-style) to get around a wall-hugging ball.
+  // little past the line (the classic style) to get around a wall-hugging ball.
   // Side walls (left & right), full length
   w.walls.push({a:{x:-halfW,y:-halfL+c}, b:{x:-halfW,y:halfL-c}, bCoef:cB, ballOnly:true});
   w.walls.push({a:{x: halfW,y:-halfL+c}, b:{x: halfW,y:halfL-c}, bCoef:cB, ballOnly:true});
@@ -13351,7 +13357,7 @@ function integrate(w, ballFrozen, playersFrozen){
 // ⚠️ `handleBallControl` used to be handed `w.ball` and nothing else, so every extra
 // ball on the pitch was a thing you could bump but never kick. That went unnoticed
 // because the only extras were multiball's (an obstacle reads much like a ball you
-// keep missing) and Killer Queen's, which are shepherded by contact anyway. The
+// keep missing) and Killer Lobsters's, which are shepherded by contact anyway. The
 // warm-up balls made it obvious: a lobby full of balls where KICK did nothing.
 //
 // ⚠️ ONE ball per player per step, never a loop over all of them. `p.trap`,
@@ -15140,7 +15146,7 @@ function placeBerry(w, b, i){
 }
 // A berry reaching a goal is BANKED, not scored: it goes into that side's hive and
 // leaves play. Fill every cell and the mode is over — the same instant-win shape as
-// the snail, so there is a second way to end a Killer Queen match.
+// the snail, so there is a second way to end a Killer Lobsters match.
 function kqBerry(w, berry, team){
   berry._goalCd = 99;
   w.hive = w.hive || [0,0];
@@ -15369,7 +15375,7 @@ function finishMatch(w){
   // In a 2-player match the labels are about WHICH HUMAN, so they follow the seats
   // rather than the teams — human2 can end up on team 0 through the lobby too.
   if (w.forceWin != null){
-    // Killer Queen: the snail — or a full hive — decides it outright, so say WHICH
+    // Killer Lobsters: the snail — or a full hive — decides it outright, so say WHICH
     // instead of quoting a scoreline that may well favour the loser.
     const byHive = w.forceWinBy === 'hive';
     const mineWon = w.forceWin === mine;
@@ -15828,7 +15834,7 @@ const BOT = {
   roleTicks: 20,             // roles are re-matched this often, not every frame
   roleMargin: 0.10,          // a challenger must beat the incumbent by 10% to take a role
 
-  // --- Killer Queen berries. A berry is shepherded by walking into it — no kick, no
+  // --- Killer Lobsters berries. A berry is shepherded by walking into it — no kick, no
   // bot-only mechanic — so the bot stands behind it on the line to its own hive and
   // keeps walking, exactly the way it lines up a shot on the ball.
   berryRunners: 1,           // per side. Two and the match stops being football.
@@ -15875,7 +15881,7 @@ const BOT = {
   stuckTicks: 34,            // ~0.55s of nobody moving before the chaser barges in
   stuckMove: 0.30,           // speed under this is "not moving", world units per step
   // ⚠️ NEAR THE BALL, or it is not a stalemate — it is a bot standing somewhere on
-  // purpose. Without this it fired across the whole pitch, and Killer Queen showed why:
+  // purpose. Without this it fired across the whole pitch, and Killer Lobsters showed why:
   // there the ball often rests untouched while everyone shepherds berries, so every
   // chaser read as stuck, belted the ball about, and knocked BERRIES into the hives. The
   // mode's own balance guard caught it at 5 of 8 matches ending on a full hive against a
@@ -16506,7 +16512,7 @@ function botAssignRoles(w, team){
     for (const q of squad) if (q.ctrl === 'bot') q.aiType = plan.roles[q.aiRole] || 'allround'; }
   // 4. Only ONE presser. The second defender covers instead of double-teaming.
   st.press = chaser || null;
-  // 5. Killer Queen: at most ONE berry runner per side. More than one and the
+  // 5. Killer Lobsters: at most ONE berry runner per side. More than one and the
   // football collapses into a fruit-collection minigame — measured at two runners a
   // side, hives filled in under a minute and the ball barely moved.
   botAssignBerry(w, team, squad, chaser, goalie, st.phase);
@@ -16519,7 +16525,7 @@ function botAssignBerry(w, team, squad, chaser, goalie, phase){
   for (const q of squad) if (q.aiBerry && !berryLive(w, q.aiBerry)) q.aiBerry = null;
   if (!w.mode || !w.mode.kq) return;
   // ⚠️ Not while defending. An ungated runner ferried berries the whole match and
-  // Killer Queen stopped being football: measured 7 of 8 bot matches ending on a full
+  // Killer Lobsters stopped being football: measured 7 of 8 bot matches ending on a full
   // hive inside 90 seconds, with the ball barely involved. A side under pressure
   // drops the errand and gets back in the game, which is also what a person does.
   if (phase === 'defend'){ for (const q of squad) q.aiBerry = null; return; }
@@ -16545,7 +16551,7 @@ function botAssignBerry(w, team, squad, chaser, goalie, phase){
     if (!berryLive(w, b) || held.has(b)) continue;
     // How far it still has to go, and whether it is on the right side of us to push.
     // ⚠️ THE LAST LEG ONLY. A bot allowed to shepherd a berry from anywhere drove it
-    // the length of the pitch, uncontested, and Killer Queen became a delivery job:
+    // the length of the pitch, uncontested, and Killer Lobsters became a delivery job:
     // 7 of 8 bot matches ended on a full hive and the ball was barely involved.
     // Raising the cell count only made the same foregone race longer. Finishing a
     // berry that is already near the hive is a real contribution; couriering one
@@ -16746,13 +16752,13 @@ function runBot(w, p){
   // design and every bot is legitimately standing still.
   // ⚠️ ARMED ON THE DEAD END ITSELF — "the strike waypoint is outside the box the target
   // gets clamped into" — and not merely on "nothing is moving". That distinction is not
-  // tidiness: gated on stillness alone it fired all over Killer Queen, where the ball
+  // tidiness: gated on stillness alone it fired all over Killer Lobsters, where the ball
   // often rests untouched while everyone shepherds berries, so chasers belted it about
   // and knocked BERRIES into the hives. The mode's own balance guard caught it at 5 of 8
   // matches ending on a full hive against a ceiling of 4. Tested against the precondition
   // it cannot fire in open play at all, because in open play the waypoint is reachable.
   const wedged = Math.abs(strikeX) > mW || Math.abs(strikeY) > mL;
-  // ⚠️ NOT IN KILLER QUEEN, and this is a scope boundary rather than a bug being dodged.
+  // ⚠️ NOT IN KILLER LOBSTERS, and this is a scope boundary rather than a bug being dodged.
   // That mode's balance is a measured proportion over eight seeded matches — how often a
   // full hive, rather than the ball, decides it — and it turns on how much the ball is
   // knocked about, because a loose ball bumps the floaty berries toward the goals. A
@@ -19506,9 +19512,9 @@ DYN_FIELDS.paddock = {
     c.restore();
   },
 };
-// The VIDEOBALL court: warm cream bands running goal-to-goal on a teal table. The
+// The VIDEOSOCCER court: warm cream bands running goal-to-goal on a teal table. The
 // bands are the whole read — they give the eye a ruler for how far the ball moved.
-DYN_FIELDS.vbcourt = {
+DYN_FIELDS.vscourt = {
   name: 'VideoSoccer court',
   paint(c, st, L, T, W, H, w){
     const base = TH.dynCourtA || '#f2e0b8', alt = TH.dynCourtB || '#e8d19b';
@@ -19623,7 +19629,7 @@ const DISC_SKINS = {
     },
   },
 };
-// A blunt arrowhead pointing along the player's facing, VIDEOBALL-style. Facing is
+// A blunt arrowhead pointing along the player's facing, VIDEOSOCCER-style. Facing is
 // already tracked for the kick, so this reads as intent rather than decoration —
 // a still frame tells you which way everyone was about to go.
 //
@@ -20045,7 +20051,7 @@ const WEDGE = { tri: 0.80, bar: 0.30, barW: 0.15 };
 //
 // ⚠️ Hue is NOT carrying the sides here, on purpose, and that is why the shapes had to.
 // ⚠️ Both marks are INSCRIBED — a star drawn out to `r` puts its points ON the guide
-// ring, which is the Videoball arrowhead mistake in a different outfit. The ring is what
+// ring, which is the VideoSoccer arrowhead mistake in a different outfit. The ring is what
 // collides; nothing may cross it.
 // ⚠️ Neither goes through `discFace`. A star that spins is a pinwheel and a bubble has
 // no front, so facing would only add noise — the same call `mono`, `pool` and the
@@ -20343,7 +20349,7 @@ DISC_SKINS.pawn = {
 // silhouette — round against square-with-corners — and the colour rides on top.
 // ⚠️ The square is INSCRIBED, not circumscribed. A player is a circle of radius r and
 // that circle is what collides; a square drawn to r would put its corners 1.41r out,
-// which is the Videoball arrowhead mistake with a different shape.
+// which is the VideoSoccer arrowhead mistake with a different shape.
 const SLEEVE = { sq: 0.70, speck: 0.22 };
 DISC_SKINS.sleeve = {
   name: 'Dots vs bars',
@@ -20479,7 +20485,7 @@ function drawGoal(w, sign){
   for (let gx=wx(-gh); gx<=wx(gh); gx+=step){ ctx.moveTo(gx, wy(y)); ctx.lineTo(gx, wy(ny)); }
   for (let gy=Math.min(wy(y),wy(ny)); gy<=Math.max(wy(y),wy(ny)); gy+=step){ ctx.moveTo(wx(-gh),gy); ctx.lineTo(wx(gh),gy); }
   ctx.stroke();
-  // Killer Queen hive: BERRY.cells slots sunk into the net pocket, on the end this
+  // Killer Lobsters hive: BERRY.cells slots sunk into the net pocket, on the end this
   // team ATTACKS — the same end they shoot at and shove the snail into, so "your
   // hive" is never the opposite way round from everything else in the mode.
   // Filled cells are berry-purple; empty ones are outlined in the owning team's
@@ -20728,7 +20734,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       skin.paint(ctx, p, x, y, r, w);
       // ⚠️ STRUCTURAL, not policy. A disc is a circle of radius r and that circle is
       // what collides — so every skin gets a guide ring drawn HERE, after it paints,
-      // and a new skin cannot forget one. The Videoball arrowhead shipped without a
+      // and a new skin cannot forget one. The VideoSoccer arrowhead shipped without a
       // ring and the shape on screen was a third bigger than the shape in the
       // physics; a skin free to draw a triangle is not free to hide the body.
       strokeDiscGuide(ctx, x, y, r);
@@ -20840,7 +20846,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     }
   }
 }
-// ---------- Motion tells (VIDEOBALL) ----------------------------------------
+// ---------- Motion tells (VIDEOSOCCER) ----------------------------------------
 // Two different shapes on purpose: dots for players, one line for the ball.
 let ballTrail = [];
 let discTrails = [];                      // per-player dot history, index-aligned to w.players
@@ -20939,7 +20945,7 @@ function drawBallTrail(w){
   }
   if (pts.length < 2) return;
   const s = cam.s;
-  // Colour it for whoever struck it, like VIDEOBALL — the streak says who did this.
+  // Colour it for whoever struck it, like VIDEOSOCCER — the streak says who did this.
   const team = b.lastKickTeam;
   const col = team === 0 ? TH.teamRed : team === 1 ? TH.teamBlue : null;
   ctx.save();
@@ -20990,7 +20996,7 @@ function drawOneBall(b, x, y, r, s){
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fillStyle=g; ctx.fill();
     return;
   }
-  // Killer Queen berry: a floaty purple orb you shepherd into your own hive. It
+  // Killer Lobsters berry: a floaty purple orb you shepherd into your own hive. It
   // HOVERS — the body lifts off its own shadow with the bob — so a still frame
   // reads "cargo", not "this is the ball you score with".
   // ⚠️ b.bob is advanced in stepBerries(), not here: a wobble ticked in a draw runs
