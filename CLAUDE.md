@@ -198,6 +198,17 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   buttons is up AND right however the pad reports the rest. `tests/padstick.mjs` presses the
   two buttons **with an axis deflected at the same time** — without that the check passes on
   the broken build too, because the stick reads idle in an ordinary probe.
+- **AXIS PAIRS ARE READ IN TWOS, never overlapping** (`padStickAxes`, `padStick`). ⚠️ Both
+  loops used to walk `i++`, which makes every axis the X of one pair and the Y of the next.
+  On a pad laid out `[trigL, trigR, hatX, hatY, stickX, stickY]` — a plausible Steam Deck
+  layout — a push on the stick made pair **(3,4)**, hatY as X and stickX as Y, the loudest
+  thing on the pad; it was chosen as "the stick", and **right and down then produced the
+  same heading**. The eight directions measured as SIX. This is the concrete, reproducible
+  form of "the thumbstick does nothing / has no diagonals on Steam Deck" that three earlier
+  diagnoses missed. Sticks and hats are reported as consecutive pairs on even indices, so
+  stepping in twos is also what the hardware does; and the combine additionally skips any
+  pair sharing an axis with the chosen stick, which is the same guarantee stated twice.
+  `tests/deckstick.mjs` runs the four shapes a Deck actually reports itself as.
 - **The MOVE STICK is found, not assumed** (`padStick`, `padStickAxes`, `padRest`, `PADAX`).
   ⚠️ `axes[0]`/`axes[1]` is the left stick **only under the STANDARD mapping** — a pad
   reporting a non-standard one numbers its axes however it likes. That is the same trap

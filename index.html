@@ -3533,7 +3533,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260814.0450AM';
+const VERSION = '20260814.0640AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3549,6 +3549,14 @@ const VERSION = '20260814.0450AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260814.0640AM', title: 'The Steam Deck stick, found at last',
+    added: [],
+    changed: [
+      '<b>Diagonals on the thumbstick work on Steam Deck.</b> On a controller that reports its axes in a certain order &mdash; a Deck among them &mdash; the game was reading one axis from the D-pad and the other from the stick, so pushing <i>right</i> and pushing <i>down</i> came out as the same direction and eight directions behaved like six. It reads the pairs properly now.',
+      'The keyboard also drives your player on a Deck, alongside the stick, since Steam sends the D-pad through as arrow keys.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
+
   { v: '20260814.0450AM', title: 'Pick anything up and play',
     added: [
       '<b>SELECT turns your controls a quarter turn.</b> Stand wherever you like &mdash; press it until "up" on your stick is up on the screen, and the controller icon in the corner turns with you so you can see what it did. Each controller has its own, and it is remembered.',
@@ -12746,8 +12754,15 @@ function padStickAxes(g){
   // Whichever pair is actually being pushed, decided live rather than once — a pad that
   // claims the standard mapping is not taken at its word here, because "standard" is a
   // promise about numbering and a pad can make it and still put the stick elsewhere.
+  // ⚠️ PAIRS STEP IN TWOS, and walking `i++` here was a real bug. Overlapping pairs mean
+  // every axis is the X of one and the Y of the next, so on a pad laid out
+  // [trigL, trigR, hatX, hatY, stickX, stickY] a push on the stick made pair (3,4) —
+  // hatY as X, stickX as Y — the loudest thing on the pad, and it was chosen as "the
+  // stick". Right and down then produced the SAME heading and the eight directions
+  // measured as six. Sticks and hats are reported as consecutive pairs on even indices,
+  // so twos is also what the hardware does.
   let best = null, bestMag = PADAX.pick;
-  for (let i = 0; i + 1 < ax.length; i++){
+  for (let i = 0; i + 1 < ax.length; i += 2){
     if (!centres(i) || !centres(i + 1)) continue;
     const m = Math.hypot(ax[i] || 0, ax[i + 1] || 0);
     if (m > bestMag){ bestMag = m; best = [i, i + 1]; }
@@ -12757,7 +12772,7 @@ function padStickAxes(g){
   // Nothing is being pushed: the lowest-numbered pair that both centre. On every pad seen so
   // far the move stick comes before the look stick, and a pair is taken together so x and y
   // cannot come from different sticks.
-  for (let i = 0; i + 1 < ax.length; i++) if (centres(i) && centres(i + 1)) return [i, i + 1];
+  for (let i = 0; i + 1 < ax.length; i += 2) if (centres(i) && centres(i + 1)) return [i, i + 1];
   return [0, 1];
 }
 // ⚠️ ON A NON-STANDARD PAD, EVERY PAIR THAT BEHAVES LIKE A STICK IS READ — not one chosen
@@ -12782,8 +12797,17 @@ function padStick(g){
   const rest = padRest[g.index];
   if (!rest) return [x, y];
   const centres = i => rest[i] != null && rest[i] < PADAX.centres;
-  for (let i = 0; i + 1 < ax.length; i++){
-    if (i === ix || !centres(i) || !centres(i + 1)) continue;
+  // ⚠️ NON-OVERLAPPING PAIRS, and the overlap was a real bug rather than a tidiness point.
+  // Walking `i++` makes every axis the X of one pair and the Y of the next, so on a pad
+  // whose stick sits at 4/5 the pair (3,4) fed axis 4 — the stick's X — in as a Y. Pushing
+  // the stick RIGHT then set y as well, and the diagonals collapsed onto the cardinals:
+  // eight distinct headings measured as SIX. Sticks and hats are reported as consecutive
+  // pairs on even indices, so stepping in twos is also what the hardware actually does.
+  // ⚠️ ...and any pair sharing an axis with the chosen stick is skipped outright, which is
+  // the same guarantee stated a second way for a pad that puts its stick on an odd index.
+  for (let i = 0; i + 1 < ax.length; i += 2){
+    if (i === ix || i + 1 === ix || i === iy || i + 1 === iy) continue;
+    if (!centres(i) || !centres(i + 1)) continue;
     const a = ax[i] || 0, b = ax[i + 1] || 0;
     if (Math.abs(a) > Math.abs(x)) x = a;
     if (Math.abs(b) > Math.abs(y)) y = b;
