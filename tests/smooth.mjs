@@ -192,6 +192,48 @@ const fpsR = await p.evaluate(()=>{
   return o;
 });
 
+// ================== the shake OFFSET, not just its amplitude ==================
+// ⚠️ REPORTED AS "when hitting kick, it looks like it blinks". The amplitude decayed once
+// per STEP — which this suite already checked — while the OFFSET was re-rolled inside
+// `render()`, once per DRAW. So on a 144Hz screen the whole pitch was thrown to a new
+// random place 2.4 times more often than the shake was tuned for, which is a strobe
+// rather than a shake, and two draws of one frame produced two different pictures.
+//
+// ⚠️ The amplitude check above cannot see this: `shake` decays identically either way.
+// What has to be measured is the OFFSET — that it holds still across two draws, and that
+// it moves once per step.
+const shakeR = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const cv = document.getElementById('game'), c2 = cv.getContext('2d');
+  const hash = () => { const d = c2.getImageData(0, 0, cv.width, cv.height).data;
+    let h = 0; for (let i = 0; i < d.length; i += 97) h = (h*31 + d[i])|0; return h; };
+  M.sel.juice = true;
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(4); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  M.addShake(9);
+  // ⚠️ One step FIRST, or the offset is still zero and the two-draw check passes for
+  // the wrong reason — it would be comparing two unshaken frames.
+  M.decayJuice();
+  o.offset = M.shakeXY.map(v => +v.toFixed(3));
+  o.offsetIsLive = Math.hypot(o.offset[0], o.offset[1]) > 0.3;
+  M.render(); const a = hash();
+  M.render(); const b2 = hash();
+  o.twoDrawsAgree = a === b2;
+  // ...and it really is moving the picture: a frame at a different offset must differ.
+  M.decayJuice(); M.render(); const c = hash();
+  o.offsetMovesThePicture = c !== a;
+  // One new offset per step, and none in between.
+  const seen = [];
+  for (let i = 0; i < 6; i++){ M.decayJuice(); seen.push(M.shakeXY.join(',')); M.render(); M.render(); }
+  o.perStep = seen;
+  o.oneRollPerStep = new Set(seen).size === seen.length;
+  // It settles to exactly zero rather than leaving the pitch parked off-centre.
+  for (let i = 0; i < 90; i++) M.decayJuice();
+  o.settled = M.shakeXY.join(',');
+  o.settlesAtZero = M.shakeXY[0] === 0 && M.shakeXY[1] === 0;
+  return o;
+});
+
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(r.frameCountsDiffer, `the four runs rendered the same number of frames — nothing was varied: ${JSON.stringify(r.byHz.map(x=>x.frames))}`);
@@ -214,9 +256,14 @@ ok(fpsR.smoothed, `the FPS meter is not smoothed (${fpsR.jitter} spread over ste
 ok(fpsR.shownWithDebug, 'the frame rate is not drawn while the debug readout is on');
 ok(fpsR.hiddenWithoutDebug, 'the frame rate is drawn with the debug readout off');
 ok(fpsR.aboveVersion, `the frame rate is not above the version tag (fps row bottom ${fpsR.fpsBottom} vs version top ${fpsR.verTop})`);
+ok(shakeR.offsetIsLive, `the shake offset is zero right after a kick (${JSON.stringify(shakeR.offset)}) — the two-draw check below would pass on two unshaken frames`);
+ok(shakeR.twoDrawsAgree, 'two draws of ONE frame differ while the screen is shaking — the offset is being rolled in render(), which is the "it blinks on every kick" report: at 144Hz the pitch is thrown somewhere new 2.4x more often than the shake was tuned for');
+ok(shakeR.offsetMovesThePicture, 'a new shake offset does not change the picture at all, so the check above is vacuous');
+ok(shakeR.oneRollPerStep, `the offset does not move once per step: ${JSON.stringify(shakeR.perStep)}`);
+ok(shakeR.settlesAtZero, `the shake settles at ${shakeR.settled} rather than exactly zero, leaving the pitch parked off-centre`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-console.log(JSON.stringify({ ...r, ...fpsR }, null, 1));
+console.log(JSON.stringify({ ...r, ...fpsR, shake: shakeR }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\nsmooth OK');

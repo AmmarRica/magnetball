@@ -284,6 +284,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   quarter-turn. `render()` uses it twice (ground, then bodies) and `drawReplayFrame` once;
   three hand-written copies is how the replay came to be drawn at ninety degrees to the match
   it was a replay of.
+- **The screen shake's OFFSET is rolled in `decayJuice()`, never in `render()`**
+  (`shakeX`/`shakeY`). ⚠️ Reported as *"when hitting kick, it looks like it blinks"*, and
+  it is the trails rule wearing its loudest hat: the AMPLITUDE decayed once per step —
+  which `tests/smooth.mjs` already checked — while the OFFSET was re-rolled once per
+  DRAW. So on a 144Hz screen the whole pitch was thrown to a new random place 2.4× more
+  often than the shake was tuned for, which is a strobe rather than a shake, and two
+  draws of one frame produced two different pictures.
+  ⚠️ **The amplitude check could not see this**: `shake` decays identically either way.
+  What has to be measured is the offset — that it holds still across two draws and moves
+  once per step. `tests/smooth.mjs` does both, plus that a new offset really does change
+  the picture (or the two-draw check is vacuous) and that it settles at exactly zero
+  rather than leaving the pitch parked off-centre.
+  ⚠️ `Math.random` is safe here and only here: `decayJuice` is called from `loop()`
+  beside `step(world)`, never from inside it, so the determinism rule is untouched — and
+  drawing from `fxRnd` would shift the particle stream for nothing.
+  ⚠️ During hit stop `loop()` returns before `decayJuice()`, so the offset holds still
+  through the freeze, which is what a freeze frame should do.
 - **Particles age in `advanceFx()`, next to `decayJuice()`** — never in `drawFx`, where
   `p.life -= STEP` and `p.x += p.vx` used to live. ⚠️ That is the trails bug wearing a
   different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the time

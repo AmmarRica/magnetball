@@ -3585,7 +3585,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0550AM';
+const VERSION = '20260816.0648PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3601,6 +3601,13 @@ const VERSION = '20260816.0550AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0648PM', title: 'The kick no longer blinks',
+    added: [],
+    changed: [
+      '<b>The screen shake on a kick is a shake again, not a flicker.</b> The pitch was being thrown to a new random place on every frame your screen drew rather than on every frame the game ran \u2014 so the faster your display, the more it strobed. It now moves at the game\u2019s own rate, which is what it was tuned for. Screen shake &amp; effects still turns it off entirely.',
+      'Goals were doing the same thing, only harder, and are fixed by the same change.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0550AM', title: 'Team size, on the pitch',
     added: [
       '<b>A + and a \u2212 square beside the warm-up keyboard.</b> Stand on them to add or remove a bot a side, so a 1v1 becomes a 3v3 without going back to the menu. The size you are about to play reads out between the two squares, and the bots walk on and off as you change it.',
@@ -11176,7 +11183,9 @@ function layTeam(list, side, halfL){
 // ============================================================
 let lastT = 0, acc = 0;
 // ---- Juice: screen shake, hit-stop, goal flash & slow-mo (all gated by sel.juice)
-let shake = 0, flash = 0, flashCol = '#ffffff', hitStop = 0;
+// ⚠️ `shakeX`/`shakeY` are the OFFSET, and they live beside the amplitude because they
+// are rolled in the step loop — see decayJuice.
+let shake = 0, shakeX = 0, shakeY = 0, flash = 0, flashCol = '#ffffff', hitStop = 0;
 // Global shake scale (0.5 = half). Lower = gentler; also caps the peak amplitude.
 const SHAKE_SCALE = 0.5;
 function addShake(a){ if (!motionOK()) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
@@ -11193,6 +11202,18 @@ function hitStopFrames(){ const v = sel.hitStop; return v == null ? 5 : Math.max
 // third as long on a 144Hz screen as on a 60Hz one. Same rates, now per step.
 function decayJuice(){
   shake = shake > 0.3 ? shake * 0.85 : 0;
+  // ⚠️ THE OFFSET IS ROLLED HERE, never in `render()`, and that was reported as the screen
+  // BLINKING on every kick. It is the trails rule wearing its loudest hat: the amplitude
+  // decayed once per step while the offset was re-rolled once per DRAW, so on a 144Hz
+  // screen the whole pitch was thrown to a new random place 2.4 times more often than the
+  // shake was designed for — which is a strobe rather than a shake. It also meant two
+  // draws of one frame produced two different pictures, which every other effect in this
+  // file is explicitly not allowed to do.
+  // ⚠️ `Math.random` is safe here and only here: `decayJuice` is called from `loop()`
+  // beside `step(world)`, never from inside it, so the determinism rule is untouched — and
+  // taking it from `fxRnd` instead would shift the particle stream for nothing.
+  if (shake > 0.3){ shakeX = (Math.random()*2-1)*shake; shakeY = (Math.random()*2-1)*shake; }
+  else { shakeX = 0; shakeY = 0; }
   flash = flash > 0.01 ? flash * 0.88 : 0;
 }
 // The celebration is over — put the screen back. Called when a REPLAY takes the canvas,
@@ -11212,7 +11233,7 @@ function decayJuice(){
 // ⚠️ `hitStop` cannot be pending here at all — it is at most twelve frames against a
 // three-second hold — but it is frozen by the same early return, and leaving one of the three
 // behind is how this comes back.
-function juiceReset(){ shake = 0; flash = 0; hitStop = 0; }
+function juiceReset(){ shake = 0; shakeX = 0; shakeY = 0; flash = 0; hitStop = 0; }
 
 // ⚠️ FRAME RATE IS A WALL-CLOCK MEASUREMENT, so unlike everything else it is counted in
 // loop() off real time and NOT step-locked — the sim rate is fixed at 1/60 by design, so a
@@ -17350,8 +17371,10 @@ function render(){
   ctx.fillStyle = TH.fieldBg;
   ctx.fillRect(0,0,cw,ch);
   // Screen shake — jitter only the pitch/players, never the touch controls.
-  let sx=0, sy=0;
-  if (shake > 0.3){ sx=(Math.random()*2-1)*shake; sy=(Math.random()*2-1)*shake; }   // decay is step-locked, see decayJuice
+  // ⚠️ READ, never rolled. Both the amplitude and the offset are advanced in
+  // `decayJuice()` in the step loop; rolling it here ran the shake at the refresh rate
+  // and made two draws of one frame disagree. See decayJuice.
+  const sx = shakeX, sy = shakeY;
   // ⚠️ TWO passes, and that is the parallax: the GROUND plane and everything standing on
   // it are offset by different amounts (opposite ways, see TILT), which is the only depth
   // cue a top-down pitch has short of redrawing the game in perspective. With tilt off or
@@ -21866,6 +21889,7 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, buildUnlocked, UNL_CATS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
+    get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },
     get flash(){ return flash; }, set flash(v){ flash=v; },
     addShake, goalBurst, scoreGoal, scoreMultiBall, creditScorer, startDemo, playSfx,
