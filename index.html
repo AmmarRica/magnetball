@@ -330,6 +330,26 @@
     .subchip .ic { width: 15px; height: 15px; }
     .subchip:hover { border-color: var(--cyan); color: var(--text); }
     .subchip.sel { color: var(--on-accent, #000); background: var(--accent); border-color: var(--accent); }
+    /* ⚠️ A MOUSE HAS NO SIDEWAYS GESTURE, so on a desktop the rows WRAP. Both chip rows
+       hide their scrollbar, which is right on a phone — you swipe them — and on a desktop
+       it left everything past the right-hand edge reachable by no input the machine has:
+       a wheel scrolls the page rather than a horizontal box, and there was no bar to drag.
+       Measured at 1280×900: EIGHT of the twelve jump chips were off the edge (Theme,
+       Display, Sound, Game Feel, Replays, VJ Mode, About, Online), plus 4 of 7 theme
+       slots, 4 of 7 player panes, 3 of 6 sound categories and 2 of 5 Game Feel panes —
+       and a sub-pane has no other route in, so those were unreachable outright.
+       ⚠️ This does NOT reopen the "must be one row" rule, which was about a PHONE: there
+       the row scrolls with a thumb and a second pinned row eats the screen it is saving.
+       Wrapping is gated to a fine pointer, so touch keeps the single scrolling row, and
+       `syncSticky` measures `#jumpBar`'s real height every resize, so the headers below
+       pin under two rows as readily as one. */
+    @media (hover: hover) and (pointer: fine) {
+      #jumpBar, .subtabs { flex-wrap: wrap; overflow: visible; }
+      /* ⚠️ Widening the bar out of the card column was tried and dropped: on a desktop
+         the menu is the 372px DOCK, not the 460px column, so a wider cap buys nothing
+         where it is actually needed and only fires on a sub-900px window, where it
+         spans 824px over 460px cards. Wrapping is the whole fix. */
+    }
     /* Photo pane: what you'd wear, next to the two ways of changing it. */
     .photorow { display: flex; align-items: center; gap: 14px; }
     .photoprev { width: 66px; height: 66px; flex: 0 0 auto; image-rendering: auto; }
@@ -3533,7 +3553,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260814.0640AM';
+const VERSION = '20260816.1256AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3549,6 +3569,13 @@ const VERSION = '20260814.0640AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.1256AM', title: 'All the menu tabs, on a desktop',
+    added: [],
+    changed: [
+      '<b>Every section in the menu can be reached with a mouse.</b> The row of section buttons slid sideways, which works with a thumb on a phone but left eight of the twelve off the edge on a desktop with no way to get at them &mdash; Theme, Display, Sound, Game Feel, Replays, VJ Mode, About and Online. On a desktop the row now wraps, so all of them are on screen at once.',
+      'The tabs inside a card wrap on a desktop too, so the Ball, Trail and Sound parts of Theme, and the Photo and Eyes parts of Your Player, are no longer past an edge you cannot drag. Phones keep the single row you swipe.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260814.0640AM', title: 'The Steam Deck stick, found at last',
     added: [],
     changed: [

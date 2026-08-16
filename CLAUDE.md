@@ -1600,6 +1600,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `buildSubTabs()` is called at the END of `buildSettings()` as well as at boot:
   `buildSettings` rebuilds those panes from scratch on every slot change, so the fresh panes have
   no `.on` class and the card showed nothing at all.
+- **A MOUSE HAS NO SIDEWAYS GESTURE, so on a desktop the chip rows WRAP**
+  (`@media (hover: hover) and (pointer: fine)` on `#jumpBar, .subtabs`). Both rows are
+  one line that scrolls sideways with the scrollbar hidden — right on a phone, where you
+  swipe them with a thumb — and on a desktop that left everything past the right-hand
+  edge reachable by **no input the machine has**: a wheel scrolls the page rather than a
+  horizontal box, and there was no bar to drag. ⚠️ Measured at 1280×900 before the fix:
+  **eight of the twelve jump chips** off the edge (Theme, Display, Sound, Game Feel,
+  Replays, VJ Mode, About, Online), plus 4 of 7 theme slots, 4 of 7 player panes, 3 of 6
+  sound categories and 2 of 5 Game Feel panes — and a sub-pane has **no other route in**,
+  so those settings were unreachable outright.
+  ⚠️ This does **not** reopen the "must be ONE row" rule below, which is a PHONE rule:
+  there the row scrolls under a thumb and a second pinned row eats the screen the tabs
+  exist to save. The wrap is gated to a fine pointer, and `syncSticky` already measures
+  `#jumpBar`'s real height on every resize, so the headers below pin under two rows as
+  readily as one.
+  ⚠️ **Widening the bar out of the card column was tried and dropped.** On a desktop the
+  menu is the **372px dock** (`.screen.docked`, `DOCK_W`), not the 460px column, so a
+  wider cap buys nothing where it is needed and only fires on a sub-900px window, where
+  it spans 824px over 460px cards.
+  ⚠️ `tests/chipreach.mjs`, and the reason every existing suite was blind to this is
+  worth keeping: `menunav` and `taptargets` both press a chip by calling
+  `scrollIntoView()` first, **which scrolls the row for you** — so a chip no human could
+  reach measured as perfectly pressable. Nothing in the new suite may scroll a row, and
+  it asserts `scrollLeft === 0` to prove it didn't.
 - **`.subtabs` is STICKY**, pinned under its own card's header at
   `--sticky-top + --sec-h` (measured by `syncSticky`). ⚠️ A chip row that scrolls away with the
   grid is only half a fix — you still have to scroll back up to change tab, which is the vertical

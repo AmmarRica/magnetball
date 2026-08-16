@@ -174,11 +174,17 @@ const r = await p.evaluate(async ()=>{
     !!card('theme').querySelector('.subpane[data-pane="bundle"] #themePick');
   // ⚠️ The chip row STAYS PUT while a grid scrolls. A row that scrolls away with the tiles is
   // only half a fix — you still have to scroll back up to change tab, which is the vertical
-  // scrolling it exists to remove. And it must be ONE row: two pinned rows put half the chips
-  // behind the section header and the pane's tiles came through the gap.
+  // scrolling it exists to remove.
+  // ⚠️ It used to require ONE row here, and that was measured on a DESKTOP page while being
+  // a PHONE rule. A mouse has no sideways gesture, so on a fine pointer a single scrolling
+  // row hides four of the seven theme chips behind an edge nothing can drag — it wraps there
+  // now. What this page can still say is the part that holds either way: the row must never
+  // OVERFLOW, because an overflowing row on a desktop is chips nobody can reach.
+  // `tests/chipreach.mjs` owns both ends of it, including the phone's single row.
   const tabs = document.querySelector('.subtabs[data-tabs="theme"]');
   o.tabsSticky = getComputedStyle(tabs).position === 'sticky';
-  o.tabsOneRow = getComputedStyle(tabs).flexWrap === 'nowrap';
+  o.tabsNoOverflow = tabs.scrollWidth <= tabs.clientWidth + 1;
+  o.tabsWrap = getComputedStyle(tabs).flexWrap;
   M.openSection('theme'); M.showSubTab('theme','bundle');
   const su2 = document.getElementById('setup');
   const hdr2 = card('theme').querySelector('h2');
@@ -209,7 +215,7 @@ ok(r.groups === 'feel,match,player,replay,sound,theme', `expected sub-tabs on fe
 ok(r.themeTabsFromSlots, `the Theme chips are not Bundle + the slot list: ${JSON.stringify(r.themeChips)} vs ${JSON.stringify(['bundle'].concat(r.slotKeys))}`);
 ok(r.bundleIsATab, 'the bundle grid is not behind a chip — it is the tallest grid in the card at 19 tiles, so leaving it stacked means scrolling past it to reach anything else');
 ok(r.tabsSticky, 'the sub-tab row is not sticky, so it scrolls away with the grid and you have to scroll back up to change tab');
-ok(r.tabsOneRow, 'the sub-tab row can WRAP — two pinned rows put half the chips behind the section header and let the pane\'s tiles through the gap');
+ok(r.tabsNoOverflow, `the sub-tab row overflows sideways on a desktop (wrap: ${r.tabsWrap}) — a mouse has no sideways gesture, so chips past the edge of a scrollbar-less row cannot be reached at all`);
 ok(r.tabsPinned, `the chip row did not pin flush under its own section header while a grid scrolled: ${JSON.stringify(r.tabsRect)}`);
 ok(r.everyPaneHasAChip, `panes and chips do not match one-for-one: ${JSON.stringify(r.paneCounts)} vs ${JSON.stringify(r.chipCounts)}`);
 ok(r.oneOpenAtATime, 'more than one pane was visible at once');
