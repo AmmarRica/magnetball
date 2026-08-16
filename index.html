@@ -3553,7 +3553,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0143AM';
+const VERSION = '20260816.0309AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3569,12 +3569,13 @@ const VERSION = '20260816.0143AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260816.0143AM', title: 'Hard Court',
+  { v: '20260816.0309AM', title: 'Tennis',
     added: [
-      '<b>A tennis theme.</b> A blue hard court inside a green apron, with white markings laid out to a real court\u2019s proportions \u2014 tram lines down each side, a service box at each end and the net across the middle. Theme \u2192 Background \u2192 Hard Court.',
-      'Its players are a clay racquet against a white net, and the ball is acid yellow with its seams on it. The racquet points where you are facing.',
+      '<b>A tennis theme.</b> A blue court, a green surround, white lines and an acid-yellow ball \u2014 the tennis palette on the ordinary pitch, not a tennis court. Theme \u2192 Background \u2192 Tennis.',
     ],
-    changed: [],
+    changed: [
+      'The version of it that painted a tennis court over the pitch, with racquets and nets for players, has been taken out. The markings you already know are worth more than the reference.',
+    ],
     fixed: 'A handful of smaller fixes.' },
   { v: '20260816.1256AM', title: 'All the menu tabs, on a desktop',
     added: [],
@@ -4071,42 +4072,42 @@ const THEMES = {
       dynGlow:'#2b1e5c',        // the nebula wash behind them
       dynEdge:'#1a1030' },      // the platform's own hard edge
   },
-  // A hard court under lights: blue inside the lines, green apron outside them, white
-  // markings, and the ball the one acid thing on the screen. Five supplied colours do
-  // all the work — #336699 court, #339966 surround, #fefff3 lines, #993300 clay,
-  // #c6ed2c ball — and the only other values here are DARKENINGS of the court blue,
-  // used for the page behind the menu and for the outlines. Nothing new is invented.
-  // ⚠️ Each colour has exactly ONE job, which is what decides the team inks. The court
-  // is blue, the surround green and the ball acid, so a team drawn in any of the three
-  // is a body the same colour as something you are already tracking — the field of
-  // decoys the Bootleg dots and the Sorry! lane squares are both written up for. That
-  // leaves CLAY against WHITE, which is a lightness pair rather than a hue one and so
-  // survives every kind of colour blindness; the silhouettes (DISC_SKINS.tennis) carry
-  // it regardless.
-  // ⚠️ White is also the LINE colour, and a white body on a white line is the one risk
-  // in that choice — which is why the net disc is a dark mesh with a white tape rather
-  // than a plain white counter, and why `discRim` is near-black and heavy.
-  // ⚠️ The court is FLAT: stripeA and stripeB are the same blue. Mown stripes are a
-  // grass thing, and a painted acrylic court has none.
+  // ⚠️ A PALETTE AND NOTHING ELSE, and that is the point of it. It shipped for one build
+  // as a whole tennis SET — a court's tram lines and service boxes painted over the
+  // pitch, racquets and nets for players, a seamed ball — and it was asked for as the
+  // five colours and the name. A theme that redraws the pitch as a different sport's
+  // court is a different game to read; these are the same football markings everybody
+  // already knows, in a tennis palette. So no `THEME_BUNDLES` row at all: field, discs
+  // and ball fall to the defaults, which is `bundleSlots`' whole reason for existing.
+  // Five supplied colours with one job each — #336699 the court, #339966 the surround,
+  // #fefff3 the lines, #993300 the clay, #c6ed2c the ball. The only other values here
+  // are DARKENINGS of the court blue, for the page behind the menu and for the outlines.
+  // ⚠️ One job each is what decides the TEAM inks. The court, the surround and the ball
+  // are already spoken for, so a team drawn in any of the three is a body the same colour
+  // as something you are already tracking — the field of decoys the Bootleg dots and the
+  // Sorry! lane squares are both written up for. That leaves CLAY against WHITE, which is
+  // a lightness pair rather than a hue one and so survives every kind of colour blindness.
+  // ⚠️ The court is FLAT: stripeA and stripeB are the same blue. Mown stripes are a grass
+  // thing, and this surface is a painted one.
   tennis: {
-    name: 'Hard Court', emoji: '🎾',
+    name: 'Tennis', emoji: '🎾',
     ui: { scan:false,
       grad:'radial-gradient(125% 95% at 50% -15%, #2a557f 0%, #1c3854 55%, #12243a 100%)',
       bg:'#12243a', panel:'rgba(254,255,243,0.07)', edge:'#3f6a92', text:'#fefff3', muted:'#a8c0d2',
       red:'#993300', blue:'#fefff3', cyan:'#c6ed2c', magenta:'#993300', green:'#339966', yellow:'#c6ed2c',
       accent:'#c6ed2c', go:'#339966', field:'#336699', onAccent:'#12243a' },
     pitch: { glow:false, fieldBg:'#339966', court:'#336699', stripeA:'#336699', stripeB:'#336699',
-      // The pocket is the clay, which is the one place on a tennis court a wash of a
-      // fourth colour helps: nobody stands in the net.
+      // The goal pocket is the clay: the one place a wash of a fourth colour helps,
+      // because nobody stands in the net.
       netPocket:'rgba(153,51,0,0.30)', line:'#fefff3', centerDot:'#fefff3',
       netMesh:'rgba(254,255,243,0.45)', post:'#fefff3', teamRed:'#993300', teamBlue:'#fefff3',
       discRim:'#12243a', kickRing:'#c6ed2c', kickText:'#12243a', cbRing:'#fefff3',
       eyeWhite:'#fefff3', eyePupil:'#12243a', nameBg:'#12243a', nameText:'#fefff3',
       shadow:'rgba(10,28,20,0.24)', ballRim:'#12243a', ball:'#c6ed2c',
-      // ⚠️ The seam is the COURT BLUE, not the white a real ball has. White on #c6ed2c
-      // is 1.3:1 and `ballSpotInk` would repaint it anyway (the floor the Pool cue ball
-      // is written up for), so the ball would have shipped looking plain. Blue measures
-      // 4.4:1 against it and is already in the palette.
+      // ⚠️ The ball's PATTERN is the court blue, not white. White on #c6ed2c is 1.3:1
+      // and `ballSpotInk` would repaint it anyway (the floor the Pool cue ball is written
+      // up for), so the ball would have shipped looking plain whatever look was picked.
+      // Blue measures 4.4:1 against it and is already in the palette.
       ballSpot:'#336699',
       trailRGB:'198,237,44',
       obstacle:'#993300', good:'#c6ed2c', warn:'#993300', dim:'#7f9ab0', cone:'#993300',
@@ -4114,8 +4115,10 @@ const THEMES = {
       // they go light — the same exception Warp and Blast Zone make for the same reason.
       hudText:'#fefff3', hudSub:'#cfe6da', accent:'#c6ed2c',
       padRing:'rgba(254,255,243,0.55)',
-      dynMark:'#fefff3',        // the court markings the field paints
-      dynAlt:'#993300' },       // the clay, for the tramline tint
+      // ⚠️ Kept even though this palette ships no field of its own: SLOTS MIX, so any
+      // `DYN_FIELDS` painter can be asked for over it, and they all fall back through
+      // `TH.dynMark || TH.line`. Without these a starfield over Tennis paints blind.
+      dynMark:'#fefff3', dynAlt:'#993300' },
   },
   // Limoncello (#f3e65a) field, black lines, WHITE everywhere else, dithered — and
   // Klein Wave (#315dce) as the second team, both taken from a supplied swatch.
@@ -5155,12 +5158,6 @@ const THEME_BUNDLES = {
   // already exists, and a second one that looked the same would be two places to keep
   // in step for no gain.
   smash:     { field:'blastzone', discs:'smash',       ball:'orb',     sfx:'space',   trail:'comet' },
-  // ⚠️ `classic` sound and `dots` trail, both left alone: a tennis SET would be six new
-  // variants across six categories, and inserting one in the middle of an `SFX` array
-  // shifts every index above it — the whistle that had to move 4 → 5 when Pinball
-  // arrived. This theme is colour, court, players and ball; nothing here needs a sound
-  // it does not have.
-  tennis:    { field:'tenniscourt', discs:'tennis',    ball:'seam',    sfx:'classic' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -17976,55 +17973,6 @@ const DYN_FIELDS = {
       c.restore();
     },
   },
-  // A tennis court's own markings, laid over whatever surface it is given: the tram
-  // lines down each side, a service box each end, the centre service line joining
-  // them, a tick at the middle of each baseline, and the net across the middle.
-  // ⚠️ Proportions are the REAL ones, scaled to the pitch rather than invented — the
-  // alley is 4.5ft of a 36ft width (0.125 a side) and the service line is 21ft of a
-  // 39ft half (0.538 out from the net). A tennis court is a shape people know by
-  // heart, so getting the ratios wrong is the one thing that would read as fake.
-  // ⚠️ Everything is a MARKING, in the markings' own ink, and nothing is filled — the
-  // Abari carpet is the write-up for why a decorative shape in the middle of the play
-  // is a decoy. Lines are not: the pitch already draws a halfway line and a circle.
-  // ⚠️ The pitch runs goal to goal, so the net lands exactly on halfway and the two
-  // baselines on the goal lines, which is why this court fits a football pitch at all.
-  // ⚠️ No `step` and no PRNG: paint is a pure function of the rect. Nothing here moves.
-  tenniscourt: {
-    name: 'Tennis court', tram: 0.125, serve: 0.538, netBand: 0.014, tick: 0.022, mesh: 26,
-    paint(c, st, L, T, W, H){
-      // Falls back through whatever palette it is handed: slots mix freely, so this can
-      // be asked for over Grass, where dynMark does not exist.
-      const ink = TH.dynMark || TH.line || '#ffffff';
-      const cx = L + W/2, cy = T + H/2;
-      const lw = Math.max(1, Math.min(W, H) * 0.005);
-      c.save(); c.beginPath(); c.rect(L, T, W, H); c.clip();
-      c.strokeStyle = rgba(ink, 0.55); c.lineWidth = lw; c.lineCap = 'butt';
-      const line = (x1, y1, x2, y2) => { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
-      // Singles sidelines — the inside edge of each tram.
-      const sl = L + W * this.tram, sr = L + W * (1 - this.tram);
-      line(sl, T, sl, T + H); line(sr, T, sr, T + H);
-      // Service lines, one each side of the net, spanning the singles court only.
-      const sy = (H/2) * this.serve;
-      line(sl, cy - sy, sr, cy - sy); line(sl, cy + sy, sr, cy + sy);
-      // The centre service line runs the whole way between them, through the net.
-      line(cx, cy - sy, cx, cy + sy);
-      // Centre marks: a tick at the middle of each baseline, pointing in.
-      const tk = H * this.tick;
-      line(cx, T, cx, T + tk); line(cx, T + H, cx, T + H - tk);
-      // The net: a mesh band on halfway with a solid tape along the top. Held to a
-      // hairline band — it sits exactly where the play is, so it may be a marking and
-      // nothing more.
-      const nb = H * this.netBand;
-      c.strokeStyle = rgba(ink, 0.28);
-      for (let i = 0; i <= this.mesh; i++){
-        const x = L + W * (i / this.mesh);
-        line(x, cy - nb, x, cy + nb);
-      }
-      c.strokeStyle = rgba(ink, 0.7); c.lineWidth = Math.max(1, lw * 1.2);
-      line(L, cy - nb, L + W, cy - nb);
-      c.restore();
-    },
-  },
   // A printed record sleeve: a grid of big dots over black card, green bars punched
   // through it, and the press's own streaks across the whole thing. Still — no step —
   // because print does not move, and a drifting grid under the players reads as lag.
@@ -19425,95 +19373,7 @@ DISC_SKINS.smash = {
     c.restore();
   },
 };
-// A RACQUET against the NET — the two objects on a tennis court that are not the ball.
-// ⚠️ The obvious pairing is racquet vs ball, and it is exactly wrong: the thing you are
-// chasing is drawn as a small bright disc, so a team drawn as one is a pitch full of
-// decoys. Same call the Abari token records from the other end ("on a pitch of wedges
-// the ball should be the one thing that is not one").
-// ⚠️ The sides differ by SILHOUETTE first: the racquet is a long asymmetric shape with a
-// wide head and a narrow grip, so a ring drawn round it is inked at the two poles and
-// EMPTY at the sides, while the net is a full disc inked all the way round. That is the
-// star-vs-shield discriminator, which is the one that has held up here. Clay against
-// white rides on top of it.
-// ⚠️ The net is a dark MESH with a white tape, never a plain white counter: white is
-// also the line colour on this palette, and a flat white disc on a white tramline is
-// the one thing the team inks risk.
-// ⚠️ The racquet goes through `discFace` like every other direction-drawn skin; the net
-// has no front, so it does not — the same call `mono`, `pool` and the house marks make.
-// ⚠️ Every extent is checked against `r` INCLUDING its own stroke half-width. The head
-// reaches 0.90r and the grip 0.90r against a 0.05r half-stroke; the guide ring is the
-// one thing a skin may not cross.
-// ⚠️ `headW` is the number that makes this pairing work, and it shipped at 0.52 — which
-// is wide enough that at the size a body is actually drawn the racquet read as a circle
-// with a grid in it, and so did the net. The ring probe still measured them 24 apart,
-// because the geometry was right and the EYE was not: a head that nearly fills the guide
-// ring is a circle whatever the maths says. At 0.40 it is a lollipop, which is the shape
-// a racquet has. Same lesson the disc skins keep relearning — measure the silhouette,
-// but look at it too.
-const TENNISD = { head: 0.58, headW: 0.40, headAt: 0.30, grip: 0.90, gripW: 0.10,
-                  strings: 3, net: 0.82, tape: 0.30, mesh: 4 };
-DISC_SKINS.tennis = {
-  name: 'Racquet vs net',
-  paint(c, p, x, y, r, w){
-    const col = p.team === 0 ? (TH.teamRed || '#993300') : (TH.teamBlue || '#fefff3');
-    const ink = TH.discRim || '#12243a';
-    c.save();
-    c.lineWidth = Math.max(1, r*0.09); c.strokeStyle = ink; c.lineJoin = 'round';
-    if (p.team === 0){
-      // The racquet, pointing where the player faces.
-      const f = discFace(p);
-      c.translate(x, y); c.rotate(Math.atan2(f.uy, f.ux) + Math.PI/2);
-      // Grip first, so the head paints over the throat.
-      c.beginPath();
-      roundRectOn(c, -r*TENNISD.gripW, -r*TENNISD.headAt, r*TENNISD.gripW*2,
-                  r*(TENNISD.grip + TENNISD.headAt), r*TENNISD.gripW);
-      c.fillStyle = col; c.fill(); c.stroke();
-      // The head: an ellipse, long along the racquet.
-      c.beginPath();
-      c.ellipse(0, -r*TENNISD.headAt, r*TENNISD.headW, r*TENNISD.head, 0, 0, 2*Math.PI);
-      c.fillStyle = col; c.fill(); c.stroke();
-      // Strings, in the outline ink so they read at any size the head survives at.
-      if (r > 7){
-        c.save();
-        c.beginPath();
-        c.ellipse(0, -r*TENNISD.headAt, r*TENNISD.headW, r*TENNISD.head, 0, 0, 2*Math.PI);
-        c.clip();
-        c.strokeStyle = rgba(ink, 0.55); c.lineWidth = Math.max(1, r*0.05);
-        for (let i = 1; i <= TENNISD.strings; i++){
-          const t = -1 + 2*i/(TENNISD.strings+1);
-          const sx = t*r*TENNISD.headW, sy = -r*TENNISD.headAt + t*r*TENNISD.head;
-          c.beginPath(); c.moveTo(sx, -r); c.lineTo(sx, r); c.stroke();
-          c.beginPath(); c.moveTo(-r, sy); c.lineTo(r, sy); c.stroke();
-        }
-        c.restore();
-      }
-    } else {
-      // The net: a full disc, meshed, with the tape across the top.
-      const R = r*TENNISD.net;
-      c.beginPath(); c.arc(x, y, R, 0, 2*Math.PI);
-      c.fillStyle = col; c.fill(); c.stroke();
-      c.save();
-      c.beginPath(); c.arc(x, y, R, 0, 2*Math.PI); c.clip();
-      if (r > 6){
-        c.strokeStyle = rgba(ink, 0.65); c.lineWidth = Math.max(1, r*0.06);
-        for (let i = -TENNISD.mesh; i <= TENNISD.mesh; i++){
-          const d = (i/TENNISD.mesh)*R;
-          c.beginPath(); c.moveTo(x + d, y - R); c.lineTo(x + d, y + R); c.stroke();
-          c.beginPath(); c.moveTo(x - R, y + d); c.lineTo(x + R, y + d); c.stroke();
-        }
-      }
-      // The tape: the solid band along the top of a net, which is what stops the disc
-      // reading as a plain meshed circle.
-      c.fillStyle = col;
-      c.fillRect(x - R, y - R, R*2, R*TENNISD.tape);
-      c.strokeStyle = ink; c.lineWidth = Math.max(1, r*0.06);
-      c.beginPath(); c.moveTo(x - R, y - R + R*TENNISD.tape);
-      c.lineTo(x + R, y - R + R*TENNISD.tape); c.stroke();
-      c.restore();
-    }
-    c.restore();
-  },
-};
+
 DISC_SKINS.wedge = {
   name: 'House marks',
   paint(c, p, x, y, r, w){
@@ -20478,19 +20338,6 @@ const BALL_LOOKS = {
       if (k) c.lineTo(px, py); else c.moveTo(px, py);
     }
     c.closePath(); c.fill();
-    c.restore(); } },
-  // A tennis ball: the two seams, each a circular arc bulging toward one side.
-  // ⚠️ The arcs are DERIVED, not eyeballed — a circle through (0,-r), (±0.62r, 0) and
-  // (0, r) puts its centre at 0.497r and its radius at 1.117r, which is what makes the
-  // two curves meet the rim square instead of tailing off inside it. The look is
-  // clipped to the ball, so running the ends out to the edge is free.
-  // ⚠️ Stroked, not filled: a seam is a line. `c.fillStyle` is the ink the painter has
-  // already chosen, so it is copied onto the stroke the way the Token look does.
-  seam:    { name:'Tennis ball', draw:(c,r,rot)=>{
-    c.save(); c.rotate(rot);
-    c.strokeStyle = c.fillStyle; c.lineWidth = Math.max(1, r*0.15); c.lineCap = 'round';
-    c.beginPath(); c.arc( r*0.497, 0, r*1.117, 2.03, 4.25); c.stroke();
-    c.beginPath(); c.arc(-r*0.497, 0, r*1.117, -1.11, 1.11); c.stroke();
     c.restore(); } },
   // A full stop. ⚠️ Deliberately NOT a ring: on the Specimen sheet team 0 is an O,
   // and a ball drawn as a second counter is a ball you lose in a challenge.

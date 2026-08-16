@@ -574,45 +574,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   past the guide ring.   The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
   is the ball itself and the ink draws only what is not fleece. Anything drawn on the rim is
   lost, because `ballRim` is dark too.
-  `tennis` (shown as **Hard Court**) = a hard court under lights, built from five
-  supplied colours with **one job each**: `#336699` the court, `#339966` the surround,
-  `#fefff3` the lines, `#993300` the clay, `#c6ed2c` the ball. The only other values in
-  the palette are darkenings of the court blue for the page behind the menu and for the
-  outlines.
+  `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
+  green surround, white markings, a clay team against a white one and an acid-yellow
+  ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It
+  shipped for one build as a tennis SET — `DYN_FIELDS.tenniscourt` painting tram lines
+  and service boxes over the pitch, racquets against nets for players, a seamed ball —
+  and what was asked for was the colours and the name. A theme that redraws the pitch as
+  another sport's court is a different game to *read*, and the markings everybody already
+  knows are worth more than the reference. So there is deliberately **no `THEME_BUNDLES`
+  row**: field, discs and ball fall to the defaults, which is what `bundleSlots` exists
+  for. The withdrawn pieces were deleted rather than left unlisted — a stray registry
+  entry is a tile in the pickers offering exactly the thing that was rejected.
   ⚠️ **One job each is what decides the TEAM inks.** The court, the surround and the ball
-  are already spoken for, so a team drawn in any of the three is a body the same colour
-  as something you are already tracking — the field of decoys the Bootleg dots and the
-  Sorry! lane squares are both written up for. That leaves **clay against white**, which
-  is a lightness pair rather than a hue one and so survives every kind of colour
-  blindness. ⚠️ White is also the LINE colour, which is the one risk in it — hence the net
-  disc being a dark mesh with a white tape rather than a plain white counter, and a
-  near-black `discRim`.
-  ⚠️ The court is **FLAT** (`stripeA === stripeB`): mown stripes are a grass thing and a
-  painted acrylic court has none.
-  ⚠️ The ball's seam is the **court blue, not the white a real ball has** — white on
-  `#c6ed2c` is 1.18:1 and `ballSpotInk` would repaint it anyway (the floor the Pool cue
-  ball is written up for), so the ball would have shipped looking plain. Blue measures
-  4.4:1 and is already in the palette.
-  ⚠️ `DYN_FIELDS.tenniscourt` uses the **real proportions** scaled to the pitch — the
-  alley is 4.5ft of a 36ft width (0.125 a side) and the service line 21ft of a 39ft half
-  (0.538 out from the net). A tennis court is a shape people know by heart, so wrong
-  ratios are the one thing that reads as fake; the suite measures them where the ratio
-  says they are and asserts them ABSENT a little way off. Everything is a **marking** and
-  nothing is filled (the Abari carpet's lesson), and the pitch running goal to goal is
-  what puts the net exactly on halfway and the baselines on the goal lines.
-  ⚠️ The players are a **racquet against a NET**, and racquet-vs-ball is the obvious
-  pairing that is exactly wrong: the thing you chase is a small bright disc, so a team
-  drawn as one is a pitch full of decoys — the Abari token records the same call from the
-  other end. The sides differ by SILHOUETTE first: a wide head and a narrow grip means a
-  ring drawn round the racquet is inked at the two poles and **empty across**, while the
-  net is inked all the way round. That is the star-vs-shield discriminator, and a pixel
-  COUNT cannot separate the two shapes. The racquet goes through `discFace`; the net has
-  no front, so it does not. ⚠️ The ring COUNT is rotation-invariant, so proving the
-  racquet turns means measuring **where** the ink is, not how much: pointed right, the
-  inked pair and the bare pair swap. `tests/tennis.mjs`.
-  ⚠️ Sound and trail are left at `classic`/`dots` on purpose — a tennis SET would be six
-  new variants across six categories, and inserting one in the middle of an `SFX` array
-  shifts every index above it (the whistle that had to go 4 → 5 when Pinball arrived).
+  are already spoken for, so a team drawn in any of the three is a body the same colour as
+  something you are already tracking (the Bootleg dots and the Sorry! lane squares are
+  both written up for this). That leaves **clay against white**, a lightness pair rather
+  than a hue one.
+  ⚠️ The court is **FLAT** (`stripeA === stripeB`) — mown stripes are a grass thing.
+  ⚠️ `dynMark`/`dynAlt` are kept even with no field of its own, because **slots mix**: any
+  `DYN_FIELDS` painter can be asked for over this palette and they all fall back through
+  `TH.dynMark || TH.line`.
+  ⚠️ **`BALL_LOOKS.tennis` already existed**, and the withdrawn `seam` look was a
+  duplicate of it that nobody noticed for a build. Check the registry before adding to it.
+  `tests/tennis.mjs` measures the court is one solid colour with the bodies taken off the
+  list first — a player standing on a sample point reads as a stripe.
   `videoball` = a cream-banded court with arrowhead players that point where they FACE, so a
   still frame shows intent as well as position. ⚠️ **The ring is the player** — a disc is a
   circle of radius `r` and that circle is what collides. The first build drew the arrowhead
