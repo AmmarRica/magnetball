@@ -57,7 +57,7 @@ const r = await p.evaluate(()=>{
   o.looksDiffer = new Set(Object.values(shots)).size === o.keys.length;
 
   // ---- a look may draw the two sides DIFFERENTLY, and must say so ---------
-  // ⚠️ Potions & Pixels pours one side and pixelates the other, which is the only
+  // ⚠️ Pontions and Prixels pours one side and pixelates the other, which is the only
   // reason `team` is in the signature. A look that branches on it without setting
   // `perTeam` would render two different tells behind a picker tile that shows one.
   const teamShot = (key, team) => {

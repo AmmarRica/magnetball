@@ -1437,6 +1437,9 @@
         <span id="rankPts" style="margin-left:auto;color:var(--muted);font-size:12px">1000 RP</span>
       </div>
       <div id="recLine" class="hint" style="text-align:left;margin-top:10px;font-family:var(--pix);font-size:12px;line-height:1.8"></div>
+      <!-- ⚠️ The cabinet's book: one row per NAME, not per device. The card above is this
+           device's own lifetime record; this is who has actually played on it. -->
+      <div id="nameBook"></div>
     </div>
 
     <!-- The Match section's header IS the KICK OFF button: collapsed it is just the
@@ -3605,7 +3608,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.0909PM';
+const VERSION = '20260816.0935PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3621,6 +3624,14 @@ const VERSION = '20260816.0909PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260816.0935PM', title: 'A record for every name',
+    added: [
+      '<b>The machine now keeps a record for each name that plays on it.</b> Played, won, lost, goals for and against, a streak and its own rating \u2014 one entry per name, so a device can hold a room full of people rather than one lifetime total. Spell your name on the warm-up keyboard or type it into Player names and every match under it is kept. It is in your Record card, best rating first, and it travels in your game save.',
+    ],
+    changed: [
+      'Several themes were renamed: Apologies!, Spaceships, GameMan, Ammari, Pontions and Prixels and Bambamzone. Whichever you had picked is still picked.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.0909PM', title: 'Two new names',
     added: [],
     changed: [
@@ -3916,7 +3927,7 @@ const CHANGELOG = [
     changed: [],
     fixed: 'A handful of smaller fixes.' },
 
-  { v: '20260811.0305PM', title: 'Blast Zone',
+  { v: '20260811.0305PM', title: 'Bambamzone',
     added: [
       'A new theme: the pitch is a bright platform floating in a starry void, with a hard black edge and a drift of stars outside it.',
       'The two sides are a star and a shield bubble, each with a ring under it so you can pick yourself out of a scramble. The ball is a sparkle orb.',
@@ -4152,8 +4163,8 @@ const THEMES = {
   // protanopia flattens toward the same dark, and while the silhouette carries the
   // sides here anyway (star vs shield bubble), there is no reason to pick the bad pair
   // when a good one costs nothing.
-  smash: {
-    name: 'Blast Zone', emoji: '💥',
+  bambam: {
+    name: 'Bambamzone', emoji: '💥',
     ui: { scan:false,
       grad:'radial-gradient(130% 100% at 50% -20%, #2b1e5c 0%, #140f2e 55%, #07050f 100%)',
       bg:'#07050f', panel:'rgba(255,255,255,0.08)', edge:'#5b4ba8', text:'#ffffff', muted:'#a99ed6',
@@ -4173,7 +4184,7 @@ const THEMES = {
       // The HUD sits on the VOID, which is nearly black, so it goes light — the same
       // exception Warp and Highlighter make for the same reason.
       hudText:'#ffffff', hudSub:'#a99ed6', accent:'#ffd23d', padRing:'rgba(255,255,255,0.55)',
-      dynMark:'#6a5ac9',        // the stars out in the blast zone
+      dynMark:'#6a5ac9',        // the stars out in the bambamzone
       dynGlow:'#2b1e5c',        // the nebula wash behind them
       dynEdge:'#1a1030' },      // the platform's own hard edge
   },
@@ -4190,7 +4201,7 @@ const THEMES = {
   // ⚠️ One job each is what decides the TEAM inks. The court, the surround and the ball
   // are already spoken for, so a team drawn in any of the three is a body the same colour
   // as something you are already tracking — the field of decoys the Bootleg dots and the
-  // Sorry! lane squares are both written up for. That leaves CLAY against WHITE, which is
+  // Apologies! lane squares are both written up for. That leaves CLAY against WHITE, which is
   // a lightness pair rather than a hue one and so survives every kind of colour blindness.
   // ⚠️ The court is FLAT: stripeA and stripeB are the same blue. Mown stripes are a grass
   // thing, and this surface is a painted one.
@@ -4217,7 +4228,7 @@ const THEMES = {
       trailRGB:'198,237,44',
       obstacle:'#993300', good:'#c6ed2c', warn:'#993300', dim:'#7f9ab0', cone:'#993300',
       // The HUD and the thumb pads sit on the SURROUND, which is the green apron, so
-      // they go light — the same exception Warp and Blast Zone make for the same reason.
+      // they go light — the same exception Warp and Bambamzone make for the same reason.
       hudText:'#fefff3', hudSub:'#cfe6da', accent:'#c6ed2c',
       padRing:'rgba(254,255,243,0.55)',
       // ⚠️ Kept even though this palette ships no field of its own: SLOTS MIX, so any
@@ -4252,7 +4263,7 @@ const THEMES = {
       // the dark one carries it. That is exactly why the ring is two-tone.
       discGuide:'rgba(255,255,255,0.6)', discGuideDark:'rgba(0,0,0,0.75)' },
   },
-  // Potions & Pixels: the wordmark's own three colours — black, a warm GOLD and a
+  // Pontions and Prixels: the wordmark's own three colours — black, a warm GOLD and a
   // neutral GREY — over the pixel gradient the events are printed on.
   // ⚠️ Gold against grey is a saturation-and-lightness pair, not a hue one, which is
   // the safe half of what a colour-blind player has. The sides ALSO differ by shape,
@@ -4261,7 +4272,7 @@ const THEMES = {
   // gold on a bright magenta gradient is two saturated colours fighting, and the one
   // that has to win is the player.
   pnp: {
-    name: 'Potions & Pixels', emoji: '🧪',
+    name: 'Pontions and Prixels', emoji: '🧪',
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #241a2e 0%, #121016 55%, #050506 100%)',
       bg:'#050506', panel:'rgba(240,179,35,0.09)', edge:'#4a4030', text:'#f2f2f2', muted:'#a7a7ad',
@@ -4318,8 +4329,8 @@ const THEMES = {
   // step past the touchline and a floater is the same shape a player is, so the gap is
   // measured on the RENDERED pixels rather than eyeballed off the hex. An arcade carpet
   // used to run UNDER the play here and it was exactly that: a floor of decoys.
-  abari: {
-    name: 'Abari', emoji: '🕹️',
+  ammari: {
+    name: 'Ammari', emoji: '🕹️',
     ui: { scan:true,
       grad:'radial-gradient(120% 90% at 50% -12%, #2a2130 0%, #1a1a1c 55%, #0f0f11 100%)',
       bg:'#131315', panel:'rgba(240,54,155,0.09)', edge:'#4a2b3d', text:'#f4f2f4', muted:'#b3a3ad',
@@ -4382,7 +4393,7 @@ const THEMES = {
   // edge at all — the boundary is magenta and loud on purpose, because on this
   // palette it is the only thing separating play from space.
   vector: {
-    name: 'Asteroids', emoji: '☄️',
+    name: 'Spaceships', emoji: '☄️',
     ui: { scan:true,
       grad:'radial-gradient(120% 90% at 50% -12%, #16123a 0%, #0a0820 55%, #04030c 100%)',
       bg:'#04030c', panel:'rgba(120,220,255,0.07)', edge:'#3a2f6b', text:'#dff2ff', muted:'#93a8c4',
@@ -4437,7 +4448,7 @@ const THEMES = {
   // ⚠️ The board's own butter is close to the ball's cream, so the ball is white with
   // a red spot and a dark rim — a cream ball on a cream board is a lost ball.
   board: {
-    name: 'Sorry!', emoji: '♟️',
+    name: 'Apologies!', emoji: '♟️',
     ui: { scan:false,
       grad:'radial-gradient(120% 90% at 50% -12%, #fdf3d2 0%, #f3e3ae 55%, #e7d295 100%)',
       bg:'#f6ead0', panel:'rgba(27,42,74,0.06)', edge:'#c9b483', text:'#1b2a4a', muted:'#5a5334',
@@ -4525,8 +4536,8 @@ const THEMES = {
       hudText:'#f3f7f2', hudSub:'#f2c31d', accent:'#f2c31d', padRing:'rgba(255,255,255,0.7)',
       dynRail:'#7a4a1e', dynRailEdge:'rgba(0,0,0,0.4)', dynPocket:'#080808' },
   },
-  gba: {
-    name: 'GBA', emoji: '🎮',
+  gameman: {
+    name: 'GameMan', emoji: '🎮',
     ui: { scan:false,
       grad:'linear-gradient(180deg, #1436c8 0%, #0a1f7a 100%)',
       bg:'#0a1f7a', panel:'rgba(20,54,200,0.92)', edge:'#5b8cff', text:'#ffffff', muted:'#a8c4ff',
@@ -4646,7 +4657,7 @@ const THEMES = {
 // ---- Contrast maths (declared above applyTheme, which runs at module init) ----
 // Pick whichever of the two ink colours actually contrasts more with the given
 // background — measured by WCAG ratio, not by a brightness threshold. The old
-// `luma > 150` test chose WHITE on GBA's mid-green (2.25:1) where black gives
+// `luma > 150` test chose WHITE on GameMan's mid-green (2.25:1) where black gives
 // 9.35:1, and did the same wherever a colour sits near the threshold.
 // Pure black, not the theme's near-black: on a 9px name plate the extra contrast
 // is the difference between clearing AA and missing it (grass measured 4.37 with
@@ -4751,7 +4762,7 @@ function applyTheme(key){
   // Every themed colour that ends up as TEXT is nudged just far enough to clear
   // WCAG AA against the surface it actually sits on. Same hue, so a theme still
   // looks like itself — but no theme can ship a label you can't read. Paper's HUD
-  // was dark ink on a dark pill (1.89:1) and GBA's score was 4.16:1 before this.
+  // was dark ink on a dark pill (1.89:1) and GameMan's score was 4.16:1 before this.
   const panel = flatten(u.panel, u.bg);
   r.setProperty('--panel-solid', panel);
   // Panel text doesn't always land on the bare panel: selected tiles wash it with
@@ -5114,7 +5125,7 @@ function applySfxSet(k){
 // ⚠️ The ball's streak is deliberately not on this slot: it is the one thing everybody
 // is tracking, so no look may switch it off.
 // ⚠️ A look is also handed the TEAM, so a pairing can draw the two sides differently —
-// Potions & Pixels pours one and pixelates the other. A look that does not care simply
+// Pontions and Prixels pours one and pixelates the other. A look that does not care simply
 // ignores it; one that does sets `perTeam`, which is what makes the picker tile show
 // both runs instead of implying the sides look alike.
 // ⚠️ A look is handed SCREEN points, not world ones, and a COUNT rather than a
@@ -5256,13 +5267,13 @@ const THEME_BUNDLES = {
   // ⚠️ `space` rather than a set of its own: those are the synth variants, which is
   // the closest thing here to a cabinet. A key with no SFX_SETS entry would take
   // applySfxSet nowhere and leave the Sound slot showing a set that does not exist.
-  abari:     { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
+  ammari:    { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
   // already exists, and a second one that looked the same would be two places to keep
   // in step for no gain.
-  smash:     { field:'blastzone', discs:'smash',       ball:'orb',     sfx:'space',   trail:'comet' },
+  bambam:    { field:'bambamzone', discs:'bambam',       ball:'orb',     sfx:'space',   trail:'comet' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -5319,6 +5330,12 @@ function normalizeLook(){
   // this runs during the bootstrap, and those registries are declared far below it.
   if (L.palette === 'videoball') L.palette = 'vsoccer';
   if (L.field === 'vbcourt') L.field = 'vscourt';
+  // ...and the two other themes whose KEY spelled out somebody else's product.
+  if (L.palette === 'smash') L.palette = 'bambam';
+  if (L.palette === 'abari') L.palette = 'ammari';
+  if (L.field === 'blastzone') L.field = 'bambamzone';
+  if (L.discs === 'smash') L.discs = 'bambam';
+  if (L.palette === 'gba') L.palette = 'gameman';
   // The seabed skin was one entry that drew shrimp vs crab, then shrimp vs lobster.
   // It is three creatures and three pairings now, so an old save naming the vanished
   // key gets the theme's current pairing instead of no skin at all.
@@ -5916,9 +5933,8 @@ function updateMMR(w){
   const oppR = DIFF_RATING[sel.diff] != null ? DIFF_RATING[sel.diff] : 1100;
   const [my, opp] = yourScore(w);
   const score = my>opp ? 1 : (my<opp ? 0 : 0.5);
-  const exp = 1/(1+Math.pow(10,(oppR-(stats.mmr||1000))/400));
   const before = stats.mmr||1000;
-  stats.mmr = Math.max(100, Math.round(before + 32*(score-exp)));
+  stats.mmr = mmrStep(before, oppR, score);
   stats.mmrPeak = Math.max(stats.mmrPeak||before, stats.mmr);
   return stats.mmr - before;
 }
@@ -5926,6 +5942,79 @@ function loadStats(){ let s={}; try { s=JSON.parse(localStorage.getItem('magnetb
 function saveStats(s){ try { localStorage.setItem('magnetball.stats', JSON.stringify(s)); } catch(e){} }
 let stats = loadStats();
 
+// ============================================================
+//  A RECORD PER NAME — the arcade cabinet's book, kept on this device
+// ============================================================
+// The whole point is that the NAME is the identity, the way a cabinet works: you put
+// your name in, and the machine remembers what that name did. It pairs with the lobby
+// keyboard, where you spell your name with your feet before you walk on.
+//
+// ⚠️ KEYED ON THE NAME, not on the seat, the profile or a login. Two people sharing one
+// device get two records by typing two names, and the same person on a friend's machine
+// gets their own by typing theirs. There are no accounts here and this does not add one.
+// ⚠️ MATCHED CASE-INSENSITIVELY and trimmed (`nameKey`), because "kai", "Kai" and "KAI "
+// are one person at a cabinet — but the name is STORED as first typed, so the book shows
+// it the way they wrote it.
+// ⚠️ EVERY HUMAN ON THE PITCH GETS ONE, not just the profile seat. Four people round a
+// cabinet is exactly the case this is for, and it is the one thing `stats` cannot do:
+// that is a single flat object of numbers for the device's owner.
+// ⚠️ Their own Elo, run through the SAME `mmrStep` the main record uses, so the two can
+// never drift apart. A name that has never played starts where `defaultStats` does.
+const NAMEBOOK = { max: 60, key: 'magnetball.names' };
+function nameKey(n){ return String(n || '').trim().toLowerCase().slice(0, 12); }
+function freshNameRec(name){
+  return { name: String(name || '').trim().slice(0, 12),
+           played:0, wins:0, losses:0, draws:0, gf:0, ga:0,
+           mmr:1000, mmrPeak:1000, streak:0, best:0, goals:0, assists:0, saves:0, at:0 };
+}
+let nameBook = loadNameBook();
+function loadNameBook(){
+  try { const v = JSON.parse(localStorage.getItem(NAMEBOOK.key) || '{}');
+        return (v && typeof v === 'object') ? v : {}; } catch(e){ return {}; }
+}
+function saveNameBook(){ try { localStorage.setItem(NAMEBOOK.key, JSON.stringify(nameBook)); } catch(e){} }
+// ⚠️ One Elo step, shared. `updateMMR` calls it for the device record and `noteNameResult`
+// for each name, so "how much is a win worth" is answered in one place.
+function mmrStep(before, oppRating, score){
+  const exp = 1/(1+Math.pow(10,(oppRating-(before||1000))/400));
+  return Math.max(100, Math.round((before||1000) + 32*(score-exp)));
+}
+// ⚠️ The cap drops the LEAST RECENTLY PLAYED, never the worst: a book that forgets the
+// people who lose is not a record of who played.
+function trimNameBook(){
+  const keys = Object.keys(nameBook);
+  if (keys.length <= NAMEBOOK.max) return;
+  keys.sort((a, b) => (nameBook[a].at || 0) - (nameBook[b].at || 0));
+  for (const k of keys.slice(0, keys.length - NAMEBOOK.max)) delete nameBook[k];
+}
+// Fold one match into one name's record. `score` is 1 / 0.5 / 0 as Elo wants it.
+function noteNameResult(name, score, gf, ga, ms, oppRating, when){
+  const k = nameKey(name);
+  // ⚠️ A blank or default name is NOT recorded. "You" is what the game calls somebody who
+  // has not said who they are, and filing every anonymous match under one entry makes the
+  // book a lie the moment two people use it.
+  if (!k || k === 'you' || k === 'player') return null;
+  const rec = nameBook[k] || (nameBook[k] = freshNameRec(name));
+  rec.played++;
+  if (score === 1){ rec.wins++; rec.streak = Math.max(1, rec.streak + 1); }
+  else if (score === 0){ rec.losses++; rec.streak = Math.min(-1, rec.streak - 1); }
+  else { rec.draws++; rec.streak = 0; }
+  rec.best = Math.max(rec.best || 0, rec.streak);
+  rec.gf += gf|0; rec.ga += ga|0;
+  if (ms){ rec.goals += ms.goals|0; rec.assists += ms.assists|0; rec.saves += ms.saves|0; }
+  rec.mmr = mmrStep(rec.mmr, oppRating, score);
+  rec.mmrPeak = Math.max(rec.mmrPeak || 1000, rec.mmr);
+  rec.at = when || rec.at;
+  trimNameBook();
+  saveNameBook();
+  return rec;
+}
+// Ranked for display: most skill first, and a name that has never finished a match is
+// not in the book at all, so there is nothing to filter.
+function nameBookTable(){
+  return Object.keys(nameBook).map(k => nameBook[k])
+    .sort((a, b) => (b.mmr - a.mmr) || (b.played - a.played));
+}
 // Apply one match result for YOUR side; returns the RP delta. See youTeam().
 function recordResult(w){
   const diffIdx = Object.keys(DIFF).indexOf(sel.diff);          // 0..N (rookie..insane)
@@ -5951,6 +6040,20 @@ function recordResult(w){
   if (opp === 0) stats.cleanSheets = (stats.cleanSheets||0) + 1;
   stats.goalsBest = Math.max(stats.goalsBest||0, my);
   updateMMR(w);
+  // ⚠️ EVERY human who played, read off `matchRoster()` rather than `w.players` — a body
+  // substituted out mid-match still played it, which is the reason that helper exists.
+  // Each one is judged by THEIR OWN side's scoreline, so in a 2v2 the two winners both
+  // get a win and the two losers both get a loss.
+  const oppR = DIFF_RATING[sel.diff] != null ? DIFF_RATING[sel.diff] : 1100;
+  const now = Date.now();
+  for (const q of matchRoster(w)){
+    if (!q || q.ctrl === 'bot') continue;
+    const f = q.team === 1 ? w.score[1] : w.score[0];
+    const a = q.team === 1 ? w.score[0] : w.score[1];
+    const sc = w.forceWin != null ? (w.forceWin === q.team ? 1 : 0)
+                                  : (f > a ? 1 : (f < a ? 0 : 0.5));
+    noteNameResult(q.name, sc, f, a, q.ms, oppR, now);
+  }
   saveStats(stats);
   renderStats();
   // RP is already saved locally above. If a sheet write path is configured, push
@@ -7960,11 +8063,42 @@ if (hsEl){
   hsEl.oninput = () => { sel.hitStop = +hsEl.value; saveSel(); showHS(); };
 }
 
+// One row per name, best first. Drawn as NODES rather than innerHTML: a name is typed by
+// a person — on the lobby keyboard or in the Player names box — and `mapClean` records
+// what happens when typed text meets a string of markup.
+function buildNameBook(){
+  const host = $('nameBook'); if (!host) return;
+  host.textContent = '';
+  const rows = nameBookTable();
+  const head = document.createElement('div');
+  head.className = 'hint always'; head.style.textAlign = 'left'; head.style.marginTop = '12px';
+  if (!rows.length){
+    head.textContent = 'No names yet. Spell one on the warm-up keyboard, or type one into Player names, and every match under that name is kept here — one record each, so a device can hold a room full of people.';
+    host.appendChild(head); return;
+  }
+  head.textContent = 'Every name that has finished a match on this device, best rating first.';
+  host.appendChild(head);
+  const tbl = document.createElement('div');
+  tbl.style.cssText = 'font-family:var(--pix);font-size:11px;margin-top:8px';
+  rows.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--edge)';
+    const put = (txt, css) => { const el = document.createElement('span'); el.textContent = txt;
+                                el.style.cssText = css; row.appendChild(el); };
+    put(String(i + 1), 'color:var(--muted);min-width:18px');
+    put(r.name, 'color:var(--text);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis');
+    put(r.wins + 'W ' + r.losses + 'L' + (r.draws ? ' ' + r.draws + 'D' : ''), 'color:var(--muted)');
+    put(String(r.mmr), 'color:var(--accent);min-width:42px;text-align:right');
+    tbl.appendChild(row);
+  });
+  host.appendChild(tbl);
+}
 function renderStats(){
   const r = rankFor(stats.points);
   $('rankEmoji').textContent = r.emoji;
   $('rankName').textContent = r.name;
   $('rankPts').textContent = stats.points + ' RP';
+  buildNameBook();
   const gd = stats.gf - stats.ga;
   const streakTxt = stats.streak>0 ? ('W'+stats.streak) : stats.streak<0 ? ('L'+(-stats.streak)) : '—';
   $('recLine').innerHTML = `${stats.wins}W · ${stats.losses}L · ${stats.draws}D  (${stats.played} played)<br>`
@@ -12035,7 +12169,7 @@ function downloadBlob(blob, filename){
 // between somebody's `package.json` and a wrecked save.
 const SAVEFILE = {
   format: 'magnetball-save', v: 1,
-  keys: ['sel', 'profile', 'stats', 'drills', 'season', 'rogue', 'maps', 'mapvotes',
+  keys: ['sel', 'profile', 'stats', 'names', 'drills', 'season', 'rogue', 'maps', 'mapvotes',
          'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
   skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html'],
 };
@@ -18833,7 +18967,7 @@ const DYN_FIELDS = {
   },
 };
 // THE STAGE FLOATS. Battlefield in a void: a bright platform with a hard black edge,
-// and outside it the blast zone — a nebula wash, a slow drift of stars, and nothing to
+// and outside it the bambamzone — a nebula wash, a slow drift of stars, and nothing to
 // stand on. That outside is the point of the theme, so this field `bleed`s.
 //
 // ⚠️ It borrows `DYN_FIELDS.pooltable.path` rather than copying it, the same way the
@@ -18847,10 +18981,10 @@ const DYN_FIELDS = {
 // perturb a single bot decision.
 // ⚠️ `stars` covers a region NINE TIMES the pitch box (see paint), so the count is not
 // the count you see behind the stage — a number tuned against the pitch alone leaves the
-// blast zone looking empty.
+// bambamzone looking empty.
 const BLAST = { stars: 320, drift: 3.2, twinkle: 0.55, edge: 0.045, glow: 0.34 };
-DYN_FIELDS.blastzone = {
-  name: 'Blast zone',
+DYN_FIELDS.bambamzone = {
+  name: 'Bambamzone',
   bleed: true,
   reset(st){
     // Deterministic layout: same seed, same sky. `mulberry32` is the sim's generator
@@ -20039,7 +20173,7 @@ DISC_SKINS.synth = {
 // bar the logo's letterform carries. ⚠️ This skin deliberately does NOT go through
 // discFace. Up-against-down IS the difference between the sides here, and a mark that
 // turns with facing destroys it the moment anybody moves — the same reason `pool` and
-// `mono` ignore the rotation control, and the arcade saucer on Asteroids flies level.
+// `mono` ignore the rotation control, and the arcade saucer on Spaceships flies level.
 // ⚠️ Inscribed, like every other angular skin: a triangle drawn out to r puts its
 // vertices ON the guide ring, and the ring is the thing that actually collides.
 const WEDGE = { tri: 0.80, bar: 0.30, barW: 0.15 };
@@ -20061,8 +20195,8 @@ const WEDGE = { tri: 0.80, bar: 0.30, barW: 0.15 };
 // star and the bubble measured IDENTICAL (32 of 32 inked) and the silhouette rule was
 // silently defeated by the very idea being borrowed. It is a ring outside the measured
 // band now, which is also closer to what the genre actually draws.
-const SMASHD = { star: 0.86, inner: 0.34, points: 5, bubble: 0.70, rim: 0.12, ind: 0.94, indW: 0.085 };
-DISC_SKINS.smash = {
+const BAMBAMD = { star: 0.86, inner: 0.34, points: 5, bubble: 0.70, rim: 0.12, ind: 0.94, indW: 0.085 };
+DISC_SKINS.bambam = {
   name: 'Star vs shield',
   paint(c, p, x, y, r, w){
     const col = p.team === 0 ? (TH.teamRed || '#ff6a2b') : (TH.teamBlue || '#25d8ff');
@@ -20071,12 +20205,12 @@ DISC_SKINS.smash = {
     // ⚠️ THE PLAYER INDICATOR, which is the best idea in the whole genre: a mark under
     // every body so a four-a-side scramble is still readable. Drawn UNDER the mark and
     // held well inside `r`, so it never competes with the guide ring.
-    c.strokeStyle = rgba(col, 0.60); c.lineWidth = Math.max(1, r*SMASHD.indW);
-    c.beginPath(); c.arc(x, y, r*SMASHD.ind, 0, 2*Math.PI); c.stroke();
+    c.strokeStyle = rgba(col, 0.60); c.lineWidth = Math.max(1, r*BAMBAMD.indW);
+    c.beginPath(); c.arc(x, y, r*BAMBAMD.ind, 0, 2*Math.PI); c.stroke();
     c.lineWidth = Math.max(1, r*0.10); c.strokeStyle = ink;
     if (p.team === 0){
       // The KO star. Points out at `star`, valleys at `inner`.
-      const n = SMASHD.points, R1 = r*SMASHD.star, R0 = r*SMASHD.inner;
+      const n = BAMBAMD.points, R1 = r*BAMBAMD.star, R0 = r*BAMBAMD.inner;
       c.beginPath();
       for (let k = 0; k < n*2; k++){
         const a = -Math.PI/2 + k*Math.PI/n, rad = (k % 2 ? R0 : R1);
@@ -20088,11 +20222,11 @@ DISC_SKINS.smash = {
     } else {
       // The shield bubble: a full disc with a bright rim and a highlight, so it reads
       // as a bubble rather than as a plain counter.
-      const R1 = r*SMASHD.bubble;
+      const R1 = r*BAMBAMD.bubble;
       c.beginPath(); c.arc(x, y, R1, 0, 2*Math.PI);
       c.fillStyle = rgba(col, 0.92); c.fill(); c.stroke();
       c.beginPath(); c.arc(x, y, R1*0.70, 0, 2*Math.PI);
-      c.strokeStyle = rgba('#ffffff', 0.55); c.lineWidth = Math.max(1, r*SMASHD.rim);
+      c.strokeStyle = rgba('#ffffff', 0.55); c.lineWidth = Math.max(1, r*BAMBAMD.rim);
       c.stroke();
     }
     c.restore();
@@ -20164,7 +20298,7 @@ DISC_SKINS.type = {
 // and at exactly r. A player is a circle and that circle is what collides; on a black
 // court with a thin dart inside it, the guide ring alone is a hairline and the body
 // you are about to challenge is a guess.
-// ⚠️ The saucer does NOT turn, and the dart does. In Asteroids the saucer flies level
+// ⚠️ The saucer does NOT turn, and the dart does. In Spaceships the saucer flies level
 // whatever it is doing, and a saucer rotated ninety degrees is a lens nobody can name
 // — the same reason `pool` and `mono` ignore the rotation control. The dart goes
 // through discFace like every other direction-drawn skin.
@@ -21055,7 +21189,7 @@ const BALL_LOOKS = {
     c.fillText('&', 0, r*0.04);
     c.restore(); } },
   // A game token: a rim ring and the slot it drops through. ⚠️ ROUND on purpose —
-  // on the Abari carpet both teams are triangles, so the one thing on the pitch that
+  // on the Ammari carpet both teams are triangles, so the one thing on the pitch that
   // is not a wedge should be the thing you are chasing.
   token:   { name:'Token', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
@@ -21067,7 +21201,7 @@ const BALL_LOOKS = {
   // The item everybody dives for: a bright orb with a sparkle turning inside it.
   // ⚠️ A four-point SPARKLE rather than a five-point star, because team 0 already wears
   // a five-point star on this theme and the ball must never be mistaken for a player.
-  orb:     { name:'Smash orb', draw:(c,r,rot)=>{
+  orb:     { name:'Bambam orb', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.beginPath();
     for (let k = 0; k < 8; k++){
@@ -21082,7 +21216,7 @@ const BALL_LOOKS = {
   period:  { name:'Full stop', draw:(c,r)=>{
     c.beginPath(); c.arc(0, 0, r*0.42, 0, 7); c.fill(); } },
   // A rock, drawn the way the arcade drew one: craters and chips, no fill. ⚠️ It is
-  // only hollow because the Asteroids palette sets `ball` to the court colour and
+  // only hollow because the Spaceships palette sets `ball` to the court colour and
   // `ballRim` to the bright one, so the rim ring paintBall already draws IS the
   // outline. On any other palette this is craters on a solid ball, which still works.
   asteroid:{ name:'Asteroid', draw:(c,r,rot)=>{
@@ -21680,7 +21814,7 @@ function drawPad(pad, isP2){
   }
 }
 // ⚠️ The thumb markers sit on the SURROUND, not on the court, so their ink is picked from the
-// surround's lightness instead of being hardcoded white. Highlighter, Sorry! and Specimen all
+// surround's lightness instead of being hardcoded white. Highlighter, Apologies! and Specimen all
 // letterbox in a light colour — and a white ring at 0.16 alpha on a white surround is nothing
 // at all, so on those palettes the resting controls simply were not there. Same shape as the
 // UFO craft's detail ink: ask the background, don't assume.
@@ -21757,7 +21891,7 @@ function updateClock(w){
 let bannerTimer=0;
 function showBanner(text, color){
   const b=$('banner'); b.textContent=text; b.style.color=color;
-  // GOAL! prints in the team's colour straight onto the court, and on GBA that's
+  // GOAL! prints in the team's colour straight onto the court, and on GameMan that's
   // red on light blue at 1.72:1. A hard outline in the opposite ink keeps 66px
   // letters legible on any surface — including ice and mud, which repaint the
   // court mid-match and would defeat a colour picked from the theme alone.
@@ -22354,6 +22488,7 @@ if (window.__MAGNETDEBUG) {
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit, lobbySizeBump,
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS,
+    NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
     KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

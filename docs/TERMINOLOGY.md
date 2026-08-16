@@ -95,7 +95,7 @@ Opened from the **Stats** nav tile. A grid of **stat tiles**, each a **value** o
   **Streak** · **Coins** (shop currency) · **Unlocks**.
 
 ## Themes (by name)
-**GBA · Neon · Flat · Grass · Mono · VideoSoccer · Paper** *(Paper = the light one)*.
+**GameMan · Neon · Flat · Grass · Mono · VideoSoccer · Paper** *(Paper = the light one)*.
 
 ---
 

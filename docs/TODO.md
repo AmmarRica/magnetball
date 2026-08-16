@@ -395,7 +395,7 @@ Three findings, two of them real bugs that shipped.
   real click path in `menufind` (everything else drove `noteRecent` directly, which proves the
   store and not the wiring).
 
-- [x] ⚠️ **`contrast`'s flakiness was a real borderline colour, not the probe.** Sorry!'s
+- [x] ⚠️ **`contrast`'s flakiness was a real borderline colour, not the probe.** Apologies!'s
   `green`/`cyan` (`#1f9f6f`) rendered as `#15694a` on a selected option tile — **4.44**
   against a 4.5 floor. Whether the scan reached that tile depended on which options
   happened to be selected when the screen was opened, so the same build passed and failed
@@ -619,7 +619,7 @@ Three findings, two of them real bugs that shipped.
   own negative outside the court makes the crossing the effect. Opt-in per palette — turning an
   orange spark cyan on a full-colour theme is a bug, not an effect.
 - [x] ⚠️ Which surfaced `padInk()`: the thumb markers were hardcoded WHITE, and Highlighter,
-  Sorry!, Specimen and now Warp all letterbox in a light colour. A white ring at 0.16 alpha on a
+  Apologies!, Specimen and now Warp all letterbox in a light colour. A white ring at 0.16 alpha on a
   white surround is nothing at all — the resting controls were not there on four palettes.
 
 ---
@@ -1048,7 +1048,7 @@ cocktail is on). Keyboard-only matches skip it entirely.
   knowledge rots (the category→name chain broke a test).
 - [x] **TERMINOLOGY** — card rows were stale (Game Feel is three groups now; Sound has five
   per-effect toggles; Your Player gained Text), Killer Lobsters was missing from the mode list, and
-  the theme list omitted GBA.
+  the theme list omitted GameMan.
 - [x] **ROADMAP** — Tier 1 and 2 still "recommended" eleven things that shipped long ago; marked
   ✅ with a note. "Amiga visual theme" was never a theme name. Added a Shipped block for the AI
   rework, shirt numbers, ball looks, the Kick Off header and the contrast pass.
@@ -1244,7 +1244,7 @@ Measured, human parked, 30–60 s of self-play (baselines in the audit):
 - [x] **Your own disc colour could vanish under your name** in the player preview (a mid green
   on Paper measured 1.95:1); it goes through `readableInk` against the live panel now, and a
   theme switch re-runs `updatePreview()` so it's re-measured.
-- [x] **The GOAL! banner prints straight onto the court** — red on GBA's light blue was
+- [x] **The GOAL! banner prints straight onto the court** — red on GameMan's light blue was
   **1.72:1**, and ice/mud repaint the court mid-match so no colour picked from the theme alone
   would hold. It's outlined in the opposite ink (`paint-order: stroke fill`) instead.
 - [x] **`tests/contrast.mjs`** walks every visible label on every screen under every theme,
@@ -1392,7 +1392,7 @@ each was shipped at some point and each is a class of mistake worth watching for
   only as far as AA needs: 4 of the 14 team tints are used untouched, the rest shift slightly
   (e.g. grass red `#e23c3c` → `#e65959`). Worst contrast across all seven themes is now 4.56.
 - [x] **`pickTextColor()` was choosing the wrong ink.** It used a fixed `luma > 150` threshold, so
-  on GBA's mid-green it picked white at **2.25:1** where black gives 9.35:1. It now compares
+  on GameMan's mid-green it picked white at **2.25:1** where black gives 9.35:1. It now compares
   actual WCAG contrast ratios and takes the better one, with pure black rather than the theme's
   near-black (`#10131c` measured 4.37 on grass — under AA — vs 4.95 for `#000000`). This also
   fixes the cap glyphs drawn on discs, which used the same function.
@@ -1469,7 +1469,7 @@ two and `tests/cocktailnopad.mjs` the third.)_
   of printing over a control. Covered by `tests/debug.mjs` — the numbers are asserted to *track* the
   sim and the settings, not just to be present.
 - [x] **Version is now time-stamped** — `20260803.0738PM` instead of a hand-bumped `.21` counter.
-- [x] **GBA theme** (🎮) from the Denki Blocks palette: cyan checkerboard court, white lines, royal
+- [x] **GameMan theme** (🎮) from the Denki Blocks palette: cyan checkerboard court, white lines, royal
   blue surround, saturated red-vs-green teams, yellow accents, hard dark outlines, no gradients.
   Pairs with the **Check** grass cut.
 - [x] **Prose + comment cleanup** (roast items 5 and 7). Rewrote the UI hints — they were all one

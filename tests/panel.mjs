@@ -34,7 +34,7 @@ async function until(pg, fn, ms=4000){
 await game.evaluate(()=>{
   const M=window.__magnet;
   M.applyBundle('neon'); M.sel.grass='stripes'; M.sel.settingsPanel='inline'; M.saveSel();
-  M.sel.look.palette='gba';                // in memory ONLY — no saveSel
+  M.sel.look.palette='gameman';                // in memory ONLY — no saveSel
 });
 
 const panel = await ctx.newPage();
@@ -61,9 +61,9 @@ o.panelIsClickable = await panel.evaluate(()=>{
   return !!el && !!el.closest('#setup'); });
 
 // --- Snapshot on open: the panel adopted the game's in-memory theme
-o.snapshotAdopted = await panel.evaluate(()=>window.__magnet.sel.look.palette === 'gba');
+o.snapshotAdopted = await panel.evaluate(()=>window.__magnet.sel.look.palette === 'gameman');
 o.snapshotNotFromStorage = await panel.evaluate(()=>
-  (JSON.parse(localStorage.getItem('magnetball.sel')||'{}').look||{}).palette !== 'gba' ||
+  (JSON.parse(localStorage.getItem('magnetball.sel')||'{}').look||{}).palette !== 'gameman' ||
   window.__magnet.syncPeerLive() === true);
 
 // --- The page can actually be SCROLLED to the bottom.

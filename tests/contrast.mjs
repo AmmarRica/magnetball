@@ -72,7 +72,7 @@ const out = await p.evaluate(async ()=>{
                    'openRogue','openLeaderboard','openDailyView','openCocktailCfg','openPadConfig'];
   // ⚠️ The theme colour TRANSITION is switched off outright rather than waited out. body
   // carries `transition: background-color .2s, color .2s`, so a sample taken mid-fade reads
-  // one theme's ink over another's paper and invents failures — measured as Abari's
+  // one theme's ink over another's paper and invents failures — measured as Ammari's
   // `#f4f2f4` text on Specimen's `#e5d501` yellow, a pair that exists in no palette. The
   // 320ms waits below were the first fix and they are a MARGIN, not a guarantee: this loop
   // rebuilds the whole settings screen 20 times over, so any work added to buildSettings

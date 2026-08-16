@@ -258,7 +258,7 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 15. **Spectator view** (M) — watch a bot-vs-bot match; useful for demos and streams.
 
 ## 🎯 Tier 4 — Creation & variety (L–XL)
-16. **Stadium editor** (XL) — draw pitches with **curves, gradients, RGBA/transparency**, custom goals; save/share via link.
+16. **Stadium editor** (XL) — draw pitches with **curves, gradients, RGameMan/transparency**, custom goals; save/share via link.
     *Mapmakers' top wishes: higher vertex limits, curves, gradients, alpha.* Biggest lift, biggest community pull.
 17. **Field & ball themes** (S–M) — grass patterns, night/retro/ice skins; heavier/lighter/bouncier ball presets.
     *Different grass patterns; configurable disc physics.*

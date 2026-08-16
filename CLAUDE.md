@@ -468,7 +468,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   circles under a team drawn as a bright red circle is a field of decoys. `tests/dyntheme.mjs`
   measures both — coverage at 0.9`r` all the way round for the dot, only on the diagonals for
   the bar, and the print's luminance against the team's.
-  `board` (shown as **Sorry!**) = a butter-yellow board, a white track of rounded squares
+  `board` (shown as **Apologies!**) = a butter-yellow board, a white track of rounded squares
   round the outside, and a tinted safety lane running into each end — which on a pitch is
   the lane into the goal. ⚠️ Both sides are PAWNS, because that is what the game is, so the
   piece cannot carry the difference: each pawn stands on its own plate, a start CIRCLE
@@ -487,7 +487,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   slit does and a chevron cannot — run **all the way across** — so it counts full-width
   gap rows rather than pixels. ⚠️ The markings are pale chrome, not a neon: both neons
   are already spoken for by the teams.
-  `pnp` (shown as **Potions & Pixels**) = the wordmark's black, GOLD and GREY over the
+  `pnp` (shown as **Pontions and Prixels**) = the wordmark's black, GOLD and GREY over the
   magenta-blue-teal pixel print the events go out on. ⚠️ Gold vs grey is a
   saturation-and-lightness pair rather than a hue one, and the sides carry a shape too —
   a potion FLASK against a PIXEL block, measured on **different axes** at 0.82`r`: the
@@ -509,7 +509,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   with a few shards scattering more as the block ages). Both scatters are derived from the
   point's own coordinates, never a clock or a PRNG — a draw must not differ between two
   draws of one step.
-  `smash` (shown as **Blast Zone**) = a platform fighter's stage: a bright cream slab
+  `bambam` (shown as **Bambamzone**) = a platform fighter's stage: a bright cream slab
   floating in a dark void, hard black edge, a nebula wash and a slow drift of stars
   outside it. ⚠️ Taken as a **design language, not characters** — no borrowed art, just
   the four things that genre got right: the stage FLOATS (the outside is where you get
@@ -527,12 +527,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sides at 32/32: the silhouette rule defeated by the very idea being borrowed.
   The ball is a four-point **sparkle orb** — four and not five on purpose, because team 0
   already wears a five-point star and the ball must never read as a player.
-  `abari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
+  `ammari` = a game bar: charcoal walls, hot pink neon, and the three marks the sign is
   built from — triangle, square, circle — drifting in the room BEYOND the pitch.
   ⚠️ The sides are the house mark and its mirror — a white triangle UP against a pink
   triangle DOWN — and that skin deliberately does **not** go through `discFace`:
   up-against-down IS the difference, so a mark that turns destroys it the moment anybody
-  moves (same argument as Asteroids' level-flying saucer). The silhouette check measures
+  moves (same argument as Spaceships' level-flying saucer). The silhouette check measures
   the WIDTH of ink at a high row against a low one — a triangle and its mirror cover the
   same area, so a pixel count calls them identical. ⚠️ **Nothing is drawn inside the
   boundary.** It `bleed`s and punches the play area out of its own clip with the field's
@@ -568,7 +568,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   counter vs crossing; ink on the axes vs only on the diagonals), and `tests/dyntheme.mjs`
   measures both. The ball is a **full stop**, deliberately not a ring: a second counter is
   a ball you lose in a challenge.
-  `vector` (shown as **Asteroids**) = a vector monitor: a nebula wash, a faint grid, a star
+  `vector` (shown as **Spaceships**) = a vector monitor: a nebula wash, a faint grid, a star
   field and a drift of stroked rocks, with a cyan dart against a lime saucer. ⚠️ **Nothing
   is filled**, and that is measured, not asserted in a comment — the middle of a ship and
   the middle of the ball both have to still be the court. The ball is hollow because the
@@ -621,7 +621,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   entry is a tile in the pickers offering exactly the thing that was rejected.
   ⚠️ **One job each is what decides the TEAM inks.** The court, the surround and the ball
   are already spoken for, so a team drawn in any of the three is a body the same colour as
-  something you are already tracking (the Bootleg dots and the Sorry! lane squares are
+  something you are already tracking (the Bootleg dots and the Apologies! lane squares are
   both written up for this). That leaves **clay against white**, a lightness pair rather
   than a hue one.
   ⚠️ The court is **FLAT** (`stripeA === stripeB`) — mown stripes are a grass thing.
@@ -650,7 +650,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `normalizeLook()` can ask the registry rather than repeat its key list (a hard-coded copy
   was the first fix and it was a second place to keep in step; the reason a copy was
   reached for at all is the `DISC_SKINS` TDZ). A look is handed the **team**, so a pairing
-  can draw the two sides differently — Potions & Pixels pours one and pixelates the other —
+  can draw the two sides differently — Pontions and Prixels pours one and pixelates the other —
   and a look that branches must set `perTeam`, which is what makes the picker tile show both
   runs instead of implying they look alike. ⚠️ A look only DRAWS — where a dot is
   dropped and how fast it fades stay in `advanceTrails` (step loop), because the LENGTH of
@@ -1153,6 +1153,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   *are* the menu — eleven cards of them, on the screen the tile was sitting on — so it was
   a door onto the room you were already standing in. The detached panel is still reachable
   from Display, where a window-management choice belongs.
+- ⚠️ **STANDING RULE: FLAG A TRADEMARK BEFORE IT SHIPS.** If a name proposed for a theme,
+  a mode, a field, a ball, a skin or anything else on screen is a real product, company,
+  band or event, SAY SO when it is proposed — do not just implement it. This is a standing
+  instruction from the owner, given after six names had to be changed in one pass. The line
+  is naming your CONTENT after somebody else's thing; naming a device the game supports
+  (Steam Deck), a wiring standard (JAMMA, I-PAC), a key map (MAME) or a service the code
+  calls (Google's sheets endpoint) is factual and stays. Not legal advice, and it is not a
+  refusal — flag it, suggest an alternative, and let the owner decide.
 - **NO OTHER PRODUCT'S NAME APPEARS ANYWHERE**, comments and test prose included —
   asked for directly, on the grounds that a game should not carry somebody else's title.
   The two that were there are gone from the source, not just from the screen: `THEMES`'
@@ -1362,6 +1370,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Turkey and Russia sit in Europe and **Australia in Asia**: the tie-break is the
   confederation they play football in, and Australia is also the only Oceania country
   here — a continent of one cannot field a side. `tests/continents.mjs`.
+- **A RECORD PER NAME** (`NAMEBOOK`, `nameBook`, `nameKey`, `noteNameResult`,
+  `nameBookTable`, `buildNameBook`; `magnetball.names`). The cabinet's book: the NAME is
+  the identity, so you type one and the machine remembers what that name did. Pairs with
+  the lobby keyboard, where you spell it with your feet.
+  ⚠️ **NOT `stats`, and the two answer different questions.** `stats` is one flat object of
+  numbers for the device's owner; it cannot say who has played on the machine. Both are
+  updated on every result and `tests/namebook.mjs` holds them apart.
+  ⚠️ **Every HUMAN on the pitch gets one**, read off `matchRoster()` (a body substituted
+  out still played the match), each judged by **their own side's** scoreline — so a 2v2
+  gives two wins and two losses, not one of each. Bots never appear.
+  ⚠️ **Keyed case-insensitively and trimmed**, because "kai", "Kai" and "KAI " are one
+  person at a cabinet — but STORED as first typed, so the book shows it their way.
+  ⚠️ **A made-up name is never recorded.** "You" is what the game calls somebody who has
+  not said who they are, and filing every anonymous match under one entry makes the book a
+  lie the moment two people share a device.
+  ⚠️ **One Elo step, shared** (`mmrStep`): `updateMMR` and the book both go through it, so
+  "how much is a win worth" is answered once. ⚠️ The cap drops the **least recently
+  played**, never the worst — a book that forgets the people who lose is not a record of
+  who played. ⚠️ Drawn as NODES, because a name is typed by a person (the reason
+  `mapClean` exists). Travels in the game save.
 - **Progression:** `stats` (RP `points`, ranks, and Elo `mmr` via `updateMMR`). Saves in
   `localStorage` under `magnetball.*` keys.
 - **Leaderboard:** `LB` config; reads via the public Google **gviz** JSON endpoint (`lbLoad`,
@@ -1875,7 +1903,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   reciprocal jitters ±8. Inside the panel rather than beside it because `drawDebug` runs after
   `drawBuildTag` and its plate would paint over the line.
 - **`padInk()`** picks the thumb-marker ink from `TH.fieldBg`'s lightness. ⚠️ They were
-  hardcoded white, and Highlighter, Sorry!, Specimen and now Warp all letterbox in a light
+  hardcoded white, and Highlighter, Apologies!, Specimen and now Warp all letterbox in a light
   colour — a white ring at 0.16 alpha on a white surround is nothing at all, so the resting
   controls simply were not there on four palettes.
 - **Tap targets clear 44px** — measured, not assumed. ⚠️ `.infobtn` was **20px** and there

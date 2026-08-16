@@ -139,7 +139,7 @@ const r = await p.evaluate(async ()=>{
     // in the step loop, so anything left alive is drawn over every later pixel check — AND
     // `spawnKickFx` calls `addShake`, which leaves render() jittering by Math.random() on every
     // frame and therefore no longer idempotent. That second one broke three unrelated blocks
-    // (Highlighter's discs, Abduction's fence, Asteroids' still-frame check) and none of the
+    // (Highlighter's discs, Abduction's fence, Spaceships' still-frame check) and none of the
     // messages pointed anywhere near here.
     M.fx.length = 0;
     for (let i=0;i<200;i++) M.decayJuice();
@@ -372,7 +372,7 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  let cover = null;                 // filled by the Bootleg block, reused by Sorry!
+  let cover = null;                 // filled by the Bootleg block, reused by Apologies!
   // ---- Bootleg: a printed sleeve, dots against bars ------------------------
   // ⚠️ Red against green is the one pair a colour-blind player cannot separate, so
   // this checks the SHAPE — a circle is covered all the way round at 0.9r, a square
@@ -388,7 +388,7 @@ const r = await p.evaluate(async ()=>{
     const R = 60, CX = 150, CY = 150;
     const cv3 = document.createElement('canvas'); cv3.width = cv3.height = 300;
     const cc3 = cv3.getContext('2d');
-    // Shared with the Sorry! block below: two themes now settle their sides on the
+    // Shared with the Apologies! block below: two themes now settle their sides on the
     // same round-against-square distinction, and one measurement covers both.
     cover = (skinKey, team) => {
       cc3.fillStyle = '#7f7f7f'; cc3.fillRect(0,0,300,300);
@@ -423,7 +423,7 @@ const r = await p.evaluate(async ()=>{
     o.sleeveFallsBack = threw;
   }
 
-  // ---- Sorry!: a board, and pawns standing on their own plates -------------
+  // ---- Apologies!: a board, and pawns standing on their own plates -------------
   // ⚠️ Both sides are pawns, so the piece cannot tell them apart — the PLATE does,
   // a start circle against a track square, measured the same way as Bootleg.
   // ⚠️ And the DECOY again, the other way round from Bootleg: here the field's lane
@@ -557,7 +557,7 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  // ---- Asteroids: a vector monitor, and nothing on it is filled -------------
+  // ---- Spaceships: a vector monitor, and nothing on it is filled -------------
   // ⚠️ "Everything is a thin line" is the whole theme, so it is measured rather than
   // asserted in a comment: the middle of a ship, and the middle of the ball, both
   // have to still be the court underneath.
@@ -716,14 +716,14 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  // ---- Abari: the house mark, and the mark upside down ----------------------
+  // ---- Ammari: the house mark, and the mark upside down ----------------------
   // ⚠️ Up-against-down IS the difference between the sides, so the skin must not
   // turn with facing — and the measurement is the WIDTH of ink at a high row against
   // a low one, because a triangle and its mirror cover the same total area and a
   // pixel count would call them identical.
   {
-    M.applyBundle('abari');
-    o.abariName = M.bundleName();
+    M.applyBundle('ammari');
+    o.ammariName = M.bundleName();
     const R = 60, CX = 150, CY = 150;
     const cv8 = document.createElement('canvas'); cv8.width = cv8.height = 300;
     const cc8 = cv8.getContext('2d');
@@ -861,7 +861,7 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  // ---- Potions & Pixels: a flask against a pixel block ----------------------
+  // ---- Pontions and Prixels: a flask against a pixel block ----------------------
   // ⚠️ Gold against grey is a saturation-and-lightness pair, not a hue one, and the
   // sides carry a SHAPE as well. The two are measured on different axes at 0.82r: the
   // flask has a neck, so it is the only one with ink straight UP there; the block has
@@ -983,22 +983,22 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  // ---- Blast Zone: a floating stage, a KO star and a shield bubble ----------
+  // ---- Bambamzone: a floating stage, a KO star and a shield bubble ----------
   // ⚠️ The silhouette is measured on a ring at 0.62r, and the radius matters. A star
   // is ink near its five points and court in the valleys between them; a bubble is ink
   // all the way round. Probing further out (0.88r) reads near-zero for BOTH — the star's
   // points end at 0.86 — so the band has to sit inside the star's reach.
   {
-    M.applyBundle('smash');
-    o.smashName = M.bundleName();
-    o.smashSlots = JSON.stringify(M.sel.look);
+    M.applyBundle('bambam');
+    o.bambamName = M.bundleName();
+    o.bambamSlots = JSON.stringify(M.sel.look);
     const R = 60, CX = 150, CY = 150;
     const cvS = document.createElement('canvas'); cvS.width = cvS.height = 300;
     const ccS = cvS.getContext('2d');
     const ringInk = (team, fr) => {
       ccS.fillStyle = '#7f7f7f'; ccS.fillRect(0,0,300,300);
       const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
-      M.DISC_SKINS.smash.paint(ccS, q, CX, CY, R, { players:[q] });
+      M.DISC_SKINS.bambam.paint(ccS, q, CX, CY, R, { players:[q] });
       let hit = 0; const N = 32;
       for (let k=0;k<N;k++){
         const a = k*2*Math.PI/N;
@@ -1009,7 +1009,7 @@ const r = await p.evaluate(async ()=>{
     };
     o.starInk = ringInk(0, 0.62);
     o.shieldInk = ringInk(1, 0.62);
-    o.smashSidesDiffer = o.starInk <= 22 && o.shieldInk >= 30;
+    o.bambamSidesDiffer = o.starInk <= 22 && o.shieldInk >= 30;
     // ⚠️ ...and the PLAYER INDICATOR must not undo it. A translucent backing plate behind
     // the mark covers every probe angle, and the first build drew exactly that: both sides
     // measured 32 of 32 and the silhouette rule was defeated by the very idea being
@@ -1021,12 +1021,12 @@ const r = await p.evaluate(async ()=>{
     // ---- the stage FLOATS: the field paints OUTSIDE the pitch -------------
     // ⚠️ THE BUG THIS CATCHES, and it shipped in the first build: the void and its stars
     // were painted into `L,T,W,H` — the pitch box — and then the court was filled straight
-    // over them. The blast zone was a flat dark surround with a sky nobody could see.
+    // over them. The void was a flat dark surround with a sky nobody could see.
     {
       const cvB = document.createElement('canvas'); cvB.width = cvB.height = 400;
       const ccB = cvB.getContext('2d');
       ccB.fillStyle = '#7f7f7f'; ccB.fillRect(0,0,400,400);
-      const f = M.DYN_FIELDS.blastzone, stB = {};
+      const f = M.DYN_FIELDS.bambamzone, stB = {};
       // A pitch box in the MIDDLE of the canvas, so there is room either side to look at.
       const L = 140, T = 120, W = 120, H = 160;
       f.reset(stB); f.step(stB, 2.0);
@@ -1130,9 +1130,9 @@ ok(r.barHasCorners, `Bootleg's two sides do not differ by SHAPE: ${r.sleeveBar}/
 ok(r.printIsMuted, `the printed court dots (${Math.round(r.printLum)}) are as bright as the team drawn as one (${Math.round(r.teamLum)}) — the field is a set of decoys`);
 ok(r.sleeveStill, 'the sleeve field has a step — print does not move, and a drifting grid under the players reads as lag');
 ok(!r.sleeveFallsBack, `the sleeve field threw over a palette that does not declare its inks: ${r.sleeveFallsBack}`);
-ok(r.boardName === 'Sorry!', `the Sorry! bundle does not resolve: ${r.boardName}`);
-ok(r.pawnRoundIsRound, `the Sorry! start-circle plate is not covered all the way round at 0.9r (${r.pawnRound}/24)`);
-ok(r.pawnSquareHasCorners, `Sorry!'s two sides do not differ by SHAPE: ${r.pawnSquare}/24 covered at 0.9r. Both sides are pawns, so the plate is the only thing that can tell them apart`);
+ok(r.boardName === 'Apologies!', `the Apologies! bundle does not resolve: ${r.boardName}`);
+ok(r.pawnRoundIsRound, `the Apologies! start-circle plate is not covered all the way round at 0.9r (${r.pawnRound}/24)`);
+ok(r.pawnSquareHasCorners, `Apologies!'s two sides do not differ by SHAPE: ${r.pawnSquare}/24 covered at 0.9r. Both sides are pawns, so the plate is the only thing that can tell them apart`);
 ok(r.laneIsRed, `the lane probe is not on the lane at all: ${JSON.stringify(r.laneLum)} — the geometry moved and this check now measures the board`);
 ok(r.laneIsTinted, `the safety lane (${Math.round(r.laneLum)}) is as saturated as the team drawn on top of it (${Math.round(r.laneTeamLum)}) — a column of five team-coloured squares is a column of five decoys`);
 ok(r.boardStill, 'the board field has a step — a printed board does not move');
@@ -1148,7 +1148,7 @@ ok(r.triPairDiffersByShape, `the saucer-vs-triangle pairing lost its SILHOUETTE:
 ok(r.craftTurns, 'the craft does not turn with its heading');
 ok(r.craftBanksWithSpeed, 'a moving craft looks exactly like a stationary one — the top-down 3D IS the pitch-down as it drives, so without it there is nothing saying it flies');
 ok(r.ballLookExists && r.sheepDraws, 'the sheep ball look draws nothing');
-ok(r.vectorName === 'Asteroids', `the Asteroids bundle does not resolve: ${r.vectorName}`);
+ok(r.vectorName === 'Spaceships', `the Spaceships bundle does not resolve: ${r.vectorName}`);
 ok(r.voidStillWithoutStep, 'the vector sky advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it 2.4x fast');
 ok(r.voidMovesWithStep, 'the vector sky never moved when stepped');
 ok(r.shipIsHollow, `a vector ship is FILLED (middle ${r.shipMiddle}, ring ${r.shipRing}) — a solid body on a line court is the only solid thing on screen`);
@@ -1172,8 +1172,8 @@ ok(r.ballIsHollow, `the ball is not an outline (edge ${Math.round(r.ballEdge)}, 
 ok(r.picksBack, 'a theme failed to apply');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-ok(r.abariName === 'Abari', `the Abari bundle does not resolve: ${r.abariName}`);
-ok(r.marksAreMirrored, `the two Abari marks are not a triangle and its mirror: high rows ${r.upHigh} vs ${r.downHigh}, low rows ${r.upLow} vs ${r.downLow}`);
+ok(r.ammariName === 'Ammari', `the Ammari bundle does not resolve: ${r.ammariName}`);
+ok(r.marksAreMirrored, `the two Ammari marks are not a triangle and its mirror: high rows ${r.upHigh} vs ${r.downHigh}, low rows ${r.upLow} vs ${r.downLow}`);
 ok(r.markStandsUp, 'the house mark turns with facing — up-against-down IS the difference between the sides, so it is gone the moment anybody moves');
 ok(r.floatsStayBack, `the brightest drifting shape renders at ${Math.round(r.floatPeak)} against the team's ${Math.round(r.markLum)} — they are triangles too, and a player may step past the touchline into them`);
 ok(r.pitchStaysClean, `${r.onPitch} of ${r.pitchProbes} probes INSIDE the boundary were painted on — the play area is punched out of the clip, so any hit means the punch-out is gone`);
@@ -1187,7 +1187,7 @@ ok(r.synthSidesDiffer, `Retrowave's sides do not differ by SHAPE: full-width gap
 ok(r.gridCached && r.gridReused, 'the neon grid is redrawn line by line every frame');
 ok(r.gridRebuildsOnInk, 'the neon grid does not rebuild when the ink changes — slots mix, so it can be asked for over another palette');
 ok(r.gridStill, 'the neon grid has a step — a floor that scrolls reads as the camera drifting');
-ok(r.pnpName === 'Potions & Pixels', `the Potions & Pixels bundle does not resolve: ${r.pnpName}`);
+ok(r.pnpName === 'Pontions and Prixels', `the Pontions and Prixels bundle does not resolve: ${r.pnpName}`);
 ok(r.pnpSidesDiffer, `the flask and the block do not differ by SHAPE at 0.82r: flask up=${r.flaskUp} diag=${r.flaskDiag}, block up=${r.pixUp} diag=${r.pixDiag}`);
 ok(r.pnpInksSeparable, `gold and grey are told apart by hue alone: lightness gap ${Math.round(r.pnpLightGap)}, saturation gap ${Math.round(r.pnpSatGap)}`);
 ok(r.printStaysBack, `the pixel print renders at ${Math.round(r.printPeak)} against the gold team's ${Math.round(r.goldLum)} — a saturated gradient is the one thing on this palette that can out-shout a body`);
@@ -1202,11 +1202,11 @@ ok(r.rollIsStable, 'the same step drawn twice gave different frames — the blin
 ok(r.rollVariesByCycle, 'the blink pattern is identical from cycle to cycle, so nothing is actually being rolled');
 ok(r.blocksKeepOffCentre, `the blocks reach past their corners (${r.blockReach} of ${r.blockGrid} cells) — the middle of the pitch is the one place nothing decorative belongs`);
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
-ok(r.smashName === 'Blast Zone', `the Blast Zone bundle does not resolve: ${r.smashName}`);
-ok(r.smashSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
+ok(r.bambamName === 'Bambamzone', `the Bambamzone bundle does not resolve: ${r.bambamName}`);
+ok(r.bambamSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
 ok(r.indicatorNotAPlate, `the player indicator is a filled plate behind the mark (star reads ${r.starInk}/32) — it covers every probe angle and defeats the silhouette it was added alongside`);
-ok(r.outsideRing, 'a Blast Zone mark crosses the guide ring, which is the thing that actually collides');
-ok(r.paintsOutside, `the blast zone paints nothing outside the pitch (${r.voidPainted} px) — the void is the whole theme, and painting it into the pitch box means the court covers it`);
+ok(r.outsideRing, 'a Bambamzone mark crosses the guide ring, which is the thing that actually collides');
+ok(r.paintsOutside, `the void paints nothing outside the pitch (${r.voidPainted} px) — the void is the whole theme, and painting it into the pitch box means the court covers it`);
 ok(r.skyHasStars, `the void is a flat wash with no stars in it — emptying the star list changed only ${r.starPixels} px`);
 ok(r.stageIsClean, `${r.stageStars} star pixels landed ON the stage — the court is the one place nothing decorative belongs`);
 ok(r.paintIsPure, 'two paints of one sim step gave different frames — the drift must advance in step(), or a paused screen crawls at the refresh rate');
