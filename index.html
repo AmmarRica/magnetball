@@ -1135,6 +1135,17 @@
     .cupmr.win b { color:var(--accent); }
     .cupmr.lose { opacity:.42; }
     .cupmr.tbd b { color:var(--muted); font-style:italic; }
+    /* ⚠️ Positioned OUT of the flow at the box's own top-right, so adding it cannot move a
+       match box and re-break the bracket's alignment against its feeders. Its 44px target
+       comes from an ::after pad rather than from padding the glyph, the same fix .infobtn
+       needed — padding it would make every match box taller. */
+    .cupundo { position:absolute; top:2px; right:2px; z-index:2; border:0; background:none;
+      color:var(--muted); font-family:var(--pix); font-size:11px; line-height:1;
+      padding:3px 4px; border-radius:6px; cursor:pointer; }
+    .cupundo::after { content:''; position:absolute; left:50%; top:50%;
+      width:44px; height:44px; transform:translate(-50%,-50%); }
+    .cupundo:hover { color:var(--text); background:rgba(128,128,128,.18); }
+    .cupundo.arm { color:var(--bad); background:rgba(255,90,90,.16); }
     /* ⚠️ THE CONNECTORS ARE CSS, not a canvas or an SVG. A bracket is a grid of boxes and
        the lines between them are the only thing making it read as a tree — but they are
        decoration, so they must never be the reason a box moves. Drawn as borders on a
@@ -1822,6 +1833,10 @@
 
     <div class="card collapsible collapsed" data-sec="display">
       <h2>Display</h2>
+      <label class="field">Language</label>
+      <div class="opts" id="langPick"></div>
+      <div class="hint" style="text-align:left">Every control, button and heading, and the words the pitch shouts. The longer help paragraphs stay in English &mdash; a hint that lies about what a setting does is worse than one you have to translate yourself. <b>Automatic</b> follows your device. Nothing you have typed is ever translated: your name, your maps and the scores stay exactly as they are.</div>
+      <div style="height:10px"></div>
       <label class="field">Layout <small id="displayDetected" style="color:var(--muted);font-weight:400"></small></label>
       <div class="opts" id="displayPick"></div>
       <div id="arcadeBox" style="margin-top:10px; display:none">
@@ -1937,6 +1952,10 @@
       <input id="hitStop" class="slider" type="range" min="0" max="12" step="1" />
       <div class="hint" style="text-align:left; margin-top:4px">A freeze-frame on the strike, but only when you first-touch a shot that's actually going in — the game checks the ball's path before it gives you one. Also fires on the goal itself. Set to 0 for none. Independent of screen shake.</div>
       <div style="height:10px"></div>
+      <label class="field">Controller rumble <small id="rumbleVal" style="color:var(--accent)"></small></label>
+      <input id="rumble" class="slider" type="range" min="0" max="100" step="5" />
+      <div class="hint" style="text-align:left; margin-top:4px">How hard the pad buzzes — on your own kick (harder the harder you hit it), the ball off the boards, the freeze-frame, and a goal, with the side that scored feeling it more. Set to 0 for none. Like hit stop this is not screen shake, so turning the wobble off leaves it alone. Needs a controller that reports a rumble motor; touch, the keyboard and an arcade panel have nothing to buzz.</div>
+      <div style="height:10px"></div>
       </div>
 
       <div class="subpane" data-pane="camera">
@@ -1995,7 +2014,11 @@
       <div style="height:14px"></div>
       <label class="field">Record every goal</label>
       <div class="opts" id="autoRecPick"></div>
-      <div class="hint always" style="text-align:left">Keeps every goal in the list above without you pressing anything &mdash; for showing the game to people, when stopping to save each one is the thing you cannot do. <b>Everything</b> keeps the whole match at full time as well. Saved here only, never downloaded; the oldest go when the list is full.</div>
+      <div class="hint always" style="text-align:left">Keeps every goal in the list above without you pressing anything &mdash; for showing the game to people, when stopping to save each one is the thing you cannot do. Saved here only, never downloaded; the oldest go when the list is full.</div>
+      <div style="height:14px"></div>
+      <label class="field">Keep whole matches</label>
+      <div class="opts" id="keepMatchesPick"></div>
+      <div class="hint always" style="text-align:left">The last few matches are kept in full, kickoff to whistle, with no need to press anything &mdash; so a match somebody asks about afterwards is still there. They appear under <b>Saved matches</b> above and in your match history, and the oldest goes when the count is full. A whole match is roughly twenty times a single goal (about 0.8MB for a long one), which is why this is a count and not a switch; goals are capped separately, so neither pushes out the other.</div>
       <div style="height:14px"></div>
       <label class="field">Watch a replay from a file</label>
       <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
@@ -2028,7 +2051,7 @@
            "which build are you on". The whole block is the target so there is nothing to aim
            at, and it copies the screen size and layout with it, because those are the next
            two questions and neither is anything personal. -->
-      <div id="aboutInfo" role="button" tabindex="0" aria-label="Copy version details">
+      <div id="aboutInfo" data-noi18n role="button" tabindex="0" aria-label="Copy version details">
         <div class="pathrow"><span class="pathkey">Version</span><span class="pathval mono" id="ver"></span></div>
         <div class="pathrow"><span class="pathkey">Updates</span><span class="pathval" id="aboutUpd"></span></div>
         <div class="copyhint" id="aboutCopyHint">Tap to copy</div>
@@ -2066,7 +2089,7 @@
       <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season, tournament or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
       <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
-      <div id="newsList"></div>
+      <div id="newsList" data-noi18n></div>
       <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
     </div>
 
@@ -2117,6 +2140,14 @@
     <div class="card">
       <h2>Lifetime <small id="statsRank" style="color:var(--muted);font-weight:400"></small></h2>
       <div class="statgrid" id="statGrid"></div>
+    </div>
+    <!-- ⚠️ One row per match played, newest first — see MATCHLOG. This is the only place
+         in the game that says WHAT HAPPENED rather than a running total, which is why it is
+         a card of its own next to Lifetime rather than more tiles inside it. -->
+    <div class="card" id="matchLogCard">
+      <h2>Match history <small id="matchLogSub" style="color:var(--muted);font-weight:400"></small></h2>
+      <div id="matchLogList"></div>
+      <button class="ghost" id="matchLogClear" type="button" style="display:none;margin-top:8px">Clear match history</button>
     </div>
     <!-- Which map/size pairs went down well, built from the end-of-match votes. -->
     <div class="card" id="mapVoteCard">
@@ -2471,6 +2502,10 @@
    Deck UI (controller menu)   "DECK UI — drive the whole menu"
    Tutorial                    "ONBOARDING TUTORIAL"
    Season / cup                "SINGLE-PLAYER SEASON"
+   Languages                   "LANGUAGES"
+   Match history               "MATCH HISTORY — one row per match"
+   Controller rumble           "CONTROLLER RUMBLE"
+   Keep whole matches          "KEEP THE LAST FEW WHOLE MATCHES"
    Tournament (bracket)        "TOURNAMENT — a single-elimination"
    Gauntlet (roguelike)        "ROGUELIKE / GAUNTLET — a run"
    Leaderboard                 "GLOBAL LEADERBOARD"
@@ -3154,6 +3189,356 @@ const DIFF = {
 // keep its old name in the menu. Declared as a getter-built object at boot because
 // BOT_PLANS is defined with the AI, far below.
 let BOTPLANOPT = { auto: { name:'Mixed', emoji:'🎲', icon:'tier1of7', desc:'A different one each side' } };
+// ============================================================
+//  LANGUAGES
+// ============================================================
+// ⚠️ **A WHITELIST KEYED ON THE ENGLISH STRING, applied by WALKING THE DOM** — not a
+// `L()` call wrapped round every string in the file. Two reasons, and the second is the
+// safety model:
+//   · The markup holds hundreds of strings across eleven cards, and the repo already
+//     makes this argument for `buildHintToggles`: "one component, applied by walking the
+//     DOM, because per-card markup means 27 places to keep in step and a new setting
+//     arrives without a toggle". A new setting arrives translated here for the same
+//     reason, or plainly in English, which is the honest fallback.
+//   · Because the table is a WHITELIST of exact English strings, nothing it does not
+//     know can be touched. A player's typed name, a map they built, a country, a version
+//     stamp and a scoreline are not in it and therefore cannot be mangled — which is the
+//     failure mode a "translate everything you see" walk would have.
+//
+// ⚠️ **THE ORIGINAL ENGLISH IS STASHED ON THE NODE** (`_en`), and translation always
+// runs from that rather than from what is on screen. Without it, switching from Spanish
+// to French would look for "Ajustes" in a table keyed on "Settings" and find nothing, so
+// the first language you picked would be the last one you could pick.
+//
+// ⚠️ **SCOPE IS DELIBERATELY PARTIAL, and the picker says so.** Every control, button,
+// heading and the words the pitch shouts are translated; the long help paragraphs under
+// them are not. Translating those properly is several thousand words a language and
+// getting it wrong is worse than English — a hint that lies about what a setting does is
+// the one kind of text that has to be right.
+//
+// ⚠️ **LATIN SCRIPT ONLY, and that is a FONT constraint rather than a preference.** The
+// UI face is Kenney Mini Square, shipped in `assets/`, and its cmap covers Latin-1 —
+// every accent these six languages need — but nothing beyond it. A CJK language would
+// fall back per glyph to `system-ui` and come out as a mix of two typefaces in the same
+// word. (It has no `oe` ligature either, which is why no French string here uses one.)
+const LANG_CODES = ['es', 'fr', 'de', 'pt', 'it'];
+// ⚠️ `name` is the language's OWN name for itself, never the English one and never a
+// translation of it. Somebody who cannot read the language currently on screen is exactly
+// the person reaching for this control, so a tile saying "Spanish" (or "Alem\u00e1n") is
+// unreadable to the one person who needs it — "Espa\u00f1ol" is not. `Automatic` names a
+// behaviour rather than a language and is the one entry that IS translated.
+// ⚠️ Every tile carries the globe, because a language list is one row of one kind of
+// thing: seven different pictures would imply seven different kinds of setting, and the
+// alternative (a flag each) is wrong on its face — a language is not a country.
+const LANGS = {
+  auto: { name: 'Automatic',  icon: 'globe' },
+  en:   { name: 'English',    icon: 'globe' },
+  es:   { name: 'Espa\u00f1ol',   icon: 'globe' },
+  fr:   { name: 'Fran\u00e7ais',  icon: 'globe' },
+  de:   { name: 'Deutsch',    icon: 'globe' },
+  pt:   { name: 'Portugu\u00eas', icon: 'globe' },
+  it:   { name: 'Italiano',   icon: 'globe' },
+};
+// One row per string: English, then the five in `LANG_CODES` order. ⚠️ A row rather than
+// five separate objects, so a missing translation is a short array you can see at a
+// glance instead of a key you have to go looking for in another table.
+const STRINGS = {
+  'Show': ['Mostrar', 'Afficher', 'Zeigen', 'Mostrar', 'Mostra'],
+  'Hidden': ['Oculto', 'Masqué', 'Versteckt', 'Oculto', 'Nascosto'],
+  'Hide': ['Ocultar', 'Masquer', 'Ausblenden', 'Ocultar', 'Nascondi'],
+  'Flat': ['Plano', 'Plat', 'Flach', 'Plano', 'Piatto'],
+  'Rolling': ['Rodando', 'Roulant', 'Rollend', 'A rolar', 'Rotante'],
+  'One-touch': ['Al primer toque', 'Une touche', 'Direktabnahme', 'Primeiro toque', 'Al primo tocco'],
+  'Controllers': ['Mandos', 'Manettes', 'Controller', 'Comandos', 'Controller'],
+  'At kickoff': ['En el saque', 'À l\'engagement', 'Beim Anstoß', 'No pontapé', 'Al calcio d\'inizio'],
+  'Versus': ['Contra ti', 'Contre toi', 'Gegen dich', 'Contra ti', 'Contro di te'],
+  'Co-op': ['Cooperativo', 'Coopératif', 'Koop', 'Cooperativo', 'Cooperativa'],
+  'Keyboard': ['Teclado', 'Clavier', 'Tastatur', 'Teclado', 'Tastiera'],
+  'Wide': ['Ancho', 'Large', 'Breit', 'Largo', 'Largo'],
+  'Long': ['Largo', 'Long', 'Lang', 'Comprido', 'Lungo'],
+  'Big': ['Grande', 'Grand', 'Groß', 'Grande', 'Grande'],
+  'Game': ['Juego', 'Jeu', 'Spiel', 'Jogo', 'Gioco'],
+  'Pitch': ['Campo', 'Terrain', 'Feld', 'Campo', 'Campo'],
+  'Players': ['Jugadores', 'Joueurs', 'Spieler', 'Jogadores', 'Giocatori'],
+  'Rules': ['Reglas', 'Règles', 'Regeln', 'Regras', 'Regole'],
+  'Matches': ['Partidos', 'Matchs', 'Spiele', 'Jogos', 'Partite'],
+  'Player': ['Jugador', 'Joueur', 'Spieler', 'Jogador', 'Giocatore'],
+  'Effects': ['Efectos', 'Effets', 'Effekte', 'Efeitos', 'Effetti'],
+  'Camera': ['Cámara', 'Caméra', 'Kamera', 'Câmara', 'Camera'],
+  'Advanced': ['Avanzado', 'Avancé', 'Erweitert', 'Avançado', 'Avanzate'],
+  '🎨 Colour': ['🎨 Color', '🎨 Couleur', '🎨 Farbe', '🎨 Cor', '🎨 Colore'],
+  '🧢 Cap': ['🧢 Gorra', '🧢 Casquette', '🧢 Mütze', '🧢 Boné', '🧢 Cappello'],
+  '🏴 Flags': ['🏴 Banderas', '🏴 Drapeaux', '🏴 Flaggen', '🏴 Bandeiras', '🏴 Bandiere'],
+  '🐻 Animals': ['🐻 Animales', '🐻 Animaux', '🐻 Tiere', '🐻 Animais', '🐻 Animali'],
+  '🔢 Text': ['🔢 Texto', '🔢 Texte', '🔢 Text', '🔢 Texto', '🔢 Testo'],
+  '📷 Photo': ['📷 Foto', '📷 Photo', '📷 Foto', '📷 Foto', '📷 Foto'],
+  '👀 Eyes': ['👀 Ojos', '👀 Yeux', '👀 Augen', '👀 Olhos', '👀 Occhi'],
+  '✨ Bundle': ['✨ Conjunto', '✨ Ensemble', '✨ Paket', '✨ Conjunto', '✨ Pacchetto'],
+  'Whistle': ['Silbato', 'Sifflet', 'Pfiff', 'Apito', 'Fischio'],
+  'Full time': ['Final', 'Fin du match', 'Abpfiff', 'Fim do jogo', 'Fine partita'],
+  'Crowd': ['Público', 'Public', 'Publikum', 'Público', 'Pubblico'],
+  'Pass / kick': ['Pase / tiro', 'Passe / tir', 'Pass / Schuss', 'Passe / remate', 'Passaggio / tiro'],
+  'Wall bounce': ['Rebote', 'Rebond', 'Bandenabpraller', 'Ressalto', 'Rimbalzo'],
+  'Net': ['Red', 'Filet', 'Netz', 'Rede', 'Rete'],
+  'Search settings…': ['Buscar ajustes…', 'Rechercher un réglage…', 'Einstellung suchen…', 'Procurar definições…', 'Cerca impostazioni…'],
+  'Your record': ['Tu récord', 'Ton bilan', 'Deine Bilanz', 'O teu recorde', 'Il tuo record'],
+  'Automatic': ['Automático', 'Automatique', 'Automatisch', 'Automático', 'Automatico'],
+  'Season': ['Temporada', 'Saison', 'Saison', 'Temporada', 'Stagione'],
+  'Tournament': ['Torneo', 'Tournoi', 'Turnier', 'Torneio', 'Torneo'],
+  'Gauntlet': ['Desafío', 'Défi', 'Parcours', 'Desafio', 'Sfida'],
+  'Drills': ['Ejercicios', 'Exercices', 'Übungen', 'Exercícios', 'Esercizi'],
+  'Tutorial': ['Tutorial', 'Tutoriel', 'Tutorial', 'Tutorial', 'Tutorial'],
+  'Stats': ['Estadísticas', 'Statistiques', 'Statistiken', 'Estatísticas', 'Statistiche'],
+  'Ranks': ['Clasificación', 'Classement', 'Rangliste', 'Classificação', 'Classifica'],
+  'Daily': ['Diario', 'Quotidien', 'Täglich', 'Diário', 'Giornaliero'],
+  'Shop': ['Tienda', 'Boutique', 'Shop', 'Loja', 'Negozio'],
+  'Watch': ['Ver', 'Regarder', 'Ansehen', 'Ver', 'Guarda'],
+  'How to play': ['Cómo jugar', 'Comment jouer', 'Spielanleitung', 'Como jogar', 'Come si gioca'],
+  'Settings': ['Ajustes', 'Réglages', 'Einstellungen', 'Definições', 'Impostazioni'],
+  'Record': ['Récord', 'Bilan', 'Bilanz', 'Recorde', 'Record'],
+  'More': ['Más', 'Plus', 'Mehr', 'Mais', 'Altro'],
+  'Play': ['Jugar', 'Jouer', 'Spielen', 'Jogar', 'Gioca'],
+  'Progress': ['Progreso', 'Progression', 'Fortschritt', 'Progresso', 'Progressi'],
+  'Help': ['Ayuda', 'Aide', 'Hilfe', 'Ajuda', 'Aiuto'],
+  'Match': ['Partido', 'Match', 'Spiel', 'Jogo', 'Partita'],
+  'Your Player': ['Tu jugador', 'Ton joueur', 'Dein Spieler', 'O teu jogador', 'Il tuo giocatore'],
+  'Controls': ['Controles', 'Commandes', 'Steuerung', 'Controlos', 'Comandi'],
+  'Theme': ['Tema', 'Thème', 'Design', 'Tema', 'Tema'],
+  'Display': ['Pantalla', 'Affichage', 'Anzeige', 'Ecrã', 'Schermo'],
+  'Sound': ['Sonido', 'Son', 'Ton', 'Som', 'Audio'],
+  'Game Feel': ['Sensación', 'Sensations', 'Spielgefühl', 'Sensação', 'Feeling'],
+  'Replays': ['Repeticiones', 'Replays', 'Wiederholungen', 'Repetições', 'Replay'],
+  'About': ['Acerca de', 'À propos', 'Über', 'Sobre', 'Info'],
+  'Online': ['En línea', 'En ligne', 'Online', 'Online', 'Online'],
+  'KICK OFF ▶': ['SAQUE ▶', 'COUP D\'ENVOI ▶', 'ANSTOSS ▶', 'PONTAPÉ ▶', 'CALCIO D\'INIZIO ▶'],
+  'Warm-up': ['Calentamiento', 'Échauffement', 'Aufwärmen', 'Aquecimento', 'Riscaldamento'],
+  'Resume': ['Continuar', 'Reprendre', 'Weiter', 'Continuar', 'Riprendi'],
+  'Restart': ['Reiniciar', 'Recommencer', 'Neustart', 'Reiniciar', 'Ricomincia'],
+  'Rematch': ['Revancha', 'Revanche', 'Revanche', 'Revanche', 'Rivincita'],
+  'Main Menu': ['Menú principal', 'Menu principal', 'Hauptmenü', 'Menu principal', 'Menu principale'],
+  'Paused': ['En pausa', 'En pause', 'Pausiert', 'Em pausa', 'In pausa'],
+  '← Back': ['← Atrás', '← Retour', '← Zurück', '← Voltar', '← Indietro'],
+  'Later': ['Más tarde', 'Plus tard', 'Später', 'Mais tarde', 'Più tardi'],
+  'Got it': ['Entendido', 'Compris', 'Alles klar', 'Entendido', 'Ho capito'],
+  'Update now': ['Actualizar ahora', 'Mettre à jour', 'Jetzt aktualisieren', 'Atualizar agora', 'Aggiorna ora'],
+  'Start ▶': ['Empezar ▶', 'Démarrer ▶', 'Starten ▶', 'Começar ▶', 'Inizia ▶'],
+  'Check for updates': ['Buscar actualizaciones', 'Vérifier les mises à jour', 'Nach Updates suchen', 'Procurar atualizações', 'Cerca aggiornamenti'],
+  'Reset to defaults': ['Restablecer', 'Réinitialiser', 'Zurücksetzen', 'Repor', 'Ripristina'],
+  'Reset to default': ['Restablecer', 'Réinitialiser', 'Zurücksetzen', 'Repor', 'Ripristina'],
+  'Mode': ['Modo', 'Mode', 'Modus', 'Modo', 'Modalità'],
+  'Difficulty (bots)': ['Dificultad (bots)', 'Difficulté (bots)', 'Schwierigkeit (Bots)', 'Dificuldade (bots)', 'Difficoltà (bot)'],
+  'Bot strategy': ['Estrategia de bots', 'Stratégie des bots', 'Bot-Strategie', 'Estratégia dos bots', 'Strategia dei bot'],
+  'Match length': ['Duración', 'Durée du match', 'Spieldauer', 'Duração', 'Durata'],
+  'Field': ['Campo', 'Terrain', 'Feld', 'Campo', 'Campo'],
+  'Ball': ['Balón', 'Ballon', 'Ball', 'Bola', 'Palla'],
+  'Pitch surface': ['Superficie', 'Surface', 'Untergrund', 'Superfície', 'Superficie'],
+  'Input': ['Mandos', 'Contrôles', 'Eingabe', 'Comandos', 'Ingressi'],
+  'Warm-up lobby': ['Sala de calentamiento', 'Salle d\'échauffement', 'Aufwärm-Lobby', 'Sala de aquecimento', 'Sala di riscaldamento'],
+  'Extra controllers': ['Mandos extra', 'Manettes en plus', 'Weitere Controller', 'Comandos extra', 'Controller extra'],
+  'Player names': ['Nombres', 'Noms des joueurs', 'Spielernamen', 'Nomes', 'Nomi'],
+  'Kickoff rule': ['Regla de saque', 'Règle d\'engagement', 'Anstoßregel', 'Regra de pontapé', 'Regola d\'inizio'],
+  'Name': ['Nombre', 'Nom', 'Name', 'Nome', 'Nome'],
+  'Colour': ['Color', 'Couleur', 'Farbe', 'Cor', 'Colore'],
+  'Cap': ['Gorra', 'Casquette', 'Mütze', 'Boné', 'Cappello'],
+  'Countryball': ['País', 'Pays', 'Land', 'País', 'Paese'],
+  'Animal': ['Animal', 'Animal', 'Tier', 'Animal', 'Animale'],
+  'Handed': ['Mano', 'Main', 'Hand', 'Mão', 'Mano'],
+  'Who plays': ['Quién juega', 'Qui joue', 'Wer spielt', 'Quem joga', 'Chi gioca'],
+  'Controller': ['Mando', 'Manette', 'Controller', 'Comando', 'Controller'],
+  'Language': ['Idioma', 'Langue', 'Sprache', 'Idioma', 'Lingua'],
+  'Layout': ['Disposición', 'Disposition', 'Layout', 'Disposição', 'Disposizione'],
+  'Screen': ['Pantalla', 'Écran', 'Bildschirm', 'Ecrã', 'Schermo'],
+  'Pitch direction': ['Orientación del campo', 'Sens du terrain', 'Spielfeldrichtung', 'Direção do campo', 'Orientamento campo'],
+  'Master': ['General', 'Général', 'Gesamt', 'Geral', 'Generale'],
+  'Volume': ['Volumen', 'Volume', 'Lautstärke', 'Volume', 'Volume'],
+  'Set': ['Conjunto', 'Ensemble', 'Set', 'Conjunto', 'Set'],
+  'Preset': ['Preajuste', 'Préréglage', 'Voreinstellung', 'Predefinição', 'Preimpostazione'],
+  'Ball control': ['Control del balón', 'Contrôle du ballon', 'Ballkontrolle', 'Controlo da bola', 'Controllo palla'],
+  'Hold to kick harder': ['Mantener para chutar más fuerte', 'Maintenir pour frapper plus fort', 'Halten für härteren Schuss', 'Manter para chutar mais forte', 'Tieni premuto per tirare più forte'],
+  'One-handed': ['Con una mano', 'À une main', 'Einhändig', 'Com uma mão', 'Con una mano'],
+  'Sprint': ['Sprint', 'Sprint', 'Sprint', 'Sprint', 'Scatto'],
+  'Screen shake & effects': ['Sacudida y efectos', 'Secousses et effets', 'Bildschirmwackeln & Effekte', 'Vibração do ecrã e efeitos', 'Scossa schermo ed effetti'],
+  'Floating stat text': ['Texto flotante', 'Texte flottant', 'Schwebende Anzeigen', 'Texto flutuante', 'Testo fluttuante'],
+  'Hit stop': ['Congelado', 'Arrêt sur image', 'Trefferstopp', 'Congelamento', 'Fermo immagine'],
+  'Controller rumble': ['Vibración del mando', 'Vibration de la manette', 'Controller-Vibration', 'Vibração do comando', 'Vibrazione controller'],
+  'Goal zoom': ['Zoom de gol', 'Zoom sur but', 'Tor-Zoom', 'Zoom no golo', 'Zoom sul gol'],
+  'Goal zoom speed': ['Velocidad del zoom', 'Vitesse du zoom', 'Zoom-Geschwindigkeit', 'Velocidade do zoom', 'Velocità zoom'],
+  'Auto-replay goals': ['Repetir goles', 'Ralenti auto des buts', 'Tore automatisch wiederholen', 'Repetir golos', 'Replay automatico'],
+  'Replay starts': ['La repetición empieza', 'Le ralenti commence', 'Wiederholung beginnt', 'A repetição começa', 'Il replay parte'],
+  'Replay camera': ['Cámara de repetición', 'Caméra du ralenti', 'Wiederholungskamera', 'Câmara da repetição', 'Camera replay'],
+  'Match speed': ['Velocidad del juego', 'Vitesse du jeu', 'Spieltempo', 'Velocidade do jogo', 'Velocità di gioco'],
+  'Debug readout': ['Datos de depuración', 'Infos de débogage', 'Debug-Anzeige', 'Dados de depuração', 'Dati di debug'],
+  'Saved goals': ['Goles guardados', 'Buts enregistrés', 'Gespeicherte Tore', 'Golos guardados', 'Gol salvati'],
+  'Saved matches': ['Partidos guardados', 'Matchs enregistrés', 'Gespeicherte Spiele', 'Jogos guardados', 'Partite salvate'],
+  'Record every goal': ['Grabar cada gol', 'Enregistrer chaque but', 'Jedes Tor aufnehmen', 'Gravar cada golo', 'Registra ogni gol'],
+  'Keep whole matches': ['Guardar partidos enteros', 'Garder les matchs entiers', 'Ganze Spiele behalten', 'Guardar jogos inteiros', 'Conserva partite intere'],
+  'Watch a replay from a file': ['Ver una repetición desde un archivo', 'Lire un ralenti depuis un fichier', 'Wiederholung aus einer Datei ansehen', 'Ver uma repetição de um ficheiro', 'Guarda un replay da file'],
+  'Delete all saved replays': ['Borrar todas las repeticiones', 'Supprimer tous les ralentis', 'Alle Wiederholungen löschen', 'Apagar todas as repetições', 'Elimina tutti i replay'],
+  'Lifetime': ['Totales', 'Total', 'Gesamt', 'Totais', 'Totali'],
+  'Match history': ['Historial de partidos', 'Historique des matchs', 'Spielverlauf', 'Histórico de jogos', 'Cronologia partite'],
+  'Clear match history': ['Borrar el historial', 'Effacer l\'historique', 'Verlauf löschen', 'Limpar o histórico', 'Cancella cronologia'],
+  'Maps rated': ['Campos valorados', 'Terrains notés', 'Bewertete Felder', 'Campos avaliados', 'Campi votati'],
+  'Teams': ['Equipos', 'Équipes', 'Teams', 'Equipas', 'Squadre'],
+  'Bracket': ['Cuadro', 'Tableau', 'Turnierbaum', 'Quadro', 'Tabellone'],
+  'How many': ['Cuántos', 'Combien', 'Wie viele', 'Quantos', 'Quanti'],
+  'Rounds': ['Rondas', 'Tours', 'Runden', 'Rondas', 'Turni'],
+  'Final': ['Final', 'Finale', 'Finale', 'Final', 'Finale'],
+  'Semi-final': ['Semifinal', 'Demi-finale', 'Halbfinale', 'Meia-final', 'Semifinale'],
+  'Quarter-final': ['Cuartos de final', 'Quart de finale', 'Viertelfinale', 'Quartos de final', 'Quarti di finale'],
+  'Off': ['Desactivado', 'Désactivé', 'Aus', 'Desligado', 'Off'],
+  'On': ['Activado', 'Activé', 'An', 'Ligado', 'On'],
+  'Auto': ['Automático', 'Auto', 'Automatisch', 'Automático', 'Automatico'],
+  'Touch': ['Táctil', 'Tactile', 'Touch', 'Toque', 'Tocco'],
+  'Everyone': ['Todos', 'Tout le monde', 'Alle', 'Todos', 'Tutti'],
+  'Skip': ['Omitir', 'Passer', 'Überspringen', 'Saltar', 'Salta'],
+  'None': ['Ninguno', 'Aucun', 'Keine', 'Nenhum', 'Nessuno'],
+  'Left': ['Izquierda', 'Gauche', 'Links', 'Esquerda', 'Sinistra'],
+  'Right': ['Derecha', 'Droite', 'Rechts', 'Direita', 'Destra'],
+  'Duo': ['Dúo', 'Duo', 'Duo', 'Duo', 'Duo'],
+  '2-Player': ['2 jugadores', '2 joueurs', '2 Spieler', '2 jogadores', '2 giocatori'],
+  'Quick': ['Rápido', 'Rapide', 'Kurz', 'Rápido', 'Veloce'],
+  'Normal': ['Normal', 'Normal', 'Normal', 'Normal', 'Normale'],
+  'First to 3': ['Hasta 3', 'Premier à 3', 'Erster mit 3', 'Até 3', 'Primo a 3'],
+  'First to 5': ['Hasta 5', 'Premier à 5', 'Erster mit 5', 'Até 5', 'Primo a 5'],
+  'Rookie': ['Novato', 'Débutant', 'Anfänger', 'Novato', 'Principiante'],
+  'Easy': ['Fácil', 'Facile', 'Leicht', 'Fácil', 'Facile'],
+  'Hard': ['Difícil', 'Difficile', 'Schwer', 'Difícil', 'Difficile'],
+  'Pro': ['Pro', 'Pro', 'Profi', 'Pro', 'Pro'],
+  'Elite': ['Élite', 'Élite', 'Elite', 'Elite', 'Elite'],
+  'Insane': ['Demencial', 'Démentiel', 'Wahnsinn', 'Insano', 'Folle'],
+  'Training': ['Entrenamiento', 'Entraînement', 'Training', 'Treino', 'Allenamento'],
+  'GOAL!': ['¡GOL!', 'BUT !', 'TOR!', 'GOLO!', 'GOL!'],
+  'OVERTIME!': ['¡PRÓRROGA!', 'PROLONGATION !', 'VERLÄNGERUNG!', 'PRORROGAÇÃO!', 'SUPPLEMENTARI!'],
+  'SUDDEN DEATH': ['MUERTE SÚBITA', 'MORT SUBITE', 'SUDDEN DEATH', 'MORTE SÚBITA', 'MORTE IMPROVVISA'],
+  'YOU WIN! 🏆': ['¡GANAS! 🏆', 'VOUS GAGNEZ ! 🏆', 'DU GEWINNST! 🏆', 'GANHASTE! 🏆', 'HAI VINTO! 🏆'],
+  'PLAYER 2 WINS': ['GANA EL JUGADOR 2', 'LE JOUEUR 2 GAGNE', 'SPIELER 2 GEWINNT', 'O JOGADOR 2 GANHA', 'VINCE IL GIOCATORE 2'],
+  'YOU WIN': ['GANAS', 'VOUS GAGNEZ', 'DU GEWINNST', 'GANHASTE', 'HAI VINTO'],
+  'YOU LOSE': ['PIERDES', 'VOUS PERDEZ', 'DU VERLIERST', 'PERDESTE', 'HAI PERSO'],
+  'DRAW': ['EMPATE', 'MATCH NUL', 'UNENTSCHIEDEN', 'EMPATE', 'PAREGGIO'],
+  'FULL TIME': ['FINAL', 'FIN DU MATCH', 'ABPFIFF', 'FIM DO JOGO', 'FINE PARTITA'],
+  'REPLAY': ['REPETICIÓN', 'RALENTI', 'WIEDERHOLUNG', 'REPETIÇÃO', 'REPLAY'],
+};
+// ⚠️ `auto` reads the BROWSER, and it is the default: somebody opening the game on a
+// Spanish phone should not have to find a setting to be spoken to in Spanish. Matched on
+// the primary subtag only — `es-MX`, `es-419` and `es` are all Spanish here.
+function langKey(){
+  if (typeof sel === 'undefined' || !sel) return 'en';
+  const v = sel.lang || 'auto';
+  if (v !== 'auto') return LANGS[v] ? v : 'en';
+  const nav = (typeof navigator !== 'undefined' && (navigator.language || (navigator.languages||[])[0])) || 'en';
+  const code = String(nav).toLowerCase().split('-')[0];
+  return LANGS[code] ? code : 'en';
+}
+function langIsEnglish(){ return langKey() === 'en'; }
+// The one lookup. Anything the table does not know comes back untouched, in English.
+// ⚠️ **A LEADING EMOJI IS SPLIT OFF AND PUT BACK.** The option tiles are labelled
+// `'\u2728 On'`, `'\u2298 Off'`, `'\ud83d\udeab Off'`, `'\ud83d\udd0a On'` and so on — the
+// same handful of words behind a dozen different pictures — so keying the table on the
+// whole label would mean a row per picture, all saying "On", and a thirteenth tile
+// arriving untranslated. One row for `On` covers every one of them, which is the same
+// don't-keep-a-second-copy-in-step rule the rest of this file runs on.
+// ⚠️ Pictographs and TWO NAMED SYMBOLS, never every non-letter. `\u2298` and `\u25b6` are
+// used as tile bullets here but are Math and Geometric characters rather than emoji, so
+// `\p{Extended_Pictographic}` misses them and `\u2298 Off` stayed English beside a
+// perfectly translated `\u2728 On`. They are safe to strip because no table key BEGINS
+// with either (`\u25b6` only ever ends one — "Start \u25b6"). Nothing else is added:
+// `\u2190 Back` is a table entry in its own right, and stripping its arrow would look up
+// `Back`, find nothing, and lose a string that was already translated.
+const EMOJI_LEAD = /^((?:[\p{Extended_Pictographic}\u2298\u25b6\uFE0F\u200D]\s*)+)(.+)$/u;
+function L(s){
+  const k = langKey();
+  if (k === 'en') return s;
+  const i = LANG_CODES.indexOf(k);
+  if (i < 0) return s;
+  const direct = STRINGS[s];
+  if (direct && direct[i]) return direct[i];
+  const m = EMOJI_LEAD.exec(s);
+  if (m){ const row = STRINGS[m[2]]; if (row && row[i]) return m[1] + row[i]; }
+  return s;
+}
+// ⚠️ Walks TEXT NODES and a short list of attributes, skipping script/style and anything
+// marked `data-noi18n` — the version stamp and the changelog, which name builds and
+// releases and are not prose. Cheap enough to run after every rebuild: it is a tree walk
+// over a few thousand nodes, not per frame.
+const I18N_ATTRS = ['placeholder', 'title', 'aria-label'];
+// ⚠️ **ANYTHING A PERSON TYPED IS MARKED OUT OF THE WALK**, and this is a real hole that
+// a sabotage found rather than a precaution. The whitelist stops the walk touching text
+// it has never heard of — but a player who names themselves **Season**, builds a map
+// called **Pitch**, or names a replay **Off** has typed a string that IS in the table, and
+// the walk would faithfully render them as Temporada, Campo and Desactivado. Their own
+// words are not ours to translate however much they look like ours, so every site that
+// renders typed text says so here rather than hoping for a miss.
+function noI18n(el){ if (el && el.setAttribute) el.setAttribute('data-noi18n', ''); return el; }
+// Is this string one the table can do anything with — directly, or once a leading emoji
+// is split off? The walk's cheap gate, and it must agree with `L` or a string is stashed
+// that can never be translated (harmless) or skipped that could have been (a bug).
+function translatable(s){
+  if (STRINGS[s]) return true;
+  const m = EMOJI_LEAD.exec(s);
+  return !!(m && STRINGS[m[2]]);
+}
+// ⚠️ **IN ENGLISH THIS IS FREE, and that matters because it runs on every option tap.**
+// The walk is a TreeWalker over ~2,500 text nodes and measured at **5.6ms** against
+// `buildSettings`' own 24ms — a 23% tax on the default configuration for no work, since
+// everything is WRITTEN in English and there is nothing to change. So it returns
+// immediately whenever the language is English *and was English last time*: the one
+// English pass that has to happen is the one just after switching back from another
+// language, which is exactly what `i18nLast` catches. (Same shape as the swatch cache:
+// the expensive thing is not made cheaper, it is not done.)
+let i18nLast = null;
+function translateDom(root){
+  const k = langKey();
+  if (k === 'en' && i18nLast === 'en') return;
+  const host = root || document.body;
+  if (!host || !host.ownerDocument) return;
+  const en = langIsEnglish();
+  const walk = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, {
+    acceptNode(n){
+      const p = n.parentNode;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      const tag = p.nodeName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'CANVAS') return NodeFilter.FILTER_REJECT;
+      if (p.closest && p.closest('[data-noi18n]')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  for (let n = walk.nextNode(); n; n = walk.nextNode()){
+    // ⚠️ Stash on first sight, then always translate FROM the original — see above.
+    if (n._en === undefined){
+      const t = n.nodeValue.trim();
+      // ⚠️ The gate has to allow for the emoji prefix as well, or a tile reading
+      // "\u2728 On" is written off as "not ours" and never stashed — the lookup below
+      // would then never get a chance to strip it.
+      if (!t || !translatable(t)) continue;         // not ours: never touched again
+      n._en = t;
+    }
+    const src = n._en;
+    const out = en ? src : L(src);
+    // Whitespace around the word is layout, so it is preserved rather than trimmed away.
+    const cur = n.nodeValue;
+    const lead = cur.slice(0, cur.length - cur.replace(/^\s+/, '').length);
+    const tail = cur.slice(cur.replace(/\s+$/, '').length);
+    const next = lead + out + tail;
+    if (next !== cur) n.nodeValue = next;
+  }
+  const els = host.querySelectorAll('[' + I18N_ATTRS.join('],[') + ']');
+  for (const el of els){
+    for (const a of I18N_ATTRS){
+      if (!el.hasAttribute(a)) continue;
+      const key = '_en_' + a;
+      if (el[key] === undefined){
+        const t = (el.getAttribute(a) || '').trim();
+        if (!t || !translatable(t)) continue;
+        el[key] = t;
+      }
+      el.setAttribute(a, en ? el[key] : L(el[key]));
+    }
+  }
+  // ⚠️ Only a WHOLE-BODY pass may record the state — a scoped call (one screen, one
+  // overlay) has not seen the rest of the page, so letting it set this would skip the
+  // full pass that restores everything else.
+  if (!root) i18nLast = k;
+}
 const MODES = {
   '1v1':  { name:'1 v 1',   emoji:'👤', icon:'person', per:1, twoP:false, desc:'You vs bot' },
   '2v2':  { name:'2 v 2',   emoji:'👥', icon:'people', per:2, twoP:false, desc:'You + bot' },
@@ -3597,8 +3982,37 @@ const ARCADE = {
 const AUTORECOPT = {
   off:    { name:'Off',        emoji:'🚫', icon:'barrier' },
   goals:  { name:'Goals',      emoji:'⚽', icon:'ball' },
-  all:    { name:'Everything', emoji:'🎞', icon:'clipboard' },
 };
+// ============================================================
+//  KEEP THE LAST FEW WHOLE MATCHES
+// ============================================================
+// ⚠️ THIS REPLACED `autoRec: 'all'`, and splitting them apart is the point. One dial was
+// answering two questions — "save goals as they happen?" and "keep the whole match?" —
+// which is why `all`'s own comment had to explain it was "gated separately because a match
+// file is ~20x the size". Two sizes, two frequencies, two answers: two settings. A stored
+// `all` folds to goals-on plus five kept matches, so nobody loses the behaviour they had.
+// ⚠️ A COUNT rather than a toggle, because the size varies more than tenfold with match
+// length and mode — ten short 1v1s cost less than three long 6v6s, so the right number is
+// not something the game can pick for somebody. Default 5, as asked for.
+const MATCHKEEP = { def: 5, opts: [0, 3, 5, 10] };
+// ⚠️ Stored as a STRING ('0'|'3'|'5'|'10'), because `buildOpts` decides which tile is lit
+// with `sel[key] === k` against the table's own keys — a number there lights no tile at
+// all and the picker looks broken while working perfectly. Read as a number here, once.
+function matchKeepN(){
+  const v = sel.keepMatches;
+  if (v == null) return MATCHKEEP.def;
+  const n = String(v) | 0;
+  return MATCHKEEP.opts.indexOf(n) >= 0 ? n : MATCHKEEP.def;
+}
+// ⚠️ Declared UP HERE with `AUTORECOPT` rather than down with the replay library it
+// trims, because `normalizeAutoRec()` runs from `loadSel()` during the bootstrap and a
+// `const` two-thirds of the way down the file is in the temporal dead zone from there.
+// Seventeenth TDZ bite in this file.
+const MATCHKEEP_OPT = MATCHKEEP.opts.reduce((m, n) => {
+  m[String(n)] = { name: n === 0 ? 'Off' : n + ' matches', icon: n === 0 ? 'barrier' : 'clipboard',
+                   emoji: n === 0 ? '🚫' : '🎞' };
+  return m;
+}, {});
 const ARCADEOPT = {
   free: { name:'Free play', emoji:'🆓', icon:'unlock' },
   coin: { name:'Coin-op',   emoji:'🪙', icon:'gift' },
@@ -3650,6 +4064,7 @@ const ICONS = {
   pencil:    'M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3Z M14.6 6.4l3 3',
   save:      'M4.6 4.6h11.6l3.2 3.2v11.6H4.6Z M8.2 4.6h6.2v4.4H8.2Z M7.4 12.6h9.2v6.8H7.4Z',
   trophy:    'M7 4h10v4.6a5 5 0 0 1-10 0Z M7 5.6H4.2v1.3a3 3 0 0 0 2.9 3 M17 5.6h2.8v1.3a3 3 0 0 1-2.9 3 M12 13.6V17 M9 20h6 M10.4 17h3.2v3h-3.2Z',
+  globe:     'M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2Z M3.6 9.4h16.8 M3.6 14.6h16.8 M12 3.4c-2.4 2.2-3.6 5.1-3.6 8.6s1.2 6.4 3.6 8.6 M12 3.4c2.4 2.2 3.6 5.1 3.6 8.6s-1.2 6.4-3.6 8.6',
   bracket:   'M3 4h4 M3 10h4 M7 4v6 M7 7h4 M3 14h4 M3 20h4 M7 14v6 M7 17h4 M11 7v10 M11 12h9',
   skull:     'M12 3.2a7 7 0 0 0-7 7v3.2l1.7 1.3V18h10.6v-3.3L19 13.4v-3.2a7 7 0 0 0-7-7Z M10.6 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M16.4 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M12 14.2l-1 2h2Z M9.4 18v2.6 M12 18v2.6 M14.6 18v2.6',
   target:    'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 7.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z M12 11.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6Z',
@@ -3854,7 +4269,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.1205PM';
+const VERSION = '20260817.0340PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3870,6 +4285,18 @@ const VERSION = '20260817.1205PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0340PM', title: 'Match history, and six languages',
+    added: [
+      '<b>A match history.</b> Every match you finish is now listed on the Career screen — the score, who played, what it was worth, how long ago — newest first, with a form guide across the top. It is the one place that says what happened rather than a running total.',
+      '<b>The last five matches are kept as replays</b>, kickoff to whistle, without you pressing anything — so a match somebody asks about afterwards is still there to watch. Set it to 3, 10 or off in Replays.',
+      '<b>Your controller buzzes.</b> On your own kick (harder the harder you hit it), the ball off the boards, the freeze-frame, and a goal — with the side that scored feeling it more. There is a strength dial in Game Feel, and it is separate from screen shake.',
+      '<b>Six languages</b> — Espa\u00f1ol, Fran\u00e7ais, Deutsch, Portugu\u00eas, Italiano and English — covering every control, button and heading, and the words the pitch shouts. It follows your device by default. The longer help paragraphs stay in English for now.',
+      '<b>Replay one tournament tie</b> without unlocking the whole draw: the \u21ba on a finished match puts it back, along with the ties it fed into. Everything else stays.',
+    ],
+    changed: [
+      '<b>Record every goal</b> and <b>keep whole matches</b> are two settings now instead of one. They are different sizes and different questions, and a whole match is about twenty times a single goal, so the counts are kept apart — a busy session of goals can no longer push out the matches you were keeping.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.1205PM', title: 'Tournament',
     added: [
       '<b>A knockout tournament of countries.</b> Pick 4, 8 or 16 teams, drag the draw into the order you want or randomise it, and lock it in — then play down a bracket you can see all of at once. USA and Mexico are always in the pool, alongside the sides that went furthest last time out.',
@@ -4411,8 +4838,8 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, sprint:'off', settingsPanel:'inline', names:'', juice:true, hitStop:5, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off',
+            trapOff:false, oneHand:false, sprint:'off', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
             // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
@@ -5402,6 +5829,9 @@ function playSfx(cat){ const arr=SFX[cat]; if(!arr||!sel.snd)return; if(world &&
   // A goal dips the MUSIC bus so the crowd lands, then restores. Hooked here rather
   // than at the four goal call sites, so a fifth one can't forget.
   if (cat === 'crowd' && typeof vjDuckGoal === 'function') vjDuckGoal();
+  // ...and the pads buzz here for the same reason: five goal paths reach this line and a
+  // sixth one would too, so it cannot be forgotten. See RUMBLE.
+  if (cat === 'crowd' && typeof rumbleGoal === 'function') rumbleGoal();
   const i=Math.min(sel.snd[cat]||0, arr.length-1); try{ arr[i](); }catch(e){} }
 // Crowd reactions (SFX, not music): a rising "oooh" on a shot toward goal, a
 // falling "aww" on a near miss / post.
@@ -6346,6 +6776,21 @@ function loadSel(){
   // the one case where the sheet is meant to win.
   cloudApply(rec, true);
   normalizeLook();
+  normalizeAutoRec();
+}
+// ⚠️ A stored `autoRec: 'all'` meant "save every goal AND keep the whole match", and that
+// second half is `keepMatches` now (see MATCHKEEP). Folded once, at load, so nothing
+// downstream has to know two shapes — the same discipline `normalizeLook` follows for the
+// renamed theme keys. Only fills `keepMatches` in if the player has not answered it
+// themselves, or the fold would overwrite a deliberate choice on every launch.
+function normalizeAutoRec(){
+  if (sel.autoRec === 'all'){
+    sel.autoRec = 'goals';
+    if (sel.keepMatches == null) sel.keepMatches = String(MATCHKEEP.def);
+  }
+  // ...and a value no picker offers (a hand-edited save, a typo in a shared sheet) falls
+  // back rather than silently meaning "on" through `autoRecOn`'s `!== 'off'` test.
+  if (!AUTORECOPT[sel.autoRec]) sel.autoRec = 'off';
 }
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
 
@@ -6526,6 +6971,74 @@ let stats = loadStats();
 // that is a single flat object of numbers for the device's owner.
 // ⚠️ Their own Elo, run through the SAME `mmrStep` the main record uses, so the two can
 // never drift apart. A name that has never played starts where `defaultStats` does.
+// ============================================================
+//  MATCH HISTORY — one row per match played on this device
+// ============================================================
+// ⚠️ A THIRD KIND OF RECORD, and the three answer three different questions. `stats` is
+// one flat object of lifetime numbers ("how many have I won"). `NAMEBOOK` is one
+// aggregate per name ("who plays on this machine, and how do they do"). Neither can say
+// **what happened**: there was no list of matches at all, so "who did I play last night",
+// "am I in form", and "let me watch that one back" had no answer anywhere in the game.
+// This is that list, and it is the only one of the three that is a LOG rather than a
+// running total.
+//
+// ⚠️ Written from `recordResult`, which is the one place that already knows who won, by
+// how much, what it was worth and who was on the pitch — the same argument that keeps
+// every floater on the line that counts its stat. A match nobody recorded a result for
+// (the attract demo, a drill, a spectated match) is not a match anybody played.
+//
+// ⚠️ `localStorage`, not IndexedDB, which is the opposite call to `REPLIB`'s and for the
+// same reason: a row is a handful of numbers and a hundred of them is ~20KB, so the cost
+// of a database — asynchrony on a screen that wants to draw immediately — buys nothing.
+// The REPLAYS stay in IndexedDB; a row only holds the id of one.
+//
+// ⚠️ It records THE MATCH, including everybody who was in it, which looks like it
+// contradicts "guests have no record" and does not: that rule is about `stats`, the
+// device owner's own lifetime tally, which a guest must never write into. A log of what
+// this machine played is exactly where the other names belong — `NAMEBOOK` already
+// holds them.
+const MATCHLOG = { key: 'magnetball.matchlog', max: 100, show: 25 };
+function loadMatchLog(){
+  try { const a = JSON.parse(localStorage.getItem(MATCHLOG.key) || '[]');
+        return Array.isArray(a) ? a : []; } catch(e){ return []; }
+}
+let matchLog = loadMatchLog();
+function saveMatchLog(){
+  try { localStorage.setItem(MATCHLOG.key, JSON.stringify(matchLog)); } catch(e){}
+}
+// ⚠️ NEWEST FIRST in storage, so the screen never has to reverse a hundred rows and the
+// cap drops the oldest with one `length =`. The other tables here sort on read because
+// they are keyed collections; this one is a list and has an order of its own.
+function noteMatch(w, delta, res){
+  if (!w || w.demo || w.drillMode || w.watch) return null;
+  const per = Math.max(w.players.filter(p => p.team === 0).length,
+                       w.players.filter(p => p.team === 1).length) || 0;
+  const rec = {
+    at: Date.now(),
+    mode: w.modeKey || sel.mode || '', field: w.fieldKey || sel.field || '',
+    len: w.lenKey || sel.length || '', diff: w.diffKey || sel.diff || '', per,
+    sc: [w.score[0] | 0, w.score[1] | 0],
+    you: youTeam(w), res, rp: delta | 0,
+    // Every human who played, in seat order — off `matchRoster`, so somebody
+    // substituted out is still in the row for the match they were in.
+    who: matchRoster(w).filter(q => q && q.ctrl !== 'bot').map(q => String(q.name || '').slice(0, 12)),
+    // Which mechanism decided it, when it was not the scoreline.
+    by: w.forceWinBy || null,
+    // The kept match replay, if one was written — see `matchKeepN`. An id whose replay has
+    // since been trimmed away is why the screen checks the library rather than trusting it.
+    rep: w._repId || '',
+    // What it was: a cup tie, a season round, a Gauntlet round, or an ordinary match.
+    kind: w.cup ? 'cup' : w.season ? 'season' : w.rogue ? 'gauntlet' : 'match',
+  };
+  matchLog.unshift(rec);
+  if (matchLog.length > MATCHLOG.max) matchLog.length = MATCHLOG.max;
+  saveMatchLog();
+  return rec;
+}
+// The last N results as W/L/D, oldest last — what a form guide is.
+function matchLogForm(n){
+  return matchLog.slice(0, n || 5).map(r => r.res);
+}
 const NAMEBOOK = { max: 60, key: 'magnetball.names' };
 function nameKey(n){ return String(n || '').trim().toLowerCase().slice(0, 12); }
 function freshNameRec(name){
@@ -6620,6 +7133,12 @@ function recordResult(w){
                                   : (f > a ? 1 : (f < a ? 0 : 0.5));
     noteNameResult(q.name, sc, f, a, q.ms, oppR, now);
   }
+  // ⚠️ ONE ROW PER MATCH, written here for the reason every other tally is: this is the
+  // single place that already knows who won, by how much, what it was worth and who was
+  // on the pitch. Recorded AFTER `noteNameResult` so the two records are always written
+  // together — a log row with no matching name-book entry would be a match that happened
+  // to nobody. See MATCHLOG.
+  noteMatch(w, delta, won ? 'w' : lost ? 'l' : 'd');
   saveStats(stats);
   renderStats();
   // RP is already saved locally above. If a sheet write path is configured, push
@@ -8644,6 +9163,16 @@ if (hsEl){
   hsEl.value = hitStopFrames(); showHS();
   hsEl.oninput = () => { sel.hitStop = +hsEl.value; saveSel(); showHS(); };
 }
+// ⚠️ The dial gives you a SAMPLE as you drag it, because a rumble strength is the one
+// setting on this card you cannot see: with no pad buzzing there is nothing at all to
+// judge 40 against 80 by, and a slider you cannot evaluate is a slider you leave alone.
+const rmEl = $('rumble'), rmValEl = $('rumbleVal');
+if (rmEl){
+  const showRM = () => { if (rmValEl) rmValEl.textContent = rumbleOn() ? Math.round(rumbleAmt()*100)+'%' : 'off'; };
+  rmEl.value = Math.round(rumbleAmt()*100); showRM();
+  rmEl.oninput = () => { sel.rumble = +rmEl.value; saveSel(); showRM();
+    for (const i of connectedGamepadIndices()) padRumble(i, 'kick', 1); };
+}
 
 // One row per name, best first. Drawn as NODES rather than innerHTML: a name is typed by
 // a person — on the lobby keyboard or in the Player names box — and `mapClean` records
@@ -8665,10 +9194,13 @@ function buildNameBook(){
   rows.forEach((r, i) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--edge)';
+    // ⚠️ RETURNS the element, so the name can be marked out of the language walk. It did
+    // not, and `noI18n(undefined)` is a silent no-op — a name of "Season" then rendered as
+    // "Temporada" on a Spanish device. See `noI18n`.
     const put = (txt, css) => { const el = document.createElement('span'); el.textContent = txt;
-                                el.style.cssText = css; row.appendChild(el); };
+                                el.style.cssText = css; row.appendChild(el); return el; };
     put(String(i + 1), 'color:var(--muted);min-width:18px');
-    put(r.name, 'color:var(--text);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis');
+    noI18n(put(r.name, 'color:var(--text);flex:1 1 auto;overflow:hidden;text-overflow:ellipsis'));
     put(r.wins + 'W ' + r.losses + 'L' + (r.draws ? ' ' + r.draws + 'D' : ''), 'color:var(--muted)');
     put(String(r.mmr), 'color:var(--accent);min-width:42px;text-align:right');
     tbl.appendChild(row);
@@ -8727,7 +9259,117 @@ function buildStats(){
   g.innerHTML = tiles.map(t=>`<div class="stat${t.hl?' hl':''}"><div class="sv">${t.v}</div><div class="sk">${t.k}</div></div>`).join('');
   buildMapVotes();
 }
-function openStats(){ dockOrFull('stats', buildStats); }
+function openStats(){ dockOrFull('stats', () => { buildStats(); buildMatchLog(); }); }
+// One row per match, newest first. ⚠️ Built as NODES, never `innerHTML`: a row carries the
+// NAMES of everybody who played and those are typed by a person — on the lobby keyboard or
+// in the Player names box — which is the trap `mapClean` and `buildNameBook` both record.
+// ⚠️ Called from `openStats`, not from `buildSettings`: that runs on every option tap, and
+// this asks IndexedDB which replays still exist.
+function buildMatchLog(){
+  const host = $('matchLogList'); if (!host) return;
+  host.textContent = '';
+  const sub = $('matchLogSub'), clr = $('matchLogClear');
+  const rows = matchLog.slice(0, MATCHLOG.show);
+  if (clr) clr.style.display = matchLog.length ? '' : 'none';
+  if (!rows.length){
+    if (sub) sub.textContent = '';
+    const h = document.createElement('div');
+    h.className = 'hint always'; h.style.textAlign = 'left';
+    h.textContent = 'Nothing yet. Every match you finish is listed here — the score, who played, '
+      + 'what it was worth — newest first, and the last few are kept as replays you can watch back.';
+    host.appendChild(h); return;
+  }
+  // The form guide is the headline: five letters say more about how it is going than any
+  // lifetime average can.
+  const form = matchLogForm(5);
+  if (sub) sub.textContent = matchLog.length + ' played  ·  ' + form.join('').toUpperCase();
+  const tbl = document.createElement('div');
+  tbl.style.cssText = 'font-family:var(--pix);font-size:11px;margin-top:8px';
+  const kept = new Set();
+  const draw = () => {
+    tbl.textContent = '';
+    for (const r of rows){
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px 0;'
+        + 'border-top:1px solid var(--edge);flex-wrap:wrap';
+      const put = (txt, css) => { const el = document.createElement('span'); el.textContent = txt;
+                                  el.style.cssText = css; row.appendChild(el); return el; };
+      // ⚠️ W/L/D takes its colour from the palette's good/bad, never a hard-coded green and
+      // red: seven palettes here are monochrome or two-tone and a baked colour is the one
+      // thing on the row that would not belong to the theme.
+      const col = r.res === 'w' ? 'var(--good)' : r.res === 'l' ? 'var(--bad)' : 'var(--muted)';
+      put(r.res.toUpperCase(), 'color:' + col + ';min-width:14px;font-weight:700');
+      // ⚠️ THE SCORE STAYS IN TEAM ORDER, the same rule the result screen follows: the
+      // scorebug is colour-coded red-then-blue and read that way all match, so putting your
+      // goals first would print a number the player never saw. The W/L carries perspective.
+      put(r.sc[0] + ' \u2013 ' + r.sc[1], 'color:var(--text);min-width:44px');
+      const bits = [];
+      const md = MODES[r.mode], fd = FIELDS[r.field];
+      // ⚠️ The mode name and the size are the SAME FACT for most modes ("2 v 2" beside
+      // "2v2"), so only the one that says something goes in — and the one that says
+      // something is the size actually FIELDED, because the warm-up lobby can put six a
+      // side on a 4v4. A mode whose name is not a size (Duo, Killer Lobsters) is real
+      // information and keeps its place.
+      if (md && !/^\d+\s*v\s*\d+$/i.test(md.name)) bits.push(md.name);
+      if (r.per) bits.push(r.per + 'v' + r.per);
+      if (fd) bits.push(fd.name);
+      if (r.kind && r.kind !== 'match') bits.push(r.kind === 'cup' ? 'Tournament'
+        : r.kind === 'season' ? 'Season' : 'Gauntlet');
+      if (r.by) bits.push(r.by === 'snail' ? 'snail home' : r.by === 'hive' ? 'hive full' : r.by);
+      put(bits.join(' \u00b7 '), 'color:var(--muted);flex:1 1 120px;overflow:hidden;text-overflow:ellipsis');
+      // Who was in it — only worth a line when it was not just you.
+      const who = (r.who || []).filter(Boolean);
+      // Typed by people — see `noI18n`.
+      if (who.length > 1) noI18n(put(who.join(', '), 'color:var(--muted);flex:0 1 auto;opacity:.8'));
+      if (r.rp) put((r.rp > 0 ? '+' : '') + r.rp + ' RP',
+                    'color:' + (r.rp > 0 ? 'var(--accent)' : 'var(--muted)') + ';min-width:52px;text-align:right');
+      put(matchLogWhen(r.at), 'color:var(--muted);min-width:56px;text-align:right');
+      // ⚠️ Offered only when the replay is STILL THERE. The row keeps an id for ever and the
+      // library keeps the last few matches, so most rows have a dead one — a Watch button
+      // that fails is worse than no button. See `matchKeepN`.
+      if (r.rep && kept.has(r.rep)){
+        const b2 = document.createElement('button');
+        b2.className = 'ghost'; b2.type = 'button';
+        b2.style.cssText = 'padding:4px 10px;font-size:11px;min-height:32px;flex:0 0 auto';
+        b2.textContent = '\u25b6 Watch';
+        b2.onclick = () => watchReplayFromMenu(() => repLibGet(r.rep));
+        row.appendChild(b2);
+      }
+      tbl.appendChild(row);
+    }
+  };
+  draw();
+  host.appendChild(tbl);
+  if (matchLog.length > rows.length){
+    const more = document.createElement('div');
+    more.className = 'hint always'; more.style.textAlign = 'left';
+    more.textContent = 'Showing the last ' + rows.length + ' of ' + matchLog.length
+      + '. The oldest goes when it reaches ' + MATCHLOG.max + '.';
+    host.appendChild(more);
+  }
+  // The replay check is async, so the rows are drawn immediately and the Watch buttons
+  // arrive a beat later — a career screen must not wait on a database to appear.
+  repLibAll().then(list => {
+    for (const m of list) if (m.kind === 'match') kept.add(m.id);
+    // ⚠️ Redrawn rows are fresh English nodes, so they have to be walked again — the
+    // screen-level pass in `dockOrFull` already ran, a beat before this promise settled.
+    if (kept.size){ draw(); translateDom(host); }
+  }).catch(() => {});
+}
+// "12m", "3h", "yesterday", "Tue", "14 Mar" — a match list is read for RECENCY, and a
+// full timestamp on every row is a column of near-identical digits.
+function matchLogWhen(t){
+  const d = Date.now() - (t || 0);
+  const mins = Math.floor(d / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h';
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return new Date(t).toLocaleDateString(undefined, { weekday: 'short' });
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
 
 // Ball magnet lives in Game Feel with the other physics sliders (FEEL_SLIDERS) —
 // it used to have a second copy of itself in the Match card.
@@ -9448,7 +10090,7 @@ async function startPhotoCam(){
   if (f) f.onchange = () => { photoFromFile(f.files && f.files[0]); f.value = ''; }; }
 buildPhotoPane();
 
-buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles();
+buildSubTabs(); buildJumpBar(); buildMenuSearch(); buildHintToggles(); translateDom();
 applyShowMode();   // a locked menu has to come back locked after a reload
 
 // ⚠️ Through tryKickOff, not straight to startMatch: on a cabinet a play costs a credit, and
@@ -9576,6 +10218,15 @@ $('cupUnlock').onclick = () => { cupLock(false); buildCupScreen(); };
 $('cupShuffle').onclick = () => { cupShuffle(); buildCupScreen(); };
 $('lbBtn').onclick = openLeaderboard;
 $('statsBtn').onclick = openStats;
+// ⚠️ Arms then confirms, like every other delete here: it cannot be undone and the button
+// sits under a list somebody is scrolling.
+{ const mc = $('matchLogClear'); let armed = 0;
+  if (mc) mc.onclick = () => {
+    if (!armed){ armed = setTimeout(() => { armed = 0; mc.textContent = 'Clear match history'; }, 3000);
+                 mc.textContent = 'Delete all ' + matchLog.length + ' rows?'; return; }
+    clearTimeout(armed); armed = 0;
+    matchLog = []; saveMatchLog(); buildMatchLog();
+  }; }
 $('shopBtn').onclick = openShop;
 $('socialBtn').onclick = openSocial;
 $('rogueBtn').onclick = openRogue;
@@ -9704,6 +10355,11 @@ function startDemo(){ if (PANEL) return; _forceWatch = true; _startQuiet = true;
 // auto = the shell re-docking itself (resize, match start), NOT the player asking
 // for a page. Get this wrong on deck and the gear opens a panel that's still slid
 // off-screen, so it looks dead.
+// ⚠️ **EVERY SCREEN IS WALKED HERE**, because this is the one function that shows one.
+// The language pass at the end of `buildSettings` only ever reached the main menu, so the
+// career screen, the drills list, the tournament and the leaderboard stayed in English —
+// which was invisible from the menu, where everything looked translated. Done AFTER the
+// caller's `build`, since that is what writes fresh English into the screen.
 function dockOrFull(id, build, auto){
   hideOverlay();
   hideScreens();
@@ -9729,6 +10385,7 @@ function dockOrFull(id, build, auto){
     uiPadLeft = 0; deskDockId = null; settingsDocked = false;
   }
   if (build) build();
+  translateDom(el);
   resize();
   if (typeof _syncHash === 'function') _syncHash(ROUTE_OF[id] || 'home');
 }
@@ -10393,7 +11050,9 @@ function buildMapList(){
     // ends up in the option tiles too, and `buildOpts` writes those with innerHTML.
     // mapClean strips the angle brackets; this is the second half of the same rule.
     const em = document.createElement('span'); em.className = 'emoji'; em.textContent = '✏️';
-    const nm = document.createElement('span'); nm.textContent = m.name;
+    // ...and it is not ours to TRANSLATE either — a field called "Pitch" is that person's
+    // field, not the word `Pitch`. See `noI18n`.
+    const nm = noI18n(document.createElement('span')); nm.textContent = m.name;
     const sz = document.createElement('small'); sz.textContent = m.W + '\u00d7' + m.L;
     el.append(em, nm, sz);
     el.onclick = () => { mapEditKey = k; mapEdit = mapClean(Object.assign({}, m)); buildMapMaker(); };
@@ -10640,6 +11299,9 @@ function buildSettings(){
   { const hs=$('hitStop'), hv=$('hitStopVal');
     if (hs){ hs.value = hitStopFrames();
       if (hv) hv.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; } }
+  { const rm=$('rumble'), rv=$('rumbleVal');
+    if (rm){ rm.value = Math.round(rumbleAmt()*100);
+      if (rv) rv.textContent = rumbleOn() ? Math.round(rumbleAmt()*100)+'%' : 'off'; } }
   syncGoalCamSliders();          // same reason: a preset, a reset or a cross-tab sync
   syncRepSecs();                 // ...and the replay lead-in
   const dbp=$('debugPick');
@@ -10723,7 +11385,16 @@ function buildSettings(){
   buildAbout();
   buildNews();
   { const sh = $('repSkipHint'); if (sh) sh.textContent = replayStopHint(); }
+  // Tiles labelled in the language they SELECT — see LANGS for why.
+  if ($('langPick')) buildOpts('langPick', LANGS, 'lang');
   if ($('autoRecPick')) buildOpts('autoRecPick', AUTORECOPT, 'autoRec');
+  // ⚠️ Changing the count TRIMS IMMEDIATELY. Dropping 10 to 3 and leaving seven big files
+  // on disk until the next match is the setting not doing what it says, and on a phone
+  // those seven are the reason somebody turned it down.
+  if ($('keepMatchesPick')){
+    buildOpts('keepMatchesPick', MATCHKEEP_OPT, 'keepMatches');
+    repLibTrim().then(() => { if (!PANEL) buildReplayList(); }).catch(() => {});
+  }
   // ⚠️ Wire the help toggles HERE, not only at boot. Six of the help paragraphs are
   // created by this function, so a one-shot pass at startup left them unclassified
   // and permanently expanded — the exact clutter the component exists to remove.
@@ -10737,6 +11408,11 @@ function buildSettings(){
   // button has anywhere to go, and both of those rebuild the settings.
   syncWarmupOffer();
   if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
+  // ⚠️ THE LANGUAGE PASS GOES LAST, after everything above has finished writing fresh
+  // ENGLISH into the DOM. It ran before `buildSubTabs()` for one build and the chip rows
+  // were the one part of the menu that stayed in English — a walk can only translate what
+  // is already there, so it has to be the final thing this function does.
+  translateDom();
 }
 // One-tap feel presets. "Casual" = the friendly default (magnet-assisted, snappy).
 // "Pro" = purist — no magnet, no trap (instant one-shot kick), floatier
@@ -11027,6 +11703,35 @@ function cupLock(on){
   saveCup();
 }
 function cupReset(){ cup.won = []; saveCup(); }
+// ⚠️ UNDO ONE TIE, and it clears that tie's DESCENDANTS ONLY — not "everything in a later
+// round". Unlock already exists for "start the draw again"; what this is for is the tie
+// somebody played by mistake, or on the wrong settings, or that ended 9-0 because a
+// controller was unplugged. Wiping the rest of the round with it would throw away results
+// other people earned, which is the opposite of an undo.
+// A match at (round r, seat s) feeds (r+1, floor(s/2)), so the chain up the tree is
+// arithmetic and there is nothing to store.
+function cupUndo(i){
+  const ms = cupMatches();
+  const m = ms.find(x => x.i === i);
+  if (!m || !m.done) return false;
+  const wasChampion = !!cupChampion();
+  // Walk up: this match, then the one it feeds, then the one that feeds, to the final.
+  let r = m.round, s = m.seat;
+  const kill = [];
+  while (r < cupRounds()){
+    const q = ms.find(x => x.round === r && x.seat === s);
+    if (q) kill.push(q.i);
+    r++; s = Math.floor(s / 2);
+  }
+  for (const k of kill) cup.won[k] = undefined;
+  // ⚠️ Un-winning the tournament gives the trophy back. `cups` is incremented in `cupEnd`
+  // the moment a champion exists, so undoing the final without this leaves a count that
+  // says you lifted it and a bracket that says nobody has — and replaying the final would
+  // then count the same tournament twice.
+  if (wasChampion && !cupChampion()) cup.cups = Math.max(0, (cup.cups || 0) - 1);
+  saveCup();
+  return true;
+}
 
 function openCup(){ dockOrFull('cup', buildCupScreen); }
 // One flag, drawn into a canvas at whatever size the caller wants. ⚠️ Through `FLAGS`'s
@@ -11089,7 +11794,7 @@ function buildCupTeams(){
     const row = document.createElement('div');
     row.className = 'cuprow'; row.draggable = true; row.dataset.i = i;
     const seed = document.createElement('span'); seed.className = 'cupseed'; seed.textContent = (i+1) + '.';
-    const nm = document.createElement('b'); nm.style.fontWeight = '400'; nm.textContent = cupName(k);
+    const nm = noI18n(document.createElement('b')); nm.style.fontWeight = '400'; nm.textContent = cupName(k);
     const grip = document.createElement('span'); grip.className = 'cuphandle'; grip.textContent = '\u2261';
     row.append(seed, cupFlagCanvas(k, 24), nm, grip);
     row.ondragstart = e => { from = i; row.classList.add('drag'); try { e.dataTransfer.setData('text/plain', String(i)); } catch(_){} };
@@ -11140,6 +11845,25 @@ function buildCupBracket(){
         box.appendChild(row);
       });
       if (m.ready && !m.done) box.onclick = () => startCupMatch(m.i);
+      // ⚠️ REPLAY ONE TIE, arm-then-confirm. The boxes are small and packed together and
+      // it clears the ties above this one, so a single tap cannot be enough — the same
+      // reason the replay and photo deletes arm first. It is a real `<button>` inside the
+      // box, so `stopPropagation` is what keeps a tap on it from also starting the match.
+      if (m.done){
+        const un = document.createElement('button');
+        un.className = 'cupundo'; un.type = 'button'; un.textContent = '↺';
+        un.title = 'Replay this tie';
+        let armed = 0;
+        un.onclick = e => {
+          e.stopPropagation();
+          if (!armed){ armed = setTimeout(() => { armed = 0; un.textContent = '↺';
+                         un.classList.remove('arm'); }, 3000);
+                       un.textContent = 'Sure?'; un.classList.add('arm'); return; }
+          clearTimeout(armed); armed = 0;
+          if (cupUndo(m.i)) buildCupScreen();
+        };
+        box.appendChild(un);
+      }
       wrap.appendChild(box);
     }
     col.appendChild(wrap);
@@ -12219,6 +12943,10 @@ function startMatch(opts){
   world = {
     // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
     field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : (DIFF[sel.diff] || DIFF.normal),
+    // ⚠️ The KEYS as well as the objects, because the match history stores what was played
+    // rather than a copy of the tuning — a key survives a rename of a mode's blurb and can
+    // be looked back up in `MODES`/`LENGTHS`, which is what a record has to be able to do.
+    modeKey: sel.mode, lenKey: sel.length, diffKey: _startQuiet ? DEMO.diff : sel.diff,
     magnet: sel.magnet,
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
@@ -12519,6 +13247,12 @@ let shake = 0, shakeX = 0, shakeY = 0, flash = 0, flashCol = '#ffffff', hitStop 
 const SHAKE_SCALE = 0.5;
 function addShake(a){ if (!motionOK()) return; shake = Math.min(shake + a*SHAKE_SCALE, 8); }
 function goalBurst(w, team){
+  // ⚠️ Recorded on the world rather than passed along, because the rumble is hooked into
+  // `playSfx('crowd')` (so it cannot miss one of the five goal paths) and by then the
+  // team is out of scope. `rumbleGoal` falls back to buzzing everyone equally if it is
+  // ever absent, so a path that reaches the crowd sound without coming through here
+  // still feels like a goal rather than like nothing.
+  w.lastGoalTeam = team;
   hitStop = Math.max(hitStop, hitStopFrames());   // its own dial — see hitStopFrames
   goalCamStart(w, w.goalCamP);                    // push in on whoever put it there
   if (!motionOK()) return;
@@ -12527,6 +13261,73 @@ function goalBurst(w, team){
 }
 // Hit stop is the player's own dial, not part of the Screen shake toggle. 0 = off.
 function hitStopFrames(){ const v = sel.hitStop; return v == null ? 5 : Math.max(0, Math.min(12, v|0)); }
+// ============================================================
+//  CONTROLLER RUMBLE
+// ============================================================
+// The pad buzzes on the four things worth feeling: your own kick, the ball off the
+// boards, hit stop, and a goal.
+//
+// ⚠️ **ITS OWN DIAL, and deliberately NOT under Screen shake & effects** — the same
+// argument hit stop already won. That toggle and `prefers-reduced-motion` are about
+// motion *on the screen*: a wobbling picture is a vestibular problem, and a buzz in
+// your hands is not on the screen at all. So `motionOK()` is not consulted, and
+// somebody who turned the shake off keeps the feel of their own shot. A player who
+// wants it gone turns THIS off, which is why it is a dial and not a hard-coded effect.
+//
+// ⚠️ **EVERY HOOK IS A SITE THAT ALREADY PLAYS A SOUND, and that is what makes it
+// safe.** `predictsGoal` re-runs the real `moveBall`/`collide*` on scratch copies and
+// has to stay provably inert — so a rumble inside `collideWall` would buzz the pad 25
+// times per shot, once per prediction step. The four hooks are `noteKick` (the one
+// place a kick is counted), `ballSounds` (which is why `_hitWall` is a FLAG consumed
+// outside the collision), `maybeHitStop`, and `playSfx('crowd')` — the same trick the
+// goal audio duck uses so a fifth goal path cannot forget.
+//
+// ⚠️ **Fire-and-forget, and never awaited.** `playEffect` returns a promise; a rejected
+// one on a pad that has gone away is an unhandled rejection in the console on every
+// kick, so it is caught and dropped.
+const RUMBLE = {
+  kick:  { ms: 90,  strong: 0.30, weak: 0.55 },   // scaled by how hard you hit it
+  wall:  { ms: 70,  strong: 0.18, weak: 0.34 },
+  stop:  { ms: 140, strong: 0.85, weak: 0.45 },   // the freeze frame: a thump
+  goal:  { ms: 420, strong: 0.70, weak: 0.85 },
+  scored:{ ms: 420, strong: 1.00, weak: 0.90 },   // the side that put it in feels more
+  min:   0.05,                                    // below this there is nothing to feel
+};
+function rumbleAmt(){ const v = sel.rumble; return (v == null ? 70 : Math.max(0, Math.min(100, v|0))) / 100; }
+function rumbleOn(){ return rumbleAmt() > 0; }
+// One pad, one effect. ⚠️ `padIndex` is -1 for a touch or keyboard seat and an ARCADE
+// panel is a virtual pad with no hardware behind it, so both simply do nothing.
+function padRumble(index, kind, scale){
+  if (!rumbleOn() || index == null || index < 0) return;
+  if (typeof arcadeMode === 'function' && arcadeMode()) return;
+  const k = RUMBLE[kind]; if (!k) return;
+  const a = rumbleAmt() * (scale == null ? 1 : Math.max(0, Math.min(1, scale)));
+  if (a < RUMBLE.min) return;
+  try {
+    const g = ((navigator.getGamepads && navigator.getGamepads()) || [])[index];
+    const act = g && (g.vibrationActuator || (g.hapticActuators && g.hapticActuators[0]));
+    if (!act || !act.playEffect) return;          // Safari, Firefox, and older pads
+    const p = act.playEffect('dual-rumble', { duration: k.ms, startDelay: 0,
+                strongMagnitude: k.strong * a, weakMagnitude: k.weak * a });
+    if (p && p.catch) p.catch(() => {});
+  } catch(e){}
+}
+// Everyone holding a pad. Used for a goal, which the whole room feels.
+function rumbleAll(w, kind, scale){
+  if (!rumbleOn() || !w) return;
+  for (const p of (w.players || [])) if (p && p.ctrl === 'gamepad') padRumble(p.padIndex, kind, scale);
+}
+// A goal: the scoring side harder than the side that conceded. ⚠️ Reached from
+// `playSfx('crowd')`, so it cannot miss a goal path — but that also means it fires with
+// no team to compare against (a menu preview of the crowd sound), hence the guard.
+function rumbleGoal(){
+  const w = world; if (!w || w.demo || !rumbleOn()) return;
+  const scorer = w.lastGoalTeam;
+  for (const p of (w.players || [])){
+    if (!p || p.ctrl !== 'gamepad') continue;
+    padRumble(p.padIndex, scorer != null && p.team === scorer ? 'scored' : 'goal', 1);
+  }
+}
 // Both used to decay inside render(), which made a goal flash and a shake last a
 // third as long on a 144Hz screen as on a 60Hz one. Same rates, now per step.
 function decayJuice(){
@@ -13268,7 +14069,7 @@ const SAVEFILE = {
   // ⚠️ `cup` travels for the reason `season` and `rogue` do: a tournament half-played is
   // a run in progress, and a save file that moves the settings but not the thing you were
   // in the middle of is a save of the game's look rather than of your game.
-  keys: ['sel', 'profile', 'stats', 'names', 'drills', 'season', 'rogue', 'cup', 'maps', 'mapvotes',
+  keys: ['sel', 'profile', 'stats', 'names', 'matchlog', 'drills', 'season', 'rogue', 'cup', 'maps', 'mapvotes',
          'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
   skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html', 'cloud'],
 };
@@ -13364,6 +14165,10 @@ function pickSaveDoc(){
 // metadata store holds a few numbers per replay; the payload store holds the frames as a
 // JSON STRING (cloning one string is far cheaper than a graph of 360 arrays) and is only
 // ever read when you actually press Watch.
+// ⚠️ `max` is the cap on GOAL clips; whole matches have their own, far smaller one — see
+// `matchKeepN`. One shared cap was wrong in both directions: a match file is ~20× a goal
+// clip (measured at 807KB against 41KB), so five matches ate an eighth of the row budget,
+// and a busy session of goals then evicted the match replays somebody was keeping.
 const REPLIB = { db:'magnetball', store:'replays', blobs:'replaydata', v:3, max:40 };
 function repLibOpen(){
   return new Promise((res, rej) => {
@@ -13406,7 +14211,9 @@ function repLibId(){ return Date.now() + '-' + (++_repLibN); }
 function repLibAdd(doc){
   const json = JSON.stringify(doc);
   const rec = {
-    id: repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
+    // ⚠️ The caller may name the id, which is what lets a match history row hold it: the
+    // row is written synchronously and this is a promise, so the id has to exist first.
+    id: doc.id || repLibId(), saved: doc.saved, field: doc.field, mode: doc.mode,
     players: doc.players.length, frames: doc.frames.length, bytes: json.length,
     // The player's own name for it, if it has one. Metadata, for the same reason `kind` is:
     // the list is drawn from this record alone and must never read the frames.
@@ -13452,9 +14259,20 @@ function repLibClear(){
 }
 // ⚠️ A cap, because nothing else would ever remove one. Saving a replay is a one-tap habit
 // and an unbounded store is a slow leak into the device's quota; the OLDEST goes.
+// ⚠️ TRIMMED PER KIND, never over one pooled list. `kind` is already in the metadata
+// (which is why it is there rather than only in the payload), so this costs nothing — and
+// without it the two kinds compete: goals are small and frequent, matches are large and
+// rare, so a pooled cap lets a run of goals quietly delete the match you wanted to keep.
+// A row of some future third kind falls back to the goal cap rather than being immortal.
 function repLibTrim(){
   return repLibAll().then(rows => {
-    const extra = rows.slice(REPLIB.max);
+    const cap = k => k === 'match' ? matchKeepN() : REPLIB.max;
+    const seen = {};
+    const extra = rows.filter(r => {
+      const k = r.kind === 'match' ? 'match' : 'goal';
+      seen[k] = (seen[k] || 0) + 1;
+      return seen[k] > cap(k);
+    });
     return Promise.all(extra.map(r => repLibDel(r.id)));
   });
 }
@@ -13707,7 +14525,7 @@ function fillRepPane(host, rows, sub, kind){
     const lab = repLibLabel(rec);
     const row = document.createElement('div'); row.className = 'reprow'; row.dataset.id = rec.id;
     const txt = document.createElement('div'); txt.className = 'reptxt';
-    const t = document.createElement('b'); t.textContent = lab.title;
+    const t = noI18n(document.createElement('b')); t.textContent = lab.title;
     const sp = document.createElement('span'); sp.textContent = lab.sub;
     txt.append(t, sp);
     const acts = document.createElement('div'); acts.className = 'repacts';
@@ -14266,8 +15084,14 @@ function advanceBallSpin(w){
 function ballSounds(w){
   const b = w.ball;
   const sp = Math.hypot(b.vx,b.vy) || 1;
-  if (b._hitNet){ playSfx('net'); addShake(4); ballSquash(b, b.vx/sp, b.vy/sp, 0.7); b._hitNet=false; b._hitWall=false; }
-  else if (b._hitWall){ playSfx('wall'); addShake(3); ballSquash(b, b.vx/sp, b.vy/sp, 0.55); b._hitWall=false; }
+  // ⚠️ The rumble rides HERE and not in `collideWall`, which is the whole reason
+  // `_hitWall` is a flag consumed outside the collision: `predictsGoal` re-runs the real
+  // collisions on scratch copies, so a buzz down there would fire 25 times a shot.
+  // Scaled by how hard the ball is travelling — every knock buzzing the same is mush.
+  if (b._hitNet){ playSfx('net'); addShake(4); ballSquash(b, b.vx/sp, b.vy/sp, 0.7); b._hitNet=false; b._hitWall=false;
+                  rumbleAll(w, 'wall', Math.min(1, sp/16)); }
+  else if (b._hitWall){ playSfx('wall'); addShake(3); ballSquash(b, b.vx/sp, b.vy/sp, 0.55); b._hitWall=false;
+                        rumbleAll(w, 'wall', Math.min(1, sp/16)); }
 }
 
 // ---------- Human input mapping from a pad
@@ -16048,6 +16872,10 @@ function noteKick(w, p, power, nx, ny){
   ms.touches++;
   if (power > ms.hardest) ms.hardest = power;
   ballSquash(b, nx, ny, Math.min(1, power/9));
+  // ⚠️ Hooked to the one place a kick is COUNTED, which is the same rule the floaters
+  // follow — all three kick paths already come through here, so a fourth cannot miss it.
+  // Scaled by power, or a tap and a full wind-up feel identical.
+  if (p.ctrl === 'gamepad') padRumble(p.padIndex, 'kick', Math.min(1, power/9));
   const attackDir = p.team===0 ? -1 : 1;           // opponent goal sits at y = attackDir*halfL
   const halfL = w.field.L/2;
   // Shot: a real strike heading goalward.
@@ -16477,6 +17305,9 @@ function maybeHitStop(w, p, ball){
   if (w.drillMode || w.demo) return;
   if (!predictsGoal(w, ball, p.team)) return;
   hitStop = Math.max(hitStop, f);
+  // The thump that lands with the freeze. Only the player who struck it — a hit stop is
+  // about the shot you just took.
+  if (p.ctrl === 'gamepad') padRumble(p.padIndex, 'stop', 1);
 }
 
 function checkGoal(w){
@@ -16822,9 +17653,15 @@ function finishMatch(w){
   // ⚠️ 'all' also keeps the WHOLE MATCH, which is the point of the setting for a demo: the
   // goals on their own are a highlight reel, and the match is the thing somebody asks to see
   // afterwards. Gated separately from the goal saves because a match file is ~20x the size.
-  if ((sel.autoRec || 'off') === 'all' && !w.drillMode){
+  // ⚠️ THE LAST FEW WHOLE MATCHES ARE KEPT WITHOUT ANYBODY ASKING (see MATCHKEEP), and
+  // the id is stashed on the world BEFORE the result is recorded — `recordResult` runs
+  // below (or inside `cupEnd`/`rogueEnd`/`seasonEnd`) and puts it in the history row, so
+  // a row can offer "watch it back". Pre-generated rather than patched in afterwards:
+  // `repLibAdd` is async and the row is written synchronously.
+  if (matchKeepN() > 0 && !w.drillMode && !w.demo){
     const doc = repMatchFileBuild();
     if (doc){ doc.name = 'Final ' + w.score[0] + '-' + w.score[1];
+              doc.id = repLibId(); w._repId = doc.id;
               repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {}); }
   }
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
@@ -23413,7 +24250,11 @@ function updateClock(w){
 
 let bannerTimer=0;
 function showBanner(text, color){
-  const b=$('banner'); b.textContent=text; b.style.color=color;
+  // ⚠️ Translated HERE rather than at the dozen call sites, for the same reason the goal
+  // audio duck is hooked into `playSfx`: this is the one funnel every big word on the
+  // pitch goes through, so a thirteenth caller cannot forget. Anything the table does not
+  // know comes back in English untouched.
+  const b=$('banner'); b.textContent=L(text); b.style.color=color;
   // GOAL! prints in the team's colour straight onto the court, and on GameMan that's
   // red on light blue at 1.72:1. A hard outline in the opposite ink keeps 66px
   // letters legible on any surface — including ice and mud, which repaint the
@@ -23459,6 +24300,11 @@ function showOverlay(title, sub, resumable){
   // Restart and Main Menu, which is the worst place to put a mode switch.
   { const sl=$('ovShowLock'); if (sl) sl.style.display = resumable ? '' : 'none'; syncShowLock(); }
   $('ovRematch').style.display = resumable ? 'none' : '';
+  // ⚠️ Translated as it is SHOWN, not as it is written: a dozen callers set the title and
+  // relabel these buttons (Restart / Cup / Retry / Drills / Bracket / Next), and every one
+  // of them ends here. Doing it at the call sites would be a dozen places to keep in step
+  // — the same argument `showBanner` makes one function up.
+  translateDom($('overlay'));
   $('overlay').classList.add('show');
 }
 function showResult(title, sub){
@@ -23966,6 +24812,10 @@ if (window.__MAGNETDEBUG) {
     computeAwards, renderAwards, renderMatchStats, STAT_COLS, STAT_MORE, statLine,
     AWARD_PER_PLAYER, STATS_WIDE, get statsOpen(){ return statsOpen; },
     mvpScore, noteKick, ballSquash, endMatch,
+    RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
+    LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
+    MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,
+    buildMatchLog, saveMatchLog, MATCHKEEP, matchKeepN, normalizeAutoRec,
     BOT, runBot, botInit, botAssignBerry, berryLive, botArrive, botArcPoint, segDist, botMaxSpeed, mulberry32,
     setMatchSeed, botSkill, DIFF, botIntercept, ballAt, botTimeToBall, botLaneClear, botAperture,
     botMirror, botBankHits, botPickAim, botFormationSpot, botAssignRoles, botPhase,
@@ -23989,7 +24839,7 @@ if (window.__MAGNETDEBUG) {
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
     CUP, CUP_TEAMS, get cup(){ return cup; }, cupTeam, cupMatches, cupRounds, cupNext,
-    cupChampion, cupRoundName, cupFill, cupShuffle, cupLock, cupReset, cupMove,
+    cupChampion, cupRoundName, cupFill, cupShuffle, cupLock, cupReset, cupUndo, cupMove,
     openCup, buildCupScreen, buildCupBracket, startCupMatch, cupEnd, cupTickerText,
     cupTickerStart, cupTickerStop, get matchTeamCol(){ return matchTeamCol; },
     set matchTeamCol(v){ matchTeamCol = v; },

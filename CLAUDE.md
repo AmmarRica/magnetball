@@ -1204,6 +1204,126 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   supports, a wiring standard a cabinet builder needs, and a service the code actually
   calls — factual and necessary, which is a different thing from naming your content after
   somebody's game.
+- **MATCH HISTORY — one row per match played** (`MATCHLOG`, `matchLog`, `noteMatch`,
+  `matchLogForm`, `buildMatchLog`, `matchLogWhen`; `magnetball.matchlog`, Career screen).
+  ⚠️ **A THIRD KIND OF RECORD, and the three answer three different questions.** `stats`
+  is one flat object of lifetime numbers ("how many have I won"). `NAMEBOOK` is one
+  aggregate per name ("who plays on this machine"). Neither can say **what happened** —
+  there was no list of matches anywhere in the game, so "who did I play last night", "am
+  I in form" and "let me watch that one back" had no answer. This is the only one of the
+  three that is a LOG rather than a running total.
+  ⚠️ Written from **`recordResult`**, the one place that already knows who won, by how
+  much, what it was worth and who was on the pitch — the same rule the floaters follow. A
+  demo, a drill and a spectated match are refused: nobody played those.
+  ⚠️ **`localStorage`, not IndexedDB** — the opposite call to `REPLIB`'s, for the same
+  reason: a row is a handful of numbers and a hundred is ~20KB, so a database buys nothing
+  and costs asynchrony on a screen that wants to draw now. Only the replay **id** points
+  into IndexedDB.
+  ⚠️ It records **the match, including everybody in it**, which looks like it contradicts
+  "guests have no record" and does not: that rule is about `stats`, the device owner's
+  lifetime tally. A log of what this machine played is where the other names belong.
+  ⚠️ **NEWEST FIRST in storage**, so the screen never reverses a hundred rows and the cap
+  drops the oldest with one `length =`. ⚠️ The score stays in **TEAM order**, the same
+  rule the result screen follows; the W/L/D carries the perspective. ⚠️ Drawn as NODES —
+  a row holds names typed by a person. Travels in the game save. `tests/history.mjs`.
+- **KEEP THE LAST FEW WHOLE MATCHES** (`MATCHKEEP`, `matchKeepN`, `sel.keepMatches`,
+  default **5**). Kickoff to whistle, with nothing to press.
+  ⚠️ **THIS SPLIT `autoRec: 'all'` IN TWO, and the split is the point.** One dial was
+  answering "save goals as they happen?" and "keep the whole match?" at once — which is
+  why `all`'s own comment had to explain it was "gated separately because a match file is
+  ~20x the size". Two sizes, two frequencies, two answers. `normalizeAutoRec()` folds a
+  stored `all` to goals-on plus five kept matches, and falls an unknown value back to
+  `off` (`autoRecOn()` tests `!== 'off'`, so an unrecognised value silently meant ON).
+  ⚠️ **A COUNT, not a toggle**: the size varies more than tenfold with match length, so
+  ten short 1v1s cost less than three long 6v6s and the right number is not the game's to
+  pick. ⚠️ **`repLibTrim` caps PER KIND.** One pooled cap was wrong in both directions —
+  a match is ~800KB against a goal's ~41KB, so five matches ate an eighth of the row
+  budget, and a busy session of goals then evicted the matches somebody was keeping.
+  ⚠️ The replay id is **pre-generated and stashed on the world** before `recordResult`
+  runs, because the history row is written synchronously and `repLibAdd` is a promise.
+  ⚠️ A history row **outlives its replay** — it keeps the id for ever and the library
+  keeps the last few — so the Watch button is offered only after the library confirms it
+  is still there. A button that fails is worse than no button.
+- **CONTROLLER RUMBLE** (`RUMBLE`, `rumbleAmt`, `padRumble`, `rumbleAll`, `rumbleGoal`,
+  `sel.rumble` 0-100, default 70; Game Feel → Effects, under Hit stop).
+  ⚠️ **ITS OWN DIAL, and deliberately NOT under Screen shake & effects** — the argument
+  hit stop already won. That toggle and `prefers-reduced-motion` are about motion **on the
+  screen**: a wobbling picture is a vestibular problem and a buzz in your hands is not on
+  the screen at all. So `motionOK()` is not consulted, and somebody who turned the shake
+  off keeps the feel of their own shot.
+  ⚠️ **EVERY HOOK IS A SITE THAT ALREADY PLAYS A SOUND, and that is what makes it safe.**
+  `predictsGoal` re-runs the real `moveBall`/`collide*` on scratch copies, so a rumble
+  inside `collideWall` would buzz the pad 25 times per shot. The four are `noteKick` (the
+  one place a kick is counted), **`ballSounds`** (which is *why* `_hitWall` is a flag
+  consumed outside the collision), `maybeHitStop`, and **`playSfx('crowd')`** — the same
+  trick the goal audio duck uses so a fifth goal path cannot forget. `w.lastGoalTeam` is
+  recorded in `goalBurst` so the scoring side feels more.
+  ⚠️ **Fire-and-forget and never awaited**: `playEffect` returns a promise, and a rejected
+  one on a pad that has gone away is an unhandled rejection on every kick.
+  ⚠️ A **no-op without hardware** — `padIndex` is -1 for touch and keyboard seats, an
+  arcade panel is a virtual pad, and Safari and Firefox have no actuator. ⚠️ Render-and-
+  feel only: `tests/history.mjs` hashes the world over 900 steps at 0% and 100%.
+- **UNDO ONE TOURNAMENT TIE** (`cupUndo`, the `\u21ba` on a finished match box).
+  ⚠️ It clears that tie's **DESCENDANTS ONLY**, never "everything in a later round".
+  Unlock already exists for starting the draw again; what this is for is the tie played by
+  mistake or on the wrong settings, and wiping the rest of the round would throw away
+  results other people earned. A match at (round r, seat s) feeds (r+1, floor(s/2)), so
+  the chain is arithmetic and nothing is stored. ⚠️ Un-winning the tournament **gives the
+  trophy back**, or replaying the final counts the same tournament twice. Arms then
+  confirms, like every other delete here.
+- **LANGUAGES — six, applied by WALKING THE DOM against a whitelist** (`LANGS`,
+  `LANG_CODES`, `STRINGS`, `L`, `langKey`, `translateDom`, `noI18n`, `sel.lang`, default
+  `auto`). Espanol, Francais, Deutsch, Portugues, Italiano, English.
+  ⚠️ **A WHITELIST KEYED ON THE ENGLISH STRING, not an `L()` call round every string.**
+  The markup holds hundreds of strings across eleven cards, and the repo already makes
+  this argument for `buildHintToggles` — per-card markup means 27 places to keep in step.
+  Because the table is a whitelist of exact strings, anything it has never heard of cannot
+  be touched.
+  ⚠️ **A LEADING EMOJI IS SPLIT OFF AND PUT BACK** (`EMOJI_LEAD`, and `translatable()`,
+  which is the walk's cheap gate and has to agree with `L`). The option tiles read
+  `✨ On`, `⊘ Off`, `🚫 Off`, `🔊 On` — the same handful of words behind a dozen pictures
+  — so keying on the whole label would be a row per picture, all saying "On", and a
+  thirteenth tile arriving untranslated. ⚠️ `⊘` and `▶` are named **explicitly**: they are
+  Math and Geometric characters rather than emoji, so a `\p{Extended_Pictographic}`-only
+  rule left `⊘ Off` in English beside a perfectly translated `✨ On`. Nothing else is
+  added — `← Back` is a table entry in its own right and stripping its arrow would look
+  up `Back`, find nothing, and lose a string that was already translated.
+  ⚠️ **THE ORIGINAL ENGLISH IS STASHED ON THE NODE** (`_en`) and translation always runs
+  from that. Without it, Spanish → French looks for "Ajustes" in a table keyed on
+  "Settings" and the first language you picked is the last one you can pick.
+  ⚠️ **ANYTHING A PERSON TYPED IS MARKED OUT** (`noI18n`), and this is a real hole a
+  sabotage found rather than a precaution: a player called **Season**, a map called
+  **Pitch** or a replay called **Off** has typed a string that IS in the table, and the
+  walk rendered them as Temporada, Campo and Desactivado. The name book, the match
+  history's names, the map list, replay titles and the cup's country names all opt out.
+  ⚠️ `buildNameBook`'s `put()` had to start **RETURNING** its element — `noI18n(undefined)`
+  is a silent no-op, which is exactly how the first build shipped translating names.
+  ⚠️ **THE PASS RUNS LAST in `buildSettings`**, after everything else has written fresh
+  English. It ran before `buildSubTabs()` for one build and the chip rows were the one
+  part of the menu still in English.
+  ⚠️ **AND ONCE PER SCREEN, in `dockOrFull`.** The `buildSettings` pass only ever reached
+  the main menu, so the career screen, the drills list and the tournament stayed English —
+  invisible from the menu, where everything looked translated. `showBanner` and
+  `showOverlay` are the other two funnels: one for the words the pitch shouts, one for a
+  result screen a dozen callers relabel.
+  ⚠️ **LATIN SCRIPT ONLY, a FONT constraint rather than a preference.** The UI face is
+  Kenney Mini Square, shipped in `assets/`; its cmap covers Latin-1 — every accent these
+  six need — and nothing beyond. A CJK language would fall back per glyph to `system-ui`
+  and come out as two typefaces inside one word. It has **no oe ligature**, so no French
+  string uses one; `tests/lang.mjs` pins both.
+  ⚠️ **IN ENGLISH THE WALK IS FREE** (`i18nLast`), and that matters because it runs on
+  every option tap: a TreeWalker over ~2,500 text nodes measured **5.6ms** against
+  `buildSettings`' own 24ms — a 23% tax on the default configuration for no work, since
+  everything is *written* in English. It returns immediately when the language is English
+  **and was English last time**; the one English pass that must happen is the one just
+  after switching back, which is exactly what the flag catches. Only a whole-body pass may
+  record the state — a scoped call has not seen the rest of the page.
+  ⚠️ **SCOPE IS DELIBERATELY PARTIAL and the picker says so**: every control, button and
+  heading, and the words the pitch shouts — but not the long help paragraphs. Those are
+  thousands of words a language and a hint that lies about what a setting does is worse
+  than one in English. ⚠️ The picker's tiles are labelled in the language they SELECT
+  ("Deutsch", never "German"): somebody who cannot read the current language is exactly
+  the person reaching for that control. `tests/lang.mjs`.
 - **TOURNAMENT — a knockout bracket of countries** (`CUP_TEAMS`, `CUP`, `cup`,
   `cupMatches`, `cupLock`, `cupDress`, `startCupMatch`, `cupEnd`, `#cup`, `#cupFlash`,
   `#cupTicker`). Pick 4/8/16, drag the draw or randomise it, lock it, play down the tree.
@@ -2632,7 +2752,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 113 suites IN PARALLEL (315s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 115 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

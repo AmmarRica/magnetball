@@ -170,6 +170,16 @@ A path that is **not already a setting is ignored in silence**, and so is a valu
 wrong kind (`feel.accel` wants a number). That is deliberate — a typo in a shared sheet
 should do nothing rather than propagate to every device.
 
+Handy ones for a venue or a cabinet:
+
+| Setting | Value | What it does |
+|---|---|---|
+| `lang` | `es`, `fr`, `de`, `pt`, `it`, `en`, `auto` | The menu's language. `auto` follows each device. |
+| `rumble` | `0`–`100` | Controller rumble strength. `0` is off. |
+| `keepMatches` | `0`, `3`, `5`, `10` | How many whole matches are kept as replays. |
+| `showMode` | `true` | The cut-down menu for a guest. |
+| `field` / `mode` / `diff` | a key | The pitch, size and bot difficulty every machine starts on. |
+
 ### Who wins
 
     built-in defaults  →  YOUR SHEET  →  whatever this device's player has changed

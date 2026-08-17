@@ -776,8 +776,24 @@ await p.close();
     const M = window.__magnet, o = {};
     o.defaultsOff = M.defaultSel().autoRec === 'off';
     o.tiles = Object.keys(M.AUTORECOPT).length;
+    // ⚠️ `autoRec` used to be a THIRD state, `all`, that also kept the whole match — one
+    // dial answering "save goals?" and "keep the match?" at once, which is why its own
+    // comment had to explain the second half was gated separately on size. That half is
+    // `keepMatches` now, and a stored `all` folds to goals-on plus five kept matches.
+    o.foldsAll = (() => { const was = M.sel.autoRec, wasK = M.sel.keepMatches;
+      M.sel.autoRec = 'all'; M.sel.keepMatches = null; M.normalizeAutoRec();
+      const r = M.sel.autoRec + '/' + M.matchKeepN();
+      M.sel.autoRec = was; M.sel.keepMatches = wasK; return r; })();
+    // ...and a value no picker offers cannot silently mean "on" through `!== 'off'`.
+    o.foldsJunk = (() => { const was = M.sel.autoRec;
+      M.sel.autoRec = 'zzz'; M.normalizeAutoRec();
+      const r = M.sel.autoRec; M.sel.autoRec = was; return r; })();
 
     // ---- OFF saves nothing, which is what makes the ON check mean anything ----
+    // ⚠️ The match KEEPER has to be off for this too, or the "nothing was saved" reading
+    // counts the whole-match replay this build now keeps by default and the check fails
+    // for a reason that has nothing to do with auto-record.
+    M.sel.keepMatches = '0';
     M.sel.autoRec = 'off'; M.sel.mode='1v1'; M.sel.lobby='off';
     M.sel.autoReplay = false;
     M.setMatchSeed(3); M.startMatch();
@@ -815,8 +831,10 @@ await p.close();
     o.goalsInGoalsPane = document.querySelectorAll('#repList .reprow').length === rows.length;
     o.noMatchesYet = document.querySelectorAll('#repMatchList .reprow').length === 0;
 
-    // ---- 'all' also keeps the whole match ----
-    M.sel.autoRec = 'all';
+    // ---- the keeper keeps the whole match, with no auto-record involved ----
+    // ⚠️ `autoRec` is left where it is and only `keepMatches` moves, which is the whole
+    // point of the split: keeping matches is not a stronger setting of "record goals".
+    M.sel.keepMatches = '5';
     M.setMatchSeed(4); M.startMatch();
     w = M.world; w.state='play'; w.stateT=2;
     for (let i=0;i<400;i++) M.step(w);
@@ -827,12 +845,32 @@ await p.close();
     o.matchRowsNow = document.querySelectorAll('#repMatchList .reprow').length;
     o.goalPaneHasNoMatches = [...document.querySelectorAll('#repList .reprow')]
       .every(r => !/^Final/.test(r.querySelector('b').textContent));
-    M.sel.autoRec = 'off';
+    // ⚠️ And the two caps are SEPARATE. A pooled cap let a run of goals evict the matches
+    // somebody was keeping — measured here by filling the goal side well past a count of
+    // three and requiring every kept match to survive it.
+    M.sel.keepMatches = '3';
+    M.sel.autoRec = 'goals';
+    for (let m = 0; m < 3; m++){
+      M.setMatchSeed(30 + m); M.startMatch();
+      w = M.world; w.state='play'; w.stateT=2;
+      for (let i=0;i<700;i++) M.step(w);
+      M.endMatch(w); M.finishMatch(w);
+      await new Promise(r=>setTimeout(r,300));
+    }
+    const lib = await M.repLibAll();
+    o.keptMatches = lib.filter(r => r.kind === 'match').length;
+    o.keptGoals = lib.filter(r => r.kind !== 'match').length;
+    M.sel.autoRec = 'off'; M.sel.keepMatches = '5';
     return o;
   });
 
   ok('auto-record defaults OFF', o.defaultsOff, 'it writes to storage on every goal, so it has to be asked for');
-  ok('...with three states', o.tiles === 3, o.tiles + ' — goals and whole matches are different orders of size');
+  ok('...with two states, goals only', o.tiles === 2,
+     o.tiles + ' — keeping whole matches is its own setting now, because it is a different question and twenty times the size');
+  ok('a stored "all" folds to goals + kept matches', o.foldsAll === 'goals/5',
+     o.foldsAll + ' — nobody may lose the behaviour they had when a dial is split in two');
+  ok('...and an unknown value falls back to off', o.foldsJunk === 'off',
+     o.foldsJunk + ' — autoRecOn() tests `!== "off"`, so an unrecognised value silently means ON');
   ok('OFF really saves nothing', o.offSaved === 0 && o.offScored > 0,
      o.offSaved + ' saved from ' + o.offScored + ' goals — if nothing was scored, the ON check below proves nothing either');
   ok('ON saves every goal unasked', o.onSaved > 0 && o.onSaved === o.onScored,
@@ -846,10 +884,13 @@ await p.close();
      'a downloads folder is exactly where you go looking for a replay you named');
   ok('goals fill the Goals pane', o.goalsInGoalsPane && o.noMatchesYet,
      JSON.stringify({ goals:o.goalsInGoalsPane, matches:o.noMatchesYet }));
-  ok('Everything keeps the match too', o.matchSaved && o.matchRowsNow > 0,
+  ok('the keeper keeps the whole match', o.matchSaved && o.matchRowsNow > 0,
      'the goals alone are a highlight reel; the match is what somebody asks to see afterwards');
   ok('...in the Matches pane, not the Goals one', o.goalPaneHasNoMatches,
      'forty rows of both interleaved is the thing the tabs exist to stop');
+  ok('the two caps are separate', o.keptMatches === 3 && o.keptGoals > 3,
+     JSON.stringify({ matches:o.keptMatches, goals:o.keptGoals }) +
+     ' — matches held at their own count of 3 while goals ran well past it; one pooled cap let a busy session of goals delete the matches somebody was keeping');
   if (qerr.length) fails.push('auto-record page errors: ' + qerr.slice(0,3).join(' | '));
   await q.close();
 }
