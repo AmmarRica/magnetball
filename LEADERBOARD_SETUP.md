@@ -128,3 +128,66 @@ downsampled + rounded so each replay fits in one cell.
 - **Scores don't save:** `LB.endpoint` is empty, or the deployment's *Who has
   access* isn't **Anyone**. Re-deploy as a **New deployment** after edits (Apps
   Script versions the URL).
+
+---
+
+## 4. Shared default settings (optional, 1 minute)
+
+Set the game's defaults **once**, in a tab of this same sheet, and every device you open
+Magnetball on starts there — the pitch, the difficulty, the theme, the Game Feel sliders.
+It is a **read**: the game never writes to this tab, and nothing about the device leaves it.
+
+### The tab
+
+1. Add a tab. Call it whatever you like — the game finds it by **gid**, not by name.
+2. Row 1 headers: `Setting | Value`. (Aliases work: `Key`/`Name`, and `Default`/`Val`.
+   Column order does not matter and extra columns are ignored.)
+3. One setting per row. Dotted paths reach the nested groups:
+
+   | Setting | Value |
+   |---|---|
+   | `field` | `colossus` |
+   | `diff` | `hard` |
+   | `length` | `10` |
+   | `look.palette` | `tennis` |
+   | `feel.accel` | `52` |
+   | `sprint` | `on` |
+   | `teamCol.0` | `#e05aa8` |
+   | `managed` | `no` |
+
+4. Find the tab's **gid**: click the tab, and read the number after `gid=` in the browser's
+   address bar. Put it in `CLOUD.gid` in `index.html`, then commit and deploy.
+   With `gid` left blank — how it ships — the game makes no request at all.
+5. The sheet must be readable the same way the board is (§2). Nothing else to do.
+
+### What the names are
+
+Anything in the game's own settings object. The quickest way to see the list is the browser
+console on the game page: `Object.keys(JSON.parse(localStorage['magnetball.sel'] || '{}'))`
+after you have changed a few things, or ask a developer for `defaultSel()`.
+
+A path that is **not already a setting is ignored in silence**, and so is a value of the
+wrong kind (`feel.accel` wants a number). That is deliberate — a typo in a shared sheet
+should do nothing rather than propagate to every device.
+
+### Who wins
+
+    built-in defaults  →  YOUR SHEET  →  whatever this device's player has changed
+
+So a fresh phone, or one that has just had Reset all settings, comes up your way; and
+anybody who deliberately changes something on a device keeps their change.
+
+Set `managed` to `yes` and that last arrow reverses: the sheet wins on every launch, on
+every device. That is the setting for a cabinet or a venue you want identical — and like
+everything else here, you set it once, in the sheet.
+
+### When it takes effect
+
+The game reads a copy kept on the device, so it works offline and in the downloaded
+single-file build. A fresh pull happens in the background shortly after launch and applies
+**next** launch — or immediately if you press **Read defaults now** in the About card,
+which also tells you when the sheet was last read.
+
+If the sheet is unreachable or not shared, the last copy the device got still applies; if
+it never got one, the built-in defaults do. Nothing is ever reported as an error, the same
+as the board.

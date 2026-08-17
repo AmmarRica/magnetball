@@ -1950,6 +1950,14 @@
            only way a player can ASK. Never dead: offline it reports that it could not reach
            the server rather than doing nothing. -->
       <button class="ghost" id="updCheckBtn" type="button">Check for updates</button>
+      <div style="height:14px"></div>
+      <!-- ⚠️ SAYS WHICH OF THE THREE IT IS. "Using built-in defaults" and "read an hour
+           ago" are different facts, and a row that only appears once the sheet has
+           answered leaves somebody wondering whether the feature is switched on at all. -->
+      <label class="field">Shared defaults</label>
+      <div class="pathrow"><span class="pathkey">Sheet</span><span class="pathval" id="cloudInfo"></span></div>
+      <button class="ghost" id="cloudCheckBtn" type="button">Read defaults now</button>
+      <div class="hint" style="text-align:left">Set the game's defaults once in a Google Sheet and every device you open Magnetball on starts there — the pitch, the difficulty, the theme, the Game Feel sliders. It is read, never written, so nothing about this device leaves it. Anything you change here still wins over the sheet, unless the sheet is set to <b>managed</b>, which is how a cabinet or a venue is kept identical. Read at launch from a copy kept on the device, so it works offline; the button pulls a fresh one now. See LEADERBOARD_SETUP.md for the tab.</div>
       <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
       <div style="height:14px"></div>
       <!-- ⚠️ THE WHOLE GAME IS ONE FILE, so "download it" is literally that rather than an
@@ -3710,7 +3718,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0900AM';
+const VERSION = '20260817.1015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3726,6 +3734,15 @@ const VERSION = '20260817.0900AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.1015AM', title: 'Set the defaults once, in a sheet',
+    added: [
+      '<b>The game can take its defaults from a Google Sheet.</b> Put a <i>Setting / Value</i> tab in the sheet, and every device you open Magnetball on starts there \u2014 the pitch, the difficulty, the theme, the sliders. It is read, never written, so nothing about your device leaves it, and it works offline because each device keeps a copy.',
+      '<b>Anything you change on a device still wins over the sheet</b>, because that is what a default is. Set <i>managed</i> in the sheet and it goes the other way, for a cabinet or a venue you want identical everywhere. There is a <b>Read defaults now</b> button in About that pulls a fresh copy and says when the sheet was last read.',
+    ],
+    changed: [
+      'A setting holding a value the game does not recognise now falls back to something sensible instead of breaking the match \u2014 one bad cell in a shared sheet, or an imported save from an older build, should look wrong rather than stop play.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0900AM', title: 'The colours are shirts',
     added: [],
     changed: [
@@ -6071,7 +6088,118 @@ function syncProfileToWorld(){
     if (!custom[i] && !p.kbTyped) p.name = profile.name || 'You';   // a typed seat name still wins
   });
 }
-function loadSel(){ try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){} normalizeLook(); }
+// ============================================================
+//  DEFAULT SETTINGS FROM A GOOGLE SHEET
+// ============================================================
+// Set the defaults ONCE, in a sheet you control, and every device comes up that way —
+// instead of walking round each phone, laptop and cabinet re-picking the pitch, the
+// difficulty, the theme and the sliders.
+//
+// ⚠️ IT IS A READ, and that is what makes it allowed at all. Sheet WRITES are closed by
+// design here (they need a hosted Apps Script; see docs/TODO.md), but the leaderboard
+// already READS a public sheet through Google's gviz JSON endpoint with no backend, no
+// API key and no dependency — so this is the same journey to a different tab. You type
+// the values in Google's own UI; the game only ever looks.
+//
+// The tab is `Setting | Value`, one row each, dotted paths for the nested groups:
+//     field            colossus
+//     diff             hard
+//     look.palette     tennis
+//     feel.accel       52
+//     teamCol.0        #e05aa8
+//     managed          no
+//
+// ⚠️ `defaultSel()` IS THE SCHEMA, and that is the whole safety model. A path is accepted
+// only if it already resolves there, and the value is coerced to the type the default
+// has — so a typo, a stale key or a hostile row cannot reach anything that is not
+// already a setting, and there is no second allowlist to keep in step.
+const CLOUD = {
+  key: 'magnetball.cloud',
+  gid: '',            // the Defaults tab's gid — blank until the sheet has one
+  timeout: 6000,      // ms; the ONLY fetch in this file with one, see cloudFetch
+  minGap: 300,        // seconds between automatic pulls
+};
+function cloudRec(){
+  try { const r = JSON.parse(localStorage.getItem(CLOUD.key) || 'null');
+        return (r && typeof r === 'object' && r.rows) ? r : null; } catch(e){ return null; }
+}
+function cloudSaveRec(rec){ try { localStorage.setItem(CLOUD.key, JSON.stringify(rec)); } catch(e){} }
+// Walk a dotted path against `defaultSel()`. Returns the default's value, or `undefined`
+// for anything the schema does not already have — which is what rejects junk.
+// ⚠️ Own properties only, at every hop: a row reading `__proto__.x` or `constructor.y`
+// would otherwise walk straight off the settings object and into the prototype chain.
+function cloudSchemaAt(path){
+  const parts = String(path || '').split('.');
+  if (!parts.length || !parts[0]) return undefined;
+  let node = defaultSel();
+  for (const part of parts){
+    if (node == null || typeof node !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(node, part)) return undefined;
+    node = node[part];
+  }
+  return node;
+}
+// Coerce the sheet's text to the shape the default has. A sheet cell is a string or a
+// number and nothing else, so this is the whole of the type system.
+function cloudCoerce(want, raw){
+  if (raw == null) return undefined;
+  const t = typeof want;
+  if (t === 'boolean'){
+    const v = String(raw).trim().toLowerCase();
+    if (['1','true','yes','on'].includes(v)) return true;
+    if (['0','false','no','off'].includes(v)) return false;
+    return undefined;
+  }
+  if (t === 'number'){ const n = +raw; return isFinite(n) ? n : undefined; }
+  if (t === 'string') return String(raw);
+  return undefined;                        // objects and arrays are addressed leaf by leaf
+}
+// Write one accepted value into `sel` along its path, creating nothing.
+function cloudSet(path, val){
+  const parts = path.split('.');
+  let node = sel;
+  for (let i = 0; i < parts.length - 1; i++){
+    if (node == null || typeof node !== 'object') return false;
+    if (!Object.prototype.hasOwnProperty.call(node, parts[i])) return false;
+    node = node[parts[i]];
+  }
+  if (node == null || typeof node !== 'object') return false;
+  node[parts[parts.length - 1]] = val;
+  return true;
+}
+// ⚠️ APPLIED OVER THE BUILT-IN DEFAULTS AND UNDER THE DEVICE'S OWN SAVE. `loadSel` merges
+// the stored `sel` immediately after this, so a setting anybody has deliberately changed
+// on this device wins — which is what "default" means. `managed` in the sheet is the way
+// to say otherwise, and it is set once, in the sheet, rather than per device.
+function cloudApply(rec, over){
+  if (!rec || !rec.rows) return 0;
+  if (!!rec.managed !== !!over) return 0;
+  let n = 0;
+  for (const k in rec.rows){
+    if (!Object.prototype.hasOwnProperty.call(rec.rows, k)) continue;
+    if (k === 'managed') continue;
+    const want = cloudSchemaAt(k);
+    if (want === undefined) continue;                 // not a setting: ignored in silence
+    const val = cloudCoerce(want, rec.rows[k]);
+    if (val === undefined) continue;                  // wrong type for that setting
+    if (cloudSet(k, val)) n++;
+  }
+  return n;
+}
+function loadSel(){
+  // ⚠️ THE SHEET'S DEFAULTS GO ON FIRST, from the CACHE, synchronously. The network pull
+  // only ever refreshes that cache (see cloudRefresh) — a fetch lands long after the
+  // bootstrap has read `sel` a hundred times, so making boot wait on one would be a
+  // whole class of bug for no gain. It also means this works offline and on the saved
+  // single-file copy, because boot never touches the network.
+  const rec = cloudRec();
+  cloudApply(rec, false);
+  try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){}
+  // ...and a MANAGED sheet goes on last, over the top of the device's own save. That is
+  // the one case where the sheet is meant to win.
+  cloudApply(rec, true);
+  normalizeLook();
+}
 function saveSel(){ try { localStorage.setItem('magnetball.sel', JSON.stringify(sel)); } catch(e){} syncPush(); }
 
 // ---------- Cross-window sync -----------------------------------------------
@@ -10778,19 +10906,85 @@ function lbNormalize(rows){
     color:String(r.color||'').trim(),
   })).sort((a,b)=> b.rp-a.rp).slice(0, LB.top);
 }
-// Parse the wrapped JSON Google returns for a public sheet's gviz endpoint.
-function lbParseGviz(text){
+// Unwrap the JSON Google returns for a public sheet's gviz endpoint, and hand back the
+// COLUMN LABELS alongside the rows. ⚠️ ONE place knows the reply's shape — the board and
+// the defaults tab both come through here, so a change in what Google sends is one fix.
+// ⚠️ The prefix is stripped by a BRACE SCAN rather than by slicing a fixed-length
+// `/*O_o*/\ngoogle.visualization.Query.setResponse(` — the same scan also removes the
+// trailing `);`, and a reply with no braces at all (an HTML sign-in page, which is what a
+// PRIVATE sheet answers with) is the case the throw below names.
+function gvizRows(text){
   const s=text.indexOf('{'), e=text.lastIndexOf('}');
   if(s<0||e<=s) throw new Error('gviz: not json (sheet may be private)');
   const j=JSON.parse(text.slice(s,e+1));
   const cols=((j.table&&j.table.cols)||[]).map(c=>String((c&&c.label)||'').trim().toLowerCase());
-  const at=(...names)=>{ for(const n of names){ const i=cols.indexOf(n); if(i>=0) return i; } return -1; };
-  const iN=at('name','player'), iR=at('rp','points','score'),
-        iF=at('country','flag'), iE=at('eyes'), iC=at('colour','color');
+  // Prefer the typed value, fall back to the formatted string.
   const cell=(c,k)=> (k>=0 && c[k]) ? (c[k].v!=null?c[k].v:c[k].f) : null;
-  const rows=((j.table&&j.table.rows)||[]).map(r=>{ const c=r.c||[];
-    return { n:cell(c,iN), rp:cell(c,iR), f:cell(c,iF), eyes:cell(c,iE), color:cell(c,iC) }; });
-  return lbNormalize(rows);
+  return { cols, rows:((j.table&&j.table.rows)||[]).map(r=>r.c||[]), cell,
+           // Columns are resolved by HEADER LABEL, case-insensitively, with aliases — so
+           // the order of columns in the sheet is nobody's problem and extras are ignored.
+           at:(...names)=>{ for(const n of names){ const i=cols.indexOf(n); if(i>=0) return i; } return -1; } };
+}
+function lbParseGviz(text){
+  const g=gvizRows(text);
+  const iN=g.at('name','player'), iR=g.at('rp','points','score'),
+        iF=g.at('country','flag'), iE=g.at('eyes'), iC=g.at('colour','color');
+  return lbNormalize(g.rows.map(c=>(
+    { n:g.cell(c,iN), rp:g.cell(c,iR), f:g.cell(c,iF), eyes:g.cell(c,iE), color:g.cell(c,iC) })));
+}
+// The Defaults tab: two columns, one setting a row. Returns `{ rows, managed }` — the
+// paths are validated against `defaultSel()` later, in `cloudApply`, so nothing here has
+// to know what a setting is.
+function cloudParse(text){
+  const g=gvizRows(text);
+  const iK=g.at('setting','key','name'), iV=g.at('value','default','val');
+  if (iK < 0 || iV < 0) throw new Error('defaults: no Setting/Value columns');
+  const rows={}; let managed=false;
+  for (const c of g.rows){
+    const k=String(g.cell(c,iK)||'').trim();
+    if (!k) continue;
+    const v=g.cell(c,iV);
+    if (k.toLowerCase()==='managed'){
+      managed=['1','true','yes','on'].includes(String(v).trim().toLowerCase());
+      continue;
+    }
+    rows[k]=v;
+  }
+  return { rows, managed };
+}
+// ⚠️ THE ONLY FETCH IN THIS FILE WITH A TIMEOUT, and it needs one because it is the only
+// one that runs off the back of a launch rather than off a button. A request that never
+// settles must not be able to hold anything open.
+async function cloudFetch(){
+  if (!LB.sheetId || !CLOUD.gid) return null;
+  const url='https://docs.google.com/spreadsheets/d/'+LB.sheetId+'/gviz/tq?tqx=out:json&gid='+CLOUD.gid;
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const t = ctl ? setTimeout(()=>{ try{ ctl.abort(); }catch(_){} }, CLOUD.timeout) : 0;
+  try{
+    const r=await fetch(url, ctl ? {cache:'no-store', signal:ctl.signal} : {cache:'no-store'});
+    if(!r.ok) return null;
+    return cloudParse(await r.text());
+  } catch(_){ return null; }        // unreachable, private, or timed out: say nothing
+  finally { if (t) clearTimeout(t); }
+}
+// Pull the sheet and remember it. ⚠️ It does NOT touch the live `sel` — the refreshed
+// copy is picked up by the next launch, which is the whole reason boot reads a cache.
+// `live` is for the About card's button, which does apply it now.
+async function cloudRefresh(live){
+  const got = await cloudFetch();
+  if (!got) return null;
+  cloudSaveRec({ at: Date.now(), rows: got.rows, managed: got.managed });
+  if (live){
+    // The recipe that already exists for adopting a changed `sel` mid-session — the same
+    // one the /settings window uses. Defaults under, then a managed sheet over.
+    const rec = cloudRec();
+    cloudApply(rec, false);
+    try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){}
+    cloudApply(rec, true);
+    syncApply(); syncRefresh();
+  }
+  buildAbout();
+  return got;
 }
 // Load the board: Apps Script endpoint → public gviz → offline sample.
 async function lbLoad(force){
@@ -11370,7 +11564,15 @@ function startMatch(opts){
   // `lobby:false` is "play now" — see tryKickOff. Everything else (a season round, a
   // drill, the attract demo, a rematch) keeps whatever `lobbyWanted` decides.
   const noLobby = !!(opts && opts.lobby === false);
-  const mode = MODES[sel.mode];
+  // ⚠️ EVERY REGISTRY LOOKUP OFF `sel` FALLS BACK, and that is a rule rather than
+  // belt-and-braces. `sel` can hold a value no registry has — a hand-edited
+  // localStorage, an imported game save (`applySaveDoc` validates nothing), a defaults
+  // sheet with a typo in it — and `FIELDS`, `BALLS` and `look.palette` already guard for
+  // exactly that reason. These three did not: an unknown `mode` threw out of here, an
+  // unknown `length` made a match with no clock, and an unknown `diff` handed the bots
+  // `undefined.react` and every decision came out NaN. One bad cell should look wrong,
+  // never take the game down.
+  const mode = MODES[sel.mode] || MODES['1v1'];
   // The idle demo cycles a random court each time it restarts, so the menu isn't
   // the same picture every visit.
   const fieldKeys = Object.keys(FIELDS);
@@ -11379,7 +11581,7 @@ function startMatch(opts){
   // The demo runs a real DEMO.secs match. It still never throws up a result overlay —
   // finishMatch sees w.demo and starts the next one instead — and it never goes to
   // overtime (see the clock in step), so a draw ends on time like everything else.
-  const len = _startQuiet ? { secs: DEMO.secs, goals:0 } : LENGTHS[sel.length];
+  const len = _startQuiet ? { secs: DEMO.secs, goals:0 } : (LENGTHS[sel.length] || LENGTHS['5']);
   // ⚠️ EVERY CONNECTED CONTROLLER GETS A BODY, even in a 1v1. The seat loop below
   // walks a roster of `per*2`, so on a 1v1 it ran out after two and the third and
   // fourth pads drove nothing at all — four people at a cabinet, two of them watching.
@@ -11484,7 +11686,7 @@ function startMatch(opts){
   const seedForToss = nextMatchSeed();
   world = {
     // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
-    field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : DIFF[sel.diff],
+    field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : (DIFF[sel.diff] || DIFF.normal),
     magnet: sel.magnet,
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
@@ -12518,6 +12720,9 @@ function downloadBlob(blob, filename){
 //   `magnetball.lastver` (which changelog you have seen) and `magnetball.firstrun` are
 //   about this install rather than about you, and `magnetball.sync`/`login`/`html` are
 //   plumbing.
+//   `magnetball.cloud` is this device's CACHED COPY of the defaults sheet plus when it
+//   last looked — a record of a remote document rather than anything about the player,
+//   and the next launch refetches it anyway. Same argument as `upd`.
 //
 // ⚠️ SAVED REPLAYS AND THE PHOTO LIBRARY ARE NOT IN IT, and the file says so. They live
 // in IndexedDB and run to megabytes; a save file you cannot email is not a save file. The
@@ -12530,7 +12735,7 @@ const SAVEFILE = {
   format: 'magnetball-save', v: 1,
   keys: ['sel', 'profile', 'stats', 'names', 'drills', 'season', 'rogue', 'maps', 'mapvotes',
          'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
-  skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html'],
+  skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html', 'cloud'],
 };
 function buildSaveDoc(){
   const data = {};
@@ -13188,6 +13393,27 @@ function buildAbout(){
   } else {
     el.textContent = 'up to date as far as we know';
   }
+  buildCloudInfo();
+}
+// Where the defaults came from. ⚠️ It says which of the three it is rather than only
+// reporting success: "using built-in defaults" and "pulled an hour ago" are different
+// facts, and a row that only ever appears when the sheet answered leaves somebody
+// wondering whether the feature is on at all.
+function buildCloudInfo(){
+  const el = $('cloudInfo'); if (!el) return;
+  const btn = $('cloudCheckBtn');
+  const on = !!(LB.sheetId && CLOUD.gid);
+  if (btn) btn.style.display = on ? '' : 'none';
+  if (!on){ el.textContent = 'no defaults sheet set up'; return; }
+  const rec = cloudRec();
+  if (!rec){ el.textContent = 'using built-in defaults — the sheet has not been read yet'; return; }
+  const n = Object.keys(rec.rows || {}).length;
+  const mins = Math.max(0, Math.round((Date.now() - (rec.at || 0)) / 60000));
+  const when = mins < 1 ? 'just now'
+             : mins < 60 ? mins + (mins === 1 ? ' minute ago' : ' minutes ago')
+             : Math.round(mins/60) + (Math.round(mins/60) === 1 ? ' hour ago' : ' hours ago');
+  el.textContent = n + (n === 1 ? ' setting' : ' settings') + ' from the sheet, read ' + when +
+                   (rec.managed ? ' — managed, the sheet wins' : '');
 }
 function buildReplayInfo(){
   const host = $('repPathInfo'); if (!host) return;
@@ -23087,6 +23313,24 @@ async function updApply(){
   location.reload();
 }
 function updLater(){ updSeen = updFound; updFound = null; updHide(); }
+// ⚠️ Deferred, on the same reasoning as the update check right below: the pull only
+// refreshes the CACHE that the next launch reads, so there is nothing to wait for and
+// every reason not to make boot wait. Gated on `!PANEL` so the /settings window does not
+// fetch the same sheet a second time — the reason `updPossible()` excludes it too.
+(function wireCloud(){
+  const btn = $('cloudCheckBtn');
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Reading…';
+    const got = await cloudRefresh(true);
+    btn.textContent = got ? '\u2713 Defaults read' : 'Could not reach the sheet';
+    setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 2200);
+  };
+  buildCloudInfo();
+  if (PANEL || !LB.sheetId || !CLOUD.gid) return;
+  const rec = cloudRec();
+  if (rec && Date.now() - (rec.at || 0) < CLOUD.minGap * 1000) return;   // just looked
+  setTimeout(() => { cloudRefresh(false); }, 1500);
+})();
 (function wireUpd(){
   const now = $('updNow'), later = $('updLater'), chk = $('updCheckBtn');
   if (now) now.onclick = updApply;
@@ -23253,6 +23497,8 @@ if (window.__MAGNETDEBUG) {
     get mapEditKey(){ return mapEditKey; }, set mapEditKey(v){ mapEditKey = v; },
     loadMaps, saveMaps, applyMaps,
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
+    CLOUD, cloudRec, cloudSaveRec, cloudApply, cloudSchemaAt, cloudCoerce, cloudParse,
+    cloudFetch, cloudRefresh, buildCloudInfo, gvizRows, loadSel,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT,
     SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, sprintBoost, advanceStamina,
     SWIPEPAUSE, onDown, onMove, onUp, SLIDER_GRAB, kickoffToss, KICKOFF_TOUCH,

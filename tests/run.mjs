@@ -22,6 +22,13 @@
 // they measure CPU contention instead — both went red six-up and green serially, which is
 // a runner reporting load as a bug. They are not exempted from the suite, they are just
 // not run against six competitors.
+// ⚠️ `updatecheck` is here for a related but distinct reason: it does not assert on a
+// duration, it WAITS on real infrastructure — it serves the page over HTTP, registers the
+// real service worker, edits the file underneath it and reloads. Its internal waits are
+// generous but finite, and adding one more suite to the pool was enough to push a loaded
+// machine past them (red once, green on a re-run with nothing else changed). A suite that
+// goes red because the machine was busy is a runner reporting load as a bug, which is the
+// whole point of this list.
 import { readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { cpus } from 'node:os';
@@ -33,7 +40,7 @@ const root = join(here, '..');
 const filter = process.argv[2] || '';
 
 // Suites whose assertions are about DURATION. See the note above.
-const TIMING = new Set(['ball3d', 'replayfile']);
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper

@@ -1415,6 +1415,43 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   played**, never the worst — a book that forgets the people who lose is not a record of
   who played. ⚠️ Drawn as NODES, because a name is typed by a person (the reason
   `mapClean` exists). Travels in the game save.
+- **DEFAULT SETTINGS FROM A GOOGLE SHEET** (`CLOUD`, `cloudRec`, `cloudApply`,
+  `cloudSchemaAt`, `cloudParse`, `cloudFetch`, `cloudRefresh`; `magnetball.cloud`).
+  ⚠️ **It is a READ, which is what makes it allowed at all**: sheet *writes* are closed by
+  design (they need a hosted Apps Script), and the leaderboard already reads a public
+  sheet through the gviz endpoint — so this is the same journey to a different `gid`.
+  ⚠️ **THE PRECEDENCE IS THE FEATURE, and it is easy to get backwards**:
+  `defaultSel()` → **the sheet** → the device's own saved `sel`. `loadSel` applies the
+  sheet, *then* merges the stored settings over it, so a setting anybody deliberately
+  changed on a device wins — which is what "default" means. The sheet's own **`managed`**
+  row reverses the last arrow and is applied last; that is how a cabinet is locked from
+  the same one place.
+  ⚠️ **NEVER WRITTEN INTO `magnetball.sel`.** The *absence* of that key is how the game
+  knows you have never changed a setting (`isFirstRun`), and the promise there is "your
+  settings win forever after" — so the sheet stays a LAYER re-applied at each boot from a
+  cache, never a save. Forging one would take the first-run lineup off every new install.
+  ⚠️ **And kept OUT of `sel`**, the same argument the arcade takings and the VJ decks are:
+  `saveSel()` serialises all of `sel` and `syncAdopt()` shallow-merges it between windows,
+  and a merge is the wrong thing to do to a record of what a remote document said. Keeping
+  it out also means no new `defaultSel()` key for `tests/audit.mjs` to call unaudited.
+  ⚠️ **`defaultSel()` IS THE SCHEMA.** A dotted path is accepted only if it already
+  resolves there, checked with `hasOwnProperty` at **every hop** (or `__proto__.x` walks
+  off into the prototype chain), and the value is coerced to the type the default has. No
+  second allowlist to keep in step.
+  ⚠️ **EVERY REGISTRY LOOKUP OFF `sel` FALLS BACK, and that is now a rule.** `sel` can
+  hold a value no registry has — a hand-edited localStorage, an imported save
+  (`applySaveDoc` validates nothing), or one typo in a shared sheet. `FIELDS`, `BALLS` and
+  `look.palette` already guarded; **`MODES`, `LENGTHS` and `DIFF` did not**, and an
+  unknown `diff` handed the bots `undefined.react` and made every decision NaN. One bad
+  cell must look wrong, never take the game down on every device at once.
+  ⚠️ **Boot reads the CACHE, synchronously; the network only refreshes it** for the next
+  launch (the About card's button applies one live through `syncApply`/`syncRefresh`, the
+  recipe `/settings` already uses). So it works offline and in the downloaded copy, and a
+  fetch cannot delay a launch. Deferred like `updCheck`, gated on `!PANEL` so two windows
+  do not pull one sheet, and **the only fetch in the file with an `AbortController`
+  timeout** — because it is the only one that runs off a launch rather than a button.
+  ⚠️ `CLOUD.gid` ships **blank**, and with it blank there is no request at all: a build
+  nobody has configured must not phone Google on every launch. `tests/clouddefaults.mjs`.
 - **Progression:** `stats` (RP `points`, ranks, and Elo `mmr` via `updateMMR`). Saves in
   `localStorage` under `magnetball.*` keys.
 - **Leaderboard:** `LB` config; reads via the public Google **gviz** JSON endpoint (`lbLoad`,
