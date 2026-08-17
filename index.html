@@ -1817,6 +1817,10 @@
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
+      <div style="height:10px"></div>
+      <label class="field">Sprint</label>
+      <div class="opts" id="sprintPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Push the stick <b>all the way</b> and you run flat out, with a ring round you draining like a clock. Empty it and you are down to the tired speed until the ring fills back up. Bots get the same ring, so it is not a handicap you carry alone. A keyboard and a D-pad have no half-way, so they are always at full tilt — same deal, they just cannot choose to jog. Off by default, because it changes how everyone moves.</div>
       <div id="feelSlidersPlayer"></div>
       </div>
 
@@ -3695,7 +3699,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0330AM';
+const VERSION = '20260817.0450AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3711,6 +3715,13 @@ const VERSION = '20260817.0330AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0450AM', title: 'Sprint',
+    added: [
+      '<b>Sprint.</b> Push the stick all the way and you run flat out, with a ring round you draining like a clock. Empty it and you are down to a tired speed until the ring has filled back up \u2014 so a sprint is something you spend rather than something you hold. Bots get the same ring, so it is not a handicap you carry alone.',
+      '<b>Three sliders for it</b>, in Game Feel \u2192 Player: how long a sprint lasts, how long it takes to come back, and how slow tired is. It is off by default, because it changes how every body on the pitch moves.',
+    ],
+    changed: [],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0330AM', title: 'Pick your team colour on the pitch',
     added: [
       '<b>Team colours, bot difficulty and the team size are all chosen by walking onto them in warm-up.</b> The colour swatches beside each half set that side\u2019s shirt, the numbered pads under the keyboard set how hard the bots are, and the + and \u2212 in the corner set how many a side. Switch halves and you are wearing that half\u2019s colour.',
@@ -4195,7 +4206,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, sprint:'off', settingsPanel:'inline', names:'', juice:true, hitStop:5, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -4227,7 +4238,8 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             pad: { up:12, down:13, left:14, right:15, kick:null },
             snd: { muted:false, vol:40, whistle:0, crowd:0, kick:0, wall:0, net:0 },
             // "Game feel" — adjustable physics (defaults mirror the current tuning).
-            feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 } }; }
+            feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50,
+                    sprintSecs:300, sprintRefill:400, sprintSlow:75 } }; }
 let sel = defaultSel();
 
 // ============================================================
@@ -5552,6 +5564,49 @@ const KICKOFF_TOUCH = 1.5;
 // reads: `chargeSecs()` is what the physics and the wind-up ring both go through, so the
 // dial cannot move one and leave the other behind.
 const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
+// ============================================================
+//  SPRINT — a stamina ring you spend and have to earn back
+// ============================================================
+// ⚠️ SPRINTING IS PUSHING THE STICK ALL THE WAY, not a button. There is no free
+// button to bind: `padKickHeld` is "every button kicks" with three exclusions, so a
+// sprint button would have to be carved out of the kick set on some pads and not
+// others, and a touch player has no second button at all. A stick at full tilt is one
+// gesture every input in the game can make — a pad, a D-pad, an arrow key and a thumb
+// on the rim of the on-screen stick all express it, and none of them need telling.
+// ⚠️ Which means the keyboard and the D-pad are ALWAYS sprinting, because they have no
+// in-between. That is not a bug to work around: it is the same deal everyone gets —
+// you run flat out for `secs`, and then you are tired until it comes back.
+// ⚠️ SPENT IS LATCHED. "Slow while the ring is not full" read literally slows you on
+// the second frame of the first run, which is not a sprint at all; you keep full speed
+// until the ring EMPTIES, and then you are slow until it is full again. `p.spent` is
+// what makes that a mechanic rather than a tax on moving.
+const SPRINT = { secs:3.0, refill:4.0, slow:75, tilt:0.92, ring:1.30 };
+const SPRINTOPT = {
+  off: { name:'Off', emoji:'🚫', icon:'barrier' },
+  on:  { name:'On',  emoji:'💨', icon:'bolt' },
+};
+function sprintOn(){ return sel.sprint === 'on'; }
+// ⚠️ Both are stored in HUNDREDTHS of a second — the slider wants integer steps — so
+// these are the one place that division happens.
+function sprintSecs(){ const v = +sel.feel.sprintSecs/100; return Math.max(0.5, Math.min(15, v || SPRINT.secs)); }
+function sprintRefill(){ const v = +sel.feel.sprintRefill/100; return Math.max(0.5, Math.min(20, v || SPRINT.refill)); }
+// The tired multiplier, 0..1. Clamped here so the slider is the only place it lives.
+function sprintSlow(){
+  const v = sel.feel.sprintSlow == null ? SPRINT.slow : +sel.feel.sprintSlow;
+  return Math.max(20, Math.min(100, v || SPRINT.slow)) / 100;
+}
+// ⚠️ STEP LOOP ONLY — this is a clock, so it belongs beside the physics and never in a
+// draw (the trails rule). No randomness at all, so determinism is untouched.
+function advanceStamina(w, p){
+  if (!sprintOn()){ p.stam = 1; p.spent = false; return 1; }
+  if (p.stam == null) p.stam = 1;
+  const push = Math.hypot(p.inX || 0, p.inY || 0);
+  if (push > SPRINT.tilt) p.stam = Math.max(0, p.stam - STEP/sprintSecs());
+  else                    p.stam = Math.min(1, p.stam + STEP/sprintRefill());
+  if (p.stam <= 0) p.spent = true;
+  if (p.stam >= 1) p.spent = false;
+  return p.spent ? sprintSlow() : 1;
+}
 const CHARGE_MS = { min:100, max:2000, step:50 };
 // ⚠️ How big the wind-up ring is drawn, as a multiple of the player's own radius. It is
 // a TELL, not a reach: the real kick range is `p.r + ball.r + PLAYER.kickRange`, which on
@@ -8055,6 +8110,7 @@ function buildMatchOpts(){
   // switch and the dial are two controls for one feature, so the dial has to grey out
   // the moment the switch moves or it sits there offering to tune something that is off.
   buildOpts('chargePick', CHARGEOPT, 'charge');
+  buildOpts('sprintPick', SPRINTOPT, 'sprint');
   syncCharge();
   buildOpts('sideViewPick', SIDEOPT, 'sideView');
   buildOpts('touchDigPick', TOUCHDIGOPT, 'touchDigital');
@@ -9572,6 +9628,15 @@ const FEEL_SLIDERS = [
   {g:'player', label:'Kick ring size', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
    min:KICKRING.min, max:KICKRING.max, step:KICKRING.step, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
+  // ⚠️ Stored in HUNDREDTHS of a second, so the slider steps are integers — the same
+  // trick the trap window uses. `sprintSecs()` is what the physics and the ring both
+  // read, so the dial can never move one and leave the other behind.
+  {g:'player', label:'Sprint length', get:()=>sel.feel.sprintSecs==null?SPRINT.secs*100:sel.feel.sprintSecs,
+   set:v=>sel.feel.sprintSecs=v, min:50,max:1000,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
+  {g:'player', label:'Sprint recovery', get:()=>sel.feel.sprintRefill==null?SPRINT.refill*100:sel.feel.sprintRefill,
+   set:v=>sel.feel.sprintRefill=v, min:50,max:1500,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
+  {g:'player', label:'Tired speed', get:()=>sel.feel.sprintSlow==null?SPRINT.slow:sel.feel.sprintSlow,
+   set:v=>sel.feel.sprintSlow=v, min:20,max:100,step:5, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
 ];
 // Reveal a settings section (theme/display/ball/sound/feel) inline on the main
 // menu: show the menu (docked on desktop, fullscreen on mobile), rebuild the
@@ -13587,7 +13652,10 @@ function integrate(w, ballFrozen, playersFrozen){
     // around with kick permanently held — you commit to a slower, deliberate approach.
     const accel = w.pAccel || PLAYER.accel, pdamp = w.pDamp || PLAYER.damp;
     for (const p of discs){
-      const a = p.kick ? accel * KICK_SLOW : accel;
+      // ⚠️ The stamina clock ticks HERE, in the step loop, for everybody — bots
+      // included, or a tired human is playing a side that never gets tired.
+      const sp = advanceStamina(w, p);
+      const a = (p.kick ? accel * KICK_SLOW : accel) * sp;
       p.vx += p.inX * a;
       p.vy += p.inY * a;
     }
@@ -21373,6 +21441,25 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // player winding up; solid is the third answer and the quiet one.)
     // ⚠️ Gated on the switch as well as the hold: with charging off the ring would still
     // close round a player holding KICK to trap, promising power that is not coming.
+    // ⚠️ THE STAMINA RING IS A CLOCK, drawn from twelve o'clock and sweeping the way a
+    // clock hand does, because that is the one circular progress everybody already
+    // reads. It shows only when there is something to say — full and rested is the
+    // resting state and a permanent ring round every body is furniture.
+    // ⚠️ Draw only: `advanceStamina` in the step loop owns the number (the trails rule).
+    if (sprintOn() && p.stam != null && p.stam < 0.999){
+      const rr = r*SPRINT.ring, lw = Math.max(1.6, r*0.13);
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 2*Math.PI);
+      ctx.strokeStyle = rgba(TH.line || '#ffffff', 0.16);
+      ctx.lineWidth = lw; ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y, rr, -Math.PI/2, -Math.PI/2 + 2*Math.PI*Math.max(0, p.stam));
+      // ⚠️ SPENT is a different colour, because "nearly empty" and "locked out until
+      // it refills" feel identical from the length of an arc alone.
+      ctx.strokeStyle = p.spent ? rgba(TH.bad || '#e0563c', 0.92)
+                                : rgba(TH.good || '#3ec06a', 0.92);
+      ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
     if (chargeOn() && (p.kick || (p.chargeT||0) > 0.01)){
       const rr = r*kickRingMul(), lw = Math.max(2, r*0.16);
       const f = chargeFrac(p);
@@ -22955,7 +23042,8 @@ if (window.__MAGNETDEBUG) {
     get mapEditKey(){ return mapEditKey; }, set mapEditKey(v){ mapEditKey = v; },
     loadMaps, saveMaps, applyMaps,
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
-    chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT, kickoffToss, KICKOFF_TOUCH,
+    chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT,
+    SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, advanceStamina, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
     drawOneDisc, motionOK, prefersReducedMotion, firstHumanSeat, mergePads, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,

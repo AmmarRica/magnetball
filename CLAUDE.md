@@ -1751,6 +1751,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
     inside the canvas (the body is outside the touchline, so a centred label loses its last
     words — which are the side). `tests/dropin.mjs`.
+- **SPRINT: a stamina ring you spend and have to earn back** (`SPRINT`, `sel.sprint`,
+  `advanceStamina`, `p.stam`/`p.spent`; Game Feel → Player). Three dials: how long a
+  sprint lasts, how long it takes back, and the tired speed.
+  ⚠️ **SPRINTING IS PUSHING THE STICK ALL THE WAY, not a button**, and that is a
+  constraint rather than a preference: `padKickHeld` is "every button kicks" with three
+  exclusions, so a sprint button would have to be carved out of the kick set on some
+  pads and not others, and a touch player has no second button at all. Full tilt is one
+  gesture a pad, a D-pad, an arrow key and a thumb on the rim can all make.
+  ⚠️ Which means **the keyboard and the D-pad are always sprinting** — they have no
+  in-between. Same deal as everyone else; they just cannot choose to jog.
+  ⚠️ **`spent` IS LATCHED, and without it the feature does not exist.** "Slow while the
+  ring is not full", read literally, slows you on the second frame of the first run.
+  You keep full speed until the ring EMPTIES and are slow until it is FULL again.
+  ⚠️ **Bots carry the same ring** — a tired human playing a side that never gets tired
+  is a handicap, not a mechanic.
+  ⚠️ Ticked in `integrate`, never in a draw (the trails rule), with no randomness at
+  all. **Off by default**, because it changes how every body on the pitch moves, and
+  `tests/sprint.mjs` hashes the world over 900 steps to prove the default costs nothing.
+  ⚠️ The ring is drawn only while there is something to say (a permanent ring round
+  every body is furniture), sweeps from twelve o'clock, and turns to `TH.bad` when
+  spent — "nearly empty" and "locked out" feel identical from an arc length alone. The
+  suite measures it as a **difference against the same body drawn rested**: the disc
+  already has a guide ring and a rim within a few pixels of that radius, so an absolute
+  ink count reads 65 of 120 probe angles with no stamina ring drawn at all.
 - **TEAM COLOUR IS ONE SHADE A SIDE, AND IT IS PICKED ON THE PITCH** (`TEAM_COLS`,
   `sel.teamCol`, `teamColOf`, `applyTeamColours`, `setTeamCol`). Every player used to
   carry their own `color` — yours from `profile`, each bot a `teamTint` variation — so a
