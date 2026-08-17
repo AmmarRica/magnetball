@@ -1760,16 +1760,45 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
     inside the canvas (the body is outside the touchline, so a centred label loses its last
     words — which are the side). `tests/dropin.mjs`.
+- **SLIDERS ARE DRAG-ONLY ON TOUCH** (`SLIDER_GRAB`, the capture-phase `pointerdown`).
+  A native range input JUMPS to wherever you press it; on a phone the sliders are wide,
+  they sit in a column you scroll with your thumb, and a graze anywhere along one
+  silently rewrote a Game Feel value you had tuned. ⚠️ Implemented by **refusing the
+  press**, never by re-implementing the control: `preventDefault` on `pointerdown` stops
+  the browser both jumping and starting its own drag, so a press away from the handle
+  does nothing and a press ON the handle is left entirely to the native drag — which
+  already does capture, momentum and keyboard focus correctly. ⚠️ **A mouse is exempt**:
+  a click on the track is precise, deliberate, the long-standing desktop behaviour, and
+  there is no scrolling thumb to graze. `tests/sprint.mjs` checks the track is refused
+  AND the handle still drags — "presses are refused" is also true of a slider nobody can
+  move at all.
+- **SWIPE DOWN FROM THE TOP EDGE TO PAUSE** (`SWIPEPAUSE`, `swipeStart`/`swipeMoved`).
+  ⚠️ **A gesture, not a region, because there is no free region**: `zoneForTouch` splits
+  the WHOLE screen into a move half and a kick half, so there is nowhere to put a "pause
+  here" area that is not already a control. The top 56px is where nobody's thumb goes
+  mid-match, and a pull-down from the top edge is an idiom every phone owner has.
+  ⚠️ A touch starting in the strip drives **no pad at all**, which is what makes it safe
+  — it cannot half-steer you on the way to being recognised. ⚠️ Timed (700ms) so a slow
+  drag through the strip is not a pause, and rejected if it is mostly sideways, since
+  that is somebody reaching for the fullscreen button.
 - **SPRINT: a stamina ring you spend and have to earn back** (`SPRINT`, `sel.sprint`,
   `advanceStamina`, `p.stam`/`p.spent`; Game Feel → Player). Three dials: how long a
   sprint lasts, how long it takes back, and the tired speed.
-  ⚠️ **SPRINTING IS PUSHING THE STICK ALL THE WAY, not a button**, and that is a
-  constraint rather than a preference: `padKickHeld` is "every button kicks" with three
-  exclusions, so a sprint button would have to be carved out of the kick set on some
-  pads and not others, and a touch player has no second button at all. Full tilt is one
-  gesture a pad, a D-pad, an arrow key and a thumb on the rim can all make.
-  ⚠️ Which means **the keyboard and the D-pad are always sprinting** — they have no
-  in-between. Same deal as everyone else; they just cannot choose to jog.
+  ⚠️ **YOU SPRINT BY HOLDING KICK.** It first fired off the stick at FULL TILT, and that
+  was wrong for a reason worth keeping: a keyboard and a D-pad have no half-way, so they
+  were sprinting the whole match and never chose anything. KICK is a thing you press on
+  purpose, on every input the game has — and it **composes** with what KICK already does
+  rather than fighting it, since holding traps and winds the shot up and releasing fires
+  it. A sprint therefore ends in a kick, which is the run you actually want to make.
+  ⚠️ **`KICK_SLOW` IS OFF while Sprint is on.** That multiplier exists so you cannot
+  cruise with kick held — and with Sprint on, holding kick IS the sprint, so leaving it
+  on makes holding KICK *slower* and the two features cancel out. `tests/sprint.mjs`
+  measures it as behaviour (held vs loose top speed), not as a flag.
+  ⚠️ **A sprint is a BOOST** (`sprintBoost`, 1.35× default, its own slider). The first
+  build had none — full speed while the ring lasted, slow after — which is a tax on
+  holding KICK rather than a run.
+  ⚠️ **Recovery can never be set faster than the spend**: `sprintRefill()` floors at
+  `sprintSecs()`, or the ring is one you never stop holding.
   ⚠️ **`spent` IS LATCHED, and without it the feature does not exist.** "Slow while the
   ring is not full", read literally, slows you on the second frame of the first run.
   You keep full speed until the ring EMPTIES and are slow until it is FULL again.

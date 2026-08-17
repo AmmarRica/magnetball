@@ -1,10 +1,12 @@
 // SPRINT — a stamina ring you spend and have to earn back.
 //
-// ⚠️ SPRINTING IS PUSHING THE STICK ALL THE WAY, not a button, and that is a design
-// constraint rather than a preference: `padKickHeld` is "every button kicks" with three
-// exclusions, so a sprint button would have to be carved out of the kick set on some
-// pads and not others, and a touch player has no second button at all. Full tilt is one
-// gesture a pad, a D-pad, an arrow key and a thumb on the rim can all make.
+// ⚠️ SPRINTING IS HOLDING KICK. It first fired off the stick being at FULL TILT, and
+// that was wrong for a reason worth keeping: a keyboard and a D-pad have no half-way, so
+// they were sprinting the entire match and never chose anything. KICK is a thing you
+// press on purpose, on every input the game has — and it composes with what KICK already
+// does rather than fighting it, since holding traps and winds up and releasing fires.
+// ⚠️ Which means KICK_SLOW has to be OFF while Sprint is on, or the two features cancel:
+// one says "holding kick makes you fast", the other "holding kick makes you slow".
 //
 // ⚠️ SPENT IS LATCHED, and without that the feature does not exist. "Slow while the ring
 // is not full", read literally, slows you on the second frame of the first run — so the
@@ -18,6 +20,7 @@ import { chromium, LAUNCH } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
 const ok = (n, c, x) => { if (!c) fails.push(n + (x ? ' — ' + x : '')); };
+const o0 = v => (v == null ? '?' : String(v));
 const p = await b.newPage({ viewport: { width: 1000, height: 900 } });
 p.on('pageerror', e => errors.push(e.message));
 p.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifest|sw\.js|Failed to load|ERR_TUNNEL/i.test(m.text())) errors.push(m.text()); });
@@ -35,12 +38,12 @@ const r = await p.evaluate(() => {
   {
     const w = M.world; w.state = 'play'; w.stateT = 2;
     const me = w.players[0];
-    // ⚠️ Driven through `pads.p1`, never by writing `p.inX` — the pad is read every
-    // step and a directly-set stick is overwritten before `integrate` ever sees it.
+    // ⚠️ Driven through `pads.p1`, never by writing `p.inX`/`p.kick` — the pad is read
+    // every step and a directly-set flag is overwritten before `integrate` ever sees it.
     // This is the trap CLAUDE.md records, and it cost this suite its first run.
-    M.pads.p1.dx = 1; M.pads.p1.dy = 0;
+    M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = true;
     for (let i = 0; i < 600; i++) M.step(w);
-    M.pads.p1.dx = 0;
+    M.pads.p1.dx = 0; M.pads.p1.kick = false;
     o.offKeepsFullStamina = me.stam === 1 && !me.spent;
   }
 
@@ -57,8 +60,12 @@ const r = await p.evaluate(() => {
   me.x = 0; me.y = 0; me.vx = me.vy = 0; me.stam = 1; me.spent = false;
   let emptiedAt = -1;
   const speeds = [];
-  M.pads.p1.dx = 1; M.pads.p1.dy = 0;    // full tilt, held
+  M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = true;   // running, KICK held
   for (let i = 0; i < 600; i++){
+    // ⚠️ Held in the MIDDLE of the pitch, velocity untouched. Left to run, the body is
+    // against the touchline inside two seconds and `integrate`'s clamp pins it at zero —
+    // so the "after" speed measured 0.008 and the check was reading a wall, not a dial.
+    me.x = 0; me.y = 0;
     M.step(w);
     if (emptiedAt < 0 && me.stam <= 0) emptiedAt = i;
     speeds.push(Math.hypot(me.vx, me.vy));
@@ -71,15 +78,29 @@ const r = await p.evaluate(() => {
   o.spentAfter = me.spent === true;
   // Top speed before it emptied vs after — the tired multiplier, measured.
   const before = Math.max.apply(null, speeds.slice(30, emptiedAt));
-  const after = Math.max.apply(null, speeds.slice(emptiedAt + 120));
+  // ⚠️ A WINDOW, not "everything after". KICK is still held, so the moment the ring
+  // refills the body is sprinting again — taking the max over the whole tail measured
+  // the second sprint and read 0.974 of the first. This window sits well inside the
+  // spent stretch: the refill is 4s (240 steps) and this ends at 150.
+  const after = Math.max.apply(null, speeds.slice(emptiedAt + 60, emptiedAt + 150));
   o.fullSpeed = +before.toFixed(3);
   o.tiredSpeed = +after.toFixed(3);
-  o.tiredIsTheDial = Math.abs(after/before - M.sprintSlow()) < 0.06;
+  // ⚠️ Against slow/boost, not against slow alone — the sprint is a BOOST now, so the
+  // ratio between running spent and running sprinting is the two dials divided.
+  o.wantRatio = +(M.sprintSlow()/M.sprintBoost()).toFixed(3);
+  o.tiredIsTheDial = Math.abs(after/before - M.sprintSlow()/M.sprintBoost()) < 0.06;
+  o.boostIsReal = M.sprintBoost() > 1.05;
 
   // ---- 3. ...and standing still earns it back ---------------------------------
   let refilledAt = -1;
-  M.pads.p1.dx = 0; M.pads.p1.dy = 0;
-  for (let i = 0; i < 900; i++){
+  // ⚠️ Let go of KICK. The ring refills whenever you are not sprinting — you do not have
+  // to stand still, you have to stop asking for it.
+  // ⚠️ Emptied by hand first: the loop above kept KICK held after the ring ran out, and
+  // a spent ring refills, so by the end of it the thing was most of the way back and the
+  // recovery measured half its dial.
+  me.stam = 0; me.spent = true;
+  M.pads.p1.kick = false; M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+  for (let i = 0; i < 1800; i++){
     M.step(w);
     if (refilledAt < 0 && me.stam >= 1) refilledAt = i;
   }
@@ -91,25 +112,59 @@ const r = await p.evaluate(() => {
   // simply never lets you off the tired multiplier again.
   me.vx = me.vy = 0;
   const back = [];
-  M.pads.p1.dx = 1;
+  M.pads.p1.dx = 1; M.pads.p1.kick = true;
   for (let i = 0; i < 60; i++){ M.step(w); back.push(Math.hypot(me.vx, me.vy)); }
+  M.pads.p1.kick = false;
   o.speedComesBack = Math.max.apply(null, back) > o.tiredSpeed * 1.3;
 
-  // ---- 4. easing OFF the stick is not a sprint --------------------------------
+  // ---- 4. RUNNING WITHOUT HOLDING KICK IS FREE -------------------------------
+  // ⚠️ The whole point of moving the trigger to KICK: getting about the pitch must cost
+  // nothing, or the ring is a tax on playing rather than a thing you spend.
   me.stam = 1; me.spent = false;
-  M.pads.p1.dx = 0.5; M.pads.p1.dy = 0;
+  M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = false;
   for (let i = 0; i < 600; i++) M.step(w);
   M.pads.p1.dx = 0;
   o.joggingIsFree = me.stam === 1 && !me.spent;
+  // ...and recovery is SLOWER than the spend, whatever the sliders say.
+  M.sel.feel.sprintRefill = 50;                  // ask for half a second
+  o.refillFloored = M.sprintRefill() >= M.sprintSecs();
+  M.sel.feel.sprintRefill = 500;
+
+  // ---- 4b. KICK_SLOW IS OFF WHILE SPRINT IS ON --------------------------------
+  // ⚠️ Measured as BEHAVIOUR, not as a flag. `KICK_SLOW` drops you to 45% of your accel
+  // while KICK is held, so leaving it on alongside a 1.35x sprint means holding KICK
+  // makes you SLOWER — the two features cancelling each other out, which is exactly what
+  // "sprint is not implemented correctly" felt like. So: on a fresh ring, holding KICK
+  // has to be faster than not holding it.
+  const topSpeed = (kick) => {
+    me.stam = 1; me.spent = false; me.vx = me.vy = 0;
+    M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = kick;
+    let best = 0;
+    for (let i = 0; i < 90; i++){ me.x = 0; me.y = 0; M.step(w); best = Math.max(best, Math.hypot(me.vx, me.vy)); }
+    M.pads.p1.kick = false; M.pads.p1.dx = 0;
+    return best;
+  };
+  o.heldSpeed = +topSpeed(true).toFixed(3);
+  o.looseSpeed = +topSpeed(false).toFixed(3);
+  o.kickDoesNotBrake = o.heldSpeed > o.looseSpeed * 1.1;
 
   // ---- 5. bots get the same ring ----------------------------------------------
   M.setMatchSeed(11); M.sel.mode = '4v4'; M.startMatch();
   {
     const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
-    for (let i = 0; i < 1800; i++) M.step(w2);
+    // ⚠️ Tracked as a MINIMUM over the run, not sampled at the end: a bot that sprinted
+    // and then let go is back at a full ring by the time the loop stops, so the final
+    // reading says nothing about whether it ever spent any.
+    let lowest = 1;
+    for (let i = 0; i < 1800; i++){
+      M.step(w2);
+      for (const q of w2.players) if (q.ctrl === 'bot' && q.stam != null) lowest = Math.min(lowest, q.stam);
+    }
     const bots = w2.players.filter(q => q.ctrl === 'bot');
     o.botsHaveStamina = bots.every(q => typeof q.stam === 'number');
-    o.someBotGotTired = bots.some(q => q.stam < 0.999);
+    o.lowestBotRing = +lowest.toFixed(3);
+    o.someBotGotTired = lowest < 0.999;
+
   }
   M.sel.sprint = 'off'; M.sel.mode = '1v1';
   return o;
@@ -191,6 +246,82 @@ const ring = await p.evaluate(() => {
   M.sel.sprint = 'off';
   return o;
 });
+// ============================ drag-only sliders, and swipe-down to pause ==
+// ⚠️ A native range input JUMPS to wherever you press it. On a phone that is a trap: the
+// sliders are wide, they sit in a column you scroll with your thumb, and a graze anywhere
+// along one silently rewrites a value you had tuned. Both halves are measured — a press
+// on the TRACK must do nothing, and a press on the HANDLE must still start a drag —
+// because "presses are refused" is also true of a slider nobody can move at all.
+const drag = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.toMenu(); M.buildSettings(); M.openSection('feel'); M.showSubTab('feel', 'player');
+  const el = document.querySelector('.subpane[data-pane="player"] input.slider');
+  o.found = !!el;
+  if (!el) return o;
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect();
+  const min = +el.min || 0, max = +el.max, span = max - min;
+  const frac = ((+el.value) - min) / span;
+  const pad = M.SLIDER_GRAB/2;
+  const handleX = r.left + pad + frac * (r.width - pad*2);
+  const fire = (x, kind) => {
+    const ev = new PointerEvent('pointerdown', { clientX: x, clientY: r.top + r.height/2,
+      pointerType: kind, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  // Far end of the track, on a touch: refused.
+  const far = handleX > r.left + r.width/2 ? r.left + 6 : r.right - 6;
+  o.trackRefusedOnTouch = fire(far, 'touch');
+  // On the handle: allowed, so the native drag still runs.
+  o.handleAllowedOnTouch = !fire(handleX, 'touch');
+  // ⚠️ A MOUSE is exempt: a click on the track is precise and deliberate, it is the
+  // long-standing desktop behaviour, and there is no scrolling thumb to graze.
+  o.mouseStillJumps = !fire(far, 'mouse');
+  o.grabPx = M.SLIDER_GRAB;
+  return o;
+});
+
+// ⚠️ SWIPE DOWN FROM THE TOP EDGE PAUSES, and it has to be a GESTURE rather than a
+// region: `zoneForTouch` splits the WHOLE screen into a move half and a kick half, so
+// there is nowhere to put a "pause here" area that is not already a control.
+// ⚠️ On a PHONE-sized page with touch. `swipeStart` is gated on `isTouchLayout()`, and
+// this file's main page is 1000x900 — where the gesture correctly does nothing, so the
+// whole block passed for the wrong reason on its first run.
+const ph = await b.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+ph.on('pageerror', e => errors.push(e.message));
+await ph.addInitScript(() => { window.__MAGNETDEBUG = true; });
+await ph.goto('file://' + process.cwd() + '/index.html');
+await ph.waitForTimeout(800);
+const swipe = await ph.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(5); M.startMatch();
+  const S = M.SWIPEPAUSE;
+  const pull = (x0, y0, dx, dy) => {
+    M.onDown(77, x0, y0); M.onMove(77, x0 + dx, y0 + dy); M.onUp(77);
+  };
+  o.edge = S.edge; o.dist = S.dist;
+  // A pull down from the top edge pauses.
+  pull(200, 10, 0, S.dist + 30);
+  o.pausedAfterPull = M.paused === true;
+  M.togglePause(false);
+  // ...a pull that starts BELOW the strip does not — that is somebody steering.
+  pull(200, S.edge + 60, 0, S.dist + 30);
+  o.midScreenIsNotAPause = M.paused === false;
+  // ...nor does a short one, nor a sideways one along the top.
+  pull(200, 10, 0, S.dist - 30);
+  o.shortIsNotAPause = M.paused === false;
+  pull(200, 10, S.dist + 40, 8);
+  o.sidewaysIsNotAPause = M.paused === false;
+  // ⚠️ ...and a touch that starts in the strip drives NO pad, which is what makes the
+  // gesture safe: it cannot half-steer you on the way to being recognised.
+  M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+  M.onDown(78, 200, 10); M.onMove(78, 260, 30);
+  o.stripDrivesNothing = M.pads.p1.dx === 0 && M.pads.p1.dy === 0;
+  M.onUp(78);
+  return o;
+});
+await ph.close();
 await p.close();
 
 // -------------------------------------------------------------------- report --
@@ -202,17 +333,24 @@ ok('a run at full tilt lasts exactly as long as the dial says', r.lastsTheDial,
 ok('...at FULL speed the whole way', r.fullSpeed > r.tiredSpeed,
    `${r.fullSpeed} then ${r.tiredSpeed} — "slow while the ring is not full" read literally slows you on the second frame of the first run, which is not a sprint`);
 ok('...then the tired multiplier is the dial', r.tiredIsTheDial,
-   `${(r.tiredSpeed/r.fullSpeed).toFixed(3)} against a dial of ${r.slow}`);
+   `${(r.tiredSpeed/r.fullSpeed).toFixed(3)} against ${r.wantRatio} (tired \u00f7 sprint)`);
+ok('...and a sprint really is FASTER than not sprinting', r.boostIsReal,
+   'a sprint with no boost is a button that only ever costs you something');
+ok('holding KICK no longer BRAKES you while Sprint is on', r.kickDoesNotBrake,
+   `${o0(r.heldSpeed)} holding vs ${o0(r.looseSpeed)} loose — KICK_SLOW drops you to 45% of your accel, so left on alongside a 1.35\u00d7 sprint, holding KICK makes you slower and the two features cancel out`);
 ok('...and it latches until the ring is FULL again', r.spentAfter);
 
 ok('standing still earns it back on its own dial', r.refillIsTheDial,
    `full again after ${r.refilledAtSecs}s against a dial of ${r.refill}s`);
 ok('...and the speed really comes back', r.speedComesBack && r.rested,
    `${r.tiredSpeed} then a peak of the recovered run — without this, "it refills" is true of a build that never lets you off the tired speed`);
-ok('easing off the stick is not a sprint', r.joggingIsFree,
-   'half a push has to cost nothing, or there is no choice being made');
+ok('running WITHOUT holding kick costs nothing', r.joggingIsFree,
+   'getting about the pitch has to be free, or the ring is a tax on playing rather than something you spend');
+ok('...and recovery can never be set faster than the spend', r.refillFloored,
+   'a ring that refills quicker than it drains is one you never stop holding');
 
 ok('bots carry the same ring', r.botsHaveStamina && r.someBotGotTired,
+   `lowest bot ring over a minute of 4v4 was ${r.lowestBotRing} — ` +
    'a tired human playing a side that never gets tired is a handicap, not a mechanic');
 
 ok('with sprint off the world is unchanged', det.stable, det.sample);
@@ -230,9 +368,25 @@ ok('...that SHRINKS as it drains', ring.shrinksAsItDrains,
 ok('...sweeping from twelve o\'clock', ring.startsAtTwelve,
    'it is a clock, and a clock hand starts at the top');
 
+ok('a slider ignores a touch on its TRACK', drag.found && drag.trackRefusedOnTouch,
+   `grab window ${drag.grabPx}px — a range input jumps to wherever you press, and on a phone that rewrites a tuned value from a graze while scrolling`);
+ok('...but a touch on its HANDLE still drags', drag.handleAllowedOnTouch,
+   '"presses are refused" is also true of a slider nobody can move at all');
+ok('...and a mouse still clicks the track', drag.mouseStillJumps,
+   'precise, deliberate, the long-standing desktop behaviour, and no scrolling thumb to graze');
+
+ok('a pull down from the top edge pauses', swipe.pausedAfterPull,
+   `${swipe.dist}px from inside the top ${swipe.edge}px`);
+ok('...a drag lower down does not', swipe.midScreenIsNotAPause, 'that is somebody steering');
+ok('...nor a short pull', swipe.shortIsNotAPause);
+ok('...nor a sideways one along the top', swipe.sidewaysIsNotAPause,
+   'reaching for the fullscreen button is not asking for the menu');
+ok('...and a touch in the strip drives no pad at all', swipe.stripDrivesNothing,
+   'it must not half-steer you on the way to being recognised');
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ r, det, ring }, null, 1));
+console.log(JSON.stringify({ r, det, ring, drag, swipe }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL sprint\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS sprint');

@@ -1826,7 +1826,7 @@
       <div style="height:10px"></div>
       <label class="field">Sprint</label>
       <div class="opts" id="sprintPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Push the stick <b>all the way</b> and you run flat out, with a ring round you draining like a clock. Empty it and you are down to the tired speed until the ring fills back up. Bots get the same ring, so it is not a handicap you carry alone. A keyboard and a D-pad have no half-way, so they are always at full tilt — same deal, they just cannot choose to jog. Off by default, because it changes how everyone moves.</div>
+      <div class="hint" style="text-align:left; margin-top:4px"><b>Hold KICK to sprint.</b> A ring round you drains like a clock while you run; let go and it fires the kick, the way holding KICK always has. Run the ring out and you are locked down to the tired speed until it has filled all the way back up — and it fills slower than it empties, so a sprint is something you spend. Holding KICK no longer slows you while this is on. Bots get the same ring. Off by default, because it changes how everyone moves.</div>
       <div id="feelSlidersPlayer"></div>
       </div>
 
@@ -3705,7 +3705,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0640AM';
+const VERSION = '20260817.0810AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3721,6 +3721,15 @@ const VERSION = '20260817.0640AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0810AM', title: 'Sprint is on the KICK button',
+    added: [
+      '<b>Swipe down from the top edge to pause</b> on a phone. There is no spare corner to put a pause button in \u2014 both halves of the screen are your controls \u2014 so it is a pull-down from the very top, where no thumb goes mid-match.',
+    ],
+    changed: [
+      '<b>Sprint is now HOLD KICK.</b> It used to trigger on pushing the stick all the way, which meant a keyboard \u2014 with no half-way \u2014 sprinted permanently and never chose anything. Hold to run, let go and it fires the kick, exactly as KICK has always worked. Holding KICK no longer slows you down while Sprint is on, and a sprint is genuinely faster now, with its own slider. Run the ring out and you are locked to the tired speed until it has filled all the way back \u2014 and it fills slower than it empties.',
+      '<b>Sliders have to be dragged by the handle now.</b> Tapping anywhere along one used to jump the value straight to that spot, which on a phone meant brushing a slider while scrolling quietly rewrote something you had tuned. A mouse still clicks the track.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0640AM', title: 'The tab row stops floating',
     added: [],
     changed: [
@@ -4259,7 +4268,7 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             snd: { muted:false, vol:40, whistle:0, crowd:0, kick:0, wall:0, net:0 },
             // "Game feel" — adjustable physics (defaults mirror the current tuning).
             feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50,
-                    sprintSecs:300, sprintRefill:400, sprintSlow:75 } }; }
+                    sprintSecs:300, sprintRefill:500, sprintSlow:75, sprintBoost:135 } }; }
 let sel = defaultSel();
 
 // ============================================================
@@ -5600,7 +5609,10 @@ const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
 // the second frame of the first run, which is not a sprint at all; you keep full speed
 // until the ring EMPTIES, and then you are slow until it is full again. `p.spent` is
 // what makes that a mechanic rather than a tax on moving.
-const SPRINT = { secs:3.0, refill:4.0, slow:75, tilt:0.92, ring:1.30 };
+// ⚠️ `refill` is LONGER than `secs` on purpose: a sprint you get back as fast as you
+// spend it is a permanent one. `sprintRefill()` floors it at the spend for the same
+// reason, so the sliders cannot be set to undo the mechanic.
+const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, ring:1.30 };
 const SPRINTOPT = {
   off: { name:'Off', emoji:'🚫', icon:'barrier' },
   on:  { name:'On',  emoji:'💨', icon:'bolt' },
@@ -5609,23 +5621,45 @@ function sprintOn(){ return sel.sprint === 'on'; }
 // ⚠️ Both are stored in HUNDREDTHS of a second — the slider wants integer steps — so
 // these are the one place that division happens.
 function sprintSecs(){ const v = +sel.feel.sprintSecs/100; return Math.max(0.5, Math.min(15, v || SPRINT.secs)); }
-function sprintRefill(){ const v = +sel.feel.sprintRefill/100; return Math.max(0.5, Math.min(20, v || SPRINT.refill)); }
+function sprintRefill(){
+  const v = +sel.feel.sprintRefill/100;
+  // ⚠️ Never faster than the spend — see SPRINT. A ring that refills quicker than it
+  // drains is one you never stop holding, which is not a sprint.
+  return Math.max(sprintSecs(), Math.min(20, v || SPRINT.refill));
+}
 // The tired multiplier, 0..1. Clamped here so the slider is the only place it lives.
 function sprintSlow(){
   const v = sel.feel.sprintSlow == null ? SPRINT.slow : +sel.feel.sprintSlow;
   return Math.max(20, Math.min(100, v || SPRINT.slow)) / 100;
 }
+// ⚠️ A SPRINT HAS TO BE FASTER THAN NOT SPRINTING, or it is a button that only ever
+// costs you something. The first build had no boost at all — full speed while the ring
+// lasted and slow afterwards — which read as a tax on holding KICK rather than a run.
+function sprintBoost(){
+  const v = sel.feel.sprintBoost == null ? SPRINT.boost : +sel.feel.sprintBoost;
+  return Math.max(100, Math.min(250, v || SPRINT.boost)) / 100;
+}
 // ⚠️ STEP LOOP ONLY — this is a clock, so it belongs beside the physics and never in a
 // draw (the trails rule). No randomness at all, so determinism is untouched.
 function advanceStamina(w, p){
-  if (!sprintOn()){ p.stam = 1; p.spent = false; return 1; }
+  if (!sprintOn()){ p.stam = 1; p.spent = false; p.sprinting = false; return 1; }
   if (p.stam == null) p.stam = 1;
-  const push = Math.hypot(p.inX || 0, p.inY || 0);
-  if (push > SPRINT.tilt) p.stam = Math.max(0, p.stam - STEP/sprintSecs());
-  else                    p.stam = Math.min(1, p.stam + STEP/sprintRefill());
+  // ⚠️ HOLD KICK TO SPRINT. It used to fire off the stick being at full tilt, which
+  // meant a keyboard — which has no half-way — was sprinting the whole time and never
+  // chose anything. KICK is a thing you press on purpose, on every input the game has.
+  // ⚠️ And it composes with what KICK already does rather than fighting it: holding
+  // traps and winds the shot up, releasing fires it. So a sprint ends in a kick, which
+  // is the run you actually want to make.
+  const want = !!p.kick && !p.spent;
+  p.sprinting = want;
+  if (want) p.stam = Math.max(0, p.stam - STEP/sprintSecs());
+  else      p.stam = Math.min(1, p.stam + STEP/sprintRefill());
+  // ⚠️ ONCE IT EMPTIES YOU ARE LOCKED OUT UNTIL IT IS FULL AGAIN — `spent` is what makes
+  // that true, and it is why a sprint is a decision rather than a button you hold all
+  // match. Recovery is deliberately slower than the spend (see sprintRefill's floor).
   if (p.stam <= 0) p.spent = true;
   if (p.stam >= 1) p.spent = false;
-  return p.spent ? sprintSlow() : 1;
+  return p.spent ? sprintSlow() : (want ? sprintBoost() : 1);
 }
 const CHARGE_MS = { min:100, max:2000, step:50 };
 // ⚠️ How big the wind-up ring is drawn, as a multiple of the player's own radius. It is
@@ -9687,6 +9721,8 @@ const FEEL_SLIDERS = [
    set:v=>sel.feel.sprintSecs=v, min:50,max:1000,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
   {g:'player', label:'Sprint recovery', get:()=>sel.feel.sprintRefill==null?SPRINT.refill*100:sel.feel.sprintRefill,
    set:v=>sel.feel.sprintRefill=v, min:50,max:1500,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
+  {g:'player', label:'Sprint speed', get:()=>sel.feel.sprintBoost==null?SPRINT.boost:sel.feel.sprintBoost,
+   set:v=>sel.feel.sprintBoost=v, min:100,max:250,step:5, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Tired speed', get:()=>sel.feel.sprintSlow==null?SPRINT.slow:sel.feel.sprintSlow,
    set:v=>sel.feel.sprintSlow=v, min:20,max:100,step:5, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
 ];
@@ -13707,7 +13743,10 @@ function integrate(w, ballFrozen, playersFrozen){
       // ⚠️ The stamina clock ticks HERE, in the step loop, for everybody — bots
       // included, or a tired human is playing a side that never gets tired.
       const sp = advanceStamina(w, p);
-      const a = (p.kick ? accel * KICK_SLOW : accel) * sp;
+      // ⚠️ KICK_SLOW is OFF while Sprint is on. That multiplier exists so you cannot
+      // cruise around with kick permanently held — and with Sprint on, holding kick is
+      // the sprint, so slowing you for it is the two features cancelling each other out.
+      const a = (p.kick && !sprintOn() ? accel * KICK_SLOW : accel) * sp;
       p.vx += p.inX * a;
       p.vy += p.inY * a;
     }
@@ -22243,10 +22282,42 @@ function zoneForTouch(x, y){
   }
 }
 
+// ============================================================
+//  SWIPE DOWN FROM THE TOP EDGE TO PAUSE
+// ============================================================
+// ⚠️ A GESTURE, not a region, because there is no free region. `zoneForTouch` splits the
+// WHOLE screen into a move half and a kick half — there is nowhere on a phone you can
+// put a "pause here" area without taking it off a control. What there is instead is a
+// strip along the very top: the pitch is below it, both thumbs are at the bottom, and
+// pulling down from the top edge is the one gesture every phone owner already knows.
+// ⚠️ A touch that starts in the strip drives NO pad at all, which is what makes this
+// safe — it cannot half-steer you on the way to being recognised. The strip is 56px of
+// an 844px screen, off the top of a zone nobody reaches into mid-match.
+// ⚠️ Timed, so a slow drag through the strip on the way to somewhere else is not a
+// pause; and it fires on the MOVE rather than on the release, so it feels like a pull.
+const SWIPEPAUSE = { edge: 56, dist: 90, ms: 700 };
+let swipeWatch = null;
+function swipeStart(id, x, y){
+  if (!isTouchLayout() || paused || !running) return false;
+  if (y > SWIPEPAUSE.edge) return false;
+  swipeWatch = { id, x, y, t: performance.now() };
+  return true;
+}
+function swipeMoved(id, x, y){
+  if (!swipeWatch || swipeWatch.id !== id) return false;
+  if (performance.now() - swipeWatch.t > SWIPEPAUSE.ms){ swipeWatch = null; return true; }
+  // Downward, and not mostly sideways — a horizontal drag along the top is somebody
+  // reaching for the fullscreen button, not asking for the menu.
+  const dy = y - swipeWatch.y, dx = Math.abs(x - swipeWatch.x);
+  if (dy > SWIPEPAUSE.dist && dy > dx){ swipeWatch = null; togglePause(true); }
+  return true;
+}
+function swipeEnd(id){ if (swipeWatch && swipeWatch.id === id) swipeWatch = null; }
 function onDown(id, x, y){
   // ⚠️ Only an UNCONTROLLED replay. With the transport up the pitch is not a button —
   // a mis-tap must not end something you deliberately sat down to watch.
   if (replay.active){ if (!replay.controls) skipReplay(); return; }
+  if (swipeStart(id, x, y)) return;      // top edge: a pull-down, never a control
   if (!running || paused || (world && world.state==='over')) return;
   const z = zoneForTouch(x,y);
   const pad = pads[z.pad];
@@ -22257,6 +22328,7 @@ function onDown(id, x, y){
   }
 }
 function onMove(id, x, y){
+  if (swipeMoved(id, x, y)) return;      // see SWIPEPAUSE
   // Sensitivity shrinks the effective joystick radius, so a shorter drag reaches full tilt.
   const R = JOY_R / (sel.sens || 1);
   for (const key of ['p1','p2']){
@@ -22278,6 +22350,7 @@ function onMove(id, x, y){
   }
 }
 function onUp(id){
+  swipeEnd(id);
   for (const key of ['p1','p2']){
     const pad = pads[key];
     if (pad.move.id === id){ pad.move.id=null; pad.dx=0; pad.dy=0; pad.rawX=0; pad.rawY=0; }
@@ -22599,6 +22672,38 @@ resize();
 // one — which would leave the sensor silent for the whole session with nothing to say so.
 // `once` because tiltAsk latches anyway and a live listener per tap is pure waste.
 window.addEventListener('pointerdown', tiltAsk, { once: true, passive: true });
+
+// ============================================================
+//  SLIDERS ARE DRAG-ONLY — grab the handle, do not tap the track
+// ============================================================
+// ⚠️ A native range input JUMPS to wherever you press. On a desktop that is a feature;
+// on a phone it is a trap, because the sliders are wide, they sit in a column you are
+// scrolling through with your thumb, and a graze anywhere along one silently rewrites a
+// Game Feel value you had tuned. Every one of them is a physical fader now: you have to
+// put your finger ON the handle and drag it.
+// ⚠️ Implemented by REFUSING the press, not by re-implementing the control. Preventing
+// the default on `pointerdown` is what stops the browser both jumping and starting its
+// own drag — so a press away from the handle does nothing at all, and a press on the
+// handle is left entirely to the native drag, which already does momentum, capture and
+// keyboard focus correctly. Rewriting that by hand is how a slider loses its keyboard.
+// ⚠️ Fine pointers are exempt: a mouse click on the track is precise, deliberate and the
+// long-standing behaviour on a desktop, and there is no scrolling thumb to graze.
+const SLIDER_GRAB = 26;      // px either side of the handle that count as ON it
+document.addEventListener('pointerdown', e => {
+  const el = e.target;
+  if (!el || el.tagName !== 'INPUT' || el.type !== 'range') return;
+  if (e.pointerType === 'mouse') return;
+  const r = el.getBoundingClientRect();
+  if (!r.width) return;
+  const min = +el.min || 0, max = el.max === '' ? 100 : +el.max;
+  const span = (max - min) || 1;
+  const frac = Math.max(0, Math.min(1, ((+el.value || 0) - min) / span));
+  // The handle's centre travels between half a handle in from each end, which is what
+  // the browser does and what makes the ends reachable.
+  const pad = SLIDER_GRAB/2;
+  const cx = r.left + pad + frac * (r.width - pad*2);
+  if (Math.abs(e.clientX - cx) > SLIDER_GRAB) e.preventDefault();
+}, { capture: true });
 window.addEventListener('keydown', tiltAsk, { once: true });
 
 if ('serviceWorker' in navigator) {
@@ -23095,7 +23200,8 @@ if (window.__MAGNETDEBUG) {
     loadMaps, saveMaps, applyMaps,
     BOT_TYPES, BOT_PLANS, botTypeM, botPlanOf, botDrawPlans, BOTPLANOPT,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT,
-    SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, advanceStamina, kickoffToss, KICKOFF_TOUCH,
+    SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, sprintBoost, advanceStamina,
+    SWIPEPAUSE, onDown, onMove, onUp, SLIDER_GRAB, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
     drawOneDisc, motionOK, prefersReducedMotion, firstHumanSeat, mergePads, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
