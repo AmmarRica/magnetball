@@ -3551,6 +3551,11 @@ const ICONS = {
   glove:     'M7 20.4V11a1.7 1.7 0 0 1 3.4 0V8.2a1.7 1.7 0 0 1 3.4 0V10a1.7 1.7 0 0 1 3.4 0v1.4a1.7 1.7 0 0 1 3.4 0v3.4c0 3.2-2.6 5.6-5.8 5.6Z M4 14.4l3 2.4',
   ball:      'M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2Z M12 7.4l3.4 2.5-1.3 4h-4.2l-1.3-4Z M12 3.4v4 M19.6 9.9l-4.2 0M8.6 9.9l-4.2 0 M9.9 13.9 7.4 17.6 M14.1 13.9l2.5 3.7',
   clipboard: 'M8.6 4.4H6.4A1.4 1.4 0 0 0 5 5.8v13.4a1.4 1.4 0 0 0 1.4 1.4h11.2a1.4 1.4 0 0 0 1.4-1.4V5.8a1.4 1.4 0 0 0-1.4-1.4h-2.2 M9.4 2.8h5.2v3.2H9.4Z M8.6 11h6.8 M8.6 15h4.8',
+  // ⚠️ Drawn, not a sprite. `assets/` has an animal pack, a flag pack, an input pack and
+  // a sports pack, and there is no shirt in any of them — and the lobby's colour
+  // swatches are canvas, in world space, where an optional asset that may not be beside
+  // the file would be a control that vanishes. One path, same 24x24 grid as every other.
+  shirt:     'M9 3.6 5.2 5.2 3.4 9.4l3.2 1.5 1.2-1.6V20.4h8.4V9.3l1.2 1.6 3.2-1.5-1.8-4.2L15 3.6a3 3 0 0 1-6 0Z',
   wall:      'M3 5.4h18v13.2H3Z M3 9.8h18 M3 14.2h18 M9 5.4v4.4 M15 5.4v4.4 M6 9.8v4.4 M12 9.8v4.4 M18 9.8v4.4 M9 14.2v4.4 M15 14.2v4.4',
 };
 // Difficulty is a RAMP, not seven unrelated pictures — generated out of DIFF's own
@@ -3705,7 +3710,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0810AM';
+const VERSION = '20260817.0900AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3721,6 +3726,13 @@ const VERSION = '20260817.0810AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0900AM', title: 'The colours are shirts',
+    added: [],
+    changed: [
+      '<b>The team colours you walk onto in warm-up are drawn as shirts now</b>, not as coloured squares \u2014 so what you are picking looks like the thing it changes. The one your side is wearing is outlined.',
+      'They stay the right way up whichever way round the pitch is, like the letters on the keyboard.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0810AM', title: 'Sprint is on the KICK button',
     added: [
       '<b>Swipe down from the top edge to pause</b> on a phone. There is no spare corner to put a pause button in \u2014 both halves of the screen are your controls \u2014 so it is a pull-down from the very top, where no thumb goes mid-match.',
@@ -18537,6 +18549,30 @@ function drawSubPrompts(w){
 // than as rects: deck view and the side camera turn and squash the pitch, and a screen
 // rect would sit at an angle to the ground it is painted on.
 // ⚠️ Draw only. The dwell it fills comes from `p.kbT`, which the step loop owns.
+// ⚠️ A T-SHIRT, drawn as a path into a box. There is no shirt sprite in `assets/` — the
+// packs there are animals, flags, input prompts and sports equipment — and it would be
+// the wrong tool anyway: `assets/` is an optional enhancement with graceful fallback,
+// and a colour swatch that disappears when the artwork is not beside the file is a
+// control nobody can find. Same shape as `ICONS.shirt`, drawn rather than stroked so it
+// can be FILLED with the colour it gives you.
+function shirtPath(c, x, y, W, H){
+  c.beginPath();
+  c.moveTo(x + 0.34*W, y);
+  c.lineTo(x + 0.12*W, y + 0.11*H);
+  c.lineTo(x + 0.00*W, y + 0.40*H);
+  c.lineTo(x + 0.19*W, y + 0.51*H);
+  c.lineTo(x + 0.25*W, y + 0.43*H);
+  c.lineTo(x + 0.25*W, y + H);
+  c.lineTo(x + 0.75*W, y + H);
+  c.lineTo(x + 0.75*W, y + 0.43*H);
+  c.lineTo(x + 0.81*W, y + 0.51*H);
+  c.lineTo(x + 1.00*W, y + 0.40*H);
+  c.lineTo(x + 0.88*W, y + 0.11*H);
+  c.lineTo(x + 0.66*W, y);
+  // the collar dips between the two shoulder points
+  c.quadraticCurveTo(x + 0.50*W, y + 0.17*H, x + 0.34*W, y);
+  c.closePath();
+}
 function drawLobbyKeys(w, ox, oy){
   const kb = w.kb; if (!kb) return;
   const T = TH;
@@ -18563,14 +18599,32 @@ function drawLobbyKeys(w, ox, oy){
     const picked = k.colTeam !== undefined ? teamColOf(k.colTeam) === k.col
                  : k.diff ? sel.diff === k.diff : false;
     const on = picked ? 1 : 0;
-    ctx.fillStyle = k.colTeam !== undefined ? rgba(k.col, 0.30 + 0.62*Math.max(f, on))
-                                            : rgba(ink, 0.08 + 0.30*Math.max(f, on*0.6));
+    ctx.fillStyle = rgba(ink, 0.08 + 0.30*Math.max(f, on*0.6));
     ctx.fill();
     ctx.lineWidth = Math.max(1, 1 + 2*Math.max(f, on*1.4));
-    ctx.strokeStyle = k.colTeam !== undefined ? rgba(k.col, 0.55 + 0.45*Math.max(f, on))
-                                              : rgba(ink, 0.35 + 0.45*Math.max(f, on));
+    ctx.strokeStyle = rgba(ink, 0.35 + 0.45*Math.max(f, on));
     ctx.stroke();
-    if (k.colTeam !== undefined) continue;      // a swatch is its colour; no label
+    // ⚠️ A COLOUR SWATCH IS A SHIRT, and it is drawn UPRIGHT inside its plate rather
+    // than turned with the ground. The plate is a place you walk to, so its corners
+    // follow the pitch; the shirt is a picture of what you are picking, and a picture on
+    // its side reads worse — the same split the letters are drawn under.
+    if (k.colTeam !== undefined){
+      const xs2 = pts.map(q => q[0]), ys2 = pts.map(q => q[1]);
+      const bw2 = Math.max.apply(null, xs2) - Math.min.apply(null, xs2);
+      const bh2 = Math.max.apply(null, ys2) - Math.min.apply(null, ys2);
+      const sw2 = Math.min(bw2, bh2) * 0.86, sh2 = sw2 * 0.92;
+      const [sxp, syp] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
+      screenUpright(sxp + ox, syp + oy, (cx2, cy2) => {
+        shirtPath(ctx, cx2 - sw2/2, cy2 - sh2/2, sw2, sh2);
+        ctx.fillStyle = rgba(k.col, 0.55 + 0.45*Math.max(f, on));
+        ctx.fill();
+        // The one you are WEARING is outlined, so eight shirts are not eight guesses.
+        ctx.lineWidth = Math.max(1, on ? 2.2 : 1);
+        ctx.strokeStyle = on ? rgba(ink, 0.95) : rgba(ink, 0.30);
+        ctx.stroke();
+      });
+      continue;                                  // a shirt is its colour; no label
+    }
     // ⚠️ THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES. A key is a place you
     // walk to, so its four corners have to follow the ground exactly; the letter on it is
     // a word, and a word on its side is not readable. `screenUpright`, not `uprightAt` —

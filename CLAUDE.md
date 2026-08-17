@@ -1835,6 +1835,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   in the corner, the team-size stepper. All of it is `w.kb.keys` — one list of walk-on
   pads — so bounds, `kbKeyAt`, `lobbyReach`, `computeCam` and the painter all work off
   one thing and a new kind of pad costs nothing.
+  ⚠️ **A COLOUR SWATCH IS A T-SHIRT** (`shirtPath`), drawn UPRIGHT inside its plate the
+  way a key's letter is: the plate is a place you walk to so its corners follow the
+  ground, and the shirt is a picture of what you are picking, which on its side reads
+  worse. The one you are wearing is outlined, or eight shirts are eight guesses.
+  ⚠️ **Drawn, not a sprite.** `assets/` has an animal pack, a flag pack, an input pack
+  and a sports pack, and there is no shirt in any of them — and it would be the wrong
+  tool anyway: `assets/` is an optional enhancement with graceful fallback, so a colour
+  control that vanishes when the artwork is not beside the file is one nobody can find.
+  `ICONS.shirt` is the same shape for the menu.
   ⚠️ **Which EDGE the colour strips go on depends on which way the halves divide.**
   Flat the halves are top and bottom, so the strips are two columns down one side;
   turned they are LEFT and RIGHT, so a column would put both teams' colours beside both

@@ -392,7 +392,11 @@ await ph.close();
 //     both painted at 0.95 and the board was a near-white slab with nothing on it.
 //     ⚠️ Measured on RENDERED PIXELS against the plate, never on the palette hex: a
 //     hex says nothing about what alpha did to it.
-const rp = await page({ viewport: { width: 1298, height: 914 } });
+// ⚠️ `deviceScaleFactor: 3`. A colour swatch is about a body wide, and at this zoom that
+// is ~15 device pixels — too coarse to tell a tee from a square, which is what the shape
+// check below has to do. Three times the pixels for the same CSS size measures the same
+// drawing properly and changes nothing about the game.
+const rp = await page({ viewport: { width: 1298, height: 914 }, deviceScaleFactor: 3 });
 const read = await rp.evaluate(() => {
   const M = window.__magnet, o = {};
   // ⚠️ rgba() first, on its own — it is the root of the contrast half and it is used
@@ -472,6 +476,56 @@ const read = await rp.evaluate(() => {
              kbTop: Math.round(kbTop), pitchBot: Math.round(pitchBot),
              sideOnKey };
   };
+  // ---- a COLOUR SWATCH IS A SHIRT, not a coloured square ------------------------
+  // ⚠️ Measured on the ink's WIDTH PER ROW, which is the one thing a tee does and a
+  // square cannot: it is widest across the sleeves and narrower down the body. A pixel
+  // count or an "is it coloured" check passes on the square this replaced.
+  o.shirt = (() => {
+    M.sel.display = 'auto'; M.applyDisplayMode();
+    window.dispatchEvent(new Event('resize'));
+    M.sel.mode = '2v2'; M.sel.lobby = 'on'; M.setMatchSeed(4); M.startMatch();
+    const w2 = M.world; for (let i = 0; i < 20; i++) M.step(w2);
+    M.computeCam(); M.render();
+    const cv = document.getElementById('game'), c = cv.getContext('2d');
+    const dpr = cv.width / cv.clientWidth;
+    // The swatch this team is actually WEARING — it is the brightest, so easiest to read.
+    const k = w2.kb.keys.find(q => q.colTeam !== undefined && M.teamColOf(q.colTeam) === q.col);
+    if (!k) return { found: false };
+    const pts = [[k.x, k.y], [k.x+k.w, k.y], [k.x, k.y+k.h], [k.x+k.w, k.y+k.h]]
+      .map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    const x0 = Math.round(Math.min.apply(null, xs)*dpr), y0 = Math.round(Math.min.apply(null, ys)*dpr);
+    const bw = Math.round((Math.max.apply(null, xs) - Math.min.apply(null, xs))*dpr);
+    const bh = Math.round((Math.max.apply(null, ys) - Math.min.apply(null, ys))*dpr);
+    const d = c.getImageData(x0, y0, bw, bh).data;
+    // The shirt is filled in the team's colour; match on hue distance to it.
+    const hex = k.col.replace('#','');
+    const tr = parseInt(hex.slice(0,2),16), tg = parseInt(hex.slice(2,4),16), tb = parseInt(hex.slice(4,6),16);
+    // ⚠️ COUNTED per row, not measured as an extent. An extent is `hi - lo`, so two
+    // stray pixels near either edge — an antialiased plate border tinted toward the
+    // fill — report the full width and every row comes out the same. That is exactly
+    // what happened: a real shirt measured 28 across the sleeves and 28 down the body
+    // in a 37px box, which is the reading a square gives.
+    const rowW = [];
+    for (let y = 0; y < bh; y++){
+      let n = 0;
+      for (let x = 0; x < bw; x++){
+        const i = (y*bw + x)*4;
+        if (Math.abs(d[i]-tr) + Math.abs(d[i+1]-tg) + Math.abs(d[i+2]-tb) <= 90) n++;
+      }
+      rowW.push(n);
+    }
+    const widest = Math.max.apply(null, rowW);
+    // ⚠️ 0.72 of the plate, not 0.85. The shirt is inset inside its plate, so 0.85 lands
+    // within half a pixel of the hem and reads zero — a sample taken on the edge of the
+    // thing rather than in it.
+    const body = rowW[Math.round(bh*0.72)] || 0;
+    return { found: true, box: [bw, bh], widest, body,
+             // sleeves are wider than the body — the whole of "it is a tee"
+             tapersBelowTheSleeves: widest > body * 1.2 && body > 0,
+             // ...and the shirt does not fill the plate corner to corner
+             notASquare: widest < bw };
+  })();
   o.flat = probe(false);
   o.deck = probe(true);
   M.sel.display = 'auto'; M.applyDisplayMode();
@@ -553,6 +607,11 @@ ok('...and HOLDING kick is still one letter', r.holdIsOneLetter,
    `a second of the button down gave "${r.afterHeldKick}" — latched on the button, not the key`);
 ok('...and crossing the board with kick held types nothing', r.crossingIsSilent,
    `walked E-R-T-Y holding kick and got "${r.afterCross}" — the latch is on the BUTTON, so it is still spent`);
+
+ok('a colour swatch is drawn as a SHIRT', read.shirt.found && read.shirt.tapersBelowTheSleeves,
+   JSON.stringify(read.shirt) + ' — measured as ink WIDTH PER ROW, the one thing a tee does and a square cannot: widest across the sleeves, narrower down the body. A pixel count passes on the coloured square this replaced');
+ok('...and not a filled plate', read.shirt.found && read.shirt.notASquare,
+   JSON.stringify(read.shirt));
 
 ok('rgba() honours the alpha on a colour that already has one', read.rgbaKeepsAlpha,
    'it used to hand a non-hex colour straight back, and Grass, the default palette, sets line: rgba(255,255,255,0.95) — so an 8% plate wash painted at 0.95');
