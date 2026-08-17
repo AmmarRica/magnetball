@@ -284,7 +284,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   over 600 steps with the tilt swinging hard and flat. ⚠️ Advanced in `advanceTilt()` next to
   `decayJuice()`, **never in a draw**: both the smoothing and the recentring are per-step
   decays. ⚠️ The handler stores a RAW reading and does no time-based maths — the sensor fires
-  at its own rate, not the sim's. ⚠️ **The neutral position DRIFTS** toward however you are
+  at its own rate, not the sim's. ⚠️ **That was a claim the code did not honour**: the
+  neutral's drift is a decay and it was being applied once per SENSOR EVENT, so a
+  handset reporting at 100Hz pulled its neutral back nearly twice as hard as one at
+  60Hz — reported as the picture *swimming* under your hands. The recentre and the
+  clamp both live in `advanceTilt` now, once per fixed step. `tests/tilt.mjs` feeds one
+  reading a step against five and requires the same neutral; nothing else in that file
+  could see it. ⚠️ **`span` is 34°, not 20** — twenty is roughly how much a handset moves
+  while you are merely playing, so the effect sat near full deflection permanently — and
+  there is a **`dead` zone** of 2.5° with the range above it re-normalised, because a
+  degree of hand tremor was a permanent sub-pixel wobble under the HUD text. ⚠️ **The neutral position DRIFTS** toward however you are
   actually holding the phone (`TILT.recentre`), and the first reading is adopted outright:
   without that, "level" means flat on a table, so playing lying down pins the effect at full
   deflection forever, which is a crooked picture rather than a parallax. ⚠️ The reading is

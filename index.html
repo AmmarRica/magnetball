@@ -3699,7 +3699,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0450AM';
+const VERSION = '20260817.0605AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3715,6 +3715,13 @@ const VERSION = '20260817.0450AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0605AM', title: 'Tilt that holds still',
+    added: [],
+    changed: [
+      '<b>The tilt parallax no longer swims.</b> The neutral position it drifts toward was being nudged once per reading from the phone\u2019s motion sensor rather than once per frame, so how much the picture wandered under your hands depended on how fast your handset reports. It now settles at the same rate on every phone, and it takes about eleven seconds rather than four \u2014 a lean you are holding stays where you put it.',
+      '<b>And it takes a real tilt now.</b> Full effect needed only twenty degrees, which is about how much a phone moves while you are simply playing, so it was permanently near maximum. There is also a couple of degrees of dead zone at the centre, so a slightly unsteady hand no longer makes the HUD shimmer.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0450AM', title: 'Sprint',
     added: [
       '<b>Sprint.</b> Push the stick all the way and you run flat out, with a ring round you draining like a clock. Empty it and you are down to a tired speed until the ring has filled back up \u2014 so a sprint is something you spend rather than something you hold. Bots get the same ring, so it is not a handicap you carry alone.',
@@ -5774,36 +5781,50 @@ function goalZoomSecs(){ const v = sel.goalZoomSpd; return v == null ? GOALCAM.i
 // a match played on a phone being waved about plays exactly like one on a desk.
 // `tests/tilt.mjs` hashes the whole world with it swinging to prove it.
 const TILT = {
-  // Degrees away from however you are holding the phone that reach full effect. Small,
-  // because this is meant to answer a hand moving rather than a hand waving.
-  span: 20,
+  // Degrees away from however you are holding the phone that reach full effect.
+  // ⚠️ 34, not 20. Twenty degrees is not a lean — it is roughly how much a handset moves
+  // while you are simply playing, so the parallax sat at or near full deflection the
+  // whole time and swung its entire range on every hand movement. Reported as too strong
+  // and swimming. At 34 it takes a deliberate tilt, which is what it is for.
+  span: 34,
+  // ⚠️ A few degrees of NOTHING at the centre. Without it a hand tremor of a degree or
+  // two is a percent or two of full deflection, which on the UI layer is a permanent
+  // sub-pixel wobble underneath text — the thing the eye picks up first and the reason
+  // "jittery" and "too strong" are the same report. The range above the zone is
+  // re-normalised (see advanceTilt) so full effect still arrives at `span`.
+  dead: 2.5,
   // Screen pixels at full tilt. ⚠️ The ground and the bodies go OPPOSITE ways, so the
   // parallax you actually see is the sum — about 11px, which is a shift you feel and do
   // not catch. Anything bigger stops reading as depth and starts reading as drift.
-  body: 7,
-  ground: 4,
+  body: 6,
+  ground: 3.4,
   // ⚠️ The TURF sits a little further back than the MARKINGS, so the pitch has depth of its
   // own rather than sliding about as one flat picture. Deliberately tiny: the touchline is a
   // marking and the grass is the turf under it, so any real gap between them stops reading as
   // a bevel and starts reading as a misaligned pitch.
-  turf: 2.5,
+  turf: 2,
   // The nearest layer — the thumbstick markers, the KICK pad and the HUD. Furthest from the
   // pitch in depth, so it moves most; they sit in the corners with nothing to line up
   // against, which is what lets them move more than anything else without looking loose.
-  ui: 9,
+  ui: 7,
   // Per-step approach to the sensor's number. Step-locked (see advanceTilt), so it is the
   // same speed on a 60Hz and a 144Hz screen.
-  ease: 0.14,
+  ease: 0.11,
   // ⚠️ Per-step drift of the NEUTRAL position toward however you are actually holding the
   // phone. Without it, "level" means flat on a table: play lying down, or with the phone
   // at the angle every person actually holds one, and the effect sits pinned at full
-  // deflection forever — which is not a parallax, it is a crooked picture. ~4s to settle.
-  recentre: 0.004,
+  // deflection forever — which is not a parallax, it is a crooked picture.
+  // ⚠️ 0.0015, so the time constant is 1/(0.0015*60) ≈ 11 SECONDS. At 0.004 it was ~4s,
+  // and four seconds is short enough to watch: a lean you were holding visibly crawled
+  // back to centre under your hands, you leant further to compensate, and that is the
+  // "swimming" half of the report. Eleven seconds still adopts a new posture quickly
+  // enough that lying down is comfortable within a couple of breaths.
+  recentre: 0.0015,
 };
 // x/y are what the renderer reads, tx/ty the sensor's latest, bx/by the drifting neutral.
 // ⚠️ `bx` starts null rather than 0 so the FIRST reading becomes the neutral outright —
 // easing up from a hard zero means the effect lurches on when the sensor wakes.
-const tilt = { x:0, y:0, tx:0, ty:0, bx:null, by:null, live:false };
+const tilt = { x:0, y:0, tx:0, ty:0, rx:0, ry:0, bx:null, by:null, live:false };
 function tiltOn(){
   // ⚠️ Phones only, and off under Reduce Motion. A picture that swims when your hand moves
   // is exactly what that setting is asking not to happen, and it is not a preference this
@@ -5871,6 +5892,23 @@ function syncTiltUI(){
 // a 144Hz screen and the effect would feel different on different phones.
 function advanceTilt(){
   if (!tilt.live) return;
+  const rx = tilt.rx || 0, ry = tilt.ry || 0;
+  // ⚠️ The NEUTRAL drifts here, at the sim's fixed rate, and the first reading is
+  // adopted outright — see TILT.recentre and onDeviceTilt for why it is not in the
+  // handler any more.
+  if (tilt.bx == null){ tilt.bx = rx; tilt.by = ry; }
+  tilt.bx += (rx - tilt.bx) * TILT.recentre;
+  tilt.by += (ry - tilt.by) * TILT.recentre;
+  // ⚠️ The dead zone subtracts, and then the REMAINING range is re-normalised, so full
+  // effect still lands at `span` rather than at `span + dead`. A plain subtraction makes
+  // every lean slightly weaker and leaves a visible step at the edge of the zone.
+  const cl = v => {
+    const m = Math.abs(v) - TILT.dead;
+    if (m <= 0) return 0;
+    return (v < 0 ? -1 : 1) * Math.min(1, m / (TILT.span - TILT.dead));
+  };
+  tilt.tx = cl(rx - tilt.bx);
+  tilt.ty = cl(ry - tilt.by);
   tilt.x += (tilt.tx - tilt.x) * TILT.ease;
   tilt.y += (tilt.ty - tilt.y) * TILT.ease;
 }
@@ -5886,13 +5924,14 @@ function onDeviceTilt(e){
   // you lean it forwards.
   const ang = ((screen.orientation && screen.orientation.angle) || window.orientation || 0) * Math.PI/180;
   const c = Math.cos(ang), s = Math.sin(ang);
-  const rx = gx*c + gy*s, ry = -gx*s + gy*c;
-  if (tilt.bx == null){ tilt.bx = rx; tilt.by = ry; }
-  tilt.bx += (rx - tilt.bx) * TILT.recentre;
-  tilt.by += (ry - tilt.by) * TILT.recentre;
-  const cl = (v) => Math.max(-1, Math.min(1, v / TILT.span));
-  tilt.tx = cl(rx - tilt.bx);
-  tilt.ty = cl(ry - tilt.by);
+  // ⚠️ RAW, AND NOTHING ELSE — which is what the comment above has always claimed and
+  // what the code did not do. The recentre is a DECAY, and it was being applied once per
+  // SENSOR EVENT: a handset delivering readings at 100Hz pulled its neutral back nearly
+  // twice as hard as one at 60Hz, so how much the picture swam under your hands depended
+  // on the phone. The clamp went with it, since it reads the neutral. Both now live in
+  // `advanceTilt`, which runs exactly once per fixed step.
+  tilt.rx = gx*c + gy*s;
+  tilt.ry = -gx*s + gy*c;
   tilt.live = true;
 }
 // ⚠️ iOS 13+ will not deliver a single reading until asked, and will only be asked from

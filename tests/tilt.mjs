@@ -53,6 +53,7 @@ const r = await p.evaluate(()=>{
   // a hard zero would read that as full deflection and snap the pitch sideways on wake.
   M.tilt.bx = null; M.tilt.by = null; M.tilt.x = 0; M.tilt.y = 0;
   M.onDeviceTilt({ gamma: 35, beta: -28 });        // phone held at a normal reading angle
+  M.advanceTilt();                                 // ⚠️ the handler stores RAW now
   o.firstReadingIsNeutral = Math.abs(M.tilt.tx) < 0.02 && Math.abs(M.tilt.ty) < 0.02;
 
   // ⚠️ Pin the baseline and the smoothed value before each sub-check. The baseline DRIFTS
@@ -65,11 +66,17 @@ const r = await p.evaluate(()=>{
   // ---- 3. step-locked: a DRAW must not advance it ------------------------
   reset();
   M.onDeviceTilt({ gamma: 40, beta: 0 });          // a target well away from where it is
-  o.targetSet = +M.tilt.tx.toFixed(3);
+  // ⚠️ THE HANDLER STORES A RAW READING AND DOES NOTHING ELSE. The clamp and the neutral
+  // both moved into `advanceTilt`, because the neutral is a DECAY and applying it once
+  // per SENSOR EVENT made the drift depend on the handset's reporting rate — a phone at
+  // 100Hz pulled its neutral back nearly twice as hard as one at 60Hz, which is the
+  // "swimming" half of the tilt report. So `tx` is still zero until a step runs.
+  o.handlerIsRaw = M.tilt.tx === 0 && M.tilt.rx !== 0;
   const beforeDraws = M.tilt.x;
   M.computeCam(); M.render(); M.render(); M.render();
   o.drawsDoNotAdvance = M.tilt.x === beforeDraws;
   M.advanceTilt();
+  o.targetSet = +M.tilt.tx.toFixed(3);
   o.afterOneStep = +M.tilt.x.toFixed(4);
   o.stepAdvances = M.tilt.x !== beforeDraws;
   // ⚠️ It eases: one step moves it TOWARD the target without arriving. Not a magnitude
@@ -79,12 +86,33 @@ const r = await p.evaluate(()=>{
 
   // ---- 4 (cont). the baseline drifts back to however you hold it ----------
   // ⚠️ Held at a constant angle, the effect must return toward centre — that is what makes
-  // playing lying down work. Fed 600 readings, because the drift is deliberately slow
-  // (~4s at 60Hz): 80 of them leaves it two thirds deflected and reads as a broken drift.
+  // playing lying down work. The drift is deliberately SLOW: its time constant is
+  // 1/(recentre*60), which is ~11s, so this needs thousands of steps. Fed too few it
+  // reads as a broken drift; that trap has now caught two different tunings.
   reset();
   const trace = [];
-  for (let i=0;i<600;i++){ M.onDeviceTilt({ gamma: 40, beta: 0 }); M.advanceTilt();
-                           if (i%150===0) trace.push(+M.tilt.tx.toFixed(3)); }
+  const need = Math.ceil(4 / (M.TILT.recentre * (1/60)) * 60) / 60 * 60;
+  for (let i=0;i<2400;i++){ M.onDeviceTilt({ gamma: 40, beta: 0 }); M.advanceTilt();
+                           if (i%600===0) trace.push(+M.tilt.tx.toFixed(3)); }
+  // ⚠️ AND THE DRIFT MUST NOT DEPEND ON HOW FAST THE SENSOR TALKS. This is the bug the
+  // move to `advanceTilt` fixes, and it is invisible to every other check in this file:
+  // the recentre is a per-unit-time decay, and while it lived in the handler it ran once
+  // per READING — so a handset delivering 5 readings per frame pulled its neutral back
+  // five times as hard, and how much the picture swam under your hands depended on the
+  // phone. Same number of STEPS, one reading per step vs five, must land in the same
+  // place. ⚠️ Compared as a NUMBER, not a boolean: "they both drifted" is true of the
+  // broken build too.
+  const drift = perStep => {
+    reset(); M.tilt.bx = 0; M.tilt.by = 0;
+    for (let i=0;i<900;i++){
+      for (let k=0;k<perStep;k++) M.onDeviceTilt({ gamma: 40, beta: 0 });
+      M.advanceTilt();
+    }
+    return +M.tilt.bx.toFixed(4);
+  };
+  o.driftAt1 = drift(1);
+  o.driftAt5 = drift(5);
+  o.driftIsRateIndependent = Math.abs(o.driftAt1 - o.driftAt5) < 0.01;
   o.recentreTrace = trace;
   o.recentreEnd = +M.tilt.tx.toFixed(3);
   o.pinnedThenRecentres = o.recentreEnd < 0.25;
@@ -415,6 +443,8 @@ ok(all.firstReadingIsNeutral, `a hard first reading was treated as full deflecti
 ok(all.drawsDoNotAdvance, 'a draw advanced the tilt — both the smoothing and the recentring are per-step decays, so a draw-driven version runs 2.4× fast on a 144Hz screen (the trails rule)');
 ok(all.stepAdvances, 'the step did not advance the tilt, so the check above passed for free');
 ok(all.easesNotSnaps, 'the tilt snapped straight to the sensor value instead of easing');
+ok(all.handlerIsRaw, 'the sensor handler is still doing the clamp and the neutral itself — both are time-based, and the handler fires at the SENSOR\'s rate, not the sim\'s');
+ok(all.driftIsRateIndependent, `the neutral drifted to ${all.driftAt1} at one reading a step and ${all.driftAt5} at five — a decay applied per READING makes how much the picture swims under your hands depend on how fast the handset talks`);
 ok(all.pinnedThenRecentres, `held at a constant 40° the effect stayed at ${all.recentreValue} — the neutral position has to drift to however you are ACTUALLY holding the phone, or playing lying down pins it at full deflection forever`);
 ok(all.opposite, `the two layers move the same way (${JSON.stringify(all.lift)} vs ${JSON.stringify(all.ground)}) — two layers moving by different amounts in OPPOSITE directions is what a parallax is`);
 ok(all.bothMove, 'one of the two layers does not move at all');
