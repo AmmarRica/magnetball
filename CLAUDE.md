@@ -2058,12 +2058,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `scrollIntoView()` first, **which scrolls the row for you** — so a chip no human could
   reach measured as perfectly pressable. Nothing in the new suite may scroll a row, and
   it asserts `scrollLeft === 0` to prove it didn't.
-- **`.subtabs` is STICKY**, pinned under its own card's header at
-  `--sticky-top + --sec-h` (measured by `syncSticky`). ⚠️ A chip row that scrolls away with the
-  grid is only half a fix — you still have to scroll back up to change tab, which is the vertical
-  scrolling it exists to remove. ⚠️ And it must be ONE row (`flex-wrap: nowrap`, scrolling
-  sideways like `#jumpBar`): two pinned rows put half the chips behind the section header and let
-  the pane's tiles through the gap.
+- **`.subtabs` DOES NOT FLOAT**, and that is a reversal. It used to pin under its own
+  card's header, on the argument that a chip row scrolling away with the grid still
+  makes you scroll back up to change tab. ⚠️ What that bought is worth less than what it
+  cost: the card already pins the **KICK OFF bar** and the **section header**, so a
+  third floating band sat on the card's own text — the hint paragraph under a pane came
+  out with a row of chips through the middle of it, which is how it was reported. Two
+  pinned rows plus one more is a lid, not navigation. `--sec-h` went with it: that
+  variable had exactly one reader and measuring a section header on every rebuild is a
+  layout read nothing uses. ⚠️ It is still ONE row (`flex-wrap: nowrap`, scrolling
+  sideways like `#jumpBar`, wrapping only for a fine pointer) — two rows put half the
+  chips behind the header and let the pane's tiles through the gap.
+  ⚠️ `tests/menunav.mjs` checks it **scrolls away**, not merely that `position` is not
+  sticky: without that, "not sticky" is satisfied by a row that never moved because
+  nothing scrolled.
 - **FPS readout:** `fps` / `trackFps(dt)`, the last row of `drawDebug`'s panel so it lands
   directly above the version tag. ⚠️ The one timer here that is deliberately **not step-locked**
   — it is counted in `loop()` off wall-clock, because the sim rate is pinned at 1/60 by design

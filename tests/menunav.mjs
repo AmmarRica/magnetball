@@ -182,17 +182,25 @@ const r = await p.evaluate(async ()=>{
   // OVERFLOW, because an overflowing row on a desktop is chips nobody can reach.
   // `tests/chipreach.mjs` owns both ends of it, including the phone's single row.
   const tabs = document.querySelector('.subtabs[data-tabs="theme"]');
-  o.tabsSticky = getComputedStyle(tabs).position === 'sticky';
+  // ⚠️ DELIBERATELY NOT STICKY. This used to require the opposite. The card already
+  // has a pinned KICK OFF bar and a pinned section header above it, so a third floating
+  // band parked itself over the card's own text — the hint under the pane came out with
+  // a row of chips through the middle of it. Reversed on request; what it is pinned
+  // against now is nothing.
+  o.tabsNotSticky = getComputedStyle(tabs).position !== 'sticky';
   o.tabsNoOverflow = tabs.scrollWidth <= tabs.clientWidth + 1;
   o.tabsWrap = getComputedStyle(tabs).flexWrap;
   M.openSection('theme'); M.showSubTab('theme','bundle');
   const su2 = document.getElementById('setup');
   const hdr2 = card('theme').querySelector('h2');
   su2.scrollTop = 0; su2.scrollTop += 1150;
+  // ⚠️ ...and it SCROLLS AWAY, which is the whole of "not sticky". Measured by scrolling
+  // the grid far enough that a pinned row would still be on screen: the chips have to
+  // have left with the content above them, not parked over it.
   const tb = tabs.getBoundingClientRect(), hb2 = hdr2.getBoundingClientRect();
-  o.tabsPinned = tb.top > 0 && tb.bottom < window.innerHeight &&
-                 Math.abs(tb.top - hb2.bottom) < 3;      // flush under its own header
+  o.tabsScrollAway = tb.bottom <= hb2.bottom + 1;
   o.tabsRect = [Math.round(tb.top), Math.round(tb.bottom)];
+  o.headRect = [Math.round(hb2.top), Math.round(hb2.bottom)];
   su2.scrollTop = 0;
   M.collapseAllSections();
   return o;
@@ -214,9 +222,9 @@ ok(r.groups === 'feel,match,player,replay,sound,theme', `expected sub-tabs on fe
 // hidden while the audit and the menu search still find them.
 ok(r.themeTabsFromSlots, `the Theme chips are not Bundle + the slot list: ${JSON.stringify(r.themeChips)} vs ${JSON.stringify(['bundle'].concat(r.slotKeys))}`);
 ok(r.bundleIsATab, 'the bundle grid is not behind a chip — it is the tallest grid in the card at 19 tiles, so leaving it stacked means scrolling past it to reach anything else');
-ok(r.tabsSticky, 'the sub-tab row is not sticky, so it scrolls away with the grid and you have to scroll back up to change tab');
+ok(r.tabsNotSticky, 'the sub-tab row is sticky again — the card already pins KICK OFF and its own header, and a third floating band lands on top of the card\'s text');
 ok(r.tabsNoOverflow, `the sub-tab row overflows sideways on a desktop (wrap: ${r.tabsWrap}) — a mouse has no sideways gesture, so chips past the edge of a scrollbar-less row cannot be reached at all`);
-ok(r.tabsPinned, `the chip row did not pin flush under its own section header while a grid scrolled: ${JSON.stringify(r.tabsRect)}`);
+ok(r.tabsScrollAway, `the chip row is still parked over the card while the grid scrolls: chips ${JSON.stringify(r.tabsRect)}, header ${JSON.stringify(r.headRect)} — without this "not sticky" is satisfied by a row that never moves because nothing scrolled`);
 ok(r.everyPaneHasAChip, `panes and chips do not match one-for-one: ${JSON.stringify(r.paneCounts)} vs ${JSON.stringify(r.chipCounts)}`);
 ok(r.oneOpenAtATime, 'more than one pane was visible at once');
 ok(r.everyPaneShowable, 'a pane stayed invisible even when its own chip was pressed');

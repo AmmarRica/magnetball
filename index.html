@@ -314,8 +314,14 @@
        two pinned rows put half the chips behind the header and the pane's tiles came through
        the gap. Same idiom as #jumpBar, for the same reason. Opaque, or the tiles show through.
        z-index 3 keeps it UNDER the section header (4) and over the panes. */
+    /* ⚠️ NOT STICKY, and that is a reversal. It used to pin under its own card's header
+       on the argument that a chip row scrolling away with the grid still makes you
+       scroll back up to change tab. What that bought is worth less than what it cost:
+       the card is already a pinned KICK OFF bar and a pinned section header, so a third
+       floating band sat over the card's own text — the hint paragraph under the pane was
+       cut in half by a row of chips parked on top of it, which is the report. Two pinned
+       rows plus one more is a lid, not navigation. It scrolls with the card now. */
     .subtabs { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0 0 12px;
-      position: sticky; top: calc(var(--sticky-top, 58px) + var(--sec-h, 40px)); z-index: 3;
       background: var(--panel-solid, var(--panel)); padding: 7px 0 8px;
       border-bottom: 1px solid var(--edge);
       overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
@@ -3699,7 +3705,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0605AM';
+const VERSION = '20260817.0640AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3715,6 +3721,13 @@ const VERSION = '20260817.0605AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0640AM', title: 'The tab row stops floating',
+    added: [],
+    changed: [
+      '<b>The row of tabs inside a settings card no longer floats over the card.</b> KICK OFF and the section heading are both already pinned to the top, so a third band parked on top of them landed on the card\u2019s own text \u2014 the paragraph under a tab came out with a row of chips through the middle of it.',
+      'It scrolls with the card now, like everything else in it.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0605AM', title: 'Tilt that holds still',
     added: [],
     changed: [
@@ -9161,10 +9174,10 @@ function syncSticky(){
   su.style.setProperty('--jump-h', jh + 'px');
   su.style.setProperty('--kick-h', kh + 'px');
   su.style.setProperty('--sticky-top', (kh + jh) + 'px');
-  // A card's own sub-tab row pins under that card's header, so it needs the header's height
-  // too. Any section header will do — they are all the same box.
-  const sec = document.querySelector('#setup .card.collapsible:not(#matchCard) > h2');
-  if (sec) su.style.setProperty('--sec-h', sec.offsetHeight + 'px');
+  // ⚠️ `--sec-h` is GONE with it. It existed for exactly one reader — a card's own
+  // sub-tab row pinning under that card's header — and the chip row is not sticky any
+  // more (see `.subtabs`), so measuring a section header on every rebuild was a layout
+  // read nothing used.
 }
 syncSticky();
 // ⚠️ Warm-up's visibility rides along: `viewMode()` reads the window, so a phone
