@@ -1764,6 +1764,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the keyboard on the way to the pitch spells a word. Latched until the body LEAVES that
   key, or standing still types sixty letters a second.
   ⚠️ **The first press CLEARS** — you are writing your name, not appending to "You".
+  ⚠️ **LAID OUT IN SCREEN TERMS, THEN MAPPED TO THE WORLD.** A keyboard IS its layout —
+  rows running across, under the pitch — so `buildLobbyKeys` builds the whole block in a
+  local frame where `u` runs ACROSS the screen and `v` runs DOWN it, and one `place()`
+  knows which world axes those are (`turned` = `pitchHorizontal()`, read from the same
+  predicate the camera uses and never from `cam.rot`, which is not answered yet when
+  warm-up is entered). Built straight into world x/y it was not a keyboard in deck view:
+  the rows came out as COLUMNS ten letters tall stacked up the right-hand side, every
+  letter the right way up and still unreadable. Because the turn is a quarter, a key
+  stays an **axis-aligned world rect**, so `kbKeyAt`, `lobbyReach` and `computeCam` know
+  nothing about any of it. ⚠️ Turned, the block clears a **TOUCHLINE** rather than the
+  net, because that is what "below the pitch, on screen" comes to once the pitch is on
+  its side — still outside the pitch, so `lobbySideOf` still answers −1 and the
+  placement rule the feature rests on is intact. The recentre is along **`u`**, the axis
+  the pitch is centred on.
+  ⚠️ **KICK PRESSES THE KEY UNDER YOU, and it is the only way to type a DOUBLE LETTER.**
+  The dwell has to latch until the body LEAVES the key (standing still would otherwise
+  type sixty letters a second), which makes "QQ" reachable only by walking off Q and
+  back on. A tap fires at once and re-arms on release. ⚠️ Latched on the **BUTTON**, not
+  the key, so holding KICK and walking across the board does not type the row you
+  crossed; and a tap sets `kbDone` and winds `kbT` to zero, or the dwell fires again on
+  top of it a moment later.
   ⚠️ **THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES**, and the letters are
   the whole point of the feature, so this is the thing to check after touching any of
   it. `drawLobbyKeys` runs AFTER `pitchXform` is restored, on points put through

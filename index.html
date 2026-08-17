@@ -3628,7 +3628,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0015AM';
+const VERSION = '20260817.0120AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3644,6 +3644,14 @@ const VERSION = '20260817.0015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0120AM', title: 'A keyboard that is still a keyboard sideways',
+    added: [
+      '<b>Press KICK to type the letter you are standing on.</b> Standing still on a key types it once and then waits for you to step off, so a double letter like the two Qs in a row was not something you could spell \u2014 now a tap types it, and a second tap types it again. Holding the button down is still one letter.',
+    ],
+    changed: [
+      '<b>The warm-up keyboard is laid out under the pitch as a proper keyboard whichever way round the pitch is.</b> In the Steam Deck layout, which turns the pitch on its side, it was turning with it \u2014 ten letters tall up the right-hand edge, which is not a keyboard even with every letter the right way up.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0015AM', title: 'The warm-up keyboard you can actually read',
     added: [],
     changed: [
@@ -13653,43 +13661,77 @@ function enterWarmup(w){
 // same shape on a 400-wide Futsal court and a 1200-wide Colossus. Built once on the way
 // into warm-up: it is fixed furniture, and rebuilding it per frame would put layout
 // arithmetic in a draw.
+// ⚠️ LAID OUT IN SCREEN TERMS, THEN MAPPED TO THE WORLD — never straight into world x
+// and y. A keyboard is a thing you READ, and a keyboard IS its layout: rows running
+// across, under the pitch. Built against world x/y it was not that in deck view, which
+// turns the pitch a quarter — the rows came out as COLUMNS ten letters tall stacked up
+// the right-hand side of the screen. Every letter the right way up, and still not a
+// keyboard.
+//
+// So the block is built in a local frame where `u` runs ACROSS the screen and `v` runs
+// DOWN it, away from the pitch; `place()` is the only thing that knows which world axes
+// those are. Because the turn is a quarter, a key stays an axis-aligned world rect — so
+// `kbKeyAt`, `lobbyReach` and `computeCam` need to know nothing about any of this.
+//
+// ⚠️ Turned, the block sits past a TOUCHLINE rather than past the net, because that is
+// what "below the pitch, on screen" comes to once the pitch is on its side. Still
+// outside the pitch, so `lobbySideOf` still answers −1 and standing on the keys is still
+// not a side pick — the placement rule the whole feature rests on.
 function buildLobbyKeys(w){
   const K = LOBBYKB, keys = [];
-  const top = w.field.L/2 + (w.field.net || 0) + K.clear;
+  // ⚠️ Read from the same predicate the CAMERA uses, never from `cam.rot`: the keyboard
+  // is built when warm-up is entered, which can be before a frame has been drawn.
+  const turned = pitchHorizontal();
+  // How far past the pitch the block starts, measured down the screen. There is no net
+  // on the sides, so the turned case clears the touchline instead.
+  const top = turned ? w.field.W/2 + K.clear
+                     : w.field.L/2 + (w.field.net || 0) + K.clear;
+  // Deck view maps world +y to screen RIGHT and world +x to screen UP, so across is +y
+  // and down is −x.
+  const place = (k, u, v, du, dv) => {
+    if (turned){ k.x = -(v + dv); k.y = u; k.w = dv; k.h = du; }
+    else       { k.x = u;         k.y = v; k.w = du; k.h = dv; }
+    return k;
+  };
+  const raw = [];                                  // (u, v, du, dv), before mapping
   const step = K.keyW + K.gap, rowH = K.keyH + K.gap;
   K.rows.forEach((row, ri) => {
-    const x0 = -(row.length*K.keyW + (row.length-1)*K.gap) / 2;
+    const u0 = -(row.length*K.keyW + (row.length-1)*K.gap) / 2;
     for (let i = 0; i < row.length; i++)
-      keys.push({ ch: row[i], label: row[i], x: x0 + i*step, y: top + ri*rowH, w: K.keyW, h: K.keyH });
+      raw.push({ k: { ch: row[i], label: row[i] }, u: u0 + i*step, v: top + ri*rowH, du: K.keyW, dv: K.keyH });
   });
   // DEL and SPACE, wide enough to be walked onto without aiming.
   const cw2 = K.keyW * K.wideW, ctrl = [['\b', 'DEL'], [' ', 'SPACE']];
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
   ctrl.forEach(([ch, label], i) =>
-    keys.push({ ch, label, x: -tot/2 + i*(cw2 + K.gap), y: top + K.rows.length*rowH, w: cw2, h: K.keyH }));
-  // The team-size stepper, RIGHT of the letters: + at the top, − at the bottom, with the
-  // size read out between them. It is how you turn a 1v1 into a 3v3 without going back
-  // to the menu, which is the one thing the lobby could not do.
+    raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
+  // The team-size stepper, RIGHT of the letters on screen: + at the top, − at the
+  // bottom, with the size read out between them. It is how you turn a 1v1 into a 3v3
+  // without going back to the menu, which is the one thing the lobby could not do.
   let lettersR = -Infinity;
-  for (const k of keys) lettersR = Math.max(lettersR, k.x + k.w);
+  for (const q of raw) lettersR = Math.max(lettersR, q.u + q.du);
   const rowsB = top + K.rows.length*rowH + K.keyH;
-  const px = lettersR + K.gap*3;
-  keys.push({ act:  1, label: '+', x: px, y: top,             w: K.pad, h: K.pad, rep: true });
-  keys.push({ act: -1, label: '\u2212', x: px, y: rowsB - K.pad, w: K.pad, h: K.pad, rep: true });
-  // ⚠️ THE WHOLE BLOCK IS RECENTRED, letters and stepper together. The letters alone are
-  // centred on the pitch's axis and the stepper hangs off one side, so the block's own
-  // middle is not x = 0 — and `computeCam` frames the SPAN, so an off-centre block slides
-  // the pitch sideways to balance it. Centring the block here means the pitch stays where
-  // it has always been and the camera's horizontal offset stays exactly zero.
-  let L = Infinity, R = -Infinity;
-  for (const k of keys){ L = Math.min(L, k.x); R = Math.max(R, k.x + k.w); }
-  const shift = -(L + R)/2;
-  for (const k of keys) k.x += shift;
-  L = Infinity; R = -Infinity;
-  let T = Infinity, B = -Infinity;
+  const pu = lettersR + K.gap*3;
+  raw.push({ k: { act:  1, label: '+', rep: true },      u: pu, v: top,           du: K.pad, dv: K.pad });
+  raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: rowsB - K.pad, du: K.pad, dv: K.pad });
+  // ⚠️ THE WHOLE BLOCK IS RECENTRED, letters and stepper together, and it is recentred
+  // ACROSS THE SCREEN (`u`) because that is the axis the pitch is centred on. The letters
+  // alone are centred on it and the stepper hangs off one side, so the block's own middle
+  // is not zero — and `computeCam` frames the SPAN, so an off-centre block slides the
+  // pitch sideways to balance it.
+  let uL = Infinity, uR = -Infinity;
+  for (const q of raw){ uL = Math.min(uL, q.u); uR = Math.max(uR, q.u + q.du); }
+  const shift = -(uL + uR)/2;
+  for (const q of raw) keys.push(place(q.k, q.u + shift, q.v, q.du, q.dv));
+  let L = Infinity, R = -Infinity, T = Infinity, B = -Infinity;
   for (const k of keys){ L = Math.min(L, k.x); T = Math.min(T, k.y);
                          R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
-  w.kb = { keys, L, T, R, B, padX: px + shift, padW: K.pad, midY: (top + rowsB)/2 };
+  // The readout's world point comes off the two stepper plates themselves rather than
+  // being rebuilt from the local frame — one place that knows where they landed.
+  const plus = keys.find(k => k.act === 1), minus = keys.find(k => k.act === -1);
+  w.kb = { keys, L, T, R, B, turned,
+           midX: (plus.x + plus.w/2 + minus.x + minus.w/2)/2,
+           midY: (plus.y + plus.h/2 + minus.y + minus.h/2)/2 };
 }
 function kbKeyAt(kb, x, y){
   for (const k of kb.keys)
@@ -13716,11 +13758,24 @@ function stepLobbyKeys(w){
   const kb = w.kb; if (!kb) return;
   for (const p of w.players){
     if (p.ctrl === 'bot'){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
+    // ⚠️ KICK IS A PRESS, AND IT IS THE ONLY WAY TO TYPE THE SAME LETTER TWICE. The
+    // dwell latches until the body LEAVES the key — it has to, or standing still types
+    // sixty letters a second — which makes "QQ" and every double letter unreachable:
+    // you would have to walk off the key and back on for the second one. So KICK fires
+    // the key under you at once and re-arms on release, which is a tap per letter.
+    // ⚠️ Latched on the BUTTON, not the key, so holding KICK and walking across the
+    // board does not type the row you crossed.
+    const held = !!p.kick;
+    const tapped = held && !p.kbKick;
+    p.kbKick = held;
     const k = kbKeyAt(kb, p.x, p.y);
     if (!k){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
     if (p.kbKey !== k){ p.kbKey = k; p.kbT = 0; p.kbDone = false; }
     p.kbT += STEP;
-    if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbHit(w, p, k); }
+    // ⚠️ Wound back to zero and marked done: the tap has said what it came to say, so
+    // the dwell must not fire again on top of it a moment later.
+    if (tapped){ p.kbDone = true; p.kbT = 0; kbHit(w, p, k); }
+    else if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbHit(w, p, k); }
     // ⚠️ Only a `rep` key comes back round. Winding `kbT` back to the dwell rather than
     // to zero is what makes the repeat rate `LOBBYKB.repeat` instead of a second dwell.
     else if (p.kbDone && k.rep && p.kbT >= LOBBYKB.dwell + LOBBYKB.repeat){
@@ -18085,7 +18140,7 @@ function drawLobbyKeys(w, ox, oy){
   // humans standing on a half, so the stored value and the fielded one can differ and
   // the readout has to be the one that comes true. Same rule the side counts follow.
   const per = lobbyPlan(w).per;
-  const [mx, my] = screenPt(wx(kb.padX + kb.padW/2), wy(kb.midY));
+  const [mx, my] = screenPt(wx(kb.midX), wy(kb.midY));
   screenUpright(mx + ox, my + oy, (x, y) => {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `15px ${LOBBY_FONT}`;
@@ -18114,9 +18169,11 @@ function drawLobbyKeys(w, ox, oy){
     // ⚠️ Held inside the canvas, the same reason the floaters and the drop-in prompts
     // are: the block can sit hard against an edge, and a centred caption then loses the
     // half of itself that says what to do.
-    const half = ctx.measureText('STAND ON A LETTER TO SPELL YOUR NAME').width/2 + 4;
-    ctx.fillText('STAND ON A LETTER TO SPELL YOUR NAME',
-                 Math.max(half, Math.min(cw - half, x)), Math.max(8, y));
+    // ⚠️ It says BOTH ways in, because the tap is the only one that can type a double
+    // letter and nothing on screen would otherwise imply it exists.
+    const cap = 'STAND ON A LETTER TO SPELL YOUR NAME  \u00b7  KICK = PRESS IT';
+    const half = ctx.measureText(cap).width/2 + 4;
+    ctx.fillText(cap, Math.max(half, Math.min(cw - half, x)), Math.max(8, y));
   });
   ctx.restore();
 }

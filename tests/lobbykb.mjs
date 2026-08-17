@@ -118,6 +118,56 @@ const r = await p.evaluate(() => {
   o.afterLongStand = me.name;
   o.latched = me.name === o.spelled + 'X';
 
+  // ⚠️ ...WHICH IS WHY KICK EXISTS: A DOUBLE LETTER IS OTHERWISE UNREACHABLE. The
+  // latch above is not optional — without it standing still types sixty letters a
+  // second — so "QQ" needs a press. KICK fires the key under you at once and re-arms
+  // on release, one tap per letter.
+  // ⚠️ Driven through `pads.p1`, never by writing `p.kick`: the pad is read every step
+  // and a directly-set flag is overwritten before `stepLobbyKeys` ever sees it.
+  const pad = window.__pads[0];
+  const tapKick = (k, downSteps = 3, upSteps = 3) => {
+    for (let i = 0; i < downSteps; i++){
+      me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = me.vy = 0;
+      pad.buttons[0].pressed = true; pad.buttons[0].value = 1; M.step(w);
+    }
+    for (let i = 0; i < upSteps; i++){
+      me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = me.vy = 0;
+      pad.buttons[0].pressed = false; pad.buttons[0].value = 0; M.step(w);
+    }
+  };
+  me.name = ''; me.kbTyped = true;
+  leave();
+  tapKick(key('Q'));
+  o.oneTap = me.name;
+  tapKick(key('Q'));
+  o.twoTaps = me.name;
+  o.doubleLetter = me.name === 'QQ';
+  // ⚠️ HELD is ONE letter, not a stream — latched on the BUTTON. Sixty steps is a full
+  // second of the button down on the same key.
+  const preHold = me.name;
+  for (let i = 0; i < 60; i++){
+    const k = key('W'); me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = me.vy = 0;
+    pad.buttons[0].pressed = true; pad.buttons[0].value = 1; M.step(w);
+  }
+  o.afterHeldKick = me.name;
+  o.holdIsOneLetter = me.name === preHold + 'W';
+  // ⚠️ ...and holding KICK while WALKING ACROSS the board must not type the row you
+  // crossed — the latch is on the button, so it is still down and still spent.
+  const preCross = me.name;
+  for (const ch of 'ERTY'){
+    for (let i = 0; i < 6; i++){
+      const k = key(ch); me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = me.vy = 0;
+      pad.buttons[0].pressed = true; pad.buttons[0].value = 1; M.step(w);
+    }
+  }
+  o.afterCross = me.name;
+  o.crossingIsSilent = me.name === preCross;
+  pad.buttons[0].pressed = false; pad.buttons[0].value = 0;
+  leave();
+  // Put back what the latch check left behind — the DEL/SPACE checks below measure a
+  // CHANGE from the name as it stands, and this block borrowed it to type into.
+  me.name = o.afterLongStand; me.kbTyped = true;
+
   // DEL and SPACE.
   // ⚠️ Measured as a CHANGE from whatever the name is by now, not against a literal —
   // the checks above have already added an X, and hard-coding "KA" here made this fail
@@ -363,10 +413,35 @@ const read = await rp.evaluate(() => {
       if (px < minx) minx = px; if (px > maxx) maxx = px;
       if (py < miny) miny = py; if (py > maxy) maxy = py;
     }
+    // ---- and it has to still BE a keyboard: rows across, below the pitch ----------
+    const cen = k2 => M.screenPt(M.wx(k2.x + k2.w/2), M.wy(k2.y + k2.h/2));
+    const row1 = 'QWERTYUIOP'.split('').map(ch => w.kb.keys.find(q => q.ch === ch)).map(cen);
+    const corners = [[w.kb.L, w.kb.T], [w.kb.R, w.kb.T], [w.kb.L, w.kb.B], [w.kb.R, w.kb.B]]
+      .map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+    const kbTop = Math.min.apply(null, corners.map(q => q[1]));
+    const kbW = Math.max.apply(null, corners.map(q => q[0])) - Math.min.apply(null, corners.map(q => q[0]));
+    const kbH = Math.max.apply(null, corners.map(q => q[1])) - kbTop;
+    const pc = [[-w.field.W/2, -w.field.L/2], [w.field.W/2, -w.field.L/2],
+                [-w.field.W/2,  w.field.L/2], [w.field.W/2,  w.field.L/2]]
+      .map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+    const pitchBot = Math.max.apply(null, pc.map(q => q[1]));
+    // ...and standing on a key is still NOT a side pick, whichever way it was laid out.
+    const probeP = w.players[0], keep = [probeP.x, probeP.y];
+    const k0 = w.kb.keys[0];
+    probeP.x = k0.x + k0.w/2; probeP.y = k0.y + k0.h/2;
+    const sideOnKey = M.lobbySideOf(probeP, w);
+    probeP.x = keep[0]; probeP.y = keep[1];
     return { plate, ink, gap: Math.round(Math.abs(ink - plate)), inkPx,
              box: [bw, bh],
              wordW: maxx - minx, wordH: maxy - miny,
-             insideX: minx >= 0 && maxx <= bw - 1, insideY: miny >= 0 && maxy <= bh - 1 };
+             insideX: minx >= 0 && maxx <= bw - 1, insideY: miny >= 0 && maxy <= bh - 1,
+             rowRunsAcross: row1.every((q, i) => i === 0 || q[0] > row1[i-1][0]),
+             rowIsLevel: Math.max.apply(null, row1.map(q => q[1])) -
+                         Math.min.apply(null, row1.map(q => q[1])) < 2,
+             wider: kbW > kbH, kbW: Math.round(kbW), kbH: Math.round(kbH),
+             belowPitch: kbTop >= pitchBot - 1,
+             kbTop: Math.round(kbTop), pitchBot: Math.round(pitchBot),
+             sideOnKey };
   };
   o.flat = probe(false);
   o.deck = probe(true);
@@ -438,6 +513,14 @@ ok('the keyboard does not advance in a draw', view.paintIsPure,
 ok('a phone frames it too', phone.state === 'warmup' && phone.onScreen,
    `${JSON.stringify(phone.span)} — the top and bottom reservations are tightest here`);
 
+ok('KICK types the key you are standing on', r.oneTap === 'Q', `got "${r.oneTap}"`);
+ok('...so a DOUBLE LETTER is reachable', r.doubleLetter,
+   `two taps on Q gave "${r.twoTaps}" — the dwell latches until the body LEAVES the key, which it has to, so without a press "QQ" would mean walking off Q and back on`);
+ok('...and HOLDING kick is still one letter', r.holdIsOneLetter,
+   `a second of the button down gave "${r.afterHeldKick}" — latched on the button, not the key`);
+ok('...and crossing the board with kick held types nothing', r.crossingIsSilent,
+   `walked E-R-T-Y holding kick and got "${r.afterCross}" — the latch is on the BUTTON, so it is still spent`);
+
 ok('rgba() honours the alpha on a colour that already has one', read.rgbaKeepsAlpha,
    'it used to hand a non-hex colour straight back, and Grass, the default palette, sets line: rgba(255,255,255,0.95) — so an 8% plate wash painted at 0.95');
 ok('...and a hex colour is unchanged', read.rgbaHexUnchanged);
@@ -448,6 +531,16 @@ for (const [tag, m] of [['flat', read.flat], ['deck view', read.deck]]){
      `"SPACE" measured ${m.wordW}x${m.wordH} — uprightAt cancels the pitch turn, so out here in screen space it ADDS one and every letter lies down`);
   ok(`...and inside the key it is on (${tag})`, m.insideX && m.insideY,
      `ink box vs plate ${JSON.stringify(m.box)} — a key is wide in world x and deck view turns world x into screen y, so a word-length label ran off both ends of the plate`);
+  // ⚠️ A KEYBOARD IS ITS LAYOUT, so upright letters are only half the claim. Built
+  // against world x/y the rows came out as COLUMNS ten letters tall up the right-hand
+  // side in deck view — every letter the right way up and still not a keyboard.
+  ok(`Q..P runs left to right on ONE line (${tag})`, m.rowRunsAcross && m.rowIsLevel,
+     `across ${m.rowRunsAcross}, level ${m.rowIsLevel}`);
+  ok(`...the block is wider than it is tall (${tag})`, m.wider, `${m.kbW}x${m.kbH}`);
+  ok(`...and it sits BELOW the pitch (${tag})`, m.belowPitch,
+     `keyboard top ${m.kbTop} vs pitch bottom ${m.pitchBot}`);
+  ok(`...while still being OUTSIDE it (${tag})`, m.sideOnKey === -1,
+     `lobbySideOf says ${m.sideOnKey} — standing on the keys must stay "undecided", which is what makes walking into a half the side pick`);
 }
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
