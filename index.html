@@ -1104,6 +1104,88 @@
     #overlay button.navsel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
     #ovHint { font-family: var(--pix); font-size:10px; color: var(--muted);
       letter-spacing:.5px; margin-top:10px; text-align:center; }
+    /* ---- TOURNAMENT ------------------------------------------------------------
+       ⚠️ The bracket SCROLLS SIDEWAYS and its rounds are columns, because that is the
+       shape everybody already reads a knockout in. A 16-team bracket is four columns
+       and eight rows and will not fit a phone any other way; wrapping it would destroy
+       the one thing the picture is for, which is seeing who you meet if you win. */
+    #cupBracket { display:flex; gap:26px; align-items:stretch; overflow-x:auto;
+      padding:4px 2px 10px; scrollbar-width:thin; }
+    .cupcol { display:flex; flex-direction:column; justify-content:space-around;
+      gap:10px; flex:0 0 auto; min-width:150px; }
+    .cupcolh { font-family:var(--pix); font-size:10px; letter-spacing:1px; color:var(--muted);
+      text-align:center; margin-bottom:2px; }
+    /* A match is one box with two rows, the way a bracket site draws it. */
+    /* ⚠️ NO `overflow:hidden` here, however much the rounded corners ask for it: the
+       connector below is an `::after` that sticks OUT of this box, and clipping the box
+       clipped every line in the bracket — which left a grid of boxes and no tree. The
+       rows carry no background of their own, so there is nothing to clip anyway. */
+    .cupm { position:relative; border:1px solid var(--edge); border-radius:9px;
+      background:rgba(128,128,128,.07); }
+    .cupm.ready { border-color:var(--accent); cursor:pointer; }
+    .cupm.ready:hover { background:rgba(33,230,255,.08); }
+    .cupm.done { opacity:.92; }
+    .cupmr { display:flex; align-items:center; gap:7px; padding:6px 8px; font-family:var(--pix);
+      font-size:11px; }
+    .cupmr + .cupmr { border-top:1px solid var(--edge); }
+    .cupmr canvas { width:18px; height:18px; flex:0 0 auto; border-radius:3px; }
+    .cupmr b { font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* ⚠️ The winner is marked on the ROW, not by removing the loser: a bracket you can
+       read backwards is most of why anybody looks at one. */
+    .cupmr.win b { color:var(--accent); }
+    .cupmr.lose { opacity:.42; }
+    .cupmr.tbd b { color:var(--muted); font-style:italic; }
+    /* ⚠️ THE CONNECTORS ARE CSS, not a canvas or an SVG. A bracket is a grid of boxes and
+       the lines between them are the only thing making it read as a tree — but they are
+       decoration, so they must never be the reason a box moves. Drawn as borders on a
+       pseudo-element that sticks OUT of the column, which cannot affect layout. */
+    .cupcol:not(:last-child) .cupm::after { content:''; position:absolute;
+      right:-14px; top:50%; width:13px; border-top:1px solid var(--edge); }
+    .cupwrap { position:relative; display:flex; flex-direction:column;
+      justify-content:space-around; gap:10px; flex:1 1 auto; }
+    /* The team list, when the bracket is unlocked. */
+    .cuprow { display:flex; align-items:center; gap:9px; padding:7px 9px; margin-bottom:5px;
+      border:1px solid var(--edge); border-radius:9px; background:rgba(128,128,128,.07);
+      font-family:var(--pix); font-size:12px; cursor:grab; min-height:44px; }
+    .cuprow.drag { opacity:.4; }
+    .cuprow.over { border-color:var(--accent); }
+    .cuprow canvas { width:24px; height:24px; flex:0 0 auto; border-radius:4px; }
+    .cuprow .cupseed { color:var(--muted); font-size:10px; min-width:20px; }
+    .cuprow .cuphandle { margin-left:auto; color:var(--muted); font-size:14px; letter-spacing:2px; }
+    /* ---- the card between matches ---------------------------------------------- */
+    #cupFlash { position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:16px; background:var(--bg);
+      text-align:center; padding:20px; }
+    #cupFlash.hidden { display:none; }
+    .cfround { font-family:var(--pix); font-size:13px; letter-spacing:2px; color:var(--accent); }
+    .cfrow { display:flex; align-items:center; justify-content:center; gap:22px; flex-wrap:nowrap; }
+    .cfteam { display:flex; flex-direction:column; align-items:center; gap:8px; min-width:0; }
+    .cfflag { width:74px; height:74px; border-radius:10px; border:1px solid var(--edge); }
+    .cfname { font-family:var(--pix); font-size:15px; }
+    .cfvs { font-family:var(--pix); font-size:20px; color:var(--muted); }
+    .cfhint { font-family:var(--pix); font-size:10px; color:var(--muted); letter-spacing:1px; }
+    /* ---- the news ticker --------------------------------------------------------
+       ⚠️ `pointer-events:none`. It sits across the bottom of a live match, and a bar you
+       can accidentally press is a bar that steals a kick. */
+    #cupTicker { position:fixed; left:0; right:0; bottom:0; z-index:9; height:26px;
+      overflow:hidden; pointer-events:none; background:rgba(0,0,0,.55);
+      border-top:1px solid var(--edge); }
+    #cupTicker.hidden { display:none; }
+    #cupTickerTrack { display:inline-block; white-space:nowrap; font-family:var(--pix);
+      font-size:11px; line-height:26px; color:var(--text); padding-left:100%;
+      animation: cupmarquee 18s linear infinite; }
+    #cupTickerTrack .tkk { color:var(--accent); margin:0 6px; }
+    @keyframes cupmarquee { from { transform:translateX(0); } to { transform:translateX(-100%); } }
+    /* ⚠️ A scrolling bar is exactly what Reduce Motion is asking not to see, so it holds
+       still and simply shows the next match instead of losing the information — the
+       information is the point and the scroll is the decoration, so it is the scroll
+       that goes. ⚠️ `.still` is the same rule reached from `motionOK()`, because the
+       Screen shake & effects toggle has to reach a moving thing built in CSS too, and
+       CSS cannot ask a predicate. */
+    @media (prefers-reduced-motion: reduce){
+      #cupTickerTrack { animation:none; padding-left:12px; }
+    }
+    #cupTicker.still #cupTickerTrack { animation:none; padding-left:12px; }
     #ovStats { width:100%; max-width:820px; margin:14px auto 0; }
     /* THE SCORELINE, SIDE BY SIDE, AT THE TOP — see renderMatchStats for why it is
        here rather than one big number inside each team's panel. It is a flex ROW with
@@ -1416,6 +1498,10 @@
   <!-- Transport for a replay you chose to watch. ⚠️ OUTSIDE #hud: playback hides the HUD,
        and while it lived in there the bar inherited `display:none` — visible by its own
        class, zero pixels tall in reality, which is what the suite now measures. -->
+  <!-- ⚠️ A NEWS TICKER, at the bottom, while a match gets going. It answers the one thing
+       a bracket makes you ask mid-match — who am I playing next — without taking you off
+       the pitch to look. Outside #hud, like #repCtl, because playback hides the HUD. -->
+  <div id="cupTicker" class="hidden"><div id="cupTickerTrack"></div></div>
   <div id="repCtl" class="hidden">
     <div class="repprog"><div id="repProgFill"></div><span id="repProgGoal"></span></div>
     <div class="repctlrow">
@@ -1601,6 +1687,7 @@
       <div class="navlab">Play</div>
       <div class="navgrid">
         <button class="navtile" id="seasonBtn" data-icon="trophy">Season</button>
+        <button class="navtile" id="cupBtn" data-icon="bracket">Tournament</button>
         <button class="navtile" id="rogueBtn" data-icon="skull">Gauntlet</button>
         <button class="navtile" id="drillsBtn" data-icon="target">Drills</button>
         <button class="navtile" id="tutBtn" data-icon="mortar">Tutorial</button>
@@ -1976,7 +2063,7 @@
         <button class="ghost" id="saveExportBtn" type="button">⤓ Export save</button>
         <button class="ghost" id="saveImportBtn" type="button">⤒ Import save…</button>
       </div>
-      <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
+      <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season, tournament or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
       <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList"></div>
@@ -2049,6 +2136,40 @@
     <button class="primary" id="seasonPlay">Start ▶</button>
     <button class="ghost" id="seasonReset" style="margin-top:12px">Restart cup</button>
     <button class="ghost" id="seasonBack" style="margin-top:12px">← Back</button>
+  </div>
+
+  <!-- ===================== TOURNAMENT ===================== -->
+  <div id="cup" class="screen hidden">
+    <div class="logo"><h1 style="font-size:30px">TOURNAMENT</h1><p id="cupSub">Single elimination</p></div>
+    <div class="card" id="cupSetupCard">
+      <h2>Teams</h2>
+      <label class="field">How many</label>
+      <div class="opts" id="cupSizePick"></div>
+      <div class="hint" style="text-align:left">Drag a country to move it. Where a team sits is who it meets — the top two play each other, then the next two, and so on down. Locking the bracket is what starts the tournament; unlocking it again clears the results.</div>
+      <div id="cupTeamList"></div>
+      <button class="ghost" id="cupShuffle" type="button">↻ Randomise the draw</button>
+    </div>
+    <div class="card" id="cupBracketCard">
+      <h2>Bracket <small id="cupWinNote" style="color:var(--muted);font-weight:400"></small></h2>
+      <div class="hint" style="text-align:left">Tap any match that is ready to play it — you do not have to go in order.</div>
+      <div id="cupBracket"></div>
+    </div>
+    <button class="primary" id="cupPlay">Lock the bracket ▶</button>
+    <button class="ghost" id="cupUnlock" style="margin-top:12px">↶ Unlock — change the draw</button>
+    <button class="ghost" id="cupBack" style="margin-top:12px">← Back</button>
+  </div>
+
+  <!-- ⚠️ THE CARD BETWEEN MATCHES. Two countries, big, for a few seconds — it is the beat
+       that makes a bracket feel like a tournament rather than a list of matches, and it is
+       also the moment people swap controllers. -->
+  <div id="cupFlash" class="hidden">
+    <div class="cfround" id="cfRound"></div>
+    <div class="cfrow">
+      <div class="cfteam"><canvas class="cfflag" id="cfFlagA" width="96" height="96"></canvas><div class="cfname" id="cfNameA"></div></div>
+      <div class="cfvs">v</div>
+      <div class="cfteam"><canvas class="cfflag" id="cfFlagB" width="96" height="96"></canvas><div class="cfname" id="cfNameB"></div></div>
+    </div>
+    <div class="cfhint" id="cfHint"></div>
   </div>
 
   <!-- ===================== LEADERBOARD ===================== -->
@@ -2350,6 +2471,7 @@
    Deck UI (controller menu)   "DECK UI — drive the whole menu"
    Tutorial                    "ONBOARDING TUTORIAL"
    Season / cup                "SINGLE-PLAYER SEASON"
+   Tournament (bracket)        "TOURNAMENT — a single-elimination"
    Gauntlet (roguelike)        "ROGUELIKE / GAUNTLET — a run"
    Leaderboard                 "GLOBAL LEADERBOARD"
    Shop                        "SHOP — cosmetics only"
@@ -2651,6 +2773,10 @@ const FLAGS = {
   brazil:  { name:'Brazil',      draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#009c3b'); c.fillStyle='#ffdf00'; c.beginPath(); c.moveTo(x,y-r*0.82); c.lineTo(x+r*0.82,y); c.lineTo(x,y+r*0.82); c.lineTo(x-r*0.82,y); c.closePath(); c.fill(); _cd(c,x,y,r,'#002776',r*0.32); } },
   usa:     { name:'USA',         draw:(c,x,y,r)=>{ _fh(c,x,y,r,['#b22234','#fff','#b22234','#fff','#b22234','#fff','#b22234']); c.fillStyle='#3c3b6e'; c.fillRect(x-r,y-r,r*1.0,r*0.98); c.fillStyle='#fff'; for(let i=0;i<3;i++)for(let j=0;j<2;j++){ _cd(c,x-r*0.82+i*r*0.34, y-r*0.72+j*r*0.42, r, r*0.05);} } },
   uk:      { name:'UK',          draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#012169'); c.strokeStyle='#fff'; c.lineWidth=r*0.42; c.beginPath(); c.moveTo(x-r,y-r); c.lineTo(x+r,y+r); c.moveTo(x+r,y-r); c.lineTo(x-r,y+r); c.stroke(); c.strokeStyle='#c8102e'; c.lineWidth=r*0.46; c.beginPath(); c.moveTo(x,y-r); c.lineTo(x,y+r); c.moveTo(x-r,y); c.lineTo(x+r,y); c.stroke(); } },
+  // ⚠️ ENGLAND IS ITS OWN FLAG, not `uk` wearing the wrong label. The tournament fields
+  // England, and a Union Jack captioned "England" is the sort of thing everybody who
+  // watches football notices immediately. A centred cross, so it is not `_nordic`.
+  england: { name:'England',     draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#fff'); c.fillStyle='#ce1124'; const t=r*0.34; c.fillRect(x-r,y-t/2,2*r,t); c.fillRect(x-t/2,y-r,t,2*r); } },
   korea:   { name:'Korea',       draw:(c,x,y,r)=>{ _bg(c,x,y,r,'#fff'); c.beginPath(); c.arc(x,y,r*0.42,Math.PI,2*Math.PI); c.fillStyle='#cd2e3a'; c.fill(); c.beginPath(); c.arc(x,y,r*0.42,0,Math.PI); c.fillStyle='#0047a0'; c.fill(); } },
   // --- Expansion set ---
   greece:  { name:'Greece',    draw:(c,x,y,r)=>{ _fh(c,x,y,r,['#0d5eaf','#fff','#0d5eaf','#fff','#0d5eaf']); c.fillStyle='#0d5eaf'; c.fillRect(x-r,y-r,r*0.9,r*0.9); c.strokeStyle='#fff'; c.lineWidth=r*0.16; c.beginPath(); c.moveTo(x-r+r*0.45,y-r); c.lineTo(x-r+r*0.45,y-r+r*0.9); c.moveTo(x-r,y-r+r*0.45); c.lineTo(x-r+r*0.9,y-r+r*0.45); c.stroke(); } },
@@ -2727,7 +2853,7 @@ const CONTINENTS = {
   europe:   { name:'Europe', keys:['poland','austria','germany','netherl','ukraine','spain','france','italy',
               'ireland','belgium','romania','portugal','sweden','finland','denmark','norway','uk','greece',
               'turkey','russia','hungary','czechia','slovakia','croatia','serbia','slovenia','switzerl',
-              'iceland','estonia','latvia','lithuan','belarus','bulgaria'] },
+              'iceland','estonia','latvia','lithuan','belarus','bulgaria','england'] },
   africa:   { name:'Africa', keys:['nigeria','egypt','kenya','ghana','morocco','algeria','senegal','cameroon',
               'southafr','ethiopia'] },
   asia:     { name:'Asia', keys:['japan','bangla','india','indo','korea','china','vietnam','thailand','philipp',
@@ -3229,10 +3355,19 @@ const TEAMCOL_DEF = ['#e05a5a', '#5a7de0'];      // red vs blue, the way it has 
 // and runs during the bootstrap — the fifteenth TDZ bite in this file.
 const BOT_FACE = 'bot';
 const BOT_GLYPH = '\ud83e\udd16';
+// ⚠️ A MATCH MAY OWN ITS OWN TWO COLOURS, and exactly one thing sets it: a tournament
+// tie, where the sides are COUNTRIES rather than "you and them". `sel.teamCol` is what a
+// player picked for themselves and has to survive the cup, so the cup cannot write into
+// it — it lays a layer over the top for the length of one match and drops it in `cupEnd`.
+// ⚠️ Declared beside `teamColOf` rather than down with the tournament code, because this
+// is the function that reads it and it runs during the bootstrap. Sixteenth TDZ bite.
+let matchTeamCol = null;
 function teamColOf(team){
+  const i = team ? 1 : 0;
+  if (matchTeamCol && matchTeamCol[i]) return matchTeamCol[i];
   const a = sel.teamCol;
-  const c = Array.isArray(a) ? a[team ? 1 : 0] : null;
-  return c || TEAMCOL_DEF[team ? 1 : 0];
+  const c = Array.isArray(a) ? a[i] : null;
+  return c || TEAMCOL_DEF[i];
 }
 // ⚠️ The one place a body's colour is decided. Called wherever the roster or the
 // sides can change — the warm-up step, `lobbyStart`, `startMatch`, `evenUpSides` and
@@ -3515,6 +3650,7 @@ const ICONS = {
   pencil:    'M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3Z M14.6 6.4l3 3',
   save:      'M4.6 4.6h11.6l3.2 3.2v11.6H4.6Z M8.2 4.6h6.2v4.4H8.2Z M7.4 12.6h9.2v6.8H7.4Z',
   trophy:    'M7 4h10v4.6a5 5 0 0 1-10 0Z M7 5.6H4.2v1.3a3 3 0 0 0 2.9 3 M17 5.6h2.8v1.3a3 3 0 0 1-2.9 3 M12 13.6V17 M9 20h6 M10.4 17h3.2v3h-3.2Z',
+  bracket:   'M3 4h4 M3 10h4 M7 4v6 M7 7h4 M3 14h4 M3 20h4 M7 14v6 M7 17h4 M11 7v10 M11 12h9',
   skull:     'M12 3.2a7 7 0 0 0-7 7v3.2l1.7 1.3V18h10.6v-3.3L19 13.4v-3.2a7 7 0 0 0-7-7Z M10.6 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M16.4 11.4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 1 1 3 0Z M12 14.2l-1 2h2Z M9.4 18v2.6 M12 18v2.6 M14.6 18v2.6',
   target:    'M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8Z M12 7.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z M12 11.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6Z',
   mortar:    'M2.6 9.2 12 5.1l9.4 4.1L12 13.3Z M6.4 11.1v4.2c0 1.7 2.5 3 5.6 3s5.6-1.3 5.6-3v-4.2 M20.6 9.6v5.2',
@@ -3718,7 +3854,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.1015AM';
+const VERSION = '20260817.1205PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3734,6 +3870,17 @@ const VERSION = '20260817.1015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.1205PM', title: 'Tournament',
+    added: [
+      '<b>A knockout tournament of countries.</b> Pick 4, 8 or 16 teams, drag the draw into the order you want or randomise it, and lock it in — then play down a bracket you can see all of at once. USA and Mexico are always in the pool, alongside the sides that went furthest last time out.',
+      '<b>Both teams play as their country</b>: everybody on the pitch wears that flag and that colour, and your own shirt colour comes straight back afterwards.',
+      '<b>A card between matches</b> naming the two countries, and a <b>news ticker</b> along the bottom while you play, saying who is up next. Press anything to skip the card.',
+      'Tap any tie on the bracket to play it — you do not have to go in order — and <b>Unlock</b> puts you back on the draw to change it.',
+    ],
+    changed: [
+      'Warm-up before a tournament match is the short version: walk onto a side, test your stick, press start. There is no keyboard and no colour picking, because in a tournament the country is who you are.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.1015AM', title: 'Set the defaults once, in a sheet',
     added: [
       '<b>The game can take its defaults from a Google Sheet.</b> Put a <i>Setting / Value</i> tab in the sheet, and every device you open Magnetball on starts there \u2014 the pitch, the difficulty, the theme, the sliders. It is read, never written, so nothing about your device leaves it, and it works offline because each device keeps a copy.',
@@ -9413,6 +9560,20 @@ $('drillsBack').onclick = toMenu;
 $('tutBtn').onclick = startTutorial;
 $('seasonBtn').onclick = openSeason;
 $('seasonBack').onclick = toMenu;
+$('cupBtn').onclick = openCup;
+$('cupBack').onclick = toMenu;
+// ⚠️ ONE button, and what it does depends on where the tournament is: lock the draw,
+// play the next tie, or start a fresh one once somebody has lifted it. A second
+// "start" beside "lock" would be two buttons for one step, and the state the screen is
+// in already says which of the three you are looking at.
+$('cupPlay').onclick = () => {
+  if (!cup.locked){ cupLock(true); buildCupScreen(); return; }
+  if (cupChampion()){ cupReset(); buildCupScreen(); return; }
+  const nx = cupNext();
+  if (nx) startCupMatch(nx.i);
+};
+$('cupUnlock').onclick = () => { cupLock(false); buildCupScreen(); };
+$('cupShuffle').onclick = () => { cupShuffle(); buildCupScreen(); };
 $('lbBtn').onclick = openLeaderboard;
 $('statsBtn').onclick = openStats;
 $('shopBtn').onclick = openShop;
@@ -10763,6 +10924,371 @@ function seasonOverlay(title, sub, kind){
 }
 
 // ============================================================
+//  TOURNAMENT — a single-elimination bracket of countries
+// ============================================================
+// Pick a size, lock it in, and play down the bracket. ⚠️ The bracket is the FEATURE, not
+// a scoreboard for one: what a knockout gives you that a cup ladder cannot is the shape
+// of the whole thing on one screen — who you meet if you win, and who is waiting on the
+// other side. So the screen is the bracket, and a match is something you tap on it.
+//
+// ⚠️ USA AND MEXICO ARE ALWAYS IN THE POOL, asked for, and the rest are the sides that
+// went furthest last time out. The order here is the order they are offered in, so the
+// default 8 is the eight most people would expect to see.
+const CUP_TEAMS = [
+  { flag:'usa',       name:'USA',       col:'#3c5fbe' },
+  { flag:'mexico',    name:'Mexico',    col:'#1e7a44' },
+  { flag:'argentina', name:'Argentina', col:'#6cace4' },
+  { flag:'france',    name:'France',    col:'#2b3a8f' },
+  { flag:'croatia',   name:'Croatia',   col:'#c8102e' },
+  { flag:'morocco',   name:'Morocco',   col:'#0f7a45' },
+  { flag:'brazil',    name:'Brazil',    col:'#f2c400' },
+  { flag:'england',   name:'England',   col:'#e8e8e8' },
+  { flag:'netherl',   name:'Holland',   col:'#e8722a' },
+  { flag:'portugal',  name:'Portugal',  col:'#8b1c2b' },
+  { flag:'japan',     name:'Japan',     col:'#1c2f78' },
+  { flag:'spain',     name:'Spain',     col:'#b8262b' },
+  { flag:'senegal',   name:'Senegal',   col:'#12a04a' },
+  { flag:'korea',     name:'Korea',     col:'#c0392b' },
+  { flag:'germany',   name:'Germany',   col:'#2e2e2e' },
+  { flag:'uruguay',   name:'Uruguay',   col:'#4aa3df' },
+];
+const CUP = {
+  key: 'magnetball.cup',
+  sizes: [4, 8, 16],
+  flash: 3.5,        // seconds of the between-matches card before warm-up
+  ticker: 12,        // seconds the news ticker runs once a match starts
+};
+function cupTeam(k){ return CUP_TEAMS.find(t => t.flag === k) || null; }
+function loadCup(){ try { return JSON.parse(localStorage.getItem(CUP.key)||'{}'); } catch(e){ return {}; } }
+function saveCup(){ try { localStorage.setItem(CUP.key, JSON.stringify(cup)); } catch(e){} }
+// `teams` is the seeding, top to bottom. `won` is one entry per match, in the same flat
+// order `cupMatches` produces, holding 0 or 1 for which SIDE of that match went through.
+let cup = Object.assign({ size:8, teams:[], locked:false, won:[], cups:0 }, loadCup());
+// ⚠️ THE BRACKET IS DERIVED, never stored. Storing the tree as well as the results is two
+// places to keep in step, and the second one goes stale the moment a result is undone —
+// which is exactly what the unlock button does. `won` is the only state a match writes.
+function cupRounds(){ return Math.max(1, Math.round(Math.log2(cup.size || 8))); }
+function cupMatches(){
+  const out = [];
+  let slots = (cup.teams || []).slice(0, cup.size);
+  let mi = 0;
+  for (let r = 0; r < cupRounds(); r++){
+    const next = [];
+    for (let i = 0; i < slots.length; i += 2){
+      const a = slots[i], b = slots[i+1];
+      const w = cup.won[mi];
+      out.push({ i: mi, round: r, seat: i/2, a, b,
+                 ready: !!a && !!b, done: w === 0 || w === 1,
+                 winner: w === 0 ? a : w === 1 ? b : null });
+      next.push(w === 0 ? a : w === 1 ? b : null);
+      mi++;
+    }
+    slots = next;
+  }
+  return out;
+}
+function cupChampion(){
+  const ms = cupMatches();
+  const last = ms[ms.length - 1];
+  return last && last.done ? last.winner : null;
+}
+// The first match that can be played and has not been. ⚠️ In bracket ORDER, so a round
+// finishes before the next one starts — which is what the picture on screen implies.
+function cupNext(){ return cupMatches().find(m => m.ready && !m.done) || null; }
+function cupRoundName(r){
+  const left = cupRounds() - r;
+  return left === 1 ? 'Final' : left === 2 ? 'Semi-final' : left === 3 ? 'Quarter-final'
+       : 'Round of ' + Math.pow(2, left);
+}
+// Fill the seeding to the chosen size. ⚠️ Keeps whatever order is already there — the
+// whole point of the drag-and-drop is that your arrangement survives a size change.
+function cupFill(){
+  const want = cup.size;
+  const have = (cup.teams || []).filter(k => cupTeam(k));
+  const out = [];
+  for (const k of have){ if (out.length < want && !out.includes(k)) out.push(k); }
+  for (const t of CUP_TEAMS){ if (out.length >= want) break; if (!out.includes(t.flag)) out.push(t.flag); }
+  cup.teams = out;
+}
+// ⚠️ Off `Math.random`, and that is fine HERE and nowhere near the sim: this runs from a
+// button on a menu, never from inside `step()`.
+function cupShuffle(){
+  cupFill();
+  const a = cup.teams;
+  for (let i = a.length - 1; i > 0; i--){ const j = (Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; }
+  saveCup();
+}
+function cupLock(on){
+  if (on){ cupFill(); cup.locked = true; }
+  // ⚠️ UNLOCKING CLEARS THE RESULTS, and it has to: the seeding is what the results are
+  // about, so keeping them while the teams move would leave a bracket claiming Brazil
+  // beat a side they were never drawn against.
+  else { cup.locked = false; cup.won = []; }
+  saveCup();
+}
+function cupReset(){ cup.won = []; saveCup(); }
+
+function openCup(){ dockOrFull('cup', buildCupScreen); }
+// One flag, drawn into a canvas at whatever size the caller wants. ⚠️ Through `FLAGS`'s
+// own draw function, never a sprite — `assets/` is optional and a team that vanishes with
+// the artwork is a tournament you cannot read.
+function cupFlagCanvas(key, px){
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px * 2;                 // crisp on a retina phone
+  const c = cv.getContext('2d');
+  const f = FLAGS[key];
+  c.save(); c.translate(px, px);
+  if (f && f.draw){ c.beginPath(); c.rect(-px, -px, px*2, px*2); c.clip(); f.draw(c, 0, 0, px); }
+  else { c.fillStyle = '#7f8aa0'; c.fillRect(-px, -px, px*2, px*2); }
+  c.restore();
+  cv.style.width = px + 'px'; cv.style.height = px + 'px';
+  return cv;
+}
+function cupName(k){ const t = cupTeam(k); return t ? t.name : (FLAGS[k] ? FLAGS[k].name : '—'); }
+function buildCupScreen(){
+  const setup = $('cupSetupCard'), brack = $('cupBracketCard');
+  if (!setup || !brack) return;
+  cupFill();
+  setup.style.display = cup.locked ? 'none' : '';
+  brack.style.display = cup.locked ? '' : 'none';
+  $('cupUnlock').style.display = cup.locked ? '' : 'none';
+  const champ = cupChampion();
+  const nx = cupNext();
+  $('cupPlay').textContent = !cup.locked ? 'Lock the bracket \u25b6'
+    : champ ? '\ud83c\udfc6 ' + cupName(champ) + ' win \u2014 play again'
+    : nx ? 'Play \u00b7 ' + cupName(nx.a) + ' v ' + cupName(nx.b) : 'Bracket complete';
+  $('cupSub').textContent = cup.locked
+    ? (champ ? 'Champion: ' + cupName(champ) : cupRoundName(nx ? nx.round : 0))
+    : 'Single elimination \u00b7 ' + cup.size + ' teams';
+  $('cupWinNote').textContent = cup.cups > 0 ? '\u00b7 \ud83c\udfc6 \u00d7' + cup.cups : '';
+  if (cup.locked) buildCupBracket(); else buildCupTeams();
+}
+// ⚠️ The size tiles go through `buildOpts`' own shape rather than being hand-rolled, so
+// they get the same look, the same 44px target and the same icon fallback as every other
+// picker in the menu.
+function buildCupTeams(){
+  const pick = $('cupSizePick');
+  if (pick){
+    pick.innerHTML = '';
+    for (const n of CUP.sizes){
+      const el = document.createElement('div');
+      el.className = 'opt' + (cup.size === n ? ' sel' : '');
+      el.innerHTML = '<span>' + n + ' teams</span><small>' +
+        (Math.round(Math.log2(n))) + ' rounds</small>';
+      el.onclick = () => { cup.size = n; cupFill(); saveCup(); buildCupScreen(); };
+      pick.appendChild(el);
+    }
+  }
+  const host = $('cupTeamList'); if (!host) return;
+  host.innerHTML = '';
+  // ⚠️ DRAG AND DROP with HTML5 dragging AND a touch fallback. `draggable` alone does
+  // nothing on a phone, and the whole point of reordering is arranging a draw before
+  // people sit down — which is a thing you do on whatever is to hand.
+  let from = -1;
+  cup.teams.forEach((k, i) => {
+    const row = document.createElement('div');
+    row.className = 'cuprow'; row.draggable = true; row.dataset.i = i;
+    const seed = document.createElement('span'); seed.className = 'cupseed'; seed.textContent = (i+1) + '.';
+    const nm = document.createElement('b'); nm.style.fontWeight = '400'; nm.textContent = cupName(k);
+    const grip = document.createElement('span'); grip.className = 'cuphandle'; grip.textContent = '\u2261';
+    row.append(seed, cupFlagCanvas(k, 24), nm, grip);
+    row.ondragstart = e => { from = i; row.classList.add('drag'); try { e.dataTransfer.setData('text/plain', String(i)); } catch(_){} };
+    row.ondragend = () => { row.classList.remove('drag'); host.querySelectorAll('.cuprow').forEach(r => r.classList.remove('over')); };
+    row.ondragover = e => { e.preventDefault(); row.classList.add('over'); };
+    row.ondragleave = () => row.classList.remove('over');
+    row.ondrop = e => { e.preventDefault(); cupMove(from, i); };
+    // Touch: pick up, drag over the row you want, let go.
+    row.addEventListener('touchstart', () => { from = i; }, { passive: true });
+    row.addEventListener('touchend', e => {
+      const t = e.changedTouches[0]; if (!t) return;
+      const over = document.elementFromPoint(t.clientX, t.clientY);
+      const dest = over && over.closest ? over.closest('.cuprow') : null;
+      if (dest && dest !== row) cupMove(from, +dest.dataset.i);
+    }, { passive: true });
+    host.appendChild(row);
+  });
+}
+function cupMove(from, to){
+  if (from < 0 || to < 0 || from === to) return;
+  const a = cup.teams; const [t] = a.splice(from, 1); a.splice(to, 0, t);
+  saveCup(); buildCupScreen();
+}
+// The bracket itself: one column a round, matches spread down it. ⚠️ Built from
+// `cupMatches()` — the same derived list the play flow uses — so the picture and the
+// thing it is a picture OF cannot drift apart.
+function buildCupBracket(){
+  const host = $('cupBracket'); if (!host) return;
+  host.innerHTML = '';
+  const ms = cupMatches();
+  for (let r = 0; r < cupRounds(); r++){
+    const col = document.createElement('div'); col.className = 'cupcol';
+    const h = document.createElement('div'); h.className = 'cupcolh'; h.textContent = cupRoundName(r).toUpperCase();
+    col.appendChild(h);
+    const wrap = document.createElement('div'); wrap.className = 'cupwrap';
+    for (const m of ms.filter(x => x.round === r)){
+      const box = document.createElement('div');
+      box.className = 'cupm' + (m.ready && !m.done ? ' ready' : '') + (m.done ? ' done' : '');
+      [m.a, m.b].forEach((k, side) => {
+        const row = document.createElement('div');
+        const won = m.done && ((m.winner === k));
+        row.className = 'cupmr' + (!k ? ' tbd' : m.done ? (won ? ' win' : ' lose') : '');
+        const nm = document.createElement('b');
+        nm.textContent = k ? cupName(k) : 'TBD';
+        if (k) row.appendChild(cupFlagCanvas(k, 18));
+        else { const sp = document.createElement('span'); sp.style.width = '18px'; row.appendChild(sp); }
+        row.appendChild(nm);
+        box.appendChild(row);
+      });
+      if (m.ready && !m.done) box.onclick = () => startCupMatch(m.i);
+      wrap.appendChild(box);
+    }
+    col.appendChild(wrap);
+    host.appendChild(col);
+  }
+}
+// ⚠️ THE COUNTRY IS THE TEAM, so both sides' colour and every player's flag come from the
+// draw rather than from `sel.teamCol` and the profile. `matchTeamCol` is what `teamColOf`
+// reads while a cup match is on — see there.
+// Put both sides in their country's flag and their country's colour. ⚠️ Called again
+// from `lobbyStart`, because that is where the roster is actually settled — see there.
+function cupDress(w){
+  if (!w || !w.cup) return;
+  matchTeamCol = [ (cupTeam(w.cup.a)||{}).col, (cupTeam(w.cup.b)||{}).col ];
+  const dress = p => { if (p) p.flag = p.team === 0 ? w.cup.a : w.cup.b; };
+  w.players.forEach(dress);
+  (w.bench || []).forEach(dress);
+  applyTeamColours(w.players);
+  applyTeamColours(w.bench);
+}
+function startCupMatch(mi){
+  const m = cupMatches().find(x => x.i === mi);
+  if (!m || !m.ready || m.done) return;
+  cupFlashThen(m, () => {
+    startMatch({ lobby: false });
+    if (!world) return;
+    world.cup = { i: mi, a: m.a, b: m.b, round: m.round };
+    cupDress(world);
+    // ⚠️ A LITE warm-up: sides and start, no keyboard and no colour swatches. In a
+    // tournament you are playing AS a country, so a lobby offering to rename you and
+    // change your shirt is offering to undo the draw.
+    // ⚠️ The ticker waits for the lobby, because "who is up next" is a thing to read
+    // WHILE playing — started here it would have run its twelve seconds out before
+    // anybody kicked off. With no lobby the match starts now, so it starts now.
+    if (warmupUseful()){ enterWarmup(world, true); }
+    else cupTickerStart();
+  });
+}
+// The card between matches, then the callback. ⚠️ Skippable on any press: it is a beat,
+// not a wait, and somebody who has seen it does not need to see it again.
+function cupFlashThen(m, go){
+  const el = $('cupFlash');
+  if (!el){ go(); return; }
+  hideScreens(); hideOverlay();
+  $('cfRound').textContent = cupRoundName(m.round).toUpperCase();
+  const setSide = (side, k) => {
+    const host = $('cfFlag' + side);
+    const fresh = cupFlagCanvas(k, 74); fresh.className = 'cfflag'; fresh.id = host.id;
+    host.replaceWith(fresh);
+    $('cfName' + side).textContent = cupName(k);
+  };
+  setSide('A', m.a); setSide('B', m.b);
+  $('cfHint').textContent = 'STARTING IN ' + Math.ceil(CUP.flash) + 'S \u00b7 PRESS ANYTHING TO SKIP';
+  el.classList.remove('hidden');
+  let done = false;
+  const end = () => {
+    if (done) return; done = true;
+    clearTimeout(tid);
+    window.removeEventListener('pointerdown', end);
+    window.removeEventListener('keydown', end);
+    el.classList.add('hidden');
+    go();
+  };
+  const tid = setTimeout(end, CUP.flash * 1000);
+  // A frame's grace, or the press that started the match closes the card it opened.
+  setTimeout(() => {
+    if (done) return;
+    window.addEventListener('pointerdown', end, { once: true });
+    window.addEventListener('keydown', end, { once: true });
+  }, 220);
+}
+// ⚠️ THE TICKER SAYS WHAT IS LEFT, not what just happened. Mid-match the question a
+// bracket puts in your head is who is next, and walking off the pitch to look at it is
+// the thing this exists to save.
+function cupTickerText(){
+  // ⚠️ The tie you are STANDING IN is not "coming up" — it is the thing on the screen
+  // behind the ticker, and listing it first is the ticker's whole line wasted on the one
+  // match nobody needs telling about.
+  const now = world && world.cup ? world.cup.i : -1;
+  const ms = cupMatches().filter(m => !m.done && m.i !== now);
+  const bits = [];
+  for (const m of ms.slice(0, 6)){
+    bits.push(cupRoundName(m.round).toUpperCase() + ': ' +
+              (m.a ? cupName(m.a) : 'TBD') + ' v ' + (m.b ? cupName(m.b) : 'TBD'));
+  }
+  const champ = cupChampion();
+  if (champ) bits.push('\ud83c\udfc6 ' + cupName(champ).toUpperCase() + ' WIN THE TOURNAMENT');
+  if (!bits.length) bits.push('TOURNAMENT COMPLETE');
+  return bits;
+}
+let cupTickerT = 0;
+function cupTickerStart(){
+  const el = $('cupTicker'), tr = $('cupTickerTrack');
+  if (!el || !tr) return;
+  tr.innerHTML = '';
+  const bits = cupTickerText();
+  // Doubled, so the loop has something to run into rather than a gap.
+  for (const pass of [0, 1]) for (const b of bits){
+    const s1 = document.createElement('span'); s1.className = 'tkk'; s1.textContent = '\u25c6';
+    const s2 = document.createElement('span'); s2.textContent = b;
+    tr.append(s1, s2);
+  }
+  el.classList.toggle('still', !motionOK());
+  el.classList.remove('hidden');
+  clearTimeout(cupTickerT);
+  cupTickerT = setTimeout(cupTickerStop, CUP.ticker * 1000);
+}
+function cupTickerStop(){ clearTimeout(cupTickerT); const el = $('cupTicker'); if (el) el.classList.add('hidden'); }
+// A cup match is over: write which SIDE went through and show the bracket's own overlay.
+function cupEnd(w){
+  cupTickerStop();
+  matchTeamCol = null;
+  let delta = 0;
+  if (!w.watch) delta = recordResult(w);
+  const rp = delta ? `   ·   ${delta>0?'+':''}${delta} RP` : '';
+  const sc = `${w.score[0]}–${w.score[1]}`;
+  // ⚠️ Team 0 is the side drawn FIRST in this match, which is what the bracket stores —
+  // not "you". `youTeam` decides whether the title congratulates you; the bracket does
+  // not care who was holding the controller.
+  const side = w.score[0] === w.score[1]
+    ? (w.forceWin != null ? w.forceWin : ((w.seed || 0) % 2))   // a draw still has to advance somebody
+    : (w.score[0] > w.score[1] ? 0 : 1);
+  cup.won[w.cup.i] = side;
+  saveCup();
+  const through = side === 0 ? w.cup.a : w.cup.b;
+  const champ = cupChampion();
+  if (champ){ cup.cups = (cup.cups||0) + 1; saveCup(); }
+  paused = true;
+  $('ovTitle').classList.remove('slam');
+  $('ovTitle').textContent = champ ? '\ud83c\udfc6 ' + cupName(champ).toUpperCase() + ' WIN THE CUP'
+                                   : cupName(through).toUpperCase() + ' GO THROUGH';
+  $('ovSub').textContent = sc + rp;
+  $('ovSub').style.display = '';
+  { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML='';
+    const vt=$('ovVote'); if (vt) vt.innerHTML=''; }
+  const nx = cupNext();
+  $('ovResume').style.display = '';
+  if (nx){ $('ovResume').textContent = 'Next \u00b7 ' + cupName(nx.a) + ' v ' + cupName(nx.b);
+           $('ovResume').onclick = () => { hideOverlay(); startCupMatch(nx.i); }; }
+  else   { $('ovResume').textContent = 'Bracket'; $('ovResume').onclick = () => { hideOverlay(); openCup(); }; }
+  $('ovRematch').textContent = 'Bracket'; $('ovRematch').style.display = '';
+  $('ovRematch').dataset.role = '';
+  $('ovRematch').onclick = () => { hideOverlay(); openCup(); };
+  $('ovMenu').textContent = 'Main Menu'; $('ovMenu').onclick = toMenu;
+  $('overlay').classList.add('show');
+}
+
+// ============================================================
 //  ROGUELIKE / GAUNTLET — a run of escalating matches. Win to descend deeper
 //  and pick a random upgrade; lose to spend a life. 3 lives; run ends at 0.
 //  Your deepest run is remembered. Local, reuses the match engine.
@@ -11561,6 +12087,12 @@ function pickNames(n, used){
 //  MATCH SETUP
 // ============================================================
 function startMatch(opts){
+  // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
+  // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
+  // whoever set it to clear it is what stops a cup tie's country colours leaking into
+  // every match afterwards when somebody walks out to the menu mid-tie. `cupDress`
+  // re-sets it immediately after this returns.
+  matchTeamCol = null;
   // `lobby:false` is "play now" — see tryKickOff. Everything else (a season round, a
   // drill, the attract demo, a rematch) keeps whatever `lobbyWanted` decides.
   const noLobby = !!(opts && opts.lobby === false);
@@ -12705,7 +13237,7 @@ function downloadBlob(blob, filename){
 //  THE GAME SAVE — everything this device knows about you, in one JSON file
 // ============================================================
 // One file you can carry to another device: settings (Game Feel and all of it), your
-// player, your record, unlocks, custom maps, drill times and a season or Gauntlet run in
+// player, your record, unlocks, custom maps, drill times and a season, tournament or Gauntlet run in
 // progress.
 //
 // ⚠️ IT IS A WHOLE SAVE, NOT A SETTINGS EXPORT, and that is a deliberate widening of the
@@ -12733,7 +13265,10 @@ function downloadBlob(blob, filename){
 // between somebody's `package.json` and a wrecked save.
 const SAVEFILE = {
   format: 'magnetball-save', v: 1,
-  keys: ['sel', 'profile', 'stats', 'names', 'drills', 'season', 'rogue', 'maps', 'mapvotes',
+  // ⚠️ `cup` travels for the reason `season` and `rogue` do: a tournament half-played is
+  // a run in progress, and a save file that moves the settings but not the thing you were
+  // in the middle of is a save of the game's look rather than of your game.
+  keys: ['sel', 'profile', 'stats', 'names', 'drills', 'season', 'rogue', 'cup', 'maps', 'mapvotes',
          'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
   skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html', 'cloud'],
 };
@@ -14182,7 +14717,14 @@ function lobbyWanted(w){
 function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
 function lobbyHost(w){ return lobbyHumans(w)[0] || null; }
 
-function enterWarmup(w){
+// ⚠️ `lite` is warm-up with the CUSTOMISATION taken out — no keyboard, no colour
+// swatches — and the tournament is the one caller. There you are playing AS a country,
+// so a lobby offering to rename you and change your shirt is offering to undo the draw.
+// What is left is what warm-up is actually for: walk onto a side, test your stick, press
+// START. The team-size stepper and the bot-skill row stay, because those are about the
+// MATCH rather than about how a body looks.
+function enterWarmup(w, lite){
+  w.lobbyLite = !!lite;
   // Anyone who sat the last one out is back in the pool — warm-up is where you
   // choose, so nobody is stuck on the bench across matches.
   if (w.bench && w.bench.length){
@@ -14252,7 +14794,10 @@ function buildLobbyKeys(w){
   };
   const raw = [];                                  // (u, v, du, dv), before mapping
   const step = K.keyW + K.gap, rowH = K.keyH + K.gap;
-  K.rows.forEach((row, ri) => {
+  // A lite lobby has no letters and no shirts (see `enterWarmup`). The block still has
+  // to have a height, or the difficulty row and the stepper land on top of the net.
+  const lite = !!w.lobbyLite;
+  if (!lite) K.rows.forEach((row, ri) => {
     const u0 = -(row.length*K.keyW + (row.length-1)*K.gap) / 2;
     for (let i = 0; i < row.length; i++)
       raw.push({ k: { ch: row[i], label: row[i] }, u: u0 + i*step, v: top + ri*rowH, du: K.keyW, dv: K.keyH });
@@ -14260,9 +14805,9 @@ function buildLobbyKeys(w){
   // DEL and SPACE, wide enough to be walked onto without aiming.
   const cw2 = K.keyW * K.wideW, ctrl = [['\b', 'DEL'], [' ', 'SPACE']];
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
-  ctrl.forEach(([ch, label], i) =>
+  if (!lite) ctrl.forEach(([ch, label], i) =>
     raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
-  const kbBot = top + K.rows.length*rowH + K.keyH;
+  const kbBot = lite ? top : top + K.rows.length*rowH + K.keyH;
   const blockBot = kbBot + K.gap*2 + K.diff;      // the difficulty row goes in below
   // ⚠️ THE TEAM-SIZE STEPPER IS IN THE CORNER, not tucked against the letters. It is
   // not part of typing your name, and standing beside the board to change the match
@@ -14285,7 +14830,7 @@ function buildLobbyKeys(w){
   // half (v > 0), turned it is the right one (u > 0).
   const nSw = TEAM_COLS.length, swSpan = nSw*K.sw + (nSw-1)*K.gap;
   const splitU = turned;                       // do the halves divide left/right?
-  [1, 0].forEach(team => {
+  if (!lite) [1, 0].forEach(team => {
     const sign = team === 0 ? 1 : -1;          // team 0 is the +ve side of the split
     const base = sign > 0 ? K.gap/2 : -(K.gap/2 + swSpan);
     TEAM_COLS.forEach((c, i) => {
@@ -14319,7 +14864,7 @@ function buildLobbyKeys(w){
   let uL = Infinity, uR = -Infinity;
   for (const q of raw){ if (q.k.colTeam !== undefined || q.k.diff || q.k.act) continue;
                         uL = Math.min(uL, q.u); uR = Math.max(uR, q.u + q.du); }
-  const shift = -(uL + uR)/2;
+  const shift = isFinite(uL) ? -(uL + uR)/2 : 0;   // lite: no letters to centre on
   for (const q of raw) keys.push(place(q.k, q.u + (q.k.colTeam !== undefined || q.k.diff || q.k.act ? 0 : shift),
                                        q.v, q.du, q.dv));
   let L = Infinity, R = -Infinity, T = Infinity, B = -Infinity;
@@ -14863,6 +15408,11 @@ function lobbyStart(w){
   labelA = w.players.map(()=>1); labelT = [];
   botInit(w);
   w.lobby = null;
+  // ⚠️ A CUP TIE RE-DRESSES ITSELF HERE, and it has to: the lobby is where the roster
+  // is finally settled, so the bodies that get their country flag in `startCupMatch`
+  // are not the bodies that take the field — `fill` mints fresh bots and
+  // `numberTheSides` runs after them. Same beat as `applyTeamColours` two lines up.
+  if (w.cup){ cupDress(w); cupTickerStart(); }
   resetKickoff(w, true);
 }
 // ---------- Floating stat text ----------------------------------------------
@@ -16278,6 +16828,7 @@ function finishMatch(w){
               repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {}); }
   }
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
+  if (w.cup){ cupEnd(w); return; }         // tournament writes its own result into the bracket
   if (w.season){ seasonEnd(w); return; }   // cup progression handles its own overlay
   let title, sub;
   // ⚠️ "You" is `youTeam(w)`, not team 0 — the warm-up lobby hands you a side by which
@@ -18928,7 +19479,9 @@ function drawLobbyKeys(w, ox, oy){
     for (const [px, py] of [[k.x, k.y], [k.x + k.w, k.y], [k.x, k.y + k.h], [k.x + k.w, k.y + k.h]])
       cs.push(screenPt(wx(px), wy(py)));
   }
-  if (!cs.length) cs.push(screenPt(wx(kb.L), wy(kb.T)));
+  // ⚠️ No letters means no caption, rather than a caption over an empty patch of grass:
+  // a lite lobby (a tournament tie) has no keyboard to introduce.
+  if (!cs.length){ ctx.restore(); return; }
   const bx0 = Math.min.apply(null, cs.map(c => c[0])) + ox;
   const bx1 = Math.max.apply(null, cs.map(c => c[0])) + ox;
   const by0 = Math.min.apply(null, cs.map(c => c[1])) + oy;
@@ -22998,7 +23551,7 @@ if ('serviceWorker' in navigator) {
 //  only swaps the left dock — the match on the right is never disturbed.
 // ---------------------------------------------------------------------------
 const ROUTE_OF = { setup:'home', how:'how', drills:'drills',
-  season:'season', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
+  season:'season', cup:'cup', leaderboard:'leaderboard', stats:'stats', shop:'shop', social:'social',
   rogue:'rogue', cocktailCfg:'cocktail', arcadeCfg:'arcade', padConfig:'controller' };
 const ROUTES = {
   home:        toMenu,
@@ -23006,6 +23559,7 @@ const ROUTES = {
   how:         openHow,
   drills:      openDrills,
   season:      openSeason,
+  cup:         openCup,
   leaderboard: openLeaderboard,
   stats:       openStats,
   shop:        openShop,
@@ -23434,6 +23988,11 @@ if (window.__MAGNETDEBUG) {
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
+    CUP, CUP_TEAMS, get cup(){ return cup; }, cupTeam, cupMatches, cupRounds, cupNext,
+    cupChampion, cupRoundName, cupFill, cupShuffle, cupLock, cupReset, cupMove,
+    openCup, buildCupScreen, buildCupBracket, startCupMatch, cupEnd, cupTickerText,
+    cupTickerStart, cupTickerStop, get matchTeamCol(){ return matchTeamCol; },
+    set matchTeamCol(v){ matchTeamCol = v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
     benchBots, beginCalibration, finishCalibration, needsCalibration, CALIB_STEPS, drawLobby, pollLobbyStart,

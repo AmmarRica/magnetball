@@ -1107,7 +1107,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **A GAME SAVE, as one JSON file** (`SAVEFILE`, `buildSaveDoc`, `parseSaveDoc`,
   `applySaveDoc`, `exportSaveFile`, `pickSaveDoc`; About card). Settings including Game
   Feel, your player, your record and unlocks, custom maps, drill times, and a season or
-  Gauntlet run in progress.
+  Gauntlet or tournament run in progress.
   ⚠️ **A whole save rather than a settings export**, which is a deliberate widening of
   the ask: a settings file would move the game's *look* to the new device and none of the
   reasons you play it.
@@ -1204,6 +1204,49 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   supports, a wiring standard a cabinet builder needs, and a service the code actually
   calls — factual and necessary, which is a different thing from naming your content after
   somebody's game.
+- **TOURNAMENT — a knockout bracket of countries** (`CUP_TEAMS`, `CUP`, `cup`,
+  `cupMatches`, `cupLock`, `cupDress`, `startCupMatch`, `cupEnd`, `#cup`, `#cupFlash`,
+  `#cupTicker`). Pick 4/8/16, drag the draw or randomise it, lock it, play down the tree.
+  ⚠️ **THE BRACKET IS DERIVED, never stored.** `cup.won` — one 0 or 1 per match, which
+  SIDE went through — is the only state a match writes; `cupMatches()` rebuilds the whole
+  tree from it every time it is asked. Storing the tree as well is two places to keep in
+  step and the second goes stale the moment a result is undone, which is exactly what
+  **Unlock** does — and unlocking therefore **clears the results**, because the seeding is
+  what the results are *about* and keeping them while the teams move leaves a bracket
+  claiming a side beat somebody they were never drawn against.
+  ⚠️ **THE COUNTRY IS THE TEAM**, so both sides' colour comes from the draw — through
+  **`matchTeamCol`**, a one-match layer `teamColOf` reads *above* `sel.teamCol`. It is a
+  layer and not a write, because `sel.teamCol` is what the PLAYER picked for themselves and
+  has to survive the cup. ⚠️ **Cleared at the top of `startMatch`**, not by whoever set it:
+  walking out to the menu mid-tie is the path with nobody left to remember, and left set
+  every match afterwards is played in two countries' colours — which reads as the player's
+  own choice silently changing. ⚠️ Declared beside `teamColOf` rather than with the cup
+  code, because that function runs during the bootstrap. **Sixteenth TDZ bite.**
+  ⚠️ **`cupDress` RUNS AGAIN FROM `lobbyStart`**, and without that the feature is broken in
+  the ordinary case: the bodies dressed in `startCupMatch` are not the bodies that take the
+  field — the lobby mints fresh bots to fill the sides and `numberTheSides` runs after them,
+  so every filled-in body was wearing a shirt number instead of the country. A check that
+  reads the flags straight after `startCupMatch` passes on that build, which is why
+  `tests/cup.mjs` reads the roster only after the lobby.
+  ⚠️ **THE LOBBY IS LITE** (`enterWarmup(w, lite)` → `w.lobbyLite` → `buildLobbyKeys`): no
+  letters, no colour swatches. In a tournament you are playing AS a country, so a lobby
+  offering to rename you and change your shirt is offering to undo the draw. The team-size
+  stepper and the bot-skill row STAY — those are about the MATCH, not about how a body
+  looks — and with no letters `drawLobbyKeys` returns before the caption rather than
+  printing "spell your name" over an empty patch of grass.
+  ⚠️ **THE TICKER WAITS FOR THE LOBBY.** Started in `startCupMatch` it would run its twelve
+  seconds out before anybody kicked off; it fires from `lobbyStart` instead (or immediately
+  when there is no lobby). It names what is **left**, skipping the tie you are standing in —
+  that one is the thing on the screen behind it. Its scroll is CSS, so `motionOK()` reaches
+  it through a `.still` class as well as the `prefers-reduced-motion` query.
+  ⚠️ **The connectors are `::after` pseudo-elements that stick OUT of a match box**, so
+  `.cupm` may **not** have `overflow:hidden` however much the rounded corners ask for it —
+  clipping the box clips every line and leaves a grid of boxes and no tree. The bracket
+  **scrolls sideways** rather than wrapping: 16 teams is four columns, which fits no phone,
+  and wrapping destroys the one thing the picture is for.
+  ⚠️ Every entry in `CUP_TEAMS` needs a real `FLAGS` key — a missing one falls back to a
+  grey square, which looks like a rendering bug and is really a team nobody can identify.
+  `tests/cup.mjs`.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
@@ -2589,7 +2632,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 98 suites IN PARALLEL (254s, against ~535s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 113 suites IN PARALLEL (315s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

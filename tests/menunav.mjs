@@ -132,7 +132,7 @@ const r = await p.evaluate(async ()=>{
   // whole job was `openSection('theme')` was a door onto the room you were already
   // standing in. The detached panel is still reachable from Display, where a
   // window-management choice belongs.
-  o.expectedIds = ['dailyBtn','drillsBtn','howBtn','lbBtn','rogueBtn','seasonBtn',
+  o.expectedIds = ['cupBtn','dailyBtn','drillsBtn','howBtn','lbBtn','rogueBtn','seasonBtn',
                    'shopBtn','socialBtn','statsBtn','tutBtn'].join(',');
   o.allTilesKept = o.tileIds === o.expectedIds;
   o.everyTileWired = tiles.every(t => typeof t.onclick === 'function');
@@ -244,7 +244,7 @@ ok(r.feelLastChipHit, `the last Game Feel chip (${r.feelLastChipPane}) is not hi
 ok(r.feelLastPaneOpened, `pressing the last chip did not open the ${r.feelLastChipPane} pane`);
 ok(r.feelWholeCardVisible, 'the preset row or the reset button vanished on some tab');
 ok(r.everyGroupLabelled, `a nav group has no label: ${JSON.stringify(r.navLabels)}`);
-ok(r.tileCount === 10, `expected 10 nav tiles, got ${r.tileCount}`);
+ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);
 ok(r.everyTileWired, 'a nav tile lost its click handler');
 ok(r.everyTileInAGroup, 'a nav tile is outside every group');
