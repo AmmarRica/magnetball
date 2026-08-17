@@ -12,7 +12,10 @@ await p.waitForTimeout(600);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
-  const look = q => [q.flag, q.cap, q.eyes, q.color].join('|');
+  // ⚠️ No `color` in the identity. It is the TEAM's now, so including it here would
+  // make "every bot looks different" trivially false on one side and trivially true
+  // across sides — measuring the shirt instead of the player.
+  const look = q => [q.flag, q.cap, q.eyes].join('|');
 
   // A distinctive player look, so "copied from you" is unmistakable.
   M.profile.flag='none'; M.profile.cap='crown'; M.profile.eyes='googly'; M.profile.color='#46d17a';
@@ -23,9 +26,18 @@ const r = await p.evaluate(async ()=>{
   const you = ps.find(q=>q.ctrl==='human1');
   const bots = ps.filter(q=>q!==you);
   o.seats = ps.length;
-  o.youKeepYourLook = you.cap==='crown' && you.color==='#46d17a';
+  // ⚠️ COLOUR IS NOT PART OF "YOUR LOOK" ANY MORE — it belongs to the TEAM. A side
+  // used to be three or four shades of nearly-red, and telling the two teams apart at
+  // a glance is the one thing a shirt colour has to do. What is yours is your cap,
+  // your face, your eyes and your name; the shirt is the side you are on.
+  o.youKeepYourLook = you.cap==='crown' && you.eyes==='googly';
+  o.yourShirtIsTheTeamS = you.color === M.teamColOf(0);
   o.noBotCopiesYou = bots.every(q=>look(q) !== look(you));
+  // ⚠️ ...so "bots differ" is measured WITHOUT the colour, for the same reason. They
+  // are still individuals — name, face, eyes — and they are all in their side's shirt.
   o.botsDifferFromEachOther = new Set(bots.map(look)).size === bots.length;
+  o.oneShadeASide = new Set(ps.filter(q=>q.team===0).map(q=>q.color)).size === 1 &&
+                    new Set(ps.filter(q=>q.team===1).map(q=>q.color)).size === 1;
   o.botFacesVary = new Set(bots.map(q=>q.flag)).size > 1;
   // ⚠️ Bots wear NO cap now. They used to cycle the whole CAPS table, which put a
   // different hat on every disc and made a cap read as decoration rather than as
@@ -34,7 +46,7 @@ const r = await p.evaluate(async ()=>{
   o.botCaps      = [...new Set(bots.map(q=>q.cap))];
   o.botsWearNoCap = bots.every(q=>q.cap === 'none' || q.cap == null);
   // Teams still read as teams: bot colours sit in their side's family.
-  o.teamColoursSplit = new Set(ps.filter(q=>q.team===0).map(q=>q.color)).size >= 1 &&
+  o.teamColoursSplit = new Set(ps.filter(q=>q.team===0).map(q=>q.color)).size === 1 &&
     ps.filter(q=>q.team===1).every(q=>q.color !== you.color);
 
   // Deterministic: the same match twice gives the same faces (no per-frame churn).
@@ -69,7 +81,8 @@ const r = await p.evaluate(async ()=>{
 
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.seats===4 && r.youKeepYourLook && r.noBotCopiesYou && r.botsDifferFromEachOther &&
+const ok = r.seats===4 && r.youKeepYourLook && r.yourShirtIsTheTeamS && r.oneShadeASide &&
+  r.noBotCopiesYou && r.botsDifferFromEachOther &&
   r.botFacesVary && r.botsWearNoCap && r.teamColoursSplit && r.stableAcrossRestarts &&
   r.bigLooksVary && r.demoOneFlagPerTeam && r.demoNotYourCap && r.rendersClean &&
   errors.length === 0;

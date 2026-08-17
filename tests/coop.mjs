@@ -31,11 +31,16 @@ const r = await p.evaluate(()=>{
   o.versusShape = shape(v);
   o.versusT1Humans = v.players.filter(x=>x.team===1 && x.ctrl!=='bot').length;
 
-  // 2v2 co-op with 3 pads: team is only 2, overflow goes to opponent
+  // ⚠️ 2v2 CO-OP WITH 3 PADS IS A 3v3 NOW. The match GROWS to fit the controllers in
+  // the room (see startMatch) rather than turning the third person away — a mode's
+  // size is the size you asked for, and a room bigger than it is a room. It used to
+  // seat two on your side and push the third onto the OPPOSITION, which in co-op is
+  // the one place they did not ask to be.
   M.sel.mode='2v2'; M.sel.coop='on'; M.startMatch();
   const c2=M.world;
   o.coop2v2T0Humans = c2.players.filter(x=>x.team===0 && x.ctrl!=='bot').length;
   o.coop2v2Overflow = c2.players.filter(x=>x.team===1 && x.ctrl!=='bot').length;
+  o.coop2v2Per = c2.players.filter(x=>x.team===0).length;
 
   // info label
   M.sel.mode='3v3'; M.updatePadInfo();
@@ -49,6 +54,6 @@ const r = await p.evaluate(()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.coopT0Humans===3 && r.coopT1Bots===3 && r.versusT1Humans>=1 &&
-  r.coop2v2T0Humans===2 && r.coop2v2Overflow===1 && errors.length===0;
+  r.coop2v2T0Humans===3 && r.coop2v2Overflow===0 && r.coop2v2Per===3 && errors.length===0;
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

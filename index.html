@@ -3105,6 +3105,9 @@ const LOBBY = {
   // all the way into one half was silently put on the other team. Spawn offset is
   // 34, so the band has to be wider than that and narrower than a half.
   neutral: 60,         // world units either side of halfway that count as undecided
+  // Everybody in a goal starts the match — held for this long, so running through the
+  // mouth on the way round the back of the net is not a request to kick off.
+  goalStart: 0.9,
   arrowR: 92,          // radius of the drawn calibration arrow
   // ---- Warm-up balls -------------------------------------------------------
   // One at each half's centre before anybody arrives, and one more per person in
@@ -3153,21 +3156,85 @@ const LOBBY = {
 // the touchline, so the exclusion is by `ctrl`, never by where a body happens to be.
 const LOBBYKB = {
   rows: ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'],
-  keyW: 48, keyH: 44, gap: 7,
-  clear: 58,         // world units between the back of the net and the top row
-  dwell: 0.40,       // seconds standing on a key before it presses
+  // ⚠️ A KEY IS ABOUT THE SIZE OF A PLAYER (PLAYER.r is 15, so a body is 30 across).
+  // They were 48 x 44 — a body and a half — which made the board wider than the pitch
+  // and turned walking to a letter into a trek. At body size the whole thing reads as
+  // something you step onto rather than a wall of furniture.
+  keyW: 30, keyH: 28, gap: 5,
+  clear: 44,         // world units between the back of the net and the top row
   maxLen: 12,        // the same cap the name box uses
   wideW: 3.2,        // DEL and SPACE, in key widths
-  // ⚠️ The team-size stepper REPEATS while you stand on it, and the letters do not.
-  // Opposite rules on purpose: a letter you meant once is a letter, so it latches until
-  // you step off — but going 1v1 to 6v6 through a latch is eleven trips on and off a
-  // square, which is not a control, it is a chore.
-  // ⚠️ 66, not 84. The two squares are pinned to the top and bottom of the letter
-  //  block, so their size is what sets the GAP between them — and the team-size
-  //  readout lives in that gap. At 84 the words sat on the minus square's own edge.
-  pad: 66,           // the + and − squares, world units
-  repeat: 0.34,      // seconds between repeats while a foot stays on one
+  // ⚠️ NOTHING PRESSES ITSELF. There used to be a dwell — stand on a key for 0.4s
+  // and it typed — and it fired while you were only crossing the board on your way to
+  // the pitch, which is a keyboard typing at you. KICK is the press now, full stop, and
+  // it is also what makes a double letter reachable (see stepLobbyKeys).
+  pad: 44,           // the + and − squares, world units
+  repeat: 0.20,      // seconds between repeats while KICK is HELD on a +/− square
+  // The colour swatches beside each half, and the difficulty pads on the far side.
+  // ⚠️ THE COURT IS THE MIDDLE AND IT HAS TO STAY BIG. Everything here is framed by
+  // `computeCam`, which fits the whole span — so every unit spent on furniture beside
+  // the pitch is taken off the pitch. Two strips and a stepper at 42 units of clearance
+  // measurably shrank it; these are the smallest sizes that are still a body wide.
+  sw: 30,            // a colour swatch
+  diff: 34,          // a difficulty pad
+  side: 20,          // world units between a touchline and the strips beside it
 };
+// ============================================================
+//  TEAM COLOUR — one shade a side, picked on the pitch
+// ============================================================
+// ⚠️ COLOUR IS TEAM-WIDE, and that is the whole point of it. Every player used to
+// carry their own `color` (yours from `profile`, each bot a `teamTint` variation), so a
+// side was three or four shades of nearly-red and telling teams apart at a glance — the
+// one thing a colour has to do on a pitch — was left to the reader. A player's own
+// customisation is their cap, their face and their name; the shirt belongs to the team.
+const TEAM_COLS = [
+  { key:'red',    name:'RED',    col:'#e05a5a' },
+  { key:'pink',   name:'PINK',   col:'#e05aa8' },
+  { key:'orange', name:'ORANGE', col:'#e0873c' },
+  { key:'yellow', name:'YELLOW', col:'#d8c93a' },
+  { key:'green',  name:'GREEN',  col:'#4fb45f' },
+  { key:'teal',   name:'TEAL',   col:'#31b0a6' },
+  { key:'blue',   name:'BLUE',   col:'#5a7de0' },
+  { key:'purple', name:'PURPLE', col:'#8a5ae0' },
+];
+const TEAMCOL_DEF = ['#e05a5a', '#5a7de0'];      // red vs blue, the way it has always read
+// ⚠️ A BOT WEARS A ROBOT IN WARM-UP AND A NUMBER IN THE MATCH. In the lobby the shirt
+// numbers are a lie waiting to happen: people are still walking onto halves, so a bot
+// numbered 3 is number 3 only until somebody joins its side. The robot says what the
+// body IS — the one thing about it that will not change — and `lobbyStart` swaps in
+// the real number once the sides are settled, counting the HUMANS first, so four
+// people on a six-a-side get 1-4 and the bots filling in are 5 and 6.
+// ⚠️ Deliberately NOT an entry in `TEXTS`. That table is the faceplate PICKER's list,
+// and this is a marker for what a body is, not a cosmetic anybody chooses; adding it
+// there would put "Robot" in front of every player as something to wear.
+// ⚠️ Declared HERE, far from `BOT_CAP` where it belongs, because `paintFace` reads it
+// and runs during the bootstrap — the fifteenth TDZ bite in this file.
+const BOT_FACE = 'bot';
+const BOT_GLYPH = '\ud83e\udd16';
+function teamColOf(team){
+  const a = sel.teamCol;
+  const c = Array.isArray(a) ? a[team ? 1 : 0] : null;
+  return c || TEAMCOL_DEF[team ? 1 : 0];
+}
+// ⚠️ The one place a body's colour is decided. Called wherever the roster or the
+// sides can change — the warm-up step, `lobbyStart`, `startMatch`, `evenUpSides` and
+// the drop-in walk-on — so a player who switches halves is simply the other colour.
+function applyTeamColours(list){
+  if (!list) return;
+  for (const p of list) if (p) p.color = teamColOf(p.team);
+}
+// ⚠️ The two sides may never end up the SAME colour. Picking a colour the other
+// side is already wearing hands them the one you just gave up, which is a swap rather
+// than a refusal — a refusal on a walk-on pad is indistinguishable from a broken pad.
+function setTeamCol(team, col){
+  const t = team ? 1 : 0, other = t ? 0 : 1;
+  const cur = [teamColOf(0), teamColOf(1)];
+  if (cur[t] === col) return false;
+  if (cur[other] === col) cur[other] = cur[t];
+  cur[t] = col;
+  sel.teamCol = cur;
+  return true;
+}
 // The surface, as MULTIPLIERS on your own Game Feel rather than as replacements for
 // it. ⚠️ These used to be absolute numbers, and `pAccel`/`pDamp` were taken from the
 // table on Ice and Mud and from the sliders only on Grass — so the Speed and Grip
@@ -3628,7 +3695,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0120AM';
+const VERSION = '20260817.0330AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3644,6 +3711,21 @@ const VERSION = '20260817.0120AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0330AM', title: 'Pick your team colour on the pitch',
+    added: [
+      '<b>Team colours, bot difficulty and the team size are all chosen by walking onto them in warm-up.</b> The colour swatches beside each half set that side\u2019s shirt, the numbered pads under the keyboard set how hard the bots are, and the + and \u2212 in the corner set how many a side. Switch halves and you are wearing that half\u2019s colour.',
+      '<b>Everybody stand in a goal to start the match</b> \u2014 a third way in, alongside START and the countdown.',
+      '<b>Every controller in the room gets a body</b>, even in a 1v1. The match grows to fit the people playing instead of turning the third and fourth person away.',
+    ],
+    changed: [
+      '<b>A team is one colour now</b>, not four shades of nearly-red. Your cap, face, eyes and name are still yours; the shirt belongs to the side you are on, and the goal at each end matches it.',
+      '<b>Bots wear a robot in warm-up and a squad number in the match</b>, counting on from the people \u2014 four of you in a six-a-side makes the bots 5 and 6.',
+      '<b>KICK OFF starts the match</b> on the settings you already have, instead of dropping into warm-up; the Warm-up button is right underneath it. It no longer makes you sit through a replay first.',
+      'The warm-up keyboard no longer types when you only walk over it \u2014 KICK is the press. The keys are about the size of a player, and everything is arranged around the court with the court in the middle.',
+      'Player names on the pitch are outlined instead of sitting in a filled box, so they read on any background without covering the play.',
+      'Bots no longer get stuck on each other walking on and off the pitch.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260817.0120AM', title: 'A keyboard that is still a keyboard sideways',
     added: [
       '<b>Press KICK to type the letter you are standing on.</b> Standing still on a key types it once and then waits for you to step off, so a double letter like the two Qs in a row was not something you could spell \u2014 now a tap types it, and a second tap types it again. Holding the button down is still one letter.',
@@ -4114,7 +4196,7 @@ function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, settingsPanel:'inline', names:'', juice:true, hitStop:5, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            display:'auto', cocktailSides:{}, lobby:'on', kickPush:'off', arcadePlay:'free', autoRec:'off',
+            display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
             // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
@@ -7418,6 +7500,21 @@ function photoFromFile(file){
 function paintFace(c, x, y, r, o){
   const key = o.flag, has = key && key!=='none';
   c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
+  // ⚠️ Handled here rather than as a TEXTS entry — see BOT_FACE. Drawn through the same
+  // fit-to-the-plate path a glyph faceplate uses, so it cannot spill off the disc.
+  if (key === BOT_FACE){
+    c.save();
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillStyle = pickTextColor(o.color||'#46d17a');
+    let px = Math.round(r*1.15);
+    c.font = px+'px '+TEXT_FONT;
+    const wid = c.measureText(BOT_GLYPH).width, fit0 = r*1.34;
+    if (wid > fit0) px = Math.max(4, Math.round(px * fit0 / wid));
+    c.font = px+'px '+TEXT_FONT;
+    c.fillText(BOT_GLYPH, x, y + r*0.04);
+    c.restore();
+    return;
+  }
   if (has && TEXTS[key]){
     // Fit the glyph to the plate: measure once and scale, so a two-character avatar
     // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
@@ -8350,7 +8447,19 @@ function arcadeKeyDown(e){
 // The one way a PLAYER asks for a game. Everything else that reaches startMatch — the attract
 // demo, the next season round, a drill — is the machine doing something rather than somebody
 // paying for it, so those are not charged.
-function tryKickOff(){ if (arcadeSpend()) startMatch(); }
+// ⚠️ KICK OFF MEANS KICK OFF. It used to drop into the warm-up lobby whenever a pad
+// was connected (`lobbyWanted`), so the one button on the menu that says "play" put you
+// in a room to choose things in — with every choice already made, in the menu, by the
+// person who just pressed it. Warm-up has its own button right underneath, and that is
+// the deliberate way in; this one starts the match on the settings you already have.
+// ⚠️ And it CANCELS a running replay first. The attract demo plays goal replays, and
+// `loop()` returns immediately while one is active — so pressing KICK OFF during one
+// started the match underneath, left it frozen until the replay ran itself out, and
+// then landed in the lobby anyway. Pressing play must never mean "watch this first".
+function tryKickOff(){
+  if (typeof replayAbort === 'function') replayAbort();
+  if (arcadeSpend()) startMatch({ lobby: false });
+}
 function connectedGamepadIndices(){
   // A cabinet's four panels, presented as four pads. Everything downstream — seat handout,
   // drop-in, the warm-up lobby, evening the sides up — goes through this one list.
@@ -8921,7 +9030,10 @@ $('playBtn').onclick = tryKickOff;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
 // useful for trying controls, or for picking sides with no controller connected.
-$('warmupBtn').onclick = () => { startMatch(); if (world && world.state !== 'warmup') enterWarmup(world); };
+$('warmupBtn').onclick = () => {
+  if (typeof replayAbort === 'function') replayAbort();   // same reason as tryKickOff
+  startMatch(); if (world && world.state !== 'warmup') enterWarmup(world);
+};
 // Reset just your look — name, colour, cap, face, eyes — without touching settings
 // or progress. Sits beside Name because that's the top of what it resets.
 $('lookReset').onclick = () => {
@@ -11089,7 +11201,10 @@ function pickNames(n, used){
 // ============================================================
 //  MATCH SETUP
 // ============================================================
-function startMatch(){
+function startMatch(opts){
+  // `lobby:false` is "play now" — see tryKickOff. Everything else (a season round, a
+  // drill, the attract demo, a rematch) keeps whatever `lobbyWanted` decides.
+  const noLobby = !!(opts && opts.lobby === false);
   const mode = MODES[sel.mode];
   // The idle demo cycles a random court each time it restarts, so the menu isn't
   // the same picture every visit.
@@ -11100,7 +11215,18 @@ function startMatch(){
   // finishMatch sees w.demo and starts the next one instead — and it never goes to
   // overtime (see the clock in step), so a draw ends on time like everything else.
   const len = _startQuiet ? { secs: DEMO.secs, goals:0 } : LENGTHS[sel.length];
-  const per = mode.per;
+  // ⚠️ EVERY CONNECTED CONTROLLER GETS A BODY, even in a 1v1. The seat loop below
+  // walks a roster of `per*2`, so on a 1v1 it ran out after two and the third and
+  // fourth pads drove nothing at all — four people at a cabinet, two of them watching.
+  // A mode's size is the size you asked for, and a room bigger than it is a room, so
+  // the match GROWS to fit rather than turning people away. Co-op puts every pad on
+  // one side, so there it takes the whole count rather than half of it.
+  let per = mode.per;
+  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet){
+    const np = connectedGamepadIndices().length;
+    if (np > 0) per = Math.max(per, Math.min(LOBBY.maxPerSide,
+                                             sel.coop === 'on' ? np : Math.ceil(np/2)));
+  }
   const used = new Set([profile.name]);
 
   let players = [];
@@ -11180,6 +11306,11 @@ function startMatch(){
     });
   }
 
+  // ⚠️ COLOUR IS TEAM-WIDE, applied AFTER every seat, name and look above — including
+  // the attract demo's own dressing, which sets a country per side and must not also
+  // set a shirt colour. `you` carries `profile.color` out of `mkPlayer` and duo mode
+  // copies it onto the whole side; both are overwritten here, on purpose.
+  applyTeamColours(players);
   applySeatRotation(players);
 
   const bp = BALLS[sel.ball] || BALLS.normal;
@@ -11264,7 +11395,7 @@ function startMatch(){
   resetKickoff(world, true);
   // Pads in play (or cocktail): warm up first so controls can be tested and sides
   // chosen. resetKickoff still runs, so the pitch is laid out legally underneath.
-  if (lobbyWanted(world)) enterWarmup(world);
+  if (!noLobby && lobbyWanted(world)) enterWarmup(world);
 
   drillKey = null;
   repReset();          // clear any prior match's replay buffer
@@ -11304,16 +11435,23 @@ function startMatch(){
   if (!_startQuiet && dockCapable()) dockOrFull('setup', null, true);
 }
 
-function teamTint(team, idx){
-  // Slight variations so teammates are distinguishable; base red/blue.
-  const base = team===0 ? ['#e05a5a','#f07a5a','#e0805a'] : ['#5a7de0','#5aa0e0','#6b6be0'];
-  return base[idx % base.length];
-}
+// ⚠️ ONE SHADE A SIDE. This used to return a slight VARIATION per seat — three
+// nearly-reds and three nearly-blues — on the reasoning that teammates should be
+// distinguishable from each other. They are: by name, cap, face and number. What a
+// shirt has to do is say which TEAM you are on, from across a room, at 30 pixels, and
+// three shades of red is the one thing that stops it doing that. `idx` is kept in the
+// signature because every call site passes a seat and none of them should have to
+// care that the answer no longer depends on it.
+function teamTint(team, idx){ return teamColOf(team); }
 // Bots wear NO cap. They used to cycle through the whole CAPS table, which put a
 // different hat on every disc on the pitch — busy, and it made a cap read as
 // decoration rather than as YOUR mark. Colour, shirt number and eyes still vary per
 // bot, so they remain individuals; the headgear is the player's alone.
 const BOT_CAP = 'none';
+// ⚠️ `BOT_FACE` and `BOT_GLYPH` are declared UP WITH `TEAM_COLS`, not here beside the
+// thing they belong with — `paintFace` reads them and it is called during the
+// bootstrap, long before this line runs. FIFTEENTH temporal-dead-zone bite in this
+// file, and the second one this week.
 // Names typed in settings, one per line, applied in seat order: your side first
 // (you, then team-mates), then the opposition. A blank line keeps whatever the
 // seat already had, so you can rename just the third bot if that's all you want.
@@ -13471,10 +13609,30 @@ function integrate(w, ballFrozen, playersFrozen){
   }
 
   // Player collisions (players move at low speed, so a single step is safe).
+  // ⚠️ A BODY BEING WALKED ON OR OFF DOES NOT COLLIDE. `walkTo` sets position
+  // directly and holds velocity at zero, so `collideDiscs` — which resolves by pushing
+  // BOTH bodies apart — shoves it off its line and the next step walks it straight
+  // back, which is a bot vibrating against a team-mate on the touchline instead of
+  // arriving. Bots were reported stuck trying to leave the field for exactly this: the
+  // gate is one point and the whole outgoing row wants to pass through it.
+  // ⚠️ `staged` is the same flag the AI is already suppressed on (`_lobTo`/`_subTo`),
+  // so nothing new decides who is being staged — and it can only ever be true in the
+  // warm-up lobby or on a substitution walk, never during play.
+  // ⚠️ Only while it is still WALKING. A lobby bot keeps `_lobTo` after it arrives, so
+  // testing the target alone would leave every bot on the pitch permanently ghosted and
+  // you could stand inside one. `_lobArr` is set by `stepLobbyBots` the step `walkTo`
+  // reports it got there, and cleared the moment it is given a new place to be.
+  const staged = q => !!((q._lobTo && !q._lobArr) || q._subTo || q._subPath);
   if (!playersFrozen){
-    for (let i=0;i<discs.length;i++)
-      for (let j=i+1;j<discs.length;j++) collideDiscs(discs[i], discs[j]);
+    for (let i=0;i<discs.length;i++){
+      if (staged(discs[i])) continue;
+      for (let j=i+1;j<discs.length;j++){
+        if (staged(discs[j])) continue;
+        collideDiscs(discs[i], discs[j]);
+      }
+    }
     for (const p of discs){
+      if (staged(p)) continue;
       for (const post of w.posts) collideDiscs(p, post);
       // Skip `ballOnly` boundary walls/arcs so players can step slightly outside.
       for (const wall of w.walls) if (!wall.ballOnly) collideWall(p, wall);
@@ -13682,10 +13840,12 @@ function buildLobbyKeys(w){
   // ⚠️ Read from the same predicate the CAMERA uses, never from `cam.rot`: the keyboard
   // is built when warm-up is entered, which can be before a frame has been drawn.
   const turned = pitchHorizontal();
-  // How far past the pitch the block starts, measured down the screen. There is no net
-  // on the sides, so the turned case clears the touchline instead.
-  const top = turned ? w.field.W/2 + K.clear
-                     : w.field.L/2 + (w.field.net || 0) + K.clear;
+  // The pitch in SCREEN terms: `across` is its half-width left-to-right, `down` its
+  // half-height. Turned, the two swap — which is the whole reason the layout below is
+  // written in u/v and never in world x/y.
+  const across = turned ? w.field.L/2 + (w.field.net || 0) : w.field.W/2;
+  const down   = turned ? w.field.W/2 : w.field.L/2 + (w.field.net || 0);
+  const top = down + K.clear;                 // where the keyboard block starts
   // Deck view maps world +y to screen RIGHT and world +x to screen UP, so across is +y
   // and down is −x.
   const place = (k, u, v, du, dv) => {
@@ -13705,24 +13865,66 @@ function buildLobbyKeys(w){
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
   ctrl.forEach(([ch, label], i) =>
     raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
-  // The team-size stepper, RIGHT of the letters on screen: + at the top, − at the
-  // bottom, with the size read out between them. It is how you turn a 1v1 into a 3v3
-  // without going back to the menu, which is the one thing the lobby could not do.
-  let lettersR = -Infinity;
-  for (const q of raw) lettersR = Math.max(lettersR, q.u + q.du);
-  const rowsB = top + K.rows.length*rowH + K.keyH;
-  const pu = lettersR + K.gap*3;
-  raw.push({ k: { act:  1, label: '+', rep: true },      u: pu, v: top,           du: K.pad, dv: K.pad });
-  raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: rowsB - K.pad, du: K.pad, dv: K.pad });
-  // ⚠️ THE WHOLE BLOCK IS RECENTRED, letters and stepper together, and it is recentred
-  // ACROSS THE SCREEN (`u`) because that is the axis the pitch is centred on. The letters
-  // alone are centred on it and the stepper hangs off one side, so the block's own middle
-  // is not zero — and `computeCam` frames the SPAN, so an off-centre block slides the
-  // pitch sideways to balance it.
+  const kbBot = top + K.rows.length*rowH + K.keyH;
+  const blockBot = kbBot + K.gap*2 + K.diff;      // the difficulty row goes in below
+  // ⚠️ THE TEAM-SIZE STEPPER IS IN THE CORNER, not tucked against the letters. It is
+  // not part of typing your name, and standing beside the board to change the match
+  // size means never brushing a letter on the way. Bottom-right of the whole layout,
+  // which is the one place nothing else wants.
+  const pu = across + K.side;
+  raw.push({ k: { act:  1, label: '+',      rep: true }, u: pu, v: top,                 du: K.pad, dv: K.pad });
+  raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: blockBot - K.pad, du: K.pad, dv: K.pad });
+  // ⚠️ COLOUR SWATCHES BESIDE EACH HALF — the half they are beside is the side they
+  // dress. Walk out of the half you are standing on and the colours in front of you
+  // are that team's, so "go over there, make that side blue; come back, make this side
+  // pink" is the literal thing you do. They are OUTSIDE the touchline, so standing on
+  // one is still `lobbySideOf` −1 and picking a colour is never also a side pick.
+  //
+  // ⚠️ WHICH EDGE THEY GO ON DEPENDS ON WHICH WAY THE HALVES DIVIDE. Flat, the halves
+  // are top and bottom, so the strips are two columns down one side. Turned, the
+  // halves are LEFT and RIGHT — so a column down the side would put both teams'
+  // colours beside both halves and mean nothing. There they are two rows above the
+  // pitch instead, one over each half. Team 0 defends +y: flat that is the bottom
+  // half (v > 0), turned it is the right one (u > 0).
+  const nSw = TEAM_COLS.length, swSpan = nSw*K.sw + (nSw-1)*K.gap;
+  const splitU = turned;                       // do the halves divide left/right?
+  [1, 0].forEach(team => {
+    const sign = team === 0 ? 1 : -1;          // team 0 is the +ve side of the split
+    const base = sign > 0 ? K.gap/2 : -(K.gap/2 + swSpan);
+    TEAM_COLS.forEach((c, i) => {
+      const along = base + i*(K.sw + K.gap);
+      raw.push({ k: { colTeam: team, col: c.col, label: '' },
+                 u: splitU ? along : -(across + K.side + K.sw),
+                 v: splitU ? -(down + K.side + K.sw) : along,
+                 du: K.sw, dv: K.sw });
+    });
+  });
+  // ⚠️ DIFFICULTY IS A ROW UNDER THE KEYBOARD, not a column beside the pitch. "How
+  // hard are the bots" is a match-wide question, so it belongs with the other
+  // match-wide control (the size stepper) and nowhere near a team's own colours — and
+  // a column out to one side lands exactly where the head count behind that goal is
+  // drawn, which is how the first build had ROOKIE printed through "1 PLAYER +1 BOT".
+  // Left to right is also how the menu's own difficulty tiles read, as a ramp.
+  const dkeys = Object.keys(DIFF);
+  const dRow = dkeys.length*K.diff + (dkeys.length-1)*K.gap;
+  // ⚠️ NUMBERED 1..7, not named. A pad is about a body wide, and ROOKIE / INSANE are
+  // six letters shrunk to fit that — which is a smudge, not a label. A rising number
+  // is legible at any size and says the one thing a difficulty tile has to say, which
+  // is "steeper"; the tier's NAME is printed once under the row, for whichever is
+  // picked. Same argument the menu's own difficulty ramp is built on.
+  dkeys.forEach((dk, i) =>
+    raw.push({ k: { diff: dk, label: String(i+1) },
+               u: -dRow/2 + i*(K.diff + K.gap), v: kbBot + K.gap*2, du: K.diff, dv: K.diff }));
+  // ⚠️ THE LETTERS ARE RECENTRED ACROSS THE SCREEN (`u`), and only the letters. That is
+  // the axis the pitch is centred on, and the strips beside the pitch are deliberately
+  // NOT part of the sum — they are pinned to the touchlines, so folding them into the
+  // centring would drag the board sideways every time a colour list changed length.
   let uL = Infinity, uR = -Infinity;
-  for (const q of raw){ uL = Math.min(uL, q.u); uR = Math.max(uR, q.u + q.du); }
+  for (const q of raw){ if (q.k.colTeam !== undefined || q.k.diff || q.k.act) continue;
+                        uL = Math.min(uL, q.u); uR = Math.max(uR, q.u + q.du); }
   const shift = -(uL + uR)/2;
-  for (const q of raw) keys.push(place(q.k, q.u + shift, q.v, q.du, q.dv));
+  for (const q of raw) keys.push(place(q.k, q.u + (q.k.colTeam !== undefined || q.k.diff || q.k.act ? 0 : shift),
+                                       q.v, q.du, q.dv));
   let L = Infinity, R = -Infinity, T = Infinity, B = -Infinity;
   for (const k of keys){ L = Math.min(L, k.x); T = Math.min(T, k.y);
                          R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
@@ -13769,22 +13971,25 @@ function stepLobbyKeys(w){
     const tapped = held && !p.kbKick;
     p.kbKick = held;
     const k = kbKeyAt(kb, p.x, p.y);
-    if (!k){ p.kbKey = null; p.kbT = 0; p.kbDone = false; continue; }
-    if (p.kbKey !== k){ p.kbKey = k; p.kbT = 0; p.kbDone = false; }
+    if (!k){ p.kbKey = null; p.kbT = 0; continue; }
+    if (p.kbKey !== k){ p.kbKey = k; p.kbT = 0; }
     p.kbT += STEP;
-    // ⚠️ Wound back to zero and marked done: the tap has said what it came to say, so
-    // the dwell must not fire again on top of it a moment later.
-    if (tapped){ p.kbDone = true; p.kbT = 0; kbHit(w, p, k); }
-    else if (!p.kbDone && p.kbT >= LOBBYKB.dwell){ p.kbDone = true; kbHit(w, p, k); }
-    // ⚠️ Only a `rep` key comes back round. Winding `kbT` back to the dwell rather than
-    // to zero is what makes the repeat rate `LOBBYKB.repeat` instead of a second dwell.
-    else if (p.kbDone && k.rep && p.kbT >= LOBBYKB.dwell + LOBBYKB.repeat){
-      p.kbT = LOBBYKB.dwell; kbHit(w, p, k);
-    }
+    if (tapped){ p.kbT = 0; kbHit(w, p, k); }
+    // ⚠️ A +/− square REPEATS while KICK is HELD, and a letter never does. Opposite
+    // rules on purpose: a letter you meant once is a letter, so it is a tap each —
+    // but going 1v1 to 8v8 at a tap a time is fourteen taps, which is a chore rather
+    // than a control. Counted off the button being down, not off standing there.
+    else if (held && k.rep && p.kbT >= LOBBYKB.repeat){ p.kbT = 0; kbHit(w, p, k); }
   }
 }
 function kbHit(w, p, k){
   if (k.act) lobbySizeBump(w, k.act);
+  // ⚠️ Colour is TEAM-wide and takes effect at once — the whole side changes under
+  // you, which is the only thing that makes a walk-on swatch legible as a control.
+  // Persisted through `sel`, because "our team is green" is something you told the
+  // game about the ROOM rather than about this match.
+  else if (k.colTeam !== undefined){ if (setTeamCol(k.colTeam, k.col)){ applyTeamColours(w.players); applyTeamColours(w.bench); saveSel(); } }
+  else if (k.diff){ if (sel.diff !== k.diff){ sel.diff = k.diff; saveSel(); } }
   else kbPress(p, k.ch);
 }
 // ⚠️ Clamped to the CURRENT floor, not just to 1. `lobbyPlan` will not field fewer
@@ -13994,11 +14199,18 @@ const LOBBY_WALK = { on: 6.5, off: 11 };     // world units per step
 // again. The lobby's clock RESETS on any sign of life, so it only ever runs out on
 // a room that has genuinely stopped deciding.
 const AUTO = { warmup: 30, result: 30 };
-function lobbySpotFor(w, team){
-  const rnd = (w.lobby && w.lobby.rng) || Math.random;   // seeded — never touches w.rng
+// ⚠️ BOTS STAND NEXT TO EACH OTHER, in one row across their own half. They used to
+// take a seeded RANDOM spot each, which scattered them over the half and made a side
+// look like a crowd rather than a team waiting to play — and it meant the preview
+// moved every time the size dial was touched. `slot` is the bot's place in the row and
+// `n` how many there are, so the row stays centred as it grows.
+// No PRNG at all now, which is one less thing that has to stay deterministic.
+function lobbySpotFor(w, team, slot, n){
   const side = team === 0 ? 1 : -1;
-  return { x: (rnd()*2 - 1) * (w.field.W/2) * 0.62,
-           y: side * (w.field.L/2) * (0.16 + rnd() * 0.36) };
+  const cnt = Math.max(1, n || 1), i = slot || 0;
+  const span = Math.min(w.field.W * 0.72, cnt * 62);
+  return { x: cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span,
+           y: side * (w.field.L/2) * 0.30 };
 }
 // Staging movement, not gameplay: positions are set directly and velocity is held at
 // zero, exactly as the touchline placement already did. These bots never run the AI.
@@ -14021,10 +14233,15 @@ function stepLobbyBots(w){
   const need = plan.need0 + plan.need1;
   if (bots.length < need){
     const used = new Set(w.players.map(p => p.name));
+    // ⚠️ THEY COME ON TOGETHER, in a line down one touchline. They used to be dropped
+    // alternately on the left and right touchlines at y = 0, so turning the size dial
+    // up scattered bodies to both edges of the screen and it read as things appearing
+    // rather than as a squad arriving.
     const side = w.field.W/2 + LOBBY.benchGap;
     for (let i = bots.length; i < need; i++){
       const bot = spawnLobbyBot(w, 0, w.players.length, used);
-      bot.x = (i % 2 ? -side : side); bot.y = 0; bot.vx = 0; bot.vy = 0;
+      bot.x = side; bot.y = (i - (need-1)/2) * LOBBY.benchStep;
+      bot.vx = 0; bot.vy = 0;
       bot.ms = freshMs();
       w.players.push(bot);
     }
@@ -14036,31 +14253,67 @@ function stepLobbyBots(w){
   for (let i=0;i<plan.need0;i++) want.push(0);
   for (let i=0;i<plan.need1;i++) want.push(1);
   const leaving = [];
+  // Where each bot stands in its side's row, so the row is centred and stays put.
+  let slot0 = 0, slot1 = 0;
   bots.forEach((b, i) => {
     const t = i < want.length ? want[i] : -1;
-    if (b._lobT !== t){
+    const slot = t === 0 ? slot0++ : t === 1 ? slot1++ : 0;
+    const spot = t >= 0 ? lobbySpotFor(w, t, slot, t === 0 ? plan.need0 : plan.need1) : null;
+    if (b._lobT !== t || (spot && b._lobTo && (b._lobTo.x !== spot.x || b._lobTo.y !== spot.y))){
       b._lobT = t;
-      if (t >= 0){ b.team = t; b._lobTo = lobbySpotFor(w, t); }
+      b._lobArr = false;                    // a new place to be is a new walk
+      if (t >= 0){ b.team = t; b._lobTo = spot; }
       else b._lobTo = null;                 // filled in below, once the row is known
     }
     if (t < 0) leaving.push(b);
   });
+  // ⚠️ Colour follows the team a bot was just handed, every step — a body that swaps
+  // halves to fill a gap has to be wearing that half's shirt before it gets there.
+  applyTeamColours(w.players);
   const slots = benchSlots(w, leaving);     // tidy row, computed as a group
-  for (const b of leaving) b._lobTo = slots.get(b);
+  for (const b of leaving){ b._lobTo = slots.get(b); }
   for (const b of bots){
-    if (!b._lobTo) continue;
-    walkTo(b, b._lobTo, b._lobT < 0 ? LOBBY_WALK.off : LOBBY_WALK.on);
+    if (!b._lobTo){ b._lobArr = true; continue; }
+    // ⚠️ Arrival is recorded, because `integrate` ghosts a body only while it is on
+    // its way — see `staged`. Without that a bot that has parked stays walk-through.
+    b._lobArr = walkTo(b, b._lobTo, b._lobT < 0 ? LOBBY_WALK.off : LOBBY_WALK.on);
   }
 }
 // Which half is this player standing in? Team 0 starts on the +y half (see layTeam),
 // so +y is team 0's side. Standing OUTSIDE the touchlines is a third answer: sitting
 // this one out.
 function lobbyOutside(w, p){
+  // ⚠️ STANDING IN A GOAL IS NOT STANDING OUTSIDE. A goal is past the goal line, so the
+  // plain box test called it "sitting this one out" — which made "everybody into a
+  // goal" (the third way to start a match, see `lobbyAllInGoal`) hand every player a
+  // bench place on the way. The pocket belongs to the half in front of it.
+  if (lobbyInGoal(w, p) >= 0) return false;
   return Math.abs(p.x) > w.field.W/2 || Math.abs(p.y) > w.field.L/2;
 }
+// Which goal is this body standing in — 0 for the one team 0 defends (+y), 1 for the
+// other, −1 for neither. Measured on the MOUTH's width and the net's depth, so the
+// bar behind the posts is out and the pocket is in.
+function lobbyInGoal(w, p){
+  if (!w || !w.field) return -1;
+  const f = w.field, half = f.L/2, net = f.net || 0;
+  if (Math.abs(p.x) > f.goal/2) return -1;
+  if (p.y > half - p.r*0.5 && p.y < half + net + p.r) return 0;
+  if (p.y < -half + p.r*0.5 && p.y > -half - net - p.r) return 1;
+  return -1;
+}
 function lobbySideOf(p, w){
+  const g = lobbyInGoal(w, p);
+  if (g >= 0) return g;
   if (w && lobbyOutside(w, p)) return -1;
   return p.y >= 0 ? 0 : 1;
+}
+// ⚠️ THE THIRD WAY TO START, and the only one that is a thing you DO on the pitch
+// rather than a button somewhere. Everyone in the lobby stands in a goal — either
+// goal — and the match begins. Needs at least one person, or an empty lobby would
+// satisfy "all of them are in a goal" on frame one and never show the warm-up at all.
+function lobbyAllInGoal(w){
+  const hs = lobbyHumans(w);
+  return hs.length > 0 && hs.every(p => lobbyInGoal(w, p) >= 0);
 }
 
 function stepWarmup(w){
@@ -14092,6 +14345,15 @@ function stepWarmup(w){
 // or a controller appearing. Only a room that has actually gone quiet times out.
 function stepLobbyClock(w){
   const L = w.lobby;
+  // ⚠️ Checked BEFORE the idle reset below, or walking into the goal counts as
+  // "somebody is still deciding" and puts the clock back to full instead of starting.
+  // Latched on a count of frames rather than firing the instant a body crosses: a
+  // player jogging through the mouth on their way round the back of the net has not
+  // asked for anything.
+  if (lobbyAllInGoal(w)){
+    L.goalT = (L.goalT || 0) + STEP;
+    if (L.goalT >= LOBBY.goalStart){ L.goalT = 0; lobbyStart(w); return; }
+  } else L.goalT = 0;
   if (L.idle == null) L.idle = AUTO.warmup;
   const hs = lobbyHumans(w);
   const pads = connectedGamepadIndices().length;
@@ -14148,7 +14410,22 @@ function lobbyPlan(w){
 // A bot built to order when the mode's roster can't cover the side people chose.
 function spawnLobbyBot(w, team, seat, used){
   const nm = pickNames(1, used)[0] || ('Bot' + (seat+1));
-  return mkPlayer(team, nm, teamTint(team, seat), BOT_CAP, 'bot', shirtNo(seat+1), randEyes(seat));
+  // ⚠️ BOT_FACE, not a shirt number: in the lobby the numbers are not settled yet —
+  // people are still walking onto halves — so `numberTheSides` hands them out at
+  // `lobbyStart`, humans first.
+  return mkPlayer(team, nm, teamTint(team, seat), BOT_CAP, 'bot', BOT_FACE, randEyes(seat));
+}
+// ⚠️ HUMANS FIRST, THEN THE BOTS FILLING IN. Four people on a six-a-side wear 1-4 and
+// the two bots are 5 and 6, which is what a team sheet looks like. Only BOTS are
+// renumbered — a person's faceplate is their own, and overwriting a photo or a flag
+// with a number is taking away the thing they chose.
+function numberTheSides(w){
+  for (const team of [0, 1]){
+    const side = w.players.filter(p => p.team === team);
+    let n = 0;
+    for (const p of side) if (p.ctrl !== 'bot') n++;      // people take the low numbers
+    for (const p of side) if (p.ctrl === 'bot') p.flag = shirtNo(++n);
+  }
 }
 // Resolve the sides people picked, balance them with bots, and kick off.
 function lobbyStart(w){
@@ -14174,6 +14451,12 @@ function lobbyStart(w){
   const spareBots = bots.filter(p => !keep.includes(p));
   w.bench = out.concat(spareBots);
   w.bench.forEach(p => { p.sittingOut = true; p.ms = freshMs(); });
+  // ⚠️ THE SIDES ARE SETTLED HERE, so this is where a bot stops being a robot and
+  // becomes a squad number — humans first. Colour follows the same beat: anybody who
+  // ended up on the other half is now wearing that half's shirt.
+  numberTheSides(w);
+  applyTeamColours(w.players);
+  applyTeamColours(w.bench);
   // Only the reserve BOTS get lined up. A human who walked out there chose that
   // spot; teleporting them to a tidy line throws away the one thing they just did.
   benchLine(w, w.bench.filter(p => p.ctrl === 'bot'));
@@ -17382,9 +17665,26 @@ function computeCam(){
   const botY = Math.max(  f.L/2 + f.net,  kb ? kb.B : -Infinity);
   const leftX = Math.min(-f.W/2, kb ? kb.L : Infinity);
   const rightX = Math.max( f.W/2, kb ? kb.R : -Infinity);
-  const midY = (topY + botY)/2, midX = (leftX + rightX)/2;
-  const worldW = (rightX - leftX) + 60;
-  const worldH = (botY - topY) + 60;
+  // ⚠️ THE COURT IS CENTRED ACROSS THE SCREEN, and the frame is fitted around it. This
+  // used to centre the SPAN — the pitch plus all the warm-up furniture — and that
+  // furniture is not symmetric (colour strips down one edge, a stepper in one corner),
+  // so the court slid sideways and the pitch, the headline above it and the scorebug
+  // above that all disagreed about where the middle was.
+  // ⚠️ ACROSS ONLY, and that asymmetry is deliberate. Doing the same DOWN the screen
+  // would reserve a band above the pitch the size of the keyboard below it — measured
+  // at half the frame left empty — for nothing anybody can see. Sideways is where the
+  // eye has a reference (the scorebug, the headline, the START button); vertically it
+  // has none.
+  const turnedCam = sideNow || pitchHorizontal();
+  // Which world extents run ACROSS the screen and which run DOWN it. Under the
+  // quarter-turn world +y is screen right and world +x is screen UP.
+  const acr = turnedCam ? [topY, botY]  : [leftX, rightX];
+  const dwn = turnedCam ? [-rightX, -leftX] : [topY, botY];
+  const spanAcross = 2*Math.max(-acr[0], acr[1]) + 60;      // symmetric: court centred
+  const spanDown   = (dwn[1] - dwn[0]) + 60;                // packed: no wasted band
+  const midDown    = (dwn[0] + dwn[1])/2;
+  const worldW = turnedCam ? spanDown : spanAcross;
+  const worldH = turnedCam ? spanAcross : spanDown;
   // Deck view turns the pitch a quarter-turn so goal-to-goal runs left→right and a
   // wide screen is actually used. render() applies the matching canvas rotation, so
   // wx/wy stay in un-rotated world space and no physics or hit-testing changes.
@@ -17411,14 +17711,12 @@ function computeCam(){
   }
   cam.ox = padL + availW/2;
   cam.oy = padTop + availH/2;
-  // ⚠️ Recentre on the SPAN's midpoint rather than on world (0,0). `wx`/`wy` put world
-  // (0,0) at (cam.ox, cam.oy), and `screenPt` then rotates about that same point — so
-  // under the quarter-turn the vertical world axis is the HORIZONTAL screen one and the
-  // offset has to swap axes with it. Both terms are zero without a keyboard, which is
-  // every other state in the game.
-  if (midX || midY){
-    if (cam.rot){ cam.ox -= midY*cam.s; cam.oy += midX*cam.s; }
-    else        { cam.ox -= midX*cam.s; cam.oy -= midY*cam.s; }
+  // ⚠️ DOWN THE SCREEN ONLY. The across axis is framed symmetrically above, so world
+  // (0,0) — the centre spot — lands on the middle of the available width in every
+  // state and every layout; the down axis is packed, so it needs its midpoint.
+  if (midDown){
+    if (cam.rot) cam.oy -= midDown*cam.s;
+    else         cam.oy -= midDown*cam.s;
   }
   // Push the pitch down by half the headroom, so the room a standing body needs is at
   // the TOP of the frame where the far touchline is, not split evenly above and below.
@@ -18101,13 +18399,19 @@ function drawLobbyKeys(w, ox, oy){
     for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0] + ox, pts[i][1] + oy);
     ctx.closePath();
     const f = fill.get(k) || 0;
-    // The plate brightens as the dwell fills, so a key being pressed says so before it
-    // fires — without it, standing on a letter is 0.4s of nothing happening.
-    ctx.fillStyle = rgba(ink, 0.08 + 0.30*f);
+    // ⚠️ A SWATCH IS PAINTED IN THE COLOUR IT GIVES YOU, and the one currently worn is
+    // the one that is lit — otherwise eight identical plates are eight guesses.
+    const picked = k.colTeam !== undefined ? teamColOf(k.colTeam) === k.col
+                 : k.diff ? sel.diff === k.diff : false;
+    const on = picked ? 1 : 0;
+    ctx.fillStyle = k.colTeam !== undefined ? rgba(k.col, 0.30 + 0.62*Math.max(f, on))
+                                            : rgba(ink, 0.08 + 0.30*Math.max(f, on*0.6));
     ctx.fill();
-    ctx.lineWidth = Math.max(1, 1 + 2*f);
-    ctx.strokeStyle = rgba(ink, 0.35 + 0.45*f);
+    ctx.lineWidth = Math.max(1, 1 + 2*Math.max(f, on*1.4));
+    ctx.strokeStyle = k.colTeam !== undefined ? rgba(k.col, 0.55 + 0.45*Math.max(f, on))
+                                              : rgba(ink, 0.35 + 0.45*Math.max(f, on));
     ctx.stroke();
+    if (k.colTeam !== undefined) continue;      // a swatch is its colour; no label
     // ⚠️ THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES. A key is a place you
     // walk to, so its four corners have to follow the ground exactly; the letter on it is
     // a word, and a word on its side is not readable. `screenUpright`, not `uprightAt` —
@@ -18125,7 +18429,7 @@ function drawLobbyKeys(w, ox, oy){
     const bh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
     screenUpright(lx + ox, ly + oy, (x, y) => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      let fs = k.act ? 26 : (k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
+      let fs = k.act ? 26 : (k.ch && k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
       fs = Math.min(fs, bh * 0.62);
       ctx.font = `${fs}px ${LOBBY_FONT}`;
       const tw = ctx.measureText(k.label).width;
@@ -18157,8 +18461,35 @@ function drawLobbyKeys(w, ox, oy){
   // the world point "above the keyboard" is to the SIDE of it — so a line centred there
   // ran straight across the keys and the pitch. Its four corners answer where the block
   // actually is on screen, which is the same trick the prompt row already uses.
-  const cs = [[kb.L, kb.T], [kb.R, kb.T], [kb.L, kb.B], [kb.R, kb.B]]
-    .map(([x, y]) => screenPt(wx(x), wy(y)));
+  // The picked tier, named once under the row of numbers — see buildLobbyKeys for why
+  // the pads themselves carry a number rather than six letters shrunk to a smudge.
+  const dpads = kb.keys.filter(k => k.diff);
+  if (dpads.length){
+    const ds = [];
+    for (const k of dpads)
+      for (const [px, py] of [[k.x, k.y], [k.x + k.w, k.y], [k.x, k.y + k.h], [k.x + k.w, k.y + k.h]])
+        ds.push(screenPt(wx(px), wy(py)));
+    const dx0 = Math.min.apply(null, ds.map(c => c[0])) + ox;
+    const dx1 = Math.max.apply(null, ds.map(c => c[0])) + ox;
+    const dy1 = Math.max.apply(null, ds.map(c => c[1])) + oy;
+    const dn = (DIFF[sel.diff] || DIFF.normal).name.toUpperCase();
+    screenUpright((dx0 + dx1)/2, dy1 + 11, (x, y) => {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `9px ${LOBBY_FONT}`;
+      ctx.fillStyle = T.hudSub || T.hudText;
+      ctx.fillText('BOT SKILL  \u00b7  ' + dn, Math.max(60, Math.min(cw - 60, x)), y);
+    });
+  }
+  // ⚠️ Measured over the LETTERS ONLY, not over `kb.L..B`. Those bounds now cover the
+  // colour strips and the difficulty column, which run the whole depth of the pitch —
+  // so a caption placed off them lands above the halfway line, on the court.
+  const cs = [];
+  for (const k of kb.keys){
+    if (!k.ch) continue;
+    for (const [px, py] of [[k.x, k.y], [k.x + k.w, k.y], [k.x, k.y + k.h], [k.x + k.w, k.y + k.h]])
+      cs.push(screenPt(wx(px), wy(py)));
+  }
+  if (!cs.length) cs.push(screenPt(wx(kb.L), wy(kb.T)));
   const bx0 = Math.min.apply(null, cs.map(c => c[0])) + ox;
   const bx1 = Math.max.apply(null, cs.map(c => c[0])) + ox;
   const by0 = Math.min.apply(null, cs.map(c => c[1])) + oy;
@@ -18199,86 +18530,39 @@ function drawLobby(w){
       for (let i=1;i<4;i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
       ctx.fillStyle = rgba(col, 0.10 + 0.06*Math.min(1, n)); ctx.fill();
-      const [cx, cy] = screenPt(wx(0), wy(sign*halfL*0.84));   // clear of the players and the line
+      // ⚠️ BEHIND THE GOAL POSTS, INSIDE THE NET. Two lines of type out on the half is
+      // text printed across the part of the pitch people are walking on and reading —
+      // the same argument that took the per-player prompts off the grass. The net
+      // pocket is the one place at that end nobody plays and nothing else is drawn:
+      // BEYOND it is where the keyboard block starts when the pitch is flat, so a
+      // count placed out there printed straight through the caption.
+      // ⚠️ ONE line, for the same reason it had to move: the pocket is a few dozen
+      // units deep and a stacked number over a caption does not fit in it.
+      const [cx, cy] = screenPt(wx(0), wy(sign*(halfL + (w.field.net || 0)*0.5)));
       screenUpright(cx, cy, (x, y) => {
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.font = `26px ${LOBBY_FONT}`;
-        ctx.fillStyle = readableInk(col, T.fieldBg);
-        ctx.fillText(String(n), x, y - 12);
-        ctx.font = `10px ${LOBBY_FONT}`;
-        ctx.fillStyle = T.hudSub || T.hudText;
-        ctx.fillText((n === 1 ? 'PLAYER' : 'PLAYERS') + (fillN > 0 ? ` +${fillN} BOT${fillN===1?'':'S'}` : ''), x, y + 12);
+        ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+        // ⚠️ Outlined rather than plated, the same as the name plates: out here the
+        // background is the net on one theme and bare page on another, and a halo
+        // reads on both without covering either.
+        const halo = T.nameBg || '#000000';
+        const line = n + (n === 1 ? ' PLAYER' : ' PLAYERS') +
+                     (fillN > 0 ? ` +${fillN} BOT${fillN===1?'':'S'}` : '');
+        ctx.font = `11px ${LOBBY_FONT}`;
+        ctx.lineWidth = 3.5; ctx.strokeStyle = halo;
+        ctx.strokeText(line, x, y);
+        ctx.fillStyle = readableInk(col, halo);
+        ctx.fillText(line, x, y);
       });
     });
   }
-  // --- Per-player prompt. Collected here, DRAWN OUTSIDE THE PITCH below (see the note).
-  const prompts = [];
-  if (!L.calib) for (const p of hs){
-    const [sx] = screenPt(wx(p.x), wy(p.y));
-    const seat = hs.indexOf(p) + 1;
-    const needCal = sel.display === 'cocktail' && !p.calibrated;
-    const txt = needCal ? 'START = SET DIRECTIONS'
-              : p === host ? 'START = KICK OFF'
-              : L.ready.has(p) ? 'READY' : 'START = READY';
-    prompts.push({ p, seat, txt, sx, ready: L.ready.has(p) });
-  }
-  // ⚠️ **THE PROMPTS SIT OUTSIDE THE PITCH**, in one row under the touchline, rather than
-  // floating over each player's head. On the pitch they were text printed across the thing
-  // you are trying to look at — worst of all in deck/side view, where `uprightAt` keeps the
-  // words upright while the pitch is turned, so a label ran vertically down the middle of
-  // the field. Below the line they are a row of P1..P4 you read once and then ignore, and
-  // the pitch is just the pitch.
-  // ⚠️ Below the touchline, or ABOVE it if there is no room down there — a short window
-  // (a landscape phone) has the pitch nearly filling the canvas, and a row clamped to the
-  // bottom edge would sit on the on-screen controls.
-  if (prompts.length){
-    // ⚠️ Measured to the back of the NET, not to the goal line — the net pocket hangs
-    // below the touchline, and a row placed off the line alone sits on top of it.
-    const back = w.field.L/2 + (w.field.net || 0);
-    const [, pb] = screenPt(wx(0), wy(back));
-    const [, pt] = screenPt(wx(0), wy(-back));
-    // ⚠️ Below the KEYBOARD too, when there is one — it is laid out past the back of the
-    // net, which is exactly where this row used to sit, and the two printed through each
-    // other. Measured off its four CORNERS in screen space rather than off its world
-    // bottom edge: deck view turns the pitch a quarter-turn, so which corner is lowest on
-    // screen is not something the world coordinates can answer.
-    const ys = [pb, pt];
-    if (w.kb) for (const [kx, ky] of [[w.kb.L, w.kb.T], [w.kb.R, w.kb.T], [w.kb.L, w.kb.B], [w.kb.R, w.kb.B]])
-      ys.push(screenPt(wx(kx), wy(ky))[1]);
-    const lo = Math.max.apply(null, ys), hi = Math.min(pb, pt);
-    // ⚠️ CLAMPED DOWNWARD, never flipped to the top. A first attempt moved the row above
-    // the pitch when it would not fit below — and the top is where the "PRESS START"
-    // headline lives, so on a tall pitch the two printed through each other. Sliding it up
-    // to the last few pixels of the canvas keeps it below the play in every case, which is
-    // the whole point of taking it off the pitch.
-    const y = Math.max(14, Math.min(lo + 22, ch - 14));
-    // Recorded so a suite can check WHERE this landed. A pixel probe cannot: the prompt
-    // plates and the players' NAME plates are the same colour, and the name plates are
-    // legitimately on the pitch, so counting plate-coloured pixels over the play measures
-    // the wrong feature (1,265 of them on a build where the prompts are plainly below).
-    L._promptY = y;
-    ctx.font = `9px ${LOBBY_FONT}`;
-    const widths = prompts.map(q => ctx.measureText(q.txt).width + 26);
-    const total = widths.reduce((a, b) => a + b, 0) + (prompts.length - 1) * 8;
-    let x = Math.max(6, cw/2 - total/2);
-    prompts.forEach((q, i) => {
-      const wd = widths[i];
-      ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      // ⚠️ `beginPath()` FIRST. `roundRectPath` only appends, so without it every plate
-      // stays in the path and each `fill()` repaints all the earlier ones — over the text
-      // already drawn in them. Four boxes came out with only the last one's words in it.
-      ctx.beginPath();
-      ctx.fillStyle = T.nameBg;
-      roundRectPath(x, y - 11, wd, 22, 6); ctx.fill();
-      ctx.fillStyle = T.hudSub || T.nameText;
-      ctx.font = `8px ${LOBBY_FONT}`;
-      ctx.fillText('P' + q.seat, x + 13, y);
-      ctx.fillStyle = q.ready ? readableInk(T.good || '#3ec06a', T.nameBg) : T.nameText;
-      ctx.font = `9px ${LOBBY_FONT}`;
-      ctx.fillText(q.txt, x + 20 + (wd - 26) / 2, y);
-      x += wd + 8;
-    });
-  }
+  // ⚠️ THERE IS NO PER-PLAYER PROMPT ROW ANY MORE. It was a line of plates under the
+  // touchline reading "P1 START = KICK OFF · P2 START = READY · …", one per person —
+  // a row that grows with the room, sitting between the pitch and the keyboard, saying
+  // the same two words four times. What it was for is answered once by the headline
+  // above the pitch, and the on-screen START button is right there under it.
+  // `L._promptY` stays defined so nothing downstream has to learn it went.
+  L._promptY = null;
   // --- The headline. One line, always the same place, so "what do I press?" is
   // answered without reading anyone's disc.
   if (!L.calib){
@@ -18287,17 +18571,27 @@ function drawLobby(w){
     const txt = cal ? 'PRESS START TO SET YOUR DIRECTIONS' : 'PRESS START TO CONTINUE';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     const y0 = Math.round(ch * 0.085);
+    // ⚠️ CENTRED ON THE COURT, not on the canvas. `cw/2` is the middle of the drawing
+    // surface, and the menu dock takes a bite out of one side of it — so with the dock
+    // open the headline, the countdown and the hint all sat well to the left of the
+    // pitch and of the scorebug above them, which are both centred on the court.
+    // Everything in this lobby is placed around the court; the court is the middle.
+    const mid = screenPt(wx(0), wy(0))[0];
     ctx.font = `13px ${LOBBY_FONT}`;
     const wd = ctx.measureText(txt).width + 26;
     ctx.fillStyle = rgba(TH.fieldBg, 0.86);
-    roundRectPath(cw/2 - wd/2, y0 - 15, wd, 30, 8); ctx.fill();
+    roundRectPath(mid - wd/2, y0 - 15, wd, 30, 8); ctx.fill();
     ctx.strokeStyle = rgba(TH.accent, 0.55); ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = TH.hudText; ctx.fillText(txt, cw/2, y0);
+    ctx.fillStyle = TH.hudText; ctx.fillText(txt, mid, y0);
+    // Recorded so a suite can check WHERE this landed, for the same reason `_promptY`
+    // used to be: a colour probe over this band picks up the countdown, the hint and
+    // whatever the theme paints behind them, and measures the wrong thing.
+    L._headX = mid;
     // ...and how long until it starts on its own. Any movement puts this back to full.
     if (!cal && L.idle != null){
       ctx.font = `10px ${LOBBY_FONT}`;
       ctx.fillStyle = TH.hudSub || TH.hudText;
-      ctx.fillText('STARTING IN ' + Math.max(0, Math.ceil(L.idle)) + 'S', cw/2, y0 + 24);
+      ctx.fillText('STARTING IN ' + Math.max(0, Math.ceil(L.idle)) + 'S', mid, y0 + 24);
     }
     // ⚠️ STACKED, not both at y0+2x. The countdown sat at +26 and this at +22 — four
     // pixels apart, so whenever a second player was in the lobby the two lines were
@@ -18305,7 +18599,7 @@ function drawLobby(w){
     if (hs.length > 1){
       ctx.font = `9px ${LOBBY_FONT}`;
       ctx.fillStyle = TH.hudSub || TH.hudText;
-      ctx.fillText('STAND ON THE SIDE YOU WANT TO PLAY — BOTS FILL THE REST', cw/2,
+      ctx.fillText('STAND ON THE SIDE YOU WANT TO PLAY  \u00b7  ALL IN A GOAL TO START', mid,
                    y0 + (L.idle != null ? 40 : 24));
     }
   }
@@ -20773,8 +21067,11 @@ function roundRectPath(x,y,ww,hh,r){
 function drawGoal(w, sign){
   const f=w.field, b=w.bounds, s=cam.s, gh=f.goal/2;
   const y = sign*b.halfL, ny = y + sign*b.net;
-  // Colour each goal by the team that DEFENDS it: team0 (red) defends the bottom, team1 (blue) the top.
-  const col = sign<0 ? TH.teamBlue : TH.teamRed;
+  // Colour each goal by the team that DEFENDS it: team0 defends the bottom (+y),
+  // team1 the top. ⚠️ Read from `teamColOf`, the same source the SHIRTS read, not from
+  // the palette's `teamRed`/`teamBlue` — a side that has picked green on the pitch and
+  // still defends a red frame is two different answers to "whose end is this".
+  const col = teamColOf(sign < 0 ? 1 : 0);
   // frame
   ctx.strokeStyle = col;
   ctx.lineWidth = Math.max(2, 3*s);
@@ -21137,15 +21434,25 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       }
       const a = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
       if (a > 0.004){
-        // The NAME carries the team colour; the box stays the neutral plate. Raw
-        // team colours on that plate drop to 3.06:1 on some themes, so the tint is
-        // lightened toward the plate's preferred ink only as far as AA needs.
-        const team = p.team === 0 ? TH.teamRed : p.team === 1 ? TH.teamBlue : null;
+        // ⚠️ OUTLINED, NOT BOXED. It used to be a filled plate behind every name, which
+        // is a rectangle of solid colour parked over the pitch above each of eight
+        // bodies — furniture, right where the play is. What the box was FOR is legible
+        // text on an unknown background, and an outline in the opposite tone does that
+        // job without covering anything: light name on a dark halo over a light pitch,
+        // dark name on a light halo over a dark one.
+        // ⚠️ The halo is picked off the PITCH, not off a constant — `TH.nameBg` is the
+        // plate colour the palette chose to sit behind text, so it is already the right
+        // "opposite" for that theme, and `readableInk` then guarantees the contrast.
+        const team = p.team === 0 ? teamColOf(0) : p.team === 1 ? teamColOf(1) : null;
+        const halo = TH.nameBg || '#000000';
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
-        ctx.fillStyle = TH.nameBg; ctx.fillRect(x-tw/2-5, y-r-23, tw+10, 16);
-        ctx.fillStyle = team ? readableInk(team, TH.nameBg) : TH.nameText;
-        ctx.fillText(label, x, y-r-11);
+        ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = halo;
+        ctx.strokeText(label, x, y-r-13);
+        ctx.fillStyle = team ? readableInk(team, halo) : (TH.nameText || '#ffffff');
+        ctx.fillText(label, x, y-r-13);
         ctx.globalAlpha = prevA;
       }
     }
@@ -22638,7 +22945,7 @@ if (window.__MAGNETDEBUG) {
     MIN_BODY_PX,
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
-    teamTint, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
+    teamTint, teamColOf, applyTeamColours, setTeamCol, TEAM_COLS, BOT_FACE, numberTheSides, lobbyInGoal, lobbyAllInGoal, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,

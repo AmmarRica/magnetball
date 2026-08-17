@@ -77,19 +77,36 @@ const o = {}; const allErrs = [];
     for(let i=0;i<45;i++) M.step(w);
     r.stickMovesYou = me.y < 30;
     window.__pads[0].axes[1] = 0;
-    // ...and so is KICK. Stand next to a ball, hold the button, and it goes.
+    // ...and so is KICK. Stand next to a ball, press, release, and it goes.
+    // ⚠️ RE-ENTERED FRESH. This block used to run on the world the checks above had
+    // been driving for a few hundred steps, and it inherited their leftovers — a
+    // hand-bound `sel.pad.kick`, a latched `p.kickUsed`, a ball nudged out of reach.
+    // It passed anyway for a long time because `buttons[0] = true` is not a Gamepad
+    // button object, so `padKickHeld` never saw the press at all and what the number
+    // measured was a body drifting into a ball: 0.93 against a threshold of 1.
     {
-      const ball = (w.extraBalls||[]).find(x => x.lobbyBall) || w.ball;
+      M.sel.pad = {};
+      M.setMatchSeed(4); M.startMatch();
+      const w2 = M.world;
+      for (let i = 0; i < 10; i++) M.step(w2);
+      const me2 = M.lobbyHumans(w2)[0];
+      const ball = (w2.extraBalls||[]).find(x => x.lobbyBall) || w2.ball;
+      const hold = (on, n) => {
+        window.__pads[0].buttons[0] = { pressed: on, touched: on, value: on ? 1 : 0 };
+        for (let i = 0; i < n; i++) M.step(w2);
+      };
       ball.vx = 0; ball.vy = 0;
-      me.x = ball.x; me.y = ball.y - 26; me.vx = me.vy = 0;
-      window.__pads[0].buttons[0] = true;
+      me2.x = ball.x; me2.y = ball.y - 26; me2.vx = me2.vy = 0;
       let best = 0;
-      for(let i=0;i<60;i++){ M.step(w); best = Math.max(best, Math.hypot(ball.vx, ball.vy)); }
-      window.__pads[0].buttons[0] = false;
+      // ⚠️ PRESS THEN RELEASE — holding KICK TRAPS the ball, planting it at your feet
+      // every step, so a check that only ever holds the button measures a carry.
+      hold(true, 20);
+      window.__pads[0].buttons[0] = { pressed: false, touched: false, value: 0 };
+      for (let i = 0; i < 40; i++){ M.step(w2); best = Math.max(best, Math.hypot(ball.vx, ball.vy)); }
       r.kickMovesTheBall = best > 1;
       r.kickBest = +best.toFixed(2);
+      r.stillNothingScored = w2.score[0] === 0 && w2.score[1] === 0 && w2.state === 'warmup';
     }
-    r.stillNothingScored = w.score[0] === 0 && w.score[1] === 0 && w.state === 'warmup';
     // No lobby without pads — a keyboard-only match still kicks straight off.
     M.sel.controllers='off'; M.applyDisplayMode(); M.startMatch();
     r.noPadsNoLobby = M.world.state === 'kickoff';
@@ -186,12 +203,14 @@ o.allOneSideStaysTogether = o.allOneSide.t0 === 'PPPb' && o.allOneSide.t1 === 'b
 // roster only held 8 bodies, so this could not be expressed at all.
 o.sixAllOnOneTeam   = o.sixOneSide.t0 === 'PPPPPP' && o.sixOneSide.t1 === 'bbbbbb'
                       && o.sixOneSide.balanced;
-// The binding limit is the MODE's seat count, not the lobby: a 4v4 has 8 bodies,
-// so a 9th controller is never seated in the first place and the per-side cap
-// (8) can't bind. 8 people all on one team is therefore the real ceiling today.
+// ⚠️ THE LOBBY'S OWN CAP IS THE CEILING NOW, not the mode's seat count. A match
+// GROWS to fit the controllers in the room (see startMatch), so a 4v4 with nine pads
+// is no longer "the 9th is never seated" — it is nine seats offered and `maxPerSide`
+// (8) turning the last one away. What has to hold is that eight play, the ninth is
+// on the bench rather than lost, and the sides are still even.
 o.eightIsTheCeiling = o.nineOneSide.t0 === 'PPPPPPPP' && o.nineOneSide.t1 === 'bbbbbbbb'
                       && o.nineOneSide.balanced
-                      && o.nineOneSide.preview.length === 8
+                      && o.nineOneSide.benchedHumans === 1
                       && o.nineOneSide.maxPerSide >= 8;
 // Building bots to order must converge, not add a body per trip to the lobby.
 o.rosterSettles     = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.sixOneSide].every(x=>x.rosterSettles);

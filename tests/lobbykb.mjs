@@ -18,9 +18,11 @@
 //      the fixed `#lobbyStartBtn` at the bottom are both screen-space DOM/HUD, and the
 //      first build put the bottom two rows of keys underneath the Start button.
 //
-// ⚠️ A DWELL, not a footstep: typing has to be deliberate, or crossing the keyboard on the
-// way to the pitch spells a word. So both halves are measured — standing types, walking
-// past does not — and the press is latched, or standing still types sixty letters a second.
+// ⚠️ NOTHING PRESSES ITSELF. There used to be a DWELL — stand on a key for 0.4s and it
+// typed — and it fired while you were only crossing the board on the way to the pitch,
+// which is a keyboard typing at you. KICK is the press, full stop, and it is also the
+// only thing that can type a DOUBLE letter. Both halves are measured: standing still
+// types nothing, and a tap types exactly one.
 import { chromium, LAUNCH } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
@@ -57,16 +59,28 @@ const r = await p.evaluate(() => {
   o.state = w.state;
   o.hasKb = !!w.kb;
   if (!o.hasKb) return o;
-  o.keyCount = w.kb.keys.length;
-  o.letters = w.kb.keys.map(k => k.ch).join('');
+  // ⚠️ ONE list of walk-on pads, not just letters: the board also carries the size
+  // stepper, the two colour strips and the difficulty row, so that bounds, hit test,
+  // reach and drawing all work off one thing.
+  const lets = w.kb.keys.filter(k => k.ch);
+  o.keyCount = lets.length;
+  o.letters = lets.map(k => k.ch).join('');
+  o.swatches = w.kb.keys.filter(k => k.colTeam !== undefined).length;
+  o.diffPads = w.kb.keys.filter(k => k.diff).length;
+  o.steppers = w.kb.keys.filter(k => k.act).length;
 
-  // ---- 1. OUTSIDE the pitch: every key is past the back of the net ----------------
+  // ---- 1. OUTSIDE the pitch: NOTHING is walk-on-able inside the touchlines --------
+  // ⚠️ Measured against the whole pitch box, not just "past the back of the net". The
+  // letters are below the pitch but the colour strips are BESIDE each half, so a
+  // one-axis test would call them inside — and what the rule actually says is that
+  // standing on a pad is never also a side pick.
   const back = w.field.L/2 + (w.field.net || 0);
-  o.allOutside = w.kb.keys.every(k => k.y > back);
-  o.nearestKey = Math.round(Math.min.apply(null, w.kb.keys.map(k => k.y)) - back);
+  o.allOutside = w.kb.keys.every(k =>
+    k.y > back || k.y + k.h < -back || k.x > w.field.W/2 || k.x + k.w < -w.field.W/2);
+  o.nearestKey = Math.round(Math.min.apply(null, lets.map(k => k.y)) - back);
   // ...so a body standing on one has not picked a side.
   const probe = w.players[0], keepY = probe.y, keepX = probe.x;
-  const k0 = w.kb.keys[0];
+  const k0 = lets[0];
   probe.x = k0.x + k0.w/2; probe.y = k0.y + k0.h/2;
   o.sideOnKeyboard = M.lobbySideOf(probe, w);
   probe.x = keepX; probe.y = keepY;
@@ -88,40 +102,25 @@ const r = await p.evaluate(() => {
   o.reachedTheKeys = me.y >= w.kb.T;
   o.reach = M.lobbyReach(w);
 
-  // ---- 3. a DWELL types, walking past does not -----------------------------------
+  // ---- 3. NOTHING PRESSES ITSELF: KICK types, standing on a key does not ---------
+  // ⚠️ There used to be a DWELL — stand on a key for 0.4s and it typed — and it fired
+  // while you were only crossing the board on the way to the pitch, which is a
+  // keyboard typing at you. Both halves are measured: a full three seconds of standing
+  // still types NOTHING, and a tap of KICK types exactly one letter.
   const key = ch => w.kb.keys.find(q => q.ch === ch);
   const standOn = (k, steps) => {
     for (let i = 0; i < steps; i++){ me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = 0; me.vy = 0; M.step(w); }
   };
   const leave = () => { for (let i = 0; i < 4; i++){ me.x = 0; me.y = 0; me.vx = 0; me.vy = 0; M.step(w); } };
-  const dwellSteps = Math.ceil(M.LOBBYKB.dwell * 60) + 4;
 
-  me.name = 'ZZZ'; me.kbTyped = false;
-  o.before = me.name;
-  standOn(key('K'), dwellSteps); leave();
-  o.afterFirst = me.name;
-  // ⚠️ The first press CLEARS: you are writing your name, not appending to whatever the
-  // game called you.
-  o.firstPressClears = me.name === 'K';
-  standOn(key('A'), dwellSteps); leave();
-  standOn(key('I'), dwellSteps); leave();
-  o.spelled = me.name;
+  me.name = 'ZZZ'; me.kbTyped = true;
+  // Three seconds parked on a letter, and a walk across four more.
+  standOn(key('K'), 180); leave();
+  for (const ch of 'ASDF'){ standOn(key(ch), 6); }
+  leave();
+  o.afterStanding = me.name;
+  o.standingIsSilent = me.name === 'ZZZ';
 
-  // Walking past is NOT a press: fewer steps on the key than the dwell takes.
-  const short = Math.max(1, Math.floor(M.LOBBYKB.dwell * 60) - 8);
-  standOn(key('Z'), short); leave();
-  o.afterBrush = me.name;
-  o.walkingPastIsSilent = me.name === o.spelled;
-
-  // ⚠️ LATCHED: three seconds of standing still is one letter, not a hundred and eighty.
-  standOn(key('X'), 180); leave();
-  o.afterLongStand = me.name;
-  o.latched = me.name === o.spelled + 'X';
-
-  // ⚠️ ...WHICH IS WHY KICK EXISTS: A DOUBLE LETTER IS OTHERWISE UNREACHABLE. The
-  // latch above is not optional — without it standing still types sixty letters a
-  // second — so "QQ" needs a press. KICK fires the key under you at once and re-arms
-  // on release, one tap per letter.
   // ⚠️ Driven through `pads.p1`, never by writing `p.kick`: the pad is read every step
   // and a directly-set flag is overwritten before `stepLobbyKeys` ever sees it.
   const pad = window.__pads[0];
@@ -135,6 +134,14 @@ const r = await p.evaluate(() => {
       pad.buttons[0].pressed = false; pad.buttons[0].value = 0; M.step(w);
     }
   };
+  me.name = 'ZZZ'; me.kbTyped = false;
+  leave();
+  tapKick(key('K'));
+  // ⚠️ The first press CLEARS: you are writing your name, not appending to whatever
+  // the game called you.
+  o.firstPressClears = me.name === 'K';
+  tapKick(key('A')); tapKick(key('I'));
+  o.spelled = me.name;
   me.name = ''; me.kbTyped = true;
   leave();
   tapKick(key('Q'));
@@ -164,31 +171,30 @@ const r = await p.evaluate(() => {
   o.crossingIsSilent = me.name === preCross;
   pad.buttons[0].pressed = false; pad.buttons[0].value = 0;
   leave();
-  // Put back what the latch check left behind — the DEL/SPACE checks below measure a
-  // CHANGE from the name as it stands, and this block borrowed it to type into.
-  me.name = o.afterLongStand; me.kbTyped = true;
 
   // DEL and SPACE.
   // ⚠️ Measured as a CHANGE from whatever the name is by now, not against a literal —
-  // the checks above have already added an X, and hard-coding "KA" here made this fail
-  // on perfectly good code.
+  // the checks above have already typed into it, and hard-coding "KA" here made this
+  // fail on perfectly good code.
   const preDel = me.name;
-  standOn(key('\b'), dwellSteps); leave();
+  tapKick(key('\b'));
   o.afterDel = me.name;
   o.delRemovesOne = me.name === preDel.slice(0, -1);
-  standOn(key(' '), dwellSteps); leave();
+  tapKick(key(' '));
   o.afterSpace = me.name;
   o.spaceAddsOne = me.name === o.afterDel + ' ';
 
-  // The cap, which is the name box's own.
-  for (let i = 0; i < 20; i++){ standOn(key(i % 2 ? 'A' : 'B'), dwellSteps); leave(); }
+  // The cap, which is the name box's own — twelve letters and no more.
+  for (let i = 0; i < 20; i++) tapKick(key(i % 2 ? 'A' : 'B'));
   o.capped = me.name.length;
-  o.capIsTheNameBoxCap = me.name.length === M.LOBBYKB.maxLen;
+  o.capIsTheNameBoxCap = me.name.length === M.LOBBYKB.maxLen && M.LOBBYKB.maxLen === 12;
 
   // ---- 4. bots never type --------------------------------------------------------
   const bot = w.players.find(q => q.ctrl === 'bot');
   const botName = bot.name;
-  for (let i = 0; i < 200; i++){ const k = key('Q'); bot.x = k.x + k.w/2; bot.y = k.y + k.h/2; M.step(w); }
+  for (let i = 0; i < 200; i++){ const k = key('Q'); bot.x = k.x + k.w/2; bot.y = k.y + k.h/2;
+                                 bot.kick = i % 8 < 4; M.step(w); }
+  bot.kick = false;
   o.botUntouched = bot.name === botName && !bot.kbTyped;
 
   // ---- 5. it is gone in play -----------------------------------------------------
@@ -213,26 +219,41 @@ const step = await p.evaluate(() => {
   const me = M.firstHumanSeat(w);
   const plus = w.kb.keys.find(k => k.act === 1), minus = w.kb.keys.find(k => k.act === -1);
   o.hasBoth = !!plus && !!minus;
-  // RIGHT of every letter, which is where they were asked for.
-  const letterR = Math.max.apply(null, w.kb.keys.filter(k => !k.act).map(k => k.x + k.w));
+  // ⚠️ IN THE CORNER, right of every letter and clear of the whole board — it is not
+  // part of typing your name, so walking to it must not mean brushing a letter.
+  const letterR = Math.max.apply(null, w.kb.keys.filter(k => k.ch).map(k => k.x + k.w));
   o.rightOfLetters = plus.x >= letterR && minus.x >= letterR;
   o.stacked = plus.y < minus.y && Math.abs(plus.x - minus.x) < 1;
 
-  const stand = (k, steps) => { for (let i = 0; i < steps; i++){ me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = 0; me.vy = 0; M.step(w); } };
-  const off = () => { for (let i = 0; i < 4; i++){ me.x = 0; me.y = -200; me.vx = 0; me.vy = 0; M.step(w); } };
-  const dwellSteps = Math.ceil(M.LOBBYKB.dwell * 60) + 4;
+  const pad = window.__pads[0];
+  const hold = (k, steps, down) => {
+    for (let i = 0; i < steps; i++){
+      me.x = k.x + k.w/2; me.y = k.y + k.h/2; me.vx = 0; me.vy = 0;
+      pad.buttons[0].pressed = !!down; pad.buttons[0].value = down ? 1 : 0;
+      M.step(w);
+    }
+  };
+  const off = () => { pad.buttons[0].pressed = false; pad.buttons[0].value = 0;
+                      for (let i = 0; i < 4; i++){ me.x = 0; me.y = -200; me.vx = 0; me.vy = 0; M.step(w); } };
+  const tap = k => { hold(k, 3, true); hold(k, 3, false); };
 
   o.startPer = M.lobbyPlan(w).per;
   o.botsAtStart = w.players.filter(q => q.ctrl === 'bot').length;
-  stand(plus, dwellSteps); off();
+  // ⚠️ STANDING ON IT DOES NOTHING, exactly like a letter — nothing on this board
+  // presses itself any more.
+  hold(plus, 180, false); off();
+  o.standingOnPlusIsSilent = M.lobbyPlan(w).per === o.startPer;
+  tap(plus); off();
   o.afterOnePress = M.lobbyPlan(w).per;
-  // ⚠️ It REPEATS while a foot stays on it — measured against one press, not against a
-  // constant, so the check survives the repeat rate being retuned.
-  stand(plus, 150); off();
+  // ⚠️ ...but it REPEATS while KICK is HELD, which is the opposite rule from a letter:
+  // a letter you meant once is a letter, and going 1v1 to 8v8 at a tap a time is
+  // fourteen taps. Measured against one press, not a constant, so retuning the repeat
+  // rate cannot break it.
+  hold(plus, 150, true); off();
   o.afterHold = M.lobbyPlan(w).per;
   o.repeats = o.afterHold > o.afterOnePress + 1;
   o.cappedAt = M.LOBBY.maxPerSide;
-  stand(plus, 900); off();
+  hold(plus, 900, true); off();
   o.holdsAtCap = M.lobbyPlan(w).per === M.LOBBY.maxPerSide;
 
   // ...and the bodies really are there, not just the number under each half.
@@ -241,7 +262,7 @@ const step = await p.evaluate(() => {
   o.previewShowsBodies = o.botsAtCap >= pl.need0 + pl.need1;
 
   // − brings it back down.
-  stand(minus, 900); off();
+  hold(minus, 900, true); off();
   o.afterMinus = M.lobbyPlan(w).per;
   o.minusWorks = o.afterMinus < o.afterHold;
 
@@ -416,8 +437,16 @@ const read = await rp.evaluate(() => {
     // ---- and it has to still BE a keyboard: rows across, below the pitch ----------
     const cen = k2 => M.screenPt(M.wx(k2.x + k2.w/2), M.wy(k2.y + k2.h/2));
     const row1 = 'QWERTYUIOP'.split('').map(ch => w.kb.keys.find(q => q.ch === ch)).map(cen);
-    const corners = [[w.kb.L, w.kb.T], [w.kb.R, w.kb.T], [w.kb.L, w.kb.B], [w.kb.R, w.kb.B]]
-      .map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+    // ⚠️ The LETTERS' own box, not `kb.L..B`. Those bounds now cover the colour strips
+    // beside each half and the difficulty row, so a whole-board measure asks a
+    // different question — "is all the furniture below the pitch" — which is false by
+    // design and says nothing about whether the keyboard is a keyboard.
+    const corners = [];
+    for (const k2 of w.kb.keys){
+      if (!k2.ch) continue;
+      for (const [px, py] of [[k2.x, k2.y], [k2.x+k2.w, k2.y], [k2.x, k2.y+k2.h], [k2.x+k2.w, k2.y+k2.h]])
+        corners.push(M.screenPt(M.wx(px), M.wy(py)));
+    }
     const kbTop = Math.min.apply(null, corners.map(q => q[1]));
     const kbW = Math.max.apply(null, corners.map(q => q[0])) - Math.min.apply(null, corners.map(q => q[0]));
     const kbH = Math.max.apply(null, corners.map(q => q[1])) - kbTop;
@@ -427,7 +456,7 @@ const read = await rp.evaluate(() => {
     const pitchBot = Math.max.apply(null, pc.map(q => q[1]));
     // ...and standing on a key is still NOT a side pick, whichever way it was laid out.
     const probeP = w.players[0], keep = [probeP.x, probeP.y];
-    const k0 = w.kb.keys[0];
+    const k0 = w.kb.keys.find(q => q.ch);
     probeP.x = k0.x + k0.w/2; probeP.y = k0.y + k0.h/2;
     const sideOnKey = M.lobbySideOf(probeP, w);
     probeP.x = keep[0]; probeP.y = keep[1];
@@ -452,8 +481,11 @@ await rp.close();
 
 // -------------------------------------------------------------------- report --
 ok('the warm-up lobby has a keyboard', r.state === 'warmup' && r.hasKb, JSON.stringify({ state: r.state, kb: r.hasKb }));
-ok('...with a key per letter, DEL and SPACE, and the two stepper squares', r.keyCount === 30,
+ok('...with a key per letter, plus DEL and SPACE', r.keyCount === 28,
    `${r.keyCount} keys: ${r.letters}`);
+ok('...the two stepper squares', r.steppers === 2, String(r.steppers));
+ok('...a colour swatch per colour PER SIDE', r.swatches === 16, String(r.swatches));
+ok('...and a difficulty pad per tier', r.diffPads === 7, String(r.diffPads));
 ok('every key is OUTSIDE the pitch', r.allOutside,
    `nearest is ${r.nearestKey} units past the back of the net — on the pitch it would be a second meaning for standing somewhere, fighting the side pick the lobby is for`);
 ok('...so standing on one is not a side pick', r.sideOnKeyboard === -1,
@@ -462,13 +494,12 @@ ok('...so standing on one is not a side pick', r.sideOnKeyboard === -1,
 ok('a player can WALK to the keys', r.reachedTheKeys,
    `held the stick down for 420 steps and got to y ${r.walkedTo}, keys start at ${JSON.stringify(r.reach)} — driven with the stick and never teleported, because a teleport passes on a build where the clamp was never widened`);
 
-ok('standing on a letter types it', r.spelled === 'KAI', `"${r.before}" then "${r.spelled}"`);
+ok('NOTHING presses itself', r.standingIsSilent,
+   `three seconds parked on K and a walk across A-S-D-F left the name "${r.afterStanding}" — a keyboard that types while you are only crossing it on the way to the pitch is a keyboard typing at you`);
+ok('KICK spells a name', r.spelled === 'KAI', `got "${r.spelled}"`);
 ok('...and the first press CLEARS the old name', r.firstPressClears,
    `"${r.afterFirst}" — you are writing your name, not appending to what the game called you`);
-ok('walking past a letter types nothing', r.walkingPastIsSilent,
-   `"${r.afterBrush}" — a dwell is what stops crossing the keyboard on the way to the pitch spelling a word`);
-ok('standing still is ONE letter, not sixty a second', r.latched,
-   `three seconds on one key gave "${r.afterLongStand}"`);
+
 ok('DEL removes a letter and SPACE adds one', r.delRemovesOne && r.spaceAddsOne,
    JSON.stringify({ del: r.afterDel, space: r.afterSpace }));
 ok('the name is capped at the name box\'s own cap', r.capIsTheNameBoxCap, `${r.capped} characters`);
@@ -485,9 +516,11 @@ ok('the keyboard is gone once play starts', r.kbGoneInPlay && r.stateAfterStart 
 
 ok('the stepper is two squares RIGHT of the letters', step.hasBoth && step.rightOfLetters && step.stacked,
    JSON.stringify({ both: step.hasBoth, right: step.rightOfLetters, stacked: step.stacked }));
-ok('one press adds a body a side', step.afterOnePress === step.startPer + 1,
+ok('standing on + does nothing either', step.standingOnPlusIsSilent,
+   'nothing on this board presses itself');
+ok('one KICK adds a body a side', step.afterOnePress === step.startPer + 1,
    `${step.startPer} then ${step.afterOnePress}`);
-ok('...and holding REPEATS', step.repeats,
+ok('...and holding KICK on it REPEATS', step.repeats,
    `one press ${step.afterOnePress}, held ${step.afterHold} — the opposite rule from the letters, because going 1v1 to 6v6 through a latch is eleven trips on and off a square`);
 ok('...up to the per-side cap and no further', step.holdsAtCap, `capped at ${step.cappedAt}`);
 ok('the bots are really THERE, not just counted', step.previewShowsBodies,

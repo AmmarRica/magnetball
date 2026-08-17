@@ -213,8 +213,22 @@ const lob = await four.evaluate(() => {
       if (Math.abs(d[i] - nr) + Math.abs(d[i+1] - ng) + Math.abs(d[i+2] - nb) < 18) n++;
     return n;
   };
-  o.inkAtRow = band(o.promptY - 12, o.promptY + 12);
-  o.promptsAreBelow = o.promptY != null && o.promptY > o.pitchHi;
+  // ⚠️ THERE IS NO PROMPT ROW ANY MORE. It was a line of plates under the touchline
+  // reading "P1 START = KICK OFF · P2 START = READY · …", one per person — a row that
+  // grew with the room, sitting between the pitch and the keyboard, saying the same
+  // two words four times. What it was for is answered once by the headline above the
+  // pitch. So what is measured now is that it is GONE and that the headline took over.
+  o.promptRowGone = w.lobby._promptY == null;
+  // ⚠️ And the headline is centred on the COURT, not on the canvas: `cw/2` is the
+  // middle of the drawing surface and the menu dock takes a bite out of one side of
+  // it, so with the dock open the headline sat well left of the pitch and of the
+  // scorebug above it. Everything in this lobby is placed around the court.
+  // ⚠️ Read from where `drawLobby` says it PUT the line, never from a colour probe —
+  // the same lesson `_promptY` records just above: the countdown, the hint and the
+  // theme's own backdrop all live in that band.
+  o.headMid = Math.round(w.lobby._headX);
+  o.courtMid = Math.round(M.screenPt(M.wx(0), M.wy(0))[0]);
+  o.headlineFollowsTheCourt = Math.abs(o.headMid - o.courtMid) < 2;
   return o;
 });
 await four.close();
@@ -265,10 +279,11 @@ ok('...unless one is bound by hand', kick.boundOnly,
    '"any button" is the default for somebody who has not chosen, not an override of somebody who has');
 
 ok('the lobby is up with four pads', lob.inWarmup);
-ok('the prompts are BELOW the pitch, not over the play', lob.promptsAreBelow,
-   `row at y=${lob.promptY}, pitch ends at ${lob.pitchHi} — floating over each player they ran down the middle of the field in deck view, where the text stays upright while the pitch is turned`);
-ok('...and something is actually drawn there', lob.inkAtRow > 200,
-   `${lob.inkAtRow} plate pixels in the row's own band — without this the coordinate above is a number nobody drew with`);
+ok('the per-player prompt row is GONE', lob.promptRowGone,
+   `_promptY is ${lob.promptY} — a row that grows with the room, between the pitch and the keyboard, saying the same two words once per person`);
+ok('...and the headline is centred on the COURT', lob.headlineFollowsTheCourt !== false,
+   `headline at ${lob.headMid}, court centre ${lob.courtMid} — cw/2 is the middle of the canvas, and the menu dock takes a bite out of one side of it`);
+
 
 ok('the default theme is grass', def.palette === 'grass' && def.livePalette === 'grass',
    `${def.palette} — a plain green pitch is what a football game looks like before you have chosen anything, and it is what a reset gives back`);

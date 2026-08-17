@@ -1751,6 +1751,78 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   - `drawSubPrompts` says which pad it is, which side it would get and what to press, clamped
     inside the canvas (the body is outside the touchline, so a centred label loses its last
     words — which are the side). `tests/dropin.mjs`.
+- **TEAM COLOUR IS ONE SHADE A SIDE, AND IT IS PICKED ON THE PITCH** (`TEAM_COLS`,
+  `sel.teamCol`, `teamColOf`, `applyTeamColours`, `setTeamCol`). Every player used to
+  carry their own `color` — yours from `profile`, each bot a `teamTint` variation — so a
+  side was three or four shades of nearly-red. ⚠️ **What a shirt has to do is say which
+  TEAM you are on**, from across a room, at thirty pixels; three shades of red is the one
+  thing that stops it doing that. A player's own customisation is their cap, face, eyes
+  and name. `teamTint(team, idx)` keeps its signature and ignores `idx`, so no call site
+  has to care.
+  ⚠️ **`applyTeamColours` is the one writer**, called wherever the roster or the sides
+  can change — `startMatch` (after every seat, name and look, including the demo's), the
+  warm-up step, `lobbyStart`, `evenUpSides` and the drop-in walk-on — so a body that
+  switches halves is simply the other colour.
+  ⚠️ **The GOAL matches** (`drawGoal` reads `teamColOf`, not `TH.teamRed`): a side that
+  picked green and still defends a red frame is two answers to "whose end is this".
+  ⚠️ **The two sides may never be the same colour** — `setTeamCol` hands the other side
+  the one you just gave up, which is a swap rather than a refusal, and a refusal on a
+  walk-on pad is indistinguishable from a broken pad.
+- **THE WARM-UP LOBBY IS THE SETTINGS SCREEN, WALKED ON.** Beside each half, the colour
+  swatches for that side; under the keyboard, seven numbered pads for bot difficulty;
+  in the corner, the team-size stepper. All of it is `w.kb.keys` — one list of walk-on
+  pads — so bounds, `kbKeyAt`, `lobbyReach`, `computeCam` and the painter all work off
+  one thing and a new kind of pad costs nothing.
+  ⚠️ **Which EDGE the colour strips go on depends on which way the halves divide.**
+  Flat the halves are top and bottom, so the strips are two columns down one side;
+  turned they are LEFT and RIGHT, so a column would put both teams' colours beside both
+  halves and mean nothing — there they are two rows above the pitch.
+  ⚠️ **Difficulty is a ROW under the keyboard, numbered 1..7**, with the picked tier
+  named once below it. A column out to one side lands exactly where the head count
+  behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
+  ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
+  starts when the pitch is flat.
+- **A GOAL BELONGS TO THE HALF IN FRONT OF IT** (`lobbyInGoal`, `lobbyAllInGoal`).
+  ⚠️ `lobbyOutside` used to call the pocket "sitting this one out", so **everybody into
+  a goal** — the third way to start a match, alongside START and the countdown — handed
+  every player a bench place on the way. Held for `LOBBY.goalStart` (0.9s), or jogging
+  through the mouth on the way round the back of the net is a request to kick off.
+- **EVERY CONNECTED CONTROLLER GETS A BODY, whatever the mode's size.** `startMatch`
+  raises `per` to fit the pads (the whole count in co-op, half of it in versus), because
+  the seat loop walks a roster of `per*2` and on a 1v1 it ran out after two — four people
+  at a cabinet, two of them watching. A mode's size is the size you asked for; a room
+  bigger than it is a room. Capped by `LOBBY.maxPerSide`, so a ninth player benches.
+- **A BOT WEARS A ROBOT IN WARM-UP AND A NUMBER IN THE MATCH** (`BOT_FACE`,
+  `numberTheSides`). In the lobby the numbers are a lie waiting to happen — people are
+  still walking onto halves — so `lobbyStart` hands them out once the sides settle,
+  **humans first**: four people in a six-a-side wear 1–4 and the bots are 5 and 6. Only
+  bots are renumbered; a person's faceplate is their own. ⚠️ `BOT_FACE` is deliberately
+  **not** a `TEXTS` entry (that table is the picker's list, and this is what a body IS,
+  not a cosmetic), and it is declared **up with `TEAM_COLS`** because `paintFace` reads
+  it during the bootstrap — the **fifteenth TDZ bite** in this file.
+- **A BODY BEING WALKED ON OR OFF DOES NOT COLLIDE** (`staged` in `integrate`).
+  `walkTo` sets position directly and holds velocity at zero, so `collideDiscs` — which
+  pushes BOTH bodies — shoved it off its line and the next step walked it back, which is
+  a bot vibrating against a team-mate instead of arriving. Reported as bots stuck trying
+  to leave the field: the gate is one point and the whole outgoing row wants through it.
+  ⚠️ Only while it is still WALKING (`_lobArr`), or a parked bot stays walk-through and
+  you can stand inside one.
+- **KICK OFF MEANS KICK OFF** (`tryKickOff` → `startMatch({lobby:false})`). It used to
+  drop into warm-up whenever a pad was connected, so the one button that says "play" put
+  you in a room to choose things in with every choice already made. Warm-up has its own
+  button underneath. ⚠️ It also calls `replayAbort()` first — `loop()` returns while a
+  replay is active, so pressing it during the attract demo's replay started the match
+  underneath, froze it until the replay ran out, and then landed in the lobby anyway.
+- **NAME PLATES ARE OUTLINED, NOT BOXED.** A filled plate above each of eight bodies is
+  a rectangle of solid colour parked over the play. What the box was for is legible text
+  on an unknown background, and a halo in the palette's own `nameBg` does that without
+  covering anything. The head count behind each goal uses the same treatment.
+- **THE COURT IS CENTRED ACROSS THE SCREEN** (`computeCam`). It used to centre the
+  SPAN — pitch plus furniture — and the warm-up furniture is not symmetric, so the court
+  slid sideways and the pitch, the headline above it and the scorebug above that
+  disagreed about the middle. ⚠️ **Across only**: doing the same down the screen reserves
+  a band above the pitch the size of the keyboard below it, measured at half the frame
+  left empty. Sideways the eye has references; vertically it has none.
 - **THE LOBBY KEYBOARD: walk onto letters to spell your own name** (`LOBBYKB`,
   `buildLobbyKeys`, `stepLobbyKeys`, `kbPress`, `lobbyKbCommit`, `drawLobbyKeys`,
   `lobbyReach`, `w.kb`). Laid out below the back of the net, then you walk into a half.
