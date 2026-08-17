@@ -1764,6 +1764,32 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the keyboard on the way to the pitch spells a word. Latched until the body LEAVES that
   key, or standing still types sixty letters a second.
   ⚠️ **The first press CLEARS** — you are writing your name, not appending to "You".
+  ⚠️ **THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES**, and the letters are
+  the whole point of the feature, so this is the thing to check after touching any of
+  it. `drawLobbyKeys` runs AFTER `pitchXform` is restored, on points put through
+  `screenPt` — so the correct wrapper is **`screenUpright`** (a documented no-op) and
+  **not `uprightAt`**, which CANCELS the pitch's quarter-turn and therefore only works
+  *inside* the transform. Out here it ADDS one, and in deck view the letters, the team
+  counts (`drawLobby`) and the drop-in prompts (`drawSubPrompts`) all lay down on their
+  sides. `drawFloaters` is the pattern to copy: screen point, draw, no wrapper.
+  ⚠️ **Each label is SHRUNK to its own plate's screen box.** A key is wide in world x
+  and deck view turns world x into screen y, so `SPACE` and `DEL` — the two labels that
+  are words — ran off both ends of a plate that is now the narrow way round. The same
+  fit covers the huge courts, where `cam.s` falls until a whole pitch fits.
+  ⚠️ **The caption is placed off the block's SCREEN bounding box**, not off a world
+  point above it: a caption is a horizontal line of words however the pitch is turned,
+  and in deck view "above the keyboard" in world terms is *beside* it, so the line ran
+  across the keys and the pitch.
+  ⚠️ **AND IT WAS WHITE ON WHITE ON THE DEFAULT PALETTE**, which no geometry check
+  could see: `rgba(col, a)` handed a **non-hex** colour straight back, and Grass sets
+  `line: 'rgba(255,255,255,0.95)'` — so the plate's 8% wash and the letter's 55% were
+  both painted at 0.95 and the board was a near-white slab with **zero** ink pixels on
+  it. Seven palettes ship a non-hex `line`. `rgba` parses `rgb()`/`rgba()` now and
+  **multiplies** the asked-for alpha by the colour's own, so a call site can never come
+  back more opaque than the palette wanted. `tests/lobbykb.mjs` measures the letter
+  against the plate in **rendered pixels**, never from the palette hex — a hex says
+  nothing about what alpha did to it — and measures "upright" on a multi-letter label,
+  because a rotated `SPACE` is taller than it is wide and an upright one is not.
   ⚠️ **`integrate`'s clamp has to open up to reach it**, and `lobbyReach(w)` is the one
   place that box is worked out — `computeCam` frames *the same numbers*, so "a player may
   never leave the VIEW" survives the keyboard being outside the pitch. A test that

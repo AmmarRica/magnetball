@@ -3628,7 +3628,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260816.1135PM';
+const VERSION = '20260817.0015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -3644,6 +3644,14 @@ const VERSION = '20260816.1135PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0015AM', title: 'The warm-up keyboard you can actually read',
+    added: [],
+    changed: [
+      '<b>The letters on the warm-up keyboard are legible again.</b> On the standard green pitch the keys were being drawn as near-white slabs with the letters the same colour as the slab, so there was nothing to read; and in the Steam Deck layout, which turns the pitch on its side, every letter was lying on its side with it. The keys are a place you walk to, so they still turn with the pitch \u2014 the writing on them no longer does.',
+      'SPACE and DEL now shrink to fit the key they are on instead of running off the ends of it, and the line that explains the keyboard sits above it whichever way round the pitch is.',
+      'The team counts on each half and the drop-in prompts on the touchline had the same problem in that layout and are upright too.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260816.1135PM', title: 'The final score, side by side',
     added: [],
     changed: [
@@ -4833,6 +4841,17 @@ function invertInk(col){
   const inv = (~n) & 0xffffff;
   return '#' + inv.toString(16).padStart(6, '0');
 }
+// ⚠️ A THEME COLOUR MAY ALREADY CARRY ITS OWN ALPHA, and this used to hand it back
+// UNTOUCHED — so `rgba(TH.line, 0.08)` returned white at **0.95** on every palette
+// whose `line` is an `rgba(...)` string, which includes Grass, the default. The
+// warm-up keyboard is where that showed: the plate asked for an 8% wash and the
+// letter on it for 55%, and both came out at 0.95, so the whole board was a slab of
+// near-white with the letters invisible inside it. Seven palettes ship a non-hex
+// `line` and every one of them had it.
+// The asked-for alpha MULTIPLIES the colour's own rather than replacing it: a call
+// site says "this colour, that much of it", and the theme's own 0.95 is a choice the
+// theme made — replacing it would let `rgba(c, 1)` come back more opaque than the
+// palette ever wanted.
 function rgba(col, a){
   let c = (col||'').trim();
   if (c[0] === '#'){
@@ -4840,6 +4859,8 @@ function rgba(col, a){
     const n = parseInt(c.slice(1), 16);
     return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
   }
+  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,/]\s*([\d.]+)\s*)?\)$/i.exec(c);
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${a * (m[4] === undefined ? 1 : +m[4])})`;
   return c;
 }
 
@@ -17371,6 +17392,16 @@ function uprightAt(x, y, fn){
   if (!cam.rot){ fn(x, y); return; }
   ctx.save(); ctx.translate(x, y); ctx.rotate(-cam.rot); fn(0, 0); ctx.restore();
 }
+// ⚠️ THE SCREEN-SPACE TWIN, AND IT IS A NO-OP ON PURPOSE. `uprightAt` CANCELS the
+// pitch's quarter-turn, so it is only ever correct INSIDE `pitchXform` — where the
+// context is carrying that turn. Called after the restore, with a point already put
+// through `screenPt`, there is no turn to cancel and it ADDS one: in deck view the
+// warm-up keyboard's letters, the lobby's team counts and the drop-in prompts all
+// came out lying on their side, which is the one thing a keyboard may not do. Text
+// placed by `screenPt` is already upright — see `drawFloaters`, which has always
+// drawn straight to the canvas for this reason. Naming the no-op means a call site
+// says which space it is in instead of leaving it to be remembered.
+function screenUpright(x, y, fn){ fn(x, y); }
 // True on-screen point for a camera-space point — applies the same quarter-turn
 // render() does, so overlap tests measure what the player actually sees.
 function screenPt(px, py){
@@ -17956,8 +17987,9 @@ function render(){
 // is, which side it would get, and what to press. The lobby learned the same lesson —
 // see its per-player prompt, whose shape this borrows.
 //
-// ⚠️ Drawn in SCREEN space through `screenPt`, and through `uprightAt` like every other
-// label: it is UI, so deck view and cocktail must not turn the words on their side.
+// ⚠️ Drawn in SCREEN space through `screenPt`, and therefore through `screenUpright`
+// rather than `uprightAt` — it is UI, so deck view must not turn the words on their
+// side, and out here the turn to cancel is the one that was never applied.
 function drawSubPrompts(w){
   if (!w || !w.bench || !w.bench.length) return;
   const T = TH;
@@ -17974,7 +18006,7 @@ function drawSubPrompts(w){
     // which on this label are the side you are about to be given.
     ctx.font = `9px ${LOBBY_FONT}`;
     const half = ctx.measureText(txt).width/2 + 8;
-    uprightAt(clamp(sx, half, cw - half), sy - p.r*cam.s - 30, (x, y) => {
+    screenUpright(clamp(sx, half, cw - half), sy - p.r*cam.s - 30, (x, y) => {
       ctx.font = `9px ${LOBBY_FONT}`; ctx.textAlign='center'; ctx.textBaseline='middle';
       const wd = ctx.measureText(txt).width + 12;
       ctx.fillStyle = T.nameBg; ctx.fillRect(x - wd/2, y - 8, wd, 16);
@@ -18021,12 +18053,29 @@ function drawLobbyKeys(w, ox, oy){
     ctx.lineWidth = Math.max(1, 1 + 2*f);
     ctx.strokeStyle = rgba(ink, 0.35 + 0.45*f);
     ctx.stroke();
-    // ⚠️ `uprightAt`, like every other word the lobby draws: the pitch may be turned a
-    // quarter and letters are the one thing that must not turn with it.
+    // ⚠️ THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES. A key is a place you
+    // walk to, so its four corners have to follow the ground exactly; the letter on it is
+    // a word, and a word on its side is not readable. `screenUpright`, not `uprightAt` —
+    // this is drawn after the pitch transform is restored, so there is no turn to cancel
+    // and cancelling one anyway is what laid every letter down in deck view.
     const [lx, ly] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
-    uprightAt(lx + ox, ly + oy, (x, y) => {
+    // ⚠️ AND IT IS SHRUNK TO FIT THE PLATE IT IS ON, measured off that plate's four
+    // SCREEN corners. A key is wide in world x, and deck view turns world x into screen
+    // y — so SPACE and DEL, the two keys whose label is a word, were drawn at their
+    // full width across a plate that is now the narrow way round and ran off both ends
+    // of it. The same fit covers the huge courts, where `cam.s` falls until a whole
+    // pitch fits and an 18px letter is wider than the key under it.
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    const bw = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+    const bh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+    screenUpright(lx + ox, ly + oy, (x, y) => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `${k.act ? 26 : (k.ch.length === 1 && k.ch !== ' ' ? 18 : 11)}px ${LOBBY_FONT}`;
+      let fs = k.act ? 26 : (k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
+      fs = Math.min(fs, bh * 0.62);
+      ctx.font = `${fs}px ${LOBBY_FONT}`;
+      const tw = ctx.measureText(k.label).width;
+      if (tw > bw * 0.80) fs = fs * (bw * 0.80) / tw;
+      ctx.font = `${Math.max(5, fs)}px ${LOBBY_FONT}`;
       ctx.fillStyle = rgba(ink, 0.55 + 0.45*f);
       ctx.fillText(k.label, x, y);
     });
@@ -18037,7 +18086,7 @@ function drawLobbyKeys(w, ox, oy){
   // the readout has to be the one that comes true. Same rule the side counts follow.
   const per = lobbyPlan(w).per;
   const [mx, my] = screenPt(wx(kb.padX + kb.padW/2), wy(kb.midY));
-  uprightAt(mx + ox, my + oy, (x, y) => {
+  screenUpright(mx + ox, my + oy, (x, y) => {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `15px ${LOBBY_FONT}`;
     ctx.fillStyle = T.hudText;
@@ -18046,14 +18095,28 @@ function drawLobbyKeys(w, ox, oy){
     ctx.fillStyle = T.hudSub || T.hudText;
     ctx.fillText('TEAM SIZE', x, y + 9);
   });
-  // What it is for, once, above the top row — nobody walks off the pitch expecting a
+  // What it is for, once, above the block — nobody walks off the pitch expecting a
   // keyboard, so the row of letters has to introduce itself.
-  const [cx, cy] = screenPt(wx(0), wy(kb.T - LOBBYKB.clear*0.45));
-  uprightAt(cx + ox, cy + oy, (x, y) => {
+  // ⚠️ Placed off the block's SCREEN bounding box, not off a world point above it. The
+  // caption is a horizontal line of words however the pitch is turned, and in deck view
+  // the world point "above the keyboard" is to the SIDE of it — so a line centred there
+  // ran straight across the keys and the pitch. Its four corners answer where the block
+  // actually is on screen, which is the same trick the prompt row already uses.
+  const cs = [[kb.L, kb.T], [kb.R, kb.T], [kb.L, kb.B], [kb.R, kb.B]]
+    .map(([x, y]) => screenPt(wx(x), wy(y)));
+  const bx0 = Math.min.apply(null, cs.map(c => c[0])) + ox;
+  const bx1 = Math.max.apply(null, cs.map(c => c[0])) + ox;
+  const by0 = Math.min.apply(null, cs.map(c => c[1])) + oy;
+  screenUpright((bx0 + bx1)/2, by0 - 13, (x, y) => {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `10px ${LOBBY_FONT}`;
     ctx.fillStyle = T.hudSub || T.hudText;
-    ctx.fillText('STAND ON A LETTER TO SPELL YOUR NAME', x, y);
+    // ⚠️ Held inside the canvas, the same reason the floaters and the drop-in prompts
+    // are: the block can sit hard against an edge, and a centred caption then loses the
+    // half of itself that says what to do.
+    const half = ctx.measureText('STAND ON A LETTER TO SPELL YOUR NAME').width/2 + 4;
+    ctx.fillText('STAND ON A LETTER TO SPELL YOUR NAME',
+                 Math.max(half, Math.min(cw - half, x)), Math.max(8, y));
   });
   ctx.restore();
 }
@@ -18080,7 +18143,7 @@ function drawLobby(w){
       ctx.closePath();
       ctx.fillStyle = rgba(col, 0.10 + 0.06*Math.min(1, n)); ctx.fill();
       const [cx, cy] = screenPt(wx(0), wy(sign*halfL*0.84));   // clear of the players and the line
-      uprightAt(cx, cy, (x, y) => {
+      screenUpright(cx, cy, (x, y) => {
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.font = `26px ${LOBBY_FONT}`;
         ctx.fillStyle = readableInk(col, T.fieldBg);
@@ -22491,7 +22554,7 @@ if (window.__MAGNETDEBUG) {
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
-    isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt,
+    isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt, screenUpright, rgba,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, advanceLabels, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,

@@ -306,6 +306,75 @@ const phone = await ph.evaluate(() => {
 });
 await ph.close();
 
+// ============================================================ 8. IT IS READABLE ==
+// ⚠️ THE KEYBOARD IS THE ONE THING ON THE PITCH MADE OF WORDS, so "it is drawn" is not
+// the bar. Two separate faults made it unreadable and NEITHER shows up in any geometry
+// check — the keys were in the right places both times.
+//
+//   · THE LETTERS LAY ON THEIR SIDE IN DECK VIEW. `uprightAt` CANCELS the pitch's
+//     quarter-turn, so it only works INSIDE `pitchXform`; called out here in screen
+//     space it ADDS one. Measured on a multi-letter label, because a rotated "SPACE"
+//     is taller than it is wide and an upright one is wider than it is tall.
+//   · THE PLATE AND THE LETTER CAME OUT THE SAME COLOUR. `rgba(col, a)` handed a
+//     non-hex colour back untouched, and Grass — the DEFAULT palette — sets
+//     `line: 'rgba(255,255,255,0.95)'`. So the 8% plate wash and the 55% letter were
+//     both painted at 0.95 and the board was a near-white slab with nothing on it.
+//     ⚠️ Measured on RENDERED PIXELS against the plate, never on the palette hex: a
+//     hex says nothing about what alpha did to it.
+const rp = await page({ viewport: { width: 1298, height: 914 } });
+const read = await rp.evaluate(() => {
+  const M = window.__magnet, o = {};
+  // ⚠️ rgba() first, on its own — it is the root of the contrast half and it is used
+  // everywhere, so a check here says which of the two broke if this suite goes red.
+  o.rgbaKeepsAlpha = M.rgba('rgba(255,255,255,0.95)', 0.08) === 'rgba(255,255,255,0.076)';
+  o.rgbaHexUnchanged = M.rgba('#ffffff', 0.5) === 'rgba(255,255,255,0.5)';
+
+  const probe = (deck) => {
+    M.sel.display = deck ? 'deck' : 'auto'; M.applyDisplayMode();
+    window.dispatchEvent(new Event('resize'));
+    M.sel.mode = '2v2'; M.sel.lobby = 'on'; M.setMatchSeed(4); M.startMatch();
+    const w = M.world; for (let i = 0; i < 20; i++) M.step(w);
+    M.computeCam(); M.render();
+    const cv = document.getElementById('game'), c = cv.getContext('2d');
+    const dpr = cv.width / cv.clientWidth;
+    const key = w.kb.keys.find(k => k.label === 'SPACE');
+    const pts = [[key.x, key.y], [key.x+key.w, key.y], [key.x+key.w, key.y+key.h], [key.x, key.y+key.h]]
+      .map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    // A pixel or two in from the plate's edge, so the outline stroke is not sampled.
+    const x0 = Math.round((Math.min.apply(null, xs) + 3) * dpr);
+    const y0 = Math.round((Math.min.apply(null, ys) + 3) * dpr);
+    const bw = Math.round((Math.max.apply(null, xs) - Math.min.apply(null, xs) - 6) * dpr);
+    const bh = Math.round((Math.max.apply(null, ys) - Math.min.apply(null, ys) - 6) * dpr);
+    const d = c.getImageData(x0, y0, bw, bh).data;
+    const lum = i => (d[i]*0.2126 + d[i+1]*0.7152 + d[i+2]*0.0722);
+    // The plate is the commonest tone inside the box; the letter is what stands off it.
+    const hist = new Map();
+    for (let i = 0; i < d.length; i += 4){ const v = Math.round(lum(i));
+      hist.set(v, (hist.get(v) || 0) + 1); }
+    let plate = 0, best = -1;
+    for (const [v, n] of hist) if (n > best){ best = n; plate = v; }
+    let ink = plate, minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9, inkPx = 0;
+    for (let py = 0; py < bh; py++) for (let px = 0; px < bw; px++){
+      const i = (py*bw + px)*4, v = lum(i);
+      if (Math.abs(v - plate) < 18) continue;                 // still the plate
+      inkPx++;
+      if (Math.abs(v - plate) > Math.abs(ink - plate)) ink = v;
+      if (px < minx) minx = px; if (px > maxx) maxx = px;
+      if (py < miny) miny = py; if (py > maxy) maxy = py;
+    }
+    return { plate, ink, gap: Math.round(Math.abs(ink - plate)), inkPx,
+             box: [bw, bh],
+             wordW: maxx - minx, wordH: maxy - miny,
+             insideX: minx >= 0 && maxx <= bw - 1, insideY: miny >= 0 && maxy <= bh - 1 };
+  };
+  o.flat = probe(false);
+  o.deck = probe(true);
+  M.sel.display = 'auto'; M.applyDisplayMode();
+  return o;
+});
+await rp.close();
+
 // -------------------------------------------------------------------- report --
 ok('the warm-up lobby has a keyboard', r.state === 'warmup' && r.hasKb, JSON.stringify({ state: r.state, kb: r.hasKb }));
 ok('...with a key per letter, DEL and SPACE, and the two stepper squares', r.keyCount === 30,
@@ -369,9 +438,21 @@ ok('the keyboard does not advance in a draw', view.paintIsPure,
 ok('a phone frames it too', phone.state === 'warmup' && phone.onScreen,
    `${JSON.stringify(phone.span)} — the top and bottom reservations are tightest here`);
 
+ok('rgba() honours the alpha on a colour that already has one', read.rgbaKeepsAlpha,
+   'it used to hand a non-hex colour straight back, and Grass, the default palette, sets line: rgba(255,255,255,0.95) — so an 8% plate wash painted at 0.95');
+ok('...and a hex colour is unchanged', read.rgbaHexUnchanged);
+for (const [tag, m] of [['flat', read.flat], ['deck view', read.deck]]){
+  ok(`the letter is INKED on its plate (${tag})`, m.inkPx > 20 && m.gap >= 25,
+     `${m.inkPx} px at a luminance gap of ${m.gap} over the plate (${m.plate}) — the plate and the letter came out the same colour, so the board was a near-white slab with nothing on it`);
+  ok(`...upright, not on its side (${tag})`, m.wordW > m.wordH,
+     `"SPACE" measured ${m.wordW}x${m.wordH} — uprightAt cancels the pitch turn, so out here in screen space it ADDS one and every letter lies down`);
+  ok(`...and inside the key it is on (${tag})`, m.insideX && m.insideY,
+     `ink box vs plate ${JSON.stringify(m.box)} — a key is wide in world x and deck view turns world x into screen y, so a word-length label ran off both ends of the plate`);
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ r, step, det, view, phone }, null, 1));
+console.log(JSON.stringify({ r, step, det, view, phone, read }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL lobbykb\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS lobbykb');
