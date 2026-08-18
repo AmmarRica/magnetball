@@ -782,8 +782,15 @@
       .screen.docked .logo p { font-size: 12px; }
       .screen.docked .card { width: 100%; max-width: none; }
       .screen.docked .opt, .screen.docked .row { max-width: none; }
-      /* Any page's trailing "← Back" ghost button sticks to the bottom of the dock. */
-      .screen.docked > button.ghost {
+      /* ⚠️ ONLY the trailing "← Back" sticks, and it is marked with a class rather than
+         matched as "a ghost button that is a child of the screen". That selector caught
+         every other action sitting at the foot of a page too — "Reset all settings to
+         default" and "Install on phone" were pinned to the bottom of the menu at all
+         times, and so were Unlock, Restart cup, Reset the counters, Save as a new field
+         and Delete this field. A control that follows you down the page reads as the
+         page's primary action, and the single worst button to leave hovering over a
+         menu is the one that erases every setting in it. */
+      .screen.docked > button.ghost.backbtn {
         position: sticky; bottom: 0; margin-top: 8px;
         background: var(--bg); border: 1px solid var(--edge);
       }
@@ -872,7 +879,7 @@
     body.deck .screen.docked .logo p { font-size: 11px; }
     body.deck .screen.docked .card { width: 100%; max-width: none; }
     body.deck .screen.docked .opt, body.deck .screen.docked .row { max-width: none; }
-    body.deck .screen.docked > button.ghost {
+    body.deck .screen.docked > button.ghost.backbtn {
       position: sticky; bottom: 0; margin-top: 8px;
       background: var(--bg); border: 1px solid var(--edge);
     }
@@ -1163,6 +1170,32 @@
     .cuprow canvas { width:24px; height:24px; flex:0 0 auto; border-radius:4px; }
     .cuprow .cupseed { color:var(--muted); font-size:10px; min-width:20px; }
     .cuprow .cuphandle { margin-left:auto; color:var(--muted); font-size:14px; letter-spacing:2px; }
+    /* ⚠️ `margin-left:auto` moves to the REMOVE button when there is one, or the grip
+       takes the space and the × ends up jammed against the name. */
+    .cuprow .cupx { margin-left:auto; border:0; background:none; color:var(--muted);
+      font-family:var(--pix); font-size:15px; line-height:1; padding:6px 8px;
+      border-radius:6px; cursor:pointer; position:relative; }
+    .cuprow .cupx::after { content:''; position:absolute; left:50%; top:50%;
+      width:44px; height:44px; transform:translate(-50%,-50%); }
+    .cuprow .cupx:hover { color:var(--bad); background:rgba(255,90,90,.14); }
+    .cuprow .cupx + .cuphandle { margin-left:0; }
+    .cupaddrow { display:flex; gap:8px; align-items:stretch; margin-bottom:6px; }
+    .cupaddrow input { flex:1 1 auto; min-width:0; min-height:44px; }
+    .cupaddrow button { flex:0 0 auto; min-height:44px; padding:0 18px; }
+    /* The name-book suggestions wrap as chips — a party that has played here before
+       should be two taps a person rather than typed in again. */
+    #cupSuggest { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px; }
+    .cupchips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 10px; }
+    /* A chip is a 44px target with its badge beside its name — the same shape the roster
+       rows use, so "who is out" and "who is in" read as the same kind of thing. */
+    .cupchip { display:flex; align-items:center; gap:7px; padding:6px 11px; min-height:44px;
+      border:1px solid var(--edge); border-radius:9px; background:rgba(128,128,128,.07);
+      font-family:var(--pix); font-size:11px; color:var(--text); cursor:pointer; }
+    .cupchip canvas { width:20px; height:20px; flex:0 0 auto; border-radius:4px; }
+    .cupchip:hover { border-color:var(--accent); }
+    .cupchip.sel { border-color:var(--accent); background:rgba(33,230,255,.10); color:var(--accent); }
+    .cupchip.none { color:var(--muted); cursor:default; border-style:dashed; }
+    .cupsugg { padding:6px 12px; font-size:11px; min-height:34px; }
     /* ---- the card between matches ---------------------------------------------- */
     #cupFlash { position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
       align-items:center; justify-content:center; gap:16px; background:var(--bg);
@@ -1178,14 +1211,18 @@
     /* ---- the news ticker --------------------------------------------------------
        ⚠️ `pointer-events:none`. It sits across the bottom of a live match, and a bar you
        can accidentally press is a bar that steals a kick. */
-    #cupTicker { position:fixed; left:0; right:0; bottom:0; z-index:9; height:26px;
-      overflow:hidden; pointer-events:none; background:rgba(0,0,0,.55);
+    /* ⚠️ Read from ACROSS A ROOM, not from a phone in your hand — a tournament ticker is
+       for the four people waiting their turn, so it is sized like a scoreboard rather than
+       like a caption. It shipped at 11px on a 26px bar and scrolled a full width in 18s,
+       which is faster than you can read a name you are not expecting. */
+    #cupTicker { position:fixed; left:0; right:0; bottom:0; z-index:9; height:38px;
+      overflow:hidden; pointer-events:none; background:rgba(0,0,0,.62);
       border-top:1px solid var(--edge); }
     #cupTicker.hidden { display:none; }
     #cupTickerTrack { display:inline-block; white-space:nowrap; font-family:var(--pix);
-      font-size:11px; line-height:26px; color:var(--text); padding-left:100%;
-      animation: cupmarquee 18s linear infinite; }
-    #cupTickerTrack .tkk { color:var(--accent); margin:0 6px; }
+      font-size:17px; line-height:38px; letter-spacing:.5px; color:var(--text);
+      padding-left:100%; animation: cupmarquee 46s linear infinite; }
+    #cupTickerTrack .tkk { color:var(--accent); margin:0 12px; }
     @keyframes cupmarquee { from { transform:translateX(0); } to { transform:translateX(-100%); } }
     /* ⚠️ A scrolling bar is exactly what Reduce Motion is asking not to see, so it holds
        still and simply shows the next match instead of losing the information — the
@@ -1602,7 +1639,7 @@
       <div style="height:14px"></div>
       <label class="field">Bot strategy</label>
       <div class="opts" id="botPlans"></div>
-      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits, how hard they hunt the ball back, and what each player looks for when they kick. Every strategy is available at every difficulty, and <b>Difficulty</b> still decides how good the bots are within whichever one you pick. The shapes are not all equally effective, though &mdash; the same as in the real game, a deep defensive side is hard to beat and an all-out attacking one leaves gaps &mdash; so treat this as picking an opponent, not a slider. <b>Standard</b> is the stock AI and the default. <b>Mixed</b> deals each side its own strategy at kickoff, so a run of matches is a run of different opponents.</div>
+      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits and how hard they press. Difficulty still decides how good they are. ⚠️ The shapes are <b>not equally effective</b>, so this is picking an opponent rather than turning a dial.</div>
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
@@ -1693,7 +1730,7 @@
          sticky thing now, and the sticky stack reads KICK OFF → chips → section headers. -->
     <div id="jumpBar"></div>
     <div class="card collapsible collapsed" data-sec="more">
-      <h2>More</h2>
+      <h2>Modes &amp; more</h2>
     <div class="navgroup">
       <div class="navlab">Play</div>
       <div class="navgrid">
@@ -2121,7 +2158,7 @@
       <div id="cocktailRows"></div>
       <button class="ghost" id="cocktailReset" style="margin-top:10px">Reset all to Bottom</button>
     </div>
-    <button class="ghost" id="cocktailBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="cocktailBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== DRILLS LIST ===================== -->
@@ -2131,7 +2168,7 @@
       <h2>Choose a drill</h2>
       <div class="opts" id="drillList"></div>
     </div>
-    <button class="ghost" id="drillsBack">← Back</button>
+    <button class="ghost backbtn" id="drillsBack">← Back</button>
   </div>
 
   <!-- ===================== CAREER STATS ===================== -->
@@ -2154,7 +2191,7 @@
       <h2>Maps rated <small id="mapVoteSub" style="color:var(--muted);font-weight:400"></small></h2>
       <div id="mapVoteList"></div>
     </div>
-    <button class="ghost" id="statsBack" style="margin-top:8px">← Back</button>
+    <button class="ghost backbtn" id="statsBack" style="margin-top:8px">← Back</button>
   </div>
 
   <!-- ===================== SEASON / CUP ===================== -->
@@ -2166,7 +2203,7 @@
     </div>
     <button class="primary" id="seasonPlay">Start ▶</button>
     <button class="ghost" id="seasonReset" style="margin-top:12px">Restart cup</button>
-    <button class="ghost" id="seasonBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="seasonBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== TOURNAMENT ===================== -->
@@ -2174,20 +2211,44 @@
     <div class="logo"><h1 style="font-size:30px">TOURNAMENT</h1><p id="cupSub">Single elimination</p></div>
     <div class="card" id="cupSetupCard">
       <h2>Teams</h2>
-      <label class="field">How many</label>
-      <div class="opts" id="cupSizePick"></div>
-      <div class="hint" style="text-align:left">Drag a country to move it. Where a team sits is who it meets — the top two play each other, then the next two, and so on down. Locking the bracket is what starts the tournament; unlocking it again clears the results.</div>
+      <label class="field">Who is in it</label>
+      <div class="opts" id="cupKindPick"></div>
+      <div id="cupSizeBox">
+        <label class="field">How many</label>
+        <div class="opts" id="cupSizePick"></div>
+      </div>
+      <!-- People only: type a name, or tap somebody the machine already knows. -->
+      <div id="cupAddBox" style="display:none">
+        <label class="field">Add a player</label>
+        <div class="cupaddrow">
+          <input id="cupAddName" type="text" autocomplete="off" spellcheck="false" placeholder="Name" maxlength="12">
+          <button class="ghost" id="cupAddBtn" type="button">Add</button>
+        </div>
+        <div id="cupSuggest"></div>
+      </div>
+      <div class="hint" style="text-align:left" id="cupSetupHint">Drag a country to move it. Where a team sits is who it meets &mdash; the top two play each other, then the next two, and so on down. Locking the bracket is what starts the tournament; unlocking it again clears the results.</div>
       <div id="cupTeamList"></div>
       <button class="ghost" id="cupShuffle" type="button">↻ Randomise the draw</button>
     </div>
     <div class="card" id="cupBracketCard">
       <h2>Bracket <small id="cupWinNote" style="color:var(--muted);font-weight:400"></small></h2>
-      <div class="hint" style="text-align:left">Tap any match that is ready to play it — you do not have to go in order.</div>
+      <div class="hint" style="text-align:left">Tap any match that is ready to play. If somebody drops out, <b>Swap a team in</b> replaces them and the replacement inherits their results.</div>
       <div id="cupBracket"></div>
+      <button class="ghost" id="cupSwapBtn" type="button" style="margin-top:10px">&#8646; Swap a team in</button>
+      <div id="cupSwapBox" style="display:none">
+        <label class="field">Who is out</label>
+        <div id="cupSwapOut" class="cupchips"></div>
+        <label class="field">Who takes their place</label>
+        <div id="cupSwapIn" class="cupchips"></div>
+        <div id="cupSwapAdd" class="cupaddrow" style="display:none">
+          <input id="cupSwapName" type="text" autocomplete="off" spellcheck="false" placeholder="Or a new name" maxlength="12">
+          <button class="ghost" id="cupSwapNameBtn" type="button">Swap in</button>
+        </div>
+      </div>
     </div>
     <button class="primary" id="cupPlay">Lock the bracket ▶</button>
     <button class="ghost" id="cupUnlock" style="margin-top:12px">↶ Unlock — change the draw</button>
-    <button class="ghost" id="cupBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="cupBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ⚠️ THE CARD BETWEEN MATCHES. Two countries, big, for a few seconds — it is the beat
@@ -2213,7 +2274,7 @@
       </h2>
       <div id="lbList"></div>
     </div>
-    <button class="ghost" id="lbBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="lbBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== SHOP ===================== -->
@@ -2240,14 +2301,14 @@
            paragraph above already says everything it said, and a button that cannot be
            pressed reads as a broken page rather than as an honest one. -->
     </div>
-    <button class="ghost" id="shopBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="shopBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== ROGUELIKE / GAUNTLET ===================== -->
   <div id="rogue" class="screen hidden">
     <div class="logo"><h1 style="font-size:26px">GAUNTLET</h1><p id="rogueSub">Roguelike run · climb as deep as you can</p></div>
     <div class="card"><div id="rogueBody"></div></div>
-    <button class="ghost" id="rogueBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="rogueBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== SOCIAL / WATCH (Instagram-style feed) ===================== -->
@@ -2262,7 +2323,7 @@
          do between matches, not with one frozen behind the overlay. -->
     <button class="ghost" id="repLoadBtn" style="margin-top:12px">⤒ Load replay (.json)</button>
     <div class="hint" style="text-align:left; margin-top:6px">Opens a saved replay, of one goal or of a whole match. It is the match data rather than a video — plain JSON — so it plays at your screen’s size and in whatever theme you are using now, and you can open it in any text editor.</div>
-    <button class="ghost" id="socialBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="socialBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== CONTROLLER CONFIG ===================== -->
@@ -2287,7 +2348,7 @@
       <div class="hint" style="text-align:left">MAME's own defaults, so a cabinet wired with any keyboard encoder works with no setup. Bound to the physical switch rather than the printed character, so the numpad stick and the coin keys never collide and the layout the machine is set to does not matter.</div>
     </div>
     <button class="ghost" id="arcadeClear" style="margin-top:12px">Reset the counters</button>
-    <button class="ghost" id="arcadeBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="arcadeBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ============================================================
@@ -2348,7 +2409,7 @@
     <button id="mapPlay" style="margin-top:12px">Play this field</button>
     <button class="ghost" id="mapSaveNew" style="margin-top:12px">Save as a new field</button>
     <button class="ghost" id="mapDelete" style="margin-top:12px">Delete this field</button>
-    <button class="ghost" id="mapBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="mapBack" style="margin-top:12px">← Back</button>
   </div>
 
   <div id="padConfig" class="screen hidden">
@@ -2369,7 +2430,7 @@
     </div>
     <button class="primary" id="padRebindAll">Rebind all ▶</button>
     <button class="ghost" id="padReset" style="margin-top:12px">Reset to default</button>
-    <button class="ghost" id="padCfgBack" style="margin-top:12px">← Back</button>
+    <button class="ghost backbtn" id="padCfgBack" style="margin-top:12px">← Back</button>
   </div>
 
   <!-- ===================== HOW TO PLAY ===================== -->
@@ -2390,7 +2451,7 @@
       <p style="margin-top:12px"><b>🤚 One hand.</b> Game Feel → <b>One-handed</b>. Letting go of the movement stick shoots where you were heading, so you can play with one thumb. The KICK button still works.</p>
       <p style="margin-top:12px"><b>⚙ Settings elsewhere.</b> Display → <b>Settings location</b> → Separate tab moves every setting to <code>/settings</code> and leaves this page all game. Both stay in sync live, and that tab shows a running readout of ball and player speed.</p>
     </div>
-    <button class="ghost" id="howBack">← Back</button>
+    <button class="ghost backbtn" id="howBack">← Back</button>
   </div>
 
   <!-- ===================== OVERLAY (pause / result) ===================== -->
@@ -3296,7 +3357,7 @@ const STRINGS = {
   'How to play': ['Cómo jugar', 'Comment jouer', 'Spielanleitung', 'Como jogar', 'Come si gioca'],
   'Settings': ['Ajustes', 'Réglages', 'Einstellungen', 'Definições', 'Impostazioni'],
   'Record': ['Récord', 'Bilan', 'Bilanz', 'Recorde', 'Record'],
-  'More': ['Más', 'Plus', 'Mehr', 'Mais', 'Altro'],
+  'Modes & more': ['Modos y más', 'Modes et plus', 'Modi und mehr', 'Modos e mais', 'Modi e altro'],
   'Play': ['Jugar', 'Jouer', 'Spielen', 'Jogar', 'Gioca'],
   'Progress': ['Progreso', 'Progression', 'Fortschritt', 'Progresso', 'Progressi'],
   'Help': ['Ayuda', 'Aide', 'Hilfe', 'Ajuda', 'Aiuto'],
@@ -3747,6 +3808,21 @@ const BOT_GLYPH = '\ud83e\udd16';
 // ⚠️ Declared beside `teamColOf` rather than down with the tournament code, because this
 // is the function that reads it and it runs during the bootstrap. Sixteenth TDZ bite.
 let matchTeamCol = null;
+// The player's own match size, borrowed for the length of a PEOPLE tie (one person a
+// side, so 1v1). ⚠️ Restored in `cupEnd` rather than by whoever set it, exactly the
+// argument `matchTeamCol` above makes: walking out to the menu mid-tie is the path with
+// nobody left to remember, so `startMatch` puts it back too and the next ordinary match
+// is the size you actually chose.
+// ⚠️ Declared HERE beside `matchTeamCol`, not down with the tournament code, because
+// `startMatch` reads `_cupStarting` and runs during the bootstrap — a `let` two-thirds of
+// the way down the file is in the temporal dead zone from there, and `typeof` does not
+// save you on a `let`. **Seventeenth TDZ bite in this file.**
+let cupModeWas = null;
+let _cupStarting = false;      // true only while startCupMatch is inside startMatch
+function cupRestoreMode(){
+  if (cupModeWas == null) return;
+  sel.mode = cupModeWas; cupModeWas = null;
+}
 function teamColOf(team){
   const i = team ? 1 : 0;
   if (matchTeamCol && matchTeamCol[i]) return matchTeamCol[i];
@@ -4269,7 +4345,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0340PM';
+const VERSION = '20260817.0705PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4285,6 +4361,19 @@ const VERSION = '20260817.0340PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260817.0705PM', title: 'A bracket of people',
+    added: [
+      '<b>The tournament can be a bracket of PEOPLE instead of countries.</b> Type everybody in, or tap a name the machine already knows from Your record, and play down the tree. Any number from two upwards \u2014 the bracket grows to the next size and whoever is left over gets a bye through the first round.',
+      '<b>Swap a team in, mid-tournament.</b> Somebody wins a tie and then has to leave: put a replacement in their place and they inherit the whole run, so a side that won a semi-final and went home is replaced by the side that plays the final. Unlocking the draw still clears the results; this does not.',
+    ],
+    changed: [
+      '<b>A tournament tie is one player a side, so there are no bots filling the pitch.</b> A tie is two entrants \u2014 two people, or two countries somebody is playing as \u2014 so at your usual match size it was coming out as one human beside a row of robots. Your own match size comes straight back afterwards.',
+      'The tournament ticker is <b>bigger and scrolls a good deal slower</b>, so it can be read from across a room rather than from a phone in your hand.',
+      '<b>Reset all settings</b> no longer follows you down the menu. It, and a handful of other buttons at the foot of a page, were pinned to the bottom of the screen at all times \u2014 only the \u2190 Back button does that now.',
+      'The <b>More</b> card is called <b>Modes &amp; more</b>, which is what is in it.',
+      'The bot-strategy help text is a third of the length it was.',
+    ],
+    fixed: 'The team-size stepper in a warm-up lobby could be raised and never lowered. Plus a handful of smaller fixes.' },
   { v: '20260817.0340PM', title: 'Match history, and six languages',
     added: [
       '<b>A match history.</b> Every match you finish is now listed on the Career screen — the score, who played, what it was worth, how long ago — newest first, with a form guide across the top. It is the one place that says what happened rather than a running total.',
@@ -10216,6 +10305,13 @@ $('cupPlay').onclick = () => {
 };
 $('cupUnlock').onclick = () => { cupLock(false); buildCupScreen(); };
 $('cupShuffle').onclick = () => { cupShuffle(); buildCupScreen(); };
+$('cupSwapBtn').onclick = () => {
+  const bx = $('cupSwapBox'); if (!bx) return;
+  const open = bx.style.display === 'none';
+  bx.style.display = open ? '' : 'none';
+  cupSwapPick = null;
+  if (open) buildCupSwap();
+};
 $('lbBtn').onclick = openLeaderboard;
 $('statsBtn').onclick = openStats;
 // ⚠️ Arms then confirms, like every other delete here: it cannot be undone and the button
@@ -11633,30 +11729,95 @@ const CUP = {
   sizes: [4, 8, 16],
   flash: 3.5,        // seconds of the between-matches card before warm-up
   ticker: 12,        // seconds the news ticker runs once a match starts
+  maxPeople: 16,     // the biggest bracket, so the biggest roster
+  nameMax: 12,       // same cap the lobby keyboard and the name book use
 };
+// ============================================================
+//  A BRACKET OF PEOPLE
+// ============================================================
+// ⚠️ **THIS IS WHAT THE TOURNAMENT IS FOR IN A ROOM.** Countries are the demo — the thing
+// that makes a bracket legible on a first run — but the game is local multiplayer, the
+// lobby already lets you spell your name with your feet, and `NAMEBOOK` already keeps a
+// record per name. Eight people at a party, one tie each, names on the tree is the
+// version of this feature people actually use.
+//
+// ⚠️ **AN ENTRANT IS AN ID, and the KIND decides how to read it.** `cup.teams` (country
+// keys) and `cup.people` (names) are kept as two separate rosters rather than one list
+// that changes meaning, so switching kinds does not destroy the other draw — and
+// everything downstream (`cupMatches`, `cupUndo`, `cupNext`, the bracket renderer, the
+// ticker, the flash card) works on ids and never needs to know which it is holding.
+const CUPKIND = {
+  country: { name:'Countries', icon:'globe',  emoji:'\ud83c\udf0d' },
+  people:  { name:'People',    icon:'people', emoji:'\ud83d\udc65' },
+};
+function cupIsPeople(){ return cup.kind === 'people'; }
+function cupRoster(){ return (cupIsPeople() ? cup.people : cup.teams) || []; }
+function cupSetRoster(a){ if (cupIsPeople()) cup.people = a; else cup.teams = a; }
 function cupTeam(k){ return CUP_TEAMS.find(t => t.flag === k) || null; }
+// ⚠️ A PERSON'S COLOUR COMES FROM THEIR SEED, not from a hash of their name. A hash can
+// collide, and two entrants drawn against each other in the same colour is the one thing
+// a shirt has to prevent; a seed index cannot collide inside one round of eight. Where a
+// 16-bracket does wrap round, `cupDress` shifts the second side — see there.
+function cupPersonCol(id){
+  const i = Math.max(0, cupRoster().indexOf(id));
+  return TEAM_COLS[i % TEAM_COLS.length].col;
+}
+// The one place an id becomes something you can draw. Everything else asks this.
+function cupEntrant(id){
+  if (!id) return null;
+  if (cupIsPeople()) return { id, name: id, col: cupPersonCol(id), flag: null };
+  const t = cupTeam(id);
+  return t ? { id, name: t.name, col: t.col, flag: t.flag } : null;
+}
 function loadCup(){ try { return JSON.parse(localStorage.getItem(CUP.key)||'{}'); } catch(e){ return {}; } }
 function saveCup(){ try { localStorage.setItem(CUP.key, JSON.stringify(cup)); } catch(e){} }
 // `teams` is the seeding, top to bottom. `won` is one entry per match, in the same flat
 // order `cupMatches` produces, holding 0 or 1 for which SIDE of that match went through.
-let cup = Object.assign({ size:8, teams:[], locked:false, won:[], cups:0 }, loadCup());
+let cup = Object.assign({ kind:'country', size:8, teams:[], people:[], locked:false, won:[], cups:0 }, loadCup());
+// ⚠️ An older save has no `kind` and no `people`; both are folded in by the Object.assign
+// above, so a bracket somebody left half-played still opens as the country bracket it was.
+if (!CUPKIND[cup.kind]) cup.kind = 'country';
+if (!Array.isArray(cup.people)) cup.people = [];
 // ⚠️ THE BRACKET IS DERIVED, never stored. Storing the tree as well as the results is two
 // places to keep in step, and the second one goes stale the moment a result is undone —
 // which is exactly what the unlock button does. `won` is the only state a match writes.
-function cupRounds(){ return Math.max(1, Math.round(Math.log2(cup.size || 8))); }
+// ⚠️ THE SIZE IS DERIVED FOR PEOPLE and chosen for countries. A party has however many
+// people it has — five is as likely as eight — so the bracket is the next power of two up
+// and the empty slots become byes. Countries keep a picker, because there the pool is
+// arbitrary and the SIZE is the thing you are choosing.
+function cupSize(){
+  if (!cupIsPeople()) return cup.size || 8;
+  const n = cupRoster().length;
+  let s = 2; while (s < n) s *= 2;
+  return Math.min(CUP.maxPeople, Math.max(2, s));
+}
+function cupRounds(){ return Math.max(1, Math.round(Math.log2(cupSize()))); }
 function cupMatches(){
   const out = [];
-  let slots = (cup.teams || []).slice(0, cup.size);
+  let slots = (cupRoster() || []).slice(0, cupSize());
+  while (slots.length < cupSize()) slots.push(null);      // the empty seats are byes
   let mi = 0;
   for (let r = 0; r < cupRounds(); r++){
     const next = [];
     for (let i = 0; i < slots.length; i += 2){
       const a = slots[i], b = slots[i+1];
       const w = cup.won[mi];
-      out.push({ i: mi, round: r, seat: i/2, a, b,
-                 ready: !!a && !!b, done: w === 0 || w === 1,
-                 winner: w === 0 ? a : w === 1 ? b : null });
-      next.push(w === 0 ? a : w === 1 ? b : null);
+      // ⚠️ A BYE — one side present, the other empty — GOES THROUGH WITHOUT A MATCH, and
+      // that is what lets any number of people enter at all. It is deliberately not
+      // stored in `won`: the bracket stays derived, so adding a ninth person to a
+      // seven-person draw silently un-byes whoever was walking the first round, which is
+      // exactly what should happen.
+      // ⚠️ **ROUND ZERO ONLY**, and getting this wrong is not subtle. In round 0 an empty
+      // seat means an entrant who never existed; in every later round it means the match
+      // feeding that seat HAS NOT BEEN PLAYED YET. Applied everywhere, winning your semi
+      // walked you straight past the final and the screen announced you as champion with
+      // half the bracket unplayed. Both seats empty is a slot nobody reached and
+      // propagates as empty either way.
+      const bye = cupIsPeople() && r === 0 && !!a !== !!b;
+      const winner = bye ? (a || b) : (w === 0 ? a : w === 1 ? b : null);
+      out.push({ i: mi, round: r, seat: i/2, a, b, bye,
+                 ready: !!a && !!b, done: bye || w === 0 || w === 1, winner });
+      next.push(winner);
       mi++;
     }
     slots = next;
@@ -11679,6 +11840,12 @@ function cupRoundName(r){
 // Fill the seeding to the chosen size. ⚠️ Keeps whatever order is already there — the
 // whole point of the drag-and-drop is that your arrangement survives a size change.
 function cupFill(){
+  // ⚠️ People are not filled from a pool — there is no pool, the roster IS the entrants.
+  // It is only trimmed to the biggest bracket on offer.
+  if (cupIsPeople()){
+    cup.people = (cup.people || []).filter(Boolean).slice(0, CUP.maxPeople);
+    return;
+  }
   const want = cup.size;
   const have = (cup.teams || []).filter(k => cupTeam(k));
   const out = [];
@@ -11690,7 +11857,7 @@ function cupFill(){
 // button on a menu, never from inside `step()`.
 function cupShuffle(){
   cupFill();
-  const a = cup.teams;
+  const a = cupRoster();
   for (let i = a.length - 1; i > 0; i--){ const j = (Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; }
   saveCup();
 }
@@ -11703,6 +11870,40 @@ function cupLock(on){
   saveCup();
 }
 function cupReset(){ cup.won = []; saveCup(); }
+// ============================================================
+//  SWAPPING A TEAM IN, MID-TOURNAMENT
+// ============================================================
+// ⚠️ **THE RESULTS SURVIVE, AND THAT IS THE WHOLE POINT.** Somebody wins a tie and then
+// has to leave — a country you want to drop, a person who is going home — and you want
+// their replacement to inherit the run rather than start the draw again. Unlock already
+// exists for "arrange it differently", and it CLEARS the results by design; this is the
+// opposite operation and it keeps every one of them.
+//
+// ⚠️ It is nearly free, and the reason is a decision made three features ago: `cup.won`
+// stores which SIDE went through, never which entrant. So swapping an id in the seeding
+// re-reads the whole tree with the new name in it — England's semi-final win becomes
+// France's — and not a line of bracket maths has to know this happened.
+//
+// ⚠️ **REACHABLE WHILE LOCKED**, unlike every other edit here. A substitution is a
+// mid-tournament event; offering it only on the unlocked draw would mean unlocking to use
+// it, which throws away the results it exists to preserve.
+function cupAvailable(){
+  const inDraw = new Set(cupRoster().map(x => String(x).toLowerCase()));
+  if (cupIsPeople())
+    return (typeof nameBookTable === 'function' ? nameBookTable() : [])
+      .map(r => r.name).filter(n => !inDraw.has(String(n).toLowerCase()));
+  return CUP_TEAMS.map(t => t.flag).filter(k => !inDraw.has(k.toLowerCase()));
+}
+function cupReplace(oldId, newId){
+  const a = cupRoster().slice();
+  const i = a.indexOf(oldId);
+  if (i < 0 || !newId || oldId === newId) return false;
+  // ⚠️ Never twice in one draw — a bracket with the same name in two seats is one nobody
+  // can read, and the same rule `cupAddPerson` applies to a new entrant.
+  if (a.some(x => String(x).toLowerCase() === String(newId).toLowerCase())) return false;
+  a[i] = newId; cupSetRoster(a); saveCup();
+  return true;
+}
 // ⚠️ UNDO ONE TIE, and it clears that tie's DESCENDANTS ONLY — not "everything in a later
 // round". Unlock already exists for "start the draw again"; what this is for is the tie
 // somebody played by mistake, or on the wrong settings, or that ended 9-0 because a
@@ -11749,7 +11950,32 @@ function cupFlagCanvas(key, px){
   cv.style.width = px + 'px'; cv.style.height = px + 'px';
   return cv;
 }
-function cupName(k){ const t = cupTeam(k); return t ? t.name : (FLAGS[k] ? FLAGS[k].name : '—'); }
+function cupName(k){
+  const e = cupEntrant(k);
+  if (e) return e.name;
+  return FLAGS[k] ? FLAGS[k].name : '—';
+}
+// ⚠️ A PERSON HAS NO FLAG, so they get the one mark that works at 18px and identifies
+// them the way the pitch will: their shirt colour, with their initial knocked out of it.
+// Deliberately not their profile faceplate — only the device's owner has one, so eight
+// entrants would be one photo and seven blanks.
+function cupBadge(k, px){
+  if (!cupIsPeople()) return cupFlagCanvas(k, px);
+  const e = cupEntrant(k);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px * 2;
+  const c = cv.getContext('2d');
+  c.save(); c.translate(px, px);
+  c.beginPath(); c.arc(0, 0, px * 0.94, 0, Math.PI * 2);
+  c.fillStyle = (e && e.col) || '#7f8aa0'; c.fill();
+  c.fillStyle = readableInk('#ffffff', (e && e.col) || '#7f8aa0', 3);
+  c.font = (px * 1.05) + 'px ' + LOBBY_FONT;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(String((e && e.name) || '?').trim().slice(0, 1).toUpperCase(), 0, px * 0.06);
+  c.restore();
+  cv.style.width = px + 'px'; cv.style.height = px + 'px';
+  return cv;
+}
 function buildCupScreen(){
   const setup = $('cupSetupCard'), brack = $('cupBracketCard');
   if (!setup || !brack) return;
@@ -11762,18 +11988,57 @@ function buildCupScreen(){
   $('cupPlay').textContent = !cup.locked ? 'Lock the bracket \u25b6'
     : champ ? '\ud83c\udfc6 ' + cupName(champ) + ' win \u2014 play again'
     : nx ? 'Play \u00b7 ' + cupName(nx.a) + ' v ' + cupName(nx.b) : 'Bracket complete';
+  const n = cupRoster().length;
   $('cupSub').textContent = cup.locked
     ? (champ ? 'Champion: ' + cupName(champ) : cupRoundName(nx ? nx.round : 0))
-    : 'Single elimination \u00b7 ' + cup.size + ' teams';
+    : cupIsPeople()
+      // ⚠️ Counted off the MATCHES, not off the empty seats. Five people in an eight
+      // bracket leaves three seats empty but hands out exactly ONE bye — the other two
+      // empties pair with each other and are a slot nobody reaches. Saying "3 byes" is a
+      // promise to two people that they are walking the first round, and they are not.
+      ? (n < 2 ? 'Add at least two people' : (() => {
+          const byes = cupMatches().filter(m => m.bye).length;
+          return n + ' in, ' + cupSize() + '-team bracket'
+               + (byes ? ' \u00b7 ' + byes + ' bye' + (byes === 1 ? '' : 's') : ''); })())
+      : 'Single elimination \u00b7 ' + cupSize() + ' teams';
   $('cupWinNote').textContent = cup.cups > 0 ? '\u00b7 \ud83c\udfc6 \u00d7' + cup.cups : '';
+  // ⚠️ You cannot lock a bracket with nobody in it. The button says why rather than
+  // being disabled — a dead control is a promise the page cannot keep.
+  $('cupPlay').disabled = false;
+  if (!cup.locked && cupIsPeople() && n < 2)
+    $('cupPlay').textContent = 'Add two people to start';
+  { const sb = $('cupSwapBtn'), bx = $('cupSwapBox');
+    if (sb) sb.style.display = cup.locked ? '' : 'none';
+    if (bx && !cup.locked){ bx.style.display = 'none'; cupSwapPick = null; }
+    if (bx && bx.style.display !== 'none') buildCupSwap(); }
   if (cup.locked) buildCupBracket(); else buildCupTeams();
 }
 // ⚠️ The size tiles go through `buildOpts`' own shape rather than being hand-rolled, so
 // they get the same look, the same 44px target and the same icon fallback as every other
 // picker in the menu.
 function buildCupTeams(){
+  // Who is in it: countries or the people in the room.
+  { const kp = $('cupKindPick');
+    if (kp){ kp.innerHTML = '';
+      for (const k of Object.keys(CUPKIND)){
+        const el = document.createElement('div');
+        el.className = 'opt' + (cup.kind === k ? ' sel' : '');
+        el.innerHTML = optGlyph(CUPKIND[k]) + '<span>' + CUPKIND[k].name + '</span>';
+        el.onclick = () => { cup.kind = k; cupFill(); saveCup(); buildCupScreen(); };
+        kp.appendChild(el);
+      }
+    } }
+  // ⚠️ The size picker is HIDDEN for people rather than shown and ignored: there the size
+  // is derived from how many entered (see `cupSize`), so a control claiming otherwise
+  // would be a lie you can press.
+  const people = cupIsPeople();
+  { const sizeBox = $('cupSizeBox'); if (sizeBox) sizeBox.style.display = people ? 'none' : ''; }
+  { const addBox = $('cupAddBox'); if (addBox) addBox.style.display = people ? '' : 'none'; }
+  { const hint = $('cupSetupHint'); if (hint) hint.textContent = people
+      ? 'Everybody plays one match at a time — where somebody sits is who they meet. Any number from two upwards: the bracket grows to the next size up and whoever is left over gets a bye through the first round. Names are kept with their record in Your record.'
+      : 'Drag a country to move it. Where a team sits is who it meets \u2014 the top two play each other, then the next two, and so on down. Locking the bracket is what starts the tournament; unlocking it again clears the results.'; }
   const pick = $('cupSizePick');
-  if (pick){
+  if (pick && !people){
     pick.innerHTML = '';
     for (const n of CUP.sizes){
       const el = document.createElement('div');
@@ -11784,19 +12049,32 @@ function buildCupTeams(){
       pick.appendChild(el);
     }
   }
+  if (people) buildCupAdd();
   const host = $('cupTeamList'); if (!host) return;
   host.innerHTML = '';
   // ⚠️ DRAG AND DROP with HTML5 dragging AND a touch fallback. `draggable` alone does
   // nothing on a phone, and the whole point of reordering is arranging a draw before
   // people sit down — which is a thing you do on whatever is to hand.
   let from = -1;
-  cup.teams.forEach((k, i) => {
+  cupRoster().forEach((k, i) => {
     const row = document.createElement('div');
     row.className = 'cuprow'; row.draggable = true; row.dataset.i = i;
     const seed = document.createElement('span'); seed.className = 'cupseed'; seed.textContent = (i+1) + '.';
     const nm = noI18n(document.createElement('b')); nm.style.fontWeight = '400'; nm.textContent = cupName(k);
     const grip = document.createElement('span'); grip.className = 'cuphandle'; grip.textContent = '\u2261';
-    row.append(seed, cupFlagCanvas(k, 24), nm, grip);
+    row.append(seed, cupBadge(k, 24), nm);
+    // ⚠️ People can be REMOVED, countries cannot — the country pool is fixed and reordering
+    // is the only edit there, but a roster of people is one somebody is still typing.
+    if (people){
+      const x = document.createElement('button');
+      x.className = 'cupx'; x.type = 'button'; x.textContent = '\u00d7';
+      x.title = 'Remove'; x.setAttribute('aria-label', 'Remove ' + cupName(k));
+      x.onclick = e => { e.stopPropagation();
+        cup.people = cup.people.filter(p => p !== k); saveCup(); buildCupScreen(); };
+      x.ondragstart = e => e.preventDefault();
+      row.appendChild(x);
+    }
+    row.append(grip);
     row.ondragstart = e => { from = i; row.classList.add('drag'); try { e.dataTransfer.setData('text/plain', String(i)); } catch(_){} };
     row.ondragend = () => { row.classList.remove('drag'); host.querySelectorAll('.cuprow').forEach(r => r.classList.remove('over')); };
     row.ondragover = e => { e.preventDefault(); row.classList.add('over'); };
@@ -11815,8 +12093,109 @@ function buildCupTeams(){
 }
 function cupMove(from, to){
   if (from < 0 || to < 0 || from === to) return;
-  const a = cup.teams; const [t] = a.splice(from, 1); a.splice(to, 0, t);
+  const a = cupRoster().slice(); const [t] = a.splice(from, 1); a.splice(to, 0, t);
+  cupSetRoster(a);
   saveCup(); buildCupScreen();
+}
+// ⚠️ ADDING A PERSON: type a name, or tap one the machine already knows. The name book is
+// the obvious source — it is every name that has finished a match here — so a party that
+// has played before does not have to be typed in twice.
+function cupAddPerson(raw){
+  const nm = String(raw || '').replace(/[<>&]/g, '').trim().slice(0, CUP.nameMax);
+  if (!nm) return false;
+  // Case-insensitively unique, the same rule `nameKey` uses: "kai" and "Kai" are one
+  // person at a cabinet, and a bracket with both is a bracket nobody can read.
+  const k = nm.toLowerCase();
+  if ((cup.people || []).some(p => String(p).toLowerCase() === k)) return false;
+  if ((cup.people || []).length >= CUP.maxPeople) return false;
+  cup.people.push(nm); saveCup();
+  return true;
+}
+function buildCupAdd(){
+  const inp = $('cupAddName'), btn = $('cupAddBtn'), sugg = $('cupSuggest');
+  if (!inp || !btn) return;
+  const add = () => { if (cupAddPerson(inp.value)){ inp.value = ''; buildCupScreen();
+                                                    const f = $('cupAddName'); if (f) f.focus(); } };
+  btn.onclick = add;
+  inp.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); add(); } };
+  inp.maxLength = CUP.nameMax;
+  if (!sugg) return;
+  sugg.textContent = '';
+  // Everyone this machine knows who is not already in the draw, best record first.
+  const inDraw = new Set((cup.people || []).map(p => String(p).toLowerCase()));
+  const rows = (typeof nameBookTable === 'function' ? nameBookTable() : [])
+    .filter(r => !inDraw.has(String(r.name).toLowerCase())).slice(0, 12);
+  if (!rows.length) return;
+  const lab = document.createElement('div');
+  // ⚠️ `flex:0 0 100%` — the suggestion row is a WRAPPING flex box, so without it this
+  // label becomes the first chip and the names run on from the end of the sentence.
+  lab.className = 'hint always';
+  lab.style.cssText = 'text-align:left;margin:6px 0 4px;flex:0 0 100%';
+  lab.textContent = 'Played here before \u2014 tap to add:';
+  sugg.appendChild(lab);
+  for (const r of rows){
+    const b2 = noI18n(document.createElement('button'));
+    b2.className = 'ghost mini cupsugg'; b2.type = 'button'; b2.textContent = r.name;
+    b2.onclick = () => { if (cupAddPerson(r.name)) buildCupScreen(); };
+    sugg.appendChild(b2);
+  }
+}
+// ⚠️ Which entrant is picked as "out". Module state and not a closure, because the panel
+// is rebuilt on every change and a selection has to survive its own redraw.
+let cupSwapPick = null;
+function cupSwapVisible(){ const b = $('cupSwapBox'); return !!b && b.style.display !== 'none'; }
+function buildCupSwap(){
+  const box = $('cupSwapBox'), outHost = $('cupSwapOut'), inHost = $('cupSwapIn');
+  if (!box || !outHost || !inHost) return;
+  const chip = (id, on, click) => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'cupchip' + (on ? ' sel' : '');
+    el.appendChild(cupBadge(id, 20));
+    const nm = noI18n(document.createElement('span')); nm.textContent = cupName(id);
+    el.appendChild(nm);
+    el.onclick = click;
+    return el;
+  };
+  outHost.textContent = '';
+  for (const id of cupRoster())
+    outHost.appendChild(chip(id, cupSwapPick === id,
+      () => { cupSwapPick = (cupSwapPick === id ? null : id); buildCupSwap(); }));
+  inHost.textContent = '';
+  const avail = cupAvailable();
+  if (!cupSwapPick){
+    const t = document.createElement('div');
+    t.className = 'cupchip none'; t.textContent = 'Pick who is leaving first';
+    inHost.appendChild(t);
+  } else if (!avail.length && !cupIsPeople()){
+    const t = document.createElement('div');
+    t.className = 'cupchip none'; t.textContent = 'Every country is already in the draw';
+    inHost.appendChild(t);
+  } else {
+    for (const id of avail)
+      inHost.appendChild(chip(id, false, () => {
+        if (cupReplace(cupSwapPick, id)){ cupSwapPick = null; buildCupScreen(); }
+      }));
+    if (cupIsPeople() && !avail.length){
+      const t = document.createElement('div');
+      t.className = 'cupchip none'; t.textContent = 'Nobody else on record \u2014 type a name';
+      inHost.appendChild(t);
+    }
+  }
+  // ⚠️ People can be somebody the machine has never seen, so the text field is there too.
+  // Countries cannot: the pool is the pool, and a typed country would have no flag.
+  const addRow = $('cupSwapAdd');
+  if (addRow){
+    addRow.style.display = cupIsPeople() && cupSwapPick ? '' : 'none';
+    const inp = $('cupSwapName'), btn = $('cupSwapNameBtn');
+    if (inp && btn){
+      const go = () => {
+        const nm = String(inp.value || '').replace(/[<>&]/g, '').trim().slice(0, CUP.nameMax);
+        if (nm && cupReplace(cupSwapPick, nm)){ inp.value = ''; cupSwapPick = null; buildCupScreen(); }
+      };
+      btn.onclick = go;
+      inp.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); go(); } };
+    }
+  }
 }
 // The bracket itself: one column a round, matches spread down it. ⚠️ Built from
 // `cupMatches()` — the same derived list the play flow uses — so the picture and the
@@ -11837,9 +12216,11 @@ function buildCupBracket(){
         const row = document.createElement('div');
         const won = m.done && ((m.winner === k));
         row.className = 'cupmr' + (!k ? ' tbd' : m.done ? (won ? ' win' : ' lose') : '');
-        const nm = document.createElement('b');
-        nm.textContent = k ? cupName(k) : 'TBD';
-        if (k) row.appendChild(cupFlagCanvas(k, 18));
+        const nm = noI18n(document.createElement('b'));
+        // ⚠️ An empty seat in a PEOPLE bracket is a bye, not a team still to be decided —
+        // saying TBD there promises a match that is never going to be played.
+        nm.textContent = k ? cupName(k) : (m.bye ? 'Bye' : 'TBD');
+        if (k) row.appendChild(cupBadge(k, 18));
         else { const sp = document.createElement('span'); sp.style.width = '18px'; row.appendChild(sp); }
         row.appendChild(nm);
         box.appendChild(row);
@@ -11877,8 +12258,27 @@ function buildCupBracket(){
 // from `lobbyStart`, because that is where the roster is actually settled — see there.
 function cupDress(w){
   if (!w || !w.cup) return;
-  matchTeamCol = [ (cupTeam(w.cup.a)||{}).col, (cupTeam(w.cup.b)||{}).col ];
-  const dress = p => { if (p) p.flag = p.team === 0 ? w.cup.a : w.cup.b; };
+  const A = cupEntrant(w.cup.a) || {}, B = cupEntrant(w.cup.b) || {};
+  let cb = B.col;
+  // ⚠️ THE TWO SIDES MAY NEVER BE THE SAME COLOUR. A person's shirt comes from their seed
+  // (see `cupPersonCol`), and in a 16-bracket seed 0 and seed 8 wrap onto the same one —
+  // so if the draw ever brings them together, the second side shifts. Checked here rather
+  // than when the colour is assigned, because it only matters for a PAIR.
+  if (cb && cb === A.col){
+    const i = TEAM_COLS.findIndex(t => t.col === cb);
+    cb = TEAM_COLS[(i + 1 + TEAM_COLS.length) % TEAM_COLS.length].col;
+  }
+  matchTeamCol = [ A.col, cb ];
+  // ⚠️ In a PEOPLE tie the entrant is a NAME, so the bodies take the name and no flag —
+  // the plate over a player has to say who is playing, which is the whole bracket. In a
+  // COUNTRY tie it is the flag and the name is left alone.
+  const people = cupIsPeople();
+  const dress = p => {
+    if (!p) return;
+    const e = p.team === 0 ? A : B;
+    if (people){ if (e.name) p.name = e.name; }
+    else p.flag = p.team === 0 ? w.cup.a : w.cup.b;
+  };
   w.players.forEach(dress);
   (w.bench || []).forEach(dress);
   applyTeamColours(w.players);
@@ -11888,9 +12288,21 @@ function startCupMatch(mi){
   const m = cupMatches().find(x => x.i === mi);
   if (!m || !m.ready || m.done) return;
   cupFlashThen(m, () => {
-    startMatch({ lobby: false });
+    // ⚠️ **A TOURNAMENT TIE IS 1v1, AND THAT IS HOW THE BOTS GO AWAY.** A tie is two
+    // entrants — two people, or two countries somebody is playing as — so a squad is the
+    // wrong shape for it: at the player's own 8v8 the pitch came out as one human beside
+    // SEVEN ROBOTS, facing eight more, which is not a match between two entrants at all.
+    // One body a side means the only bot that can ever exist is the opponent when you are
+    // playing the bracket on your own, and with two controllers there is none.
+    // ⚠️ Set on `sel` rather than on the world: `startMatch` reads `MODES[sel.mode]` to lay
+    // the roster out, so a size left standing there is a size that gets fielded. The
+    // player's own is put back at full time and by `startMatch` — see `cupModeWas`.
+    if (cupModeWas == null) cupModeWas = sel.mode;
+    sel.mode = '1v1';
+    _cupStarting = true;
+    try { startMatch({ lobby: false }); } finally { _cupStarting = false; }
     if (!world) return;
-    world.cup = { i: mi, a: m.a, b: m.b, round: m.round };
+    world.cup = { i: mi, a: m.a, b: m.b, round: m.round, people: cupIsPeople() };
     cupDress(world);
     // ⚠️ A LITE warm-up: sides and start, no keyboard and no colour swatches. In a
     // tournament you are playing AS a country, so a lobby offering to rename you and
@@ -11976,6 +12388,7 @@ function cupTickerStop(){ clearTimeout(cupTickerT); const el = $('cupTicker'); i
 function cupEnd(w){
   cupTickerStop();
   matchTeamCol = null;
+  cupRestoreMode();
   let delta = 0;
   if (!w.watch) delta = recordResult(w);
   const rp = delta ? `   ·   ${delta>0?'+':''}${delta} RP` : '';
@@ -12817,6 +13230,8 @@ function startMatch(opts){
   // every match afterwards when somebody walks out to the menu mid-tie. `cupDress`
   // re-sets it immediately after this returns.
   matchTeamCol = null;
+  // ...and the match size a people tie borrowed, for the same reason. See `cupModeWas`.
+  if (typeof cupRestoreMode === 'function' && !_cupStarting) cupRestoreMode();
   // `lobby:false` is "play now" — see tryKickOff. Everything else (a season round, a
   // drill, the attract demo, a rematch) keeps whatever `lobbyWanted` decides.
   const noLobby = !!(opts && opts.lobby === false);
@@ -15632,14 +16047,26 @@ function buildLobbyKeys(w){
   if (!lite) ctrl.forEach(([ch, label], i) =>
     raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
   const kbBot = lite ? top : top + K.rows.length*rowH + K.keyH;
-  const blockBot = kbBot + K.gap*2 + K.diff;      // the difficulty row goes in below
+  // ⚠️ Floored at two pads, so the stepper's `+` and `−` can never land ON TOP of each
+  // other. That is what happened the moment a lobby had no letters above them: the size
+  // could be raised and never lowered. The stepper is gone from a lite lobby now for a
+  // different reason (see below), which leaves this as the guard that stops the same
+  // collapse arriving with the next short layout.
+  const blockBot = Math.max(kbBot + K.gap*2 + K.diff, top + K.pad*2 + K.gap*3);
   // ⚠️ THE TEAM-SIZE STEPPER IS IN THE CORNER, not tucked against the letters. It is
   // not part of typing your name, and standing beside the board to change the match
   // size means never brushing a letter on the way. Bottom-right of the whole layout,
   // which is the one place nothing else wants.
+  // ⚠️ **NOT IN A TOURNAMENT.** A tie is two ENTRANTS, so its size is 1v1 by definition
+  // (see `startCupMatch`) — a stepper there is a control that can only put the robots back
+  // that the tie exists to keep off the pitch. It was also unusable in a lite lobby: with
+  // no letters and no swatches above it the block was shorter than two pads, so `+` and
+  // `−` landed on top of each other and the size could be raised and never lowered.
   const pu = across + K.side;
-  raw.push({ k: { act:  1, label: '+',      rep: true }, u: pu, v: top,                 du: K.pad, dv: K.pad });
-  raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: blockBot - K.pad, du: K.pad, dv: K.pad });
+  if (!lite){
+    raw.push({ k: { act:  1, label: '+',      rep: true }, u: pu, v: top,                 du: K.pad, dv: K.pad });
+    raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: blockBot - K.pad, du: K.pad, dv: K.pad });
+  }
   // ⚠️ COLOUR SWATCHES BESIDE EACH HALF — the half they are beside is the side they
   // dress. Walk out of the half you are standing on and the colours in front of you
   // are that team's, so "go over there, make that side blue; come back, make this side
@@ -15696,10 +16123,14 @@ function buildLobbyKeys(w){
                          R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
   // The readout's world point comes off the two stepper plates themselves rather than
   // being rebuilt from the local frame — one place that knows where they landed.
+  // The readout's world point comes off the two stepper plates themselves rather than
+  // being rebuilt from the local frame — one place that knows where they landed. ⚠️ Both
+  // are absent in a lite lobby, so this may not dereference them; `drawLobbyKeys` skips
+  // the readout when there is no stepper to put it between.
   const plus = keys.find(k => k.act === 1), minus = keys.find(k => k.act === -1);
-  w.kb = { keys, L, T, R, B, turned,
-           midX: (plus.x + plus.w/2 + minus.x + minus.w/2)/2,
-           midY: (plus.y + plus.h/2 + minus.y + minus.h/2)/2 };
+  w.kb = { keys, L, T, R, B, turned, stepper: !!(plus && minus),
+           midX: plus && minus ? (plus.x + plus.w/2 + minus.x + minus.w/2)/2 : 0,
+           midY: plus && minus ? (plus.y + plus.h/2 + minus.y + minus.h/2)/2 : 0 };
 }
 function kbKeyAt(kb, x, y){
   for (const k of kb.keys)
@@ -20271,6 +20702,7 @@ function drawLobbyKeys(w, ox, oy){
   // humans standing on a half, so the stored value and the fielded one can differ and
   // the readout has to be the one that comes true. Same rule the side counts follow.
   const per = lobbyPlan(w).per;
+  if (kb.stepper){
   const [mx, my] = screenPt(wx(kb.midX), wy(kb.midY));
   screenUpright(mx + ox, my + oy, (x, y) => {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -20281,6 +20713,7 @@ function drawLobbyKeys(w, ox, oy){
     ctx.fillStyle = T.hudSub || T.hudText;
     ctx.fillText('TEAM SIZE', x, y + 9);
   });
+  }
   // What it is for, once, above the block — nobody walks off the pitch expecting a
   // keyboard, so the row of letters has to introduce itself.
   // ⚠️ Placed off the block's SCREEN bounding box, not off a world point above it. The
@@ -24838,7 +25271,10 @@ if (window.__MAGNETDEBUG) {
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },
-    CUP, CUP_TEAMS, get cup(){ return cup; }, cupTeam, cupMatches, cupRounds, cupNext,
+    CUP, CUP_TEAMS, CUPKIND, get cup(){ return cup; }, cupTeam, cupMatches, cupRounds, cupNext,
+    cupIsPeople, cupRoster, cupEntrant, cupSize, cupBadge, cupAddPerson, cupPersonCol,
+    cupAvailable, cupReplace, buildCupSwap,
+    buildCupAdd, cupRestoreMode, get cupModeWas(){ return cupModeWas; },
     cupChampion, cupRoundName, cupFill, cupShuffle, cupLock, cupReset, cupUndo, cupMove,
     openCup, buildCupScreen, buildCupBracket, startCupMatch, cupEnd, cupTickerText,
     cupTickerStart, cupTickerStop, get matchTeamCol(){ return matchTeamCol; },

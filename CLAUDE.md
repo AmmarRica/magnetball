@@ -1364,6 +1364,42 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   clipping the box clips every line and leaves a grid of boxes and no tree. The bracket
   **scrolls sideways** rather than wrapping: 16 teams is four columns, which fits no phone,
   and wrapping destroys the one thing the picture is for.
+  ⚠️ **A BRACKET OF PEOPLE, not only countries** (`CUPKIND`, `cup.kind`, `cup.people`,
+  `cupRoster`, `cupEntrant`, `cupBadge`, `cupAddPerson`, `cupSize`). Countries make a
+  bracket legible on a first run; the game is local multiplayer, and the entrant people
+  want on the tree is each other. ⚠️ **AN ENTRANT IS AN ID and the KIND decides how to
+  read it** — `cupEntrant` is the one place that resolves one, so `cupMatches`, `cupUndo`,
+  `cupNext`, the renderer, the ticker and the flash card never learn there are two kinds.
+  ⚠️ **TWO ROSTERS kept side by side** (`cup.teams`, `cup.people`) rather than one list
+  that changes meaning, so switching kinds does not destroy the other draw.
+  ⚠️ **ANY NUMBER FROM TWO UPWARDS, with BYES** — a party has however many people it has,
+  and 4/8/16 only is a feature for the party that happens to number 4, 8 or 16. The size
+  is the next power of two and the empty seats walk their occupant through round one.
+  ⚠️ **A BYE IS ROUND ZERO ONLY**: there an empty seat is an entrant who never existed, in
+  every later round it is a match not yet played. Applied everywhere, winning your semi
+  walked you past the final and the screen crowned you with half the draw unplayed.
+  ⚠️ The header counts **byes, not empty seats** — five in an eight-bracket leaves three
+  seats empty and hands out exactly ONE bye, because two of them pair with each other.
+  ⚠️ A person's colour comes from their **seed index**, not a hash of their name (a hash
+  collides); where a 16-bracket wraps two seeds onto one colour, `cupDress` shifts the
+  second side, because it only matters for a PAIR.
+  ⚠️ A people bracket feeds `NAMEBOOK` **for free** — the bodies carry the entrants' names
+  and `recordResult` already files every human by name.
+  ⚠️ **A TIE IS ONE BODY A SIDE, AND THAT IS HOW THE BOTS GO AWAY.** A tie is two
+  entrants, so a squad is the wrong shape: at the player's own 8v8 it fielded one human
+  beside seven robots facing eight more. `startCupMatch` borrows `sel.mode` for 1v1 and
+  `cupModeWas` puts it back at full time and from `startMatch` — same argument
+  `matchTeamCol` makes, walking out to the menu being the path with nobody to remember.
+  ⚠️ Which is also why **the lite lobby has no team-size stepper**: the only thing it could
+  do is field the robots the tie exists to keep off. (It was unusable there anyway — with
+  no letters above them `+` and `−` landed on top of each other and the size could be
+  raised and never lowered. `blockBot` is floored at two pads so that cannot return.)
+  ⚠️ **SWAPPING A TEAM IN KEEPS THE RESULTS** (`cupReplace`, `cupAvailable`,
+  `buildCupSwap`), and it is nearly free because `cup.won` stores which SIDE went through
+  and never which entrant — so re-reading the tree with a new id in the seeding turns
+  England's semi-final win into France's. ⚠️ **Reachable while LOCKED**, unlike every other
+  edit here: a substitution is a mid-tournament event, and reaching it through Unlock would
+  clear the results it exists to preserve.
   ⚠️ Every entry in `CUP_TEAMS` needs a real `FLAGS` key — a missing one falls back to a
   grey square, which looks like a rendering bug and is really a team nobody can identify.
   `tests/cup.mjs`.

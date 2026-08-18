@@ -137,6 +137,9 @@ const r = await p.evaluate(async () => {
   // ---- 4. a tie: countries on the pitch -----------------------------------
   M.cup.size = 4; M.cupFill(); M.cup.won = []; M.cup.locked = true;
   const draw = M.cup.teams.slice();
+  // ⚠️ Deliberately a BIG mode, because the claim is that a tie ignores it: at 3v3 the
+  // pitch used to come out as one human beside two robots facing three more, which is not
+  // a match between two entrants.
   M.sel.mode = '3v3'; M.sel.lobby = 'touch'; M.sel.display = 'auto'; M.applyDisplayMode();
   M.sel.teamCol = ['#4fb45f', '#8a5ae0'];            // the PLAYER's own two colours
   M.startCupMatch(0);
@@ -152,10 +155,20 @@ const r = await p.evaluate(async () => {
   o.diffPads = w.kb ? w.kb.keys.filter(k => k.diff).length : -1;
   o.steppers = w.kb ? w.kb.keys.filter(k => k.act).length : -1;
   o.liteStripped = o.lite && o.letters === 0 && o.shirts === 0;
-  o.liteKeptMatchControls = o.diffPads > 0 && o.steppers === 2;
+  // ⚠️ THE TEAM-SIZE STEPPER IS GONE TOO, and that is not tidying: a tie is two ENTRANTS,
+  // so its size is 1v1 by definition — a stepper there is a control whose only power is to
+  // put back the robots the tie exists to keep off the pitch. It was also unusable in a
+  // lite lobby, where with no letters above them the `+` and `−` landed on top of each
+  // other and the size could be raised and never lowered. The bot-skill row STAYS: play
+  // the bracket on your own and the opponent is a bot, so how good it is still matters.
+  o.liteKeptBotSkill = o.diffPads > 0;
+  o.liteHasNoStepper = o.steppers === 0 && w.kb && w.kb.stepper === false;
   // ⚠️ AFTER the lobby — see the trap at the top of this file.
   M.lobbyStart(w);
   o.rosterN = w.players.length;
+  o.oneASide = w.players.filter(q => q.team === 0).length === 1
+            && w.players.filter(q => q.team === 1).length === 1;
+  o.modeDuringTie = M.sel.mode;
   o.flagsOnPitch = [...new Set(w.players.map(q => q.flag))].sort().join(',');
   o.colsOnPitch  = [...new Set(w.players.map(q => q.color))].sort().join(',');
   const cA = M.cupTeam(draw[0]).col, cB = M.cupTeam(draw[1]).col;
@@ -201,6 +214,137 @@ const r = await p.evaluate(async () => {
   o.normalShirts = M.world.kb.keys.filter(k => k.colTeam !== undefined).length;
   o.liteIsNotSticky = o.normalLetters > 20 && o.normalShirts > 0 && !M.world.lobbyLite;
 
+  // ⚠️ ...and the player's own size comes BACK. `startCupMatch` borrows `sel.mode`, so a
+  // tie that kept it would silently resize every match afterwards.
+  o.modeAfter = M.sel.mode;
+  // ==========================================================================
+  //  7. A BRACKET OF PEOPLE
+  // ==========================================================================
+  // ⚠️ **THIS IS WHAT THE TOURNAMENT IS FOR IN A ROOM.** Countries make a bracket
+  // legible on a first run, but the game is local multiplayer and the entrant people
+  // actually want on the tree is each other. The country path above and this one share
+  // every line of bracket maths — `cupMatches`, `cupUndo`, `cupNext`, the renderer, the
+  // ticker — because an entrant is an ID and only `cupEntrant` knows how to read it.
+  M.cupLock(false);
+  M.cup.kind = 'people'; M.cup.people = [];
+  o.peopleStartEmpty = M.cupRoster().length === 0;
+  for (const n of ['Kai', 'Rio', 'Nova', 'Ash', 'Zed']) M.cupAddPerson(n);
+  o.peopleRoster = M.cupRoster().join(',');
+  // ⚠️ Names are unique CASE-INSENSITIVELY, the rule `nameKey` already uses — "kai" and
+  // "Kai" are one person at a cabinet, and a bracket holding both is unreadable.
+  o.dupeRejected = M.cupAddPerson('kai') === false && M.cupAddPerson('KAI ') === false;
+  o.blankRejected = M.cupAddPerson('   ') === false && M.cupAddPerson('') === false;
+  // ...and typed text cannot be markup, the rule `mapClean` records.
+  M.cupAddPerson('<img src=x>');
+  o.strippedMarkup = M.cupRoster().every(n => !/[<>&]/.test(n));
+  M.cup.people = M.cup.people.filter(n => !/img/.test(n));
+
+  // ⚠️ **ANY NUMBER FROM TWO UPWARDS, and the leftovers get a BYE.** A party has however
+  // many people it has — five is as likely as eight — so the bracket is the next power of
+  // two and the empty seats walk their occupant through round one. Without this the
+  // feature would only work for the party that happens to number exactly 4, 8 or 16.
+  M.buildCupScreen();
+  o.sizeFor5 = M.cupSize();
+  { const ms = M.cupMatches();
+    o.byes5 = ms.filter(m => m.bye).length;
+    o.byeWinners = ms.filter(m => m.bye).map(m => m.winner).join(',');
+    o.playable5 = ms.filter(m => m.ready && !m.done).length; }
+  // ⚠️ ONE bye, not three. Five in an eight-bracket leaves three seats empty, but two of
+  // those pair with EACH OTHER and are a slot nobody reaches — only the fifth entrant is
+  // actually walking the first round. The screen used to say "3 byes", which promised two
+  // people a free round they were never getting.
+  o.fiveMakesEight = o.sizeFor5 === 8 && o.byes5 === 1 && o.playable5 === 2
+                  && o.byeWinners === 'Zed';
+  o.subSaysOneBye = /1 bye\b/.test($('cupSub') ? $('cupSub').textContent : '');
+  o.sizeFor2 = (() => { const was = M.cup.people.slice();
+    M.cup.people = ['A', 'B']; const n = M.cupSize(); const ms = M.cupMatches();
+    const r = n === 2 && ms.length === 1 && M.cupRoundName(0) === 'Final';
+    M.cup.people = was; return r; })();
+
+  // ⚠️ **A BYE IS ROUND ZERO ONLY**, and getting this wrong is not subtle: in round 0 an
+  // empty seat is an entrant who never existed, but in every later round it is a match
+  // that HAS NOT BEEN PLAYED YET. Applied everywhere, winning your semi-final walked you
+  // past the final and the screen announced you as champion with half the draw unplayed.
+  { const was = M.cup.people.slice();
+    M.cup.people = ['Kai', 'Rio', 'Nova', 'Ash'];      // a clean 4, no byes at all
+    M.cup.won = [1];                                    // Rio wins the first semi
+    const ms = M.cupMatches();
+    const fin = ms.find(m => m.round === 1);
+    o.finalIsNotABye = !fin.bye && !fin.done && fin.winner === null;
+    o.noEarlyChampion = M.cupChampion() === null;
+    o.stillToPlay = (M.cupNext() || {}).i;
+    M.cup.people = was; M.cup.won = []; }
+
+  // ---- the tie itself: two people, one body each, no filler ---------------
+  M.cup.people = ['Kai', 'Rio', 'Nova', 'Ash'];
+  M.cup.won = []; M.cup.locked = true;
+  M.sel.mode = '6v6';                                   // deliberately big — a tie ignores it
+  M.startCupMatch(0);
+  await new Promise(res => setTimeout(res, 300));
+  { const w2 = M.world;
+    M.lobbyStart(w2);
+    o.peopleN = w2.players.length;
+    o.peopleNames = w2.players.map(q => q.name).join(' v ');
+    o.peopleAreTheEntrants = o.peopleNames === 'Kai v Rio';
+    o.peopleColoursDiffer = w2.players[0].color !== w2.players[1].color;
+    // ⚠️ ONE BODY A SIDE means the only bot that can exist is the opponent when you are
+    // playing the bracket on your own. With two controllers there is none at all.
+    o.peopleBots = w2.players.filter(q => q.ctrl === 'bot').length;
+    o.noFiller = o.peopleN === 2 && o.peopleBots <= 1;
+    w2.state = 'play'; w2.stateT = 1; w2.score = [0, 3];
+    M.endMatch(w2); M.finishMatch(w2);
+    o.peopleTitle = (document.querySelector('#overlay h2') || {}).textContent || '';
+    o.peopleResult = M.cup.won[0] === 1;
+    // ⚠️ A people bracket feeds the NAME BOOK for free, because the bodies carry the
+    // entrants' names and `recordResult` already files every human by name. Nothing here
+    // had to be written for that, and it is the reason this is worth more than countries.
+    o.bookHasEntrant = M.nameBookTable().some(x => x.name === 'Kai' || x.name === 'Rio'); }
+
+  // ...and switching back to countries finds the country draw exactly as it was left.
+  M.cupLock(false);
+  M.cup.kind = 'country'; M.cupFill();
+  o.countryDrawIntact = M.cupRoster().length > 0 && M.cupRoster().every(k => !!M.cupTeam(k));
+  o.rostersAreSeparate = M.cup.people.length === 4 && M.cup.teams.length > 0;
+  M.cup.kind = 'country';
+
+  // ==========================================================================
+  //  8. SWAPPING A TEAM IN, MID-TOURNAMENT
+  // ==========================================================================
+  // ⚠️ **THE RESULTS SURVIVE, AND THAT IS THE WHOLE POINT.** England wins a semi-final and
+  // then has to leave; France takes their place and inherits the run. Unlock is the
+  // opposite operation — it clears the results by design — so doing this through Unlock
+  // would throw away the very thing that makes it worth having.
+  // ⚠️ It is nearly free because `cup.won` stores which SIDE went through, never which
+  // entrant, so re-reading the tree with a new id in the seeding is the whole feature.
+  M.cup.kind = 'country'; M.cup.size = 4;
+  M.cup.teams = ['usa', 'mexico', 'argentina', 'england'];
+  M.cupLock(true); M.cup.won = [0, 1];                  // USA through, England through
+  M.openCup(); M.buildCupScreen();
+  o.finalBefore = (() => { const f = M.cupMatches().find(m => m.round === 1);
+                           return f.a + ' v ' + f.b; })();
+  // ⚠️ REACHABLE WHILE LOCKED. A substitution is a mid-tournament event; offering it only
+  // on the unlocked draw would mean unlocking to reach it.
+  o.swapOfferedLocked = $('cupSwapBtn').style.display !== 'none';
+  $('cupSwapBtn').click();
+  o.swapOutChips = [...$('cupSwapOut').querySelectorAll('.cupchip')].map(c => c.textContent.trim()).join(',');
+  // Nothing to pick until you have said who is leaving — a list of replacements with no
+  // slot to put them in is a list that does nothing.
+  o.swapNeedsAnOut = /Pick who is leaving/.test($('cupSwapIn').textContent);
+  [...$('cupSwapOut').querySelectorAll('.cupchip')].find(c => /England/.test(c.textContent)).click();
+  o.swapChoices = [...$('cupSwapIn').querySelectorAll('.cupchip')].length;
+  [...$('cupSwapIn').querySelectorAll('.cupchip')].find(c => /France/.test(c.textContent)).click();
+  o.rosterAfterSwap = M.cupRoster().join(',');
+  o.finalAfter = (() => { const f = M.cupMatches().find(m => m.round === 1);
+                          return f.a + ' v ' + f.b; })();
+  o.wonAfterSwap = JSON.stringify(M.cup.won);
+  o.stayedLocked = M.cup.locked;
+  o.inheritedTheRun = o.finalBefore === 'usa v england' && o.finalAfter === 'usa v france'
+                   && o.wonAfterSwap === '[0,1]' && o.stayedLocked;
+  // ...and nobody may be in the draw twice, the same rule a new entrant follows.
+  o.swapRefusesDupe = M.cupReplace('usa', 'mexico') === false;
+  o.swapRefusesUnknown = M.cupReplace('nobody-at-all', 'brazil') === false;
+  M.cupLock(false);
+
   M.sel.lobby = 'on'; M.sel.mode = '1v1'; M.sel.teamCol = null;
   return o;
 });
@@ -226,7 +370,11 @@ ok('...and 16 teams scrolls sideways rather than wrapping', r.scrollsNotWraps, `
 ok('a tie starts on the drawn pair', r.matchStarted && r.tieIsTheDraw);
 ok('the tournament lobby has no keyboard and no shirts', r.liteStripped,
    `lite=${r.lite} letters=${r.letters} shirts=${r.shirts}`);
-ok('...but keeps the match controls', r.liteKeptMatchControls, `diff=${r.diffPads} steppers=${r.steppers}`);
+ok('...but keeps the bot-skill row', r.liteKeptBotSkill, `diff=${r.diffPads}`);
+ok('...and has no team-size stepper', r.liteHasNoStepper,
+   `steppers=${r.steppers} — a tie is 1v1 by definition, and the only thing that control could do is field the bots the tie exists to keep off`);
+ok('a tie is one body a side, whatever mode was set', r.oneASide && r.rosterN === 2,
+   `${r.rosterN} on the pitch with sel.mode "${r.modeDuringTie}" — it was 3v3 going in`);
 ok('every body on the pitch wears its country', r.everyoneWearsTheirCountry, r.flagsOnPitch);
 ok('...and its country\'s colour', r.everyoneWearsTheCountryColour, r.colsOnPitch);
 ok('...not the colours the player picked for themselves', r.countryColoursNotThePlayers, r.colsOnPitch);
@@ -240,10 +388,39 @@ ok('the ticker stops at full time', r.tickerStoppedAtFullTime);
 ok('the colour override is dropped at full time', r.overrideCleared);
 ok('...and by startMatch, so walking out mid-tie cannot leak it', r.overrideClearedByStartMatch,
    `mid-tie it was ${r.midTieOverride}`);
+ok('...and your own match size', r.modeAfter === '3v3', `sel.mode came back as ${r.modeAfter}`);
 ok('an ordinary match after a tie is in your own colours', r.noColourLeak, r.afterWalkOut);
 ok('...and your own faceplate', r.noFlagLeak);
 ok('...and gets the full lobby back', r.liteIsNotSticky,
    `letters=${r.normalLetters} shirts=${r.normalShirts}`);
+ok('a people roster starts empty and takes names', r.peopleStartEmpty && r.peopleRoster === 'Kai,Rio,Nova,Ash,Zed', r.peopleRoster);
+ok('...uniquely, ignoring case', r.dupeRejected, '"kai" and "Kai" are one person at a cabinet');
+ok('...never blank', r.blankRejected);
+ok('...and never markup', r.strippedMarkup, 'a name is typed by a person — the rule mapClean records');
+ok('five people make an eight-bracket with three byes', r.fiveMakesEight,
+   JSON.stringify({ size:r.sizeFor5, byes:r.byes5, playable:r.playable5, through:r.byeWinners }) +
+   ' — without byes the feature only works for a party that happens to number exactly 4, 8 or 16');
+ok('...and two people make a straight final', r.sizeFor2);
+ok('...and the screen counts the byes it will actually hand out', r.subSaysOneBye,
+   'three empty seats is not three byes — two of them pair with each other');
+ok('a bye is ROUND ZERO only', r.finalIsNotABye && r.noEarlyChampion,
+   'winning a semi must not walk you past the final — an empty seat in a later round is a match not yet played, not an entrant who never existed');
+ok('...with the OTHER semi next, not the final', r.stillToPlay === 1,
+   'next up is match ' + r.stillToPlay + ' — the bracket plays in order, so a semi cannot be skipped');
+ok('a people tie fields the two entrants and nobody else', r.noFiller && r.peopleAreTheEntrants,
+   `${r.peopleN} on the pitch (${r.peopleNames}), ${r.peopleBots} bot — at 6v6 it used to be one human beside five robots facing six more`);
+ok('...in different colours', r.peopleColoursDiffer);
+ok('...and the result goes into the bracket', r.peopleResult, r.peopleTitle);
+ok('...and into the name book, for free', r.bookHasEntrant,
+   'the bodies carry the entrants\' names, so recordResult files them without anything here being written for it');
+ok('the two rosters are kept apart', r.rostersAreSeparate && r.countryDrawIntact,
+   'switching kinds must not destroy the draw you were arranging in the other');
+ok('a team can be swapped in while the bracket is LOCKED', r.swapOfferedLocked && r.swapChoices > 0,
+   `${r.swapChoices} replacements offered — a substitution is a mid-tournament event, and reaching it through Unlock would clear the results it exists to keep`);
+ok('...and you have to say who is leaving first', r.swapNeedsAnOut);
+ok('the replacement INHERITS the run', r.inheritedTheRun,
+   `final was "${r.finalBefore}", is now "${r.finalAfter}", results ${r.wonAfterSwap}, locked ${r.stayedLocked} — England won the semi and left, so France is the one in the final`);
+ok('...and nobody can be in the draw twice', r.swapRefusesDupe && r.swapRefusesUnknown);
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
 console.log(JSON.stringify(r, null, 1));
