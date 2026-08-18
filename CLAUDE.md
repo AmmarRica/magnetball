@@ -2311,6 +2311,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   button underneath. ⚠️ It also calls `replayAbort()` first — `loop()` returns while a
   replay is active, so pressing it during the attract demo's replay started the match
   underneath, froze it until the replay ran out, and then landed in the lobby anyway.
+- **A HALO MAY NEVER OUTLIVE THE TEXT IT IS BEHIND** (`haloAlpha`). Every label that fades
+  is a backing stroke plus a fill, and the two do **not** fade alike: the backing is the
+  opposite tone by design, so over a mid-green pitch a dark halo at alpha 0.2 still reads
+  clearly while a pale fill at 0.2 has all but gone. The name plate made it worse by
+  striking its halo **TWICE** — two passes at the same alpha composite to 0.36 against the
+  single-pass text's 0.2, so the backing got relatively **louder** the fainter the name
+  became. Right beside the ball, where `LABEL_BALL` ramps the text to nothing, what was
+  left on the pitch was a dark blocky plate with no name in it. Reported exactly that way.
+  ⚠️ `haloAlpha(a, passes)` returns the per-pass alpha whose `passes` strokes composite to
+  **a²**. At full strength it is exactly 1, so a solid label is untouched; below that the
+  backing is always the quieter of the two and is gone well before the letters.
+  ⚠️ **ONE helper, and `drawFloaters` goes through it too** — the floating stat labels have
+  the same asymmetry with one stroke rather than two, so a second copy of the reasoning is
+  a second place for it to rot.
+  ⚠️ The invariant `tests/labels.mjs` pins needs **no magic number**: what is on the pitch
+  at alpha `a` is at most `a` of what is there at full strength. A build whose backing
+  outlives its text cannot satisfy it. ⚠️ And it is checked alongside "still solid at full
+  strength", because *"the backing fades fast"* is also true of a build with no backing at
+  all — which is the one thing this must not become.
+  ⚠️ Measured as a **DIFFERENCE** against the same frame with no label on it. An absolute
+  ink count in the band reads the halfway line, the centre circle and the mown stripes and
+  flattens at a constant whatever the alpha is — the first run of that probe reported 0.76
+  of full ink at every alpha **including zero**.
 - **NAME PLATES ARE OUTLINED, NOT BOXED.** A filled plate above each of eight bodies is
   a rectangle of solid colour parked over the play. What the box was for is legible text
   on an unknown background, and a halo in the palette's own `nameBg` does that without

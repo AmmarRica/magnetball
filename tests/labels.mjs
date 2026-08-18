@@ -165,14 +165,88 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ============================================================
+//  A HALO MAY NOT OUTLIVE THE TEXT IT IS BEHIND
+// ============================================================
+// ⚠️ Reported as "the font background is bad and is visible even when the text is not",
+// with a screenshot of a dark blocky plate beside the ball with no name in it. Two causes,
+// both real: the backing is the OPPOSITE tone by design, so over a mid-green pitch a dark
+// halo at alpha 0.2 still reads clearly while a pale fill at 0.2 has all but gone — and
+// the name plate strikes its halo TWICE, so the two passes composite to 0.36 against the
+// single-pass text's 0.2 and it got relatively LOUDER the fainter the name became. Right
+// beside the ball, where `LABEL_BALL` ramps the text to nothing, what was left was the
+// plate on its own.
+// ⚠️ THE INVARIANT, and it needs no magic number: what is on the pitch at alpha `a` is at
+// most `a` of what is there at full strength. A build whose backing outlives its text
+// cannot satisfy it — on this page the reported build reads 0.534 at a = 0.5 and 0.196 at
+// a = 0.15, both over their own alpha, against 0.410 and 0.114 now. (On a 900px page,
+// where the type is bigger and antialiasing counts for less, the same sabotage reads 0.742
+// and 0.333 against 0.364 and 0.076 — the gap is wider, the invariant is the same.)
+// ⚠️ Measured as a DIFFERENCE against the same frame with no label on it. An absolute ink
+// count in the band reads the halfway line, the centre circle and the mown stripes and
+// flattens at a constant whatever the alpha is — which is exactly what the first run of
+// this probe did, reporting 0.76 of full ink at every alpha including zero.
+const halo = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.names='Kai'; M.setMatchSeed(5); M.startMatch();
+  const w = M.world; w.state='play'; w.stateT=2;
+  const me = w.players[0];
+  me.x = 0; me.y = 0; w.ball.x = 9000; w.ball.y = 9000;
+  for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }
+  const c = document.getElementById('game'), cx = c.getContext('2d');
+  const dpr = c.width / c.clientWidth, NP = M.NAMEPLATE;
+  const band = (alpha) => {
+    // ⚠️ Render ONCE first: `drawDiscs` snaps `labelA` to its target the first time it
+    // sees a body ("no fade-in from nowhere"), so a value written before that is lost.
+    M.renderAlpha = 1; M.render();
+    M.labelA[0] = alpha;
+    M.render();
+    const px = Math.round(M.wx(me.x) * dpr), py = Math.round(M.wy(me.y) * dpr);
+    const top = Math.round(py - (15 * M.cam.s + NP.gap + NP.size + 6) * dpr);
+    const h = Math.round((NP.size + 12) * dpr), half = Math.round(70 * dpr);
+    return cx.getImageData(px - half, top, half*2, h).data;
+  };
+  const base = band(0);
+  const ink = (alpha) => {
+    const d = band(alpha); let sum = 0;
+    for (let i = 0; i < d.length; i += 4)
+      sum += Math.abs(d[i]-base[i]) + Math.abs(d[i+1]-base[i+1]) + Math.abs(d[i+2]-base[i+2]);
+    return sum;
+  };
+  const full = ink(1);
+  o.full = Math.round(full / 1000);
+  o.at = {}; o.fadesNoSlowerThanItSays = full > 0;
+  for (const a of [0.5, 0.3, 0.15, 0.08]){
+    const rel = ink(a) / full;
+    o.at[a] = +rel.toFixed(3);
+    if (rel > a) o.fadesNoSlowerThanItSays = false;
+  }
+  // ⚠️ ...and it is still SOLID at full strength. "The backing fades fast" is also true of
+  // a build with no backing at all, which is the one thing this must not become — the halo
+  // is what makes a name readable over grass, over a starfield and over a disc.
+  o.haloAtFull = M.haloAlpha(1, 2);
+  o.solidAtFullStrength = Math.abs(o.haloAtFull - 1) < 1e-9;
+  // One helper, so a second fading label cannot answer it differently.
+  o.oneStrokeSquares = Math.abs(M.haloAlpha(0.5, 1) - 0.25) < 1e-9;
+  o.twoStrokesComposite = Math.abs((1 - Math.pow(1 - M.haloAlpha(0.5, 2), 2)) - 0.25) < 1e-9;
+  return o;
+});
+
 console.log(JSON.stringify(r,null,2));
+console.log('HALO:', JSON.stringify(halo));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const near = (v,t)=>Math.abs(v-t) < 0.02;
 const okOrient = m => near(m.clear,1) && near(m.discOver,r.floor) && near(m.discAway,1)
                    && near(m.ballOver,r.floor) && near(m.ballAway,1) && near(m.selfNeverDims,1);
 const ok = okOrient(r.upright) && okOrient(r.sideways) && r.gradual && r.replayFades &&
   r.platesDifferByTeam && r.team0ReadsRed && r.team1ReadsBlue && r.boxesMatchEachOther &&
-  r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed && errors.length===0;
+  r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed &&
+  halo.fadesNoSlowerThanItSays && halo.solidAtFullStrength &&
+  halo.oneStrokeSquares && halo.twoStrokesComposite && errors.length===0;
+if (!halo.fadesNoSlowerThanItSays)
+  console.log('  the plate outlives its own text:', JSON.stringify(halo.at),
+              '— each must be at or under its own alpha; the reported build reads 0.534 at 0.5 and 0.196 at 0.15');
+if (!halo.solidAtFullStrength) console.log('  the halo is no longer solid at full strength:', halo.haloAtFull);
 if(!ok) console.log('upright:', okOrient(r.upright), '| sideways:', okOrient(r.sideways), '| gradual:', r.gradual, '| replay:', r.replayFades);
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

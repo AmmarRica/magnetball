@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260818.0225PM';
+const VERSION = '20260818.0450PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,14 @@ const VERSION = '20260818.0225PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260818.0450PM', title: 'Names fade out properly',
+    added: [],
+    changed: [
+      '<b>A name plate\u2019s dark backing no longer hangs around after the name has gone.</b> The backing was drawn twice over and the letters once, so as a plate faded \u2014 which it does whenever it drifts near the ball \u2014 the backing got relatively stronger, and what was left sitting on the grass was a dark block with no name in it. The backing goes first now, and is gone well before the letters.',
+      'The floating <b>GOAL / ASSIST / SAVE</b> labels had the same problem and are fixed with it \u2014 a dark outline over a green pitch holds its own long after a pale word inside it has faded.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260818.0225PM', title: 'Hold KICK and you sprint',
     added: [],
     changed: [
@@ -16888,9 +16896,14 @@ function drawFloaters(sx, sy, bx, by){
     // sit across the middle of the player it is naming.
     const stand = sideNow ? sideLift(FLOAT.anchorR * cam.s * cam.body) : 0;
     const y = Math.max(FLOAT.size + 2, py + sy + by - climb - stand - f.tier * FLOAT.gap);
-    ctx.globalAlpha = a;
+    // ⚠️ THE HALO GOES FIRST, the name plates' rule and for the same reason: black over a
+    // mid-green pitch keeps far more contrast at a given alpha than a pale fill does, so
+    // fading the two together leaves an outline with nothing inside it. One stroke here,
+    // so the square is the alpha itself.
+    ctx.globalAlpha = haloAlpha(a, 1);
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)';
     ctx.strokeText(f.text, x, y);
+    ctx.globalAlpha = a;
     ctx.fillStyle = f.col || TH.hudText;
     ctx.fillText(f.text, x, y);
   }
@@ -21546,6 +21559,22 @@ function drawLobby(w){
 // pixels rather than world units for the reason the floaters use them: on the huge courts
 // `cam.s` falls until the whole pitch fits and a world-sized name is a smudge.
 const NAMEPLATE = { size: 13, halo: 5, gap: 16 };
+// ⚠️ **A HALO MAY NEVER OUTLIVE THE TEXT IT IS BEHIND.** Text that fades is drawn as a
+// backing stroke plus a fill, and the two do not fade alike: the backing is the opposite
+// tone by design, so over a mid-green pitch a black halo at alpha 0.2 still reads clearly
+// while a pale fill at 0.2 has all but gone — and where the backing is struck more than
+// once, the passes COMPOSITE and it comes out louder still. Both cases leave an outline
+// with nothing inside it, which is what "the font background is visible even when the text
+// is not" was reporting.
+// One helper, so every fading label answers it the same way: it returns the per-pass alpha
+// whose `passes` strokes composite to `a` SQUARED. At full strength it is exactly 1, so a
+// solid label is untouched; below that the backing is always the quieter of the two.
+function haloAlpha(a, passes){
+  const t = Math.max(0, Math.min(1, a));
+  const want = t * t;                                  // where the backing must end up
+  if (passes <= 1) return want;
+  return 1 - Math.pow(1 - want, 1 / passes);           // ...undoing the compositing
+}
 const LOBBY_FONT = "'Kenney', system-ui, -apple-system, sans-serif";
 
 // ---------- Connected-controller flairs -------------------------------------
@@ -24385,15 +24414,27 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         const team = p.team === 0 ? teamColOf(0) : p.team === 1 ? teamColOf(1) : null;
         const halo = TH.nameBg || '#000000';
         const prevA = ctx.globalAlpha;
-        ctx.globalAlpha = prevA * a;
         ctx.lineJoin = 'round'; ctx.miterLimit = 2;
         ctx.lineWidth = NAMEPLATE.halo;
         ctx.strokeStyle = halo;
-        // ⚠️ Struck TWICE. One pass of a round-joined stroke at this weight still lets a
-        // busy pitch through between the letters; a second lays the backing solid, which
-        // is what makes the name readable over grass, over a starfield and over a disc.
+        // ⚠️ **THE HALO GOES FIRST, AND THAT IS A FIX RATHER THAN A PREFERENCE.** It is
+        // struck TWICE — one pass of a round-joined stroke at this weight still lets a busy
+        // pitch through between the letters, and a second lays the backing solid, which is
+        // what makes a name readable over grass, over a starfield and over a disc. But two
+        // passes at the plate's alpha COMPOSITE: at a = 0.2 they come out at 0.36 against
+        // the single-pass text's 0.2, so the backing got RELATIVELY LOUDER the fainter the
+        // name became. Right beside the ball, where `LABEL_BALL` ramps the text to nothing,
+        // what was left on the pitch was a dark blocky plate with no name in it — reported
+        // as "the font background is visible even when the text is not".
+        // ⚠️ `haloAlpha` solves `1-(1-h)^2 = a*a` so the two strokes composite to a SQUARE
+        // of the text's alpha: identical at full strength (h = 1, so nothing about a solid
+        // name plate changes) and gone well before the letters are. A halo exists to make
+        // text legible, so it can have nothing to do once the text is on its way out.
+        const hA = haloAlpha(a, 2);
+        ctx.globalAlpha = prevA * hA;
         ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
         ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
+        ctx.globalAlpha = prevA * a;
         ctx.fillStyle = team ? readableInk(team, halo) : (TH.nameText || '#ffffff');
         ctx.fillText(label, x, y-r-NAMEPLATE.gap);
         ctx.globalAlpha = prevA;
@@ -25911,7 +25952,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,
