@@ -203,7 +203,7 @@ const r = await p.evaluate(() => {
     for (const key of M.DRILL_KEYS){
       const res = play(key, 45);
       o.plays.push({ key, done: res.done, t: res.t, got: res.got, need: res.need,
-                     limit: M.DRILLS[key].timed || 0 });
+                     limit: M.drillLimit(M.DRILLS[key]) });
     }
   } catch(e){ o.threw = e.message; }
   o.solved = o.plays.filter(x => x.done).map(x => x.key);
@@ -415,6 +415,194 @@ ok('the real ball is still filled', gball.realBallFilled,
    '"nothing is filled" must not be satisfied by there being no ball');
 // ⚠️ Bronze at 0.34, filled at a third of that again, was a slightly-darker patch of grass.
 // The ORDER is what is pinned, not three magic numbers — retuning must stay monotonic.
+
+// ============================================================
+//  THE COACHING DEMONSTRATION — it has to move like somebody playing
+// ============================================================
+// ⚠️ The old one traced the authored line at CONSTANT speed on a fixed 6.5-second loop,
+// wrapped instantly from the end back to the start, and pinned the body a fixed offset
+// behind the ball along the current segment — so it sprinted a short route, crawled a
+// long one, took hairpins flat out, slid sideways across corners and teleported at the
+// end. Every check here is one of those four, and each is written so the OLD build fails
+// it: "it moves" and "it follows the line" were true of that build too.
+const coach = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const build = key => { M.startDrill(key); return { c: M.world.drill.coach, w: M.world }; };
+
+  // ---- 1. HOW LONG IT TAKES IS HOW FAR IT IS -------------------------------
+  // ⚠️ The old build gave a 545-unit route and a 1,255-unit one the same 6.5 seconds.
+  const a = build('straight_up').c, b = build('uturn').c;
+  o.shortLen = Math.round(a.len); o.longLen = Math.round(b.len);
+  o.shortRun = +a.run.toFixed(2);  o.longRun = +b.run.toFixed(2);
+  o.lenRatio = +(b.len / a.len).toFixed(2);
+  o.runRatio = +(b.run / a.run).toFixed(2);
+  // Not equality — it brakes for corners and the U-turn has more of them, so the times
+  // may not be exactly proportional. What must be true is that the longer route takes
+  // proportionally longer, which a fixed loop cannot do at all.
+  o.lengthDecidesTime = o.runRatio > 1.6 && Math.abs(o.runRatio - o.lenRatio) < 0.8;
+
+  // ---- 2. IT IS THE PLAYER'S OWN SPEED -------------------------------------
+  // ⚠️ Structural: `coachTop` reads `pAccel`/`pDamp`, the two numbers `integrate` settles a
+  // body with, so turning the Speed slider up speeds the demonstration up as well. A
+  // hard-coded pace passes every other check in this block.
+  const w0 = build('straight_up').w;
+  o.topAtDefault = Math.round(M.coachTop(w0));
+  const slow = Object.assign({}, w0, { pAccel: w0.pAccel * 0.4 });
+  o.topWhenSlower = Math.round(M.coachTop(slow));
+  o.speedIsThePlayers = o.topWhenSlower < o.topAtDefault * 0.75;
+
+  // ---- 3. IT BRAKES FOR CORNERS AND STARTS AND STOPS -----------------------
+  // Sampled as distance covered per fixed slice of time. A hairpin route must show a real
+  // dip somewhere in the middle, and both ends must be near a standstill.
+  const c = build('uturn').c;
+  const N = 60, dt = c.run / N, step = [];
+  for (let i = 0; i < N; i++)
+    step.push(M.coachDistAt(c, (i+1)*dt) - M.coachDistAt(c, i*dt));
+  const cruise = Math.max.apply(null, step);
+  const mid = step.slice(4, N-4);
+  o.slowestMidway = +(Math.min.apply(null, mid) / cruise).toFixed(2);
+  o.brakesForCorners = o.slowestMidway < 0.8;
+  o.startsFromRest = step[0] / cruise < 0.7;
+  o.stopsAtTheEnd  = step[N-1] / cruise < 0.7;
+
+  // ---- 4. THE BODY RUNS THE ROUTE, NOT AN OFFSET FROM THE BALL -------------
+  // ⚠️ THE decisive one. The old build put the body at `ball − direction × 2.2r`, which at
+  // a corner is a point NOWHERE NEAR the route — it cut the corner and slid sideways.
+  // Measured as the body's distance to the authored polyline over the whole loop.
+  const bp = build('box_path');
+  const path = bp.w.drill.def.path, cc = bp.c;
+  const toSeg = (p, q, r) => {                       // point p to segment q..r
+    const vx = r.x-q.x, vy = r.y-q.y, L2 = vx*vx+vy*vy || 1;
+    let t = ((p.x-q.x)*vx + (p.y-q.y)*vy) / L2; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (q.x+vx*t), p.y - (q.y+vy*t));
+  };
+  const offRoute = pt => { let m = Infinity;
+    for (let i=1;i<path.length;i++) m = Math.min(m, toSeg(pt, path[i-1], path[i])); return m; };
+  // ⚠️ Driven through the shipped `coachPose`, never by re-deriving "ball minus trail"
+  // here — a suite that recomputes the rule is checking its own arithmetic.
+  let worstBody = 0, minGap = Infinity, maxGap = 0;
+  for (let i = 0; i <= 400; i++){
+    const pose = M.coachPose(cc, cc.run * i / 400);
+    if (pose.d <= M.COACH.trail * 1.5 || pose.d >= cc.len - 1) continue;   // ends are special
+    worstBody = Math.max(worstBody, offRoute(pose.body));
+    const gap = Math.hypot(pose.ball.x - pose.body.x, pose.ball.y - pose.body.y) / M.COACH.trail;
+    minGap = Math.min(minGap, gap); maxGap = Math.max(maxGap, gap);
+  }
+  // ⚠️ ...and the DRAW really uses it. Everything above is arithmetic on a helper; this is
+  // the one line that says the picture agrees with it, measured as ink at the point the
+  // pose names. Without it, `drawCoach` could work the body out its own way for ever.
+  {
+    const w = bp.w;
+    w.drill.coachT = M.COACH.hold + cc.run * 0.55;
+    M.renderAlpha = 1; M.render();
+    const pose = M.coachPose(cc, M.coachPhase(cc, w.drill.coachT));
+    const cnv = document.getElementById('game'), cx2 = cnv.getContext('2d');
+    const dpr = cnv.width / cnv.clientWidth;
+    const px = Math.round(M.wx(pose.body.x) * dpr), py = Math.round(M.wy(pose.body.y) * dpr);
+    const at = (x, y) => { const q = cx2.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+                           return [q[0], q[1], q[2]]; };
+    const court = at(px, py + 150);   // a stretch of pitch the demonstration is not on
+    const dist = (u, v) => Math.abs(u[0]-v[0]) + Math.abs(u[1]-v[1]) + Math.abs(u[2]-v[2]);
+    o.inkAtBody = dist(at(px, py), court);
+    o.drawUsesThePose = o.inkAtBody > 12;
+  }
+  o.bodyOffRoute = +worstBody.toFixed(2);
+  o.bodyRunsTheRoute = worstBody < 1.5;
+  // ⚠️ ...and at a CORNER the straight-line gap CLOSES, because the body is still on the
+  // leg before while the ball has turned. Down a straight it is exactly `trail`; through a
+  // right-angle it should fall toward trail/root-2. A rigid offset — the old behaviour —
+  // holds the gap at 1.00 the whole way round, so the MINIMUM is the thing to look at.
+  o.gapMin = +minGap.toFixed(3);
+  o.gapMax = +maxGap.toFixed(3);
+  o.bodySwingsRoundCorners = minGap < 0.85 && maxGap > 0.95;
+
+  // ---- 5. IT PARKS AT THE ENDS RATHER THAN WRAPPING ------------------------
+  // ⚠️ The jump back to the start still happens; it happens while nothing is moving.
+  o.holdSecs = M.COACH.hold;
+  o.parksAtEnds = M.COACH.hold > 0.3 &&
+                  M.coachDistAt(cc, 0) === 0 &&
+                  Math.abs(M.coachDistAt(cc, cc.run) - cc.len) < 1;
+
+  // ---- 6. A DRILL WITH NO ROUTE HAS NO DEMONSTRATION, AND DOES NOT THROW ---
+  let built = 0, nulls = 0, threw = null;
+  try {
+    for (const k of M.DRILL_KEYS){ const x = build(k).c; if (x) built++; else nulls++; }
+  } catch(e){ threw = e.message; }
+  o.builtCount = built; o.nullCount = nulls; o.coachThrew = threw;
+  o.everyDrillAnswers = built + nulls === M.DRILL_KEYS.length;
+  return o;
+});
+
+ok('a longer route takes proportionally longer', coach.lengthDecidesTime,
+   `${coach.shortLen}u in ${coach.shortRun}s against ${coach.longLen}u in ${coach.longRun}s — length x${coach.lenRatio}, time x${coach.runRatio}; the old build gave both 6.5s`);
+ok('...at the PLAYER\'s own speed, off the Game Feel sliders', coach.speedIsThePlayers,
+   `${coach.topAtDefault} u/s, and ${coach.topWhenSlower} u/s with the acceleration turned down — a hard-coded pace passes every other check here`);
+ok('it brakes for corners', coach.brakesForCorners,
+   `slowest stretch mid-route is ${coach.slowestMidway} of cruising speed`);
+ok('...and starts and finishes at a standstill', coach.startsFromRest && coach.stopsAtTheEnd,
+   'a demonstration that is already at top speed on the first frame is not one you can copy');
+ok('the drawing really uses that pose', coach.drawUsesThePose,
+   `${coach.inkAtBody} of ink at the point the pose names — everything else in this block is arithmetic on a helper`);
+ok('the body runs the ROUTE, not a fixed offset from the ball', coach.bodyRunsTheRoute,
+   `worst ${coach.bodyOffRoute} units off the line — the old body sat at ball minus direction times 2.2r, which at a corner is a point nowhere near the route`);
+ok('...so it swings round the outside of a turn', coach.bodySwingsRoundCorners,
+   `the body-to-ball gap runs ${coach.gapMin}-${coach.gapMax} of the trail distance — a rigid offset holds it at 1.00 all the way round, and a right-angle should pull it toward 0.71`);
+ok('it parks at both ends instead of wrapping mid-stride', coach.parksAtEnds,
+   `holds ${coach.holdSecs}s — the jump back to the start still happens, but while nothing is moving`);
+ok('every drill answers, and none of them throws', coach.everyDrillAnswers && !coach.coachThrew,
+   coach.coachThrew || `${coach.builtCount} with a route, ${coach.nullCount} without`);
+
+// ============================================================
+//  ONE BACKSTOP INSTEAD OF ELEVEN CLOCKS
+// ============================================================
+const clocks = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  o.max = M.DRILLTIME.max;
+  o.own = M.DRILL_KEYS.filter(k => M.DRILLS[k].timed);
+  o.limits = {}; M.DRILL_KEYS.forEach(k => o.limits[k] = M.drillLimit(M.DRILLS[k]));
+  o.allAtTheCap = M.DRILL_KEYS.every(k => M.DRILLS[k].high || o.limits[k] === M.DRILLTIME.max);
+  // ⚠️ Break the Targets keeps its own, because there the clock is the SCORING RULE.
+  o.targetsKeepsIts60 = o.limits.targets === 60 && !!M.DRILLS.targets.high;
+  // ⚠️ The same 120 as GHOST.maxSecs — a recording stops at that mark, so a run may not
+  // outlive the ghost of it.
+  o.matchesTheRecordingCap = M.DRILLTIME.max === M.GHOST.maxSecs;
+
+  // ⚠️ THE SHIPPED READOUT, called — not its rule copied. Re-deriving "elapsed or
+  // countdown?" in the suite is a check on the suite: the first version of this block did
+  // exactly that and a sabotage that made the HUD count down on every drill sailed past it.
+  M.startDrill('straight_up'); const w = M.world;
+  w.drill.elapsed = 3; w.drill.timeLeft = o.max - 3; o.readEarly = M.drillReadout(w.drill);
+  w.drill.elapsed = o.max - 5; w.drill.timeLeft = 5; o.readLate = M.drillReadout(w.drill);
+  o.showsYourTime = o.readEarly === '3.0s';
+  o.countsDownNearTheCap = o.readLate === '5s';
+  M.startDrill('targets'); const wt = M.world;
+  wt.drill.elapsed = 12; wt.drill.timeLeft = 48; o.readTargets = M.drillReadout(wt.drill);
+  o.targetsCountsDown = o.readTargets === '48s';
+
+  // Past the cap it fails; a minute in it does not.
+  M.startDrill('straight_up'); const w2 = M.world;
+  for (let i = 0; i < 60 * 60; i++) M.stepDrill(w2);
+  o.aliveAtAMinute = !w2.drill.failed && !w2.drill.complete;
+  for (let i = 0; i < 61 * 60; i++) M.stepDrill(w2);
+  o.failsPastTheCap = w2.drill.failed;
+  return o;
+});
+
+ok('every drill has the same two-minute backstop', clocks.allAtTheCap && clocks.max === 120,
+   `${clocks.max}s, and the only drill with a clock of its own is ${JSON.stringify(clocks.own)}`);
+ok('...except Break the Targets, where the clock IS the score', clocks.targetsKeepsIts60);
+ok('...and it is the same number a recording stops at', clocks.matchesTheRecordingCap,
+   `DRILLTIME.max and GHOST.maxSecs are one number — a shorter cap wastes the headroom, a longer one lets a run outlive its own ghost`);
+ok('a time drill shows YOUR TIME, not a countdown', clocks.showsYourTime,
+   `reads "${clocks.readEarly}" — what you are racing is your own three best runs`);
+ok('...and counts down only in the last seconds', clocks.countsDownNearTheCap,
+   `reads "${clocks.readLate}" with 5s left`);
+ok('...while Break the Targets counts down throughout', clocks.targetsCountsDown,
+   `reads "${clocks.readTargets}" — there the clock is the scoring rule`);
+ok('a minute in, nothing has failed you', clocks.aliveAtAMinute,
+   'the old limits were 22-45s, so several drills failed a good attempt on the whistle');
+ok('...and past two minutes it does', clocks.failsPastTheCap, 'the cap is a backstop, not decoration');
+
 const alphas = await p.evaluate(() => window.__magnet.GHOST.alpha.slice());
 ok('the ghosts stay ordered by rank, and bronze is visible', alphas[0] > alphas[1] && alphas[1] > alphas[2] && alphas[2] >= 0.45,
    alphas.join(' > ') + ' — gold asserts itself most, and the quietest is still a ghost you can see');

@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260818.0905AM';
+const VERSION = '20260818.1150AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,15 @@ const VERSION = '20260818.0905AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260818.1150AM', title: 'A demonstration you can copy',
+    added: [],
+    changed: [
+      '<b>The drill demonstration moves like somebody playing.</b> It used to trace the line at one flat speed on a six-and-a-half second loop whatever the route was, take hairpins at full pelt, slide sideways round corners and jump back to the start mid-stride. Now it travels at your own player\u2019s speed, so a longer route takes longer; it slows for corners and picks up again on the straights; the body runs the same line as the ball rather than being stuck to it, so it swings round the outside of a turn the way you have to; and it comes to a stop at the end before going round again.',
+      '<b>No more per-drill time limits.</b> Every drill had its own clock \u2014 twenty-two seconds on one, forty-five on another \u2014 and they were guesses, so a good attempt could fail on the whistle. There is one generous two-minute backstop now, and nothing else. Break the Targets keeps its minute, because there the clock is the score.',
+      '<b>The drill readout is your time, not a countdown.</b> What you are racing is your own three best runs. The countdown comes back in the last few seconds, which is the only moment the cap means anything.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260818.0905AM', title: 'Gold, silver and bronze on the board',
     added: [
       '<b>Finish a drill and all three of your best times are on the screen</b> \u2014 gold, silver and bronze, with the record marked. The slot your run just took is highlighted with your time on it, and if the run did not make the board it is shown underneath so you can see how far off you were. The board is on the out-of-time screen too, since what you have to beat is most use on the run that did not get there.',
@@ -20078,6 +20087,33 @@ let drillBest = loadDrillBest();
 // more than a save file anybody could send. At 10Hz with integer coordinates it is ~4KB a
 // run, so the top three of all 24 drills come to well under half a megabyte and go in the
 // save file with everything else. The smoothing is what buys the rate down.
+// ⚠️ **ONE BACKSTOP, NOT ELEVEN CLOCKS** (`DRILLTIME`, `drillLimit`). Every timed drill
+// used to carry its own fail limit — 22s here, 45s there — and they were guesswork twice
+// over: set by eye, then loosened by eye when they turned out to be tighter than the route
+// could be played. A limit that is a guess is a limit that fails a good attempt on the
+// whistle, and the thing a time drill is actually scored on is YOUR OWN TIME against your
+// own three best runs. So there is one generous cap and nothing else.
+// ⚠️ **Two minutes, and it is the same 120 as `GHOST.maxSecs`** — a recording stops at
+// that mark, so a shorter cap would leave headroom nobody could use and a longer one
+// would let a run outlive the ghost of it. The two numbers are the same number.
+// ⚠️ **Break the Targets keeps its own 60**, and that is not an exception being carved
+// out: there the clock is the SCORING RULE (how many can you get in a minute) rather than
+// a limit on how long you may take, which is why running out there completes the drill
+// instead of failing it. `drillLimit` is the one place that knows the difference.
+const DRILLTIME = { max: 120, warn: 15 };
+function drillLimit(def){ return (def && def.timed) || DRILLTIME.max; }
+// ⚠️ **A TIME DRILL SHOWS YOUR TIME, NOT A COUNTDOWN.** What you are racing is your own
+// three best runs, and a clock ticking down to zero says the drill is a test you can fail
+// — which with a two-minute backstop it essentially is not. The countdown comes back in
+// the last `DRILLTIME.warn` seconds, the one moment the cap means anything, and on Break
+// the Targets, where the clock IS the score.
+// ⚠️ It is a function rather than three lines inside `renderDrill` so that a check on it
+// is a check on the real rule: a suite that re-derives "elapsed or countdown?" for itself
+// is testing its own arithmetic, which is the false pass this file keeps recording.
+function drillReadout(d){
+  if (d.def.high || (d.timed && d.timeLeft <= DRILLTIME.warn)) return Math.ceil(d.timeLeft) + 's';
+  return d.elapsed.toFixed(1) + 's';
+}
 const GHOST = {
   hz: 10,                       // samples a second
   keep: 3,                      // how many runs a drill remembers
@@ -20238,35 +20274,35 @@ function drillBoundary(w){ const hw=w.field.W/2, hl=w.field.L/2, b=0.3;
 const DRILLS = {
   // ----- Basics: easy movement drills. Goal is just to finish in the (generous)
   // time. A coaching ghost demonstrates the route the whole time. -----
-  straight_up:{ name:'Straight Line', emoji:'⬆️', unit:'t', desc:'Dribble the ball straight up into the circle', timed:30,
+  straight_up:{ name:'Straight Line', emoji:'⬆️', unit:'t', desc:'Dribble the ball straight up into the circle',
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-260,48,'reach'); },
     path:[{x:0,y:285},{x:0,y:-260}] },
-  turn_right:{ name:'Right Turn', emoji:'➡️', unit:'t', desc:'Go up, then turn right into the circle', timed:30, seq:true,
+  turn_right:{ name:'Right Turn', emoji:'➡️', unit:'t', desc:'Go up, then turn right into the circle', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-30,46,'reach'); dZone(w,175,-30,46,'reach'); },
     path:[{x:0,y:285},{x:0,y:-30},{x:175,y:-30}] },
-  turn_left:{ name:'Left Turn', emoji:'⬅️', unit:'t', desc:'Go up, then turn left into the circle', timed:30, seq:true,
+  turn_left:{ name:'Left Turn', emoji:'⬅️', unit:'t', desc:'Go up, then turn left into the circle', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-30,46,'reach'); dZone(w,-175,-30,46,'reach'); },
     path:[{x:0,y:285},{x:0,y:-30},{x:-175,y:-30}] },
-  uturn:{ name:'U-Turn', emoji:'↩️', unit:'t', desc:'Up the left lane, around the wall, back down into the circle', timed:40, seq:true,
+  uturn:{ name:'U-Turn', emoji:'↩️', unit:'t', desc:'Up the left lane, around the wall, back down into the circle', seq:true,
     build(w){ drillBoundary(w); dSet(w,-110,320,-110,285); dWall(w,0,-330,0,150);
       dZone(w,-110,-300,42,'reach'); dZone(w,110,-300,42,'reach'); dZone(w,110,150,46,'reach'); },
     path:[{x:-110,y:285},{x:-110,y:-300},{x:110,y:-300},{x:110,y:150}] },
-  zigzag_easy:{ name:'Zig-Zag', emoji:'〽️', unit:'t', desc:'Weave the ball through the circles in order', timed:40, seq:true,
+  zigzag_easy:{ name:'Zig-Zag', emoji:'〽️', unit:'t', desc:'Weave the ball through the circles in order', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,-120,150,42,'reach'); dZone(w,120,-20,42,'reach'); dZone(w,-90,-250,42,'reach'); },
     path:[{x:0,y:285},{x:-120,y:150},{x:120,y:-20},{x:-90,y:-250}] },
-  round_cone:{ name:'Round the Cone', emoji:'🚧', unit:'t', desc:'Take the ball around the cone and into the circle', timed:30,
+  round_cone:{ name:'Round the Cone', emoji:'🚧', unit:'t', desc:'Take the ball around the cone and into the circle',
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dCone(w,0,20); dZone(w,0,-250,46,'reach'); },
     path:[{x:0,y:285},{x:95,y:20},{x:0,y:-250}] },
-  wide_route:{ name:'Wide Route', emoji:'🛣️', unit:'t', desc:'Push wide right, then up into the circle', timed:35, seq:true,
+  wide_route:{ name:'Wide Route', emoji:'🛣️', unit:'t', desc:'Push wide right, then up into the circle', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,175,120,44,'reach'); dZone(w,175,-240,46,'reach'); },
     path:[{x:0,y:285},{x:175,y:120},{x:175,y:-240}] },
-  box_path:{ name:'Box Path', emoji:'⬛', unit:'t', desc:'Trace the box: right, up, left, into the circle', timed:45, seq:true,
+  box_path:{ name:'Box Path', emoji:'⬛', unit:'t', desc:'Trace the box: right, up, left, into the circle', seq:true,
     build(w){ drillBoundary(w); dSet(w,-130,320,-130,285); dZone(w,130,200,40,'reach'); dZone(w,130,-200,40,'reach'); dZone(w,-130,-200,44,'reach'); },
     path:[{x:-130,y:285},{x:130,y:200},{x:130,y:-200},{x:-130,y:-200}] },
-  long_push:{ name:'Long Push', emoji:'🎳', unit:'t', desc:'One long dribble the length of the pitch', timed:30,
+  long_push:{ name:'Long Push', emoji:'🎳', unit:'t', desc:'One long dribble the length of the pitch',
     build(w){ drillBoundary(w); dSet(w,0,330,0,300); dZone(w,0,-330,50,'reach'); },
     path:[{x:0,y:300},{x:0,y:-330}] },
-  dribble_finish:{ name:'Dribble & Finish', emoji:'🥅', unit:'t', desc:'Dribble up, round the cone, then KICK through the gate', timed:40, seq:true,
+  dribble_finish:{ name:'Dribble & Finish', emoji:'🥅', unit:'t', desc:'Dribble up, round the cone, then KICK through the gate', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dCone(w,0,-40); dZone(w,120,-40,42,'reach'); dGate(w,0,-320,66,0); },
     path:[{x:0,y:285},{x:120,y:-40},{x:0,y:-320}] },
   y_pass:{ name:'Y-Passing', emoji:'🔱', unit:'s', desc:'Thread the three gates of the Y, in order', seq:true,
@@ -20282,7 +20318,7 @@ const DRILLS = {
     build(w){ drillBoundary(w); dSet(w,0,320,0,300); dZone(w,0,-250,44,'settle'); } },
   needles:{ name:'Threading Needles', emoji:'🪡', unit:'s', desc:'Thread three gates that keep getting narrower', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,275); dGate(w,0,150,66,0); dGate(w,0,0,46,0); dGate(w,0,-150,30,0); } },
-  gate_rush:{ name:'Gate Rush', emoji:'⏱️', unit:'t', desc:'Thread all five scattered gates before time runs out', timed:45,
+  gate_rush:{ name:'Gate Rush', emoji:'⏱️', unit:'t', desc:'Thread all five scattered gates before time runs out',
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dGate(w,-130,175,48,80); dGate(w,140,70,48,-70);
       dGate(w,-100,-45,48,60); dGate(w,120,-165,48,-60); dGate(w,-25,-305,48,10); } },
   bank:{ name:'Bank Shot', emoji:'🎱', unit:'s', desc:'A wall blocks the way — bank the ball into the gate',
@@ -20458,7 +20494,7 @@ function startDrill(key){
     ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:dbp.r, invMass:dbp.invMass, bCoef:dbp.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
     state:'drill', stateT:0,
-    drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0,
+    drill: { key, def, elapsed:0, complete:false, failed:false, timed:drillLimit(def), timeLeft:drillLimit(def), coachT:0,
              // ⚠️ The ghosts are snapshotted at START, not read live: `drillAddRun` writes
              // into the same table mid-run otherwise, and your new run would appear as a
              // ghost of itself the moment it finished.
@@ -20467,6 +20503,10 @@ function startDrill(key){
   };
   def.build(world);
   world.drill.total = world.gates.length + world.zones.length;
+  // ⚠️ The coaching demonstration is a PRECOMPUTE, built once here — see COACH. It reads
+  // `pAccel`/`pDamp` off the world, so it is built after those are set and it picks up a
+  // live Game Feel change on the next run of the drill.
+  world.drill.coach = buildCoach(world);
   // A fresh drill inherits no sparks. Confetti from the completion you just read lives in
   // `fx` for about a second, and "Next drill" is well inside that.
   fx.length = 0;
@@ -20704,28 +20744,174 @@ function showDrillResult(title, sub, completed, board){
 
 // Coaching ghost — draws the ideal route as a dotted line and animates a faded
 // ghost player+ball looping along it, so you can see the movement to copy.
-function pathAt(path, t){
-  const segs=[]; let total=0;
-  for (let i=1;i<path.length;i++){ const dx=path[i].x-path[i-1].x, dy=path[i].y-path[i-1].y; const l=Math.hypot(dx,dy)||1; segs.push({dx:dx/l,dy:dy/l,l}); total+=l; }
-  const LOOP=6.5;                         // seconds per demo loop
-  let dist=((t/LOOP)*total)%total;
-  for (let i=0;i<segs.length;i++){ if (dist<=segs[i].l){ const p0=path[i]; return {x:p0.x+segs[i].dx*dist, y:p0.y+segs[i].dy*dist, dx:segs[i].dx, dy:segs[i].dy}; } dist-=segs[i].l; }
-  const last=path[path.length-1]; return {x:last.x, y:last.y, dx:0, dy:-1};
+// ============================================================
+//  THE COACHING GHOST — a demonstration that moves like somebody playing
+// ============================================================
+// ⚠️ **THE OLD ONE DID NOT PLAY THE DRILL, IT TRACED THE LINE.** `pathAt` walked the
+// authored polyline at a CONSTANT speed on a fixed 6.5-second loop, wrapped straight from
+// the last point back to the first, and pinned the body exactly 2.2 radii behind the ball
+// along the current segment. Four things were wrong with that and all four are visible:
+// a 545-unit route and a 1,400-unit one were both demonstrated in 6.5 seconds, so one was
+// a sprint and the other a crawl; it went round hairpins at full pelt; the body SLID
+// SIDEWAYS across a corner instead of coming round the ball; and at the end it teleported
+// mid-stride back to the start. Nobody moves like that, so it demonstrated nothing you
+// could copy.
+//
+// ⚠️ **THE SPEED IS THE PLAYER'S OWN**, derived from the same two Game Feel numbers the
+// physics uses: `v = a·d/(1−d)` per step is where `integrate` settles a body at full
+// stick, so the demonstration gets faster when you turn the Speed slider up, exactly as
+// you would. It is not a constant anybody has to keep in step with the sliders — and it
+// makes route LENGTH mean something again, because a longer route now takes longer.
+// `COACH.pace` (0.9) is measured, not picked: at 1.0 the model does Straight Line in
+// 2.38s and a real run of it takes 2.6s, because pushing a ball is not free.
+//
+// ⚠️ **IT BRAKES INTO CORNERS AND ACCELERATES OUT.** Each sample gets a speed cap from
+// how sharp the turn is there, then a forward pass limits how fast it can pick speed up
+// and a backward pass makes it slow down IN TIME for what is coming — the standard two
+// passes, and the backward one is the half that reads as somebody who can see the corner.
+// The ramp rate is derived from the damping too (`coachRamp`), so it is the same body.
+//
+// ⚠️ **THE BODY RUNS THE SAME ROUTE, A FIXED DISTANCE BEHIND** — never a fixed offset from
+// the ball. That is what a dribbler does, and it is what makes the body swing round the
+// outside of a turn on its own: the ball has taken the corner while the body is still on
+// the leg before it, which is the shape you are being shown how to copy.
+//
+// ⚠️ **IT PARKS AT BOTH ENDS** for `COACH.hold` rather than wrapping. The jump back to the
+// start still happens, but at a moment when nothing is moving, which reads as "again"
+// instead of a body teleporting through a wall.
+//
+// ⚠️ **BUILT ONCE, AT `startDrill`.** It is a precompute, not a per-frame advance, so it
+// is not the trails rule — but doing it in the draw would be a few hundred square roots a
+// frame for a table that cannot change. `d.coachT` is still advanced in `stepDrill`.
+// ⚠️ No randomness at all: a demonstration that differs between two draws of one step is
+// the paused-screen flicker every dynamic field is written to avoid.
+const COACH = {
+  pace: 0.9,        // of the player's own top speed — see above, this one is measured
+  turnKeep: 0.34,   // how much speed survives a hairpin; 1 would be the old build
+  trail: 30,        // how far behind the ball the body runs, world units
+  hold: 0.8,        // a beat parked at each end of the loop
+  step: 6,          // route resampling, world units
+  ballR: 0.6,       // ⚠️ a RING, and smaller than the real ball — the ghosts' rule
+  ballA: 0.8,
+};
+// Where `integrate` settles a body at full stick: v_{n+1} = (v_n + a)·d, so v = a·d/(1−d)
+// per step. Times 60 for units a second.
+function coachTop(w){
+  const a = w.pAccel || PLAYER.accel, d = Math.min(0.999, w.pDamp || PLAYER.damp);
+  return (a * d / (1 - d)) * 60 * COACH.pace;
+}
+// How hard it may change speed, in units per second squared. Taken from how long that
+// same damping takes to reach ~95% of top speed, so the ramp belongs to the body rather
+// than being a second dial to keep in step.
+function coachRamp(w){
+  const d = Math.min(0.999, w.pDamp || PLAYER.damp);
+  const secs = Math.max(0.12, (Math.log(0.05) / Math.log(d)) * STEP);
+  return coachTop(w) / secs;
+}
+function buildCoach(w){
+  const path = w.drill && w.drill.def && w.drill.def.path;
+  if (!path || path.length < 2) return null;
+  // 1. resample the polyline evenly, keeping cumulative distance
+  const pts = [{ x: path[0].x, y: path[0].y, d: 0 }];
+  let run = 0;
+  for (let i = 1; i < path.length; i++){
+    const ax = path[i-1].x, ay = path[i-1].y, bx = path[i].x, by = path[i].y;
+    const L = Math.hypot(bx - ax, by - ay);
+    if (L < 1e-6) continue;
+    const n = Math.max(1, Math.ceil(L / COACH.step));
+    for (let k = 1; k <= n; k++){
+      const f = k / n; run += L / n;
+      pts.push({ x: ax + (bx - ax) * f, y: ay + (by - ay) * f, d: run });
+    }
+  }
+  if (pts.length < 3) return null;
+  // 2. a speed cap per sample from the local turn — straight is free, a hairpin is not
+  const vmax = coachTop(w), A = coachRamp(w);
+  const v = pts.map((p, i) => {
+    if (i === 0 || i === pts.length - 1) return 0;       // stationary at both ends
+    const a = pts[i-1], b = pts[i+1];
+    const ux = p.x - a.x, uy = p.y - a.y, vx = b.x - p.x, vy = b.y - p.y;
+    const ul = Math.hypot(ux, uy) || 1, vl = Math.hypot(vx, vy) || 1;
+    const c = (ux * vx + uy * vy) / (ul * vl);           // 1 straight, −1 a hairpin
+    return vmax * (COACH.turnKeep + (1 - COACH.turnKeep) * Math.max(0, (1 + c) / 2));
+  });
+  // 3. forward: how fast it can have got going. backward: braking in time for the corner.
+  for (let i = 1; i < v.length; i++){
+    const ds = pts[i].d - pts[i-1].d;
+    v[i] = Math.min(v[i], Math.sqrt(v[i-1] * v[i-1] + 2 * A * ds));
+  }
+  for (let i = v.length - 2; i >= 0; i--){
+    const ds = pts[i+1].d - pts[i].d;
+    v[i] = Math.min(v[i], Math.sqrt(v[i+1] * v[i+1] + 2 * A * ds));
+  }
+  // 4. integrate the speeds into arrival times
+  const ts = [0]; let t = 0;
+  for (let i = 1; i < pts.length; i++){
+    const ds = pts[i].d - pts[i-1].d;
+    t += ds / Math.max(vmax * 0.06, (v[i-1] + v[i]) / 2);   // floor: never a stall mid-route
+    ts.push(t);
+  }
+  return { pts, ts, run: t, len: pts[pts.length - 1].d };
+}
+// Position at a distance along the route. Before the start it runs BACK along the first
+// leg, which is where the body stands while the ball is still on the line.
+function coachAtDist(c, dd){
+  const pts = c.pts, n = pts.length;
+  if (dd <= 0){
+    const a = pts[0], b = pts[1], L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: a.x - (b.x - a.x) / L * -dd, y: a.y - (b.y - a.y) / L * -dd };
+  }
+  if (dd >= pts[n-1].d) return { x: pts[n-1].x, y: pts[n-1].y };
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1){ const m = (lo + hi) >> 1; if (pts[m].d <= dd) lo = m; else hi = m; }
+  const a = pts[lo], b = pts[hi], f = (dd - a.d) / Math.max(1e-6, b.d - a.d);
+  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+}
+// How far along the route it has got by time `tt`.
+function coachDistAt(c, tt){
+  const ts = c.ts, n = ts.length;
+  if (tt <= 0) return 0;
+  if (tt >= ts[n-1]) return c.pts[n-1].d;
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1){ const m = (lo + hi) >> 1; if (ts[m] <= tt) lo = m; else hi = m; }
+  const f = (tt - ts[lo]) / Math.max(1e-6, ts[hi] - ts[lo]);
+  return c.pts[lo].d + (c.pts[hi].d - c.pts[lo].d) * f;
+}
+// ⚠️ ONE PLACE ANSWERS WHERE THE DEMONSTRATION IS. `drawCoach` used to work the body out
+// inline, which meant a test could only re-implement the rule and check its own arithmetic
+// — the false pass this file has been bitten by before. The draw asks for a pose; so does
+// the suite.
+function coachPose(c, tt){
+  const dd = coachDistAt(c, Math.max(0, Math.min(c.run, tt)));
+  return { d: dd, ball: coachAtDist(c, dd), body: coachAtDist(c, dd - COACH.trail) };
+}
+// Where it is in the park-run-park loop.
+function coachPhase(c, t){
+  const period = c.run + COACH.hold * 2;
+  const ph = ((t || 0) % period + period) % period;
+  return Math.max(0, Math.min(c.run, ph - COACH.hold));
 }
 function drawCoach(w){
-  const d=w.drill, path=d.def && d.def.path; if (!path || path.length<2) return;
-  const s=cam.s;
+  const d = w.drill, c = d && d.coach; if (!c) return;
+  const s = cam.s, path = d.def.path;
   ctx.save();
   ctx.setLineDash([6,9]); ctx.lineWidth=Math.max(1,2*s); ctx.strokeStyle=rgba(TH.accent,0.45);
   ctx.beginPath(); ctx.moveTo(wx(path[0].x),wy(path[0].y));
   for (let i=1;i<path.length;i++) ctx.lineTo(wx(path[i].x),wy(path[i].y));
   ctx.stroke(); ctx.setLineDash([]);
-  const g=pathAt(path, d.coachT||0);
-  const gx=wx(g.x), gy=wy(g.y), r=w.ball.r*s;
-  ctx.globalAlpha=0.5;
-  ctx.beginPath(); ctx.arc(gx - g.dx*r*2.2, gy - g.dy*r*2.2, PLAYER.r*s, 0, 2*Math.PI); ctx.fillStyle=rgba(TH.accent,0.32); ctx.fill();
-  ctx.beginPath(); ctx.arc(gx, gy, r, 0, 2*Math.PI); ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.fill();
-  ctx.globalAlpha=1;
+  // Park, run, park — then round again.
+  const pose = coachPose(c, coachPhase(c, d.coachT || 0));
+  const gb = pose.ball, gp = pose.body;
+  // ⚠️ AN OUTLINE AS WELL AS A FILL, the note `drawGhosts` already carries: a translucent
+  // disc on a green pitch is a smudge, and the ring is what makes it a body. It was a bare
+  // 0.32 fill under a 0.5 global alpha — 16% — which is a slightly-lighter patch of grass.
+  ctx.beginPath(); ctx.arc(wx(gp.x), wy(gp.y), PLAYER.r*s, 0, 2*Math.PI);
+  ctx.fillStyle = rgba(TH.accent, 0.26); ctx.fill();
+  ctx.lineWidth = Math.max(1.4, 2.2*s); ctx.strokeStyle = rgba(TH.accent, 0.7); ctx.stroke();
+  // ⚠️ A RING, for the reason a ghost's ball is one: the real ball is the only thing on a
+  // drill pitch that may be a filled circle of that size.
+  ctx.beginPath(); ctx.arc(wx(gb.x), wy(gb.y), Math.max(1.5, w.ball.r*COACH.ballR*s), 0, 2*Math.PI);
+  ctx.lineWidth = Math.max(1, 1.6*s); ctx.strokeStyle = `rgba(255,255,255,${COACH.ballA})`; ctx.stroke();
   ctx.restore();
 }
 
@@ -20861,7 +21047,7 @@ function renderDrill(){
   // just unhelpful, it was wrong — it said the drill was complete and empty at once.
   const n = d.doneCount || 0;
   const prog = d.def.high ? (n + (n === 1 ? ' goal' : ' goals')) : `${n}/${d.total}`;
-  const time = d.timed ? `${Math.ceil(d.timeLeft)}s` : `${d.elapsed.toFixed(1)}s`;
+  const time = drillReadout(d);
   ctx.fillText(prog + '   ' + time, cw/2, 74);
   drawControls();
 }
@@ -25675,7 +25861,8 @@ if (window.__MAGNETDEBUG) {
     GHOST, ghostRate, ghostAt, ghostSpline, ghostRecord, drillRuns, drillTop,
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
-    buildDrillBoard, drillScoreText, showDrillResult,
+    buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
+    COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

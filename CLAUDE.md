@@ -1030,6 +1030,67 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ribbons and map vote sitting under the drill's own title.
   ⚠️ Break the Targets counts **goals**, so `drillScoreText` is the one place that knows
   which units a drill scores in — the same reason `drillBetter` exists one entry up.
+- **ONE TWO-MINUTE BACKSTOP, NOT ELEVEN CLOCKS** (`DRILLTIME`, `drillLimit`,
+  `drillReadout`). Every timed drill carried its own fail limit — 22s here, 45s there —
+  and they were guesswork twice over: set by eye, then loosened by eye when they turned
+  out tighter than the route could be played. A limit that is a guess fails a good attempt
+  on the whistle, and what a time drill is actually scored on is **your own time against
+  your own three best runs**. So there is one generous cap and nothing else.
+  ⚠️ **120 is the same number as `GHOST.maxSecs`** — a recording stops at that mark, so a
+  shorter cap leaves headroom nobody can use and a longer one lets a run outlive the ghost
+  of it. One number, asserted as one.
+  ⚠️ **Break the Targets keeps its own 60**, and that is not an exception being carved out:
+  there the clock is the **scoring rule** (how many in a minute) rather than a limit on how
+  long you may take, which is why running out completes that drill instead of failing it.
+  `drillLimit` is the one place that knows the difference.
+  ⚠️ **The readout is YOUR TIME, not a countdown** (`drillReadout`). A clock ticking to zero
+  says the drill is a test you can fail, which with a two-minute backstop it essentially is
+  not. The countdown returns in the last `DRILLTIME.warn` seconds — the one moment the cap
+  means anything — and on Break the Targets throughout. ⚠️ It is a **function** rather than
+  three lines inside `renderDrill`, so a check on it is a check on the real rule: the first
+  version of that check re-derived "elapsed or countdown?" in the suite and a sabotage that
+  made the HUD count down on every drill sailed straight past it.
+- **THE COACHING DEMONSTRATION MOVES LIKE SOMEBODY PLAYING** (`COACH`, `buildCoach`,
+  `coachTop`, `coachRamp`, `coachAtDist`, `coachDistAt`, `coachPose`, `coachPhase`,
+  `drawCoach`).
+  ⚠️ **The old one traced the line, it did not play the drill.** `pathAt` walked the
+  authored polyline at CONSTANT speed on a fixed 6.5-second loop, wrapped instantly from
+  the end back to the start, and pinned the body a fixed offset behind the ball along the
+  current segment. Four things wrong, all visible: a 545-unit route and a 1,255-unit one
+  were both demonstrated in 6.5s, so one was a sprint and the other a crawl; it took
+  hairpins flat out; the body **slid sideways** across a corner instead of coming round the
+  ball; and at the end it teleported mid-stride. Nobody moves like that, so it demonstrated
+  nothing anybody could copy.
+  ⚠️ **THE SPEED IS THE PLAYER'S OWN**, derived from the two Game Feel numbers the physics
+  uses — `v = a·d/(1−d)` per step is where `integrate` settles a body at full stick — so the
+  demonstration gets faster when you turn the Speed slider up, and route LENGTH means
+  something again. `COACH.pace` (0.9) is **measured**: at 1.0 the model does Straight Line
+  in 2.38s and a real run takes 2.6s, because pushing a ball is not free.
+  ⚠️ **It brakes into corners and accelerates out** — a speed cap per sample from how sharp
+  the turn is, then a forward pass for how fast it can have got going and a backward pass
+  for braking in time. The backward pass is the half that reads as somebody who can *see*
+  the corner. The ramp rate comes off the same damping (`coachRamp`), so it is one body.
+  ⚠️ **The body runs the same ROUTE, a fixed distance behind** — never a fixed offset from
+  the ball. That is what a dribbler does, and it is what makes the body swing round the
+  outside of a turn on its own: the ball has taken the corner while the body is still on
+  the leg before. Measured as the body's distance from the polyline (the old build was 29
+  units off at a corner) **and** as the body-to-ball gap closing toward 1/√2 through a
+  right angle, since a rigid offset holds that gap at exactly 1.00 all the way round.
+  ⚠️ **It parks at both ends** for `COACH.hold` rather than wrapping. The jump back still
+  happens, at a moment when nothing is moving.
+  ⚠️ **`coachPose` is the ONE place that answers where it is**, and the draw asks it. The
+  suite drives the same function and then ties it to the picture with a single ink probe at
+  the point the pose names — without that, `drawCoach` could work the body out its own way
+  for ever while every other check passed.
+  ⚠️ **Built once, in `startDrill`**: a precompute, not a per-frame advance, so it is not
+  the trails rule — but a few hundred square roots a frame for a table that cannot change
+  is still waste. `d.coachT` is advanced in `stepDrill`. No randomness at all.
+  ⚠️ Its ball is a **ring**, for the reason a ghost's is: on a drill pitch the real ball is
+  the only thing that may be a filled circle of that size. And the body has an **outline as
+  well as a fill** — at a bare 0.32 under a 0.5 global alpha it was a lighter patch of grass.
+  ⚠️ **Fifteen of the 25 drills have no `path` and so get no demonstration**, which is unchanged and
+  deliberate: a route derived from the objectives would cut straight through the wall the
+  course is built around, and a demonstration that walks through a wall is worse than none.
 - **THE DRILL CLOCKS ARE DESIGN JUDGEMENT, AND THE MACHINE IS A FLOOR** (`drillAutoPad`,
   `drillObjective`, `drillRoute`). ⚠️ **A withdrawn claim.** The machine shipped described
   as "the instrument the drill timings are tuned against" — a controller that could play
@@ -1039,9 +1100,9 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   reaches **8 of 25**. A yardstick that measures a third of the range is not one, and
   quoting it as one would put a number on the other seventeen that nothing measured.
   ⚠️ **The GHOSTS are the measure instead** — three real runs per drill, kept and raced,
-  by the people the clock is for. The limits are set to the brief (a bad player inside
-  thirty seconds, a good one inside ten) and were loosened where they were plainly tight;
-  a drill nobody can beat shows up as a drill with no ghosts on it.
+  by the people the clock is for. The per-drill limits were loosened once and then dropped
+  entirely for a single backstop (see `DRILLTIME` above); a drill nobody can beat shows up
+  as a drill with no ghosts on it.
   ⚠️ What the machine still buys, and why it ships rather than living in a test: on all 25
   it never THROWS and never leaves a drill in a broken state. That is a real guarantee
   about every layout. ⚠️ It writes a **PAD** through `applyHumanInput`, never the player,
