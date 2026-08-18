@@ -9,6 +9,54 @@ _Current build: **v20260814.0210AM** (shown under the title; bump `VERSION` in `
 
 ---
 
+## 🔮 Next up — agreed 18 Aug, in this order
+The four that were left over from the phone/single-player suggestions, after the drill
+ghosts shipped. The match length is deliberately **not** here: first-to-3 was tried and
+kept.
+
+- [ ] **Daily challenge — one seeded scenario a day.** A fixed field, mode, difficulty and
+  match seed derived from the calendar date, so everybody playing on the same day plays the
+  identical match. Best result per day kept, plus a streak. Highest value of the four for
+  phone single-player, because it is the only one that gives a reason to open the game on a
+  day you were not going to. Everything it needs already exists: `setMatchSeed` pins a
+  match, `MATCHLOG` records it, the Daily Reward modal is the hook.
+  ⚠️ The seed comes from the **DATE**, never `Math.random` — the whole premise is that
+  everyone got the same match, and a rolled seed makes that unverifiable.
+  ⚠️ **Local only.** Sheet writes are closed by design (see Parked, below), so a shared
+  board needs the Apps Script and must not be implied on screen until it exists — a
+  scoreboard that never fills in is the dead-control rule wearing a new hat.
+- [ ] **Adaptive difficulty from your Elo, opt-in.** `DIFF_RATING` already maps each of the
+  seven tiers to an implied rating and `stats.mmr` already tracks yours, so this is picking
+  the nearest tier at kickoff behind a toggle that is **off** by default.
+  ⚠️ It carries a real bug fix with it: `updateMMR` and `recordResult` both read `sel.diff`
+  at **result** time rather than `w.diffKey`, so changing difficulty mid-match already
+  grades you against the wrong opponent — and a tier the game picks for you makes that
+  wrong on every single match.
+  ⚠️ It may only pick a **tier**, never bend `botSkill`. Difficulty is a ladder and a type
+  is a shape (see `BOT_TYPES` in CLAUDE.md); a setting that reaches into the scalar is a
+  second difficulty dial hidden inside a first one.
+- [ ] **Trim the menu on a touch-only device.** Hide the controller-only settings — pad
+  binding, move-stick calibration, cocktail seat rotation, the arcade panel map — on a
+  device that is only ever going to be touched.
+  ⚠️ Key it on the **touch layout**, never on "no gamepad connected". `tests/audit.mjs`
+  requires every `defaultSel()` key to have a reachable, effective control, and it runs on a
+  desktop-shaped headless page with no pad — so a pad-absence rule hides half the Controls
+  card from the audit and fails it.
+  ⚠️ CSS is half a fix, the hole `shownInShowMode` already documents: `menuSearchIndex` has
+  to filter too, or the search still jumps somebody into a pane that is hidden.
+- [ ] **Resume an interrupted match.** A phone call, a locked screen or a closed tab loses
+  the match outright today. Snapshot the world on `visibilitychange`/`pagehide` and offer to
+  resume at boot. Last of the four because it is the only one that is not mostly wiring.
+  ⚠️ `w.rng` is a mulberry32 **closure**, so a snapshot cannot restore the stream. Either
+  the counter is exposed and re-seeded, or a resumed match is deliberately no longer
+  bit-reproducible from its seed — a decision to make **before** writing any of it, not
+  after.
+  ⚠️ It must not resurrect a match somebody deliberately left. `toMenu()` nulls the world,
+  so the snapshot is cleared there and at full time, or every launch offers to resume the
+  match you just finished.
+
+---
+
 ## 🎒 SKIPPED — carried over from the 13 Aug session
 
 Everything shipped that day went out without its test suite, because the ask at the time was
