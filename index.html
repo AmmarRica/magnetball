@@ -11562,10 +11562,16 @@ function openDrills(){ dockOrFull('drills', buildDrillList); }
 function buildDrillList(){
   const wrap = $('drillList'); wrap.innerHTML='';
   DRILL_KEYS.forEach(key=>{
-    const dl = DRILLS[key]; const best = drillBest[key];
+    // ⚠️ Through `drillTop`, never `drillBest[key]` — a drill now keeps its best THREE
+    // runs, and an older save still holds a bare number there. One reader, one shape.
+    const dl = DRILLS[key]; const best = drillTop(key);
+    const runs = drillRuns(key);
     const el = document.createElement('div'); el.className='opt';
+    const say = v => dl.high ? (v + (v === 1 ? ' goal' : ' goals')) : (v.toFixed(2) + 's');
+    // A medal per kept run, so the tile says how many ghosts will be out there with you.
+    const medals = runs.map((r, i) => r.p ? ['\ud83e\udd47','\ud83e\udd48','\ud83e\udd49'][i] : '').join('');
     el.innerHTML = `<span class="emoji">${dl.emoji}</span><span>${dl.name}</span>`+
-      `<small>${best!=null?('best '+(dl.high?(best+(best===1?' goal':' goals')):(best.toFixed(2)+'s'))):dl.desc.slice(0,22)}</small>`;
+      `<small>${best!=null?('best '+say(best)+(medals?' '+medals:'')):dl.desc.slice(0,22)}</small>`;
     el.onclick = () => startDrill(key);
     wrap.appendChild(el);
   });
@@ -19998,6 +20004,107 @@ let drillKey = null;
 function loadDrillBest(){ try { return JSON.parse(localStorage.getItem('magnetball.drills')||'{}'); } catch(e){ return {}; } }
 function saveDrillBest(o){ try { localStorage.setItem('magnetball.drills', JSON.stringify(o)); } catch(e){} }
 let drillBest = loadDrillBest();
+// ============================================================
+//  DRILL GHOSTS — race your three best runs at once
+// ============================================================
+// ⚠️ **THREE AT ONCE, COLOURED BY RANK**, not one. A single ghost tells you whether you
+// are ahead of your best; three tell you the SHAPE of your own improvement — where the
+// gold run took a line the bronze one did not, which is the thing you are actually trying
+// to learn. Gold, silver and bronze, and the colour is the only label they need.
+//
+// ⚠️ **SAMPLED AT 10Hz AND INTERPOLATED, and that is what makes them smooth.** Stepping a
+// recording frame by frame is what a replay does, and at any sample rate you can afford to
+// store it reads as a stutter — which is why a ghost recorded that way never looks like
+// the ones in Braid or a kart game. Those interpolate a CURVE through sparse keyframes, so
+// the ghost is smooth at any playback rate and any refresh rate. Catmull-Rom through the
+// four surrounding samples, not a straight line between two: at 10Hz a linear blend puts a
+// visible corner at every sample, and a corner every tenth of a second is the stutter back
+// again wearing a different hat.
+//
+// ⚠️ **10Hz IS A STORAGE DECISION, and it is what lets a ghost travel.** Three runs of
+// every drill at 60Hz is about 3MB — more than the whole `localStorage` budget and far
+// more than a save file anybody could send. At 10Hz with integer coordinates it is ~4KB a
+// run, so the top three of all 24 drills come to well under half a megabyte and go in the
+// save file with everything else. The smoothing is what buys the rate down.
+const GHOST = {
+  hz: 10,                       // samples a second
+  keep: 3,                      // how many runs a drill remembers
+  cols: ['#ffd23d', '#c8ccd4', '#cd7f32'],     // gold, silver, bronze
+  alpha: [0.62, 0.46, 0.34],    // the better the run, the more it asserts itself
+  ballA: 0.5,                   // its ball, relative to the ghost's own alpha
+  maxSecs: 120,                 // a runaway recording can never eat the budget
+};
+function ghostRate(){ return Math.max(1, GHOST.hz); }
+// The rows a drill keeps, best first. ⚠️ `drillBest[key]` is still a plain NUMBER for a
+// save written by an older build, so every reader goes through here and an old save keeps
+// working with no ghost attached to its time.
+function drillRuns(key){
+  const v = drillBest[key];
+  if (v == null) return [];
+  if (typeof v === 'number') return [{ t: v }];
+  return Array.isArray(v.runs) ? v.runs : [];
+}
+function drillTop(key){ const r = drillRuns(key)[0]; return r ? r.t : null; }
+// ⚠️ ONE COMPARATOR, because "better" points two ways: Break the Targets scores on goals
+// where higher wins, and everything else scores on time where lower does. Two copies of
+// this test is how the original recorded somebody's WORST run as their record.
+function drillBetter(key, a, b){
+  const high = !!(DRILLS[key] && DRILLS[key].high);
+  return high ? a > b : a < b;
+}
+// ---- recording ------------------------------------------------------------
+// ⚠️ Advanced from `stepDrill`, never from a draw — the trails rule. A sample is taken on
+// a COUNTER rather than on `elapsed % (1/hz)`, because a float modulo drops or doubles a
+// sample whenever the remainder lands near zero and a ghost is then a frame ahead of
+// itself for the rest of the run.
+function ghostRecord(w){
+  const d = w.drill; if (!d || d.complete || d.failed) return;
+  if (!d.rec) d.rec = { p: [], b: [], n: 0 };
+  const every = Math.max(1, Math.round(1 / (STEP * ghostRate())));
+  if ((d.rec.n++ % every) !== 0) return;
+  if (d.rec.p.length >= GHOST.maxSecs * ghostRate() * 2) return;
+  const p = w.players[0], b = w.ball;
+  d.rec.p.push(Math.round(p.x), Math.round(p.y));
+  d.rec.b.push(Math.round(b.x), Math.round(b.y));
+}
+// ---- playback -------------------------------------------------------------
+// ⚠️ **CATMULL-ROM, and it is clamped at the ends rather than wrapped.** A ghost that runs
+// off the start of its own recording is a body that appears from nowhere; duplicating the
+// end samples holds it still at both ends, which is what a finished run should do.
+function ghostSpline(a, i, f){
+  const n = a.length / 2;
+  if (!n) return null;
+  const at = k => { const j = Math.max(0, Math.min(n - 1, k)); return [a[j*2], a[j*2+1]]; };
+  const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+  const f2 = f * f, f3 = f2 * f;
+  const c = (q0, q1, q2, q3) =>
+    0.5 * ((2*q1) + (-q0 + q2)*f + (2*q0 - 5*q1 + 4*q2 - q3)*f2 + (-q0 + 3*q1 - 3*q2 + q3)*f3);
+  return [c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1])];
+}
+// Where a recorded run is at time `t` seconds. Null once it has run out, so a ghost that
+// finished ahead of you simply stops being drawn rather than freezing on the pitch.
+function ghostAt(run, t, which){
+  const a = run && run[which || 'p']; if (!a || a.length < 2) return null;
+  const n = a.length / 2;
+  const x = t * ghostRate();
+  if (x > n - 1 + 0.5) return null;
+  const i = Math.max(0, Math.floor(x));
+  return ghostSpline(a, i, Math.max(0, Math.min(1, x - i)));
+}
+// ⚠️ A run is kept only if it EARNS a place, and the list is capped at three — so the
+// storage cost of this feature is bounded by the number of drills, not by how much
+// somebody practises.
+function drillAddRun(key, t, rec){
+  const runs = drillRuns(key).slice();
+  const row = { t: +(+t).toFixed(2), at: Date.now() };
+  if (rec && rec.p && rec.p.length >= 4){ row.hz = ghostRate(); row.p = rec.p; row.b = rec.b; }
+  runs.push(row);
+  runs.sort((x, y) => drillBetter(key, x.t, y.t) ? -1 : (x.t === y.t ? 0 : 1));
+  runs.length = Math.min(runs.length, GHOST.keep);
+  drillBest[key] = { runs };
+  saveDrillBest(drillBest);
+  return runs.indexOf(row);          // -1 if it did not make the cut
+}
 
 // ---- primitives (populate a drill world)
 function dGate(w,x,y,gw,angDeg,opts){
@@ -20155,6 +20262,116 @@ const DRILLS = {
 };
 const DRILL_KEYS = Object.keys(DRILLS);
 
+// ============================================================
+//  A DRILL PLAYED BY THE MACHINE
+// ============================================================
+// ⚠️ **THIS IS THE INSTRUMENT THE DRILL TIMINGS ARE TUNED AGAINST**, and that is why it
+// ships rather than living in a test. "Is this drill completable, and in how long?" is not
+// a question anybody can answer by eye across two dozen layouts, and the time limits were
+// set by guesswork — some of them tighter than the drill could actually be finished in.
+// `tests/drillghost.mjs` drives every drill through this and fails if one cannot be
+// finished, so a new drill with an impossible layout or an impossible clock cannot ship.
+//
+// ⚠️ It writes a PAD, not the player, and `stepDrill` then runs it through
+// `applyHumanInput` like any other input. So it is playing the drill the way a person
+// does — through the same movement, the same grip, the same kick — rather than steering a
+// body directly, which would make it a measurement of something nobody can reproduce.
+//
+// ⚠️ Deliberately NOT `runBot`: that wants teams, formations and a goal to attack, none of
+// which a drill has. The rule of thumb it follows instead is the whole of dribbling —
+// stand on the far side of the ball from where you want it, and walk.
+// The route the ball has to travel. ⚠️ `def.path` is the AUTHORED one — it is what the
+// coaching ghost already demonstrates — so the machine follows the designer's line rather
+// than beelining through the cone the line exists to go round. Where a drill has no path,
+// the objectives in order ARE the route, which is right for every drill whose obstacles
+// are not between them.
+function drillRoute(w){
+  const d = w.drill;
+  if (d._route) return d._route;
+  const pts = [];
+  if (d.def.path && d.def.path.length > 1){
+    for (let i = 1; i < d.def.path.length; i++) pts.push({ x: d.def.path[i].x, y: d.def.path[i].y });
+  }
+  d._route = pts;
+  return pts;
+}
+// The next thing the ball has to reach: a route waypoint while any are left, then the
+// objective itself. ⚠️ A waypoint is passed on the BALL's position, not the player's — the
+// ball is the thing being taken round the course.
+function drillObjective(w){
+  const d = w.drill;
+  if (d.def.targets){
+    // Break the Targets: put it in whichever goal is nearer.
+    const halfL = w.bounds.halfL;
+    return { x: 0, y: w.ball.y < 0 ? -halfL - 10 : halfL + 10, kind: 'goal' };
+  }
+  const route = drillRoute(w);
+  d._wp = d._wp || 0;
+  while (d._wp < route.length){
+    const q = route[d._wp];
+    if (Math.hypot(w.ball.x - q.x, w.ball.y - q.y) < 46) { d._wp++; continue; }
+    break;
+  }
+  const seq = !!d.def.seq;
+  const cands = [];
+  const gi = w.gates.findIndex(g => !g.done);
+  w.gates.forEach((g, i) => { if (g.done) return; if (seq && i !== gi) return;
+                              cands.push({ x: g.x, y: g.y, kind: 'gate', g }); });
+  const zi = w.zones.findIndex(z => !z.done);
+  w.zones.forEach((z, i) => { if (z.done) return; if (seq && i !== zi) return;
+                              cands.push({ x: z.x, y: z.y, kind: z.kind, r: z.r }); });
+  if (!cands.length) return null;
+  let best = cands[0], bd = Infinity;
+  for (const c of cands){ const dd = Math.hypot(c.x - w.ball.x, c.y - w.ball.y);
+                          if (dd < bd){ bd = dd; best = c; } }
+  // ⚠️ A waypoint is steered to as a plain PUSH, never as a shot: the shot rules belong to
+  // the objective at the end of the route, and firing at a corner of the course sends the
+  // ball off it.
+  if (d._wp < route.length){
+    const q = route[d._wp];
+    // ...unless the waypoint IS the objective, in which case treat it as one.
+    if (Math.hypot(q.x - best.x, q.y - best.y) < 24) return best;
+    return { x: q.x, y: q.y, kind: 'way' };
+  }
+  return best;
+}
+function drillAutoPad(w){
+  const out = { dx: 0, dy: 0, kick: false };
+  const d = w.drill; if (!d || d.complete || d.failed) return out;
+  const p = w.players[0], b = w.ball;
+  const t = drillObjective(w); if (!t) return out;
+  const bd = Math.hypot(t.x - b.x, t.y - b.y) || 1;
+  const ax = (t.x - b.x) / bd, ay = (t.y - b.y) / bd;      // where the ball has to go
+  const bsp = Math.hypot(b.vx, b.vy);
+  // A SETTLE zone is the one objective you can overshoot: the ball has to come to REST
+  // inside it, so once it is close enough to coast there, stop pushing.
+  if (t.kind === 'settle' && bd < (t.r || 40) * 0.75) return out;
+  // ⚠️ **IT HAS TO KICK.** A gate down a corridor, a wall to bank off, a corner to snipe:
+  // those are shots, and a drill that is a shot cannot be dribbled. A route WAYPOINT is
+  // never fired at — the shot belongs to the objective at the end of the route.
+  const shot = t.kind === 'gate' || t.kind === 'goal';
+  const off = (p.r + b.r) * (shot ? 1.3 : 1.02);
+  const sx = b.x - ax * off, sy = b.y - ay * off;
+  // ⚠️ Round the ball, not through it — `botArcPoint`, the match AI's own approach, rather
+  // than a second copy of the idea. Heading straight for the standing spot with the ball in
+  // the way shoves it the wrong way first, and the machine then chases its own objective.
+  // ⚠️ **A UNIT STICK, not `botArrive`.** That helper writes in ACCELERATION space against
+  // `w.pAccel`, and a drill's accel is the player's own Game Feel setting — so on a low one
+  // it asks for almost no stick at all and the machine cannot finish a straight line.
+  const toBall = Math.hypot(b.x - p.x, b.y - p.y) || 1;
+  const R = Math.max(off, Math.min(toBall, off * 2.2));
+  const arc = botArcPoint(p, b, R, sx, sy, 0.5);
+  const behind = ((p.x - b.x) * ax + (p.y - b.y) * ay) / toBall;   // -1 = perfectly behind
+  const lined = behind < -0.72;
+  const gx = lined ? t.x : arc.x, gy = lined ? t.y : arc.y;
+  const mx = gx - p.x, my = gy - p.y, md = Math.hypot(mx, my) || 1;
+  out.dx = mx / md; out.dy = my / md;
+  out.faceX = ax; out.faceY = ay;
+  // Fire only when lined up on a near-still ball, as a TAP — `holdT` is left alone, or a
+  // full wind-up sends every gate drill's ball off the end of the pitch.
+  if (shot && lined && bsp < 1.4 && bd > (p.r + b.r) * 2.4 && toBall < off * 1.9) out.kick = true;
+  return out;
+}
 function startDrill(key){
   drillKey = key; const def = DRILLS[key];
   // Use the SAME movement as a real match — your Game Feel sliders, pitch grip,
@@ -20175,7 +20392,12 @@ function startDrill(key){
     ball: { x:0,y:0,vx:0,vy:0,px:0,py:0, r:dbp.r, invMass:dbp.invMass, bCoef:dbp.bCoef, damp:fv.bdamp, isBall:true },
     walls:[], posts:[], arcs:[], gates:[], zones:[], cones:[],
     state:'drill', stateT:0,
-    drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0 },
+    drill: { key, def, elapsed:0, complete:false, failed:false, timed:def.timed||0, timeLeft:def.timed||0, coachT:0,
+             // ⚠️ The ghosts are snapshotted at START, not read live: `drillAddRun` writes
+             // into the same table mid-run otherwise, and your new run would appear as a
+             // ghost of itself the moment it finished.
+             rec: null, _route: null, _wp: 0,
+             ghosts: drillRuns(key).filter(r => r.p && r.p.length >= 4) },
   };
   def.build(world);
   world.drill.total = world.gates.length + world.zones.length;
@@ -20215,6 +20437,7 @@ function stepDrill(w){
   integrate(w, false, false);
   advanceBallSpin(w);   // ⚠️ a drill's ball rolls too — it used to sit frozen, see there
   ballSounds(w);
+  ghostRecord(w);       // ⚠️ step loop, never a draw — see GHOST
   updateDrill(w);
 }
 
@@ -20297,13 +20520,19 @@ function drillDone(w){
   // quietly record your WORST run as your record on that one.
   const high = !!d.def.high;
   const t = high ? (d.scored || 0) : d.elapsed;
-  const prev = drillBest[d.key];
-  const isBest = prev == null || (high ? t > prev : t < prev);
-  if (isBest){ drillBest[d.key] = high ? t : +t.toFixed(2); saveDrillBest(drillBest); }
+  const prev = drillTop(d.key);
+  // ⚠️ The run and its GHOST go in together, and the table decides whether it earned a
+  // place — so a personal best and a third-best are the same code path and the recording
+  // can never be attached to a run the table then throws away.
+  const rank = drillAddRun(d.key, t, d.rec);
+  const isBest = rank === 0;
   const say = v => high ? (v + (v === 1 ? ' goal' : ' goals')) : ('Time ' + v.toFixed(2) + 's');
+  const medal = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'][rank] || '';
   showBanner(high ? "TIME'S UP" : 'COMPLETE!', high ? 'var(--accent)' : 'var(--green)');
-  showDrillResult(high ? "TIME'S UP ⏱️" : 'COMPLETE! ✅',
-    say(t) + (isBest ? '   ·   NEW BEST 🏆' : (prev != null ? `   ·   best ${say(prev)}` : '')), true);
+  showDrillResult(high ? "TIME'S UP \u23f1\ufe0f" : 'COMPLETE! \u2705',
+    say(t) + (isBest ? '   \u00b7   NEW BEST \ud83c\udfc6'
+                     : rank > 0 ? `   \u00b7   ${medal} of your best three   \u00b7   best ${say(prev)}`
+                     : (prev != null ? `   \u00b7   best ${say(prev)}` : '')), true);
 }
 function drillFail(w){
   w.drill.failed = true;
@@ -20360,6 +20589,40 @@ function drawCoach(w){
   ctx.restore();
 }
 
+// ⚠️ **DRAWN BACK TO FRONT — bronze first, gold last.** Three translucent bodies on one
+// route overlap constantly, and whichever is drawn last is the one you can read; the run
+// you are chasing is the gold one, so it goes on top.
+// ⚠️ **`d.elapsed` is the clock, and the render alpha is added on top of it.** A ghost is
+// a body moving over time like any other, so drawing it at the step's time would judder
+// against a player drawn through `ix`/`iy` — the two would be up to a full step apart, and
+// on a 144Hz screen the ghost would visibly step while you moved smoothly.
+function drawGhosts(w){
+  const d = w.drill; const runs = d && d.ghosts; if (!runs || !runs.length) return;
+  const s = cam.s;
+  const t = (d.elapsed || 0) + (d.complete || d.failed ? 0 : renderAlpha * STEP);
+  ctx.save();
+  for (let i = Math.min(runs.length, GHOST.keep) - 1; i >= 0; i--){
+    const run = runs[i];
+    const gp = ghostAt(run, t, 'p');
+    if (!gp) continue;                       // its run is over: it stops being drawn
+    const gb = ghostAt(run, t, 'b');
+    const col = GHOST.cols[i] || GHOST.cols[GHOST.cols.length - 1];
+    const a = GHOST.alpha[i] != null ? GHOST.alpha[i] : 0.3;
+    // Its ball first, so the body reads over it the way a real one does.
+    if (gb){
+      ctx.beginPath(); ctx.arc(wx(gb[0]), wy(gb[1]), Math.max(2, w.ball.r * s), 0, 2*Math.PI);
+      ctx.fillStyle = rgba(col, a * GHOST.ballA); ctx.fill();
+    }
+    const px = wx(gp[0]), py = wy(gp[1]), pr = Math.max(3, PLAYER.r * s);
+    ctx.beginPath(); ctx.arc(px, py, pr, 0, 2*Math.PI);
+    ctx.fillStyle = rgba(col, a * 0.34); ctx.fill();
+    // ⚠️ An OUTLINE as well as a fill: three translucent discs of similar lightness on a
+    // green pitch are three smudges, and the ring is what makes each one a body.
+    ctx.lineWidth = Math.max(1.4, 2.2 * s); ctx.strokeStyle = rgba(col, a);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 // ---- drill rendering
 // The real goal frame, for the one drill that has real goals. Drawn from `w.bounds`
 // and `POST.r` — the same numbers the physics uses — so what you aim at is what the
@@ -20425,6 +20688,7 @@ function renderDrill(){
   for (const wl of w.walls){ if(!wl.draw) continue; ctx.beginPath(); ctx.moveTo(wx(wl.a.x),wy(wl.a.y)); ctx.lineTo(wx(wl.b.x),wy(wl.b.y)); ctx.stroke(); }
   ctx.lineCap='butt';
   drawCoach(w);                 // coaching ghost demonstrates the route
+  drawGhosts(w);                // ...and your own three best runs, racing you
   drawFx(); drawBallTrail(w);
   for (const z of w.zones){
     ctx.beginPath(); ctx.arc(wx(z.x),wy(z.y),z.r*s,0,2*Math.PI);
@@ -20894,6 +21158,11 @@ function drawLobby(w){
     ctx.fillText((c.step+1) + ' / ' + CALIB_STEPS.length, x, y + R*1.9 + 18);
   }
 }
+// ⚠️ THE NAME OVER A PLAYER, in SCREEN pixels. It shipped at 9px with a 3.5px halo and
+// was reported as hard to read — which is the one thing a name plate exists to be. Screen
+// pixels rather than world units for the reason the floaters use them: on the huge courts
+// `cam.s` falls until the whole pitch fits and a world-sized name is a smudge.
+const NAMEPLATE = { size: 13, halo: 5, gap: 16 };
 const LOBBY_FONT = "'Kenney', system-ui, -apple-system, sans-serif";
 
 // ---------- Connected-controller flairs -------------------------------------
@@ -23665,7 +23934,13 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // Fades out while the plate covers a disc or the ball. Draw is in local coords,
     // hit test in true screen space — same rect, the local frame is screen-aligned.
     if (s>0.28){
-      ctx.font = `9px 'Kenney', system-ui, -apple-system, sans-serif`;
+      // ⚠️ **9px WAS TOO SMALL TO READ**, which is what a name plate is entirely for.
+      // The size is in SCREEN pixels rather than world units, the same call the floaters
+      // make: on the huge courts `cam.s` falls until a whole pitch fits, and a world-sized
+      // name there is a smudge. The halo scales with it — a 3.5px outline round 13px type
+      // is a fringe rather than the backing that makes the letters legible on an unknown
+      // pitch, and the backing is the whole reason the plate is outlined and not boxed.
+      ctx.font = `${NAMEPLATE.size}px 'Kenney', system-ui, -apple-system, sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='alphabetic';
       const label = p.name;
       const tw = ctx.measureText(label).width;
@@ -23729,11 +24004,15 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         const prevA = ctx.globalAlpha;
         ctx.globalAlpha = prevA * a;
         ctx.lineJoin = 'round'; ctx.miterLimit = 2;
-        ctx.lineWidth = 3.5;
+        ctx.lineWidth = NAMEPLATE.halo;
         ctx.strokeStyle = halo;
-        ctx.strokeText(label, x, y-r-13);
+        // ⚠️ Struck TWICE. One pass of a round-joined stroke at this weight still lets a
+        // busy pitch through between the letters; a second lays the backing solid, which
+        // is what makes the name readable over grass, over a starfield and over a disc.
+        ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
+        ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
         ctx.fillStyle = team ? readableInk(team, halo) : (TH.nameText || '#ffffff');
-        ctx.fillText(label, x, y-r-13);
+        ctx.fillText(label, x, y-r-NAMEPLATE.gap);
         ctx.globalAlpha = prevA;
       }
     }
@@ -25245,6 +25524,9 @@ if (window.__MAGNETDEBUG) {
     computeAwards, renderAwards, renderMatchStats, STAT_COLS, STAT_MORE, statLine,
     AWARD_PER_PLAYER, STATS_WIDE, get statsOpen(){ return statsOpen; },
     mvpScore, noteKick, ballSquash, endMatch,
+    GHOST, ghostRate, ghostAt, ghostSpline, ghostRecord, drillRuns, drillTop,
+    drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
+    drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

@@ -142,7 +142,9 @@ const r = await p.evaluate(() => {
   o.title = (document.querySelector('#overlay h2') || {}).textContent || '';
   o.sub = (document.querySelector('#overlay p') || {}).textContent || '';
   o.saysGoals = /3 goals/.test(o.sub);
-  o.bestAfterThree = M.drillBest.targets;
+  // ⚠️ Through `drillTop`, never `drillBest.targets` — a drill keeps its best THREE runs
+  // now, so that slot holds a record rather than a bare number. One reader, one shape.
+  o.bestAfterThree = M.drillTop('targets');
 
   // ⚠️ A WORSE run must not overwrite the record. This is the assertion that catches
   // the `t < prev` comparison every other drill uses.
@@ -151,7 +153,7 @@ const r = await p.evaluate(() => {
   w.drill.elapsed = w.drill.timed - 0.01;
   for (let k=0;k<8;k++) M.step(w);
   o.oneScored = w.drill.scored;
-  o.bestAfterWorse = M.drillBest.targets;
+  o.bestAfterWorse = M.drillTop('targets');
   o.worseRunKeepsTheRecord = o.bestAfterWorse === o.bestAfterThree;
   o.subSaysKeptBest = /best 3 goals/.test((document.querySelector('#overlay p')||{}).textContent||'');
 
@@ -161,7 +163,7 @@ const r = await p.evaluate(() => {
   w.drill.elapsed = w.drill.timed - 0.01;
   for (let k=0;k<8;k++) M.step(w);
   o.fiveScored = w.drill.scored;
-  o.bestAfterBetter = M.drillBest.targets;
+  o.bestAfterBetter = M.drillTop('targets');
   o.betterRunTakesTheRecord = o.bestAfterBetter === o.fiveScored && o.fiveScored > o.bestAfterThree;
 
   // ---- 5b. IT IS ACTUALLY ON THE SCREEN -----------------------------------

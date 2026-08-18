@@ -40,7 +40,11 @@ const root = join(here, '..');
 const filter = process.argv[2] || '';
 
 // Suites whose assertions are about DURATION. See the note above.
-const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck']);
+// ⚠️ `swatchcache` joined this set after flaking in a busy pool: it asserts that a cached
+// swatch row rebuilds in single-digit MILLISECONDS, and six browsers sharing the machine
+// is exactly the condition that makes a 1.4ms operation measure as 12. It passes alone
+// every time — which is the signature of a timing suite, not of a bug.
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper
