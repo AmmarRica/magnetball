@@ -30,7 +30,11 @@ await p.waitForTimeout(800);
 
 const r = await p.evaluate(() => {
   const M = window.__magnet, o = {};
-  o.defaultOff = M.defaultSel().sprint === 'off';
+  // ⚠️ **ON BY DEFAULT**, and it shipped off. The report was "holding kick does not
+  // deplete stamina, it just makes me move really slow" — which is precisely the off
+  // state: `KICK_SLOW` takes 55% of your acceleration with nothing on screen saying why,
+  // while the mechanic KICK is wired to sits behind a switch nothing implies exists.
+  o.defaultOn = M.defaultSel().sprint === 'on';
 
   // ---- 1. off is genuinely off ------------------------------------------------
   M.sel.sprint = 'off';
@@ -148,46 +152,140 @@ const r = await p.evaluate(() => {
   o.looseSpeed = +topSpeed(false).toFixed(3);
   o.kickDoesNotBrake = o.heldSpeed > o.looseSpeed * 1.1;
 
-  // ---- 5. bots get the same ring ----------------------------------------------
+  // ---- 5. BOTS DO NOT SPRINT, and that reverses an earlier call ---------------
+  // ⚠️ The rule used to be that they carried the same ring, because "a tired human playing
+  // a side that never gets tired is a handicap". Measured, that argument was pointing at
+  // something that was not happening: bots spent 0.0% of ticks locked out and the ring
+  // never fell below 0.62, because a bot holds KICK to TRAP rather than to run. What they
+  // actually got was the 1.35x boost with none of the cost — and it COMPRESSED THE
+  // DIFFICULTY LADDER, the one guarantee the AI exists to keep. Over 36 duels a rung, goal
+  // difference for the stronger side: rookie<normal +39 -> +14, normal<hard +19 -> 0.
   M.setMatchSeed(11); M.sel.mode = '4v4'; M.startMatch();
   {
     const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
-    // ⚠️ Tracked as a MINIMUM over the run, not sampled at the end: a bot that sprinted
-    // and then let go is back at a full ring by the time the loop stops, so the final
-    // reading says nothing about whether it ever spent any.
     let lowest = 1;
     for (let i = 0; i < 1800; i++){
       M.step(w2);
       for (const q of w2.players) if (q.ctrl === 'bot' && q.stam != null) lowest = Math.min(lowest, q.stam);
     }
     const bots = w2.players.filter(q => q.ctrl === 'bot');
-    o.botsHaveStamina = bots.every(q => typeof q.stam === 'number');
     o.lowestBotRing = +lowest.toFixed(3);
-    o.someBotGotTired = lowest < 0.999;
-
+    o.botsNeverTire = lowest > 0.999 && bots.every(q => !q.sprinting && !q.spent);
+    // ⚠️ And the predicate is read off `ctrl`, so a body somebody drops into mid-match gets
+    // the ring and a bot taking a seat back loses it. Checked directly, because "bots do
+    // not sprint" written as a check on the roster at kickoff would miss that entirely.
+    const one = bots[0];
+    o.botHasNoRing = M.sprintsFor(one) === false;
+    const was = one.ctrl; one.ctrl = 'gamepad';
+    o.seatDecidesIt = M.sprintsFor(one) === true;
+    one.ctrl = was;
   }
   M.sel.sprint = 'off'; M.sel.mode = '1v1';
   return o;
 });
 
-// ============================================ off changes NOTHING at all ==
-// ⚠️ The point of a default-off gameplay switch: with it off the world must be bit
-// identical to a build that never had it. Hashed over 900 steps.
-const det = await p.evaluate(() => {
+// ======================================= what a fresh install actually does ==
+// ⚠️ THE REPORT, MEASURED. Every other block here sets `sel.sprint` by hand, so all of
+// them passed on the build that shipped the wrong default — the complaint was never that
+// the mechanic was broken, it was that nobody got it. This one clears storage, reloads
+// the page and touches no setting at all.
+const dflt = await (async () => {
+  const q = await b.newPage({ viewport: { width: 900, height: 900 } });
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const out = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const top = (kick, sprint) => {
+      if (sprint != null) M.sel.sprint = sprint;
+      M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(11); M.startMatch();
+      const w = M.world; w.state = 'play'; w.stateT = 2;
+      const me = w.players.find(x => x.ctrl === 'human1') || w.players[0];
+      // ⚠️ SETTLED speed, and two traps had to be walked round to get one. Taking the
+      // MAXIMUM over the run catches the shove from the opposing bot running into you and
+      // read 3.44 for a build whose steady state is 1.71 — the whole gap being measured.
+      // Averaging the TAIL instead then read 0, because 90 steps at full pelt puts the
+      // body into `integrate`'s boundary clamp and it is pressed against a wall.
+      // So: the body is held at the centre every step and everything else is parked at the
+      // far end. Only its VELOCITY is being measured, and position does not feed accel.
+      let sum = 0, n = 0;
+      for (let i = 0; i < 90; i++){
+        M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = kick;
+        w.ball.x = 9000; w.ball.y = 9000; w.ball.vx = 0; w.ball.vy = 0;   // never near the ball
+        me.x = 0; me.y = 0;                                              // never near a wall
+        for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }  // never near anyone
+        M.step(w);
+        if (i >= 40){ sum += Math.hypot(me.vx, me.vy); n++; }
+      }
+      return { v: +(sum / Math.max(1, n)).toFixed(2), stam: me.stam == null ? null : +me.stam.toFixed(2) };
+    };
+    const held = top(true);            // untouched settings
+    o.heldSpeed = held.v; o.stamAfter = held.stam;
+    o.looseSpeed = top(false).v;
+    o.wasSpeed = top(true, 'off').v;   // what the shipped default did
+    o.outOfTheBox = held.stam < 0.9 && held.v > o.looseSpeed * 1.1 && o.wasSpeed < o.looseSpeed * 0.7;
+    return o;
+  });
+  await q.close();
+  return out;
+})();
+
+// ================================= a bot-only match does not know Sprint exists ==
+// ⚠️ THE LADDER IS WHAT THIS PROTECTS. `KICK_SLOW` is lifted for a sprinter — with Sprint
+// on, holding KICK IS the sprint — and it was lifted on `sprintOn()`, a GLOBAL answer, so
+// every bot got the exemption while having no ring: a straight buff, and rookie-vs-normal
+// still fell from +39 to +23 with the ring already taken off them. `sprintsFor(p)` is one
+// predicate both places read. Hashed over 900 steps of an all-bot match.
+const botw = await p.evaluate(() => {
   const M = window.__magnet;
   const run = () => {
-    M.sel.mode = '3v3'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
-    M.setMatchSeed(23); M.startMatch();
+    M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+    M.setMatchSeed(77); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (const q of w.players) q.ctrl = 'bot';        // nobody here has a ring either way
     for (let i = 0; i < 900; i++) M.step(w);
     return w.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
            `#${w.ball.x.toFixed(6)},${w.ball.y.toFixed(6)}#${w.score.join('-')}`;
   };
-  M.sel.sprint = 'off'; const a = run();
-  M.sel.sprint = 'off'; const b2 = run();
-  M.sel.sprint = 'on';  const c = run();
+  M.sel.sprint = 'off'; const off = run();
+  M.sel.sprint = 'on';  const on  = run();
   M.sel.sprint = 'off';
-  return { stable: a === b2, onDiffers: a !== c, sample: a.slice(0, 60) };
+  return { same: off === on, on };
+});
+
+// ============================================ off changes NOTHING at all ==
+// ⚠️ With it OFF the world must be bit identical to a build that never had it. That was
+// written when off was the default; now that on is, it is the escape hatch that has to
+// hold — somebody who switches Sprint off is asking for the pre-Sprint game, and this is
+// what says they get it. Hashed over 900 steps.
+// ⚠️ It sets `sel.sprint` explicitly at every step of the comparison and never leans on
+// the default, which is why flipping that default did not touch this block.
+const det = await p.evaluate(() => {
+  const M = window.__magnet;
+  // ⚠️ `hold` drives the HUMAN seat's KICK, and it has to, because that is now the only
+  // thing Sprint changes: bots do not sprint, so an idle match is identical either way.
+  // The first version of this block compared two idle matches and asserted they DIFFERED
+  // — true when bots carried the ring, and quietly false the moment they stopped.
+  const run = (hold) => {
+    M.sel.mode = '3v3'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+    M.setMatchSeed(23); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (let i = 0; i < 900; i++){
+      M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = !!hold;
+      M.step(w);
+    }
+    M.pads.p1.dx = 0; M.pads.p1.kick = false;
+    return w.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
+           `#${w.ball.x.toFixed(6)},${w.ball.y.toFixed(6)}#${w.score.join('-')}`;
+  };
+  M.sel.sprint = 'off'; const a = run(false);
+  M.sel.sprint = 'off'; const b2 = run(false);
+  M.sel.sprint = 'on';  const idleOn = run(false);
+  M.sel.sprint = 'off'; const heldOff = run(true);
+  M.sel.sprint = 'on';  const heldOn = run(true);
+  M.sel.sprint = 'off';
+  return { stable: a === b2, idleSame: a === idleOn, onDiffers: heldOff !== heldOn,
+           sample: a.slice(0, 60) };
 });
 
 // ==================================================== the ring, in pixels ==
@@ -325,7 +423,11 @@ await ph.close();
 await p.close();
 
 // -------------------------------------------------------------------- report --
-ok('sprint is OFF by default', r.defaultOff, 'it changes how every body on the pitch moves');
+ok('sprint is ON by default', r.defaultOn,
+   'it shipped off, so holding KICK gave you KICK_SLOW and none of the mechanic it is wired to');
+ok('...so out of the box, holding KICK spends the ring and runs FASTER', dflt.outOfTheBox,
+   `ring went 1 -> ${dflt.stamAfter} and top speed ${dflt.heldSpeed} against ${dflt.looseSpeed} loose` +
+   ` — the reported build read ${dflt.wasSpeed} held, which is 45% of loose and no ring at all`);
 ok('...and off means the ring never moves', r.offKeepsFullStamina);
 
 ok('a run at full tilt lasts exactly as long as the dial says', r.lastsTheDial,
@@ -349,13 +451,21 @@ ok('running WITHOUT holding kick costs nothing', r.joggingIsFree,
 ok('...and recovery can never be set faster than the spend', r.refillFloored,
    'a ring that refills quicker than it drains is one you never stop holding');
 
-ok('bots carry the same ring', r.botsHaveStamina && r.someBotGotTired,
-   `lowest bot ring over a minute of 4v4 was ${r.lowestBotRing} — ` +
-   'a tired human playing a side that never gets tired is a handicap, not a mechanic');
+ok('bots do NOT sprint', r.botsNeverTire,
+   `lowest bot ring over half a minute of 4v4 was ${r.lowestBotRing} — they used to carry it, ` +
+   'and since a bot holds KICK to TRAP rather than to run it never emptied: 0.0% of ticks spent, ' +
+   'so what they got was the 1.35x boost with none of the cost');
+ok('...and it is the SEAT that decides, not what the body started as', r.botHasNoRing && r.seatDecidesIt,
+   'a body somebody drops into mid-match gets the ring; a bot taking a seat back loses it');
+ok('...so a bot-only match is bit identical with Sprint on and off', botw.same,
+   `${botw.on.slice(0,44)} — the ladder is what this protects: with bots sprinting, normal-vs-hard ` +
+   'went from +19 goal difference over 36 duels to exactly 0, which is two tiers nobody can tell apart');
 
 ok('with sprint off the world is unchanged', det.stable, det.sample);
-ok('...and with it on it is a different match', det.onDiffers,
-   'if switching it on changes nothing then nothing was wired up');
+ok('...and with nobody holding KICK it is the same match either way', det.idleSame,
+   'bots do not sprint, so an untouched match cannot tell the setting apart — which is exactly what keeps the ladder where it was');
+ok('...but hold KICK and it is a different match', det.onDiffers,
+   'if switching it on changes nothing for the one seat that has a ring then nothing was wired up');
 
 ok('the ring is not drawn when you are rested', ring.hiddenWhenRested,
    `${ring.restInk} of ${ring.probes} probe angles inked with a full ring — a permanent ring round every body is furniture`);

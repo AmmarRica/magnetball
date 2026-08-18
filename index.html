@@ -1995,7 +1995,7 @@
       <div style="height:10px"></div>
       <label class="field">Sprint</label>
       <div class="opts" id="sprintPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px"><b>Hold KICK to sprint.</b> A ring round you drains like a clock while you run; let go and it fires the kick, the way holding KICK always has. Run the ring out and you are locked down to the tired speed until it has filled all the way back up — and it fills slower than it empties, so a sprint is something you spend. Holding KICK no longer slows you while this is on. Bots get the same ring. Off by default, because it changes how everyone moves.</div>
+      <div class="hint" style="text-align:left; margin-top:4px"><b>Hold KICK to sprint.</b> A ring round you drains like a clock while you run; let go and it fires the kick, the way holding KICK always has. Run the ring out and you are locked down to the tired speed until it has filled all the way back up — and it fills slower than it empties, so a sprint is something you spend. The ring is yours — bots do not sprint, because they hold KICK to trap rather than to run, and giving them the boost flattened the difficulty tiers into each other. Turn it <b>off</b> and holding KICK instead drags you down to a deliberate walk, which is how the game worked before this existed.</div>
       <div id="feelSlidersPlayer"></div>
       </div>
 
@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260818.1150AM';
+const VERSION = '20260818.0225PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,15 @@ const VERSION = '20260818.1150AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260818.0225PM', title: 'Hold KICK and you sprint',
+    added: [],
+    changed: [
+      '<b>Sprint is on out of the box.</b> Hold KICK and you run \u2014 a ring round you drains like a clock, and letting go fires the kick the way it always has. Run the ring out and you are down to the tired speed until it fills back up. It was built and wired to the button and then left switched off, so what holding KICK actually did was drag you down to well under half speed with nothing on screen saying why.',
+      '<b>The ring is yours, not the bots\u2019.</b> They kept holding KICK to trap the ball rather than to run, so all it did was hand every one of them a free turn of speed \u2014 and it flattened the difficulty tiers into each other: Normal and Hard came out dead level over three dozen test matches. The bots play exactly as they always did.',
+      'Turning Sprint <b>off</b> in Game Feel puts the old behaviour back exactly \u2014 holding KICK becomes a deliberate walk again.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260818.1150AM', title: 'A demonstration you can copy',
     added: [],
     changed: [
@@ -4988,7 +4997,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, sprint:'off', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -6373,6 +6382,18 @@ const SPRINTOPT = {
   off: { name:'Off', emoji:'🚫', icon:'barrier' },
   on:  { name:'On',  emoji:'💨', icon:'bolt' },
 };
+// ⚠️ **ON BY DEFAULT, and it shipped OFF.** Reported as *"holding kick does not deplete
+// stamina, it just makes me move really slow"*, and that is exactly what the off state
+// does: `KICK_SLOW` takes 55% of your acceleration (measured: top speed 1.71 against
+// 3.80) with nothing on screen to say why, while the stamina system that KICK is wired
+// to sits behind a setting whose existence nothing on the pitch implies.
+// ⚠️ **SAME SHAPE AS `sel.controllers` SHIPPING `off`**, one entry down: a whole mechanic
+// built, wired to the button, and then defaulted to the half that only costs you
+// something. A player who holds KICK gets the punishment and none of the mechanic, and
+// has no way to guess there is a switch.
+// ⚠️ The off state is still a real answer and keeps `KICK_SLOW` exactly as it was — that
+// is the pre-Sprint game, and `tests/sprint.mjs` hashes 900 steps to prove it is bit
+// identical. What moved is which of the two you get without asking.
 function sprintOn(){ return sel.sprint === 'on'; }
 // ⚠️ Both are stored in HUNDREDTHS of a second — the slider wants integer steps — so
 // these are the one place that division happens.
@@ -6397,8 +6418,36 @@ function sprintBoost(){
 }
 // ⚠️ STEP LOOP ONLY — this is a clock, so it belongs beside the physics and never in a
 // draw (the trails rule). No randomness at all, so determinism is untouched.
+// ⚠️ **BOTS DO NOT SPRINT, AND THAT REVERSES AN EARLIER CALL.** The rule used to be that
+// they carried the same ring, on the argument that "a tired human playing a side that
+// never gets tired is a handicap, not a mechanic". Measured, that argument was pointing at
+// something that was not happening: over eight seeded matches the bots spent **0.0% of
+// ticks** locked out and the ring never fell below **0.62**, because a bot holds KICK to
+// TRAP rather than to run and lets go long before the ring empties. So what they were
+// actually getting was the 1.35x boost with none of the cost — which is not the same ring,
+// it is a flat speed bonus for carrying the ball.
+// ⚠️ **And it COMPRESSED THE DIFFICULTY LADDER**, which is the one guarantee the AI is
+// built to keep. Over 36 duels a rung (3 modes x 6 seeds, both orientations), goal
+// difference for the stronger side: rookie<normal **+39 -> +14**, normal<hard **+19 -> 0**,
+// rookie<insane +57 -> +64. Adjacent tiers are what a ladder is, and Normal against Hard
+// came out dead level: a free 1.35x for holding a button every tier holds equally makes
+// raw speed matter more and decision quality matter less, so the tiers converge.
+// ⚠️ A human's own deal is still fair against a bot at a flat 1.0: 3s at 1.35 then 5s at
+// 0.75 averages **0.975** if you simply hold it down, and better than 1.0 if you spend it
+// in bursts and let it fill. It is a mechanic you can play well, not a bonus.
+// ⚠️ Read off `ctrl`, so a body a person DROPS INTO mid-match gets the ring from the goal
+// it walks on at, and a bot that takes a seat back loses it — the seat is what decides,
+// not what the body was when the match kicked off.
+// ⚠️ **ONE PREDICATE**, because two places have to agree about it: this, and `integrate`'s
+// `KICK_SLOW` exemption. `KICK_SLOW` is lifted for a sprinter — with Sprint on, holding
+// KICK IS the sprint, so slowing you for it is the two features cancelling out — and it
+// was lifted on `sprintOn()` alone, which is a GLOBAL answer. That handed every bot the
+// exemption while giving them no ring, i.e. a straight buff: measured, rookie<normal still
+// fell from +39 to +23 with the ring already taken off them. Whoever does not sprint keeps
+// the deliberate walk exactly as it always was.
+function sprintsFor(p){ return sprintOn() && p && p.ctrl !== 'bot'; }
 function advanceStamina(w, p){
-  if (!sprintOn()){ p.stam = 1; p.spent = false; p.sprinting = false; return 1; }
+  if (!sprintsFor(p)){ p.stam = 1; p.spent = false; p.sprinting = false; return 1; }
   if (p.stam == null) p.stam = 1;
   // ⚠️ HOLD KICK TO SPRINT. It used to fire off the stick being at full tilt, which
   // meant a keyboard — which has no half-way — was sprinting the whole time and never
@@ -15825,7 +15874,7 @@ function integrate(w, ballFrozen, playersFrozen){
       // ⚠️ KICK_SLOW is OFF while Sprint is on. That multiplier exists so you cannot
       // cruise around with kick permanently held — and with Sprint on, holding kick is
       // the sprint, so slowing you for it is the two features cancelling each other out.
-      const a = (p.kick && !sprintOn() ? accel * KICK_SLOW : accel) * sp;
+      const a = (p.kick && !sprintsFor(p) ? accel * KICK_SLOW : accel) * sp;
       p.vx += p.inX * a;
       p.vy += p.inY * a;
     }
@@ -25862,7 +25911,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

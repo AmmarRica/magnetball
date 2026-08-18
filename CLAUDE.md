@@ -2187,11 +2187,53 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **`spent` IS LATCHED, and without it the feature does not exist.** "Slow while the
   ring is not full", read literally, slows you on the second frame of the first run.
   You keep full speed until the ring EMPTIES and are slow until it is FULL again.
-  ⚠️ **Bots carry the same ring** — a tired human playing a side that never gets tired
-  is a handicap, not a mechanic.
-  ⚠️ Ticked in `integrate`, never in a draw (the trails rule), with no randomness at
-  all. **Off by default**, because it changes how every body on the pitch moves, and
-  `tests/sprint.mjs` hashes the world over 900 steps to prove the default costs nothing.
+  ⚠️ **BOTS DO NOT SPRINT, and that REVERSES an earlier call.** They used to carry the
+  same ring, on the argument that "a tired human playing a side that never gets tired is a
+  handicap". Measured, that argument was pointing at something that was not happening: bots
+  spent **0.0% of ticks** locked out and the ring never fell below **0.62**, because a bot
+  holds KICK to **trap** rather than to run and lets go long before it empties. What they
+  actually got was the 1.35× boost with **none of the cost**.
+  ⚠️ **And it COMPRESSED THE DIFFICULTY LADDER**, the one guarantee the AI is built to
+  keep. Over 36 duels a rung (3 modes × 6 seeds, both orientations), goal difference for
+  the stronger side: rookie<normal **+39 → +14**, normal<hard **+19 → 0**, rookie<insane
+  +57 → +64. Adjacent tiers are what a ladder *is*, and Normal against Hard came out dead
+  level — a free 1.35× for holding a button every tier holds equally makes raw speed matter
+  more and decision quality matter less, so the tiers converge. With bots out of it the
+  sweep reads +39 / +19 / +57 with Sprint on **and** off, identically.
+  ⚠️ **`sprintsFor(p)` is ONE predicate, and two places must agree on it.** `KICK_SLOW` is
+  lifted for a sprinter — with Sprint on, holding KICK *is* the sprint — and it was lifted
+  on `sprintOn()`, a **global** answer, so every bot got the exemption while having no
+  ring: a straight buff, and rookie<normal still fell +39 → **+23** with the ring already
+  taken off them. Whoever does not sprint keeps the deliberate walk exactly as it was.
+  ⚠️ Read off **`ctrl`**, so a body somebody drops into mid-match gets the ring from the
+  goal it walks on at and a bot taking a seat back loses it — the seat decides, not what
+  the body was at kickoff.
+  ⚠️ A human's deal is still fair against a bot at a flat 1.0: 3s at 1.35 then 5s at 0.75
+  averages **0.975** if you just hold it down, and better than 1.0 if you spend it in
+  bursts. It is a mechanic you can play well, not a bonus.
+  ⚠️ The determinism block had to change with it: it compared two IDLE matches and asserted
+  they differed, which was true while bots carried the ring and quietly false the moment
+  they stopped. It now drives the human seat's KICK, and separately requires an untouched
+  match to be **identical** either way.
+  ⚠️ Ticked in `integrate`, never in a draw (the trails rule), with no randomness at all.
+  ⚠️ **ON BY DEFAULT, and it shipped OFF.** Reported as *"holding kick does not deplete
+  stamina, it just makes me move really slow"* — which is exactly what the off state does:
+  `KICK_SLOW` takes 55% of your acceleration (measured, settled top speed **1.71 against
+  3.80**) with nothing on screen to say why, while the stamina system KICK is wired to sat
+  behind a switch whose existence nothing on the pitch implies. **Same shape as
+  `sel.controllers` shipping `off`**: a whole mechanic built, wired to the button, and then
+  defaulted to the half that only ever costs you something.
+  ⚠️ **Off is still a real answer and is unchanged** — it keeps `KICK_SLOW` exactly as it
+  was, which is the pre-Sprint game, and `tests/sprint.mjs` still hashes 900 steps to prove
+  that path is bit identical. What moved is which of the two you get without asking.
+  ⚠️ The suite's other blocks all set `sel.sprint` by hand, so **every one of them passed
+  on the build with the wrong default** — the mechanic was never broken, nobody was getting
+  it. There is a block now that clears storage, reloads and touches no setting at all.
+  ⚠️ Two measurement traps recorded in it: the MAXIMUM speed over a run catches the shove
+  from an opposing bot and read 3.44 for a build whose steady state is 1.71, and averaging
+  the tail instead read **0**, because 90 steps at full pelt puts the body into
+  `integrate`'s boundary clamp and it is pressed against a wall. The body is held at the
+  centre and everyone else parked at the far end; only its velocity is being measured.
   ⚠️ The ring is drawn only while there is something to say (a permanent ring round
   every body is furniture), sweeps from twelve o'clock, and turns to `TH.bad` when
   spent — "nearly empty" and "locked out" feel identical from an arc length alone. The
