@@ -961,6 +961,51 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   drill has no `total`, so the shared `0/0` claimed it was complete and empty at once.
   ⚠️ The player is never moved to the next ball — walking to it is the drill.
   `tests/targetsdrill.mjs`.
+- **DRILL GHOSTS — your three best runs, on the pitch at once** (`GHOST`, `drillRuns`,
+  `drillTop`, `drillBetter`, `ghostRecord`, `ghostSpline`, `ghostAt`, `drillAddRun`,
+  `drawGhosts`). Gold, silver and bronze, coloured by rank.
+  ⚠️ **THREE, not one.** One ghost says whether you are ahead of your best; three say what
+  the SHAPE of your improvement was — where the gold run took a line the bronze one did
+  not. The colour is the only label they need.
+  ⚠️ **SAMPLED AT 10Hz AND INTERPOLATED THROUGH A CURVE, and that is the whole of why
+  they look right.** Stepping a recording frame by frame is what a REPLAY does, and at any
+  rate you can afford to store three runs of 25 drills it reads as a stutter — which is
+  why a ghost recorded that way never looks like the ones in Braid or a kart game. Those
+  interpolate between sparse keyframes. **Catmull-Rom, never a straight line**: at 10Hz a
+  linear blend puts a visible corner at every sample, which is the stutter back again
+  wearing a different hat. ⚠️ The suite measures it as a **comparison against a linear
+  baseline computed from the same recording**, never an absolute — how jerky a polyline
+  looks depends entirely on how fast the run was and how hard it turned.
+  ⚠️ **10Hz IS WHAT LETS A GHOST TRAVEL.** Three runs of every drill at 60Hz is ~3MB,
+  more than the whole `localStorage` budget and far more than a game save anybody could
+  send. The top three ride in `SAVEFILE`, paths included.
+  ⚠️ **`drillBetter` points BOTH ways.** Every drill is lower-is-better except Break the
+  Targets (`def.high`), so one comparator is what stops somebody's worst run becoming
+  their record on exactly that one — the same trap `targetSpot` records one entry up.
+  ⚠️ `drillRuns` folds the legacy `magnetball.drills` shape (a bare number per drill) on
+  read, so an older save keeps its times.
+  ⚠️ Drawn back to front, bronze first, and read through `d.elapsed + renderAlpha*STEP` —
+  a ghost anchored to a moving clock must interpolate like anything else on the pitch.
+  A ghost that finished ahead of you STOPS being drawn rather than standing at the line.
+- **THE DRILL CLOCKS ARE DESIGN JUDGEMENT, AND THE MACHINE IS A FLOOR** (`drillAutoPad`,
+  `drillObjective`, `drillRoute`). ⚠️ **A withdrawn claim.** The machine shipped described
+  as "the instrument the drill timings are tuned against" — a controller that could play
+  every drill would answer "is this completable, and in how long?" across two dozen
+  layouts, which is not a question anybody settles by eye. It cannot: it finishes the open
+  courses and cannot do the ones built round a wall or needing a threaded shot, so it
+  reaches **8 of 25**. A yardstick that measures a third of the range is not one, and
+  quoting it as one would put a number on the other seventeen that nothing measured.
+  ⚠️ **The GHOSTS are the measure instead** — three real runs per drill, kept and raced,
+  by the people the clock is for. The limits are set to the brief (a bad player inside
+  thirty seconds, a good one inside ten) and were loosened where they were plainly tight;
+  a drill nobody can beat shows up as a drill with no ghosts on it.
+  ⚠️ What the machine still buys, and why it ships rather than living in a test: on all 25
+  it never THROWS and never leaves a drill in a broken state. That is a real guarantee
+  about every layout. ⚠️ It writes a **PAD** through `applyHumanInput`, never the player,
+  so it plays the drill the way a person does; and ⚠️ **a unit stick, not `botArrive`** —
+  that helper writes in ACCELERATION space against `w.pAccel`, which is the player's own
+  Game Feel setting, so on a low one it asks for almost no stick and the machine cannot
+  finish a straight line. `tests/drillghost.mjs`.
 - **Map maker (`MAPMAKER`, `maps`, `mapClean`, `loadMaps`/`saveMaps`/`applyMaps`,
   `openMapMaker`, `buildMapMaker`, `drawMapPreview`, `mapStore`; `#mapMaker`):** build a
   field — size, corners, goal mouth, net depth, post size, wall and net liveliness.

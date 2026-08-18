@@ -18,12 +18,19 @@
 // suite pins the projected size for all 24 drills, because that number is the reason the
 // rate is what it is.
 //
-// ⚠️ THE MACHINE THAT PLAYS A DRILL (`drillAutoPad`) is the instrument the drill timings
-// are tuned against, and its coverage is asserted as a FLOOR rather than as "all of them":
-// it is a reactive controller against two dozen hand-designed obstacle courses, and the
-// honest claim is which ones it can finish, not that it can finish everything. What the
-// suite does hold absolutely is that it never THROWS and never leaves a drill in a broken
-// state — a tuning instrument that crashes on drill nineteen is worse than none.
+// ⚠️ THE MACHINE THAT PLAYS A DRILL (`drillAutoPad`) is NOT the yardstick the timings are
+// set by, and this suite used to say it was. It is a reactive controller against two dozen
+// hand-designed obstacle courses: it finishes the open ones and cannot do the ones built
+// round a wall or needing a threaded shot, so it reaches 8 of 25 — a third of the range,
+// which measures nothing about the other seventeen. The clocks are set by design judgement
+// (a bad player inside thirty seconds, a good one inside ten) and the GHOSTS are what
+// measures them once people set times.
+// ⚠️ So coverage is asserted as a FLOOR, and the absolute claims are the two that hold on
+// all 25: it never THROWS and never leaves a drill in a broken state. A course that
+// crashes the one thing driving it is a course with something wrong with it, which is
+// worth catching whether or not the run completes.
+// ⚠️ And on the ones it CAN play, no drill is timed tighter than it managed — the machine
+// is a bad player, so a limit it cannot meet is a limit nobody can.
 import { chromium, LAUNCH } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);

@@ -4345,7 +4345,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260817.0705PM';
+const VERSION = '20260818.0620AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4361,6 +4361,17 @@ const VERSION = '20260817.0705PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260818.0620AM', title: 'Race your three best runs',
+    added: [
+      '<b>Drill ghosts \u2014 your three best runs of a drill, all on the pitch at once.</b> Gold, silver and bronze, coloured by rank, so you can see not just whether you are ahead of your best but where the good run went differently. They travel in your saved game with the times.',
+    ],
+    changed: [
+      '<b>The ghosts glide.</b> They follow a curve through the run rather than jumping from one recorded moment to the next, which is what a ghost in a racing game does and what makes it look like somebody playing rather than a slideshow.',
+      '<b>Player names are bigger and easier to read</b> over a busy pitch.',
+      '<b>The timed drills have more generous clocks.</b> Several were tighter than the route could reasonably be played, so a good attempt failed on the whistle. Beating them is still the point; running out of time on the way round is not.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260817.0705PM', title: 'A bracket of people',
     added: [
       '<b>The tournament can be a bracket of PEOPLE instead of countries.</b> Type everybody in, or tap a name the machine already knows from Your record, and play down the tree. Any number from two upwards \u2014 the bracket grows to the next size and whoever is left over gets a bye through the first round.',
@@ -20183,35 +20194,35 @@ function drillBoundary(w){ const hw=w.field.W/2, hl=w.field.L/2, b=0.3;
 const DRILLS = {
   // ----- Basics: easy movement drills. Goal is just to finish in the (generous)
   // time. A coaching ghost demonstrates the route the whole time. -----
-  straight_up:{ name:'Straight Line', emoji:'⬆️', unit:'t', desc:'Dribble the ball straight up into the circle', timed:25,
+  straight_up:{ name:'Straight Line', emoji:'⬆️', unit:'t', desc:'Dribble the ball straight up into the circle', timed:30,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-260,48,'reach'); },
     path:[{x:0,y:285},{x:0,y:-260}] },
-  turn_right:{ name:'Right Turn', emoji:'➡️', unit:'t', desc:'Go up, then turn right into the circle', timed:28, seq:true,
+  turn_right:{ name:'Right Turn', emoji:'➡️', unit:'t', desc:'Go up, then turn right into the circle', timed:30, seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-30,46,'reach'); dZone(w,175,-30,46,'reach'); },
     path:[{x:0,y:285},{x:0,y:-30},{x:175,y:-30}] },
-  turn_left:{ name:'Left Turn', emoji:'⬅️', unit:'t', desc:'Go up, then turn left into the circle', timed:28, seq:true,
+  turn_left:{ name:'Left Turn', emoji:'⬅️', unit:'t', desc:'Go up, then turn left into the circle', timed:30, seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,0,-30,46,'reach'); dZone(w,-175,-30,46,'reach'); },
     path:[{x:0,y:285},{x:0,y:-30},{x:-175,y:-30}] },
-  uturn:{ name:'U-Turn', emoji:'↩️', unit:'t', desc:'Up the left lane, around the wall, back down into the circle', timed:34, seq:true,
+  uturn:{ name:'U-Turn', emoji:'↩️', unit:'t', desc:'Up the left lane, around the wall, back down into the circle', timed:40, seq:true,
     build(w){ drillBoundary(w); dSet(w,-110,320,-110,285); dWall(w,0,-330,0,150);
       dZone(w,-110,-300,42,'reach'); dZone(w,110,-300,42,'reach'); dZone(w,110,150,46,'reach'); },
     path:[{x:-110,y:285},{x:-110,y:-300},{x:110,y:-300},{x:110,y:150}] },
-  zigzag_easy:{ name:'Zig-Zag', emoji:'〽️', unit:'t', desc:'Weave the ball through the circles in order', timed:32, seq:true,
+  zigzag_easy:{ name:'Zig-Zag', emoji:'〽️', unit:'t', desc:'Weave the ball through the circles in order', timed:40, seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,-120,150,42,'reach'); dZone(w,120,-20,42,'reach'); dZone(w,-90,-250,42,'reach'); },
     path:[{x:0,y:285},{x:-120,y:150},{x:120,y:-20},{x:-90,y:-250}] },
-  round_cone:{ name:'Round the Cone', emoji:'🚧', unit:'t', desc:'Take the ball around the cone and into the circle', timed:28,
+  round_cone:{ name:'Round the Cone', emoji:'🚧', unit:'t', desc:'Take the ball around the cone and into the circle', timed:30,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dCone(w,0,20); dZone(w,0,-250,46,'reach'); },
     path:[{x:0,y:285},{x:95,y:20},{x:0,y:-250}] },
-  wide_route:{ name:'Wide Route', emoji:'🛣️', unit:'t', desc:'Push wide right, then up into the circle', timed:30, seq:true,
+  wide_route:{ name:'Wide Route', emoji:'🛣️', unit:'t', desc:'Push wide right, then up into the circle', timed:35, seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dZone(w,175,120,44,'reach'); dZone(w,175,-240,46,'reach'); },
     path:[{x:0,y:285},{x:175,y:120},{x:175,y:-240}] },
-  box_path:{ name:'Box Path', emoji:'⬛', unit:'t', desc:'Trace the box: right, up, left, into the circle', timed:36, seq:true,
+  box_path:{ name:'Box Path', emoji:'⬛', unit:'t', desc:'Trace the box: right, up, left, into the circle', timed:45, seq:true,
     build(w){ drillBoundary(w); dSet(w,-130,320,-130,285); dZone(w,130,200,40,'reach'); dZone(w,130,-200,40,'reach'); dZone(w,-130,-200,44,'reach'); },
     path:[{x:-130,y:285},{x:130,y:200},{x:130,y:-200},{x:-130,y:-200}] },
-  long_push:{ name:'Long Push', emoji:'🎳', unit:'t', desc:'One long dribble the length of the pitch', timed:26,
+  long_push:{ name:'Long Push', emoji:'🎳', unit:'t', desc:'One long dribble the length of the pitch', timed:30,
     build(w){ drillBoundary(w); dSet(w,0,330,0,300); dZone(w,0,-330,50,'reach'); },
     path:[{x:0,y:300},{x:0,y:-330}] },
-  dribble_finish:{ name:'Dribble & Finish', emoji:'🥅', unit:'t', desc:'Dribble up, round the cone, then KICK through the gate', timed:34, seq:true,
+  dribble_finish:{ name:'Dribble & Finish', emoji:'🥅', unit:'t', desc:'Dribble up, round the cone, then KICK through the gate', timed:40, seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dCone(w,0,-40); dZone(w,120,-40,42,'reach'); dGate(w,0,-320,66,0); },
     path:[{x:0,y:285},{x:120,y:-40},{x:0,y:-320}] },
   y_pass:{ name:'Y-Passing', emoji:'🔱', unit:'s', desc:'Thread the three gates of the Y, in order', seq:true,
@@ -20227,7 +20238,7 @@ const DRILLS = {
     build(w){ drillBoundary(w); dSet(w,0,320,0,300); dZone(w,0,-250,44,'settle'); } },
   needles:{ name:'Threading Needles', emoji:'🪡', unit:'s', desc:'Thread three gates that keep getting narrower', seq:true,
     build(w){ drillBoundary(w); dSet(w,0,320,0,275); dGate(w,0,150,66,0); dGate(w,0,0,46,0); dGate(w,0,-150,30,0); } },
-  gate_rush:{ name:'Gate Rush', emoji:'⏱️', unit:'t', desc:'Thread all five scattered gates before time runs out', timed:22,
+  gate_rush:{ name:'Gate Rush', emoji:'⏱️', unit:'t', desc:'Thread all five scattered gates before time runs out', timed:45,
     build(w){ drillBoundary(w); dSet(w,0,320,0,285); dGate(w,-130,175,48,80); dGate(w,140,70,48,-70);
       dGate(w,-100,-45,48,60); dGate(w,120,-165,48,-60); dGate(w,-25,-305,48,10); } },
   bank:{ name:'Bank Shot', emoji:'🎱', unit:'s', desc:'A wall blocks the way — bank the ball into the gate',
@@ -20265,12 +20276,23 @@ const DRILL_KEYS = Object.keys(DRILLS);
 // ============================================================
 //  A DRILL PLAYED BY THE MACHINE
 // ============================================================
-// ⚠️ **THIS IS THE INSTRUMENT THE DRILL TIMINGS ARE TUNED AGAINST**, and that is why it
-// ships rather than living in a test. "Is this drill completable, and in how long?" is not
-// a question anybody can answer by eye across two dozen layouts, and the time limits were
-// set by guesswork — some of them tighter than the drill could actually be finished in.
-// `tests/drillghost.mjs` drives every drill through this and fails if one cannot be
-// finished, so a new drill with an impossible layout or an impossible clock cannot ship.
+// ⚠️ **IT IS A FLOOR, NOT THE YARDSTICK, and that claim was withdrawn.** It shipped
+// described as the instrument the drill timings are tuned against — a machine that could
+// play every drill would answer "is this completable, and in how long?" across two dozen
+// layouts, which is not a question anybody can settle by eye. It cannot: it finishes the
+// open courses and cannot do the ones built round a wall or needing a threaded shot, so it
+// reaches **8 of 25**. A yardstick that measures a third of the range is not a yardstick,
+// and quoting it as one would put a number on the other seventeen that nothing measured.
+// ⚠️ **THE GHOSTS ARE THE MEASURE INSTEAD**, which is what they were always going to be:
+// three real runs per drill, kept and raced, by the people the clock is for. The limits are
+// set by design judgement and loosened where they were plainly tight — the brief is a bad
+// player inside thirty seconds and a good one inside ten — and a drill nobody can beat
+// shows up as a drill with no ghosts on it.
+// ⚠️ What this still buys, and why it ships rather than living in a test: it never THROWS
+// and never leaves a drill in a broken state, on any of the 25. That is a real guarantee
+// about every layout — an obstacle course that crashes the one thing driving it is a
+// layout with something wrong with it — and `tests/drillghost.mjs` asserts it on all of
+// them while asserting completion as a floor on the ones it can actually play.
 //
 // ⚠️ It writes a PAD, not the player, and `stepDrill` then runs it through
 // `applyHumanInput` like any other input. So it is playing the drill the way a person
