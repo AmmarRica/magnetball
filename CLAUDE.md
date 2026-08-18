@@ -987,6 +987,49 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Drawn back to front, bronze first, and read through `d.elapsed + renderAlpha*STEP` —
   a ghost anchored to a moving clock must interpolate like anything else on the pitch.
   A ghost that finished ahead of you STOPS being drawn rather than standing at the line.
+  ⚠️ **A GHOST'S BALL IS A RING, AND SMALLER THAN THE REAL ONE** (`GHOST.ballR`,
+  `GHOST.ballA`). It shipped as a FILLED disc at exactly `w.ball.r` in the medal colour,
+  which put **four** round objects the size of the ball on a drill pitch — the real one and
+  three ghosts' — with the gold one a body's length from yours at a similar lightness.
+  Reported as the ball being wrong in drills, and it was: the ball is the one thing you are
+  tracking, so nothing else may be a filled circle of that size. The ring keeps what a
+  ghost ball is FOR — in a shot drill the ball leaves the body and where it went is the line
+  you are beating — and gives up only the part that made it a decoy. Same argument
+  Spaceships makes about nothing being filled. ⚠️ `tests/drillghost.mjs` measures it as a
+  **PAIR** on rendered pixels: the centre is untouched court AND the rim is inked. Either
+  alone passes on a build with no ghost ball at all, which is a different design.
+  ⚠️ `GHOST.alpha` was raised to 0.82/0.66/0.54. The **ORDER** is the thing — the better the
+  run, the more it asserts itself, and that is what the suite pins rather than three magic
+  numbers — but bronze at 0.34, filled at a third of that again, was a slightly-darker
+  patch of grass.
+- **THE DRILL BOARD — all three of your best times on the screen that just set one**
+  (`buildDrillBoard`, `drillScoreText`, `DRILL_MEDALS`/`DRILL_PLACES`, `#drillBoard`).
+  Gold, silver, bronze, the record marked, and the slot this run took highlighted with
+  **your** time on it.
+  ⚠️ **THE MEDAL COLOURS ARE `GHOST.cols`**, handed to the CSS as a `--m` custom property
+  and never written in the stylesheet — so the row that lights up and the ghost it stands
+  for are the same colour by construction rather than by two lists agreeing.
+  ⚠️ **AN EMPTY SLOT IS STATED, not omitted**: three rows is the shape of the thing you are
+  filling in, and two rows plus a gap reads as a bug — which is exactly the first-ever-run
+  case, where all three are empty but the one you just set.
+  ⚠️ **A RUN THAT DID NOT PLACE IS STILL SHOWN**, as a fourth dashed row. How far off the
+  board you were is the information, and a board that only appears when you beat something
+  is missing on the run you most want it on. Same reason it is on the **failure** screen.
+  ⚠️ **The value comes from the TABLE, not from the run that was just played** — the row at
+  `rank` is where `drillAddRun` put it, so the board cannot show a time the record does
+  not. `tests/drillghost.mjs` therefore plays a real drill **twice** for that claim: every
+  check that hands `showDrillResult` a rank and a matching table proves only that they were
+  handed in agreeing.
+  ⚠️ **The subtitle stopped repeating it.** `#ovSub` carried the medal and "best <time>" as
+  words, which is the same numbers said twice within an inch of each other — the call the
+  result screen already made about its own scoreline. What is left up there is what the
+  board cannot say: what you just did, and whether it was a best.
+  ⚠️ **`showDrillResult` CLEARS `#ovStats`/`#ovAwards`/`#ovVote`**, and its not doing so was
+  a real leak: this screen does not go through `showOverlay`, the one place that empties
+  them, so a drill played straight after a match came up with that match's team panels,
+  ribbons and map vote sitting under the drill's own title.
+  ⚠️ Break the Targets counts **goals**, so `drillScoreText` is the one place that knows
+  which units a drill scores in — the same reason `drillBetter` exists one entry up.
 - **THE DRILL CLOCKS ARE DESIGN JUDGEMENT, AND THE MACHINE IS A FLOOR** (`drillAutoPad`,
   `drillObjective`, `drillRoute`). ⚠️ **A withdrawn claim.** The machine shipped described
   as "the instrument the drill timings are tuned against" — a controller that could play

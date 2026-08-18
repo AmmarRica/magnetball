@@ -1270,6 +1270,36 @@
     .statstog { font-family: var(--pix); font-size:11px; letter-spacing:.5px; color: var(--accent); }
     /* Folded: the numbers go, the score and the ribbons stay. */
     #ovStats.lean .statstbl { display:none; }
+    /* ---- THE DRILL BOARD: your three best runs, on the screen that just set one.
+       ⚠️ The medal colours are handed in as `--m` from GHOST.cols, never written here:
+       these are the same three colours the ghosts are painted in on the pitch, so the row
+       that is highlighted and the ghost you just beat are the same colour by construction
+       rather than by two lists agreeing. */
+    #drillBoard { width:100%; max-width:420px; margin:2px auto 0; text-align:left; }
+    .dbhead { font-family: var(--pix); font-size:11px; letter-spacing:1px;
+      color: var(--muted); margin:0 0 6px 2px; }
+    .dbrow { display:flex; align-items:center; gap:9px; min-height:38px;
+      padding:0 10px; margin:0 0 5px; border-radius:10px;
+      border:1px solid var(--edge); background: rgba(128,128,128,.05); }
+    .dbrow .dbm { flex:0 0 auto; font-size:15px; line-height:1; }
+    .dbrow .dbl { flex:1 1 auto; min-width:0; font-family: var(--pix); font-size:11px;
+      letter-spacing:1px; color: var(--m, var(--text)); overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
+    .dbrow .dbv { flex:0 0 auto; font-family: var(--pix); font-size:15px; color: var(--text); }
+    .dbrow .dbtag { flex:0 0 auto; font-family: var(--pix); font-size:9px; letter-spacing:1px;
+      color: var(--bg); background: var(--m, var(--accent)); border-radius:5px; padding:3px 5px; }
+    /* The slot this run took. The tint and the left edge carry it, not the tag alone —
+       a tag is a word to read and the row has to be findable without reading it. */
+    .dbrow.you { border-color: var(--m, var(--accent)); border-left-width:4px;
+      background: color-mix(in srgb, var(--m, var(--accent)) 15%, transparent); }
+    /* An empty slot is stated, not omitted: three rows is the shape of the thing you are
+       filling in, and two rows plus a gap reads as a bug. */
+    .dbrow.empty { opacity:.45; }
+    .dbrow.empty .dbv { color: var(--muted); }
+    /* A run that did not place. Shown anyway — how far off you were IS the information,
+       and a board that goes blank when you miss says nothing at all. */
+    .dbrow.miss { border-style:dashed; background:none; }
+    .dbrow.miss .dbl, .dbrow.miss .dbv { color: var(--muted); }
     /* One column per team: players, then score, then that team's awards. */
     .teampanels { display:flex; gap:10px; align-items:stretch; }
     .tpanel { flex:1 1 0; min-width:0; display:flex; flex-direction:column;
@@ -4345,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260818.0620AM';
+const VERSION = '20260818.0905AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4361,6 +4391,17 @@ const VERSION = '20260818.0620AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260818.0905AM', title: 'Gold, silver and bronze on the board',
+    added: [
+      '<b>Finish a drill and all three of your best times are on the screen</b> \u2014 gold, silver and bronze, with the record marked. The slot your run just took is highlighted with your time on it, and if the run did not make the board it is shown underneath so you can see how far off you were. The board is on the out-of-time screen too, since what you have to beat is most use on the run that did not get there.',
+    ],
+    changed: [
+      '<b>A ghost\u2019s ball no longer looks like the ball.</b> Each of the three ghosts was drawing a filled circle the same size as the real ball, so a drill had four of them on the pitch and the gold one sat right beside yours. A ghost\u2019s ball is a small ring now \u2014 you can still see where their ball went, and the only solid ball on the pitch is the one you are kicking.',
+      '<b>The bronze ghost can actually be seen.</b> It was faint enough on grass to be a slightly darker patch of it.',
+      'A drill no longer opens with the confetti from the one you just finished.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260818.0620AM', title: 'Race your three best runs',
     added: [
       '<b>Drill ghosts \u2014 your three best runs of a drill, all on the pitch at once.</b> Gold, silver and bronze, coloured by rank, so you can see not just whether you are ahead of your best but where the good run went differently. They travel in your saved game with the times.',
@@ -20041,8 +20082,11 @@ const GHOST = {
   hz: 10,                       // samples a second
   keep: 3,                      // how many runs a drill remembers
   cols: ['#ffd23d', '#c8ccd4', '#cd7f32'],     // gold, silver, bronze
-  alpha: [0.62, 0.46, 0.34],    // the better the run, the more it asserts itself
-  ballA: 0.5,                   // its ball, relative to the ghost's own alpha
+  // ⚠️ Raised from 0.62/0.46/0.34. The ORDER is the point — the better the run, the more
+  // it asserts itself — but bronze at 0.34, filled at a third of that again, came out as
+  // a slightly-darker patch of grass: a ghost you cannot see is not a ghost.
+  alpha: [0.82, 0.66, 0.54],
+  ballR: 0.6, ballA: 0.9,       // its ball: a RING, smaller than the real one — see below
   maxSecs: 120,                 // a runaway recording can never eat the budget
 };
 function ghostRate(){ return Math.max(1, GHOST.hz); }
@@ -20423,6 +20467,9 @@ function startDrill(key){
   };
   def.build(world);
   world.drill.total = world.gates.length + world.zones.length;
+  // A fresh drill inherits no sparks. Confetti from the completion you just read lives in
+  // `fx` for about a second, and "Next drill" is well inside that.
+  fx.length = 0;
 
   hideScreens();
   closeDailyModal();          // never let a full-screen modal (z-index 40) linger over the pitch — it eats touches
@@ -20542,30 +20589,101 @@ function drillDone(w){
   // quietly record your WORST run as your record on that one.
   const high = !!d.def.high;
   const t = high ? (d.scored || 0) : d.elapsed;
-  const prev = drillTop(d.key);
   // ⚠️ The run and its GHOST go in together, and the table decides whether it earned a
   // place — so a personal best and a third-best are the same code path and the recording
   // can never be attached to a run the table then throws away.
   const rank = drillAddRun(d.key, t, d.rec);
   const isBest = rank === 0;
   const say = v => high ? (v + (v === 1 ? ' goal' : ' goals')) : ('Time ' + v.toFixed(2) + 's');
-  const medal = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'][rank] || '';
   showBanner(high ? "TIME'S UP" : 'COMPLETE!', high ? 'var(--accent)' : 'var(--green)');
+  // ⚠️ The subtitle no longer repeats the board below it. It used to carry the medal and
+  // "best <time>" as words, which is the same three numbers said twice within an inch of
+  // each other — the same call the result screen's scoreline made about `#ovSub`. What is
+  // left up here is only what the board cannot say: what you just did, and whether it was
+  // a best. `medal` is still read by nothing else, so it goes with it.
   showDrillResult(high ? "TIME'S UP \u23f1\ufe0f" : 'COMPLETE! \u2705',
-    say(t) + (isBest ? '   \u00b7   NEW BEST \ud83c\udfc6'
-                     : rank > 0 ? `   \u00b7   ${medal} of your best three   \u00b7   best ${say(prev)}`
-                     : (prev != null ? `   \u00b7   best ${say(prev)}` : '')), true);
+    say(t) + (isBest ? '   \u00b7   NEW BEST \ud83c\udfc6' : ''), true,
+    { key: d.key, rank, t });
 }
 function drillFail(w){
   w.drill.failed = true;
   showBanner("TIME'S UP", 'var(--red)');
   const done = w.drill.doneCount, tot = w.drill.total;
-  showDrillResult("TIME'S UP ⏱️", `${done}/${tot} gates — try again`, false);
+  // ⚠️ The board is shown on a FAILURE as well. What you are trying to beat is exactly
+  // what you want in front of you on the run that did not get there, and a board that
+  // only appears when you succeed is missing on the screen it is most use on.
+  showDrillResult("TIME'S UP ⏱️", `${done}/${tot} gates — try again`, false,
+                  { key: w.drill.key, rank: -1, t: null });
 }
 function nextDrillKey(){ const i = DRILL_KEYS.indexOf(drillKey); return DRILL_KEYS[(i+1) % DRILL_KEYS.length]; }
-function showDrillResult(title, sub, completed){
+// ============================================================
+//  THE DRILL BOARD — gold, silver and bronze on the screen that just set one
+// ============================================================
+// Three rows, one per kept run, and the row this run took is highlighted with your time.
+// ⚠️ **THE COLOURS COME FROM `GHOST.cols`**, handed to the CSS as `--m`, never written in
+// the stylesheet. They are the same three colours the ghosts are painted in on the pitch,
+// so the row you just took and the ghost you just beat are the same colour by
+// construction — a second list of medal colours is a second thing to keep in step, and
+// this file's standing complaint about duplicated knowledge is that it rots.
+// ⚠️ **AN EMPTY SLOT IS STATED, not omitted.** Three rows is the shape of the thing you are
+// filling in; two rows and a gap reads as a bug, and on a first-ever run all three are
+// empty except the one you just set, which is exactly when the shape explains itself.
+// ⚠️ **A RUN THAT DID NOT PLACE IS SHOWN ANYWAY**, as a fourth dashed row. How far off the
+// board you were is the information — a board that only appears when you beat something
+// tells you nothing on the run where you want to know most.
+// ⚠️ Built as NODES rather than `innerHTML`, and the reason is the same one `buildMapList`
+// and the match history give: a drill row carries no typed text today, but `#ovStats` is
+// shared with the match result, whose panels hold player NAMES.
+function drillScoreText(key, v){
+  if (v == null) return '\u2014';
+  const high = !!(DRILLS[key] && DRILLS[key].high);
+  return high ? (v + (v === 1 ? ' goal' : ' goals')) : (v.toFixed(2) + 's');
+}
+const DRILL_MEDALS = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'];
+const DRILL_PLACES = ['Gold', 'Silver', 'Bronze'];
+function buildDrillBoard(key, rank, t){
+  const host = $('ovStats'); if (!host) return;
+  const runs = drillRuns(key);
+  const box = document.createElement('div'); box.id = 'drillBoard';
+  const head = document.createElement('div'); head.className = 'dbhead';
+  head.textContent = 'YOUR BEST THREE';
+  box.appendChild(head);
+  const cell = (cls, txt) => { const e = document.createElement('span'); e.className = cls;
+                               e.textContent = txt; return e; };
+  for (let i = 0; i < GHOST.keep; i++){
+    const run = runs[i];
+    const row = document.createElement('div');
+    row.className = 'dbrow' + (i === rank ? ' you' : '') + (run ? '' : ' empty');
+    row.style.setProperty('--m', GHOST.cols[i] || GHOST.cols[GHOST.cols.length - 1]);
+    row.appendChild(cell('dbm', DRILL_MEDALS[i] || ''));
+    row.appendChild(cell('dbl', DRILL_PLACES[i] || ''));
+    row.appendChild(cell('dbv', drillScoreText(key, run ? run.t : null)));
+    // ⚠️ The tag says which of the two things this row is, and it can be both: the run you
+    // have just set is the record on any run that lands in slot one.
+    if (i === rank) row.appendChild(cell('dbtag', i === 0 ? 'YOUR RECORD' : 'THIS RUN'));
+    else if (i === 0 && run) row.appendChild(cell('dbtag', 'RECORD'));
+    box.appendChild(row);
+  }
+  if (rank < 0 && t != null){
+    const row = document.createElement('div'); row.className = 'dbrow miss';
+    row.appendChild(cell('dbm', ''));
+    row.appendChild(cell('dbl', 'This run'));
+    row.appendChild(cell('dbv', drillScoreText(key, t)));
+    box.appendChild(row);
+  }
+  host.appendChild(box);
+}
+function showDrillResult(title, sub, completed, board){
   paused = true;
   $('ovTitle').textContent = title; $('ovSub').textContent = sub;
+  // ⚠️ Cleared HERE, and its absence was a real leak: this screen does not go through
+  // `showOverlay`, which is the one place that empties these three. So a drill played
+  // straight after a match came up with that match's team panels, its ribbons and its map
+  // vote still sitting under the drill's own title.
+  { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML='';
+    const vt=$('ovVote'); if (vt) vt.innerHTML=''; }
+  if (board) buildDrillBoard(board.key, board.rank, board.t);
   if (completed){
     // Finished a drill → offer the next one, retry, or the menu.
     const nk = nextDrillKey();
@@ -20630,14 +20748,22 @@ function drawGhosts(w){
     const gb = ghostAt(run, t, 'b');
     const col = GHOST.cols[i] || GHOST.cols[GHOST.cols.length - 1];
     const a = GHOST.alpha[i] != null ? GHOST.alpha[i] : 0.3;
-    // Its ball first, so the body reads over it the way a real one does.
+    // ⚠️ **A GHOST'S BALL IS A RING, AND IT IS SMALLER THAN THE REAL ONE.** It was a
+    // FILLED disc at exactly `w.ball.r`, which put four round objects the size of the ball
+    // on a drill pitch — the real one and three medal-coloured ones — and the gold ghost's
+    // sat a body's length from yours in the same size and a similar lightness. Reported as
+    // the ball being wrong in drills, and it is: the ball is the one thing you are
+    // tracking, so nothing else may be a filled circle of that size. The ring keeps what
+    // the ghost ball is FOR (in a shot drill the ball leaves the body, and where it went
+    // is the line you are trying to beat) and gives up only the part that made it a decoy.
+    // Same argument Spaceships makes about nothing being filled.
     if (gb){
-      ctx.beginPath(); ctx.arc(wx(gb[0]), wy(gb[1]), Math.max(2, w.ball.r * s), 0, 2*Math.PI);
-      ctx.fillStyle = rgba(col, a * GHOST.ballA); ctx.fill();
+      ctx.beginPath(); ctx.arc(wx(gb[0]), wy(gb[1]), Math.max(1.5, w.ball.r * GHOST.ballR * s), 0, 2*Math.PI);
+      ctx.lineWidth = Math.max(1, 1.6 * s); ctx.strokeStyle = rgba(col, a * GHOST.ballA); ctx.stroke();
     }
     const px = wx(gp[0]), py = wy(gp[1]), pr = Math.max(3, PLAYER.r * s);
     ctx.beginPath(); ctx.arc(px, py, pr, 0, 2*Math.PI);
-    ctx.fillStyle = rgba(col, a * 0.34); ctx.fill();
+    ctx.fillStyle = rgba(col, a * 0.26); ctx.fill();
     // ⚠️ An OUTLINE as well as a fill: three translucent discs of similar lightness on a
     // green pitch are three smudges, and the ring is what makes each one a body.
     ctx.lineWidth = Math.max(1.4, 2.2 * s); ctx.strokeStyle = rgba(col, a);
@@ -25549,6 +25675,7 @@ if (window.__MAGNETDEBUG) {
     GHOST, ghostRate, ghostAt, ghostSpline, ghostRecord, drillRuns, drillTop,
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
+    buildDrillBoard, drillScoreText, showDrillResult,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

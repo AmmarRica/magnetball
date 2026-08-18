@@ -217,6 +217,208 @@ const r = await p.evaluate(() => {
   return o;
 });
 
+// ============================================================
+//  THE BOARD — gold, silver and bronze on the screen that just set one
+// ============================================================
+// ⚠️ Measured on the RENDERED rows, never on the numbers that were handed in: the whole
+// point of this screen is that you can see all three at once, so what has to be true is
+// that three rows exist, they carry the three values, and the one you took is the one
+// marked. Reading `drillRuns()` back would test the table, which section 2 already does.
+const board = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const runs = () => M.drillRuns('straight_up');
+  const rows = () => Array.from(document.querySelectorAll('#drillBoard .dbrow'));
+  const txt = (r, c) => ((r.querySelector('.' + c) || {}).textContent || '').trim();
+
+  // A drill with nothing on the board yet: three rows all the same, all empty.
+  localStorage.setItem('magnetball.drills', JSON.stringify({}));
+  Object.keys(M.drillBest).forEach(k => delete M.drillBest[k]);
+  M.showDrillResult('x', '', true, { key: 'straight_up', rank: -1, t: 9.5 });
+  o.emptyRows = rows().length;
+  o.emptyAllStated = rows().slice(0, 3).every(r => r.classList.contains('empty'));
+  // ⚠️ ...and a run that did not place is still SHOWN, as a fourth row carrying your time.
+  o.missRowShown = rows().length === 4 && rows()[3].classList.contains('miss');
+  o.missRowSaysYourTime = /9\.50/.test(txt(rows()[3] || document.createElement('i'), 'dbv'));
+
+  // Now three real runs, best first.
+  const mk = t => ({ t, hz: 10, p: [0,0, 0,-10, 0,-20, 0,-30] });
+  M.drillBest.straight_up = { runs: [mk(2.50), mk(3.50), mk(4.50)] };
+  M.showDrillResult('x', '', true, { key: 'straight_up', rank: 1, t: 3.50 });
+  const r = rows();
+  o.rows = r.length;
+  o.values = r.map(x => txt(x, 'dbv'));
+  o.places = r.map(x => txt(x, 'dbl'));
+  // ⚠️ THE HIGHLIGHT IS ON THE SLOT THE RUN TOOK, and it carries that run's own value —
+  // "highlight it with my score" is two claims and a build could satisfy either alone.
+  o.youRows = r.filter(x => x.classList.contains('you')).length;
+  o.youIsSilver = r[1].classList.contains('you');
+  o.youShowsYourScore = txt(r[1], 'dbv') === '3.50s';
+  o.youTagged = /THIS RUN/i.test(txt(r[1], 'dbtag'));
+  o.goldTagged = /RECORD/i.test(txt(r[0], 'dbtag'));
+  // ⚠️ ONE LIST OF MEDAL COLOURS. The rows are painted from `GHOST.cols` — the same three
+  // the ghosts are drawn in on the pitch — so a row and the ghost it stands for can never
+  // disagree. Read off the live style, not off the constant, or this tests nothing.
+  o.cols = r.slice(0, 3).map(x => x.style.getPropertyValue('--m').trim().toLowerCase());
+  o.colsFromGhost = JSON.stringify(o.cols) ===
+                    JSON.stringify(M.GHOST.cols.map(c => c.toLowerCase()));
+  o.colsAllDifferent = new Set(o.cols).size === 3;
+  // ...and the row actually renders in that colour rather than merely carrying the token.
+  o.goldLabelPainted = getComputedStyle(r[0].querySelector('.dbl')).color;
+  o.silverLabelPainted = getComputedStyle(r[1].querySelector('.dbl')).color;
+
+  // Taking the top slot says RECORD and not two tags.
+  M.showDrillResult('x', '', true, { key: 'straight_up', rank: 0, t: 2.50 });
+  o.topTag = txt(rows()[0], 'dbtag');
+
+  // Break the Targets counts GOALS, and higher is better, so the board must not print
+  // "7.00s" for seven goals. ⚠️ The one drill where the units differ.
+  o.targetsText = M.drillScoreText('targets', 7);
+  o.timeText = M.drillScoreText('straight_up', 7);
+
+  // ⚠️ IT IS ON THE FAILURE SCREEN TOO. What you have to beat is most use on the run that
+  // did not get there.
+  M.showDrillResult("TIME'S UP", '0/1 gates', false, { key: 'straight_up', rank: -1, t: null });
+  o.onFailure = rows().length >= 3;
+  o.failureHasNoMissRow = !rows().some(x => x.classList.contains('miss'));   // no time to show
+
+  // ⚠️ AND IT DOES NOT INHERIT A MATCH. `showDrillResult` does not go through
+  // `showOverlay`, which is the one place that empties #ovStats — so a drill played after
+  // a match came up with that match's team panels under the drill's title.
+  const st = document.getElementById('ovStats');
+  st.innerHTML = '<div class="teampanels" id="_leak">left over</div>';
+  M.showDrillResult('x', '', true, { key: 'straight_up', rank: 0, t: 2.5 });
+  o.matchCleared = !document.getElementById('_leak');
+  o.boardStillThere = !!document.getElementById('drillBoard');
+  return o;
+});
+
+ok('the board lists all three places', board.rows === 3 && board.places.join('/') === 'Gold/Silver/Bronze',
+   board.rows + ' rows: ' + board.places.join('/'));
+ok('...with all three times on it', board.values.join(' ') === '2.50s 3.50s 4.50s', board.values.join(' '));
+ok('the slot this run took is the one highlighted', board.youRows === 1 && board.youIsSilver,
+   `${board.youRows} highlighted, silver=${board.youIsSilver}`);
+ok('...and it carries YOUR score', board.youShowsYourScore && board.youTagged,
+   'both halves of "highlight it with my score" — a build could mark the row and print the old time');
+ok('the record is marked', board.goldTagged && /RECORD/i.test(board.topTag), board.topTag);
+ok('the medal colours come from GHOST.cols', board.colsFromGhost && board.colsAllDifferent,
+   board.cols.join(' ') + ' — one list, so a row and the ghost it stands for cannot disagree');
+ok('...and the rows really render in them', board.goldLabelPainted !== board.silverLabelPainted,
+   `${board.goldLabelPainted} vs ${board.silverLabelPainted} — carrying the token is not painting with it`);
+ok('an empty slot is stated, not omitted', board.emptyRows >= 3 && board.emptyAllStated,
+   `${board.emptyRows} rows on a drill with no runs`);
+ok('a run that did not place is shown anyway', board.missRowShown && board.missRowSaysYourTime,
+   'how far off the board you were is the information');
+ok('the board is on the failure screen too', board.onFailure && board.failureHasNoMissRow);
+
+// ⚠️ AND THE REAL PATH, not a hand-set table. Every check above hands `showDrillResult` a
+// rank and a table that already agree, so they cannot tell whether the row that gets
+// highlighted is really the slot the run just took — the honest claim is about `drillDone`
+// choosing it, and only playing a drill twice can show that.
+const real = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  localStorage.setItem('magnetball.drills', JSON.stringify({}));
+  Object.keys(M.drillBest).forEach(k => delete M.drillBest[k]);
+  const play = sc => {
+    M.startDrill('straight_up'); const w = M.world;
+    for (let i = 0; i < 30*60 && !w.drill.complete && !w.drill.failed; i++){
+      const pad = M.drillAutoPad(w);
+      M.pads.p1.dx = pad.dx*sc; M.pads.p1.dy = pad.dy*sc; M.pads.p1.kick = pad.kick;
+      M.stepDrill(w);
+    }
+    return +w.drill.elapsed.toFixed(2);
+  };
+  const fast = play(1);            // a good run: takes gold
+  const slow = play(0.55);         // a worse one: takes silver behind it
+  const rows = Array.from(document.querySelectorAll('#drillBoard .dbrow'));
+  const you = rows.findIndex(r => r.classList.contains('you'));
+  o.fast = fast; o.slow = slow;
+  o.youIndex = you;
+  o.youValue = you >= 0 ? (rows[you].querySelector('.dbv') || {}).textContent : '';
+  o.goldValue = (rows[0].querySelector('.dbv') || {}).textContent;
+  return o;
+});
+ok('a real run lands in its own slot, with its own time on it',
+   real.slow > real.fast && real.youIndex === 1 &&
+   real.youValue === real.slow.toFixed(2) + 's' && real.goldValue === real.fast.toFixed(2) + 's',
+   `ran ${real.fast}s then ${real.slow}s — highlighted row ${real.youIndex} reads ${real.youValue}, gold reads ${real.goldValue}`);
+ok('Break the Targets is counted in GOALS', board.targetsText === '7 goals' && board.timeText === '7.00s',
+   board.targetsText + ' / ' + board.timeText);
+ok('a drill result does not inherit a match result', board.matchCleared && board.boardStillThere,
+   'showDrillResult does not go through showOverlay, which is the one place that empties #ovStats');
+
+// ============================================================
+//  A GHOST'S BALL IS NOT THE BALL
+// ============================================================
+// ⚠️ Reported as the ball being wrong in drills, and it was: each ghost drew a FILLED disc
+// at exactly `w.ball.r` in its medal colour, so a drill pitch carried four round objects
+// the size of the ball and the gold one sat a body's length from yours in a similar
+// lightness. Measured on RENDERED PIXELS at the point `drawGhosts` puts it, because the
+// claim is about what it looks like, not about what radius was asked for.
+// ⚠️ The check is a PAIR: the centre must be untouched court (it is not filled) AND the rim
+// must be inked (it is drawn at all). Either alone passes on a build with no ghost ball —
+// which is a different design, and not the one being tested.
+const gball = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  // ⚠️ The ghost's BALL is put well clear of its own body. With the two on the same point
+  // the body — which IS filled, being a body — is drawn straight over the ball and the
+  // centre probe reads the body's ink: the first run of this check failed for that reason
+  // and not because anything was filled that should not be.
+  const mk = t => { const pp = [], bb = []; for (let i = 0; i < 40; i++){
+                      pp.push(-60, -200 + i * 4); bb.push(60, -200 + i * 4); }
+                    return { t, hz: 10, p: pp, b: bb }; };
+  localStorage.setItem('magnetball.drills', JSON.stringify({}));
+  Object.keys(M.drillBest).forEach(k => delete M.drillBest[k]);
+  M.drillBest.straight_up = { runs: [mk(4), mk(5), mk(6)] };
+  M.startDrill('straight_up');
+  const w = M.world;
+  // Two seconds in, so every ghost is mid-run and well clear of the real ball's spawn.
+  for (let i = 0; i < 120; i++) M.stepDrill(w);
+  const gb = M.ghostAt(w.drill.ghosts[0], w.drill.elapsed, 'b');
+  o.hasGhostBall = !!gb;
+  if (!gb) return o;
+  // ⚠️ DRAW IT ON PURPOSE. `stepDrill` in a loop advances the sim and never paints, and the
+  // rAF loop cannot run inside a synchronous evaluate — so the canvas still holds whatever
+  // frame was on it before, and the first version of this probe read the menu's demo.
+  M.renderAlpha = 1; M.render();
+  const c = document.getElementById('game'), cx = c.getContext('2d');
+  const dpr = c.width / c.clientWidth;
+  const px = Math.round(M.wx(gb[0]) * dpr), py = Math.round(M.wy(gb[1]) * dpr);
+  const rr = Math.max(1.5, w.ball.r * M.GHOST.ballR * M.cam.s) * dpr;
+  const at = (x, y) => { const d = cx.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+                         return [d[0], d[1], d[2]]; };
+  const court = at(px + rr * 6, py);                       // plain court, well clear of it
+  const dist = (a, b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) + Math.abs(a[2]-b[2]);
+  o.centreOffCourt = dist(at(px, py), court);
+  let rim = 0;
+  for (let a = 0; a < 16; a++){
+    const q = at(px + Math.cos(a/16*2*Math.PI) * rr, py + Math.sin(a/16*2*Math.PI) * rr);
+    if (dist(q, court) > 10) rim++;
+  }
+  o.rimInked = rim;
+  // ⚠️ ...and the REAL ball still is filled, or "nothing is filled" has been achieved by
+  // taking the ball off the pitch.
+  const bx = Math.round(M.wx(w.ball.x) * dpr), by = Math.round(M.wy(w.ball.y) * dpr);
+  o.realBallFilled = dist(at(bx, by), court) > 30;
+  // ⚠️ ...and it is SMALLER than the real one, which is the other half of "not the ball".
+  o.ghostBallR = +(w.ball.r * M.GHOST.ballR).toFixed(2);
+  o.realBallR = w.ball.r;
+  return o;
+});
+
+ok('a ghost has a ball at all', gball.hasGhostBall && gball.rimInked >= 10,
+   `${gball.rimInked}/16 rim probes inked — in a shot drill the ball leaves the body, and where it went is the line you are beating`);
+ok('...but it is HOLLOW, so only the real ball is a filled disc', gball.centreOffCourt <= 10,
+   `centre is ${gball.centreOffCourt} off the court colour — it shipped as a filled disc at exactly the ball's radius, which put four balls on a drill pitch`);
+ok('...and smaller than the real one', gball.ghostBallR < gball.realBallR * 0.8,
+   `${gball.ghostBallR} against ${gball.realBallR}`);
+ok('the real ball is still filled', gball.realBallFilled,
+   '"nothing is filled" must not be satisfied by there being no ball');
+// ⚠️ Bronze at 0.34, filled at a third of that again, was a slightly-darker patch of grass.
+// The ORDER is what is pinned, not three magic numbers — retuning must stay monotonic.
+const alphas = await p.evaluate(() => window.__magnet.GHOST.alpha.slice());
+ok('the ghosts stay ordered by rank, and bronze is visible', alphas[0] > alphas[1] && alphas[1] > alphas[2] && alphas[2] >= 0.45,
+   alphas.join(' > ') + ' — gold asserts itself most, and the quietest is still a ghost you can see');
+
 ok('a run is recorded while you play', r.finished && r.recorded > 4,
    `${r.recorded} samples at ${r.hz}Hz`);
 ok('...at the sampling rate, not per frame', r.rateLooksRight,

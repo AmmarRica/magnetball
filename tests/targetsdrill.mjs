@@ -155,7 +155,26 @@ const r = await p.evaluate(() => {
   o.oneScored = w.drill.scored;
   o.bestAfterWorse = M.drillTop('targets');
   o.worseRunKeepsTheRecord = o.bestAfterWorse === o.bestAfterThree;
-  o.subSaysKeptBest = /best 3 goals/.test((document.querySelector('#overlay p')||{}).textContent||'');
+  // ⚠️ The record is on the BOARD now, not in the subtitle. It used to be printed as
+  // "best 3 goals" beside your score, which is the same number twice within an inch of
+  // itself; the three rows say it instead — and the run that just failed to beat it is
+  // shown underneath as the row that did not place, which is the whole point on a run
+  // that went backwards. Counted in GOALS here, the one drill where they are not seconds.
+  {
+    const rows = Array.from(document.querySelectorAll('#drillBoard .dbrow'));
+    const val = r => ((r.querySelector('.dbv')||{}).textContent||'').trim();
+    o.boardGold = rows[0] ? val(rows[0]) : '';
+    o.boardKeepsTheRecord = o.boardGold === '3 goals';
+    // ⚠️ The worse run is still ON the board — as a lower slot if the three are not full
+    // yet, or as the dashed row underneath if they are. Which of the two it is depends on
+    // how many runs the drill has, so what is asserted is that it is SHOWN and that it is
+    // NOT the record: a build that only draws the record would satisfy the line above.
+    const mine = rows.find(x => x.classList.contains('you')) ||
+                 rows.find(x => x.classList.contains('miss'));
+    o.boardShowsMine = !!mine;
+    o.boardMineText = mine ? val(mine) : '';
+    o.boardMineIsNotGold = !!mine && !mine.classList.contains('dbrow-gold') && rows.indexOf(mine) !== 0;
+  }
 
   // ...and a BETTER one does replace it.
   M.startDrill('targets'); w = M.world;
@@ -354,7 +373,10 @@ ok('the record is the score', r.bestAfterThree === r.threeScored,
    `scored ${r.threeScored}, recorded ${r.bestAfterThree}`);
 ok('a WORSE run does not overwrite the record', r.worseRunKeepsTheRecord,
    `scored ${r.oneScored} and the record went ${r.bestAfterThree} -> ${r.bestAfterWorse}: HIGHER is better here, unlike every other drill`);
-ok('...and it says so', r.subSaysKeptBest, r.sub);
+ok('...and the BOARD still shows it as the record', r.boardKeepsTheRecord,
+   `gold row reads "${r.boardGold}" — counted in goals, not seconds`);
+ok('...with the run that did not beat it shown below it', r.boardShowsMine && r.boardMineIsNotGold,
+   `"${r.boardMineText}" — how far off you were is the information on the run that went backwards, and it must not be sitting in the record's slot`);
 ok('a BETTER run does take it', r.betterRunTakesTheRecord,
    `scored ${r.fiveScored}, record ${r.bestAfterBetter}`);
 ok('the GOALS are actually drawn, at both ends', r.goalsAreDrawn,
