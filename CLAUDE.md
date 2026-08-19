@@ -633,6 +633,40 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   past the guide ring.   The sheep is a `BALL_LOOKS` entry, and a look gets ONE ink clipped to the ball — the fleece
   is the ball itself and the ink draws only what is not fleece. Anything drawn on the rim is
   lost, because `ballRim` is dark too.
+  `tactics` (shown as **Tactics Board**) = the diagram a coach draws on: flat green, white
+  markings at full strength, and bodies that are magnet COUNTERS sitting on the board
+  rather than circles painted into it — a cast shadow, the base disc, a spherical shade
+  lit at the top left, a dark rim and a specular highlight, every layer a fraction of `r`
+  so it is the same object at 9px on a phone and 40px on a desktop.
+  ⚠️ **THE SIDES ARE A RED COUNTER AGAINST A STRIPED ONE, AND THE STRIPES ARE THE
+  SILHOUETTE.** Both are discs, so hue alone is exactly what this file refuses: three navy
+  bars clipped inside the pale counter make a scan across it alternate, which the plain red
+  one cannot do at all. `tests/dyntheme.mjs` counts light/dark **STEPS** between adjacent
+  samples rather than crossings of an absolute threshold — the first version used a fixed
+  cut at luminance 110 and the RED counter reported three edges, because its base sits at
+  107 and the shading wanders across the line. A stripe boundary is a step and shading is a
+  ramp; that is the difference, and it needs no constant tuned to a particular red.
+  ⚠️ ...and the shading is checked as the CONTROL: a lit counter has a real light-to-dark
+  spread, so "one side is darker" is true of both and the alternation is the claim.
+  ⚠️ `DYN_FIELDS.tacticsboard` adds only what the game's pitch is MISSING — penalty areas,
+  six-yard boxes, penalty spots and the D. It does **not** fill: `drawPitch` owns the
+  surface, and a fill here would cover the goal boxes already drawn under it.
+  ⚠️ **Every number is a fraction of the field**, never a pixel from the reference drawing:
+  the courts run from Futsal to Leviathan and differ threefold in width. The proportions
+  are a real pitch's (penalty area 40% of the width by 16.5/105 of the length).
+  ⚠️ The **D is computed, not eyeballed** — the arc between the two angles where a circle
+  of the penalty radius crosses the box edge, so it stays a D on a court of any size, and
+  is skipped entirely when the radius cannot reach the edge.
+  ⚠️ **The ball is `BALL_LOOKS.classic`, which already IS the panelled football** the board
+  wants — one black pentagon in the middle and five round the rim. Adding a second copy is
+  the mistake the withdrawn `seam` look made against `BALL_LOOKS.tennis`: check the
+  registry before adding to it.
+  ⚠️ The skin's cast shadow is held to 0.26 because `drawOneDisc` has **already** laid a
+  soft one straight down in `TH.shadow` before any skin paints — this is the directional
+  one on top of it, and two at full strength is a body sitting in a hole.
+  ⚠️ **The spec this was drawn from labelled its counters with a real club's current
+  squad.** Those are real people's names and are not shipped: the look is generic, the
+  names are not ours to use. Same standing rule as the trademark one below.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It

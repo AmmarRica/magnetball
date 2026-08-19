@@ -983,6 +983,99 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
+  // ---- Tactics Board: magnet counters, and stripes as the silhouette --------
+  // ⚠️ **BOTH SIDES ARE DISCS**, so hue cannot carry them: red against pale is a lightness
+  // pair, and the shape has to do the work at twelve pixels and for a colour-blind player.
+  // The striped counter has three navy bars across it, so a scan through the middle
+  // alternates dark/pale/dark — an alternation the plain red counter cannot have at all.
+  // Measured as light/dark EDGES along that scan, which is what "stripes" means and what a
+  // pixel count would miss entirely (both discs cover exactly the same area). Same
+  // argument Highlighter's bar and Bootleg's square are built on.
+  {
+    M.applyBundle('tactics');
+    o.tacName = M.bundleName();
+    o.tacSlots = JSON.stringify(M.sel.look);
+    // ⚠️ The ball look is the one ALREADY in the registry, not a second copy of it — the
+    // mistake the withdrawn `seam` look made against `BALL_LOOKS.tennis`.
+    o.tacUsesClassicBall = M.sel.look.ball === 'classic';
+    const R = 60, CX = 150, CY = 150;
+    const cvT = document.createElement('canvas'); cvT.width = cvT.height = 300;
+    const ccT = cvT.getContext('2d');
+    const drawCounter = (team) => {
+      ccT.fillStyle = '#7f7f7f'; ccT.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.counter.paint(ccT, q, CX, CY, R, { players:[q] });
+    };
+    const bands = (team) => {
+      drawCounter(team);
+      // Across the middle of the disc, well inside the rim. Navy is dark and the paper is
+      // near-white, so the two stay far apart in luminance whatever the shading did.
+      // ⚠️ Counted as STEPS between adjacent samples, not as crossings of an absolute
+      // luminance threshold. The first version used a fixed cut at 110 and the red counter
+      // reported THREE edges — its own base sits at luminance 107, so the top-left-to-
+      // bottom-right shading wanders back and forth across the line. A stripe boundary is a
+      // step and shading is a ramp, which is the difference that actually distinguishes
+      // them and needs no constant tuned to a particular red.
+      const d = ccT.getImageData(Math.round(CX-R*0.72), CY, Math.round(R*1.44), 1).data;
+      let flips = 0, prev = null, darkest = 255, lightest = 0;
+      for (let i = 0; i < d.length; i += 4){
+        const lum = d[i]*0.30 + d[i+1]*0.59 + d[i+2]*0.11;
+        darkest = Math.min(darkest, lum); lightest = Math.max(lightest, lum);
+        if (prev !== null && Math.abs(lum - prev) > 25) flips++;
+        prev = lum;
+      }
+      return { flips, spread: Math.round(lightest - darkest) };
+    };
+    const redB = bands(0), paleB = bands(1);
+    o.tacRedBands = redB.flips; o.tacPaleBands = paleB.flips;
+    o.tacStripesAreTheShape = paleB.flips >= 4 && redB.flips === 0;
+    // ⚠️ ...and the SHADING must not be what is doing it. A counter lit at the top left has
+    // a real light-to-dark spread across it, so "one side is darker" is true of both — the
+    // alternation above is the claim, and this is the control that says so.
+    o.tacRedSpread = redB.spread; o.tacPaleSpread = paleB.spread;
+    o.tacShadingIsNotStripes = redB.spread > 20;
+    // ⚠️ Nothing crosses the guide ring except the cast shadow, which is what a shadow is
+    // for — measured on the LEFT, away from where the light throws it.
+    const ringAt = (team, fr, ang) => {
+      drawCounter(team);
+      const px = Math.round(CX + Math.cos(ang)*R*fr), py = Math.round(CY + Math.sin(ang)*R*fr);
+      const d = ccT.getImageData(px, py, 1, 1).data;
+      return Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127);
+    };
+    o.tacLeftOfRing = ringAt(0, 1.10, Math.PI) + ringAt(1, 1.10, Math.PI);
+    o.tacStaysInsideTheRing = o.tacLeftOfRing < 40;
+
+    // ---- the board's own markings ------------------------------------------
+    // ⚠️ Measured as marks ADDED over a plain court, because `drawPitch` owns the surface
+    // and this painter must not repaint it: a fill here would cover the goal boxes the game
+    // has already drawn. So the check is that ink appears where a penalty box edge, a
+    // penalty spot and the D belong — and nowhere across the middle of an empty half.
+    {
+      const cvM = document.createElement('canvas'); cvM.width = cvM.height = 400;
+      const ccM = cvM.getContext('2d');
+      ccM.fillStyle = '#7f7f7f'; ccM.fillRect(0,0,400,400);
+      const L = 60, T = 40, W = 280, H = 320;
+      M.DYN_FIELDS.tacticsboard.paint(ccM, {}, L, T, W, H, { field: M.FIELDS.classic });
+      const inked = (x, y) => { const d = ccM.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+                                return Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127) > 40; };
+      const near = (x, y) => inked(x, y) || inked(x, y-1) || inked(x, y+1) || inked(x-1, y) || inked(x+1, y);
+      const cx = L + W/2;
+      const boxD = H * (16.5/105), boxW = W * 0.40, spot = H * (11/105), pr = W * (9.15/68);
+      o.markBoxFront = near(cx, T + boxD);
+      o.markBoxSide  = near(cx - boxW/2, T + boxD*0.5);
+      o.markSpot     = near(cx, T + spot);
+      // ⚠️ ...and the D really is a D: ink beyond the box edge on the centre line, which is
+      // the only place a penalty ARC reaches and a penalty BOX never does.
+      o.markArc      = near(cx, T + spot + pr);
+      // Nothing painted across the middle of a half — this adds marks, it does not fill.
+      o.markNotAFill = !near(cx + boxW*0.9, T + H*0.30);
+      o.boardMarksIt = o.markBoxFront && o.markBoxSide && o.markSpot && o.markArc && o.markNotAFill;
+    }
+    // ⚠️ `grass`, not `classic` — there is no `classic` palette and `applyBundle('classic')`
+    // is a silent no-op, which is written up at the top of this file.
+    M.applyBundle('grass');
+  }
+
   // ---- Bambamzone: a floating stage, a KO star and a shield bubble ----------
   // ⚠️ The silhouette is measured on a ring at 0.62r, and the radius matters. A star
   // is ink near its five points and court in the valleys between them; a bubble is ink
@@ -1202,6 +1295,16 @@ ok(r.rollIsStable, 'the same step drawn twice gave different frames — the blin
 ok(r.rollVariesByCycle, 'the blink pattern is identical from cycle to cycle, so nothing is actually being rolled');
 ok(r.blocksKeepOffCentre, `the blocks reach past their corners (${r.blockReach} of ${r.blockGrid} cells) — the middle of the pitch is the one place nothing decorative belongs`);
 ok(r.ampExists && r.ampDraws, 'the ampersand ball look draws nothing');
+ok(r.tacName === 'Tactics Board' && r.tacUsesClassicBall,
+   `Tactics Board does not resolve, or is not using the panelled football already in the registry: ${r.tacName} · ${r.tacSlots} — a second copy of it is the mistake the withdrawn seam look made`);
+ok(r.tacStripesAreTheShape,
+   `the counters do not differ by SHAPE: ${r.tacPaleBands} light/dark edges across the striped one against ${r.tacRedBands} across the red one — both are discs, so hue cannot carry the sides`);
+ok(r.tacShadingIsNotStripes,
+   `the red counter spans only ${r.tacRedSpread} of luminance, so it is not really being lit — "one side is darker" would then be doing the work the alternation is supposed to do`);
+ok(r.tacStaysInsideTheRing,
+   `a counter spills past the guide ring on the lit side (${r.tacLeftOfRing} of ink at 1.10r) — the ring is what collides`);
+ok(r.boardMarksIt,
+   `the board's markings are wrong: ${JSON.stringify({ front:r.markBoxFront, side:r.markBoxSide, spot:r.markSpot, arc:r.markArc, notAFill:r.markNotAFill })}`);
 ok(r.bambamName === 'Bambamzone', `the Bambamzone bundle does not resolve: ${r.bambamName}`);
 ok(r.bambamSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
 ok(r.indicatorNotAPlate, `the player indicator is a filled plate behind the mark (star reads ${r.starInk}/32) — it covers every probe angle and defeats the silhouette it was added alongside`);

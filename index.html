@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0410AM';
+const VERSION = '20260819.0730AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,15 @@ const VERSION = '20260819.0410AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0730AM', title: 'Tactics Board',
+    added: [
+      '<b>A new theme: Tactics Board.</b> The pitch as a coach\u2019s diagram \u2014 flat green, full white markings with penalty areas, six-yard boxes, penalty spots and the D \u2014 and players drawn as magnet counters sitting on top of it, lit from the corner with a shadow underneath. A red counter against a navy-striped one, and the panelled football.',
+    ],
+    changed: [
+      'The two sides are told apart by the <b>stripes</b>, not just the colour, so they still read at a glance on a small screen and for anyone who does not separate red from white easily.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0410AM', title: 'Video export you can actually play',
     added: [
       '<b>Save the whole match as a video.</b> A new button beside Save clip on the result screen. It plays the match back to film it, so it takes about as long as the match did \u2014 the button says how long while it runs.',
@@ -5555,6 +5564,36 @@ const THEMES = {
       obstacle:'#d94fa0', good:'#3ec06a', warn:'#f2c53d', dim:'#3f6a4f', cone:'#ff8a1e',
       hudText:'#eefaf0', hudSub:'#aee0bd', accent:'#3ec06a', padRing:'rgba(255,255,255,0.6)' },
   },
+  // ⚠️ **A TACTICS BOARD, and the pitch is the ONLY thing here that is a real pitch.**
+  // Every other palette dresses the court as something else; this one dresses it as the
+  // diagram a coach draws on — flat grass green, white markings at full strength, and
+  // bodies that are magnet counters sitting ON the board rather than painted into it.
+  // ⚠️ **The two sides are a RED counter against a STRIPED one**, which is a hue pair and
+  // therefore not enough on its own — see `DISC_SKINS.counter` for the shape that carries
+  // it. The pitch green and the marking white are spoken for, so a team drawn in either is
+  // a body the same colour as something you are already tracking (the Bootleg dots and the
+  // Apologies! lane squares are both written up for exactly this).
+  // ⚠️ The court is FLAT (`stripeA === stripeB`): a board is a printed surface, and mown
+  // stripes are the thing this palette is deliberately not.
+  tactics: {
+    name: 'Tactics Board', emoji: '📋',
+    ui: { scan:false,
+      grad:'linear-gradient(180deg, #2c5c2f 0%, #17301a 100%)',
+      bg:'#17301a', panel:'rgba(30,62,34,0.92)', edge:'#3f7a44', text:'#f2f7f2', muted:'#b8d5ba',
+      red:'#e23a32', blue:'#1b3a8c', cyan:'#8cc63f', magenta:'#d94fa0', green:'#8cc63f', yellow:'#f2c53d',
+      accent:'#f2f4f8', go:'#8cc63f', field:'#1d3d20', onAccent:'#141414' },
+    pitch: { glow:false, fieldBg:'#3d7c3e', court:'#4c9a4c', stripeA:'#4c9a4c', stripeB:'#4c9a4c',
+      netPocket:'rgba(255,255,255,0.10)', line:'rgba(255,255,255,0.95)', centerDot:'rgba(255,255,255,0.95)',
+      netMesh:'rgba(255,255,255,0.28)', post:'#ffffff', teamRed:'#e23a32', teamBlue:'#f2f4f8',
+      discRim:'#141414', kickRing:'#f2c53d', kickText:'#141414', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#141414', nameBg:'#141414', nameText:'#ffffff',
+      shadow:'rgba(0,0,0,0.34)', ballRim:'#141414', ball:'#ffffff', ballSpot:'#141414', trailRGB:'255,255,255',
+      obstacle:'#d94fa0', good:'#8cc63f', warn:'#f2c53d', dim:'#7bb37c', cone:'#ff8a1e',
+      hudText:'#f2f7f2', hudSub:'#c3ddc4', accent:'#f2f4f8', padRing:'rgba(255,255,255,0.7)',
+      // The board's own inks: the markings the field painter adds, and the counters.
+      dynMark:'rgba(255,255,255,0.95)', dynAlt:'#1b3a8c',
+      tacRed:'#e23a32', tacRedRim:'#8e1d18', tacPale:'#f2f4f8', tacNavy:'#1b3a8c', tacPaleRim:'#12203f' },
+  },
   mono: {
     name: 'Mono', emoji: '⬜',
     ui: { scan:false,
@@ -6239,6 +6278,11 @@ const THEME_BUNDLES = {
   // the closest thing here to a cabinet. A key with no SFX_SETS entry would take
   // applySfxSet nowhere and leave the Sound slot showing a set that does not exist.
   ammari:    { field:'arcade',    discs:'wedge',       ball:'token',   sfx:'space'   },
+  // ⚠️ `ball: 'classic'` rather than a look of its own. The panelled football the board
+  // wants is ALREADY in the registry — one black pentagon in the middle and five round
+  // the rim — and adding a second copy of it is the mistake the withdrawn `seam` look
+  // made against `BALL_LOOKS.tennis`. Check the registry before adding to it.
+  tactics:   { field:'tacticsboard', discs:'counter',   ball:'classic', sfx:'classic' },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
@@ -22633,6 +22677,62 @@ DYN_FIELDS.bambamzone = {
     c.restore();
   },
 };
+// ============================================================
+//  THE TACTICS BOARD — the markings a real pitch has and this one never drew
+// ============================================================
+// The game's own pitch is a rectangle, a halfway line and a centre circle. A board has
+// the rest of them: penalty boxes, six-yard boxes, penalty spots and the D. This painter
+// adds only what is missing, over whatever `drawPitch` has already laid down.
+// ⚠️ **EVERY NUMBER IS A FRACTION OF THE FIELD**, never a pixel from the reference
+// drawing. The courts here run from Futsal to Leviathan and differ threefold in width, so
+// a box measured in pixels is a box that swallows a small pitch and is a postage stamp on
+// a big one. The proportions are a real pitch's: the penalty area is 40% of the width and
+// 16.5/105 of the length, the six-yard box 18.3/68 by 5.5/105.
+// ⚠️ **The D IS CLIPPED to outside the penalty area**, which is what makes it a D rather
+// than a circle — drawn as the arc between the two angles where a circle of the penalty
+// radius crosses the box edge, computed rather than eyeballed, so it stays a D on a court
+// of any shape.
+// ⚠️ It does NOT bleed and does NOT repaint the court: `drawPitch` owns the surface, and
+// a second fill here would cover the goal boxes it has already drawn. Marks only.
+// ⚠️ Falls back through `TH.dynMark || TH.line` like every other painter — slots mix, so
+// this can be asked for over any palette, and on a dark court white markings are still
+// what it wants.
+DYN_FIELDS.tacticsboard = {
+  name: 'Tactics board',
+  paint(c, st, L, T, W, H){
+    const ink = TH.dynMark || TH.line || '#ffffff';
+    const lw = Math.max(1, Math.min(W, H) * 0.006);
+    c.save();
+    c.strokeStyle = ink; c.fillStyle = ink; c.lineWidth = lw;
+    // The pitch runs goal-to-goal down H, so the boxes hang off the two ends.
+    const boxW = W * 0.40, boxD = H * (16.5/105);          // penalty area
+    const sixW = W * (18.3/68), sixD = H * (5.5/105);      // six-yard box
+    const spot = H * (11/105);                             // penalty spot from the line
+    const pr = W * (9.15/68);                              // penalty arc radius
+    const cx = L + W/2;
+    for (const end of [0, 1]){
+      const y0 = end ? T + H : T;                          // the goal line
+      const dir = end ? -1 : 1;                            // ...and into the pitch
+      c.strokeRect(cx - boxW/2, Math.min(y0, y0 + dir*boxD), boxW, boxD);
+      c.strokeRect(cx - sixW/2, Math.min(y0, y0 + dir*sixD), sixW, sixD);
+      const sy = y0 + dir*spot;
+      c.beginPath(); c.arc(cx, sy, Math.max(1.2, lw*1.4), 0, 2*Math.PI); c.fill();
+      // ⚠️ The D: the part of the penalty circle that is OUTSIDE the box. `boxD - spot`
+      // is how far the box edge is from the spot, so the half-angle is its arccos — and
+      // when the radius cannot reach the edge at all there is no D to draw.
+      const reach = (boxD - spot) / pr;
+      if (Math.abs(reach) < 1){
+        const half = Math.acos(Math.max(-1, Math.min(1, reach)));
+        const mid = end ? -Math.PI/2 : Math.PI/2;           // pointing into the pitch
+        c.beginPath(); c.arc(cx, sy, pr, mid - half, mid + half); c.stroke();
+      }
+    }
+    // The centre spot, which the game marks in `centerDot` — restated here at full
+    // strength because on a board it is a mark like any other.
+    c.beginPath(); c.arc(cx, T + H/2, Math.max(1.2, lw*1.4), 0, 2*Math.PI); c.fill();
+    c.restore();
+  },
+};
 // A pool table: baize, cushions and pockets. Not animated — a dynamic theme is one
 // that OWNS its field, and some of those fields simply hold still. `step` is optional.
 DYN_FIELDS.pooltable = {
@@ -23278,6 +23378,69 @@ function discFace(p){
   return { ux: fx/m, uy: fy/m };
 }
 const DISC_SKINS = {
+  // ============================================================
+  //  MAGNET COUNTERS — the tactics board's pieces, lit from the top left
+  // ============================================================
+  // Five layers, bottom to top: a cast shadow, the base disc, a spherical shade, a dark
+  // rim and a specular highlight. What it buys is HEIGHT — a counter sitting on the board
+  // rather than a circle painted into it — and every layer is a fraction of `r`, so it is
+  // the same object at 9 pixels on a phone and at 40 on a desktop.
+  // ⚠️ **THE SIDES ARE A RED COUNTER AGAINST A STRIPED ONE, AND THE STRIPES ARE THE
+  // SILHOUETTE.** Both are discs, so hue alone would be exactly the thing this file
+  // refuses — red against pale is a lightness pair, but a colour-blind player and a
+  // twelve-pixel body both need the difference to be a SHAPE. Three navy bars across a
+  // pale disc read as ink on vertical bands and plain paper between them, which is what
+  // `tests/dyntheme.mjs` measures: a column through the bars is inked and a column
+  // between them is not, and the red counter has no such alternation at all. Same
+  // argument Highlighter's bar and Bootleg's square make.
+  // ⚠️ The bars are CLIPPED to the disc, not drawn as chords: an unclipped rect at this
+  // width overhangs the guide ring, which is the VideoSoccer arrowhead mistake.
+  // ⚠️ The shade and the highlight are drawn with `TH` nowhere in sight — they are light,
+  // not colour, so they hold over a red counter, a pale one and any team colour a player
+  // picks. Only the base and the rim come from the palette.
+  counter: {
+    name: 'Counters',
+    paint(c, p, x, y, r, w){
+      const pale = p.team === 1;
+      const base = pale ? (TH.tacPale || '#f2f4f8') : (TH.tacRed  || '#e23a32');
+      const rim  = pale ? (TH.tacPaleRim || '#12203f') : (TH.tacRedRim || '#8e1d18');
+      // 1. the cast shadow, DOWN AND TO THE RIGHT of the light. ⚠️ `drawOneDisc` has
+      // already laid a soft one straight down in `TH.shadow` before calling any skin —
+      // this is the DIRECTIONAL one on top of it, which is why it is held well back: two
+      // shadows at full strength is a body sitting in a hole.
+      c.beginPath(); c.arc(x + r*0.16, y + r*0.22, r, 0, 2*Math.PI);
+      c.fillStyle = 'rgba(0,0,0,0.26)'; c.fill();
+      // 2. the base disc
+      c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+      c.fillStyle = base; c.fill();
+      // 2b. ...and the stripes, inside it
+      if (pale){
+        c.save(); c.clip();
+        c.fillStyle = TH.tacNavy || '#1b3a8c';
+        const bw = r*0.42;
+        for (const k of [-1, 0, 1]) c.fillRect(x + k*r*0.84 - bw/2, y - r, bw, r*2);
+        c.restore();
+      }
+      // 3. the spherical shade: lit at the top left, falling away to the bottom right
+      if (r > 4){
+        const g = c.createRadialGradient(x - r*0.30, y - r*0.40, r*0.05, x, y, r*1.05);
+        g.addColorStop(0,    'rgba(255,255,255,0.35)');
+        g.addColorStop(0.55, 'rgba(255,255,255,0)');
+        g.addColorStop(1,    'rgba(0,0,0,0.28)');
+        c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle = g; c.fill();
+      }
+      // 4. the rim, in the base's own darker tone
+      c.beginPath(); c.arc(x, y, r - Math.max(0.5, r*0.06), 0, 2*Math.PI);
+      c.strokeStyle = rim; c.lineWidth = Math.max(1.2, r*0.13); c.stroke();
+      // 5. the specular highlight — an ellipse, because a sphere's is not a circle
+      if (r > 6){
+        c.save(); c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
+        c.beginPath(); c.ellipse(x, y - r*0.42, r*0.52, r*0.26, 0, 0, 2*Math.PI);
+        c.fillStyle = 'rgba(255,255,255,0.30)'; c.fill();
+        c.restore();
+      }
+    },
+  },
   // Strict black and white. Player colour comes from the profile, which no palette
   // can reach, so a monochrome theme has to paint the disc itself or the pitch ends
   // up covered in the one thing the theme says it doesn't have. Sides read by fill:
