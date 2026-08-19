@@ -371,6 +371,26 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ The cap drops the **oldest** — dropping the newest swallows the goal in a scramble.
   ⚠️ Its own toggle, not under Screen shake: a label naming what you did is information,
   and turning the wobble off is not asking to stop being told. `tests/floaters.mjs`.
+- **A STREAK MAY NEVER BE WIDER THAN IT IS LONG** (`drawBallTrail`). The width was a flat
+  1.7 ball radii while the LENGTH is `BALL_LEN_MAX * drive` — so at a gentle pace `drive`
+  is near zero, the path is a couple of pixels long, and a 12px round-capped stroke over it
+  renders as a **BLOB the size of the ball stuck to the back of it**. Reported as *"ball
+  shape is odd in drills after kicked"*, and it shows up in a drill first because a drill
+  is nudge-and-follow on an empty pitch: the streak is a tell about where the ball just
+  came from, and a lump attached to the ball tells you nothing.
+  ⚠️ **Two parts, and both are needed.** The width RISES WITH SPEED the way the length
+  already does, so a slow ball gets a thin tell rather than a fat stub; and it is then
+  **clamped to the length actually drawn**, which is what makes "wider than it is long"
+  impossible at any speed, on any court and at any zoom.
+  ⚠️ **The check's threshold is DERIVED, and the obvious one is VACUOUS.** A round-capped
+  stroke covers `pathLength + width` along travel and `width` across, so `along >= across`
+  is true of ANY build that draws anything — the first version asserted exactly that and
+  **passed on the flat-width build it exists to catch**. Substituting, `width <= pathLength`
+  is `along >= 2·across`, which is the rule written in what the pixels can be measured as,
+  with no constant tuned to a speed or a zoom. Measured as a DIFFERENCE against the same
+  frame with no trail, or the ball's own round body reports a 1:1 box on every build.
+  ⚠️ Paired with "at full pelt there is still a REAL streak", because *never wider than
+  long* is also satisfied by drawing nothing. `tests/tells.mjs`.
 - **Motion tells:** short dot tails behind the players and one streak behind the ball,
   both capped in world units (`DOT_GAP`/`DOT_MAX`, `BALL_LEN_MAX`). ⚠️ A three-second,
   time-measured version of these was built and **reverted**: at the speed cap it drew a

@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.1005AM';
+const VERSION = '20260819.1240PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,14 @@ const VERSION = '20260819.1005AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.1240PM', title: 'The ball stops growing a lump',
+    added: [],
+    changed: [
+      '<b>The streak behind the ball is a streak again.</b> Its width was fixed while its length grew with speed, so a gentle nudge drew something as wide as the ball and barely as long \u2014 a lump stuck to the back of it rather than a trail. It is thin when the ball is ambling and wide when it is flying, and it can never come out wider than it is long.',
+      'Most obvious in drills, where you nudge the ball about on an empty pitch, but it was there in a match too.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.1005AM', title: 'Names under your feet',
     added: [],
     changed: [
@@ -24910,8 +24918,25 @@ function drawBallTrail(w){
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(wx(pts[0].x), wy(pts[0].y));
-  for (let k = 1; k < pts.length; k++) ctx.lineTo(wx(pts[k].x), wy(pts[k].y));
-  ctx.lineWidth = b.r * s * 1.7;
+  let lenPx = 0;
+  for (let k = 1; k < pts.length; k++){
+    ctx.lineTo(wx(pts[k].x), wy(pts[k].y));
+    lenPx += Math.hypot(wx(pts[k].x) - wx(pts[k-1].x), wy(pts[k].y) - wy(pts[k-1].y));
+  }
+  // ⚠️ **A STREAK MAY NEVER BE WIDER THAN IT IS LONG.** The width was a flat 1.7 ball
+  // radii while the LENGTH is `BALL_LEN_MAX * drive` — so at a gentle pace `drive` is
+  // near zero, the path is a couple of pixels long, and a 12px round-capped stroke over
+  // it renders as a BLOB the size of the ball stuck to the back of it. Reported as the
+  // ball's shape going odd after a kick, and it shows up in drills first because a drill
+  // is nudge-and-follow on an empty pitch: the streak is a tell about where the ball just
+  // came from, and a lump attached to the ball tells you nothing.
+  // ⚠️ Two parts, and both are needed. The width now RISES WITH SPEED like the length
+  // does, so a slow ball gets a thin tell rather than a fat stub; and it is then clamped
+  // to the length actually drawn, which is what makes "wider than it is long" impossible
+  // at any speed, on any court and at any zoom. A round cap adds half a width at each
+  // end, so the clamp is what keeps the covered shape a capsule rather than a circle.
+  const wantW = b.r * s * (0.55 + 1.15 * drive);
+  ctx.lineWidth = Math.max(1, Math.min(wantW, lenPx));
   ctx.strokeStyle = col ? rgba(col, 0.34 + 0.30*drive) : `rgba(${TH.trailRGB},${0.20 + 0.22*drive})`;
   ctx.stroke();
   ctx.restore();

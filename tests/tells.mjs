@@ -89,6 +89,57 @@ const r = await p.evaluate(async ()=>{
   };
   o.fastBall = ballInk(0,-16,12,3.0);
   o.slowBall = ballInk(0,-1.2,12,3.0);
+
+  // 4b) ⚠️ **A STREAK MAY NEVER BE WIDER THAN IT IS LONG.** The width was a flat 1.7 ball
+  //     radii while the LENGTH is `BALL_LEN_MAX * drive` — so at a gentle pace the path is
+  //     a couple of pixels long and a 12px round-capped stroke over it renders as a BLOB
+  //     the size of the ball stuck to the back of it. Reported as the ball's shape going
+  //     odd after a kick, and it shows in drills first: a drill is nudge-and-follow on an
+  //     empty pitch, and a lump attached to the ball says nothing about where it came from.
+  //     Measured as the streak's own bounding box, ALONG travel against ACROSS it.
+  //     ⚠️ A DIFFERENCE against the same frame with no trail, so only the streak counts —
+  //     the ball itself is round and would report a 1:1 box on any build at all.
+  const streakBox = (vx, vy, n) => {
+    const sx = 0, sy = 140;
+    const place = () => { w.ball.vx=vx; w.ball.vy=vy; w.ball.x=sx - vx*n; w.ball.y=sy - vy*n; };
+    const R = 150;
+    const bx0 = Math.round((M.wx(sx) - R) * DPR), by0 = Math.round((M.wy(sy) - R) * DPR);
+    const wpx = Math.round(R*2*DPR), hpx = Math.round(R*2*DPR);
+    M.resetTrails(); place();
+    for (let i=0;i<n;i++){ w.ball.x+=vx; w.ball.y+=vy; }
+    M.drawPitch(w);                                   // no trail: the baseline
+    const bare = c2.getImageData(bx0, by0, wpx, hpx).data;
+    M.resetTrails(); place();
+    for (let i=0;i<n;i++){ M.advanceTrails(w); w.ball.x+=vx; w.ball.y+=vy; }
+    M.drawPitch(w); M.drawBallTrail(w);
+    const full = c2.getImageData(bx0, by0, wpx, hpx).data;
+    let lo0 = 1e9, hi0 = -1e9, lo1 = 1e9, hi1 = -1e9, hits = 0;
+    const sp = Math.hypot(vx, vy) || 1, ax = vx/sp, ay = vy/sp;   // travel, world = screen here
+    for (let py2 = 0; py2 < hpx; py2++) for (let px2 = 0; px2 < wpx; px2++){
+      const i = (py2*wpx + px2)*4;
+      const d = Math.abs(full[i]-bare[i]) + Math.abs(full[i+1]-bare[i+1]) + Math.abs(full[i+2]-bare[i+2]);
+      if (d < 12) continue;
+      hits++;
+      const ox = px2/DPR - R, oy = py2/DPR - R;        // screen offset from the ball
+      const al = ox*ax + oy*ay, ac = -ox*ay + oy*ax;   // along travel, across it
+      lo0 = Math.min(lo0, al); hi0 = Math.max(hi0, al);
+      lo1 = Math.min(lo1, ac); hi1 = Math.max(hi1, ac);
+    }
+    return hits ? { along: +(hi0-lo0).toFixed(1), across: +(hi1-lo1).toFixed(1), hits } : null;
+  };
+  o.crawlBox = streakBox(0, -1.1, 10);
+  o.beltBox  = streakBox(0, -18, 10);
+  // ⚠️ **THE THRESHOLD IS DERIVED, NOT PICKED, and the obvious one is VACUOUS.** A
+  // round-capped stroke covers `pathLength + width` along travel and `width` across, so
+  // `along >= across` is true of ANY build that draws anything at all — the first version
+  // asserted exactly that and passed on the flat-width build this exists to catch.
+  // Substituting: width <= pathLength  ⟺  across <= along − across  ⟺  along >= 2·across.
+  // That is "a streak may never be wider than it is long", written in what the pixels can
+  // actually be measured as, with no constant tuned to a particular speed or zoom.
+  o.crawlIsAStreak = !!o.crawlBox && o.crawlBox.along >= o.crawlBox.across * 2;
+  // ⚠️ ...and at full pelt there is still a REAL streak. Without this, "never wider than
+  // long" is satisfied by drawing nothing, which is a different design and not this one.
+  o.beltIsAStreak  = !!o.beltBox  && o.beltBox.along  >= o.beltBox.across * 3;
   w.ball.x=-520; w.ball.y=-520; w.ball.vx=0; w.ball.vy=0;
 
   // 5) Wind-up is visible on the disc: a charged player differs from an idle one
@@ -231,6 +282,8 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.parkedTail <= 2 &&                 // a parked player leaves it clean
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
+           r.crawlIsAStreak && r.beltIsAStreak &&   // a streak, never a lump — see 4b
+
            r.chargeVisible > 20 &&              // wind-up reads on the disc
            r.ringSolid && r.ringInked && r.ringIsFullCircle &&  // solid, drawn, never a sweep
            r.layoutIsTouch && r.padDrawsSomething &&        // the pad is on screen at all
@@ -241,6 +294,8 @@ if(!ok) console.log('checks:', {
   movingTail:r.movingTail>12, parked:r.parkedTail<=2, speedScales:r.movingTail>r.slowTail,
   fastBall:r.fastBall>12, ballScales:r.slowBall<r.fastBall, charge:r.chargeVisible>20,
   reset:r.trailsClearedOnStart, themes:r.allThemesRead,
+  crawlIsAStreak:r.crawlIsAStreak, crawlBox:r.crawlBox,
+  beltIsAStreak:r.beltIsAStreak, beltBox:r.beltBox,
   ringSolid:r.ringSolid, ringInked:r.ringInked, ringFull:r.ringIsFullCircle,
   ringDial:[r.ringAtMin, r.ringAtMax] });
 if(!ok && !r.allThemesRead) console.log('per-theme:', JSON.stringify(r.perTheme));
