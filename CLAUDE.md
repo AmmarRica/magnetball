@@ -2407,6 +2407,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Reserved on `sprintsFor(p)`, **never on "is the stamina ring on screen right now"** —
   it appears the frame after KICK goes down, so a live test jumps the wind-up ring outward
   one frame in.
+  ⚠️ **THE RING MEANS "KICK IS HELD", NOT "A SHOT IS WINDING UP", and that gate is why it
+  was reported missing FOUR TIMES.** It was `chargeOn() && (p.kick || charging)`, so with
+  **Hold to kick harder** switched off the ring was never drawn at all — however hard you
+  pressed, on any pitch, at any size. Three rounds of retuning the radius, the width and
+  the colour could not make a ring appear that the draw was refusing to reach, and every
+  measurement I took was on a build with charging ON, so none of them could see it.
+  ⚠️ The old reasoning was "with charging off the ring promises power that is not coming",
+  and that was the wrong reading of what the ring is FOR: it is a tell about what the
+  PLAYER is doing — the button is down, you are about to kick or you are carrying — which
+  is worth showing whether or not a wind-up is part of it. The charge now only modulates
+  the width and the brightness.
+  ⚠️ **A REPORT THAT SURVIVES THREE FIXES IS A SIGN THE THING IS NOT BEING DRAWN AT ALL.**
+  Each round changed something real and measurable and the answer came back unchanged;
+  that pattern is the tell, and the question to ask is "what stops this from being reached"
+  rather than "what is wrong with how it looks".
   ⚠️ **THE WIND-UP RING IS PICKED FOR CONTRAST, and the palette's own `kickRing` is not
   used for it** (`kickRingInk`). Reported three times as not being visible, and this was
   the actual cause the first two diagnoses missed — both of those were about GEOMETRY, and

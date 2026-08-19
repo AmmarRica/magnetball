@@ -4392,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0820PM';
+const VERSION = '20260819.0910PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4408,14 @@ const VERSION = '20260819.0820PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0910PM', title: 'The kick ring shows whenever you hold KICK',
+    added: [],
+    changed: [
+      '<b>The ring round a player now means \u201cKICK is held\u201d.</b> It was tied to the Hold to kick harder setting, so with that switched off the ring was never drawn at all, however hard you pressed. Charging still changes how thick and bright it gets \u2014 it just no longer decides whether you see it.',
+      'If you had that setting off, this is why no amount of resizing or recolouring made a ring appear.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0820PM', title: 'A white circle when you kick',
     added: [],
     changed: [
@@ -24854,8 +24862,18 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.lineWidth = stamW; ctx.stroke();
       ctx.lineCap = 'butt';
     }
-    if (chargeOn() && (p.kick || (p.chargeT||0) > 0.01)){
-      const f = chargeFrac(p);
+    // ⚠️ **THE RING MEANS "KICK IS HELD", NOT "A SHOT IS WINDING UP", and that gate is why
+    // it was reported missing four times.** It was `chargeOn() && (p.kick || charging)`, so
+    // with **Hold to kick harder** switched off the ring was never drawn AT ALL — however
+    // hard you pressed, on any pitch, at any size. Three rounds of retuning its radius, its
+    // width and its colour could not make a ring appear that the draw was refusing to
+    // reach. The charge now only MODULATES it; holding KICK is what puts it on screen.
+    // ⚠️ The old reasoning was "with charging off the ring promises power that is not
+    // coming" — which was the wrong reading of what the ring is for. It is a tell about
+    // what YOU are doing (the button is down, you are about to kick or you are carrying),
+    // and that is worth showing whether or not a wind-up is part of it.
+    if (p.kick || (chargeOn() && (p.chargeT||0) > 0.01)){
+      const f = chargeOn() ? chargeFrac(p) : 0;
       // ⚠️ **IT HAS TO READ THE MOMENT KICK GOES DOWN, not once it is charged.** The alpha
       // ramped 0.42 → 0.92, so the ring spent the start of every hold at well under half
       // strength — on a phone that is a 2px white stroke at 0.42 over grass, which is the
