@@ -391,6 +391,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   frame with no trail, or the ball's own round body reports a 1:1 box on every build.
   ⚠️ Paired with "at full pelt there is still a REAL streak", because *never wider than
   long* is also satisfied by drawing nothing.
+  ⚠️ **The RANGE is a taste dial and it was set too low first time** (0.55..1.70 ball
+  radii). Measured against a 17px ball at three speeds, that drew **6 / 8 / 12** against
+  the old flat width's 16 / 16 / 16 — thinner everywhere, *including at full pelt*, where
+  the clamp to path length was biting as well. Reported as "did you make the trail
+  thinner". At 0.85..1.45 it reads **8 / 10 / 16**: full speed back where it was, the slow
+  end lifted, and no blob. The clamp is what holds the invariant, so this number is free.
   ⚠️ **AND THE BALL GOES BACK TO BEING A BALL** — asked for in those words. Belt it and
   the silhouette is a long streak; let it stop and what is left is the round shape it
   started as, measured against the same never-kicked frame. **TWO independent guards hold

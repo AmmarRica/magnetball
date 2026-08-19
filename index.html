@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0245PM';
+const VERSION = '20260819.0320PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,11 +4391,12 @@ const VERSION = '20260819.0245PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260819.0245PM', title: 'Readable or gone',
+  { v: '20260819.0320PM', title: 'Readable or gone',
     added: [],
     changed: [
       '<b>A player\u2019s name is either readable or it is not there.</b> Names fade out as the ball comes near, and the fade had a long tail \u2014 over most of the pitch a name was drawn faint enough that you could see something was written above a player without being able to tell what. It now dims a little as the ball approaches and then goes completely.',
       '<b>And the ball goes back to being a ball.</b> Belt it and you get a long streak; let it come to a stop and the streak clears away, leaving the plain round ball behind.',
+      '<b>...and the streak is a little wider again.</b> Fixing the lump made it thinner at every speed rather than just the slow ones. Full pelt is back to the width it always was.',
     ],
     fixed: 'Assorted fixes and tidying.',
   },
@@ -24959,7 +24960,12 @@ function drawBallTrail(w){
   // to the length actually drawn, which is what makes "wider than it is long" impossible
   // at any speed, on any court and at any zoom. A round cap adds half a width at each
   // end, so the clamp is what keeps the covered shape a capsule rather than a circle.
-  const wantW = b.r * s * (0.55 + 1.15 * drive);
+  // ⚠️ The RANGE was 0.55..1.70 ball radii, which put the top of it exactly where the
+  // old flat width was — so at full pelt nothing changed and everything slower got
+  // thinner, which is what "did you make the trail thinner?" was about. Lifted at both
+  // ends. The clamp below is what keeps the invariant, not this number, so the width
+  // is free to be a taste dial.
+  const wantW = b.r * s * (0.85 + 1.45 * drive);
   ctx.lineWidth = Math.max(1, Math.min(wantW, lenPx));
   ctx.strokeStyle = col ? rgba(col, 0.34 + 0.30*drive) : `rgba(${TH.trailRGB},${0.20 + 0.22*drive})`;
   ctx.stroke();
