@@ -661,6 +661,12 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   wants — one black pentagon in the middle and five round the rim. Adding a second copy is
   the mistake the withdrawn `seam` look made against `BALL_LOOKS.tennis`: check the
   registry before adding to it.
+  ⚠️ **A PRINTED COUNTER, NOT A BILLIARD BALL.** The first build ran the shade at white
+  0.35 / black 0.28 through a tight radial with a 0.30 specular ellipse in the middle, and
+  it came out as wet plastic — a bright glossy sphere reads as something LIT, and the
+  board is a thing lying flat. The light stop is a third of what it was, the sheen is 0.11
+  and pushed nearly to the top edge, and the rim is thicker and nearly black: a counter is
+  a printed disc with a hard edge, and that edge is what carries the look.
   ⚠️ The skin's cast shadow is held to 0.26 because `drawOneDisc` has **already** laid a
   soft one straight down in `TH.shadow` before any skin paints — this is the directional
   one on top of it, and two at full strength is a body sitting in a hole.
@@ -2403,6 +2409,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ink count in the band reads the halfway line, the centre circle and the mown stripes and
   flattens at a constant whatever the alpha is — the first run of that probe reported 0.76
   of full ink at every alpha **including zero**.
+- **THE NAME PLATE HANGS BELOW THE BODY**, and one number decides it (`by` in
+  `drawOneDisc`). It used to sit above, where it fought the floating stat labels — GOAL,
+  ASSIST, SAVE — which RISE off a player: two lots of text in the same place over the same
+  body, one of them moving. ⚠️ **The hit test and the draw both work off `by`**, so the
+  rectangle the overlap fade tests can never end up somewhere the letters are not.
+  ⚠️ Everything else about it is unchanged: `LABEL_DIM`, the near-ball ramp, the eased
+  `labelA`, and the halo that goes first. ⚠️ `tests/labels.mjs` had **four** probes pinned
+  to the old position and every one of them failed OPEN rather than closed — a body parked
+  30px above the disc sits on bare pitch, so "a disc over the plate dims it" reported no
+  dimming, and the team-tint probe sampled grass, which is the same colour for both sides.
 - **NAME PLATES ARE OUTLINED, NOT BOXED.** A filled plate above each of eight bodies is
   a rectangle of solid colour parked over the play. What the box was for is legible text
   on an unknown background, and a halo in the palette's own `nameBg` does that without

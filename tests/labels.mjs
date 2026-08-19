@@ -39,15 +39,17 @@ const r = await p.evaluate(async ()=>{
     settle(w); res.clear = +alphaOf(w,me).toFixed(3);
 
     // 2) A disc parked exactly where the plate sits -> fades to the floor.
-    //    The plate hangs above the disc ON SCREEN, and a sideways pitch maps screen
-    //    "up" to world +x — so derive the world offset from the camera rotation
-    //    instead of assuming -y (that assumption silently passes only when upright).
-    const upWorld = () => {
+    //    ⚠️ The plate hangs BELOW the disc on screen — it used to be above, and a probe
+    //    left up there parks the body on bare pitch and reports the plate as never
+    //    dimming at all. And a sideways pitch maps screen "down" to world -x, so the
+    //    world offset is derived from the camera rotation rather than assumed to be +y
+    //    (that assumption silently passes only when the pitch is upright).
+    const plateWorld = () => {
       const rot = M.cam.rot || 0, c = Math.cos(-rot), sn = Math.sin(-rot);
-      const sdx = 0, sdy = -30;              // 30px up, comfortably inside the plate
+      const sdx = 0, sdy = 30;               // 30px down, comfortably inside the plate
       return [(sdx*c - sdy*sn)/M.cam.s, (sdx*sn + sdy*c)/M.cam.s];
     };
-    const [ux, uy] = upWorld();
+    const [ux, uy] = plateWorld();
     mate.x = me.x + ux; mate.y = me.y + uy;
     settle(w); res.discOver = +alphaOf(w,me).toFixed(3);
 
@@ -99,7 +101,7 @@ const r = await p.evaluate(async ()=>{
   o.replayClear = +M.labelA[0].toFixed(3);
   // Now park a disc on the plate and re-render through FRESH player objects each
   // frame, the way playReplay does.
-  const blocker = { ...rw.players[1], x: rMe.x, y: rMe.y - 30/M.cam.s };
+  const blocker = { ...rw.players[1], x: rMe.x, y: rMe.y + 30/M.cam.s };   // BELOW: the plate moved
   for(let i=0;i<90;i++){
     const fake = { ...rw, players: rw.players.map((pl,ix)=> ix===1 ? {...blocker} : {...pl}) };
     M.drawDiscs(fake); M.advanceLabels();
@@ -118,9 +120,11 @@ const r = await p.evaluate(async ()=>{
   M.computeCam(); for(let i=0;i<12;i++) M.render();
   const cv2=document.getElementById('game'), c3=cv2.getContext('2d');
   const DPR2=cv2.width/cv2.clientWidth;
-  // Sample the middle of each plate (18px above the disc, in screen space).
+  // Sample the middle of each plate. ⚠️ BELOW the disc — the plate moved under the body,
+  // and a probe left above it samples bare pitch, which is the same colour for both teams
+  // and reports that the plates do not differ by team at all.
   const plateAt = (q) => { const [sx,sy]=M.screenPt(M.wx(q.x), M.wy(q.y));
-    const py=sy - q.r*M.cam.s - 15;
+    const py=sy + q.r*M.cam.s + M.NAMEPLATE.gap - M.NAMEPLATE.size*0.45;
     const d=c3.getImageData(Math.round(sx*DPR2)-2, Math.round(py*DPR2)-2, 5, 5).data;
     let R=0,G=0,B=0,n=0; for(let i=0;i<d.length;i+=4){R+=d[i];G+=d[i+1];B+=d[i+2];n++;}
     return [Math.round(R/n), Math.round(G/n), Math.round(B/n)]; };
@@ -201,9 +205,13 @@ const halo = await p.evaluate(() => {
     M.renderAlpha = 1; M.render();
     M.labelA[0] = alpha;
     M.render();
+    // ⚠️ BELOW the body. The plate hangs under the disc now — it used to sit above, where
+    // it fought the floating stat labels, which RISE off a player. A band left above the
+    // body measures bare pitch and reports every alpha as identical.
     const px = Math.round(M.wx(me.x) * dpr), py = Math.round(M.wy(me.y) * dpr);
-    const top = Math.round(py - (15 * M.cam.s + NP.gap + NP.size + 6) * dpr);
-    const h = Math.round((NP.size + 12) * dpr), half = Math.round(70 * dpr);
+    const base = py + (15 * M.cam.s + NP.gap) * dpr;      // the text baseline
+    const top = Math.round(base - (NP.size + 4) * dpr);
+    const h = Math.round((NP.size + 10) * dpr), half = Math.round(70 * dpr);
     return cx.getImageData(px - half, top, half*2, h).data;
   };
   const base = band(0);

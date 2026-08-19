@@ -220,6 +220,11 @@ const px = await p.evaluate(()=>{
   // region can be differenced without another body wandering into it.
   const PY = -150, BY = 150;
   const place = (on) => {
+    // ⚠️ NO NAMES. The plate hangs BELOW a body now, which puts it inside the box this
+    // measures the cylinder's height from — so the "body" being measured was the disc plus
+    // its own label, and a body standing 16.5px up reported as growing 7 and rising 17.
+    // Emptying the names draws no plate at all, which is what this wants: the box IS the art.
+    for (const q of w.players) q.name = '';
     park(0, on ? -60 : FAR, on ? PY : FAR);
     park(1, FAR, FAR); park(2, FAR, FAR); park(3, FAR, FAR);
     w.ball.x = on ? 60 : FAR; w.ball.y = on ? BY : FAR;

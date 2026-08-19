@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0730AM';
+const VERSION = '20260819.1005AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,14 @@ const VERSION = '20260819.0730AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.1005AM', title: 'Names under your feet',
+    added: [],
+    changed: [
+      '<b>Player names now sit below each player instead of above.</b> Everywhere, on every theme \u2014 which also gets them out of the way of the GOAL / ASSIST / SAVE labels that float upwards off a player. They still fade out behind another body or near the ball exactly as before.',
+      '<b>The Tactics Board counters are flatter.</b> They were coming out glossy, like wet plastic, which reads as something lit rather than something lying on a board. Softer shading, a quieter sheen and a thicker dark edge.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0730AM', title: 'Tactics Board',
     added: [
       '<b>A new theme: Tactics Board.</b> The pitch as a coach\u2019s diagram \u2014 flat green, full white markings with penalty areas, six-yard boxes, penalty spots and the D \u2014 and players drawn as magnet counters sitting on top of it, lit from the corner with a shadow underneath. A red counter against a navy-striped one, and the panelled football.',
@@ -5592,7 +5600,7 @@ const THEMES = {
       hudText:'#f2f7f2', hudSub:'#c3ddc4', accent:'#f2f4f8', padRing:'rgba(255,255,255,0.7)',
       // The board's own inks: the markings the field painter adds, and the counters.
       dynMark:'rgba(255,255,255,0.95)', dynAlt:'#1b3a8c',
-      tacRed:'#e23a32', tacRedRim:'#8e1d18', tacPale:'#f2f4f8', tacNavy:'#1b3a8c', tacPaleRim:'#12203f' },
+      tacRed:'#e23a32', tacRedRim:'#3f0f0c', tacPale:'#f2f4f8', tacNavy:'#1b3a8c', tacPaleRim:'#0a1120' },
   },
   mono: {
     name: 'Mono', emoji: '⬜',
@@ -23421,22 +23429,32 @@ const DISC_SKINS = {
         for (const k of [-1, 0, 1]) c.fillRect(x + k*r*0.84 - bw/2, y - r, bw, r*2);
         c.restore();
       }
-      // 3. the spherical shade: lit at the top left, falling away to the bottom right
+      // 3. the shade. ⚠️ **A PRINTED COUNTER, NOT A BILLIARD BALL** — the first build ran
+      // white at 0.35 and black at 0.28 through a tight radial, which came out as wet
+      // plastic: a bright glossy sphere reads as something LIT rather than something
+      // lying on a board, and the board is the whole idea. What is wanted is the flat
+      // shape with just enough fall-off to say it has a thickness, so the light stop is
+      // a third of what it was and the dark one is a soft edge round the bottom.
       if (r > 4){
-        const g = c.createRadialGradient(x - r*0.30, y - r*0.40, r*0.05, x, y, r*1.05);
-        g.addColorStop(0,    'rgba(255,255,255,0.35)');
-        g.addColorStop(0.55, 'rgba(255,255,255,0)');
-        g.addColorStop(1,    'rgba(0,0,0,0.28)');
+        const g = c.createRadialGradient(x - r*0.28, y - r*0.36, r*0.10, x, y, r*1.10);
+        g.addColorStop(0,    'rgba(255,255,255,0.12)');
+        g.addColorStop(0.62, 'rgba(255,255,255,0)');
+        g.addColorStop(1,    'rgba(0,0,0,0.22)');
         c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle = g; c.fill();
       }
-      // 4. the rim, in the base's own darker tone
-      c.beginPath(); c.arc(x, y, r - Math.max(0.5, r*0.06), 0, 2*Math.PI);
-      c.strokeStyle = rim; c.lineWidth = Math.max(1.2, r*0.13); c.stroke();
-      // 5. the specular highlight — an ellipse, because a sphere's is not a circle
-      if (r > 6){
-        c.save(); c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
-        c.beginPath(); c.ellipse(x, y - r*0.42, r*0.52, r*0.26, 0, 0, 2*Math.PI);
-        c.fillStyle = 'rgba(255,255,255,0.30)'; c.fill();
+      // 4. the rim. ⚠️ Thick and nearly black, which is what carries the look — a
+      // counter is a printed disc with a hard edge, and a thin rim in a lighter tone
+      // left it looking airbrushed. It is still the base's own tone rather than a
+      // shared black, so a red counter's edge stays warm and a pale one's stays cool.
+      c.beginPath(); c.arc(x, y, r - Math.max(0.6, r*0.08), 0, 2*Math.PI);
+      c.strokeStyle = rim; c.lineWidth = Math.max(1.4, r*0.16); c.stroke();
+      // 5. a sheen, not a glint. ⚠️ Held to 0.11 and pushed nearly to the top edge: at
+      // 0.30 in the middle of the disc it was the brightest thing on the counter and
+      // read as reflection. It is here to round the top off, not to shine.
+      if (r > 7){
+        c.save(); c.beginPath(); c.arc(x, y, r*0.92, 0, 2*Math.PI); c.clip();
+        c.beginPath(); c.ellipse(x, y - r*0.52, r*0.46, r*0.20, 0, 0, 2*Math.PI);
+        c.fillStyle = 'rgba(255,255,255,0.11)'; c.fill();
         c.restore();
       }
     },
@@ -24695,7 +24713,13 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       const label = p.name;
       const tw = ctx.measureText(label).width;
       const [psx, psy] = screenPt(wx(ix(p)), wy(iy(p)));
-      const lx = psx - tw/2 - 5, ly = psy - r - 23, lw = tw + 10, lh = 16;
+      // ⚠️ **THE PLATE HANGS BELOW THE BODY**, and one number decides it — the hit test
+      // and the draw both work off `by`, so the rectangle the overlap fade tests can
+      // never end up somewhere the letters are not. It used to be above, where it fought
+      // the floating stat labels (GOAL, ASSIST, SAVE) which RISE off a player: two lots
+      // of text in the same place over the same body, one of them moving.
+      const by = r + NAMEPLATE.gap;                     // centre → text baseline, downward
+      const lx = psx - tw/2 - 5, ly = psy + by - 7, lw = tw + 10, lh = 16;
       let blocked = false;
       for (const q of w.players){
         if (q === p) continue;
@@ -24770,11 +24794,11 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         // text legible, so it can have nothing to do once the text is on its way out.
         const hA = haloAlpha(a, 2);
         ctx.globalAlpha = prevA * hA;
-        ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
-        ctx.strokeText(label, x, y-r-NAMEPLATE.gap);
+        ctx.strokeText(label, x, y + by);
+        ctx.strokeText(label, x, y + by);
         ctx.globalAlpha = prevA * a;
         ctx.fillStyle = team ? readableInk(team, halo) : (TH.nameText || '#ffffff');
-        ctx.fillText(label, x, y-r-NAMEPLATE.gap);
+        ctx.fillText(label, x, y + by);
         ctx.globalAlpha = prevA;
       }
     }

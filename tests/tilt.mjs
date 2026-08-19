@@ -223,17 +223,21 @@ const shad = await p.evaluate(()=>{
   const shot = (bodyIn) => {
     // ⚠️ The bare reference is taken at the SAME tilt, because the ground layer shifts too —
     // differencing against a reference at a different tilt would show the whole pitch.
+    // ⚠️ NO NAME on the probed body. The plate hangs BELOW the disc now, which puts it
+    // inside the window below — and its opacity adapts frame to frame to avoid its
+    // neighbours, so what got measured was the label's alpha wobbling rather than the
+    // parallax. Emptying the name draws no plate at all, which is cleaner than trying to
+    // dodge it by geometry.
     w.players.forEach((q,i)=>{ q.x = (i===0 && bodyIn) ? 0 : 9999;
-                               q.y = (i===0 && bodyIn) ? 0 : 9999; });
+                               q.y = (i===0 && bodyIn) ? 0 : 9999; q.name = ''; });
     M.resetTrails();
     M.computeCam(); M.render();
     const [sx, sy] = M.screenPt(M.wx(0), M.wy(0));
     const r = w.players[0].r * M.cam.s * M.cam.body;
-    // ⚠️ A window around the DISC AND ITS SHADOW only, deliberately stopping short of the
-    // name plate above it. The plate rides the body layer too, but it is far wider than the
-    // disc and its opacity ADAPTS frame to frame to avoid overlapping its neighbours — so a
-    // window that included it measured the label's alpha wobbling, not the parallax, and
-    // reported 16px of growth for a 7px lift.
+    // ⚠️ A window around the DISC AND ITS SHADOW only. The plate is kept out of it by
+    // emptying the name above rather than by where this window falls — it used to sit
+    // above the disc and now hangs below, so a window tuned to miss it in one direction is
+    // a window that catches it in the other.
     const x0 = Math.round((sx - r*3)*DPR), y0 = Math.round((sy - r*1.4)*DPR);
     const wpx = Math.round(r*6*DPR), hpx = Math.round(r*3.8*DPR);
     return { d: cc.getImageData(x0, y0, wpx, hpx).data, w: wpx, h: hpx, r: r*DPR };

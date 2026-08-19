@@ -1033,7 +1033,13 @@ const r = await p.evaluate(async ()=>{
     // a real light-to-dark spread across it, so "one side is darker" is true of both — the
     // alternation above is the claim, and this is the control that says so.
     o.tacRedSpread = redB.spread; o.tacPaleSpread = paleB.spread;
-    o.tacShadingIsNotStripes = redB.spread > 20;
+    // ⚠️ Only that the counter IS lit, not by how much. The threshold was 20 when the
+    // shade ran white 0.35 / black 0.28 and the counter came out glossy; flattening it to
+    // a printed disc dropped the spread to 12, which is the intended look and not a
+    // regression. What matters is that the red counter has a smooth ramp and ZERO steps —
+    // the step count above is the discriminator, this is the control that says the ramp
+    // exists at all. A build with no shading reads 0.
+    o.tacShadingIsNotStripes = redB.spread > 6;
     // ⚠️ Nothing crosses the guide ring except the cast shadow, which is what a shadow is
     // for — measured on the LEFT, away from where the light throws it.
     const ringAt = (team, fr, ang) => {
