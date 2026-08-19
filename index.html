@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0140AM';
+const VERSION = '20260819.0410AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,17 @@ const VERSION = '20260819.0140AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0410AM', title: 'Video export you can actually play',
+    added: [
+      '<b>Save the whole match as a video.</b> A new button beside Save clip on the result screen. It plays the match back to film it, so it takes about as long as the match did \u2014 the button says how long while it runs.',
+    ],
+    changed: [
+      '<b>Exported video is a real video file now.</b> Asked for an MP4, the browser was handing back an MP4 wrapper with VP9 inside it \u2014 a combination QuickTime, the iOS photo app and most editors simply refuse to open. The export asks for H.264 by name, checks what it actually got, and names the file after what is really in it.',
+      '<b>And it asks for a much higher bitrate</b>, so a pitch full of flat colour and hard edges stops crawling and smearing whenever anything moves.',
+      '<b>Replays are smooth.</b> A whole-match replay is recorded at a lower frame rate to keep the file small, and it was being played back one recorded frame at a time, which stutters. It now draws between them \u2014 which also makes slow motion on a goal replay smooth instead of stepped.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0140AM', title: 'You can see both rings now',
     added: [],
     changed: [
@@ -14277,6 +14288,17 @@ function repOnGoal(w){
   repPend = REP_TAIL_F;
   const b=$('replayBar'); if(b) b.classList.remove('hidden');
 }
+// One frame part-way between two recorded ones. `k` is a boolean per body and is taken
+// from whichever frame is nearer — a kick is an event, not a quantity.
+function repTween(a, b, f){
+  if (!b || !(f > 0)) return a;
+  const t = Math.max(0, Math.min(1, f));
+  const p = a.p.map((pa, i) => {
+    const pb = b.p[i] || pa;
+    return { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t, k: t < 0.5 ? pa.k : pb.k };
+  });
+  return { bx: a.bx + (b.bx - a.bx) * t, by: a.by + (b.by - a.by) * t, p };
+}
 function drawReplayFrame(f){
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
   const fake = {
@@ -14519,7 +14541,16 @@ function playReplay(speed, opts){
         }
         replay.active=false; finish(); return;
       }
-      drawReplayFrame(frames[idx]);
+      // ⚠️ **DRAWN BETWEEN THE RECORDED FRAMES, not on them.** A match replay is sampled at
+      // 30Hz by design and HALVES itself past `REPMATCH.max`, so a long match is held at 15
+      // — and stepping a recording frame by frame at a rate you can afford to store is what
+      // makes a replay read as a stutter. It is the same argument the drill ghosts are built
+      // on, and the same fix: the frames are keyframes and the picture is drawn between
+      // them. It carries slow motion too, where even a 60Hz goal recording repeats frames.
+      // ⚠️ A straight LERP here rather than the ghosts' Catmull-Rom: a ball bouncing off a
+      // wall is a real corner in the path, and a curve through it would round the bounce
+      // off — which would be the replay telling a lie about the physics.
+      drawReplayFrame(repTween(frames[idx], frames[idx+1], (t - last) / dur));
       if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
       replay.raf = requestAnimationFrame(tick);
     }
@@ -15382,16 +15413,96 @@ function buildReplayInfo(){
   row('Folder', downloadPathHint(), true);
   row('Named', repFilename().replace(/-\d[\d-]*\./, '-<date>.'), true);
 }
+// ⚠️ **NEVER ASK FOR A BARE `video/mp4`, and that was the whole of "the export is bad
+// quality".** Asked for one, Chrome answers **`video/mp4;codecs=vp9`** — an MP4 CONTAINER
+// WITH VP9 INSIDE, measured, not guessed. The combination is legal and almost nothing
+// plays it: QuickTime, iOS Photos and most editors refuse the file outright, and the game
+// then hands it over named `.mp4` because the container says mp4. So the list asks for
+// H.264 by an EXPLICIT codec string, and the bare type is last — where it means Safari,
+// which advertises only `video/mp4` and does produce H.264.
+// ⚠️ VP8 is a long way down for a measured reason: at the same 40Mbps request it produced
+// **0.52Mbps** against VP9's **3.22Mbps** on the same moving picture. It is a last resort,
+// not an alternative.
+const REPCODECS = [
+  'video/mp4;codecs=avc1.4d002a',    // H.264 Main 4.2 — the widest thing that is really mp4
+  'video/mp4;codecs=avc1.42E01E',    // ...baseline, for encoders that will not do Main
+  'video/mp4;codecs=h264',
+  'video/webm;codecs=vp9',           // no H.264 encoder → VP9 is the next best picture
+  'video/webm;codecs=vp8',
+  'video/mp4',                       // Safari: bare type, and it means H.264 there
+  'video/webm',
+];
+// An mp4 container carrying a codec no mp4 player expects. `rec.mimeType` is checked
+// against this AFTER construction, because asking is not the same as getting.
+function repBadMux(mime){
+  return /mp4/i.test(mime || '') && /vp0?[89]|av01|vp8|vp9/i.test(mime || '');
+}
 function repMime(){
-  const cands = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
-  for (const m of cands){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
+  for (const m of REPCODECS){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
   return '';
+}
+// ⚠️ **ASK FOR A REAL BITRATE.** Left to itself MediaRecorder picks ~2.5Mbps for this size,
+// and a canvas of flat colour with hard edges is the worst case for that — the lines and
+// the discs crawl and smear the moment anything moves. Scaled to the canvas so a phone does
+// not pay a desktop's bitrate.
+// ⚠️ The ask is a CEILING, not a floor: measured on a deliberately busy picture, a 40Mbps
+// request came back as 3.2Mbps of actual file, because the encoder spends it only where the
+// picture changes and a pitch is mostly still. So a high ask is close to free — asking 8
+// gave 1.8Mbps and asking 40 gave 3.2, which is the whole argument for asking high.
+function repBitrate(){
+  const px = Math.max(1, cv.width * cv.height);
+  return Math.round(Math.min(80e6, Math.max(12e6, px * 60 * 0.4)));
+}
+// One recorder, built the same way for a goal and for a whole match. Returns null when
+// there is nothing on this browser that can record.
+function repMakeRecorder(stream){
+  const bps = repBitrate();
+  for (const mime of REPCODECS){
+    if (!MediaRecorder.isTypeSupported(mime)) continue;
+    let rec;
+    // ⚠️ Falls back if the bitrate is refused: some builds reject an option object they do
+    // not like outright, and a clip at the default rate beats no clip at all.
+    try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bps }); }
+    catch(_){ try { rec = new MediaRecorder(stream, { mimeType: mime }); } catch(__){ continue; } }
+    // ⚠️ ...and what came BACK is checked, because asking is not getting.
+    if (repBadMux(rec.mimeType)) continue;
+    return rec;
+  }
+  try { return new MediaRecorder(stream, { videoBitsPerSecond: bps }); } catch(_){ return null; }
 }
 // ⚠️ The BUTTON is passed in. It used to look up `#clipBtn`, which was the in-match replay
 // bar's button — and that button was removed when Save clip moved to the result screen, so
 // every message this function produces was written to `null`. Combined with the silent
 // returns in `recordAndShareClip`, pressing Save clip could do nothing whatsoever and say
 // nothing about it.
+// ⚠️ THE WHOLE MATCH, filmed. It goes through the same recorder as a goal clip — same
+// codec list, same bitrate — and differs only in what is played while it runs: the match
+// buffer rather than the goal ring, at 1x rather than the goal's slow motion, because a
+// match is watched at the speed it happened.
+// ⚠️ It plays through `playReplayFile`, which swaps the world for one rebuilt from the
+// document and puts it back in a `finally` — so the match on the pitch behind the result
+// screen is untouched, and a throw mid-recording cannot strand the game holding a
+// replay's world.
+async function saveMatchClip(btn){
+  const doc = repMatchFileBuild();
+  if (!doc){
+    if (btn) clipSay(btn, '⚠ No match to save');
+    return '⚠ No match to save';
+  }
+  const secs = Math.round((doc.frames.length / Math.max(1, doc.fps)) || 0);
+  const was = btn ? btn.textContent : '';
+  if (btn) btn.textContent = '● REC · ' + Math.max(1, Math.round(secs/60)) + ' min';
+  const why = await recordAndShareClip(btn, () => playReplayFile(doc, 1), 'match');
+  if (btn) clipSay(btn, why || '✓ Saved', was);
+  return why;
+}
+// One place says a word on a button and puts the label back.
+function clipSay(btn, msg, back){
+  if (!btn) return;
+  const was = back != null ? back : btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => { if (btn.textContent !== was) btn.textContent = was; }, 2600);
+}
 async function saveClip(btn){
   btn = btn || $('clipBtn');
   if (!lastReplay || !lastReplay.frames.length){
@@ -15422,47 +15533,31 @@ async function saveClip(btn){
 // browser with no recorder Save clip played the goal back and saved nothing, and said nothing
 // — indistinguishable from a broken button, which is exactly how it was reported. Returns ''
 // when a file really was produced, or a short reason for the caller to show.
-async function recordAndShareClip(btn){
+// ⚠️ **`play` IS PASSED IN**, so a goal clip and a whole-match clip are the same function
+// rather than two copies of the recorder wiring — the only difference between them is what
+// gets rendered while it is running.
+async function recordAndShareClip(btn, play, stem){
+  play = play || (() => playReplay(0.7));
   try {
     if (!cv.captureStream || !window.MediaRecorder){
-      // Nothing to record with. Still show the goal, and say why no file appeared —
-      // and point at the thing that DOES work everywhere, since it is on the same screen.
-      await playReplay();
+      // Nothing to record with. Still show it, and say why no file appeared — and point at
+      // the thing that DOES work everywhere, since it is on the same screen.
+      await play();
       return '⚠ No video support — use Save replay';
     }
     const stream = cv.captureStream(60);
-    const mime = repMime();
-    // ⚠️ ASK FOR A REAL BITRATE. Left to itself MediaRecorder picks a conservative default
-    // — around 2.5Mbps for this size — and a canvas full of flat colour with hard edges is
-    // the worst case for that: the lines and the discs crawl and smear the moment anything
-    // moves. The pitch is also mostly static, so a high ceiling costs far less than the
-    // number suggests; the encoder spends it only where the picture actually changes.
-    // Scaled to the canvas so a phone does not pay a desktop's bitrate: ~0.25 bits per pixel
-    // per frame at 60fps, floored so a small window still gets a usable picture and capped
-    // so a 4K display does not produce a file nobody can send.
-    const px = Math.max(1, cv.width * cv.height);
-    const bps = Math.round(Math.min(48e6, Math.max(8e6, px * 60 * 0.25)));
-    const opts = mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps };
-    let rec;
-    // ⚠️ Falls back if the bitrate is refused. Some builds reject an option object they do
-    // not like outright, and a clip at the default rate beats no clip at all.
-    try { rec = new MediaRecorder(stream, opts); }
-    catch(_){ rec = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined); }
+    const rec = repMakeRecorder(stream);
+    if (!rec) return '⚠ No video support — use Save replay';
     const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise(r => rec.onstop = r);
     if (btn) btn.textContent = '● REC';
     rec.start(250);                       // emit chunks periodically
-    await playReplay(0.7);
+    await play();
     try { rec.requestData(); } catch(e){}
     rec.stop(); await stopped;
     const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
     if (!blob.size) return '⚠ Recording came out empty';
-    // ⚠️ The container is whatever the browser will ENCODE, not what we asked for. `repMime`
-    // puts mp4 first and every browser that can make one takes it; the rest give webm, which
-    // is a video file and plays in anything modern. Naming it off `blob.type` rather than off
-    // the request is what stops a webm being handed over called ".mp4".
-    const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
-    const file = new File([blob], repClipName(ext), { type: blob.type });
+    const file = new File([blob], repClipName(repClipExt(blob.type), stem), { type: blob.type });
     if (navigator.canShare && navigator.canShare({ files:[file] })){
       try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
       catch(e){
@@ -15486,9 +15581,15 @@ function clipDownload(file){
 // Named like the replay files, so a clip and the replay of the same goal sit together in a
 // downloads folder instead of every clip being "magnetball-goal" and overwriting the last.
 // Same timestamp shape as `repFilename`, which is where that reasoning is written down.
-function repClipName(ext){
+// ⚠️ Named off the CODEC as well as the container. `type.indexOf('mp4')` alone called a
+// VP9-in-MP4 file `.mp4`, which is the exact thing `REPCODECS` now avoids — this is the
+// belt to that braces, so a file can never be named for something it is not.
+function repClipExt(type){
+  return (String(type||'').indexOf('mp4') >= 0 && !repBadMux(type)) ? 'mp4' : 'webm';
+}
+function repClipName(ext, stem){
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  return 'magnetball-clip-' + t + '.' + ext;
+  return 'magnetball-' + (stem || 'clip') + '-' + t + '.' + ext;
 }
 
 function step(w){
@@ -18753,6 +18854,12 @@ function renderAwards(w){
     if (typeof MediaRecorder!=='undefined'){
       const sh=document.createElement('button'); sh.textContent='⬇ Save clip';
       sh.onclick=()=>saveClip(sh); foot.appendChild(sh);
+      // ⚠️ THE WHOLE MATCH AS A VIDEO, and it is its own button rather than a state of the
+      // one above: a goal clip is a few seconds and a match is however long the match was,
+      // played back in full to film it. The label says so, because a button that appears to
+      // hang for four minutes is a broken button.
+      const mv=document.createElement('button'); mv.textContent='⬇ Save match video';
+      mv.onclick=()=>saveMatchClip(mv); foot.appendChild(mv);
     }
     // ⚠️ THREE things and they are all different, which is why all three get a button.
     // The clip is a VIDEO of the last goal, to send someone. The other two are the match
@@ -25983,7 +26090,7 @@ if (window.__MAGNETDEBUG) {
     get world(){ return world; }, get TH(){ return TH; }, pads, sel, FIELDS, SFX, THEMES,
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
-    get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, playReplay, saveClip, repMime,
+    get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, set lastReplay(v){ lastReplay = v; }, playReplay, saveClip, repMime,
     REPFILE, repFileBuild, repFileParse, repFileWorld, repFilename, saveReplayFile, playReplayFile,
     REPMATCH, repMatchFileBuild, repMatchCapture, get repMatchBuf(){ return repMatchBuf; },
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
@@ -26150,6 +26257,7 @@ if (window.__MAGNETDEBUG) {
     readableInk, contrastRatio, rgbToHex, mixCol, hexRgb, flatten, relLum, plural, syncProfileToWorld,
     ix, iy, markPrev, get renderAlpha(){ return renderAlpha; }, set renderAlpha(v){ renderAlpha=v; }, TELEPORT,
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
+    saveMatchClip, repMakeRecorder, repBadMux, repBitrate, REPCODECS, repTween, repClipExt, repClipName,
     oneHandKick, ONEHAND, padTouchDown, padStick, padStickAxes, PADAX, buildStickRows, startStickBind, get padBind(){ return padBind; }, replayAbort, repMime, repClipName, recordAndShareClip, saveClip, renderAwards, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
   };
 }

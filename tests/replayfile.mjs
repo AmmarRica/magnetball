@@ -642,7 +642,14 @@ await p.close();
     // The result screen's own button hands itself in, or none of the above reaches a player.
     o.resultPassesItself = /saveClip\s*\(\s*sh\s*\)/.test(M.renderAwards.toString());
     // mp4 is asked for FIRST, so any browser that can encode one gets one.
-    o.prefersMp4 = M.repMime.toString().indexOf("'video/mp4'") < M.repMime.toString().indexOf('webm');
+    // ⚠️ Was a check on `repMime`'s SOURCE TEXT — that the literal 'video/mp4' appeared
+    // before 'webm' in it. That asserts nothing about behaviour, breaks on any refactor,
+    // and had become wrong as a claim: a BARE `video/mp4` is now deliberately last,
+    // because Chrome answers it with VP9 inside an MP4 container. What is preferred is a
+    // REAL mp4, named by its H.264 codec.
+    const ix = m => M.REPCODECS.indexOf(m);
+    o.prefersMp4 = ix('video/mp4;codecs=avc1.4d002a') === 0 &&
+                   ix('video/mp4;codecs=avc1.4d002a') < ix('video/webm;codecs=vp9');
     // A clip is named per-goal, not one fixed name that overwrites itself.
     o.namesAreUnique = M.repClipName('mp4') !== 'magnetball-goal.mp4' &&
                        /magnetball-clip-.*\.mp4$/.test(M.repClipName('mp4'));
@@ -658,7 +665,8 @@ await p.close();
      `button still reads ${JSON.stringify(o.buttonText)} — it used to look up an element that no longer exists, so every message went to null`);
   ok('...and the result screen hands its own in', o.resultPassesItself,
      'otherwise saveClip falls back to the missing #clipBtn and the player sees nothing');
-  ok('mp4 is preferred over webm', o.prefersMp4);
+  ok('a REAL mp4 is preferred over webm', o.prefersMp4,
+     'a bare video/mp4 is not an mp4 preference — Chrome answers it with VP9 in an MP4 container');
   ok('clips are named per goal', o.namesAreUnique,
      'one fixed filename means each clip overwrites the last in the downloads folder');
   if (qerr.length) fails.push('save-clip page errors: ' + qerr.slice(0,3).join(' | '));
@@ -894,6 +902,187 @@ await p.close();
   if (qerr.length) fails.push('auto-record page errors: ' + qerr.slice(0,3).join(' | '));
   await q.close();
 }
+
+
+// ============================================================
+//  THE VIDEO EXPORT — the codec, the bitrate, and the whole match
+// ============================================================
+// ⚠️ **A BARE `video/mp4` IS A TRAP, measured not guessed.** Ask Chrome for one and it
+// answers `video/mp4;codecs=vp9` — an MP4 CONTAINER WITH VP9 INSIDE. That is legal and
+// almost nothing plays it: QuickTime, iOS Photos and most editors refuse it outright, and
+// the game handed it over named `.mp4` because the container said mp4. That was the whole
+// of "the export doesn\'t produce good quality video".
+// ⚠️ The bitrate matters and the ASK IS A CEILING: on a deliberately busy picture, asking
+// 8Mbps produced 1.8 and asking 40 produced 3.2, because the encoder spends it only where
+// the picture changes. So asking high is close to free, which is why it asks high.
+// ⚠️ Its own page: the suite's first one is closed a long way above this.
+const vpage = await page();
+const vid = await vpage.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  o.mime = M.repMime();
+  o.notBareMp4 = o.mime !== 'video/mp4' || !MediaRecorder.isTypeSupported('video/webm;codecs=vp9');
+  o.mimeIsClean = !M.repBadMux(o.mime);
+  // The trap itself, both ways round.
+  o.spotsTheTrap = M.repBadMux('video/mp4;codecs=vp9') && M.repBadMux('video/mp4;codecs=vp8');
+  o.allowsRealMp4 = !M.repBadMux('video/mp4;codecs=avc1.4d002a') && !M.repBadMux('video/webm;codecs=vp9');
+  // ⚠️ H.264 comes BEFORE VP9 in the list, and the bare type is LAST — the order is the
+  // fix, so it is the thing pinned. VP8 is below VP9 because it measured at a sixth of
+  // VP9\'s bitrate for the same request.
+  const ix = m => M.REPCODECS.indexOf(m);
+  o.orderIsRight = ix('video/mp4;codecs=avc1.4d002a') === 0 &&
+                   ix('video/webm;codecs=vp9') < ix('video/webm;codecs=vp8') &&
+                   ix('video/mp4') === M.REPCODECS.length - 2;
+  // ⚠️ And what came BACK is checked, because asking is not getting.
+  const rec = M.repMakeRecorder(document.getElementById('game').captureStream(60));
+  o.builtMime = rec ? rec.mimeType : '';
+  o.builtIsClean = !!rec && !M.repBadMux(rec.mimeType);
+  // ⚠️ The extension follows the CODEC, not just the container.
+  o.extMp4 = M.repClipExt('video/mp4;codecs=avc1.4d002a');
+  o.extTrap = M.repClipExt('video/mp4;codecs=vp9');
+  o.extWebm = M.repClipExt('video/webm;codecs=vp9');
+  o.namesByCodec = o.extMp4 === 'mp4' && o.extTrap === 'webm' && o.extWebm === 'webm';
+  const cv = document.getElementById('game');
+  o.bps = M.repBitrate();
+  o.bitrateIsReal = o.bps >= 12e6 && o.bps >= cv.width * cv.height * 60 * 0.3;
+  // A goal clip and a match clip are named apart, or a downloads folder is a pile.
+  o.goalName = M.repClipName('mp4');
+  o.matchName = M.repClipName('mp4', 'match');
+  o.namedApart = o.goalName !== o.matchName && /match/.test(o.matchName);
+  return o;
+});
+
+ok('the export never asks for a bare video/mp4', vid.notBareMp4 && vid.mimeIsClean,
+   `repMime() = ${vid.mime} — a bare ask gets VP9 inside an MP4 container, which QuickTime, iOS and most editors refuse`);
+ok('...and it knows that combination when it sees it', vid.spotsTheTrap && vid.allowsRealMp4);
+ok('...H.264 first, VP9 before VP8, the bare type last', vid.orderIsRight,
+   JSON.stringify(vid.mime) + ' — VP8 measured at a sixth of VP9 bitrate for the same request');
+ok('the recorder that actually gets built is checked too', vid.builtIsClean,
+   `built ${vid.builtMime} — asking is not getting`);
+ok('the file is named for its CODEC, not just its container', vid.namesByCodec,
+   `${vid.extMp4} / ${vid.extTrap} / ${vid.extWebm}`);
+ok('a real bitrate is asked for', vid.bitrateIsReal,
+   `${(vid.bps/1e6).toFixed(1)}Mbps — left to itself MediaRecorder picks ~2.5, and flat colour with hard edges is the worst case for that`);
+ok('a match video is named apart from a goal clip', vid.namedApart,
+   `${vid.goalName} vs ${vid.matchName}`);
+
+// ============================================================
+//  A REPLAY IS DRAWN BETWEEN ITS FRAMES
+// ============================================================
+// ⚠️ A match replay is sampled at 30Hz by design and HALVES itself past `REPMATCH.max`, so
+// a long one is held at 15 — and stepping a recording frame by frame at a rate you can
+// afford to store is what makes a replay read as a stutter. Same argument the drill ghosts
+// are built on, same fix. Slow motion gets it too: even a 60Hz goal recording repeats
+// frames when it is played at 0.55x.
+// ⚠️ Measured as the number of DISTINCT drawn positions over a real playback, not by
+// reading `repTween` back — the pure function is checked below as well, but on its own it
+// proves only that a helper exists and says nothing about whether playback calls it.
+const tween = await vpage.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  // Exact arithmetic first: a helper that is wrong makes everything below meaningless.
+  const a = { bx:0, by:0, p:[{x:0,y:0,k:false}] }, b = { bx:100, by:40, p:[{x:20,y:8,k:true}] };
+  const mid = M.repTween(a, b, 0.5);
+  o.mathOK = mid.bx === 50 && mid.by === 20 && mid.p[0].x === 10;
+  o.zeroIsTheFrame = M.repTween(a, b, 0) === a;      // no allocation, and no drift at k=0
+  o.noNextIsTheFrame = M.repTween(a, null, 0.7) === a;
+  // ⚠️ A kick is an EVENT, not a quantity — taken from whichever frame is nearer.
+  o.kickIsNotBlended = M.repTween(a, b, 0.2).p[0].k === false && M.repTween(a, b, 0.8).p[0].k === true;
+
+  // Now the real thing: a 4Hz recording, played at 1x, sampled as fast as the browser will
+  // draw. Stepping gives one position per recorded frame; drawing between them gives many.
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(3); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  // ⚠️ NOT on y = 0. That is the halfway LINE, which is white and spans the whole pitch, so
+  // "the brightest pixel in the row" is the line wherever the ball happens to be — the first
+  // run of this reported 2 positions for that reason and not because nothing moved. The
+  // bodies are parked off the row too, for the same reason.
+  const BY = 140;
+  const frames = [];
+  for (let i = 0; i < 5; i++)
+    frames.push({ bx: -180 + i*90, by: BY, p: w.players.map(() => ({ x:0, y:-320, k:false })) });
+  const cv = document.getElementById('game'), cx = cv.getContext('2d');
+  const dpr = cv.width / cv.clientWidth;
+  const seen = new Set();
+  const sample = () => {
+    // Where is the ball? The brightest pixel in its row — it is white on a green pitch.
+    const y = Math.round(M.wy(BY) * dpr);
+    const d = cx.getImageData(0, y, cv.width, 1).data;
+    let best = -1, bestV = 0;
+    for (let x = 0; x < cv.width; x++){
+      const v = d[x*4] + d[x*4+1] + d[x*4+2];
+      if (v > bestV){ bestV = v; best = x; }
+    }
+    if (best >= 0) seen.add(best);
+  };
+  M.lastReplay = { players: w.players.length, frames, goalAt: -1, goals: null, fps: 4 };
+  const play = M.playReplay(1);
+  const t0 = performance.now();
+  await new Promise(done => {
+    const spin = () => { sample();
+      if (performance.now() - t0 > 900) { done(); return; }
+      requestAnimationFrame(spin); };
+    requestAnimationFrame(spin);
+  });
+  M.replayAbort();
+  await play;
+  o.distinct = seen.size;
+  o.recorded = frames.length;
+  o.positions = Array.from(seen).sort((x, y2) => x - y2);
+  // ⚠️ Comfortably more than one position per recorded frame. A stepping build can only
+  // ever produce as many distinct positions as it has frames.
+  o.drawsBetween = o.distinct > o.recorded * 2;
+  return o;
+});
+
+ok('a tween is exact arithmetic', tween.mathOK && tween.zeroIsTheFrame && tween.noNextIsTheFrame);
+ok('...and a kick is an event, not a quantity', tween.kickIsNotBlended,
+   'blending a boolean would flicker the wind-up ring through a whole tween');
+// ============================================================
+//  THE WHOLE MATCH, AS A VIDEO
+// ============================================================
+// ⚠️ Asked for alongside the quality fix. It goes through the SAME recorder as a goal clip
+// — same codec list, same bitrate — and differs only in what is played while it runs, which
+// is why `recordAndShareClip` takes the playback as an argument rather than hard-coding
+// `playReplay`. A second copy of the recorder wiring is a second place for the codec trap
+// to come back.
+// ⚠️ Driven end to end on a deliberately SHORT match: the export plays the match back in
+// full to film it, so a real one would take as long as the match did.
+const mv = await vpage.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  const blobs = []; const realURL = URL.createObjectURL;
+  URL.createObjectURL = (b2) => { blobs.push(b2); return realURL.call(URL, b2); };
+  const realClick = HTMLAnchorElement.prototype.click; let named = null;
+  HTMLAnchorElement.prototype.click = function(){ if (this.download) named = this.download; };
+  try {
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=false; M.setMatchSeed(9); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    for (let i=0;i<240;i++) M.step(w);
+    M.endMatch(w); M.finishMatch(w);
+    o.reason = await M.saveMatchClip(null);
+    o.blobs = blobs.length;
+    o.bytes = blobs.length ? blobs[0].size : 0;
+    o.type = blobs.length ? blobs[0].type : '';
+    o.name = named;
+    // ⚠️ And the live world came BACK. `playReplayFile` swaps `world` for one rebuilt from
+    // the document; a throw mid-recording that skipped the restore would strand the game
+    // holding a replay's world, which is the bug `replayAbort` exists for one layer down.
+    o.worldRestored = !!(M.world && M.world.players && M.world.players.length);
+  } finally {
+    HTMLAnchorElement.prototype.click = realClick; URL.createObjectURL = realURL;
+  }
+  o.made = o.reason === '' && o.blobs === 1 && o.bytes > 20000;
+  o.namedMatch = /magnetball-match-/.test(o.name || '') && !M.repBadMux(o.type);
+  return o;
+});
+
+ok('the whole match exports as a video', mv.made,
+   `${JSON.stringify(mv.reason)}, ${Math.round(mv.bytes/1024)}KB of ${mv.type}`);
+ok('...named apart from a goal clip, and not a container lying about its codec', mv.namedMatch, mv.name);
+ok('...and the live match is put back afterwards', mv.worldRestored,
+   'playReplayFile swaps the world for one rebuilt from the document');
+
+ok('a replay is DRAWN BETWEEN its frames', tween.drawsBetween,
+   `${tween.distinct} distinct ball positions from a ${tween.recorded}-frame recording — a stepping build cannot exceed its own frame count, and a match replay is sampled at 30Hz and halves past the cap`);
+await vpage.close();
 
 await b.close();
 if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));

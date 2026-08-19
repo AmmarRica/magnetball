@@ -2835,6 +2835,53 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   not with the replay code it belongs to — the slider wiring calls `syncRepSecs()` during
   the bootstrap, and from there a `const` two-thirds of the way down is in the temporal dead
   zone and takes the page out. **Eleventh TDZ bite in this file.**
+- **THE VIDEO EXPORT: never a bare `video/mp4`** (`REPCODECS`, `repMime`, `repBadMux`,
+  `repMakeRecorder`, `repBitrate`, `repClipExt`).
+  ⚠️ **Ask Chrome for `video/mp4` and it answers `video/mp4;codecs=vp9`** — an MP4
+  CONTAINER WITH VP9 INSIDE. Measured, not guessed. That combination is legal and almost
+  nothing plays it: QuickTime, iOS Photos and most editors refuse the file outright, and
+  the game handed it over named `.mp4` because `blob.type` said mp4. That was the whole of
+  *"the video export doesn't produce good quality video"*.
+  ⚠️ So the candidate list asks for H.264 by an **explicit codec string** and the bare type
+  is **last**, where it means Safari — which advertises only `video/mp4` and does produce
+  H.264. VP8 sits below VP9 for a measured reason: at the same 40Mbps request it produced
+  **0.52Mbps** against VP9's **3.22Mbps** on the same moving picture.
+  ⚠️ **What came BACK is checked**, because asking is not getting: `repMakeRecorder` reads
+  `rec.mimeType` after construction and moves down the list if it is an mp4 carrying VP9.
+  ⚠️ **The extension follows the CODEC, not just the container** (`repClipExt`) — the belt
+  to that braces, so a file can never be named for something it is not.
+  ⚠️ **The bitrate ask is a CEILING, not a floor**, which is the argument for asking high:
+  on a deliberately busy picture, asking 8Mbps came back as 1.8 and asking 40 came back as
+  3.2, because the encoder spends it only where the picture changes and a pitch is mostly
+  still. Left to itself MediaRecorder picks ~2.5Mbps, and flat colour with hard edges is
+  the worst case for that.
+- **THE WHOLE MATCH AS A VIDEO** (`saveMatchClip`). Its own button beside Save clip, not a
+  state of it: a goal clip is a few seconds and a match is however long the match was,
+  played back in full to film it — so the label says so, because a button that appears to
+  hang for four minutes is a broken button.
+  ⚠️ **`recordAndShareClip` TAKES THE PLAYBACK AS AN ARGUMENT**, so a goal clip and a match
+  clip are one function. A second copy of the recorder wiring is a second place for the
+  codec trap to come back.
+  ⚠️ It plays through `playReplayFile`, which swaps `world` for one rebuilt from the
+  document and restores it in a `finally` — so the match behind the result screen is
+  untouched and a throw mid-recording cannot strand the game holding a replay's world.
+- **A REPLAY IS DRAWN BETWEEN ITS FRAMES** (`repTween`). A match replay is sampled at 30Hz
+  by design and **halves itself** past `REPMATCH.max`, so a long one is held at 15 — and
+  stepping a recording frame by frame at a rate you can afford to store is exactly what
+  makes a replay read as a stutter. Same argument the drill ghosts are built on, same fix:
+  the frames are keyframes and the picture is drawn between them. Slow motion gets it too,
+  where even a 60Hz goal recording repeats frames at 0.55×.
+  ⚠️ A straight **LERP**, not the ghosts' Catmull-Rom: a ball bouncing off a wall is a real
+  corner in the path, and a curve through it would round the bounce off — the replay
+  telling a lie about the physics.
+  ⚠️ **A kick is an EVENT, not a quantity** — `k` is taken from whichever frame is nearer,
+  because blending a boolean would flicker the wind-up ring through a whole tween.
+  ⚠️ Measured as the number of **distinct drawn positions** over a real playback, never by
+  reading the helper back: a pure function proves only that a helper exists. Two probe
+  traps recorded — the ball must not be sampled on **y = 0**, which is the halfway line and
+  is white right across the pitch (the first run reported 2 positions for that reason), and
+  `lastReplay` needed a setter on the debug hook or the synthetic recording was silently
+  ignored.
 - **Save clip REPORTS what it did.** Every exit in `recordAndShareClip` was a bare `return`
   or a swallowed `catch`, and `saveClip` wrote its status to `$('clipBtn')` — the in-match
   bar's button, **deleted** when Save clip moved to the result screen. So on a browser with
