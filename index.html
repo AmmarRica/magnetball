@@ -4392,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0710PM';
+const VERSION = '20260819.0820PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4408,14 @@ const VERSION = '20260819.0710PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0820PM', title: 'A white circle when you kick',
+    added: [],
+    changed: [
+      '<b>The circle round you while you hold KICK is white and solid.</b> On the default green pitch it was being drawn in a muted gold at under half strength, which at phone size came out as a grey smudge rather than a circle. It is now picked to stand out against whatever pitch you are on, and it is at full strength the moment you press.',
+      'It also sits exactly where the Kick ring size setting says, at every screen size.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0710PM', title: 'The kick circle, and your place in the menu',
     added: [],
     changed: [
@@ -6530,7 +6538,7 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
 // ⚠️ Both floors are in PIXELS because that is what a thin arc is measured in: a stroke
 // under about two pixels is an anti-aliased suggestion rather than a line.
 const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 0.75, caseA: 0.55,
-               inset: 1.0, spent: '#e0563c' };
+               inset: 1.0, kickMin: 2.2, spent: '#e0563c' };
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -6544,7 +6552,19 @@ const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 0.75, case
 // under it. That is this file's standing idiom — the guide ring on every disc, the name
 // plate's halo, `paintCap`'s outline — and it buys the contrast without touching the hue,
 // on every palette, including ones nobody has made yet.
-function ringCasing(){ return pickTextColor(TH.stripeA || TH.court || '#000000'); }
+function ringCasing(){ return relLum(TH.stripeA || TH.court || '#000000') > 0.55 ? '#ffffff' : '#000000'; }
+// ⚠️ **THE WIND-UP RING IS WHITE, and the palette's own `kickRing` is not used for it.**
+// Reported three times as not being visible, and this was the actual cause the first two
+// diagnoses missed: on GRASS — the default palette — `TH.kickRing` is `#f2c53d`, a muted
+// gold, cased in black. At the 2px a phone draws it that is a dark grey smudge on green,
+// not a circle round the player. The ring carries no meaning in its hue — it says "you are
+// winding up" and nothing more — so unlike the stamina arc, whose green-for-go and
+// red-for-spent are the whole point, it is free to be picked for CONTRAST instead.
+// ⚠️ White on any ordinary pitch (it is the colour the markings are already drawn in), and
+// black on a light one — Highlighter's acid yellow and Apologies!'s butter board would
+// swallow white outright. The casing is always the opposite tone, so the pair reads on a
+// palette nobody has made yet.
+function kickRingInk(){ return relLum(TH.stripeA || TH.court || '#000000') > 0.55 ? '#000000' : '#ffffff'; }
 // ⚠️ **ONE PLACE WORKS OUT WHERE THE TWO RINGS GO.** It was inline in `drawOneDisc`, which
 // meant a check could only re-derive the rule and then agree with its own arithmetic —
 // and it did: the first version of that check counted inked bands along a ray, found two,
@@ -6579,7 +6599,10 @@ function ringLayout(p, r){
   // skin may paint anything under it.
   const stamR = Math.max(r*0.35, r - guideW - stamW/2 - RING.inset);
   const gap = Math.max(RING.gap, r*RING.gapR);
-  const kickW = Math.max(2, r*0.16) * (1 + chargeFrac(p)*0.45);
+  // ⚠️ `RING.kickMin` is a floor in PIXELS, not a fraction of `r`: on a phone the body is
+  // ~9.8px, so `r*0.16` is 1.6px and the ring came out as a hairline. The fraction is what
+  // keeps it in proportion on a big body; the floor is what keeps it visible on a small one.
+  const kickW = Math.max(RING.kickMin, r*0.16) * (1 + chargeFrac(p)*0.45);
   // ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets, never its width right
   // now.** The stroke grows with the charge, so reserving against the live width made the
   // ring CREEP OUTWARD as you held KICK — measured drifting 21.6 → 21.8px across one
@@ -24833,10 +24856,15 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     }
     if (chargeOn() && (p.kick || (p.chargeT||0) > 0.01)){
       const f = chargeFrac(p);
+      // ⚠️ **IT HAS TO READ THE MOMENT KICK GOES DOWN, not once it is charged.** The alpha
+      // ramped 0.42 → 0.92, so the ring spent the start of every hold at well under half
+      // strength — on a phone that is a 2px white stroke at 0.42 over grass, which is the
+      // faint grey smudge this was reported as three times. The charge is carried by the
+      // WIDTH and by a lift from 0.88 to full; the ring is a solid white circle throughout.
       ctx.beginPath(); ctx.arc(x, y, kickR, 0, 2*Math.PI);
-      ctx.strokeStyle = rgba(ringCasing(), RING.caseA * (0.42 + 0.5*f));
+      ctx.strokeStyle = rgba(ringCasing(), RING.caseA * (0.85 + 0.15*f));
       ctx.lineWidth = kickW + RING.case*2; ctx.stroke();
-      ctx.strokeStyle = rgba(TH.kickRing, 0.42 + 0.5*f);
+      ctx.strokeStyle = rgba(kickRingInk(), 0.88 + 0.12*f);
       ctx.lineWidth = kickW; ctx.stroke();
     }
     // Fades out while the plate covers a disc or the ball. Draw is in local coords,
@@ -26479,7 +26507,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, haloAlpha, NAMEPLATE, RING, ringCasing, ringLayout, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, RING, ringCasing, kickRingInk, ringLayout, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

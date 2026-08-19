@@ -389,19 +389,34 @@ const bands = await p.evaluate(() => {
     return Math.round(m); };
   o.inkAtStam = peak(L.stamR, L.stamW/2 + M.RING.case);
   o.inkAtKick = peak(L.kickR, L.kickW/2 + M.RING.case);
-  // ⚠️ **The gap probe is now DISC RIM → WIND-UP RING, and it is a thin one by design.**
-  // With the arc on the body the old "plain pitch between the two rings" no longer names
-  // anything: the two are on opposite sides of the rim, which `reallyClear` asserts from
-  // the layout and the guide-ring check asserts from the pixels. What is left to measure
-  // out here is that the wind-up ring is its OWN mark rather than a thickening of the rim,
-  // so the sample sits clear of the guide ring's antialiasing (mid was 0.5px outside it
-  // and read 127 of ink from the rim alone).
-  o.inkInGap  = far(at((guideOutR + L.kickInner) / 2 + 0.75));
+  // ⚠️ **THE GAP PROBE IS GONE, and what replaces it is the check that should have caught
+  // this bug three reports ago.** "Plain pitch between the two rings" named something real
+  // while both rings were outside the disc; with the arc on the body they are on opposite
+  // sides of the rim, `reallyClear` asserts that from the layout and the guide-ring probe
+  // asserts it from the pixels, and all the old sample could still see was the wind-up
+  // ring's own casing — which is supposed to be there.
+  // ⚠️ What nothing measured was whether the ring is VISIBLE, and it was not: on GRASS, the
+  // default palette, `TH.kickRing` is `#f2c53d` — a muted gold — cased in black, so at the
+  // 2px a phone draws it the ring rendered as a dark grey smudge on green. Every geometry
+  // check passed throughout. The ring is picked for contrast now (`kickRingInk`), and this
+  // measures the RENDERED result: the brightest pixel in the ring's band against the court
+  // it is drawn on.
+  // ⚠️ Threshold from BOTH builds rather than the passing one: the gold build reaches 455
+  // of 765 against a court at 287 (a separation of 168), the contrast-picked one reaches
+  // 687 the instant KICK goes down and 765 at full charge (400+). 280 sits clear of both.
+  {
+    const q = at(r * 6); o.courtLum = q[0] + q[1] + q[2];
+    let best = 0;
+    for (let d = -(L.kickW/2 + M.RING.case); d <= L.kickW/2 + M.RING.case; d += 0.25){
+      const v = at(L.kickR + d); best = Math.max(best, Math.abs(v[0]+v[1]+v[2] - o.courtLum));
+    }
+    o.kickRingContrast = best;
+  }
   // ⚠️ Thresholds picked off BOTH builds, not off the passing one: with the casing removed
   // the stamina band reads 87 and the gap fills to 65, and with the rings overlapping the
   // gap reads 78 — so 110 and 40 sit clear of every sabotage and clear of the real build's
   // 167 and 8.
-  o.drawnWhereItSays = o.inkAtStam > 110 && o.inkAtKick > 110 && o.inkInGap < 40;
+  o.drawnWhereItSays = o.inkAtStam > 110 && o.inkAtKick > 110 && o.kickRingContrast > 280;
   // ⚠️ ...and they are DIFFERENT MARKS. Sampled at the two radii the layout names, never
   // at whatever the scan happened to find.
   const a = at(L.stamR), b2 = at(L.kickR);   // the marks' own colours, band centres
@@ -416,7 +431,10 @@ ok('...and the wind-up ring HOLDS STILL as the charge builds', bands.radiusHolds
    JSON.stringify({ empty: bands.kickREmpty, full: bands.kickRFull }) +
    ' — its stroke widens with the wind-up, so a reservation taken from the live width walks the whole ring outward while you hold KICK');
 ok('...and the picture agrees with the layout', bands.drawnWhereItSays,
-   `ink ${bands.inkAtStam} at the stamina radius, ${bands.inkAtKick} at the wind-up radius, ${bands.inkInGap} in the gap (bands found: ${JSON.stringify(bands.bandSpans)})`);
+   `ink ${bands.inkAtStam} at the stamina radius, ${bands.inkAtKick} at the wind-up radius, ` +
+   `wind-up ring contrast ${bands.kickRingContrast} against a court at ${bands.courtLum} ` +
+   `(bands found: ${JSON.stringify(bands.bandSpans)}) — the palette's own kickRing is a muted gold on grass ` +
+   `and rendered as a grey smudge at the 2px a phone draws it, which every geometry check here passed straight through`);
 ok('...and they are different marks, not one ring split by an antialiased pixel', bands.ringsDiffer,
    `inner ${JSON.stringify(bands.innerCol)} against outer ${JSON.stringify(bands.outerCol)}`);
 ok('...and both stand off the pitch on GRASS, the palette they hid on',

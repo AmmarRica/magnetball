@@ -2407,6 +2407,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Reserved on `sprintsFor(p)`, **never on "is the stamina ring on screen right now"** —
   it appears the frame after KICK goes down, so a live test jumps the wind-up ring outward
   one frame in.
+  ⚠️ **THE WIND-UP RING IS PICKED FOR CONTRAST, and the palette's own `kickRing` is not
+  used for it** (`kickRingInk`). Reported three times as not being visible, and this was
+  the actual cause the first two diagnoses missed — both of those were about GEOMETRY, and
+  the geometry was only half of it. On **Grass, the default palette, `TH.kickRing` is
+  `#f2c53d`**, a muted gold, cased in black: at the 2px a phone draws it that is a dark
+  grey smudge on green rather than a circle round the player. Measured, the rendered ring
+  peaked at **455 of 765 against a court at 287**; picked for contrast it reaches **687 the
+  instant KICK goes down and 765 at full charge**.
+  ⚠️ **The ring's hue carries NO meaning**, which is what makes this allowed — it says "you
+  are winding up" and nothing more. That is exactly the difference from the stamina arc,
+  whose green-for-go and red-for-spent are the whole point and which is therefore left
+  alone; see the entry below, where running those two through `readableInk` was tried and
+  reverted.
+  ⚠️ White on any ordinary pitch — it is the colour the markings are already drawn in — and
+  black on a light one, because Highlighter's acid yellow and Apologies!' butter board
+  would swallow white outright. The casing is always the opposite tone, so the pair reads
+  on a palette nobody has made yet.
+  ⚠️ **The alpha ramped 0.42 → 0.92 and now runs 0.88 → 1.0.** A ring that spends the start
+  of every hold at under half strength is invisible exactly when you press the button; the
+  charge is carried by the WIDTH instead, and `RING.kickMin` is a floor in PIXELS rather
+  than a fraction of `r`, because `r*0.16` on a 9.8px phone body is a 1.6px hairline.
+  ⚠️ **The TOUCH PAD's ring is deliberately NOT changed** — it is a UI control with its own
+  design and its own pulse, and rewiring it to the contrast ink broke that pulse outright.
   ⚠️ **BOTH RINGS ARE CASED IN THE PITCH'S OPPOSITE INK, and RECOLOURING THEM WAS TRIED
   FIRST AND WAS WRONG.** The problem is real — on Grass, the default palette, `TH.good` is
   `#3ec06a` against mown stripes of `#2f9e52`, a green ring on green grass at **1.29:1**,
