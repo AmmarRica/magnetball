@@ -356,13 +356,10 @@ const bands = await p.evaluate(() => {
   // `gap` instead, which pushed the wind-up ring's own casing further in and made the
   // reading WORSE: 110 of ink in what was supposed to be daylight.
   o.clearance = +(L.kickInner - L.stamOuter).toFixed(2);
-  // ⚠️ **THE ARC IS ON THE BODY NOW, so "clear each other" means opposite sides of the
-  // disc rim** rather than two bands in the daylight outside it. Three concentric bands do
-  // not fit round a small body — the gap and the casings are fixed pixel amounts, so the
-  // smaller the body the bigger a fraction of `r` they eat, and tightening them moved the
-  // wind-up ring 1.94r → 1.81r on a desktop and left it at 1.92r on a PHONE, which is
-  // where the report came from. Inside, the arc costs no room out here at all.
-  o.reallyClear = L.stamOuter < r && L.kickInner > r;
+  // ⚠️ Both rings are outside the disc again — the arc was moved ONTO the body for one
+  // build and the disc came out as a bullseye, with the wind-up ring then 1.1px off it.
+  // The wind-up dial is 2.00 now, which is what buys the daylight this measures.
+  o.reallyClear = o.clearance >= L.gap * 0.9;
   // ⚠️ **AND THE WIND-UP RING DOES NOT CREEP OUTWARD AS YOU CHARGE.** Its stroke grows
   // with the wind-up, and the reservation was computed from the width RIGHT NOW — so the
   // ring drifted outward across a single hold (measured 21.6 → 21.8px). A ring that is a
@@ -487,8 +484,13 @@ const ring = await p.evaluate(() => {
   // nothing once it moved onto the disc — the body is already bright, so "is this pixel
   // lit" stops separating the arc from the player underneath it. Rested is the baseline
   // because that is the one state where the arc is not drawn at all.
+  // ⚠️ The threshold has to clear the arc's own BACKGROUND TRACK, which is drawn as a full
+  // circle at 0.16 alpha whenever the ring is up. At 30 the track registered at every
+  // angle, so half stamina measured 100 of 120 and "it is an arc, not a full circle" went
+  // red on a build whose arc is plainly half a circle. The lit arc is far brighter than
+  // the track, so a higher cut separates them without naming either.
   const extra = a => a.map((q, k) => Math.abs(q[0]-rest[k][0]) + Math.abs(q[1]-rest[k][1])
-                                   + Math.abs(q[2]-rest[k][2]) > 30);
+                                   + Math.abs(q[2]-rest[k][2]) > 90);
   const eh = extra(half), el = extra(low);
   const count = a => a.reduce((n, v) => n + (v ? 1 : 0), 0);
   o.restInk = 0; o.halfExtra = count(eh); o.lowExtra = count(el);
@@ -519,15 +521,14 @@ const ring = await p.evaluate(() => {
     const s = M.cam.s, rr = me.r * s * M.cam.body;
     const L = M.ringLayout(me, rr);
     const guideOut = rr + Math.max(1, rr * M.DISC_GUIDE.w);
-    // ⚠️ The arc is INSIDE the guide ring now, so the clearance is measured the other way:
-    // its OUTER edge must stop short of the guide band's inner edge. The guide ring is
-    // structural — every skin gets one, because a player is a circle of radius `r` and that
-    // circle is what collides — so it is the thing the arc gives way to, whichever side of
-    // it the arc sits on.
-    const guideIn = rr - Math.max(1, rr * M.DISC_GUIDE.w);
-    const stamOut = L.stamR + L.stamW/2 + M.RING.case;
-    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamOut.toFixed(2);
-    o.clearsTheGuideRing = stamOut < guideIn;
+    // ⚠️ The arc is back OUTSIDE the guide ring — it was moved onto the body for one build
+    // and the disc came out as a bullseye — so the clearance is measured the way it always
+    // was: the arc's inner edge must clear the guide band's outer edge. The guide ring is
+    // structural, every skin gets one, because a player is a circle of radius `r` and that
+    // circle is what collides.
+    const stamIn = L.stamR - L.stamW/2 - M.RING.case;
+    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamIn.toFixed(2);
+    o.clearsTheGuideRing = stamIn > guideOut;
     // ⚠️ **AND THE PIXELS AGREE — measured as "unchanged", not as "bare pitch".** The
     // daylight between the two is a fraction of a pixel wide by design (the arc hugs the
     // player), so a midpoint probe reads the antialiased edges of both and reports 426 of

@@ -4392,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0910PM';
+const VERSION = '20260819.1015PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4408,14 @@ const VERSION = '20260819.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.1015PM', title: 'A real gap between you and the kick ring',
+    added: [],
+    changed: [
+      '<b>The ring round you while you hold KICK now sits clear of your player, with pitch visible between the two.</b> It was being drawn hard against the disc, so it read as a glow stuck to you rather than a ring around you.',
+      'The stamina arc moved back outside the body too \u2014 on it, the player came out looking like a target.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0910PM', title: 'The kick ring shows whenever you hold KICK',
     added: [],
     changed: [
@@ -5115,7 +5123,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:142, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:200, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -6545,7 +6553,7 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
 // outward one frame in.
 // ⚠️ Both floors are in PIXELS because that is what a thin arc is measured in: a stroke
 // under about two pixels is an anti-aliased suggestion rather than a line.
-const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 0.75, caseA: 0.55,
+const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 1.3, caseA: 0.75,
                inset: 1.0, kickMin: 2.2, spent: '#e0563c' };
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
@@ -6590,22 +6598,18 @@ function ringLayout(p, r){
   // second place a radius lives, and `tests/sprint.mjs` was already locating the arc
   // with it — the same hard-coded-copy trap `tells.mjs` records for the wind-up ring.
   const guideW = Math.max(1, r * DISC_GUIDE.w);
-  // ⚠️ **THE STAMINA ARC IS DRAWN ON THE BODY, just inside the guide ring** — and that is
-  // what finally gets the wind-up ring back to the player. Outside the disc, three
-  // concentric bands (guide, stamina, wind-up) do not fit: each is a stroke plus a casing
-  // either side, and the gap and the casings are FIXED PIXEL amounts, so the smaller the
-  // body the bigger a fraction of `r` they eat. Tightening them moved the wind-up ring
-  // 1.94r → 1.81r on a desktop-sized body and **did almost nothing on a phone**, where the
-  // body is 9.8px and it still measured 1.92r — a faint circle at nearly twice the body
-  // radius, which is where "I don't see the circle" came from both times.
-  // ⚠️ Inside, the arc costs NO room outside the disc, so `kickR` is simply the dial again
-  // and the collision case is gone rather than negotiated. It is also the most literal
-  // reading of "stamina closer to the player": it is on them.
-  // ⚠️ No `RING.clear`/`RING.case` in the radius here — inside, the arc sits over the
-  // player's own body, which is a known solid colour rather than the pitch, so it needs
-  // clearance from the guide ring and nothing more. It still draws its casing, because a
-  // skin may paint anything under it.
-  const stamR = Math.max(r*0.35, r - guideW - stamW/2 - RING.inset);
+  // ⚠️ **THE STAMINA ARC SITS JUST OUTSIDE THE GUIDE RING, and the wind-up ring is given
+  // room rather than squeezed against the body.** Both of those were arrived at by
+  // LOOKING at a rendered phone frame, which is what three rounds of arithmetic missed.
+  // ⚠️ Drawn ON the body (the previous attempt) the disc came out as a bullseye — team
+  // colour, then a green arc, then the guide ring, all inside twenty pixels — and the
+  // wind-up ring at the old 1.42 dial then had **1.1px** of pitch between it and the disc,
+  // so it read as a halo stuck to the player instead of a ring around them. The ask was a
+  // disc, a clear gap, then a ring; that needs the gap to be real.
+  // ⚠️ Which is why `KICKRING.def` is **2.00** and not 1.42. The reference drawing has the
+  // ring at about 1.4× a body with no guide ring and no stamina arc on it; the game's disc
+  // carries both, so the same *apparent* separation needs a bigger multiple.
+  const stamR = r + guideW + RING.inset + RING.case + stamW/2;
   const gap = Math.max(RING.gap, r*RING.gapR);
   // ⚠️ `RING.kickMin` is a floor in PIXELS, not a fraction of `r`: on a phone the body is
   // ~9.8px, so `r*0.16` is 1.6px and the ring came out as a hairline. The fraction is what
@@ -6722,7 +6726,11 @@ const CHARGE_MS = { min:100, max:2000, step:50 };
 // the default numbers is 2.6r, and the ring has always been drawn well inside that. This
 // dial moves the drawing only — nothing here touches the physics, so a bigger ring never
 // means a longer kick.
-const KICKRING = { min: 100, max: 300, step: 5, def: 142 };
+// ⚠️ `def` must agree with the `kickRing` literal in `defaultSel()`. It cannot READ this
+// constant: `defaultSel` runs during the bootstrap and `KICKRING` is declared far below
+// it, which is the temporal dead zone this file has been bitten by seventeen times. The
+// literal is what a fresh install gets; `def` is the fallback for a save that has no value.
+const KICKRING = { min: 100, max: 300, step: 5, def: 200 };
 function kickRingMul(){
   const v = sel.kickRing == null ? KICKRING.def : +sel.kickRing;
   return Math.max(KICKRING.min, Math.min(KICKRING.max, v || KICKRING.def)) / 100;

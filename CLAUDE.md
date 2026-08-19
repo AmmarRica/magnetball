@@ -2418,10 +2418,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   PLAYER is doing — the button is down, you are about to kick or you are carrying — which
   is worth showing whether or not a wind-up is part of it. The charge now only modulates
   the width and the brightness.
-  ⚠️ **A REPORT THAT SURVIVES THREE FIXES IS A SIGN THE THING IS NOT BEING DRAWN AT ALL.**
-  Each round changed something real and measurable and the answer came back unchanged;
-  that pattern is the tell, and the question to ask is "what stops this from being reached"
-  rather than "what is wrong with how it looks".
+  ⚠️ **A REPORT THAT SURVIVES THREE FIXES MEANS THE DIAGNOSIS IS WRONG, not the tuning.**
+  Each round changed something real and measurable and the answer came back unchanged. What
+  finally settled it was rendering a real phone frame and LOOKING at it — the ring was
+  drawing, bright and white, jammed against the disc with **1.1px** of pitch between them,
+  so it read as a halo on the body rather than a ring around it. Three rounds of arithmetic
+  never asked what the picture looked like.
+  ⚠️ **AND THE STANDOFF WAS NEVER THE COMPLAINT — I inferred that and it cost three
+  builds.** The original ring sat at 1.94r and the report was "I cannot see it"; I read
+  that as "it is too far out" and spent two changes pulling it in to 1.42r, which made it
+  worse. The dial's default is **2.00** now, which is essentially back where it started.
+  What was actually wrong was the COLOUR (a muted gold on green) and the alpha, both fixed
+  above. **Ask which property is wrong before tuning one.**
+  ⚠️ `KICKRING.def` is 2.00 and not the reference drawing's ~1.4 because that drawing has a
+  bare disc: the game's carries a guide ring and, next to it, the stamina arc, so the same
+  *apparent* gap needs a bigger multiple.
   ⚠️ **THE WIND-UP RING IS PICKED FOR CONTRAST, and the palette's own `kickRing` is not
   used for it** (`kickRingInk`). Reported three times as not being visible, and this was
   the actual cause the first two diagnoses missed — both of those were about GEOMETRY, and
