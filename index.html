@@ -2731,6 +2731,14 @@ const FIELDS = {
   retro:   { name:'Retro',    emoji:'🕹️', W:440, L:720,  goal:150, corner:0,   net:64 },
   sprint:  { name:'Sprint',   emoji:'💨', W:420, L:520,  goal:160, corner:0,   net:54 },
   endless: { name:'Endless',  emoji:'♾️', W:380, L:1100, goal:150, corner:0,   net:70 },
+  // ⚠️ **LONG AND NARROW ON PURPOSE** — the shape is the whole idea. The arena-shooter map
+  // this takes after is two identical bases at opposite ends of a long, thin causeway, and
+  // what makes it read is that there is nowhere to go but at the other side. 340 across a
+  // 1020 length is three to one, the narrowest of the long courts; anything wider and it
+  // stops being a corridor and starts being a pitch.
+  // ⚠️ Corners are SQUARE. A rounded end would round off the base platforms the field
+  // painter draws into them, and the two ends are meant to read as built structures.
+  faceoff: { name:'Faceoff Orbit', emoji:'🛰️', W:340, L:1020, goal:150, corner:0, net:66 },
 };
 
 // ============================================================
@@ -4392,7 +4400,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.1130PM';
+const VERSION = '20260820.0015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4416,15 @@ const VERSION = '20260819.1130PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0015AM', title: 'Faceoff Orbit',
+    added: [
+      '<b>A new pitch and a matching look: Faceoff Orbit.</b> A long, narrow deck hanging in space with a planet off to one side, an identical base at each end, and a hard split across the middle where the two halves meet. Pick the pitch under Match \u2192 Pitch and the look under Theme.',
+    ],
+    changed: [
+      'The two ends are exact mirrors of each other, so neither side has anything the other does not.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.1130PM', title: 'The ring is your kicking range',
     added: [],
     changed: [
@@ -5174,6 +5191,32 @@ let sel = defaultSel();
 //  pitch→ every colour the canvas draws with, so a theme fully reskins the game
 // ============================================================
 const THEMES = {
+  // Two identical bases at opposite ends of a causeway, hung in orbit. ⚠️ The look is
+  // taken as a SHAPE — a long thin court, a hard edge, and a planet somewhere below —
+  // and nothing is borrowed but the idea; the map it takes after is somebody else's and
+  // is not named here or anywhere in the file. See the standing rule in CLAUDE.md.
+  faceoff: {
+    name: 'Faceoff Orbit', emoji: '🛰️',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #14204a 0%, #070b1c 55%, #03040c 100%)',
+      bg:'#03040c', panel:'rgba(150,190,255,0.08)', edge:'#2a3a6a', text:'#e8f0ff', muted:'#8fa2cc',
+      red:'#ff6a4d', blue:'#4dc9ff', cyan:'#63f2e0', magenta:'#c98cff', green:'#7ce8a8', yellow:'#ffd166',
+      accent:'#63f2e0', go:'#7ce8a8', field:'#0a1230', onAccent:'#03040c' },
+    // ⚠️ The COURT is a lit deck and the surround is the void, so the markings can stay
+    // bright without fighting the sky. `stripeA === stripeB` — mown stripes are a grass
+    // thing and a metal deck does not have them.
+    pitch: { glow:false, fieldBg:'#03040c', court:'#16203f', stripeA:'#16203f', stripeB:'#16203f',
+      netPocket:'rgba(99,242,224,0.14)', line:'#dce8ff', centerDot:'#dce8ff',
+      netMesh:'rgba(220,232,255,0.42)', post:'#dce8ff', teamRed:'#ff6a4d', teamBlue:'#4dc9ff',
+      discRim:'#03040c', kickRing:'#ffffff', kickText:'#03040c', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#03040c', nameBg:'#03040c', nameText:'#e8f0ff',
+      shadow:'rgba(0,0,0,0.34)', ballRim:'#03040c', ball:'#f2f7ff', ballSpot:'#16203f',
+      trailRGB:'220,232,255',
+      obstacle:'#8fa2cc', good:'#7ce8a8', warn:'#ffd166', dim:'#5a6a94', cone:'#ffd166',
+      hudText:'#e8f0ff', hudSub:'#8fa2cc', accent:'#63f2e0', padRing:'rgba(220,232,255,0.5)',
+      // The painter's own inks — deck plate, the seam down the middle, and the stars.
+      dynMark:'#dce8ff', dynEdge:'#63f2e0', dynGlow:'#24407f', dynAlt:'#0e1730' },
+  },
   // The first DYNAMIC theme: the pitch is not a picture, it's an animation. Black
   // and white throughout, with the field a starfield streaming out from the centre
   // spot so you're playing on the view out the front of something moving fast.
@@ -6363,6 +6406,12 @@ const SLOT_KEYS = Object.keys(SLOTS);
 // Every palette is a bundle; only the ones that own more than colour say so here.
 const THEME_BUNDLES = {
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
+  // ⚠️ Slots only, like every other bundle — no field key. A theme may not reach into the
+  // Match card and choose the pitch you play on; `FIELDS.faceoff` is the shape this look
+  // was drawn for and it is picked there, in Pitch, like any other court. The painter is
+  // written in FRACTIONS of whatever rectangle it is handed, so on a square court it
+  // still lays out two bases and a seam — just a chunkier one.
+  faceoff:   { field:'faceoff',   discs:'none',  ball:'plain', sfx:'space' },
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   vsoccer:   { field:'vscourt',   discs:'arrow', ball:'plain', sfx:'classic' },
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
@@ -22808,6 +22857,130 @@ const DYN_FIELDS = {
 // the count you see behind the stage — a number tuned against the pitch alone leaves the
 // bambamzone looking empty.
 const BLAST = { stars: 320, drift: 3.2, twinkle: 0.55, edge: 0.045, glow: 0.34 };
+// ============================================================
+//  FACEOFF ORBIT — two identical bases, one causeway, hung in space
+// ============================================================
+// ⚠️ **THE TWO HALVES ARE MIRRORS OF EACH OTHER, and that is the design rather than a
+// nicety.** The arena map this takes after is symmetrical end to end so that neither side
+// has anything the other does not, and the whole read of it is "that base over there is
+// mine, backwards". Every element below is drawn from a `half()` helper called twice with
+// the sign flipped, so the two ends cannot drift apart.
+// ⚠️ **AND IT IS SPLIT DOWN THE MIDDLE**, asked for directly: a dark seam across the
+// halfway line with a lit causeway through it, so the court reads as two worlds meeting
+// rather than one pitch with a line painted on it.
+// ⚠️ The seam is DECORATION and nothing more — the ball crosses it exactly as it crosses
+// any other part of the pitch. A painter may not change where anything can go; the field
+// rectangle is what the physics knows about.
+// ⚠️ `bleed`s, so the void and the stars cover the surround rather than stopping at the
+// touchline — the point of the look is a court hanging in nothing.
+// ⚠️ Its own seeded PRNG, never `w.rng`: how long the field has been on screen must not
+// perturb a single bot decision. The drift advances in `step`, never in `paint`.
+const ORBIT = {
+  stars: 300,       // over a region several times the pitch box — see paint
+  drift: 0.9,       // units a step, sideways, so the sky is not static
+  twinkle: 0.5,
+  seam: 0.055,      // the split, as a fraction of the court's LENGTH
+  causeway: 0.30,   // how much of the width the bridge across the seam covers
+  base: 0.26,       // each base platform, as a fraction of the length
+  ribs: 7,          // deck plating lines per base
+  planet: 0.55,     // planet radius as a fraction of the pitch WIDTH
+};
+DYN_FIELDS.faceoff = {
+  name: 'Faceoff Orbit',
+  bleed: true,
+  reset(st){
+    const rnd = mulberry32(0x0FACE01);       // fixed: the same sky every match
+    st.s = [];
+    for (let i = 0; i < ORBIT.stars; i++)
+      st.s.push({ x: rnd(), y: rnd(), r: 0.4 + rnd()*1.6, ph: rnd()*Math.PI*2, sp: 0.3 + rnd()*0.9 });
+    st.t = 0;
+  },
+  step(st, dt){ if (!st.s) this.reset(st); st.t = (st.t || 0) + dt; },
+  paint(c, st, L, T, W, H, w){
+    if (!st.s) this.reset(st);
+    const t = st.t || 0;
+    const voidCol = TH.fieldBg || '#03040c';
+    const deck    = TH.court   || '#16203f';
+    const plate   = TH.dynAlt  || '#0e1730';
+    const mark    = TH.dynMark || TH.line || '#dce8ff';
+    const edge    = TH.dynEdge || TH.line || '#63f2e0';
+    const glow    = TH.dynGlow || '#24407f';
+
+    // ---- the void, over a region far bigger than the pitch ------------------
+    // ⚠️ Painted into L,T,W,H the stars land UNDER the court and the deck covers them,
+    // which is the mistake bambamzone records: a flat surround with a sky nobody sees.
+    const ox = L - W, oy = T - H, ow = W*3, oh = H*3;
+    c.save();
+    c.fillStyle = voidCol; c.fillRect(ox, oy, ow, oh);
+    // A planet to one side, well clear of the court so nothing decorative sits where the
+    // play is. Drawn before the stars so its limb occludes them.
+    // ⚠️ Placed off the PITCH box, not off the oversized void region. Positioned in the
+    // void's own fractions it landed at y = 1280 on a 1000px canvas — off screen entirely,
+    // because that region is three times the pitch in each direction and its lower half is
+    // below anything anybody sees. The pitch is the only rectangle that is always in view.
+    const pr = W*ORBIT.planet;
+    const px = L - W*0.85, py = T + H*0.30;
+    const g = c.createRadialGradient(px - pr*0.35, py - pr*0.35, pr*0.1, px, py, pr);
+    g.addColorStop(0, glow); g.addColorStop(1, voidCol);
+    c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI); c.fillStyle = g; c.fill();
+    for (const s of st.s){
+      // Sideways drift, wrapped — a slow parallax rather than anything that moves fast
+      // enough to pull the eye off the ball.
+      let sx = ox + ((s.x + (t * ORBIT.drift * s.sp) / ow) % 1) * ow;
+      const sy = oy + s.y * oh;
+      const a = 0.35 + ORBIT.twinkle * 0.5 * (1 + Math.sin(t*1.6*s.sp + s.ph));
+      c.globalAlpha = Math.max(0, Math.min(1, a));
+      c.fillStyle = mark;
+      c.fillRect(sx, sy, s.r, s.r);
+    }
+    c.globalAlpha = 1;
+
+    // ---- the court: a lit deck hanging in it -------------------------------
+    c.fillStyle = deck; c.fillRect(L, T, W, H);
+
+    // ⚠️ ONE helper, called twice with the sign flipped, so the two ends are the same
+    // structure by construction and not by two blocks of code agreeing.
+    const midY = T + H/2;
+    const half = (sign) => {
+      const goalEnd = sign < 0 ? T : T + H;         // the end this base defends
+      const baseH = H * ORBIT.base;
+      const y0 = sign < 0 ? goalEnd : goalEnd - baseH;
+      // Plating: a slightly different tone so the base reads as built, not painted.
+      c.fillStyle = plate; c.fillRect(L, y0, W, baseH);
+      c.strokeStyle = mark; c.globalAlpha = 0.20; c.lineWidth = Math.max(1, W*0.004);
+      c.beginPath();
+      for (let i = 1; i < ORBIT.ribs; i++){
+        const ry = y0 + baseH * (i / ORBIT.ribs);
+        c.moveTo(L, ry); c.lineTo(L + W, ry);
+      }
+      c.stroke();
+      // The base's outer lip, in the accent — this is the edge you defend from.
+      c.globalAlpha = 0.75; c.strokeStyle = edge; c.lineWidth = Math.max(1.5, W*0.010);
+      const lipY = sign < 0 ? y0 + baseH : y0;
+      c.beginPath(); c.moveTo(L, lipY); c.lineTo(L + W, lipY); c.stroke();
+      c.globalAlpha = 1;
+    };
+    half(-1); half(1);
+
+    // ---- the split down the middle -----------------------------------------
+    // A dark seam across the halfway line with a lit causeway through it. The seam is the
+    // "two worlds" read; the causeway is what stops it looking like a wall.
+    const seamH = H * ORBIT.seam;
+    c.fillStyle = voidCol; c.globalAlpha = 0.55;
+    c.fillRect(L, midY - seamH/2, W, seamH);
+    c.globalAlpha = 1;
+    const cw = W * ORBIT.causeway;
+    c.fillStyle = deck;
+    c.fillRect(L + (W - cw)/2, midY - seamH/2, cw, seamH);
+    c.strokeStyle = edge; c.globalAlpha = 0.8; c.lineWidth = Math.max(1, W*0.006);
+    c.beginPath();
+    c.moveTo(L + (W - cw)/2, midY - seamH/2); c.lineTo(L + (W - cw)/2, midY + seamH/2);
+    c.moveTo(L + (W + cw)/2, midY - seamH/2); c.lineTo(L + (W + cw)/2, midY + seamH/2);
+    c.stroke();
+    c.globalAlpha = 1;
+    c.restore();
+  },
+};
 DYN_FIELDS.bambamzone = {
   name: 'Bambamzone',
   bleed: true,

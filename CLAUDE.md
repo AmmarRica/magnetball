@@ -711,6 +711,33 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **The spec this was drawn from labelled its counters with a real club's current
   squad.** Those are real people's names and are not shipped: the look is generic, the
   names are not ours to use. Same standing rule as the trademark one below.
+  `faceoff` (shown as **Faceoff Orbit**) = two identical bases at opposite ends of a long
+  thin causeway, hung in space. ⚠️ **The name is ours; the map it takes after is not.** It
+  was proposed under a real arena shooter's map name, which is somebody else's trademark,
+  so the idea was taken and the name was not — the standing rule below, applied at the
+  moment it was proposed rather than after it shipped.
+  ⚠️ **THE TWO HALVES ARE MIRRORS, and that is the design rather than a nicety** — the map
+  this takes after is symmetrical end to end so neither side has anything the other does
+  not. Every element is drawn from a `half()` helper called twice with the sign flipped, so
+  the two ends cannot drift apart.
+  ⚠️ **AND IT IS SPLIT DOWN THE MIDDLE**, asked for directly: a dark seam across the
+  halfway line with a lit causeway through it, so the court reads as two worlds meeting
+  rather than one pitch with a line painted on it. ⚠️ The seam is DECORATION — the ball
+  crosses it exactly as it crosses anything else. A painter may never change where a body
+  can go; the field rectangle is what the physics knows about, and containment was measured
+  over 4,000 steps with hard kicks (zero escapes, the ball reaching 566 against a 510 half
+  length plus a 66 net, which is the goal and not an escape).
+  ⚠️ `FIELDS.faceoff` is **long and narrow on purpose** — 340 across a 1020 length. The
+  shape is the whole idea: two bases with nowhere to go but at each other. Corners are
+  SQUARE, because a rounded end would round off the base platforms drawn into it.
+  ⚠️ **The BUNDLE carries slots only, with no field key**, like every other one: a theme may
+  not reach into the Match card and pick the pitch you play on. The painter is written in
+  FRACTIONS of whatever rectangle it is handed, so on a square court it still lays out two
+  bases and a seam — just a chunkier one.
+  ⚠️ The planet is placed off the **PITCH** box, never off the oversized region the void is
+  painted into: positioned in that region's own fractions it landed at y = 1280 on a 1000px
+  canvas — off screen entirely, because the region is three times the pitch each way and
+  its lower half is below anything anybody sees.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It
