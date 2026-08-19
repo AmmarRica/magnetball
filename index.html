@@ -3781,7 +3781,7 @@ const LOBBYKB = {
   // and turned walking to a letter into a trek. At body size the whole thing reads as
   // something you step onto rather than a wall of furniture.
   keyW: 30, keyH: 28, gap: 5,
-  clear: 44,         // world units between the back of the net and the top row
+  clear: 0.8,         // world units between the back of the net and the top row
   maxLen: 12,        // the same cap the name box uses
   wideW: 3.2,        // DEL and SPACE, in key widths
   // ⚠️ NOTHING PRESSES ITSELF. There used to be a dwell — stand on a key for 0.4s
@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0320PM';
+const VERSION = '20260819.0430PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,14 @@ const VERSION = '20260819.0320PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0430PM', title: 'The ring comes back to the player',
+    added: [],
+    changed: [
+      '<b>The circle round a player sits close to them again.</b> Adding the stamina ring pushed the wind-up circle out to nearly twice the player\u2019s width, so it stopped reading as belonging to them at all. Stamina now hugs the body and the wind-up circle sits just outside it.',
+      'The wind-up circle also stays put while you hold KICK. It used to drift very slightly outwards as the shot charged.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0320PM', title: 'Readable or gone',
     added: [],
     changed: [
@@ -6473,7 +6481,7 @@ const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
 // ⚠️ `refill` is LONGER than `secs` on purpose: a sprint you get back as fast as you
 // spend it is a permanent one. `sprintRefill()` floors it at the spend for the same
 // reason, so the sliders cannot be set to undo the mechanic.
-const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, ring:1.30 };
+const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
 // ⚠️ **THE TWO RINGS ROUND A PLAYER MUST NOT TOUCH, AND THEY DID.** The stamina clock is
 // drawn at 1.30r and the wind-up ring at 1.42r — 0.12r apart, which on a phone is **1.2
 // PIXELS** between two strokes that are 1.6px and up to 2.9px wide. They overlapped, the
@@ -6488,8 +6496,8 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, ring:1.30 };
 // outward one frame in.
 // ⚠️ Both floors are in PIXELS because that is what a thin arc is measured in: a stroke
 // under about two pixels is an anti-aliased suggestion rather than a line.
-const RING = { gap: 2.2, gapR: 0.08, stamW: 0.15, stamMin: 2.2, case: 1.3, caseA: 0.55,
-               spent: '#e0563c' };
+const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 0.75, caseA: 0.55,
+               clear: 0.8, spent: '#e0563c' };
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -6512,9 +6520,22 @@ function ringCasing(){ return pickTextColor(TH.stripeA || TH.court || '#000000')
 // which then ties it to the picture by probing the gap the layout claims is there.
 function ringLayout(p, r){
   const stamW = Math.max(RING.stamMin, r*RING.stamW);
-  const stamR = r*SPRINT.ring;
+  // ⚠️ **THE STAMINA RING'S RADIUS IS DERIVED, not a multiple.** It was `r*SPRINT.ring`
+  // (1.30), and a fixed multiple is the wrong shape for it: what actually decides how
+  // close it can sit is the DISC GUIDE RING, which is structural and may never be covered
+  // — so the answer is "just outside the guide ring, wherever that is", which changes with
+  // the body size. Derived, it hugs the player at every radius and on every court, and
+  // `SPRINT.ring` is DELETED rather than left unread: a constant nothing uses is the
+  // second place a radius lives, and `tests/sprint.mjs` was already locating the arc
+  // with it — the same hard-coded-copy trap `tells.mjs` records for the wind-up ring.
+  const guideW = Math.max(1, r * DISC_GUIDE.w);
+  const stamR = r + guideW + RING.clear + RING.case + stamW/2;
   const gap = Math.max(RING.gap, r*RING.gapR);
   const kickW = Math.max(2, r*0.16) * (1 + chargeFrac(p)*0.45);
+  // ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets, never its width right
+  // now.** The stroke grows with the charge, so reserving against the live width made the
+  // ring CREEP OUTWARD as you held KICK — measured drifting 21.6 → 21.8px across one
+  // wind-up. A ring that is a tell about the shot must not also be a tell about itself.
   // ⚠️ **A BAND IS THE STROKE PLUS ITS CASING, on both sides.** Clearing the strokes alone
   // still overlapped — the casing is `RING.case` wider each side of each ring, so 2.6px of
   // the daylight was already spoken for. Widening `gap` did not fix it and made it worse
@@ -6522,11 +6543,12 @@ function ringLayout(p, r){
   // has to clear, not the centre lines.
   const stamOuter = stamR + stamW/2 + RING.case;
   const kickHalf = kickW/2 + RING.case;
+  const kickHalfMax = (Math.max(2, r*0.16) * 1.45)/2 + RING.case;
   // ⚠️ Reserved on the SETTING, not on the stamina ring being up right now — it appears the
   // frame after KICK goes down, so a live test would jump the wind-up ring outward one
   // frame in. The wind-up radius is a player dial and keeps whatever it is set to unless
   // that would put it through the stamina arc.
-  const kickR = Math.max(r*kickRingMul(), sprintsFor(p) ? stamOuter + gap + kickHalf : 0);
+  const kickR = Math.max(r*kickRingMul(), sprintsFor(p) ? stamOuter + gap + kickHalfMax : 0);
   return { stamR, stamW, kickR, kickW, gap, stamOuter, kickInner: kickR - kickHalf };
 }
 const SPRINTOPT = {

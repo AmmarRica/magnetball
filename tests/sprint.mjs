@@ -357,6 +357,19 @@ const bands = await p.evaluate(() => {
   // reading WORSE: 110 of ink in what was supposed to be daylight.
   o.clearance = +(L.kickInner - L.stamOuter).toFixed(2);
   o.reallyClear = o.clearance >= L.gap * 0.9;
+  // ⚠️ **AND THE WIND-UP RING DOES NOT CREEP OUTWARD AS YOU CHARGE.** Its stroke grows
+  // with the wind-up, and the reservation was computed from the width RIGHT NOW — so the
+  // ring drifted outward across a single hold (measured 21.6 → 21.8px). A ring that is a
+  // tell about the shot must not also be a tell about itself. Reserved on the widest it
+  // ever gets, so the radius is a constant; sampled at both ends of the charge, since one
+  // reading cannot see a drift.
+  const rq = me.r * M.cam.s * M.cam.body;
+  const was = me.chargeT;
+  me.chargeT = 0;    const kEmpty = M.ringLayout(me, rq).kickR;
+  me.chargeT = 999;  const kFull  = M.ringLayout(me, rq).kickR;
+  me.chargeT = was;
+  o.kickREmpty = +kEmpty.toFixed(2); o.kickRFull = +kFull.toFixed(2);
+  o.radiusHoldsStill = Math.abs(kFull - kEmpty) < 0.01;
   // ⚠️ ...and the PICTURE agrees: ink where the layout puts each ring, plain pitch in the
   // gap between them. Without this the layout could say anything and the draw ignore it.
   const mid = (L.stamOuter + L.kickInner) / 2;
@@ -386,6 +399,9 @@ const bands = await p.evaluate(() => {
 
 ok('the two rings clear each other', bands.reallyClear,
    `${bands.clearance}px of daylight between them against a wanted gap of ${bands.layout.gap} — ${JSON.stringify(bands.layout)}; they sat 0.12r apart, which on a phone is 1.2 pixels between strokes 1.6 and 2.9 wide, and the wind-up ring is drawn second`);
+ok('...and the wind-up ring HOLDS STILL as the charge builds', bands.radiusHoldsStill,
+   JSON.stringify({ empty: bands.kickREmpty, full: bands.kickRFull }) +
+   ' — its stroke widens with the wind-up, so a reservation taken from the live width walks the whole ring outward while you hold KICK');
 ok('...and the picture agrees with the layout', bands.drawnWhereItSays,
    `ink ${bands.inkAtStam} at the stamina radius, ${bands.inkAtKick} at the wind-up radius, ${bands.inkInGap} in the gap (bands found: ${JSON.stringify(bands.bandSpans)})`);
 ok('...and they are different marks, not one ring split by an antialiased pixel', bands.ringsDiffer,
@@ -416,7 +432,10 @@ const ring = await p.evaluate(() => {
   const STEPA = 3, N = 360/STEPA;
   const scan = () => {
     M.computeCam(); M.render();
-    const s = M.cam.s, rr = me.r * s * M.cam.body * M.SPRINT.ring;
+    // ⚠️ Read the radius from `ringLayout`, never from a constant in the suite: the
+    // stamina ring is derived from the disc's guide ring now, so a copy here goes on
+    // sampling bare grass and reports a perfectly good arc as invisible.
+    const s = M.cam.s, rr = M.ringLayout(me, me.r * s * M.cam.body).stamR;
     const cx = M.wx(me.x), cy = M.wy(me.y);
     const on = [];
     for (let k = 0; k < N; k++){
@@ -447,6 +466,51 @@ const ring = await p.evaluate(() => {
   // ⚠️ ...starting at TWELVE O'CLOCK and sweeping like a clock hand. Index 0 is
   // straight up, so the inked run has to begin there.
   o.startsAtTwelve = eh[0] === true && eh[1] === true;
+  // ⚠️ **AND IT MUST NOT SWALLOW THE DISC'S GUIDE RING**, which is the claim that replaced
+  // the old magic 1.30: the stamina radius is derived from the guide ring's own width, so
+  // that ring is what decides how close the arc can sit, and it is structural — every skin
+  // gets one because a player is a circle of radius `r` and that circle is what collides.
+  // Probed the same way as the gap between the two rings, one layer in: the daylight
+  // between the guide ring's outer edge and the stamina band's inner edge must be real.
+  {
+    const s = M.cam.s, rr = me.r * s * M.cam.body;
+    const L = M.ringLayout(me, rr);
+    const guideOut = rr + Math.max(1, rr * M.DISC_GUIDE.w);
+    const stamIn = L.stamR - L.stamW/2 - M.RING.case;
+    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamIn.toFixed(2);
+    o.clearsTheGuideRing = stamIn > guideOut;
+    // ⚠️ **AND THE PIXELS AGREE — measured as "unchanged", not as "bare pitch".** The
+    // daylight between the two is a fraction of a pixel wide by design (the arc hugs the
+    // player), so a midpoint probe reads the antialiased edges of both and reports 426 of
+    // 765 on a build where nothing overlaps at all. What the claim actually says is that
+    // the arc does not PAINT OVER the guide ring, so the honest measurement is the guide
+    // ring's own pixels with the arc up against the same pixels with it down.
+    const ringPx = () => { M.computeCam(); M.render();
+      const cx = M.wx(me.x), cy = M.wy(me.y), out = [];
+      for (let k = 0; k < N; k++){
+        const t = (k*STEPA - 90) * Math.PI/180;
+        // ⚠️ Sample the guide ring ITSELF, at `rr`. The first version probed
+        // `guideOut * 0.985`, and `guideOut` is `r + lw` — the OUTER edge of the band, so
+        // that lands in the daylight beyond it and measured the stamina arc's own casing
+        // rather than the ring it is supposed to be protecting. It reported 290 of change
+        // on a build where the guide ring is untouched.
+        const px = Math.round((cx + Math.cos(t)*rr) * dpr);
+        const py = Math.round((cy + Math.sin(t)*rr) * dpr);
+        const d = c.getImageData(px, py, 1, 1).data; out.push([d[0], d[1], d[2]]);
+      }
+      return out; };
+    me.stam = 1; me.spent = false;   const guideBare = ringPx();
+    me.stam = 0.5; me.spent = false; const guideArc  = ringPx();
+    let worst = 0;
+    for (let k = 0; k < N; k++)
+      worst = Math.max(worst, Math.abs(guideArc[k][0]-guideBare[k][0])
+                            + Math.abs(guideArc[k][1]-guideBare[k][1])
+                            + Math.abs(guideArc[k][2]-guideBare[k][2]));
+    o.guideUntouched = worst;
+    // ⚠️ ...and the arc really was drawn in that render, or "untouched" is what you get
+    // from comparing two identical pictures.
+    o.arcWasUp = o.halfExtra > N*0.20;
+  }
   M.sel.sprint = 'off';
   return o;
 });
@@ -583,6 +647,9 @@ ok('...that SHRINKS as it drains', ring.shrinksAsItDrains,
    `${ring.halfExtra} at half, ${ring.lowExtra} at empty`);
 ok('...sweeping from twelve o\'clock', ring.startsAtTwelve,
    'it is a clock, and a clock hand starts at the top');
+ok('...and it never swallows the disc\'s GUIDE RING', ring.clearsTheGuideRing && ring.arcWasUp && ring.guideUntouched <= 24,
+   JSON.stringify({ guideOut: ring.guideOut, stamIn: ring.stamIn, worstPixelChange: ring.guideUntouched, arcWasUp: ring.arcWasUp }) +
+   ' — the stamina radius is DERIVED from the guide ring\'s width rather than a fixed multiple, so that ring is what decides how close the arc can sit, and it is structural: every skin gets one because a player is a circle of radius r and that circle is what collides');
 
 ok('a slider ignores a touch on its TRACK', drag.found && drag.trackRefusedOnTouch,
    `grab window ${drag.grabPx}px — a range input jumps to wherever you press, and on a phone that rewrites a tuned value from a graze while scrolling`);

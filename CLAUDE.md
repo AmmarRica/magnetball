@@ -2343,6 +2343,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `ringLayout(p, r)` **reserves the stamina ring's footprint and pushes the wind-up ring
   out to clear it**, rather than moving either to a new fixed multiple — the wind-up radius
   is a player DIAL and keeps whatever it is set to unless it would collide.
+  ⚠️ **THE STAMINA RADIUS IS DERIVED, and `SPRINT.ring` (1.30) IS DELETED.** Reported as
+  *"I don't see a circle around the player anymore"*, and the measurement is the report:
+  on Classic (body 11.1px) the wind-up ring was sitting at **1.94r** against a dial of
+  1.42, so the circle that used to hug the player was a wide faint ring at nearly twice the
+  body radius and the thing beside the player was a partial arc. A fixed multiple is the
+  wrong shape for the stamina ring anyway: what decides how close it can sit is the **disc
+  guide ring**, which is structural and may never be covered — so the answer is "just
+  outside the guide ring, wherever that is", which moves with the body size. Derived, it
+  hugs the player at every radius and on every court, and there is no constant left for
+  anybody to keep in step with `DISC_GUIDE.w`. `tests/sprint.mjs` was locating the arc with
+  that very constant, which is the hard-coded-copy trap `tells.mjs` records for the wind-up
+  ring one entry down; it reads `ringLayout` now.
+  ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets**, never its width right
+  now: the stroke grows with the charge, so a live reading walked the whole ring outward
+  across one hold (21.3 → 21.8px). A ring that is a tell about the shot must not also be a
+  tell about itself. Sampled at both ends of the charge, since one reading cannot see a drift.
+  ⚠️ **THREE CONCENTRIC BANDS DO NOT FIT ROUND A SMALL BODY, and that is the real limit
+  here.** Guide ring, stamina ring and wind-up ring are each a stroke plus a casing either
+  side — about 3.2px — and between the disc rim and the dial's 1.42r there is 4.7px of
+  room. So the dial cannot be honoured while a stamina ring exists, and the tightening only
+  buys so much: **1.94r → 1.81r** measured, with the gap from the body edge falling from
+  0.94r to 0.81r. Every number was found by sweeping against the pixels rather than picked
+  — `clear` below 0.8 has the arc's casing painting on the guide ring, and `gap` below 1.8
+  leaves 58 of ink in the daylight where a real gap reads 8, which is inside the range the
+  sabotage builds produce (65 and 78) and so no longer separates them.
   ⚠️ **A BAND IS THE STROKE PLUS ITS CASING**, on both sides. Clearing the strokes alone
   still overlapped (2.6px of the daylight was already spoken for), and widening the gap
   instead made it **worse** — it pushed the wind-up ring's own casing further in, and the
