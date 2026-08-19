@@ -2234,8 +2234,43 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the tail instead read **0**, because 90 steps at full pelt puts the body into
   `integrate`'s boundary clamp and it is pressed against a wall. The body is held at the
   centre and everyone else parked at the far end; only its velocity is being measured.
+  ⚠️ **THE TWO RINGS ROUND A PLAYER MUST NOT TOUCH, AND THEY DID** (`RING`, `ringLayout`,
+  `ringCasing`). The stamina clock sits at 1.30r and the wind-up ring at 1.42r — **0.12r
+  apart, which on a phone is 1.2 PIXELS** between strokes 1.6px and up to 2.9px wide. They
+  overlapped, the wind-up ring is drawn second, and it painted straight over the stamina
+  arc: holding KICK showed one fat gold band and no stamina at all. Invisible while Sprint
+  was off by default; the first thing anybody saw once it shipped on.
+  ⚠️ `ringLayout(p, r)` **reserves the stamina ring's footprint and pushes the wind-up ring
+  out to clear it**, rather than moving either to a new fixed multiple — the wind-up radius
+  is a player DIAL and keeps whatever it is set to unless it would collide.
+  ⚠️ **A BAND IS THE STROKE PLUS ITS CASING**, on both sides. Clearing the strokes alone
+  still overlapped (2.6px of the daylight was already spoken for), and widening the gap
+  instead made it **worse** — it pushed the wind-up ring's own casing further in, and the
+  probe read 110 of ink in what was supposed to be clear pitch. The edges clear, not the
+  centre lines.
+  ⚠️ Reserved on `sprintsFor(p)`, **never on "is the stamina ring on screen right now"** —
+  it appears the frame after KICK goes down, so a live test jumps the wind-up ring outward
+  one frame in.
+  ⚠️ **BOTH RINGS ARE CASED IN THE PITCH'S OPPOSITE INK, and RECOLOURING THEM WAS TRIED
+  FIRST AND WAS WRONG.** The problem is real — on Grass, the default palette, `TH.good` is
+  `#3ec06a` against mown stripes of `#2f9e52`, a green ring on green grass at **1.29:1**,
+  and the gold wind-up ring is 2.09:1. But running them through `readableInk`, the way the
+  ball's spot colour is, took the green to **#164325** and the spent red to **#65271b**:
+  `pickTextColor` finds more headroom below mid-green than above it, so both were pushed
+  DOWN. A dark green arc on grass reads as a shadow, the one distinction the ring exists to
+  make — green for go, red for locked out — collapsed into two dark browns, and the gold
+  ring came out near-black. So the colour is left alone and a thin casing is drawn under
+  it: this file's standing idiom (the guide ring on every disc, the name plate's halo,
+  `paintCap`'s outline), and it works on palettes nobody has made yet.
+  ⚠️ `tests/sprint.mjs` asks `ringLayout` for the geometry and then **ties it to the
+  picture** — ink at each radius, plain pitch at the midpoint. Its first version counted
+  inked bands along a ray, found two, and **passed on a build with the rings back on top of
+  each other**, because one of the two it had found was the disc's own rim. And the ink is
+  the PEAK across a band, not the pixel at its centre: the centre of the stamina arc is
+  green on green by definition and the casing is at the edges, so sampling the middle
+  measures the thing that was invisible and reports it as still invisible.
   ⚠️ The ring is drawn only while there is something to say (a permanent ring round
-  every body is furniture), sweeps from twelve o'clock, and turns to `TH.bad` when
+  every body is furniture), sweeps from twelve o'clock, and turns to `RING.spent` when
   spent — "nearly empty" and "locked out" feel identical from an arc length alone. The
   suite measures it as a **difference against the same body drawn rested**: the disc
   already has a guide ring and a rim within a few pixels of that radius, so an absolute

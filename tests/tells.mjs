@@ -95,8 +95,12 @@ const r = await p.evaluate(async ()=>{
   //    at the charge-ring radius.
   me.x=0; me.y=0; me.vx=0; me.vy=0; me.kick=false; me.chargeT=0;
   M.resetTrails();
-  const ringAt = () => { const rr=me.r*M.cam.s*1.42;
-    return px(M.wx(me.x), M.wy(me.y) - rr); };      // top of the ring
+  // ⚠️ The radius comes from `ringLayout`, never from a 1.42 written here. That constant
+  // is the wind-up ring's DIAL default, and the ring is pushed outward when it would
+  // collide with the stamina clock — so a hard-coded copy went on sampling bare grass and
+  // reported the wind-up ring as invisible on a build where it is drawn perfectly well.
+  const ringR = () => M.ringLayout(me, me.r*M.cam.s*M.cam.body).kickR;
+  const ringAt = () => px(M.wx(me.x), M.wy(me.y) - ringR());      // top of the ring
   M.drawPitch(w); M.drawDiscs(w);
   const idle = ringAt();
   me.kick=true; me.chargeT=M.CHARGE.max; me.holdT=0;
@@ -108,12 +112,12 @@ const r = await p.evaluate(async ()=>{
   //     circle is drawn (left and right sides equally inked, not an arc filling
   //     clockwise from the top), and its brightness varies frame to frame.
   const ringInk = () => { const [sx,sy]=M.screenPt(M.wx(me.x), M.wy(me.y));
-    const R=Math.round(me.r*1.42*M.cam.s)+3;
+    const R=Math.round(ringR())+4;
     const d2=c2.getImageData(Math.round(sx*DPR)-R, Math.round(sy*DPR)-R, R*2, R*2).data;
     let n=0; for(let i=0;i<d2.length;i+=4) if(d2[i]+d2[i+1]+d2[i+2]>330) n++;
     return n; };
   const halves = () => { const [sx,sy]=M.screenPt(M.wx(me.x), M.wy(me.y));
-    const R=Math.round(me.r*1.42*M.cam.s)+3;
+    const R=Math.round(ringR())+4;
     const g=(x0)=>{ const d2=c2.getImageData(x0, Math.round(sy*DPR)-R, R, R*2).data;
       let n=0; for(let i=0;i<d2.length;i+=4) if(d2[i]+d2[i+1]+d2[i+2]>330) n++; return n; };
     return [ g(Math.round(sx*DPR)-R), g(Math.round(sx*DPR)) ]; };

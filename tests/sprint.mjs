@@ -288,6 +288,112 @@ const det = await p.evaluate(() => {
            sample: a.slice(0, 60) };
 });
 
+// =========================== TWO RINGS, AND YOU CAN SEE BOTH OF THEM ==
+// ⚠️ Reported as "make sure you can see stamina and kick circles", and the geometry says
+// why you could not: the stamina clock sits at 1.30r and the wind-up ring at 1.42r, which
+// on a phone is **1.2 PIXELS** between strokes 1.6px and up to 2.9px wide. They overlapped
+// and the wind-up ring, drawn second, painted straight over the stamina arc — one fat gold
+// band and no stamina at all. It only became visible when Sprint shipped ON by default.
+// ⚠️ Measured by SCANNING OUTWARD along a ray and counting separate inked bands, which is
+// the claim itself: two rings you can tell apart is two runs of ink with pitch between
+// them. A build where they merge reads as one run however wide it is.
+// ⚠️ The ray goes straight UP, because the stamina arc is drawn clockwise from twelve — at
+// any other angle a part-drained ring may legitimately have no arc there, and the check
+// would pass on a build that draws no stamina at all.
+// ⚠️ Grass on purpose, and pinned: it is the DEFAULT palette and the one where both rings
+// were hardest to find (green `TH.good` on green mown stripes is 1.29:1, gold on green is
+// 2.09:1). A suite that samples pixels has to say which palette it is sampling.
+const bands = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.applyTheme('grass');
+  M.sel.sprint = 'on'; M.sel.mode = '1v1'; M.sel.lobby = 'off';
+  M.setMatchSeed(7); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const me = w.players.find(q => q.ctrl === 'human1') || w.players[0];
+  me.x = 0; me.y = 0; me.vx = me.vy = 0;
+  w.ball.x = 9000; w.ball.y = 9000;
+  for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }
+  // Hold KICK for a second: the wind-up ring is up and the stamina ring is part drained.
+  for (let i = 0; i < 70; i++){
+    M.pads.p1.dx = 0; M.pads.p1.dy = 0; M.pads.p1.kick = true;
+    me.x = 0; me.y = 0; w.ball.x = 9000; w.ball.y = 9000;
+    M.step(w);
+  }
+  M.pads.p1.kick = false;
+  M.renderAlpha = 1; M.render();
+  o.stam = +me.stam.toFixed(2); o.charge = +(me.chargeT || 0).toFixed(2);
+  const cv = document.getElementById('game'), c = cv.getContext('2d');
+  const dpr = cv.width / cv.clientWidth;
+  const cx = M.wx(me.x), cy = M.wy(me.y);
+  const r = me.r * M.cam.s * M.cam.body;
+  // Plain pitch a long way out along the same ray, as the "this is court" reference.
+  const at = (rad) => { const px = Math.round(cx * dpr), py = Math.round((cy - rad) * dpr);
+                        const d = c.getImageData(px, py, 1, 1).data; return [d[0], d[1], d[2]]; };
+  const court = at(r * 6);
+  const far = (q) => Math.abs(q[0]-court[0]) + Math.abs(q[1]-court[1]) + Math.abs(q[2]-court[2]);
+  // Scan from just outside the disc's own rim out to well past the wind-up ring.
+  const runs = []; let cur = null;
+  for (let rad = r * 1.20; rad <= r * 2.6; rad += 0.25){
+    const inked = far(at(rad)) > 24;
+    if (inked){ if (!cur){ cur = { from: rad, to: rad, peak: 0, col: null }; runs.push(cur); }
+                cur.to = rad;
+                const q = at(rad), d = far(q);
+                if (d > cur.peak){ cur.peak = d; cur.col = q; } }
+    else cur = null;
+  }
+  o.runs = runs.length;
+  o.bandSpans = runs.map(x => [+x.from.toFixed(1), +x.to.toFixed(1)]);
+  // ⚠️ **NOT "there are two runs of ink".** The first version of this asserted exactly
+  // that, found two, and PASSED on a build with the rings back on top of each other —
+  // because one of the two it had found was the disc's own rim, which sits a couple of
+  // pixels further out than the scan started. The claim has to name the two rings.
+  const L = M.ringLayout(me, r);
+  o.layout = { stamR:+L.stamR.toFixed(1), stamW:+L.stamW.toFixed(1),
+               kickR:+L.kickR.toFixed(1), kickW:+L.kickW.toFixed(1), gap:+L.gap.toFixed(1),
+               stamOuter:+L.stamOuter.toFixed(1), kickInner:+L.kickInner.toFixed(1) };
+  // ⚠️ Measured on the BANDS — stroke plus casing — not the stroke centre lines. Clearing
+  // the strokes alone still left the two casings overlapping, and the first fix widened
+  // `gap` instead, which pushed the wind-up ring's own casing further in and made the
+  // reading WORSE: 110 of ink in what was supposed to be daylight.
+  o.clearance = +(L.kickInner - L.stamOuter).toFixed(2);
+  o.reallyClear = o.clearance >= L.gap * 0.9;
+  // ⚠️ ...and the PICTURE agrees: ink where the layout puts each ring, plain pitch in the
+  // gap between them. Without this the layout could say anything and the draw ignore it.
+  const mid = (L.stamOuter + L.kickInner) / 2;
+  // ⚠️ The PEAK across the band, not the pixel at its centre. The centre of the stamina
+  // arc is the arc's own colour — which on grass is green on green, 66 away from the
+  // court — and the whole point of the casing is that it sits at the EDGES. Sampling the
+  // middle measures the thing that was already invisible and reports it as still
+  // invisible, which is how the first run of this failed a build that works.
+  const peak = (rad, half) => { let m = 0;
+    for (let d = -half; d <= half; d += 0.25) m = Math.max(m, far(at(rad + d)));
+    return Math.round(m); };
+  o.inkAtStam = peak(L.stamR, L.stamW/2 + M.RING.case);
+  o.inkAtKick = peak(L.kickR, L.kickW/2 + M.RING.case);
+  o.inkInGap  = far(at(mid));
+  // ⚠️ Thresholds picked off BOTH builds, not off the passing one: with the casing removed
+  // the stamina band reads 87 and the gap fills to 65, and with the rings overlapping the
+  // gap reads 78 — so 110 and 40 sit clear of every sabotage and clear of the real build's
+  // 167 and 8.
+  o.drawnWhereItSays = o.inkAtStam > 110 && o.inkAtKick > 110 && o.inkInGap < 40;
+  // ⚠️ ...and they are DIFFERENT MARKS. Sampled at the two radii the layout names, never
+  // at whatever the scan happened to find.
+  const a = at(L.stamR), b2 = at(L.kickR);   // the marks' own colours, band centres
+  o.innerCol = a; o.outerCol = b2;
+  o.ringsDiffer = Math.abs(a[0]-b2[0]) + Math.abs(a[1]-b2[1]) + Math.abs(a[2]-b2[2]) > 60;
+  return o;
+});
+
+ok('the two rings clear each other', bands.reallyClear,
+   `${bands.clearance}px of daylight between them against a wanted gap of ${bands.layout.gap} — ${JSON.stringify(bands.layout)}; they sat 0.12r apart, which on a phone is 1.2 pixels between strokes 1.6 and 2.9 wide, and the wind-up ring is drawn second`);
+ok('...and the picture agrees with the layout', bands.drawnWhereItSays,
+   `ink ${bands.inkAtStam} at the stamina radius, ${bands.inkAtKick} at the wind-up radius, ${bands.inkInGap} in the gap (bands found: ${JSON.stringify(bands.bandSpans)})`);
+ok('...and they are different marks, not one ring split by an antialiased pixel', bands.ringsDiffer,
+   `inner ${JSON.stringify(bands.innerCol)} against outer ${JSON.stringify(bands.outerCol)}`);
+ok('...and both stand off the pitch on GRASS, the palette they hid on',
+   bands.inkAtStam > 110 && bands.inkAtKick > 110,
+   `${bands.inkAtStam} / ${bands.inkAtKick} against the court — green on green is 1.29:1 and gold on green 2.09:1, which is what the casing is for`);
+
 // ==================================================== the ring, in pixels ==
 // ⚠️ Measured as RENDERED INK, never from the flag — a "stamina exists" check passes on
 // a build that draws nothing at all.
