@@ -96,11 +96,23 @@ const labels = await p.evaluate(() => {
   w.ball.x = 0; w.ball.y = 0;
   const fadeAt = d => { me.x = d; me.y = 0; M.computeCam(); M.render(); M.advanceLabels();
     for (let i = 0; i < 60; i++) M.advanceLabels(); return +(M.labelA[0] ?? 1).toFixed(3); };
+  // ⚠️ **THE RAMP HAS A FLOOR NOW (`LABEL_MIN`), so where this probes matters.** It used
+  // to sample `far * 0.55`, which the `t²` fade puts at 0.30 — under the floor, so it
+  // reads exactly 0 and "part way down" became "gone". The regime the ramp still lives in
+  // is [LABEL_MIN, 1], so the mid probe is derived from the floor rather than picked:
+  // t = sqrt((1 + LABEL_MIN) / 2) puts the value halfway between the floor and full.
+  const midT = Math.sqrt((1 + M.LABEL_MIN) / 2);
   o.farAway = fadeAt(M.LABEL_BALL.far * 2.2);
-  o.midWay  = fadeAt(M.LABEL_BALL.far * 0.55);
+  o.midWay  = fadeAt(M.LABEL_BALL.far * midT);
   o.onTop   = fadeAt(0);
   o.goesToZero = o.onTop <= 0.004;
   o.isARamp = o.farAway > 0.9 && o.midWay > o.onTop && o.midWay < o.farAway;
+  // ⚠️ ...and it SNAPS at the floor rather than trailing off into an unreadable band —
+  // the half of the rule that answers "if it is that blurry then just hide it". Just
+  // under the floor is exactly zero, not merely small.
+  o.floor = M.LABEL_MIN;
+  o.justUnderTheFloor = fadeAt(M.LABEL_BALL.far * Math.sqrt(Math.max(0, M.LABEL_MIN - 0.03)));
+  o.snapsAtTheFloor = o.justUnderTheFloor === 0 && o.midWay >= M.LABEL_MIN;
   return o;
 });
 
@@ -228,6 +240,9 @@ ok('a name plate goes COMPLETELY at the strongest point', labels.hidesCompletely
 ok('...and it is still a ramp, not a switch', labels.isARamp,
    JSON.stringify({ far: labels.farAway, mid: labels.midWay, onTop: labels.onTop }) +
    ' — plates have to thin out as they approach rather than snapping off at a line');
+ok('...down to a LEGIBLE floor, then nothing', labels.snapsAtTheFloor,
+   JSON.stringify({ floor: labels.floor, mid: labels.midWay, justUnder: labels.justUnderTheFloor }) +
+   ' — everything the draw accepts must be readable, and everything below it exactly zero: a plate too faint to read is a smear that says a name is there without saying which');
 
 ok('the in-match bar offers NO save', btns.noSaveOnTheMatchBar,
    JSON.stringify(btns.inMatchButtons) + ' — it comes up between a goal and the kickoff, and saving a file is not something to offer while there is a match to get back to');

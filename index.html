@@ -4375,7 +4375,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.1240PM';
+const VERSION = '20260819.0245PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4391,14 @@ const VERSION = '20260819.1240PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0245PM', title: 'Readable or gone',
+    added: [],
+    changed: [
+      '<b>A player\u2019s name is either readable or it is not there.</b> Names fade out as the ball comes near, and the fade had a long tail \u2014 over most of the pitch a name was drawn faint enough that you could see something was written above a player without being able to tell what. It now dims a little as the ball approaches and then goes completely.',
+      '<b>And the ball goes back to being a ball.</b> Belt it and you get a long streak; let it come to a stop and the streak clears away, leaving the plain round ball behind.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.1240PM', title: 'The ball stops growing a lump',
     added: [],
     changed: [
@@ -24483,11 +24491,24 @@ const LABEL_DIM = 0, LABEL_FADE = 0.18;
 // It is still a RAMP: the fade runs from `far` down to nothing, so plates thin out as
 // they approach rather than snapping off at a line.
 const LABEL_BALL = { far: 190, near: 0 };
+// ⚠️ **READABLE OR GONE — there is no faint state any more.** Reported as *"the text
+// player name in game is worthless and can't be read; if it is that blurry then just hide
+// it"*, and the ramp is what produced it: `far` is 190 world units on a pitch 440 across,
+// and the fade is `t²`, so a body 90 units from the ball drew its name at **0.22 alpha**.
+// Most of the pitch was therefore rendering names in a band too faint to read and too
+// present to ignore — a smear that says a name is there without saying which.
+// ⚠️ So the ramp SNAPS: anything under `LABEL_MIN` is zero, and `drawOneDisc` refuses to
+// draw below the same number. What is left is a plate that dims a little as the ball comes
+// near and then goes, which is the whole of what the near-ball rule was ever for.
+// ⚠️ ONE constant, read by the ramp and by the draw. Two numbers would drift into exactly
+// the state this removes: a plate the fade says to show and the draw declines to.
+const LABEL_MIN = 0.55;
 // How much a plate should show given the distance from it to the nearest ball.
 function labelBallFade(d){
   if (!(d < LABEL_BALL.far)) return 1;
   const t = Math.max(0, d) / LABEL_BALL.far;             // 0 at the ball, 1 at the edge
-  return LABEL_BALL.near + (1 - LABEL_BALL.near) * (t * t);
+  const v = LABEL_BALL.near + (1 - LABEL_BALL.near) * (t * t);
+  return v < LABEL_MIN ? 0 : v;
 }
 // By index, NOT on the player — the replay rebuilds its player objects every frame,
 // which re-seeds anything stored there and the fade never converges.
@@ -24771,7 +24792,10 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         labelT[idx] = target;
       }
       const a = (idx != null && labelA[idx] != null) ? labelA[idx] : target;
-      if (a > 0.004){
+      // ⚠️ Below `LABEL_MIN` nothing is drawn at all — see labelBallFade. A plate is either
+      // legible or absent; the band in between is a smudge that tells you a name is there
+      // without telling you which, and it was most of the pitch.
+      if (a >= LABEL_MIN){
         // ⚠️ OUTLINED, NOT BOXED. It used to be a filled plate behind every name, which
         // is a rectangle of solid colour parked over the pitch above each of eight
         // bodies — furniture, right where the play is. What the box was FOR is legible
@@ -26401,7 +26425,7 @@ if (window.__MAGNETDEBUG) {
     get paused(){ return paused; }, get running(){ return running; }, togglePause, updateScoreUI, overButtons,
     pitchHorizontal, applySeatRotation, toggleFullscreen, isFullscreen, updateFsUI, buildSettings,
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt, screenUpright, rgba,
-    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, advanceLabels, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
+    screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, LABEL_MIN, labelBallFade, LABEL_BALL, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, advanceLabels, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
     GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,

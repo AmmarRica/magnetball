@@ -390,7 +390,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   with no constant tuned to a speed or a zoom. Measured as a DIFFERENCE against the same
   frame with no trail, or the ball's own round body reports a 1:1 box on every build.
   ⚠️ Paired with "at full pelt there is still a REAL streak", because *never wider than
-  long* is also satisfied by drawing nothing. `tests/tells.mjs`.
+  long* is also satisfied by drawing nothing.
+  ⚠️ **AND THE BALL GOES BACK TO BEING A BALL** — asked for in those words. Belt it and
+  the silhouette is a long streak; let it stop and what is left is the round shape it
+  started as, measured against the same never-kicked frame. **TWO independent guards hold
+  that**, so a sabotage of either alone proves nothing: `drawBallTrail` returns below
+  `BALL_MIN_SPD`, and `advanceTrails` keeps pushing the parked ball's own position, so
+  the ring fills with duplicates and the old distant points shift out. With both removed
+  a settled ball measures **17×147** instead of 17×17.
+  ⚠️ **"No wider than the ball" is NOT the way to check the width rule, and it was tried.**
+  A box round the ball AND its streak cannot separate the two, and the stub the flat-width
+  build drew is *narrower* than the ball it was stuck to — so the check passed on exactly
+  the build it existed to catch. The width rule stays in the `crawlBox`/`beltBox` pair,
+  which measures the streak alone as a difference. `tests/tells.mjs`.
 - **Motion tells:** short dot tails behind the players and one streak behind the ball,
   both capped in world units (`DOT_GAP`/`DOT_MAX`, `BALL_LEN_MAX`). ⚠️ A three-second,
   time-measured version of these was built and **reverted**: at the speed cap it drew a
@@ -1350,6 +1362,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   request. Right on top of the ball is where a name is worth least and the play is worth
   most, so it goes completely; `drawDiscs` skips a plate under `a > 0.004`, so a target of
   0 stops it being drawn at all. The two rules compose by taking the quieter answer.
+  ⚠️ **READABLE OR GONE — there is no faint state any more** (`LABEL_MIN`, 0.55).
+  Reported as *"the text player name in game is worthless and can't be read; if it is
+  that blurry then just hide it"*, and the ramp is what produced it: `far` is 190 world
+  units on a pitch 440 across and the fade is `t²`, so a body **90 units from the ball
+  drew its name at 0.22 alpha**. Most of the pitch was therefore rendering names in a
+  band too faint to read and too present to ignore — a smear that says a name is there
+  without saying which. So the ramp **snaps**: `labelBallFade` returns 0 below the floor
+  and `drawOneDisc` refuses to draw below the same number. What is left is a plate that
+  dims a little as the ball comes near and then goes, which is the whole of what the
+  near-ball rule was ever for.
+  ⚠️ **ONE constant, read by the ramp and by the draw.** Two numbers would drift into
+  exactly the state this removes — a plate the fade says to show and the draw declines to.
+  ⚠️ **It made two existing checks VACUOUS, and that is the interesting part.**
+  `tests/labels.mjs` probed the halo at 0.5 / 0.3 / 0.15 / 0.08, every one of which now
+  renders as *nothing* — so "the halo never outlives its text" was passing because there
+  was no text and no halo on the pitch at all. The probes are spaced across
+  `[LABEL_MIN, 1]` now, which is the range that is actually drawn. `tests/gamesave.mjs`
+  sampled the ramp at `far * 0.55` (value 0.30, under the floor) and read "part way down"
+  as "gone"; its mid probe is **derived from the floor** — `t = sqrt((1+LABEL_MIN)/2)`,
+  halfway between the floor and full — rather than picked, so retuning the floor cannot
+  quietly make it vacuous again. Both suites now also pin the floor from the other side:
+  just under it is **exactly zero**, not merely small.
 - **Fireworks for the goal that WINS it (`FIREWORK`, `startFireworks`,
   `advanceFireworks`, `w.fwT`):** every goal got the same confetti and then the pitch went
   quiet, so the one that won the match looked like the one that made it 1-0.

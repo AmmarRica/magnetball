@@ -129,6 +129,56 @@ const r = await p.evaluate(async ()=>{
   };
   o.crawlBox = streakBox(0, -1.1, 10);
   o.beltBox  = streakBox(0, -18, 10);
+  // ⚠️ **AND THE BALL GOES BACK TO BEING A BALL.** Asked for in as many words. Measured on
+  // the whole drawn object — ball plus whatever the streak adds — so a resting ball has to
+  // come out as a CIRCLE, and the streak may only ever lengthen it, never widen it. The
+  // width is the load-bearing half: it is what a lump does and a streak does not.
+  const objBox = (vy, n, park) => {
+    const sx = 0, sy = 140;
+    const place = () => { w.ball.vx=0; w.ball.vy=vy; w.ball.x=sx; w.ball.y=sy - vy*n; };
+    const R = 150;
+    const bx0 = Math.round((M.wx(sx) - R) * DPR), by0 = Math.round((M.wy(sy) - R) * DPR);
+    const wpx = Math.round(R*2*DPR), hpx = Math.round(R*2*DPR);
+    M.resetTrails(); place();
+    for (let i=0;i<n;i++){ w.ball.y+=vy; }
+    M.drawPitch(w);
+    const bare = c2.getImageData(bx0, by0, wpx, hpx).data;
+    M.resetTrails(); place();
+    for (let i=0;i<n;i++){ M.advanceTrails(w); w.ball.y+=vy; }
+    // Optionally let it come to a stop and keep ticking, so the streak decays away.
+    for (let i=0;i<(park||0);i++){ w.ball.vx=0; w.ball.vy=0; M.advanceTrails(w); }
+    M.drawPitch(w); M.drawBallTrail(w); M.drawBall(w);
+    const full = c2.getImageData(bx0, by0, wpx, hpx).data;
+    let lx=1e9, hx=-1e9, ly=1e9, hy=-1e9, hits=0;
+    for (let py2=0; py2<hpx; py2++) for (let px2=0; px2<wpx; px2++){
+      const i = (py2*wpx+px2)*4;
+      const d = Math.abs(full[i]-bare[i]) + Math.abs(full[i+1]-bare[i+1]) + Math.abs(full[i+2]-bare[i+2]);
+      if (d < 12) continue; hits++;
+      lx=Math.min(lx,px2/DPR); hx=Math.max(hx,px2/DPR); ly=Math.min(ly,py2/DPR); hy=Math.max(hy,py2/DPR);
+    }
+    return hits ? { w: +(hx-lx).toFixed(1), h: +(hy-ly).toFixed(1) } : null;
+  };
+  // ⚠️ **THE BALL GOES BACK TO BEING A BALL**, asked for in those words. The shape at rest
+  // is round, a belted one is a long streak, and once it stops the streak DECAYS AWAY and
+  // what is left is the round shape again — measured against the same never-kicked frame,
+  // so "the same" is a real comparison rather than two readings of one render.
+  // ⚠️ The width rule lives in the `crawlBox`/`beltBox` pair below and NOT here, and that
+  // is deliberate: a union box of the ball AND its streak cannot separate the two, so
+  // "no wider than the ball" is trivially true of the flat-width build — the stub it
+  // drew is narrower than the ball it was stuck to. Measured; it passed on the broken
+  // build, which is why it is not in this list.
+  o.restShape    = objBox(0, 10);
+  o.fastShape    = objBox(-18, 10);
+  o.settledShape = objBox(-18, 10, 90);
+  o.ballIsRoundAtRest = !!o.restShape && Math.abs(o.restShape.w - o.restShape.h) <= o.restShape.w * 0.12;
+  o.streakLengthens = !!o.fastShape && o.fastShape.h > o.restShape.h * 2;
+  // ⚠️ TWO INDEPENDENT GUARDS hold this, so a sabotage of either alone passes and proves
+  // nothing: `drawBallTrail` returns below `BALL_MIN_SPD`, and `advanceTrails` keeps
+  // pushing the parked ball's own position so the ring fills with duplicates and the old
+  // distant points shift out. Verified by removing BOTH — settled reads 17x147 then.
+  o.roundAgainAfterAKick = !!o.settledShape && !!o.restShape &&
+      Math.abs(o.settledShape.h - o.restShape.h) <= o.restShape.h * 0.15 &&
+      Math.abs(o.settledShape.w - o.restShape.w) <= o.restShape.w * 0.15;
   // ⚠️ **THE THRESHOLD IS DERIVED, NOT PICKED, and the obvious one is VACUOUS.** A
   // round-capped stroke covers `pathLength + width` along travel and `width` across, so
   // `along >= across` is true of ANY build that draws anything at all — the first version
@@ -283,6 +333,7 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.crawlIsAStreak && r.beltIsAStreak &&   // a streak, never a lump — see 4b
+           r.ballIsRoundAtRest && r.roundAgainAfterAKick && r.streakLengthens &&
 
            r.chargeVisible > 20 &&              // wind-up reads on the disc
            r.ringSolid && r.ringInked && r.ringIsFullCircle &&  // solid, drawn, never a sweep
@@ -294,6 +345,9 @@ if(!ok) console.log('checks:', {
   movingTail:r.movingTail>12, parked:r.parkedTail<=2, speedScales:r.movingTail>r.slowTail,
   fastBall:r.fastBall>12, ballScales:r.slowBall<r.fastBall, charge:r.chargeVisible>20,
   reset:r.trailsClearedOnStart, themes:r.allThemesRead,
+  ballIsRoundAtRest:r.ballIsRoundAtRest, restShape:r.restShape,
+  roundAgainAfterAKick:r.roundAgainAfterAKick, fastShape:r.fastShape, settledShape:r.settledShape,
+  streakLengthens:r.streakLengthens,
   crawlIsAStreak:r.crawlIsAStreak, crawlBox:r.crawlBox,
   beltIsAStreak:r.beltIsAStreak, beltBox:r.beltBox,
   ringSolid:r.ringSolid, ringInked:r.ringInked, ringFull:r.ringIsFullCircle,

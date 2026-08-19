@@ -223,8 +223,13 @@ const halo = await p.evaluate(() => {
   };
   const full = ink(1);
   o.full = Math.round(full / 1000);
+  // ⚠️ **THE PROBES MUST SIT IN THE RANGE THAT IS ACTUALLY DRAWN.** They were 0.5 / 0.3 /
+  // 0.15 / 0.08, and `LABEL_MIN` (0.55) then made every one of them read exactly ZERO —
+  // so "the halo never outlives its text" passed because nothing was on the pitch at all,
+  // which is the vacuous form of the check, not the check. Spaced across [LABEL_MIN, 1)
+  // instead, so each one is a plate that IS drawn and the ratio means something.
   o.at = {}; o.fadesNoSlowerThanItSays = full > 0;
-  for (const a of [0.5, 0.3, 0.15, 0.08]){
+  for (const a of [0.95, 0.8, 0.68, M.LABEL_MIN].map(v => +(v).toFixed(3))){
     const rel = ink(a) / full;
     o.at[a] = +rel.toFixed(3);
     if (rel > a) o.fadesNoSlowerThanItSays = false;
@@ -240,6 +245,66 @@ const halo = await p.evaluate(() => {
   return o;
 });
 
+// ============================================================
+//  READABLE OR GONE — there is no faint state
+// ============================================================
+// ⚠️ Reported as "the text player name in game is worthless and can't be read; if it is
+// that blurry then just hide it". The near-ball ramp is what produced it: `far` is 190
+// world units on a pitch 440 across and the fade is t², so a body 90 units from the ball
+// drew its name at 0.22 alpha — too faint to read and too present to ignore, over most of
+// the pitch. Both the ramp and the draw now refuse anything under `LABEL_MIN`.
+// ⚠️ Measured on RENDERED INK against the same frame with no plate, never on the flag: a
+// "the plate is hidden" check that reads a number passes on a build that draws it anyway.
+const legible = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.applyBundle('grass');
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.names='KAI'; M.setMatchSeed(5); M.startMatch();
+  const w = M.world; w.state='play'; w.stateT=2;
+  const me = w.players[0];
+  me.x = 0; me.y = 0; w.ball.x = 9000; w.ball.y = 9000;
+  for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }
+  const c = document.getElementById('game'), cx = c.getContext('2d');
+  const dpr = c.width / c.clientWidth, NP = M.NAMEPLATE;
+  const band = (alpha) => {
+    M.renderAlpha = 1; M.render();            // first render snaps labelA to its target
+    M.labelA[0] = alpha;
+    M.render();
+    const px = Math.round(M.wx(me.x) * dpr);
+    const base = Math.round(M.wy(me.y) * dpr) + (15 * M.cam.s + NP.gap) * dpr;
+    const top = Math.round(base - (NP.size + 4) * dpr);
+    const h = Math.round((NP.size + 10) * dpr), half = Math.round(70 * dpr);
+    return cx.getImageData(px - half, top, half*2, h).data;
+  };
+  const base0 = band(0);
+  const ink = (alpha) => { const d = band(alpha); let sum = 0;
+    for (let i = 0; i < d.length; i += 4)
+      sum += Math.abs(d[i]-base0[i]) + Math.abs(d[i+1]-base0[i+1]) + Math.abs(d[i+2]-base0[i+2]);
+    return sum; };
+  o.min = M.LABEL_MIN;
+  o.atFull  = ink(1);
+  o.justOver  = ink(M.LABEL_MIN + 0.02);
+  o.justUnder = ink(M.LABEL_MIN - 0.02);
+  o.deepMush  = ink(0.22);                    // what a body 90 units from the ball used to get
+  o.nothingInTheMush = o.justUnder === 0 && o.deepMush === 0;
+  // ⚠️ ...and it is still DRAWN at the floor, or "nothing in the mush" is satisfied by a
+  // build that never draws a name at all. ⚠️ `atFull > 0` is not redundant: as a bare
+  // ratio the test reads `justOver > 0` on a build that draws nothing at full strength,
+  // which is exactly the build this half exists to catch (measured — a floor of 1.01
+  // passed it).
+  o.drawnAtTheFloor = o.atFull > 0 && o.justOver > o.atFull * 0.3;
+  // ⚠️ ONE constant: the ramp must agree with the draw. A distance the ramp says to show
+  // must be a value the draw will accept, and everything else must be exactly zero — two
+  // numbers would drift into a plate the fade shows and the draw declines.
+  o.rampMatchesTheDraw = true; o.rampValues = [];
+  for (let d = 0; d <= M.LABEL_BALL.far + 40; d += 10){
+    const v = M.labelBallFade(d);
+    o.rampValues.push(+v.toFixed(2));
+    if (v !== 0 && v < M.LABEL_MIN) o.rampMatchesTheDraw = false;
+  }
+  return o;
+});
+
+console.log('LEGIBLE:', JSON.stringify({ ...legible, rampValues: undefined }));
 console.log(JSON.stringify(r,null,2));
 console.log('HALO:', JSON.stringify(halo));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
@@ -250,11 +315,18 @@ const ok = okOrient(r.upright) && okOrient(r.sideways) && r.gradual && r.replayF
   r.platesDifferByTeam && r.team0ReadsRed && r.team1ReadsBlue && r.boxesMatchEachOther &&
   r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed &&
   halo.fadesNoSlowerThanItSays && halo.solidAtFullStrength &&
+  legible.nothingInTheMush && legible.drawnAtTheFloor && legible.rampMatchesTheDraw &&
   halo.oneStrokeSquares && halo.twoStrokesComposite && errors.length===0;
 if (!halo.fadesNoSlowerThanItSays)
   console.log('  the plate outlives its own text:', JSON.stringify(halo.at),
               '— each must be at or under its own alpha; the reported build reads 0.534 at 0.5 and 0.196 at 0.15');
 if (!halo.solidAtFullStrength) console.log('  the halo is no longer solid at full strength:', halo.haloAtFull);
+if (!legible.nothingInTheMush)
+  console.log(`  a plate is drawn in the unreadable band: ${legible.justUnder} of ink just under the floor and ${legible.deepMush} at 0.22, which is what a body 90 units from the ball used to get`);
+if (!legible.drawnAtTheFloor)
+  console.log(`  nothing is drawn at the floor either (${legible.justOver} against ${legible.atFull} at full) — "hidden when faint" must not be satisfied by never drawing a name`);
+if (!legible.rampMatchesTheDraw)
+  console.log('  the near-ball ramp returns values the draw will refuse:', JSON.stringify(legible.rampValues));
 if(!ok) console.log('upright:', okOrient(r.upright), '| sideways:', okOrient(r.sideways), '| gradual:', r.gradual, '| replay:', r.replayFades);
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);
