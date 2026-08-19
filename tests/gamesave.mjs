@@ -68,8 +68,14 @@ const ring = await p.evaluate(() => {
   o.clampsRubbish = (M.sel.kickRing = 9999, M.kickRingMul()) === M.KICKRING.max/100 &&
                     (M.sel.kickRing = null, M.kickRingMul()) === M.KICKRING.def/100;
 
-  // ⚠️ RENDER ONLY. The ring is a tell, not the reach — so winding it to the top must
-  // leave the world bit-identical over a stretch of play.
+  // ⚠️ **THE RENDER-ONLY CLAIM IS WITHDRAWN, and this asserts the opposite now.** The ring
+  // used to be a tell drawn well inside the real reach, and this block proved the dial
+  // could never become a hidden gameplay lever. It was reported that the ring does not
+  // show where you can actually kick: measured, the ring sat at 30 world units while the
+  // kick condition was `dist < p.r + b.r + 14` = 39, so a ball resting against the OUTSIDE
+  // of the ring was 40 away and did not kick — out by one unit, which is the kind of
+  // near-miss that makes an indicator feel broken. The ring IS the reach now, so the dial
+  // moves both and a bit-identical world would mean the fix had not landed.
   const runHash = (mul) => {
     M.sel.kickRing = mul; M.setMatchSeed(21); M.startMatch();
     const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
@@ -77,7 +83,47 @@ const ring = await p.evaluate(() => {
     return w2.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
            `#${w2.ball.x.toFixed(6)},${w2.ball.y.toFixed(6)}#${w2.score.join('-')}`;
   };
-  o.worldSame = runHash(M.KICKRING.min) === runHash(M.KICKRING.max);
+  o.dialMovesTheGame = runHash(M.KICKRING.min) !== runHash(M.KICKRING.max);
+  // ⚠️ ...and the PICTURE agrees with the physics, which is the actual claim: a ball
+  // touching the ring is within reach. Walked inward from well outside until KICK first
+  // connects, and compared against where the drawn ring is — measured at every dial value,
+  // never just the default, since the whole point is that the two move together.
+  // ⚠️ A trap needs TAP_HOLD seconds of holding, so ONE step measures the hold timer
+  // rather than the reach and reports no kick at any distance. Positions are re-pinned
+  // every step, because `integrate` moves both bodies out of the band being tested.
+  o.reach = {};
+  for (const dial of [M.KICKRING.min, M.KICKRING.def, M.KICKRING.max]){
+    M.sel.kickRing = dial; M.setMatchSeed(4); M.startMatch();
+    const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
+    const me2 = w2.players[0];
+    for (const q of w2.players) if (q !== me2){ q.x = 0; q.y = 9000; }
+    const ringWorld = 15 * (dial/100), touchAt = ringWorld + 10;
+    let furthest = -1;
+    for (let d = touchAt + 6; d >= 18 && furthest < 0; d -= 0.25){
+      const b2 = w2.ball;
+      me2.trap = null; me2.trapUsed = false; me2.kickUsed = false; me2.tapArmed = false; me2.tapT = 0;
+      b2._trappedBy = null;
+      M.pads.p1.kick = true; M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+      for (let k = 0; k < 20 && furthest < 0; k++){
+        b2.x = d; b2.y = 0; b2.vx = b2.vy = 0;
+        me2.x = 0; me2.y = 0; me2.vx = me2.vy = 0;
+        M.step(w2);
+        // ⚠️ The TRAP flags only, never "the ball moved". At the smallest dial the reach is
+        // zero, so a ball at the touch distance is resting against the player's body and
+        // the ordinary disc collision shoves it — which a velocity test scores as a kick
+        // and reported the reach as 2.25 units LONGER than the ring at that setting.
+        if (b2._trappedBy === me2 || me2.trap) furthest = d;
+      }
+    }
+    M.pads.p1.kick = false;
+    o.reach[dial] = { touchAt: +touchAt.toFixed(2), furthest: +furthest.toFixed(2) };
+  }
+  // ⚠️ The probe steps in 0.25, so agreement to within a step is exact agreement. The
+  // tolerance is 1.0 rather than 0.25 for one case only: at the SMALLEST dial the reach is
+  // zero, so the ball sits against the player's body and the disc collision separates them
+  // before the trap can latch, costing a couple of extra steps. At the default and the
+  // maximum — the settings anyone actually plays on — the two agree to within one step.
+  o.ringIsTheReach = Object.values(o.reach).every(x => x.furthest > 0 && Math.abs(x.touchAt - x.furthest) <= 1.0);
   M.sel.kickRing = M.KICKRING.def;
   return o;
 });
@@ -232,8 +278,10 @@ ok('...and the ring is actually drawn', ring.ringIsDrawn,
    'otherwise the check above passes on a build that draws no ring at all');
 ok('the size dial spans a real range and clamps rubbish', ring.dialSpansARealRange && ring.clampsRubbish,
    JSON.stringify({ min: ring.mulAtMin, def: ring.mulAtDefault, max: ring.mulAtMax }));
-ok('...and it is RENDER ONLY', ring.worldSame,
-   'the ring is a wind-up tell, not the reach — 900 steps at the smallest and largest setting must leave the world bit-identical, or the dial is a hidden gameplay lever');
+ok('...and the ring IS the reach', ring.ringIsTheReach,
+   JSON.stringify(ring.reach) + ' — a ball touching the ring has to be within kicking distance at every dial value, or the circle is not showing you where you can kick; `touchAt` is where a ball\'s edge meets the drawn ring and `furthest` is the greatest distance at which KICK connects');
+ok('...so the dial moves the GAME, not just the picture', ring.dialMovesTheGame,
+   'the render-only guarantee is deliberately withdrawn — the ring was a tell drawn well inside the real reach, which is exactly what "it does not show where you can kick" was reporting');
 
 ok('a name plate goes COMPLETELY at the strongest point', labels.hidesCompletely && labels.goesToZero,
    JSON.stringify({ LABEL_DIM: labels.dim, near: labels.near, onTop: labels.onTop }));

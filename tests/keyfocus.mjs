@@ -143,7 +143,7 @@ o.everySliderInItsOwnPane = o.groups.want.every(([g, lab]) =>
 // each must appear in its own pane and in NO other, which is what catches a slider quietly
 // moving. Ball is what the ball does; Kick is what you do to it.
 o.want = { ball:   ['max ball speed','ball glide','ball magnet'],
-           kick:   ['kick power','trap window','kick ring'],
+           kick:   ['kick power','trap window','kick reach'],
            player: ['acceleration','float','sensitivity'],
            sprint: ['sprint length','sprint recovery','sprint speed','tired speed'] };
 o.groupedAsIntended = Object.entries(o.want).every(([g, words]) => words.every(w =>

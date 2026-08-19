@@ -447,7 +447,15 @@ await p.close();
     M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
     M.setMatchSeed(7); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 2;
-    for (let i = 0; i < 900; i++) M.step(w);
+    // ⚠️ **STEP UNTIL A GOAL, never a fixed 900.** The save buttons only exist once there
+    // is a replay to save, so this block was quietly depending on these particular bots
+    // scoring inside that window — and the day the kick reach moved by a QUARTER OF A
+    // UNIT they no longer did, and the suite reported "Save clip is missing from the
+    // result screen" for a change that had nothing to do with the result screen.
+    let steps = 0;
+    while (steps < 9000 && (w.score[0] + w.score[1]) === 0){ M.step(w); steps++; }
+    o.stepsToGoal = steps;
+    for (let i = 0; i < 120; i++) M.step(w);      // let the goal state settle
     M.endMatch(w); M.finishMatch(w);
     const ov = document.getElementById('overlay');
     o.resultButtons = [...ov.querySelectorAll('button')].map(b => b.textContent.trim());

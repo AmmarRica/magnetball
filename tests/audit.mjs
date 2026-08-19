@@ -93,7 +93,7 @@ const r = await p.evaluate(async ()=>{
   const feelLabels=allFeelLabels.map(l=>l.textContent.toLowerCase());
   out.feelSliders = feelLabels.length;
   for (const want of ['acceleration','float','kick power','max ball speed','ball glide','magnet','trap window','sensitivity',
-                      'kick ring','sprint length','sprint recovery','sprint speed','tired speed'])
+                      'kick reach','sprint length','sprint recovery','sprint speed','tired speed'])
     if (!feelLabels.some(t=>t.includes(want))) out.unreachable.push('feel slider: '+want);
 
   // ---------- 2. EFFECT -------------------------------------------------------

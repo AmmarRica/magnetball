@@ -4392,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.1015PM';
+const VERSION = '20260819.1130PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4408,14 @@ const VERSION = '20260819.1015PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.1130PM', title: 'The ring is your kicking range',
+    added: [],
+    changed: [
+      '<b>The circle round you while you hold KICK now shows exactly how far you can reach.</b> If the ball is touching that circle or inside it, you will kick it. Before, the circle was only a decoration and sat a little inside the real range, so a ball right on the line would not connect.',
+      '<b>It is a plain white ring now</b> \u2014 the dark outline around it is gone \u2014 and the Game Feel slider that sizes it is called Kick reach, because it now moves your actual range as well as the picture. The default reach is unchanged from before.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.1015PM', title: 'A real gap between you and the kick ring',
     added: [],
     changed: [
@@ -5123,7 +5131,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:200, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:195, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -6721,20 +6729,40 @@ function advanceStamina(w, p){
   return p.spent ? sprintSlow() : (want ? sprintBoost() : 1);
 }
 const CHARGE_MS = { min:100, max:2000, step:50 };
-// ⚠️ How big the wind-up ring is drawn, as a multiple of the player's own radius. It is
-// a TELL, not a reach: the real kick range is `p.r + ball.r + PLAYER.kickRange`, which on
-// the default numbers is 2.6r, and the ring has always been drawn well inside that. This
-// dial moves the drawing only — nothing here touches the physics, so a bigger ring never
-// means a longer kick.
+// How far you can reach the ball, as a multiple of the player's own radius, drawn as the
+// ring you see while KICK is held. ⚠️ **The old "TELL, not a reach" note is WITHDRAWN** —
+// it is both now; see below.
+// ⚠️ **THE RING IS THE REACH NOW — it is not a tell any more.** Asked for directly: "if
+// the ball touches that ring, that should be treated as a kick; if the ball is inside the
+// ring, it should still be treated as a kick". Measured before changing anything, the ring
+// sat at 30 world units and the kick condition was `dist < p.r + b.r + 14` = 39, so a ball
+// resting against the outside of the ring was 40 away and did NOT kick — just outside, by
+// one unit, which is exactly the kind of near-miss that makes an indicator feel wrong.
+// ⚠️ So the dial moves BOTH, and this file's old "render only, never a hidden gameplay
+// lever" guarantee is deliberately withdrawn: it existed because the ring was decoration,
+// and a decoration that disagrees with the physics is the thing being complained about.
+// `tests/gamesave.mjs` asserted the render-only claim and now asserts the opposite.
+// ⚠️ `def` is **195**, not 200, so a fresh install's reach is what it has always been to
+// within a quarter of a unit: `p.r * 1.95 = 29.25` plus the ball's radius is 39.25 against
+// the 39 the physics used before. It is on the slider's own step of 5 — 193 would have
+// given the reach EXACTLY, and it is not a value the control can select, so the dial would
+// have jumped the moment anybody touched it.
+// ⚠️ `max` is **200**, the size the ring is drawn at today, because it was asked that the
+// ring never get bigger than that — and now that the ring is the reach, that cap is also
+// what stops the dial being a way to give yourself a longer leg.
 // ⚠️ `def` must agree with the `kickRing` literal in `defaultSel()`. It cannot READ this
 // constant: `defaultSel` runs during the bootstrap and `KICKRING` is declared far below
-// it, which is the temporal dead zone this file has been bitten by seventeen times. The
-// literal is what a fresh install gets; `def` is the fallback for a save that has no value.
-const KICKRING = { min: 100, max: 300, step: 5, def: 200 };
+// it, which is the temporal dead zone this file has been bitten by seventeen times.
+const KICKRING = { min: 100, max: 200, step: 5, def: 195 };
 function kickRingMul(){
   const v = sel.kickRing == null ? KICKRING.def : +sel.kickRing;
   return Math.max(KICKRING.min, Math.min(KICKRING.max, v || KICKRING.def)) / 100;
 }
+// The kick reach in WORLD units, derived from the ring the player can see. The ring is
+// drawn at `p.r * kickRingMul()`, and a ball touches it when the centres are that plus the
+// ball's own radius apart — which is exactly the condition `handleBallControl` tests, so
+// the picture and the physics cannot disagree.
+function kickRangeUnits(){ return PLAYER.r * (kickRingMul() - 1); }
 function chargeOn(){ return sel.charge !== 'off'; }
 function chargeSecs(){
   const v = sel.chargeMs == null ? CHARGE.max*1000 : +sel.chargeMs;
@@ -11159,9 +11187,10 @@ const FEEL_SLIDERS = [
   {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
   {g:'kick', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
-  // ⚠️ The ring is a wind-up TELL, not the reach — see kickRingMul. This moves the
-  // drawing only, so winding it up never lengthens a kick.
-  {g:'kick', label:'Kick ring size', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
+  // ⚠️ This is the REACH, and the ring you see while KICK is held is drawn at exactly it —
+  // so it moves the physics as well as the picture. It used to be a drawing-only dial and
+  // that is the withdrawn claim; see KICKRING.
+  {g:'kick', label:'Kick reach', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
    min:KICKRING.min, max:KICKRING.max, step:KICKRING.step, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
   // ⚠️ Stored in HUNDREDTHS of a second, so the slider steps are integers — the same
@@ -12003,7 +12032,7 @@ function startTutorial(){
   world = {
     field: FIELDS.classic, mode: MODES.train, len: { secs:0, goals:0 }, diff: DIFF.normal,
     magnet: 0, train: true, watch: false, cb: sel.cb==='on',
-    pAccel: fv.accel, pDamp: fv.pdamp, ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
+    pAccel: fv.accel, pDamp: fv.pdamp, ballCap: fv.ballcap, kickPower: fv.kick, kickRange: kickRangeUnits(),
     players: [you],
     ball: { x:0, y:110, vx:0, vy:0, r:BALLS.normal.r, invMass:BALLS.normal.invMass, bCoef:BALLS.normal.bCoef, damp:fv.bdamp, isBall:true },
     posts:[], walls:[], arcs:[], score:[0,0], timeLeft:0, goalsTarget:0, overtime:false,
@@ -13787,7 +13816,7 @@ function startMatch(opts){
     watch, demo: _startQuiet,   // idle background demo (desktop menu) — muted, not recorded
     cb: sel.cb==='on',
     pAccel: sf.accel, pDamp: sf.damp,
-    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange,
+    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: kickRangeUnits(),
     players,
     ball: { x:0, y:0, vx:0, vy:0, r:bp.r, invMass:bp.invMass, bCoef:bp.bCoef, damp:fv.bdamp, isBall:true },
     posts: [],
@@ -17892,7 +17921,7 @@ function handleBallControl(w, p, ball, ballFrozen){
   // here means the worst case is one frame of glue that is gone next step, rather
   // than a steal that works from one side of the roster and not the other.
   if (!ballFrozen && ball._trappedBy && ball._trappedBy !== p && ball._trappedBy.team !== p.team
-      && p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange + TRAP.steal){
+      && p.kick && !p.kickUsed && dist < sum + (w.kickRange != null ? w.kickRange : PLAYER.kickRange) + TRAP.steal){
     const c = ball._trappedBy;
     c.trap = false; c.trapAng = null; c.tapArmed = false;
     // ⚠️ `trapUsed` latches until KICK is RELEASED, so the carrier cannot simply
@@ -17910,7 +17939,7 @@ function handleBallControl(w, p, ball, ballFrozen){
   if (w.trapOff && !ballFrozen){
     // "Pro" mode: authentic one-shot kick — the ball fires the instant you touch
     // it (no trap/glue), carrying your momentum. Holding KICK still charges power.
-    if (p.kick && !p.kickUsed && dist < sum + PLAYER.kickRange){
+    if (p.kick && !p.kickUsed && dist < sum + (w.kickRange != null ? w.kickRange : PLAYER.kickRange)){
       let nx, ny;
       if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
       const power = (w.kickPower||PLAYER.kick) * chargeMul(p);
@@ -17925,7 +17954,7 @@ function handleBallControl(w, p, ball, ballFrozen){
     // Casual: a QUICK TAP of KICK is an instant pass; HOLDING traps the ball to
     // your feet (max 0.5s), then release to shoot. Redirecting while carrying
     // spins the ball. The ball is glued just OUTSIDE your body so it never overlaps.
-    const near = dist < sum + PLAYER.kickRange;
+    const near = dist < sum + (w.kickRange != null ? w.kickRange : PLAYER.kickRange);
     if (p.kick){
       if (!p.trap && !p.trapUsed){
         if (near){
@@ -20934,7 +20963,7 @@ function startDrill(key){
   world = {
     field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
     pAccel: sf.accel, pDamp: sf.damp,
-    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: PLAYER.kickRange, trapMax: fv.trap,
+    ballCap: fv.ballcap, kickPower: fv.kick, kickRange: kickRangeUnits(), trapMax: fv.trap,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
     // ⚠️ The ball you PICKED, not the default one. A drill exists to rehearse the match,
     // and it already borrows the sliders, the grip, the kick power and the magnet for
@@ -24887,9 +24916,12 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       // strength — on a phone that is a 2px white stroke at 0.42 over grass, which is the
       // faint grey smudge this was reported as three times. The charge is carried by the
       // WIDTH and by a lift from 0.88 to full; the ring is a solid white circle throughout.
+      // ⚠️ **NO CASING — it is a plain ring, asked for in those words.** The dark stroke
+      // either side was there to make it read on an unknown pitch, and `kickRingInk`
+      // already solves that a better way by picking the ring's own colour against the
+      // court: white on an ordinary pitch, black on a light one. Two answers to one
+      // problem, and the casing was the one that made a white ring look outlined.
       ctx.beginPath(); ctx.arc(x, y, kickR, 0, 2*Math.PI);
-      ctx.strokeStyle = rgba(ringCasing(), RING.caseA * (0.85 + 0.15*f));
-      ctx.lineWidth = kickW + RING.case*2; ctx.stroke();
       ctx.strokeStyle = rgba(kickRingInk(), 0.88 + 0.12*f);
       ctx.lineWidth = kickW; ctx.stroke();
     }

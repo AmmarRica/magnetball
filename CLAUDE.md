@@ -1326,11 +1326,40 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **`tests/tells.mjs` was PINNING the pulse** (`ringHigh > ringLow * 1.25`, "it
   flashes, never sweeps") — the check is inverted now, and still requires the ring to be
   a full circle and to actually be inked, or "it does not flicker" is true of no ring.
-  ⚠️ The ring is a **TELL, not the reach**: the real range is `p.r + ball.r +
-  PLAYER.kickRange`, which is 2.6r on the defaults, and the ring has always been drawn
-  well inside that. The dial moves the DRAWING only — `tests/gamesave.mjs` steps 900
-  frames at the smallest and largest setting and requires the world bit-identical, so it
-  can never become a hidden gameplay lever.
+  ⚠️ **THE RING IS THE REACH, and "a TELL, not the reach" is WITHDRAWN.** It was a tell
+  drawn well inside the real range (`p.r + ball.r + PLAYER.kickRange`, 2.6r), with the
+  dial moving the DRAWING only and `tests/gamesave.mjs` proving the world bit-identical at
+  either end of it — a guarantee that existed because the ring was decoration.
+  ⚠️ Reported as the ring not showing where you can actually kick, and the measurement is
+  the report: the ring sat at **30** world units while the kick condition was
+  `dist < p.r + b.r + 14` = **39**, so a ball resting against the OUTSIDE of the ring was
+  40 away and did not connect. Out by one unit — the kind of near-miss that makes an
+  indicator feel broken rather than tight. A decoration that disagrees with the physics is
+  the thing being complained about, so the decoration stopped being one.
+  ⚠️ `kickRangeUnits()` is the one place that turns the dial into a world-unit reach, and
+  the ring is drawn at exactly `p.r * kickRingMul()` — so a ball touching the ring is a
+  ball within reach, by construction rather than by two numbers agreeing.
+  ⚠️ **`KICKRING.def` is 195**, so a fresh install's reach is what it has always been to
+  within a quarter of a unit: `15 × 1.95 = 29.25` plus the ball's radius is 39.25 against
+  the 39 the physics used before. ⚠️ It is on the slider's own **step of 5**: 193 gives the
+  old reach exactly and is not a value the control can select, so the dial would have
+  jumped the moment anybody touched it. `max`
+  is **200**, the size the ring was drawn at, asked for as "never bigger than it is now" —
+  and now that the ring is the reach, that cap is also what stops the dial being a way to
+  give yourself a longer leg.
+  ⚠️ **NO CASING on this ring** — asked for as "just keep it a white ring". The dark stroke
+  either side was there to make it read on an unknown pitch, and `kickRingInk` already
+  answers that better by picking the ring's own colour against the court. Two answers to
+  one problem, and the casing was the one that made a white ring look outlined.
+  ⚠️ `tests/gamesave.mjs` now asserts the OPPOSITE of what it used to: that the dial moves
+  the world, and that a ball touching the ring is within reach at **every** dial value.
+  ⚠️ **Its probe holds KICK for twenty steps, not one.** A trap needs `TAP_HOLD` seconds of
+  holding, so a single step measures the hold timer rather than the reach and reports no
+  kick at any distance; and positions are re-pinned every step, because `integrate` moves
+  both bodies out of the band being tested. ⚠️ It detects the TRAP flags and never "the
+  ball moved": at the smallest dial the reach is zero, so the ball rests against the
+  player's body and the ordinary disc collision shoves it, which a velocity test scores as
+  a kick and reported the reach 2.25 units LONGER than the ring.
 - **A GAME SAVE, as one JSON file** (`SAVEFILE`, `buildSaveDoc`, `parseSaveDoc`,
   `applySaveDoc`, `exportSaveFile`, `pickSaveDoc`; About card). Settings including Game
   Feel, your player, your record and unlocks, custom maps, drill times, and a season or
