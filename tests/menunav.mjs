@@ -44,7 +44,11 @@ const r = await p.evaluate(async ()=>{
       c.click();
       const on = panes.filter(x=>x.classList.contains('on'));
       if (on.length !== 1 || on[0].dataset.pane !== c.dataset.pane) o.oneOpenAtATime = false;
-      if (!vis(on[0])) o.everyPaneShowable = false;
+      // ⚠️ Guarded, because a chip whose pane does not exist opens NOTHING — and an
+      // unguarded `vis(on[0])` then throws `undefined.getBoundingClientRect`, which kills
+      // the suite before any of its diagnostics print. A dead chip is a finding this file
+      // is meant to NAME, not a crash: verified by declaring a pane with nothing behind it.
+      if (!on.length || !vis(on[0])) o.everyPaneShowable = false;
     }
   }
   // ...and the cards actually got shorter. Measured, not asserted by eye.
@@ -82,7 +86,8 @@ const r = await p.evaluate(async ()=>{
   // than one above the chips.
   {
     const c = card('feel'); c.classList.remove('collapsed');
-    const IDS = ['trapPick','feelSlidersBall','oneHandPick','feelSlidersPlayer','juicePick',
+    const IDS = ['trapPick','chargePick','feelSlidersBall','feelSlidersKick','oneHandPick',
+                 'feelSlidersPlayer','sprintPick','feelSlidersSprint','juicePick',
                  'tiltPick','popupPick','ball3dPick','hitStop','goalZoom','goalZoomSpd',
                  'autoReplayPick','sideViewPick','mspeed','debugPick'];
     o.feelMissing = IDS.filter(id => !document.getElementById(id));
@@ -96,6 +101,12 @@ const r = await p.evaluate(async ()=>{
       o.feelPaneOf[id] = pn ? pn.dataset.pane : null;
     }
     o.feelPanesUsed = [...new Set(Object.values(o.feelPaneOf))].sort().join(',');
+    // ⚠️ **COMPARED AGAINST `SUBTABS.feel`, never a string typed in here.** It was the
+    // literal 'advanced,ball,camera,effects,player', so the day Game Feel grew Kick and
+    // Sprint panes this went red for the RIGHT reason and would have gone quietly stale
+    // for the wrong one — a pane deleted from the card and left in the chip row is exactly
+    // the dead tab this is meant to catch, and a hard-coded expectation cannot see it.
+    o.feelPanesDeclared = M.SUBTABS.feel.map(t => t[0]).sort().join(',');
     // ⚠️ THE LAST CHIP HAS TO BE REACHABLE. Five chips do not fit a 430px phone, so the row
     // scrolls sideways — and a chip you cannot reach hides a whole pane. Scrolled into view
     // and HIT-TESTED at its own centre, never just `.click()`ed: that dispatches at the node
@@ -236,8 +247,8 @@ ok(r.feelOutsideAPane.length === 0,
    `a Game Feel control is outside every pane: ${JSON.stringify(r.feelOutsideAPane)} — it would show on every tab, which is what the tabs exist to stop`);
 ok(r.feelWholeCard.length === 2,
    `the preset row and the reset button must stay OUT of the panes (found ${JSON.stringify(r.feelWholeCard)}) — both act on the whole card, so filing either under one fifth of what it sets is worse than leaving it above the chips`);
-ok(r.feelPanesUsed === 'advanced,ball,camera,effects,player',
-   `the Game Feel controls are spread over ${r.feelPanesUsed} — every pane has to earn its chip, and a chip with nothing behind it is a dead tab`);
+ok(r.feelPanesUsed === r.feelPanesDeclared,
+   `the Game Feel controls sit in ${r.feelPanesUsed} but the chips declare ${r.feelPanesDeclared} — every pane has to earn its chip, and a chip with nothing behind it is a dead tab`);
 ok(r.feelRowScrolls === true || r.feelLastChipHit,
    'the chip row neither fits nor scrolls, so the last tab is unreachable');
 ok(r.feelLastChipHit, `the last Game Feel chip (${r.feelLastChipPane}) is not hit-testable at its own centre once scrolled to — five chips do not fit a phone, and a chip you cannot press hides a whole pane`);

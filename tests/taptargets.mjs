@@ -81,6 +81,16 @@ const taps = await p.evaluate(() => {
     return { v: u + d + 1, h: l + rr + 1, box: Math.round(r.height) };
   };
   const vis = sel => [...document.querySelectorAll(sel)].filter(e => e.getBoundingClientRect().height > 0);
+  // ⚠️ **FIND a pane with a help toggle in it, never assume the card opens on one.** This
+  // read `vis('.infobtn')[0]` straight after `openLook('feel')`, which works only while the
+  // FIRST Game Feel pane happens to carry a `.hint` — and it stopped doing so when Ball
+  // became three physics sliders and the trap/charge help moved to the Kick pane. The
+  // suite then threw on `undefined.scrollIntoView`, which is a crash rather than a finding
+  // about tap targets. The button's pad is a global rule, so any pane holding one will do.
+  for (const [pane] of M.SUBTABS.feel){
+    if (vis('.infobtn').length) break;
+    M.showSubTab('feel', pane);
+  }
 
   o.infobtn  = reach(vis('.infobtn')[0]);
   o.infoN    = document.querySelectorAll('.infobtn').length;

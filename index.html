@@ -1968,13 +1968,23 @@
       <label class="field">Preset</label>
       <div class="opts" id="feelPresets"></div>
 
-      <!-- ⚠️ Nineteen controls, so five things you might be here for rather than one list.
+      <!-- ⚠️ Thirty controls, so seven things you might be here for rather than one list.
            As one list the Tilt parallax toggle sat sixteenth in it and was reported as a
            missing feature; the chip row is now the heading, which is why the three
-           `.subhead` groups this replaced are gone rather than repeated inside the panes. -->
+           `.subhead` groups this replaced are gone rather than repeated inside the panes.
+           ⚠️ The later split into seven was NOT about height — no pane filled a phone
+           screen — it was about what sat together; see SUBTABS.feel. -->
       <div class="subtabs" data-tabs="feel"></div>
 
+      <!-- ⚠️ BALL is what the ball ITSELF does. Everything about handling it — trapping,
+           carrying, the wind-up and its ring — is the Kick pane below, because those are
+           settings about the player's action rather than about the object. "Ball control"
+           and "Trap window" read like ball settings and are not. -->
       <div class="subpane" data-pane="ball">
+      <div id="feelSlidersBall"></div>
+      </div>
+
+      <div class="subpane" data-pane="kick">
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
@@ -1985,18 +1995,25 @@
       <label class="field">Full power after <small id="chargeVal" style="color:var(--accent)"></small></label>
       <input id="chargeMs" class="slider" type="range" min="100" max="2000" step="50" />
       <div class="hint always" style="text-align:left; margin-top:4px">Holding KICK winds a shot up to <b>+90%</b> power, and a ring closes round you while it does. The slider is how long you have to hold for the full amount &mdash; shorter makes every shot hard, longer makes the wind-up something you commit to. Switch it off and every kick fires at exactly its normal strength, however long the button is down, which is what you want if you hold KICK to carry the ball. Affects shots, one-touches, body checks and booting the snail.</div>
-      <div id="feelSlidersBall"></div>
+      <div id="feelSlidersKick"></div>
       </div>
 
       <div class="subpane" data-pane="player">
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
-      <div style="height:10px"></div>
+      <div id="feelSlidersPlayer"></div>
+      </div>
+
+      <!-- ⚠️ SPRINT IS ITS OWN PANE, and that is the whole reason this card was revisited:
+           five of Player's ten controls were Sprint dials, so a mechanic with a toggle and
+           four numbers was scattered through a list about movement, input and ring size.
+           A reader who wants to tune sprinting had to know which of the ten were the ones. -->
+      <div class="subpane" data-pane="sprint">
       <label class="field">Sprint</label>
       <div class="opts" id="sprintPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px"><b>Hold KICK to sprint.</b> A ring round you drains like a clock while you run; let go and it fires the kick, the way holding KICK always has. Run the ring out and you are locked down to the tired speed until it has filled all the way back up — and it fills slower than it empties, so a sprint is something you spend. The ring is yours — bots do not sprint, because they hold KICK to trap rather than to run, and giving them the boost flattened the difficulty tiers into each other. Turn it <b>off</b> and holding KICK instead drags you down to a deliberate walk, which is how the game worked before this existed.</div>
-      <div id="feelSlidersPlayer"></div>
+      <div id="feelSlidersSprint"></div>
       </div>
 
       <div class="subpane" data-pane="effects">
@@ -4375,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0430PM';
+const VERSION = '20260819.0555PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4391,6 +4408,14 @@ const VERSION = '20260819.0430PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0555PM', title: 'Game Feel, sorted into seven',
+    added: [],
+    changed: [
+      '<b>Sprint has its own tab.</b> Five of the ten controls under Player were sprint dials, so a whole mechanic was scattered through a list about movement and aiming. It is one place now.',
+      '<b>Ball and Kick are separate tabs.</b> Ball is what the ball itself does \u2014 speed, glide, magnet. Trapping, carrying, the wind-up, kick power and the ring that shows it are all under Kick, where you would look for them.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0430PM', title: 'The ring comes back to the player',
     added: [],
     changed: [
@@ -9992,9 +10017,18 @@ const SUBTABS = {
   // the category's own label carries a parenthetical ("Whistle (kickoff / reset)") that
   // is useful as a heading and far too long for a chip.
   sound:  SFX_CATS.map(([k, lab]) => [k, lab.replace(/\s*\(.*$/, ''), SFX_CHIP_ICON[k]]),
-  feel:   [['ball','Ball','ball'], ['player','Player','run'],
-           ['effects','Effects','flame'], ['camera','Camera','camera'],
-           ['advanced','Advanced','gear']],
+  // ⚠️ **SEVEN, and the three that were added are a REGROUPING rather than a split for
+  // height.** Not one Game Feel pane filled a phone screen — the tallest was Ball at 0.84
+  // — so length was never the complaint. What was wrong is what sat together: PLAYER held
+  // ten controls and FIVE of them were Sprint, so a whole mechanic was buried in a mixed
+  // list of movement, input and a drawing dial. That is the exact shape that put the Tilt
+  // toggle sixteenth in a list and got it reported as a MISSING feature.
+  // ⚠️ Ball is now what the BALL does and Kick is what you DO to it — trap, carry, wind-up,
+  // power, and the ring that shows the wind-up. "Ball control" and "Trap window" read as
+  // ball settings and are really kick settings, which is why they moved.
+  feel:   [['ball','Ball','ball'], ['kick','Kick','boot'], ['player','Player','run'],
+           ['sprint','Sprint','bolt'], ['effects','Effects','flame'],
+           ['camera','Camera','camera'], ['advanced','Advanced','gear']],
   theme:  [['bundle', '✨ Bundle']].concat(
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
@@ -11040,27 +11074,27 @@ $('settingsReset').onclick = () => {
 const FEEL_SLIDERS = [
   {g:'player', label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
   {g:'player', label:'Player float (more glide →)', get:()=>sel.feel.pdamp, set:v=>sel.feel.pdamp=v, min:850,max:985,step:5, fmt:v=>(v/1000).toFixed(3)},
-  {g:'ball', label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
+  {g:'kick', label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
   {g:'ball', label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
   {g:'ball', label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
   {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
-  {g:'ball', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
+  {g:'kick', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
   // ⚠️ The ring is a wind-up TELL, not the reach — see kickRingMul. This moves the
   // drawing only, so winding it up never lengthens a kick.
-  {g:'player', label:'Kick ring size', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
+  {g:'kick', label:'Kick ring size', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
    min:KICKRING.min, max:KICKRING.max, step:KICKRING.step, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
   // ⚠️ Stored in HUNDREDTHS of a second, so the slider steps are integers — the same
   // trick the trap window uses. `sprintSecs()` is what the physics and the ring both
   // read, so the dial can never move one and leave the other behind.
-  {g:'player', label:'Sprint length', get:()=>sel.feel.sprintSecs==null?SPRINT.secs*100:sel.feel.sprintSecs,
+  {g:'sprint', label:'Sprint length', get:()=>sel.feel.sprintSecs==null?SPRINT.secs*100:sel.feel.sprintSecs,
    set:v=>sel.feel.sprintSecs=v, min:50,max:1000,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
-  {g:'player', label:'Sprint recovery', get:()=>sel.feel.sprintRefill==null?SPRINT.refill*100:sel.feel.sprintRefill,
+  {g:'sprint', label:'Sprint recovery', get:()=>sel.feel.sprintRefill==null?SPRINT.refill*100:sel.feel.sprintRefill,
    set:v=>sel.feel.sprintRefill=v, min:50,max:1500,step:25, fmt:v=>(v/100).toFixed(2)+'s'},
-  {g:'player', label:'Sprint speed', get:()=>sel.feel.sprintBoost==null?SPRINT.boost:sel.feel.sprintBoost,
+  {g:'sprint', label:'Sprint speed', get:()=>sel.feel.sprintBoost==null?SPRINT.boost:sel.feel.sprintBoost,
    set:v=>sel.feel.sprintBoost=v, min:100,max:250,step:5, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
-  {g:'player', label:'Tired speed', get:()=>sel.feel.sprintSlow==null?SPRINT.slow:sel.feel.sprintSlow,
+  {g:'sprint', label:'Tired speed', get:()=>sel.feel.sprintSlow==null?SPRINT.slow:sel.feel.sprintSlow,
    set:v=>sel.feel.sprintSlow=v, min:20,max:100,step:5, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
 ];
 // Reveal a settings section (theme/display/ball/sound/feel) inline on the main
@@ -11824,8 +11858,18 @@ function buildFeelPresets(){
     wrap.appendChild(el);
   }
 }
+// The one place that knows how a `FEEL_SLIDERS` group name becomes an element id, and
+// the one place that knows which groups exist. Read by the builder and by the suites.
+function feelSliderWrapId(g){ return 'feelSliders' + g[0].toUpperCase() + g.slice(1); }
+function feelSliderGroups(){ return [...new Set(FEEL_SLIDERS.map(s => s.g))]; }
 function buildFeelSliders(){
-  const wraps = { ball: $('feelSlidersBall'), player: $('feelSlidersPlayer') };
+  // ⚠️ **BUILT FROM THE TABLE'S OWN GROUPS through `feelSliderWrapId`, never a hand-written
+  // map of ids.** A literal here is a second list of the groups, and four test suites had
+  // copied it — so when Game Feel grew Kick and Sprint panes, every one of them went on
+  // querying two of the four wrappers and simply stopped seeing the sliders that moved.
+  // One place knows how a group name becomes an element id.
+  const wraps = {};
+  for (const g of feelSliderGroups()) wraps[g] = $(feelSliderWrapId(g));
   for (const k in wraps) if (wraps[k]) wraps[k].innerHTML='';
   FEEL_SLIDERS.forEach(s=>{
     const wrap = wraps[s.g] || wraps.ball; if (!wrap) return;
@@ -26509,6 +26553,7 @@ if (window.__MAGNETDEBUG) {
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit, lobbySizeBump,
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS,
+    feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
     KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,

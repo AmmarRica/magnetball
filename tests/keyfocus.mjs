@@ -60,17 +60,17 @@ await start();
 o.sliderFocusReleased = await (async ()=>{
   // Focus a Game Feel slider and check it IS focused (or the rest is vacuous)
   await p.evaluate(()=>{
-    const inp=document.querySelector('#feelSlidersBall input, #feelSlidersPlayer input');
+    const inp=document.querySelector(window.__magnet.feelSliderGroups().map(g=>'#'+window.__magnet.feelSliderWrapId(g)+' input').join(', '));
     inp.focus(); });
   const focusedBefore = await p.evaluate(()=>document.activeElement.tagName === 'INPUT');
-  const valBefore = await p.evaluate(()=>+document.querySelector('#feelSlidersBall input, #feelSlidersPlayer input').value);
+  const valBefore = await p.evaluate(()=>+document.querySelector(window.__magnet.feelSliderGroups().map(g=>'#'+window.__magnet.feelSliderWrapId(g)+' input').join(', ')).value);
   // Click the pitch, then press arrows
   await p.evaluate(()=>{ const cv=document.getElementById('game');
     cv.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true})); });
   const focusedAfter = await p.evaluate(()=>document.activeElement.tagName === 'INPUT');
   await p.keyboard.press('ArrowRight');
   await p.keyboard.press('ArrowRight');
-  const valAfter = await p.evaluate(()=>+document.querySelector('#feelSlidersBall input, #feelSlidersPlayer input').value);
+  const valAfter = await p.evaluate(()=>+document.querySelector(window.__magnet.feelSliderGroups().map(g=>'#'+window.__magnet.feelSliderWrapId(g)+' input').join(', ')).value);
   return focusedBefore && !focusedAfter && valAfter === valBefore;
 })();
 // ...and the arrows drive the player again after that click
@@ -110,38 +110,62 @@ o.arrowsDrivePlayer = await (async ()=>{
 // made has not changed — the sliders are still grouped ball vs player — so it is checked
 // where the grouping now lives, which is a stronger reading of the same thing: a chip you can
 // press against a pane that holds the right sliders.
+// ⚠️ **EVERY GROUP, derived from `FEEL_SLIDERS` — not the two this used to name.** It read
+// `#feelSlidersBall` and `#feelSlidersPlayer` and checked word lists against them, so when
+// Game Feel split into Ball / Kick / Player / Sprint it was silently measuring half the
+// card: "kick power" and "trap window" had moved to a wrapper it never queried. The claim
+// it was reaching for is stronger and cannot go stale — every slider the game declares
+// lands in the pane its own `g` names, that pane is reachable by a chip, and none is lost.
 o.groups = await p.evaluate(()=>{
   const M=window.__magnet; M.buildSettings();
-  const ball=[...document.querySelectorAll('#feelSlidersBall label')].map(l=>l.textContent.toLowerCase());
-  const player=[...document.querySelectorAll('#feelSlidersPlayer label')].map(l=>l.textContent.toLowerCase());
-  const paneOf = id => { const pn = document.getElementById(id).closest('.subpane');
-                         return pn ? pn.dataset.pane : null; };
   const chips = [...document.querySelectorAll('.subtabs[data-tabs="feel"] .subchip')].map(c=>c.dataset.pane);
-  return { ball, player, chips, declared: M.FEEL_SLIDERS.length,
-           ballPane: paneOf('feelSlidersBall'), playerPane: paneOf('feelSlidersPlayer') };
+  const byGroup = {}, paneOfGroup = {};
+  for (const g of M.feelSliderGroups()){
+    const wrap = document.getElementById(M.feelSliderWrapId(g));
+    byGroup[g] = wrap ? [...wrap.querySelectorAll('label')].map(l=>l.textContent.toLowerCase()) : null;
+    const pn = wrap && wrap.closest('.subpane');
+    paneOfGroup[g] = pn ? pn.dataset.pane : null;
+  }
+  return { byGroup, paneOfGroup, chips, declared: M.FEEL_SLIDERS.length,
+           want: M.FEEL_SLIDERS.map(s => [s.g, s.label.toLowerCase()]) };
 });
-o.ballGroupRight = ['kick power','max ball speed','ball glide','ball magnet','trap window']
-  .every(w => o.groups.ball.some(t=>t.includes(w)));
-o.playerGroupRight = ['acceleration','float','sensitivity']
-  .every(w => o.groups.player.some(t=>t.includes(w)));
+// Each declared slider is present in ITS OWN group's wrapper. ⚠️ This catches the BUILDER
+// dropping a group — `buildFeelSliders` falls back to Ball for an unknown one, so a group
+// with no pane silently piles into the wrong tab — but it is deliberately NOT a check on
+// the grouping being *right*: it compares the table against itself, so re-tagging a slider
+// moves both sides at once and it still passes. Verified: filing 'Sprint speed' under
+// `g:'ball'` sails through this.
+o.everySliderInItsOwnPane = o.groups.want.every(([g, lab]) =>
+  (o.groups.byGroup[g] || []).some(t => t.includes(lab)));
+// ⚠️ **SO THE INTENDED GROUPING IS WRITTEN DOWN, and it has to be.** Which pane a slider
+// belongs in is a human judgement — "kick power is a kick setting, not a ball setting" —
+// and no amount of deriving can check a judgement against itself. These are the words, and
+// each must appear in its own pane and in NO other, which is what catches a slider quietly
+// moving. Ball is what the ball does; Kick is what you do to it.
+o.want = { ball:   ['max ball speed','ball glide','ball magnet'],
+           kick:   ['kick power','trap window','kick ring'],
+           player: ['acceleration','float','sensitivity'],
+           sprint: ['sprint length','sprint recovery','sprint speed','tired speed'] };
+o.groupedAsIntended = Object.entries(o.want).every(([g, words]) => words.every(w =>
+  (o.groups.byGroup[g] || []).some(t => t.includes(w)) &&
+  Object.entries(o.groups.byGroup).every(([g2, labs]) =>
+    g2 === g || !(labs || []).some(t => t.includes(w)))));
 // ⚠️ Counted from `FEEL_SLIDERS` itself, not hard-coded. It was `=== 8` and went red
 // the moment a ninth slider arrived, which is a suite failing for the arrival of a
-// setting rather than for anything being lost. What it means to say is that every
-// slider the game declares lands in exactly one of the two groups.
+// setting rather than for anything being lost.
 o.sliderCount = o.groups.declared;
-o.noneLost = o.groups.ball.length + o.groups.player.length === o.sliderCount;
-o.noCrossover = !o.groups.player.some(t=>t.includes('ball')) &&
-                !o.groups.ball.some(t=>t.includes('sensitivity'));
+o.noneLost = Object.values(o.groups.byGroup)
+  .reduce((n, a) => n + (a ? a.length : 0), 0) === o.sliderCount;
 // Each set of sliders is in its own pane, and each pane has a chip to reach it by — a pane
 // with no chip hides its controls while querySelectorAll still finds them.
-o.hasSubheads = o.groups.ballPane === 'ball' && o.groups.playerPane === 'player' &&
-                o.groups.chips.includes('ball') && o.groups.chips.includes('player');
+o.hasSubheads = Object.entries(o.groups.paneOfGroup)
+  .every(([g, pane]) => pane === g && o.groups.chips.includes(g));
 
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = o.spaceKicks && o.xKicks && o.capitalXKicks && o.typingKeepsSpace &&
   o.typingDoesNotSteer && o.sliderFocusReleased && o.arrowsDrivePlayer &&
-  o.ballGroupRight && o.playerGroupRight && o.noneLost && o.noCrossover && o.hasSubheads &&
+  o.everySliderInItsOwnPane && o.groupedAsIntended && o.noneLost && o.hasSubheads &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

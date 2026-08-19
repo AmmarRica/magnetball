@@ -73,14 +73,27 @@ const r = await p.evaluate(async ()=>{
   // first and you can't tell which one you last used.
   out.duplicateControls = [];
   if (document.getElementById('magnet')) out.duplicateControls.push('magnet (Match card copy)');
-  const allFeelLabels = [...document.querySelectorAll('#feelSlidersBall label, #feelSlidersPlayer label')];
+  // ⚠️ **DERIVED FROM `FEEL_SLIDERS`, never a hand-written list of wrapper ids.** It was
+  // `#feelSlidersBall, #feelSlidersPlayer`, and the moment Game Feel grew Kick and Sprint
+  // panes that copy went on measuring two of the four groups: every slider that moved
+  // simply vanished from the audit, which is the failure mode this whole file exists to
+  // catch. One `g` per group in the table, one wrapper per `g` in the page.
+  const feelGroups = M.feelSliderGroups();
+  const feelSel = feelGroups.map(g => '#' + M.feelSliderWrapId(g) + ' label').join(', ');
+  const allFeelLabels = [...document.querySelectorAll(feelSel)];
+  // ...and every group in the table must actually have a wrapper on the page, or
+  // `buildFeelSliders`' fallback quietly piles that group's sliders into Ball.
+  for (const g of feelGroups)
+    if (!document.getElementById(M.feelSliderWrapId(g)))
+      out.unreachable.push('feel slider group has no pane: ' + g);
   if (allFeelLabels.length !== new Set(allFeelLabels.map(l=>l.textContent)).size)
     out.duplicateControls.push('repeated feel slider label');
 
   // Every Game Feel slider must be present and write its key.
   const feelLabels=allFeelLabels.map(l=>l.textContent.toLowerCase());
   out.feelSliders = feelLabels.length;
-  for (const want of ['acceleration','float','kick power','max ball speed','ball glide','magnet','trap window','sensitivity'])
+  for (const want of ['acceleration','float','kick power','max ball speed','ball glide','magnet','trap window','sensitivity',
+                      'kick ring','sprint length','sprint recovery','sprint speed','tired speed'])
     if (!feelLabels.some(t=>t.includes(want))) out.unreachable.push('feel slider: '+want);
 
   // ---------- 2. EFFECT -------------------------------------------------------

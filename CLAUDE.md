@@ -2808,10 +2808,36 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
   `theme` and `feel`.
-  ⚠️ **Game Feel is tabbed too** — Ball / Player / Effects / Camera / Advanced. Nineteen
-  controls in one list is how the Tilt parallax toggle came to sit *sixteenth* in it and get
-  reported as a missing feature; the chip row is the heading now, which is why the three
-  `.subhead` groups it replaced are gone rather than repeated inside the panes.
+  ⚠️ **Game Feel is tabbed too** — Ball / Kick / Player / Sprint / Effects / Camera /
+  Advanced. Nineteen controls in one list is how the Tilt parallax toggle came to sit
+  *sixteenth* in it and get reported as a missing feature; the chip row is the heading now,
+  which is why the three `.subhead` groups it replaced are gone rather than repeated inside
+  the panes.
+  ⚠️ **THE SPLIT TO SEVEN WAS A REGROUPING, NOT A SPLIT FOR HEIGHT.** Measured first: not
+  one Game Feel pane filled a phone screen (the tallest was Ball at **0.84**), so length was
+  never the problem. What was wrong is what sat *together* — **PLAYER held ten controls and
+  five of them were Sprint**, so a mechanic with a toggle and four dials was scattered
+  through a list about movement, input and ring size. That is the same shape that buried the
+  Tilt toggle, one layer up: a reader who wants to tune sprinting had to already know which
+  five of the ten were the ones.
+  ⚠️ **Ball is what the BALL does; Kick is what you DO to it.** Ball keeps the three physics
+  sliders (max speed, glide, magnet); trapping, carrying, the wind-up, kick power and the
+  ring that shows the wind-up are Kick. "Ball control" and "Trap window" *read* like ball
+  settings and are really kick settings, which is why they moved.
+  ⚠️ **`feelSliderWrapId`/`feelSliderGroups` are the ONE place that knows how a
+  `FEEL_SLIDERS` group becomes an element id**, and that is not tidiness: the wrapper map
+  used to be a literal in `buildFeelSliders` and **four test suites had copied it**
+  (`audit`, `keyfocus`, `panel`, `trapwindow`). The day the card grew Kick and Sprint every
+  one of them went on querying two of the four wrappers, so every slider that moved silently
+  vanished from them — `audit` reported 6 sliders where the table declares 13. A group with
+  no wrapper still falls back to Ball rather than throwing, so `audit` now names an
+  unbacked group outright.
+  ⚠️ **The intended grouping is WRITTEN DOWN in `tests/keyfocus.mjs`, and it has to be.**
+  Deriving "every slider is in the pane its own `g` names" compares the table against itself
+  — re-tag a slider and both sides move, so it passes — which was verified by filing Sprint
+  speed under `ball` and watching it sail through. Which pane a slider *belongs* in is a
+  human judgement and no derivation can check a judgement against itself, so the words are
+  listed per pane and each must appear in its own and in no other.
   ⚠️ The **preset row and the reset button stay OUTSIDE the panes**: both act on the whole
   card, and filing a set-everything control under one fifth of the things it sets is worse
   than leaving it above the chips. `#matchCard` keeps KICK OFF and Warm-up outside its own
