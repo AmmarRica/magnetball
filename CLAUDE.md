@@ -1423,6 +1423,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   is the one property that means that without being read; seven identical dots also have to
   be *counted* to be told apart, so at tile size the middle four looked alike. Same
   argument the disc skins are built on.
+- **SETTINGS COMES BACK WHERE YOU LEFT IT** (`uiState._open`, `lastSection()`,
+  `uiState._tab`). ⚠️ The pause screen's Settings button was `openLook('theme')` — a
+  hard-coded card — so pausing mid-match and pressing it always landed on Theme however
+  deep in another card you had been, and because `openSection` collapses the rest it then
+  **overwrote the record of where you were**, leaving no way back but to go looking again.
+  Reported from a phone, where it costs most: the menu is a full-bleed screen, so you lose
+  the card, the tab and the scroll all at once.
+  ⚠️ **The open card cannot be derived from the collapsed flags** — `collapseAllSections`
+  closes everything, and after that every card reads "closed" and the last one you used is
+  gone. So it is recorded explicitly, and `lastSection()` **checks it against the DOM**
+  before using it: a stored section outlives the card it names (the standalone Ball card was
+  removed, and a save from before that still says `ball`, which would open nothing at all).
+  ⚠️ The **sub-pane travels too** (`uiState._tab`, seeded into `subTab` at boot): "where I
+  was modifying the settings" is the card AND the chip inside it, and `subTab` was memory-only
+  so a reload dropped you on the first chip of every row. Stored under keys of its own
+  (`_open`, `_tab`) so they cannot collide with a section name in the same object.
 - **There is NO "Settings" tile under More**, and its absence is the point: the settings
   *are* the menu — eleven cards of them, on the screen the tile was sitting on — so it was
   a door onto the room you were already standing in. The detached panel is still reachable
@@ -2359,8 +2375,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   now: the stroke grows with the charge, so a live reading walked the whole ring outward
   across one hold (21.3 → 21.8px). A ring that is a tell about the shot must not also be a
   tell about itself. Sampled at both ends of the charge, since one reading cannot see a drift.
+  ⚠️ **AND THE ANSWER IN THE END WAS TO PUT THE ARC ON THE BODY.** Reported a second time
+  as *"I still don't see the circle that indicates the kick"*, and the measurement said why:
+  the tightening below was taken on a DESKTOP-sized body (11.1px) where it read 1.94r →
+  1.81r, and on a **PHONE** — body 9.8px — it still measured **1.92r**, because the gap and
+  the casings are fixed PIXEL amounts, so the smaller the body the bigger a fraction of `r`
+  they eat. The phone is the worst case and the worst case is where the report came from.
+  So `stamR` is now just INSIDE the guide ring, drawn over the player's own body, and
+  `kickR` is `r*kickRingMul()` with **nothing pushing it** — the collision case is gone
+  rather than negotiated, and the dial means what it says at every body size (measured 1.42r
+  on a phone). It is also the most literal reading of "stamina closer to the player".
+  ⚠️ **The window inside is narrow at BOTH ends and `RING.inset` was swept, not picked**:
+  too shallow and the arc's casing paints on the guide ring (31 of change at 0.6, where a
+  clean build reads 0), too deep and the faceplate swallows it (at 1.4 the arc's top was
+  invisible and a nearly-empty ring showed nothing at all). 1.0 is where both readings are
+  good.
   ⚠️ **THREE CONCENTRIC BANDS DO NOT FIT ROUND A SMALL BODY, and that is the real limit
-  here.** Guide ring, stamina ring and wind-up ring are each a stroke plus a casing either
+  that forced it** — kept here because it is why the outside was abandoned.** Guide ring, stamina ring and wind-up ring are each a stroke plus a casing either
   side — about 3.2px — and between the disc rim and the dial's 1.42r there is 4.7px of
   room. So the dial cannot be honoured while a stamina ring exists, and the tightening only
   buys so much: **1.94r → 1.81r** measured, with the gap from the body edge falling from

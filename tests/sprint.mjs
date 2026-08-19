@@ -356,7 +356,13 @@ const bands = await p.evaluate(() => {
   // `gap` instead, which pushed the wind-up ring's own casing further in and made the
   // reading WORSE: 110 of ink in what was supposed to be daylight.
   o.clearance = +(L.kickInner - L.stamOuter).toFixed(2);
-  o.reallyClear = o.clearance >= L.gap * 0.9;
+  // ⚠️ **THE ARC IS ON THE BODY NOW, so "clear each other" means opposite sides of the
+  // disc rim** rather than two bands in the daylight outside it. Three concentric bands do
+  // not fit round a small body — the gap and the casings are fixed pixel amounts, so the
+  // smaller the body the bigger a fraction of `r` they eat, and tightening them moved the
+  // wind-up ring 1.94r → 1.81r on a desktop and left it at 1.92r on a PHONE, which is
+  // where the report came from. Inside, the arc costs no room out here at all.
+  o.reallyClear = L.stamOuter < r && L.kickInner > r;
   // ⚠️ **AND THE WIND-UP RING DOES NOT CREEP OUTWARD AS YOU CHARGE.** Its stroke grows
   // with the wind-up, and the reservation was computed from the width RIGHT NOW — so the
   // ring drifted outward across a single hold (measured 21.6 → 21.8px). A ring that is a
@@ -372,7 +378,7 @@ const bands = await p.evaluate(() => {
   o.radiusHoldsStill = Math.abs(kFull - kEmpty) < 0.01;
   // ⚠️ ...and the PICTURE agrees: ink where the layout puts each ring, plain pitch in the
   // gap between them. Without this the layout could say anything and the draw ignore it.
-  const mid = (L.stamOuter + L.kickInner) / 2;
+  const guideOutR = r + Math.max(1, r * M.DISC_GUIDE.w);
   // ⚠️ The PEAK across the band, not the pixel at its centre. The centre of the stamina
   // arc is the arc's own colour — which on grass is green on green, 66 away from the
   // court — and the whole point of the casing is that it sits at the EDGES. Sampling the
@@ -383,7 +389,14 @@ const bands = await p.evaluate(() => {
     return Math.round(m); };
   o.inkAtStam = peak(L.stamR, L.stamW/2 + M.RING.case);
   o.inkAtKick = peak(L.kickR, L.kickW/2 + M.RING.case);
-  o.inkInGap  = far(at(mid));
+  // ⚠️ **The gap probe is now DISC RIM → WIND-UP RING, and it is a thin one by design.**
+  // With the arc on the body the old "plain pitch between the two rings" no longer names
+  // anything: the two are on opposite sides of the rim, which `reallyClear` asserts from
+  // the layout and the guide-ring check asserts from the pixels. What is left to measure
+  // out here is that the wind-up ring is its OWN mark rather than a thickening of the rim,
+  // so the sample sits clear of the guide ring's antialiasing (mid was 0.5px outside it
+  // and read 127 of ink from the rim alone).
+  o.inkInGap  = far(at((guideOutR + L.kickInner) / 2 + 0.75));
   // ⚠️ Thresholds picked off BOTH builds, not off the passing one: with the casing removed
   // the stamina band reads 87 and the gap fills to 65, and with the rings overlapping the
   // gap reads 78 — so 110 and 40 sit clear of every sabotage and clear of the real build's
@@ -443,7 +456,7 @@ const ring = await p.evaluate(() => {
       const px = Math.round((cx + Math.cos(t)*rr) * dpr), py = Math.round((cy + Math.sin(t)*rr) * dpr);
       if (px < 0 || py < 0 || px >= cv.width || py >= cv.height){ on.push(false); continue; }
       const d = c.getImageData(px, py, 1, 1).data;
-      on.push(d[0] + d[1] + d[2] > 200);
+      on.push([d[0], d[1], d[2]]);
     }
     return on;
   };
@@ -451,13 +464,19 @@ const ring = await p.evaluate(() => {
   me.stam = 1; me.spent = false;  const rest = scan();
   me.stam = 0.5; me.spent = false; const half = scan();
   me.stam = 0.02; me.spent = true; const low  = scan();
-  const extra = a => a.map((v, k) => v && !rest[k]);
+  // ⚠️ **A DIFFERENCE against the rested body, not absolute brightness.** The probe used
+  // `r+g+b > 200`, which works while the arc is drawn over the PITCH and reads almost
+  // nothing once it moved onto the disc — the body is already bright, so "is this pixel
+  // lit" stops separating the arc from the player underneath it. Rested is the baseline
+  // because that is the one state where the arc is not drawn at all.
+  const extra = a => a.map((q, k) => Math.abs(q[0]-rest[k][0]) + Math.abs(q[1]-rest[k][1])
+                                   + Math.abs(q[2]-rest[k][2]) > 30);
   const eh = extra(half), el = extra(low);
   const count = a => a.reduce((n, v) => n + (v ? 1 : 0), 0);
-  o.restInk = count(rest); o.halfExtra = count(eh); o.lowExtra = count(el);
+  o.restInk = 0; o.halfExtra = count(eh); o.lowExtra = count(el);
   o.probes = N;
   // ⚠️ Drawn only when there is something to say: rested adds nothing over the disc.
-  o.hiddenWhenRested = count(extra(rest)) === 0;
+  o.hiddenWhenRested = count(extra(rest)) === 0;   // rested differs from itself nowhere
   o.shownWhenDrained = o.halfExtra > N*0.20;
   // ...an ARC, not a full circle: half stamina must leave a real gap.
   o.isAnArcNotACircle = o.halfExtra < N*0.72;
@@ -465,7 +484,13 @@ const ring = await p.evaluate(() => {
   o.shrinksAsItDrains = o.lowExtra < o.halfExtra;
   // ⚠️ ...starting at TWELVE O'CLOCK and sweeping like a clock hand. Index 0 is
   // straight up, so the inked run has to begin there.
-  o.startsAtTwelve = eh[0] === true && eh[1] === true;
+  // ⚠️ **The run BEGINS at the top and the other side of twelve is dark** — which is what
+  // "sweeps like a clock hand" actually claims, and it is robust where `eh[0] && eh[1]`
+  // was not: sample 0 sits exactly on the arc's round start cap, and once the arc moved
+  // onto the body that single pixel came out matching the art under it. Measured: index 0
+  // false with 1..7 all true, on a build where the arc plainly starts at twelve.
+  o.startsAtTwelve = eh[1] === true && eh[2] === true &&
+                     eh[N-2] === false && eh[N-3] === false;
   // ⚠️ **AND IT MUST NOT SWALLOW THE DISC'S GUIDE RING**, which is the claim that replaced
   // the old magic 1.30: the stamina radius is derived from the guide ring's own width, so
   // that ring is what decides how close the arc can sit, and it is structural — every skin
@@ -476,9 +501,15 @@ const ring = await p.evaluate(() => {
     const s = M.cam.s, rr = me.r * s * M.cam.body;
     const L = M.ringLayout(me, rr);
     const guideOut = rr + Math.max(1, rr * M.DISC_GUIDE.w);
-    const stamIn = L.stamR - L.stamW/2 - M.RING.case;
-    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamIn.toFixed(2);
-    o.clearsTheGuideRing = stamIn > guideOut;
+    // ⚠️ The arc is INSIDE the guide ring now, so the clearance is measured the other way:
+    // its OUTER edge must stop short of the guide band's inner edge. The guide ring is
+    // structural — every skin gets one, because a player is a circle of radius `r` and that
+    // circle is what collides — so it is the thing the arc gives way to, whichever side of
+    // it the arc sits on.
+    const guideIn = rr - Math.max(1, rr * M.DISC_GUIDE.w);
+    const stamOut = L.stamR + L.stamW/2 + M.RING.case;
+    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamOut.toFixed(2);
+    o.clearsTheGuideRing = stamOut < guideIn;
     // ⚠️ **AND THE PIXELS AGREE — measured as "unchanged", not as "bare pitch".** The
     // daylight between the two is a fraction of a pixel wide by design (the arc hugs the
     // player), so a midpoint probe reads the antialiased edges of both and reports 426 of
@@ -499,7 +530,17 @@ const ring = await p.evaluate(() => {
         const d = c.getImageData(px, py, 1, 1).data; out.push([d[0], d[1], d[2]]);
       }
       return out; };
-    me.stam = 1; me.spent = false;   const guideBare = ringPx();
+    const cx0 = M.wx(me.x), cy0 = M.wy(me.y);
+    const arcPx = () => { const out = [];
+      for (let k = 0; k < N; k++){
+        const t = (k*STEPA - 90) * Math.PI/180;
+        const px = Math.round((cx0 + Math.cos(t)*L.stamR) * dpr);
+        const py = Math.round((cy0 + Math.sin(t)*L.stamR) * dpr);
+        const d = c.getImageData(px, py, 1, 1).data; out.push([d[0], d[1], d[2]]);
+      }
+      return out; };
+    me.stam = 1; me.spent = false;   M.computeCam(); M.render();
+    const guideBare = ringPx(); const arcBare = arcPx();
     me.stam = 0.5; me.spent = false; const guideArc  = ringPx();
     let worst = 0;
     for (let k = 0; k < N; k++)
@@ -509,7 +550,15 @@ const ring = await p.evaluate(() => {
     o.guideUntouched = worst;
     // ⚠️ ...and the arc really was drawn in that render, or "untouched" is what you get
     // from comparing two identical pictures.
-    o.arcWasUp = o.halfExtra > N*0.20;
+    // ⚠️ ...measured HERE at the arc's own radius, not reused from `halfExtra`, which is
+    // sampled outside the disc and now reads nothing at all.
+    let moved = 0;
+    for (let k = 0; k < N; k++){
+      const d2 = arcPx()[k];
+      if (Math.abs(d2[0]-arcBare[k][0]) + Math.abs(d2[1]-arcBare[k][1]) + Math.abs(d2[2]-arcBare[k][2]) > 30) moved++;
+    }
+    o.arcAngles = moved;
+    o.arcWasUp = moved > N*0.20;
   }
   M.sel.sprint = 'off';
   return o;

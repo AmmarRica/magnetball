@@ -4392,7 +4392,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260819.0555PM';
+const VERSION = '20260819.0710PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4408,6 +4408,14 @@ const VERSION = '20260819.0555PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260819.0710PM', title: 'The kick circle, and your place in the menu',
+    added: [],
+    changed: [
+      '<b>The circle round you when you hold KICK is back where it belongs.</b> The stamina ring had pushed it out to nearly twice your width \u2014 worst on a phone, where it was furthest out. Stamina is drawn on the player now, so the kick circle sits exactly where the Kick ring size setting says.',
+      '<b>Settings remembers where you were.</b> Pausing mid-match and pressing Settings always dropped you on the Theme card; it now opens the card and the tab you last had open, and remembers them across a reload.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260819.0555PM', title: 'Game Feel, sorted into seven',
     added: [],
     changed: [
@@ -6522,7 +6530,7 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
 // ⚠️ Both floors are in PIXELS because that is what a thin arc is measured in: a stroke
 // under about two pixels is an anti-aliased suggestion rather than a line.
 const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 0.75, caseA: 0.55,
-               clear: 0.8, spent: '#e0563c' };
+               inset: 1.0, spent: '#e0563c' };
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -6554,7 +6562,22 @@ function ringLayout(p, r){
   // second place a radius lives, and `tests/sprint.mjs` was already locating the arc
   // with it — the same hard-coded-copy trap `tells.mjs` records for the wind-up ring.
   const guideW = Math.max(1, r * DISC_GUIDE.w);
-  const stamR = r + guideW + RING.clear + RING.case + stamW/2;
+  // ⚠️ **THE STAMINA ARC IS DRAWN ON THE BODY, just inside the guide ring** — and that is
+  // what finally gets the wind-up ring back to the player. Outside the disc, three
+  // concentric bands (guide, stamina, wind-up) do not fit: each is a stroke plus a casing
+  // either side, and the gap and the casings are FIXED PIXEL amounts, so the smaller the
+  // body the bigger a fraction of `r` they eat. Tightening them moved the wind-up ring
+  // 1.94r → 1.81r on a desktop-sized body and **did almost nothing on a phone**, where the
+  // body is 9.8px and it still measured 1.92r — a faint circle at nearly twice the body
+  // radius, which is where "I don't see the circle" came from both times.
+  // ⚠️ Inside, the arc costs NO room outside the disc, so `kickR` is simply the dial again
+  // and the collision case is gone rather than negotiated. It is also the most literal
+  // reading of "stamina closer to the player": it is on them.
+  // ⚠️ No `RING.clear`/`RING.case` in the radius here — inside, the arc sits over the
+  // player's own body, which is a known solid colour rather than the pitch, so it needs
+  // clearance from the guide ring and nothing more. It still draws its casing, because a
+  // skin may paint anything under it.
+  const stamR = Math.max(r*0.35, r - guideW - stamW/2 - RING.inset);
   const gap = Math.max(RING.gap, r*RING.gapR);
   const kickW = Math.max(2, r*0.16) * (1 + chargeFrac(p)*0.45);
   // ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets, never its width right
@@ -6568,12 +6591,10 @@ function ringLayout(p, r){
   // has to clear, not the centre lines.
   const stamOuter = stamR + stamW/2 + RING.case;
   const kickHalf = kickW/2 + RING.case;
-  const kickHalfMax = (Math.max(2, r*0.16) * 1.45)/2 + RING.case;
-  // ⚠️ Reserved on the SETTING, not on the stamina ring being up right now — it appears the
-  // frame after KICK goes down, so a live test would jump the wind-up ring outward one
-  // frame in. The wind-up radius is a player dial and keeps whatever it is set to unless
-  // that would put it through the stamina arc.
-  const kickR = Math.max(r*kickRingMul(), sprintsFor(p) ? stamOuter + gap + kickHalfMax : 0);
+  // ⚠️ **THE DIAL, FULL STOP — nothing pushes this any more.** It used to be reserved
+  // outward to clear the stamina ring, which is how a control the player had set to 1.42
+  // ended up drawn at 1.94. With the arc on the body there is nothing out here to clear.
+  const kickR = r*kickRingMul();
   return { stamR, stamW, kickR, kickW, gap, stamOuter, kickInner: kickR - kickHalf };
 }
 const SPRINTOPT = {
@@ -9446,7 +9467,19 @@ function openSection(sec){
     card.classList.toggle('collapsed', !mine);
     uiState[card.dataset.sec] = !mine;
   });
+  // ⚠️ Remember WHICH card, so coming back to settings lands where you left off. The
+  // collapsed flags alone cannot say this: `collapseAllSections` closes everything, and
+  // after that every card reads "closed" and the last one you used is gone.
+  uiState._open = sec;
   syncChevrons(); saveUI(uiState);
+}
+// The card to open when nobody names one. ⚠️ Checked against the DOM, because a stored
+// section can outlive the card it names — the standalone Ball card was removed and a save
+// from before that still says 'ball', which would open nothing at all.
+function lastSection(){
+  const want = uiState._open;
+  if (want && document.querySelector('.card.collapsible[data-sec="' + want + '"]')) return want;
+  return 'theme';
 }
 function collapseAllSections(){
   document.querySelectorAll('.card.collapsible').forEach(card=>{
@@ -10032,7 +10065,9 @@ const SUBTABS = {
   theme:  [['bundle', '✨ Bundle']].concat(
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
-const subTab = {};                                  // which pane each group is showing
+// Which pane each group is showing. Seeded from the saved UI state, so the settings
+// screen comes back where you left it rather than on the first chip of every row.
+const subTab = Object.assign({}, (uiState && uiState._tab) || {});
 
 // ============================================================
 //  SHOW MODE — the menu cut down to what a guest needs
@@ -10101,7 +10136,12 @@ function toggleShowMode(){
 
 function showSubTab(group, pane){
   const card = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!card) return;
+  // ⚠️ Persisted, not just held in memory: "where I was modifying the settings" is the
+  // card AND the pane inside it, and a reload otherwise drops you back on the first chip.
+  // Stored under a key of its own so it cannot collide with a section name.
   subTab[group] = pane;
+  uiState._tab = Object.assign({}, uiState._tab, { [group]: pane });
+  saveUI(uiState);
   const scope = card.closest('.card') || document;
   for (const el of scope.querySelectorAll('.subpane'))
     el.classList.toggle('on', el.dataset.pane === pane);
@@ -10736,7 +10776,7 @@ $('ovResume').onclick = () => togglePause(false);
 $('ovMenu').onclick = toMenu;
 // Settings is reached from the pause menu now. The gear used to sit in the HUD, one
 // mis-tap from the ball while the match was live.
-$('ovSettings').onclick = () => openLook('theme');
+$('ovSettings').onclick = () => openLook();     // where you left off — see lastSection
 $('ovShowLock').onclick = toggleShowMode;
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
@@ -11101,7 +11141,11 @@ const FEEL_SLIDERS = [
 // menu: show the menu (docked on desktop, fullscreen on mobile), rebuild the
 // pickers, then expand + scroll the requested card into view.
 function openLook(section){
-  const target = section || 'theme';
+  // ⚠️ **`lastSection()`, not a hard-coded 'theme'.** Pausing mid-match and pressing
+  // Settings always landed on the Theme card however deep in another one you had been —
+  // and because `openSection` collapses the rest, it then OVERWROTE the record of where
+  // you were, so there was no way back but to go looking again.
+  const target = section || lastSection();
   buildSettings();
   if (isDesktop()) sel.deskDock = true, saveSel();
   if (sel.dockCollapsed) sel.dockCollapsed = false, saveSel();   // opening settings expands the dock
