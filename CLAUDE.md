@@ -738,6 +738,33 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   painted into: positioned in that region's own fractions it landed at y = 1280 on a 1000px
   canvas — off screen entirely, because the region is three times the pitch each way and
   its lower half is below anything anybody sees.
+  ⚠️ **FACEOFF ORBIT'S SKY WAS FROZEN, and it was ONE WORD.** `step` was written
+  `step(st, dt)` and the registry's contract is `step(st)` — `advanceDynField()` passes no
+  second argument, so `dt` was `undefined`, `st.t` went **NaN** on the very first step, and
+  the paint's `const t = st.t || 0` silently rescued NaN back to zero. Forever. The drift and
+  the twinkle were already written; the clock simply never left zero. Measured at **0.000%**
+  of background pixels changing over 900 steps against 0.06–0.5% for every other animated
+  field. ⚠️ **`bambamzone` carried the identical line** and was equally dead. Every other
+  field uses an integer step counter, which is the form that cannot be fed the wrong thing.
+  ⚠️ **The rates had to be retuned in the same breath.** `ORBIT.drift` was 0.9 "units a
+  step" ≈ 54px/second — three and a half orders of magnitude above `voidgrid`'s 0.00022 —
+  so unfreezing the clock without retuning swaps a dead sky for a streaking one. Rates are
+  fractions per step now, the resolution-independent form the other fields use.
+  ⚠️ **THE PITCH CANNOT MOVE**, so the tumble is carried entirely by the void: stars sweep in
+  ARCS about the pitch centre, near stars are carried FURTHER and FASTER than far ones, and
+  the arcs are SQUASHED vertically (`ORBIT.tilt`) so it reads as going round a sphere rather
+  than spinning on a turntable. Stars on the far side dim — without that the paths read as
+  ellipses and the whole thing is a flat ring seen at an angle. ONE number, `s.d`, drives the
+  radius, the rate and the brightness, which is what makes it read as depth rather than as
+  three unrelated effects.
+  ⚠️ The planet rides the SAME rotation, further out and lagging, and is drawn **before** the
+  deck fill — which is what makes "behind" true rather than merely claimed. Its orbit is in
+  PITCH-BOX units, never the oversized void region's fractions (the y = 1280 trap below).
+  ⚠️ It is a **lit limb and a terminator**, not the flat radial haze it was: peak luminance
+  101 against a void floor of 6. "The moon behind" means you can see it.
+  ⚠️ `tests/dyntheme.mjs` **could not catch any of this** because it stepped these two fields
+  as `f.step(stB, 1.0)` — **passing a `dt` the real caller never passes**. It tested the
+  painter's arithmetic against a call the game does not make.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It

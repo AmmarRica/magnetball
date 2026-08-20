@@ -1128,7 +1128,13 @@ const r = await p.evaluate(async ()=>{
       const f = M.DYN_FIELDS.bambamzone, stB = {};
       // A pitch box in the MIDDLE of the canvas, so there is room either side to look at.
       const L = 140, T = 120, W = 120, H = 160;
-      f.reset(stB); f.step(stB, 2.0);
+      // ⚠️ **`f.step(stB)`, and it used to pass a `dt` the real caller never passes.** That
+      // is precisely what hid a shipped bug for the life of this field: `step` was written
+      // `step(st, dt)`, `advanceDynField()` calls `step(st)`, so `dt` was `undefined`, the
+      // clock went NaN on the first step and the paint's `st.t || 0` rescued it to zero for
+      // ever. This block tested the painter's arithmetic against a call the game does not
+      // make. A test must step a field the way the game steps it.
+      f.reset(stB); f.step(stB); f.step(stB);
       f.paint(ccB, stB, L, T, W, H, { field: M.FIELDS.classic });
       const count = (x0, y0, x1, y1, pred) => {
         const d = ccB.getImageData(x0, y0, x1-x0, y1-y0).data;
@@ -1169,10 +1175,130 @@ const r = await p.evaluate(async ()=>{
         return ccB.getImageData(0,0,400,400).data.join(','); };
       const a1 = snap(), a2 = snap();
       o.paintIsPure = a1 === a2;
-      f.step(stB, 1.0);
+      f.step(stB);
       o.driftMovesWithStep = snap() !== a1;
     }
     M.applyBundle('classic');
+  }
+
+  // ================= FACEOFF ORBIT: the sky TUMBLES =======================
+  // ⚠️ Reported as "the theme doesn't work as intended — I want the illusion of the field
+  // rotating in 3D". It did not move at all: `step(st, dt)` against a caller that passes no
+  // `dt` meant the clock never left zero. Measured at **0.000%** of background pixels
+  // changing over 900 steps, against 0.06-0.5% for every other animated field.
+  // ⚠️ Driven through the REAL `advanceDynField()`, which is the whole point — the previous
+  // block's `f.step(st, 1.0)` is what hid this.
+  {
+    M.sel.look.palette = 'faceoff'; M.applyTheme('faceoff');
+    M.sel.look.field = 'faceoff'; M.sel.field = 'faceoff';
+    M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(3); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    // Bodies parked well off the pitch, so anything that changes is the SKY.
+    const park = () => { for (const q of w.players){ q.x=9e4; q.y=9e4; q.px=9e4; q.py=9e4; }
+                         w.ball.x=9e4; w.ball.y=9e4; w.ball.px=9e4; w.ball.py=9e4; };
+    park(); M.render();
+    const h0 = frame();
+    M.render();
+    o.orbitStillWithoutStep = frame() === h0;    // a draw must not advance it
+    for (let i = 0; i < 400; i++){ M.advanceDynField(); }
+    park(); M.render();
+    o.orbitMovesWithStep = frame() !== h0;
+
+    // ---- the PARALLAX, measured as DISTANCE TRAVELLED ---------------------
+    // ⚠️ **A CHANGED-PIXEL COUNT SATURATES AND CANNOT MEASURE THIS — measured, and the
+    // first version of this check did exactly that.** Once a star has moved off its own
+    // few pixels, moving further changes no more pixels: near vs far read 252/128 at 20
+    // steps, 291/272 at 80, and 5464/5408 at 1800 — a ratio of 1.01 for a parallax that
+    // is really 5×. So one star per depth band is isolated and its INK is located, which
+    // is a distance and does not saturate.
+    // ⚠️ Located in the rendered frame, never by re-deriving the position formula — that
+    // would test the suite's copy of the maths instead of the painter.
+    // ⚠️ **The deck is excluded from the scan**, because its rib lines are drawn in the
+    // same near-white star ink and are static: without that, both bands found the same
+    // rib pixel and reported a travel of 0.
+    // ⚠️ This is what separates a TUMBLE from a flat spin, which moves every star alike
+    // and would sail through "the stars moved".
+    const fo = M.DYN_FIELDS.faceoff;
+    const NC = 420;
+    const cv2 = document.createElement('canvas'); cv2.width = cv2.height = NC;
+    const c2 = cv2.getContext('2d');
+    const bL = 150, bT = 140, bW = 110, bH = 150;
+    const shotOf = (st2) => { c2.fillStyle = '#000000'; c2.fillRect(0,0,NC,NC);
+      fo.paint(c2, st2, bL, bT, bW, bH, { field: M.FIELDS.faceoff });
+      return c2.getImageData(0,0,NC,NC).data; };
+    const starAt = (st2) => { const d = shotOf(st2); let bx=-1, by=-1, best=-1;
+      for (let y=0;y<NC;y++) for (let x=0;x<NC;x++){
+        if (x>=bL-2 && x<=bL+bW+2 && y>=bT-2 && y<=bT+bH+2) continue;   // the deck is not sky
+        const i=(y*NC+x)*4, R=d[i], G=d[i+1], B=d[i+2];
+        if (B > R+18) continue;                                          // the planet leans blue
+        const lum=(R+G+B)/3; if (lum>best){ best=lum; bx=x; by=y; } }
+      return [bx, by, best]; };
+    const oneStar = (lo, hi) => {
+      const st2 = {}; fo.reset(st2);
+      const pick = st2.s.filter(x => x.d >= lo && x.d < hi)[0];
+      if (!pick) return { travel: -1 };
+      st2.s = [pick];
+      const a = starAt(st2);
+      for (let i = 0; i < 900; i++) fo.step(st2);
+      const b3 = starAt(st2);
+      return { travel: Math.hypot(b3[0]-a[0], b3[1]-a[1]), lum: a[2] };
+    };
+    const moved = (a, b3) => { let n = 0;
+      for (let i = 0; i < a.length; i += 4)
+        if (Math.abs(a[i]-b3[i]) + Math.abs(a[i+1]-b3[i+1]) + Math.abs(a[i+2]-b3[i+2]) > 24) n++;
+      return n; };
+    const nearB = oneStar(0.9, 1.01), farB = oneStar(0.35, 0.45);
+    o.orbitNear = +nearB.travel.toFixed(1); o.orbitFar = +farB.travel.toFixed(1);
+    // ⚠️ Paired with the near star really travelling, or a build where NOTHING moves gives
+    // 0/0 and the ratio is whatever the guard makes it.
+    o.orbitHasParallax = nearB.travel > 20 && farB.travel >= 0 &&
+                         nearB.travel > farB.travel * 2.5;
+
+    // ---- the sky is really stars, not the deck flickering -----------------
+    // ⚠️ The `keptStars` technique: empty the star list and see what the difference was.
+    // Without it "the sky moved" is satisfied by the seam or the planet alone.
+    { const st3 = {}; fo.reset(st3);
+      const withS = shotOf(st3);
+      const keep = st3.s; st3.s = [];
+      const noS = shotOf(st3);
+      st3.s = keep;
+      o.orbitStarPixels = moved(withS, noS);
+      o.orbitHasStars = o.orbitStarPixels > 60; }
+
+    // ---- the PLANET moves too, and stays a disc ---------------------------
+    // ⚠️ Asked for by name: "the moon/earth behind" has to move as well. Measured as the
+    // centroid of the planet's own ink shifting, with the stars taken out so a moving star
+    // cannot stand in for it.
+    { const st4 = {}; fo.reset(st4); st4.s = [];
+      const cent = () => { const d = shotOf(st4); let sx=0, sy=0, n=0;
+        for (let y=0;y<360;y++) for (let x=0;x<360;x++){ const i=(y*360+x)*4;
+          // the planet is the only blue-ish body out there
+          if (d[i+2] > d[i] + 14 && d[i+2] > 30){ sx+=x; sy+=y; n++; } }
+        return n ? [sx/n, sy/n, n] : null; };
+      const p0 = cent();
+      for (let i=0;i<1800;i++) fo.step(st4);
+      const p1 = cent();
+      o.orbitPlanet = [p0 && p0[2], p1 && p1[2]];
+      o.orbitPlanetMoves = !!(p0 && p1 && Math.hypot(p1[0]-p0[0], p1[1]-p0[1]) > 8);
+      // ⚠️ **VISIBLE MEANS CONTRAST, NOT AREA — and a sabotage proved it.** The first
+      // version counted blue-leaning pixels, which a faint wash has just as many of: putting
+      // the old flat haze back changed the count barely at all and sailed straight through.
+      // What "the moon behind" means is that it stands out from the sky, so the planet's
+      // PEAK is measured against the void's own floor. Shipping reads 112 against 28.
+      { const d2 = shotOf(st4); let peak = 0; const lum = [];
+        for (let y=0;y<NC;y++) for (let x=0;x<NC;x++){
+          if (x>=bL-2 && x<=bL+bW+2 && y>=bT-2 && y<=bT+bH+2) continue;
+          const i=(y*NC+x)*4, L=(d2[i]+d2[i+1]+d2[i+2])/3;
+          if (L>peak) peak=L; lum.push(L); }
+        lum.sort((a,b)=>a-b);
+        o.orbitPlanetPeak = Math.round(peak);
+        o.orbitVoidFloor = Math.round(lum[lum.length>>1]);
+        o.orbitPlanetVisible = peak > o.orbitVoidFloor + 45; } }
+
+    // ---- and the paint is PURE for a given step ---------------------------
+    { const st5 = {}; fo.reset(st5); fo.step(st5); fo.step(st5);
+      const a1 = shotOf(st5).join(','), a2 = shotOf(st5).join(',');
+      o.orbitPaintIsPure = a1 === a2; }
   }
 
   return o;
@@ -1187,6 +1313,13 @@ ok(r.insideIsBaize, `wood is inside the boundary, so the ball rolls over the cus
 ok(r.deepIsBaize, `the middle of the table is not baize, so the probe is not measuring the cloth: ${JSON.stringify(r.deepInside)}`);
 ok(r.outsideIsWood, `there is no cushion outside the boundary at all, so the checks above prove nothing: ${JSON.stringify(r.justOutside)}`);
 ok(r.cutCornerIsNotCourt, `court colour is stranded in a chamfered field's cut corner, outside the line and outside the wood: ${JSON.stringify(r.cutCorner)}`);
+ok(r.orbitStillWithoutStep, 'the Faceoff sky advanced inside a DRAW — it must only move on a sim step');
+ok(r.orbitMovesWithStep, 'THE FACEOFF SKY NEVER MOVED WHEN STEPPED — `step(st, dt)` against a caller that passes no dt makes the clock NaN, and the paint\'s `st.t || 0` rescues it to zero for ever');
+ok(r.orbitHasParallax, `no parallax in the tumble: a near star travelled ${r.orbitNear}px and a far one ${r.orbitFar}px — a flat spin carries every star alike and would sail through "the stars moved"`);
+ok(r.orbitHasStars, `the Faceoff void has no stars in it — emptying the list changed only ${r.orbitStarPixels}px, so "the sky moved" could be the seam or the planet alone`);
+ok(r.orbitPlanetVisible, `the planet does not stand out from the sky: peak ${r.orbitPlanetPeak} against a void floor of ${r.orbitVoidFloor} — "the moon behind" means you can SEE it, and counting tinted pixels measures the disc's AREA, which a faint wash has just as much of`);
+ok(r.orbitPlanetMoves, 'the planet never moved — it was asked for by name, and a static moon in a turning sky reads as a smudge on the lens');
+ok(r.orbitPaintIsPure, 'two paints of one step gave different frames — a paused screen would crawl at the refresh rate');
 ok(r.stillWithoutStep, 'the field advanced inside a DRAW — it must only move on a sim step, or a 144Hz screen runs it fast');
 ok(r.movesWithStep, 'the starfield never moved when stepped');
 ok(r.samples >= 60, `too few samples to mean anything: ${r.samples}`);

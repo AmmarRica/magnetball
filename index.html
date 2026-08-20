@@ -4511,7 +4511,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0845AM';
+const VERSION = '20260820.1000AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4527,6 +4527,15 @@ const VERSION = '20260820.0845AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.1000AM', title: 'Faceoff Orbit actually orbits',
+    added: [],
+    changed: [
+      '<b>The Faceoff Orbit sky was completely frozen and now it turns.</b> Stars sweep around the pitch, the ones nearest you travel further than the far ones, and the whole thing is tilted so it reads as a slab of deck slowly tumbling in space rather than a picture of stars.',
+      '<b>The planet behind it moves too, and you can actually see it now</b> \u2014 it was a faint smudge you could easily miss. It has a lit edge and a dark side, and it passes behind the deck as the view comes round.',
+      'The Bambamzone stars were frozen in exactly the same way and are drifting again.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0845AM', title: 'Pitches by shape',
     added: [
       '<b>The Field picker is grouped by shape</b> \u2014 Square, Rounded and Other. Every tab still shows every size, smallest to largest, so it is grouped by the shape of the court and never by how big it is. Thirty-three pitches in one grid was a lot to read; it opens on whichever group your current pitch belongs to.',
@@ -23420,27 +23429,54 @@ const BLAST = { stars: 320, drift: 3.2, twinkle: 0.55, edge: 0.045, glow: 0.34 }
 // touchline — the point of the look is a court hanging in nothing.
 // ⚠️ Its own seeded PRNG, never `w.rng`: how long the field has been on screen must not
 // perturb a single bot decision. The drift advances in `step`, never in `paint`.
+// ⚠️ **RATES ARE FRACTIONS PER STEP, and `drift` used to be "units a step" at 0.9.** That
+// works out at ~54 pixels a second, three and a half orders of magnitude above `voidgrid`'s
+// 0.00022 ("a rock crosses in about a match") — it never showed because the clock was frozen
+// (see `step` below), so unfreezing it without retuning would have replaced a dead sky with
+// a streaking one. Fractions also make the motion resolution-independent, which is the form
+// `bambamzone` and `voidgrid` already use.
 const ORBIT = {
   stars: 300,       // over a region several times the pitch box — see paint
-  drift: 0.9,       // units a step, sideways, so the sky is not static
+  spin: 0.00042,    // radians a step — a star near the rim goes right round in ~4 minutes
+  tilt: 0.42,       // how hard the sweep is squashed vertically: 1 is a turntable, 0 is edge-on
+  near: 0.35,       // the closest depth band; nearer stars sweep wider and faster
   twinkle: 0.5,
   seam: 0.055,      // the split, as a fraction of the court's LENGTH
   causeway: 0.30,   // how much of the width the bridge across the seam covers
   base: 0.26,       // each base platform, as a fraction of the length
   ribs: 7,          // deck plating lines per base
   planet: 0.55,     // planet radius as a fraction of the pitch WIDTH
+  planetR: 1.35,    // ...and how far out it orbits, in pitch WIDTHS from the centre
+  planetSpin: 0.7,  // its share of the star spin — it is further away, so it lags
 };
 DYN_FIELDS.faceoff = {
   name: 'Faceoff Orbit',
   bleed: true,
+  // ⚠️ **THE SKY IS A SPHERE, not a scatter.** Each star is an ANGLE and a DEPTH rather than
+  // an x/y, because that is what lets the whole field turn as one body: `paint` puts it at
+  // `centre + (cos a, sin a * tilt) * radius(d)`, so every star travels the same rotation
+  // and the depth decides how far it gets carried.
   reset(st){
     const rnd = mulberry32(0x0FACE01);       // fixed: the same sky every match
     st.s = [];
-    for (let i = 0; i < ORBIT.stars; i++)
-      st.s.push({ x: rnd(), y: rnd(), r: 0.4 + rnd()*1.6, ph: rnd()*Math.PI*2, sp: 0.3 + rnd()*0.9 });
+    for (let i = 0; i < ORBIT.stars; i++){
+      // ⚠️ `d` is DEPTH, 0 far and 1 near, and it drives three things at once — the radius,
+      // the angular rate and the brightness. One number doing all three is what makes the
+      // parallax read as depth rather than as three unrelated effects.
+      const d = ORBIT.near + rnd() * (1 - ORBIT.near);
+      st.s.push({ a: rnd()*Math.PI*2, d, r: 0.4 + rnd()*1.6, ph: rnd()*Math.PI*2 });
+    }
     st.t = 0;
   },
-  step(st, dt){ if (!st.s) this.reset(st); st.t = (st.t || 0) + dt; },
+  // ⚠️ **`step(st)`, and it was `step(st, dt)` — one word, and the whole theme was dead.**
+  // The registry's contract is `step(st)` called once per sim step; `advanceDynField()` passes
+  // NO second argument, so `dt` was `undefined`, `st.t` went `NaN` on the very first step, and
+  // `paint`'s `st.t || 0` silently rescued NaN back to zero. Forever. The drift and the
+  // twinkle were already written; the clock simply never left zero, and it measured as 0.000%
+  // of background pixels changing over 900 steps against 0.06-0.5% for every other animated
+  // field. `bambamzone` carried the identical line. Every other field in the registry uses an
+  // integer step counter, which is the form that cannot be fed the wrong thing.
+  step(st){ if (!st.s) this.reset(st); st.t = (st.t | 0) + 1; },
   paint(c, st, L, T, W, H, w){
     if (!st.s) this.reset(st);
     const t = st.t || 0;
@@ -23457,24 +23493,56 @@ DYN_FIELDS.faceoff = {
     const ox = L - W, oy = T - H, ow = W*3, oh = H*3;
     c.save();
     c.fillStyle = voidCol; c.fillRect(ox, oy, ow, oh);
-    // A planet to one side, well clear of the court so nothing decorative sits where the
-    // play is. Drawn before the stars so its limb occludes them.
-    // ⚠️ Placed off the PITCH box, not off the oversized void region. Positioned in the
-    // void's own fractions it landed at y = 1280 on a 1000px canvas — off screen entirely,
-    // because that region is three times the pitch in each direction and its lower half is
-    // below anything anybody sees. The pitch is the only rectangle that is always in view.
+    // ---- THE TUMBLE --------------------------------------------------------
+    // ⚠️ **The pitch cannot move** — a painter may never change where a body can go — so the
+    // whole illusion is carried by the void turning around it. Three things together, and it
+    // needs all three: the stars sweep in ARCS about the pitch centre, near stars are carried
+    // FURTHER and FASTER than far ones, and the arcs are SQUASHED vertically so the motion
+    // reads as going round a sphere rather than spinning on a turntable.
+    // ⚠️ A pure function of `st.t`: no state is advanced here. Two paints of one step give
+    // the same sky, or a paused screen crawls at the refresh rate.
+    const cx = L + W/2, cy = T + H/2;
+    const span = Math.hypot(W*3, H*3) * 0.5;      // reach to the far corner of the void
+    const spin = t * ORBIT.spin;
+
+    // The planet rides the SAME rotation, further out and lagging, so it sweeps across and
+    // goes behind the deck rather than sitting in a corner.
+    // ⚠️ Its orbit is in PITCH-BOX units (`W`), never the oversized void region's fractions.
+    // Positioned in that region's own fractions it landed at y = 1280 on a 1000px canvas —
+    // off screen entirely, because the region is three times the pitch each way and its
+    // lower half is below anything anybody sees. The pitch is the only rectangle always in
+    // view. ⚠️ And it is drawn BEFORE the deck fill, which is what makes "behind" true
+    // rather than merely claimed.
     const pr = W*ORBIT.planet;
-    const px = L - W*0.85, py = T + H*0.30;
-    const g = c.createRadialGradient(px - pr*0.35, py - pr*0.35, pr*0.1, px, py, pr);
-    g.addColorStop(0, glow); g.addColorStop(1, voidCol);
-    c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI); c.fillStyle = g; c.fill();
+    const pa = spin * ORBIT.planetSpin + 2.35;    // its own phase, so it is not on top of a star
+    const px = cx + Math.cos(pa) * W * ORBIT.planetR;
+    const py = cy + Math.sin(pa) * W * ORBIT.planetR * ORBIT.tilt;
+    // ⚠️ A LIT LIMB AND A TERMINATOR, not a flat haze. It was a radial gradient straight from
+    // `dynGlow` into the void and rendered as a smudge you could not name — "the moon behind"
+    // means you can see it. The body is a shade darker than the void's own floor so it reads
+    // as a disc, and the light comes from one side.
+    c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI);
+    c.fillStyle = rgba(glow, 0.55); c.fill();
+    const g = c.createRadialGradient(px - pr*0.45, py - pr*0.45, pr*0.05, px, py, pr*1.02);
+    g.addColorStop(0, rgba(mark, 0.30));
+    g.addColorStop(0.45, rgba(glow, 0.42));
+    g.addColorStop(1, rgba(voidCol, 0.92));
+    c.beginPath(); c.arc(px, py, pr, 0, 2*Math.PI);
+    c.fillStyle = g; c.fill();
+
     for (const s of st.s){
-      // Sideways drift, wrapped — a slow parallax rather than anything that moves fast
-      // enough to pull the eye off the ball.
-      let sx = ox + ((s.x + (t * ORBIT.drift * s.sp) / ow) % 1) * ow;
-      const sy = oy + s.y * oh;
-      const a = 0.35 + ORBIT.twinkle * 0.5 * (1 + Math.sin(t*1.6*s.sp + s.ph));
-      c.globalAlpha = Math.max(0, Math.min(1, a));
+      // ⚠️ ONE number, `s.d`, drives the radius, the rate and the brightness at once — which
+      // is what makes the parallax read as DEPTH rather than as three unrelated effects.
+      const a2 = s.a + spin * s.d;
+      const rad = span * (0.18 + s.d * 0.86);
+      const sx = cx + Math.cos(a2) * rad;
+      const sy = cy + Math.sin(a2) * rad * ORBIT.tilt;
+      // ⚠️ Stars on the far side of the sweep DIM. Without it the paths are visibly ellipses
+      // and the whole thing reads as a flat ring seen at an angle; with it the ring closes
+      // into a sphere. `sin` is the depth into the screen for this rotation.
+      const limb = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(a2));
+      const tw = 0.35 + ORBIT.twinkle * 0.5 * (1 + Math.sin(t * 0.03 * (0.4 + s.d) + s.ph));
+      c.globalAlpha = Math.max(0, Math.min(1, tw * limb * (0.45 + s.d * 0.55)));
       c.fillStyle = mark;
       c.fillRect(sx, sy, s.r, s.r);
     }
@@ -23538,7 +23606,12 @@ DYN_FIELDS.bambamzone = {
       st.st.push({ x: rnd(), y: rnd(), r: 0.4 + rnd()*1.5, ph: rnd()*Math.PI*2, sp: 0.3 + rnd()*0.9 });
     st.t = 0;
   },
-  step(st, dt){ if (!st.st) this.reset(st); st.t = (st.t || 0) + dt; },
+  // ⚠️ **`step(st)`, and it was `step(st, dt)` — the identical one-word defect Faceoff Orbit
+  // carried.** `advanceDynField()` passes no second argument, so `dt` was `undefined`, `st.t`
+  // went `NaN` on the first step, and the paint's `st.t || 0` rescued it back to zero for
+  // ever. Measured at 0.000% of background pixels changing over 900 steps: the star drift
+  // this field is built around never moved once.
+  step(st){ if (!st.st) this.reset(st); st.t = (st.t | 0) + 1; },
   paint(c, st, L, T, W, H, w){
     if (!st.st) this.reset(st);
     const t = st.t || 0;
@@ -23562,9 +23635,12 @@ DYN_FIELDS.bambamzone = {
     // OWN phase and the field clock, so it is a pure function of the step — two draws of
     // one frame give the same sky.
     for (const s2 of st.st){
-      const y = VT + (((s2.y + t * BLAST.drift * 0.01 * s2.sp) % 1) * VH);
+      // ⚠️ The `0.01` became `0.00018` when the clock was fixed. The old figure was tuned
+      // for a `dt` in SECONDS, so on an integer step counter it wrapped the sky every half
+      // second; this is the same speed the field was designed for (a full wrap in ~29s).
+      const y = VT + (((s2.y + t * BLAST.drift * 0.00018 * s2.sp) % 1) * VH);
       const x = VL + s2.x * VW;
-      const a = 0.35 + BLAST.twinkle * 0.5 * (1 + Math.sin(t * 1.7 * s2.sp + s2.ph));
+      const a = 0.35 + BLAST.twinkle * 0.5 * (1 + Math.sin(t * 0.028 * s2.sp + s2.ph));
       c.fillStyle = rgba(star, Math.min(1, a));
       c.beginPath(); c.arc(x, y, s2.r, 0, 2*Math.PI); c.fill();
     }
