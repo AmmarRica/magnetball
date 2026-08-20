@@ -100,6 +100,61 @@ const r = await p.evaluate(async ()=>{
     }
     return out; };
   o.wideGlyphStaysInside = spill('quads') === 0 && spill('nine6') === 0;
+
+  // ---- THE GLYPH IS CENTRED ON THE DISC ------------------------------------
+  // ⚠️ Reported as the shirt number not being in the middle of it, and it was not: every
+  // entry in the table sat 4.5-7px LOW on a 52px disc, worst case 8.0. Two causes, and the
+  // big one looks correct — `textBaseline='middle'` centres the FONT's em box, and a digit
+  // has no descender, so its ink is all above the baseline while the em box reserves
+  // descender space below it. The rest was a hand-tuned `+ r*0.04` nudge on every glyph.
+  //
+  // ⚠️ **MEASURED AS A DIFFERENCE against the same disc with no faceplate.** An absolute
+  // ink scan reads the disc's own rim and body — which are filled circles centred on the
+  // very point being checked — and reports a centre of ~0 on every build, the broken one
+  // included. That is this file's standing trap and it is at its sharpest here.
+  // ⚠️ **Paired with "the glyph is drawn at all"**, or "it is centred" is satisfied by a
+  // build that draws nothing. `blank` is the braille blank `⠀` and is excluded BY NAME: it
+  // is a real, non-collapsing space and IS the blank avatar, so zero ink is correct there —
+  // and it is also the one shipped key whose text metrics come back unusable, which is what
+  // the painter's `isFinite` guard is for.
+  const R = 26, N = 96, C = N/2;
+  const plate = (flag) => { const cv=document.createElement('canvas'); cv.width=cv.height=N;
+    const c=cv.getContext('2d');
+    M.drawDisc(c, C, C, R, { color:'#f0a34b', flag, eyes:false, cap:'none' });
+    return c.getImageData(0,0,N,N).data; };
+  const bareDisc = plate('none');
+  const glyphBox = (flag) => {
+    const a = plate(flag); let top=1e9, bot=-1e9, n=0, mr=0;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++){
+      const i=(y*N+x)*4;
+      const d = Math.abs(a[i]-bareDisc[i]) + Math.abs(a[i+1]-bareDisc[i+1]) + Math.abs(a[i+2]-bareDisc[i+2]);
+      if (d > 60){ if(y<top)top=y; if(y>bot)bot=y; n++;
+                   const rr=Math.hypot(x-C,y-C); if(rr>mr)mr=rr; }
+    }
+    return n ? { off:(top+bot)/2 - C, ink:n, mr } : { off:null, ink:0, mr:0 };
+  };
+  const boxes = Object.keys(M.TEXTS).map(k => ({ k, ...glyphBox(k) }));
+  const drawn = boxes.filter(q => q.k !== 'blank');
+  o.everyGlyphHasInk = drawn.every(q => q.ink > 0);
+  o.blankHasNone = boxes.find(q => q.k === 'blank').ink === 0;
+  o.worstOffset = +Math.max(...drawn.map(q => Math.abs(q.off))).toFixed(2);
+  o.meanOffset = +(drawn.reduce((a,q) => a + q.off, 0) / drawn.length).toFixed(3);
+  // ⚠️ **THE MEAN IS THE SHARP INSTRUMENT HERE, AND A MAX-ABSOLUTE CHECK IS NOT — a
+  // sabotage proved it.** The defect is a SYSTEMATIC one: every glyph low by the same
+  // amount. Per-glyph rounding is ±0.5 (a bounding box of even height has its midpoint on a
+  // half-pixel), which is the same size as the smaller of the two causes — so putting the
+  // `r*0.04` nudge back moved the worst absolute offset only 1.0 → 1.5 and sailed past a
+  // max-only check. Averaged over all 47 drawn glyphs that rounding cancels and the bias
+  // does not: this build measures **-0.36** and the nudge build **+0.68**.
+  // ⚠️ Both are kept. The mean catches a bias the whole table shares; the max stops one
+  // exotic glyph going wild without the average noticing. Neither alone is the claim.
+  o.glyphIsCentred = Math.abs(o.meanOffset) <= 0.5 && o.worstOffset <= 1.5;
+  o.offBy = drawn.filter(q => Math.abs(q.off) > 1.5).map(q => q.k + ' ' + q.off).slice(0, 6);
+  // ⚠️ And nothing was pushed off the disc getting there. `wideGlyphStaysInside` above
+  // covers two keys; this covers all 48, so the next person who reaches for a height-based
+  // fit to the plate has a guard rather than a surprise.
+  o.maxInkRadius = +Math.max(...drawn.map(q => q.mr)).toFixed(1);
+  o.nothingSpills = o.maxInkRadius <= R;
   return o;
 });
 
@@ -110,7 +165,8 @@ const must = ['defaultIsANumber','freshProfileIsANumber','allNumbers','noCountry
   'everyGlyphFromTheList','noDuplicateGlyphs','allTextUnlocked','textKeysDontClash',
   'textIsACategory','countsIncludeText','oneTilePerGlyph','everyTilePaints',
   'plateChangesTheDisc','differentDigitsDiffer','differentStylesDiffer','blankDraws',
-  'pickEquips','pickPersists','wornInMatch','wideGlyphStaysInside'];
+  'pickEquips','pickPersists','wornInMatch','wideGlyphStaysInside',
+  'everyGlyphHasInk','blankHasNone','glyphIsCentred','nothingSpills'];
 const bad = must.filter(k => r[k] !== true);
 const ok = bad.length === 0 && errors.length === 0;
 if (bad.length) console.log('FAILED:', bad);

@@ -4460,7 +4460,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0500AM';
+const VERSION = '20260820.0615AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4476,6 +4476,14 @@ const VERSION = '20260820.0500AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0615AM', title: 'The number sits in the middle now',
+    added: [],
+    changed: [
+      '<b>Your shirt number is centred on the disc.</b> Every number and glyph was sitting low \u2014 by about a tenth of the disc \u2014 which is small enough to look like nothing and enough to make a numbered player look slightly wrong.',
+      'The same fix reaches every glyph at once: the numbers, the circled numbers, the symbols, the robot face the bots wear in warm-up, and the little discs in the picker, your player preview and the result screen.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0500AM', title: 'A quieter pitch',
     added: [
       '<b>A mute button, next to full screen.</b> Both of them are also on the pause screen now as one-press toggles, so you can silence the game or go full screen without going near the menu.',
@@ -9095,38 +9103,55 @@ function photoFromFile(file){
   im.src = url;
 }
 
+// ⚠️ **A GLYPH IS CENTRED ON ITS INK, NOT ON THE FONT'S EM BOX**, and it shipped the other
+// way round. Reported as the shirt number not being in the middle of the disc, and measured
+// as exactly that: taking the ink's bounding box as a difference against the same disc with
+// no faceplate, EVERY entry in `TEXTS` sat **4.5 to 7 pixels LOW** on a 52px disc — 9-13% of
+// the diameter — with a worst case of 8.0.
+// ⚠️ **`textBaseline = 'middle'` is the bulk of it (~80%), and it looks correct.** It
+// centres the FONT's em box, and a digit has no descender: its ink sits entirely above the
+// baseline while the em box reserves descender space below it, so the em middle lands under
+// the digit. Every glyph in the table has this, in its own amount.
+// ⚠️ The rest was a hardcoded `+ r*0.04` nudge, tuned by eye for one glyph shape and
+// applied to all 48. Centring on the ink box needs no such number at all: worst offset
+// measured across the whole table falls from **8.0px to 1.0px**, which is rounding at any
+// size a disc is really drawn.
+// ⚠️ **The `isFinite` guard is not padding.** `TEXTS.blank` is the braille blank `⠀` — a
+// real, non-collapsing space that IS the blank avatar — and it produces ZERO ink, so it is
+// the one shipped key whose metrics can come back unusable.
+// ⚠️ **ONE painter, and there were two.** This block was copy-pasted for the bot face,
+// `+ r*0.04` and all — the same trap `paintCap`'s header records, where two cap draws at
+// slightly different offsets meant the mark you picked was never quite the mark you played
+// with. Both branches call this now.
+// ⚠️ The fit is still WIDTH-only, deliberately: a height cap is free now that the ink box
+// is measured, but it would resize every glyph in the game, and the spill was measured — no
+// key's ink reaches further after this than before.
+function fitGlyph(c, t, x, y, r, ink){
+  c.save();
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  c.fillStyle = ink;
+  // Fit the glyph to the plate: measure once and scale, so a two-character avatar
+  // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
+  let px = Math.round(r*1.15);
+  c.font = px+'px '+TEXT_FONT;
+  const fit = r*1.34, wid = c.measureText(t).width;
+  if (wid > fit){ px = Math.max(4, Math.round(px * fit / wid)); c.font = px+'px '+TEXT_FONT; }
+  const m = c.measureText(t);
+  const a = m.actualBoundingBoxAscent, d = m.actualBoundingBoxDescent;
+  c.fillText(t, x, y + ((isFinite(a) && isFinite(d)) ? (a - d)/2 : 0));
+  c.restore();
+}
 function paintFace(c, x, y, r, o){
   const key = o.flag, has = key && key!=='none';
   c.beginPath(); c.arc(x,y,r*0.84,0,7); c.fillStyle=o.color||'#46d17a'; c.fill();
   // ⚠️ Handled here rather than as a TEXTS entry — see BOT_FACE. Drawn through the same
   // fit-to-the-plate path a glyph faceplate uses, so it cannot spill off the disc.
   if (key === BOT_FACE){
-    c.save();
-    c.textAlign='center'; c.textBaseline='middle';
-    c.fillStyle = pickTextColor(o.color||'#46d17a');
-    let px = Math.round(r*1.15);
-    c.font = px+'px '+TEXT_FONT;
-    const wid = c.measureText(BOT_GLYPH).width, fit0 = r*1.34;
-    if (wid > fit0) px = Math.max(4, Math.round(px * fit0 / wid));
-    c.font = px+'px '+TEXT_FONT;
-    c.fillText(BOT_GLYPH, x, y + r*0.04);
-    c.restore();
+    fitGlyph(c, BOT_GLYPH, x, y, r, pickTextColor(o.color||'#46d17a'));
     return;
   }
   if (has && TEXTS[key]){
-    // Fit the glyph to the plate: measure once and scale, so a two-character avatar
-    // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
-    const t = TEXTS[key].g;
-    const fit = r*1.34;
-    c.save();
-    c.textAlign='center'; c.textBaseline='middle';
-    c.fillStyle = pickTextColor(o.color||'#46d17a');
-    let px = Math.round(r*1.15);
-    c.font = px+'px '+TEXT_FONT;
-    const wid = c.measureText(t).width;
-    if (wid > fit) { px = Math.max(4, Math.round(px * fit / wid)); c.font = px+'px '+TEXT_FONT; }
-    c.fillText(t, x, y + r*0.04);
-    c.restore();
+    fitGlyph(c, TEXTS[key].g, x, y, r, pickTextColor(o.color||'#46d17a'));
     return;
   }
   if (key === 'photo'){

@@ -968,6 +968,38 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `tests/balllook.mjs` measures all three, and counts fleece **regions** for the `solo`
   check — the obvious "how much of the disc is pale" does not discriminate at all (sixteen
   small sheep score 0.669 against one big one's 0.622, so the tiled build scored higher).
+- **A GLYPH IS CENTRED ON ITS INK, NOT ON THE FONT'S EM BOX** (`fitGlyph`). Reported as the
+  shirt number not being in the middle of the disc, and measured as exactly that: taking the
+  ink's bounding box as a **difference against the same disc with no faceplate**, every
+  entry in `TEXTS` sat **4.5 to 7 pixels LOW** on a 52px disc — 9-13% of the diameter —
+  worst case 8.0.
+  ⚠️ **`textBaseline: 'middle'` is ~80% of it, and it looks correct.** It centres the FONT's
+  em box, and a digit has no descender: its ink is all above the baseline while the em box
+  reserves descender space below it, so the em middle lands under the digit. Every glyph in
+  the table has this, in its own amount. `measureText().actualBoundingBoxAscent/Descent` is
+  the answer and this is the **file's first use of vertical text metrics** — all eleven
+  other `measureText` calls read `.width` only.
+  ⚠️ The rest was a hardcoded `+ r*0.04` nudge, tuned by eye for one glyph and applied to
+  all 48. Centring on the ink box needs no such number: worst offset across the table falls
+  from **8.0px to 1.0px**.
+  ⚠️ **The `isFinite` guard is not padding.** `TEXTS.blank` is the braille blank `⠀` — a
+  real, non-collapsing space that IS the blank avatar — and it produces zero ink, so it is
+  the one shipped key whose metrics can come back unusable.
+  ⚠️ **ONE painter, and there were two.** The text block was copy-pasted for the bot face,
+  `+ r*0.04` and all — the same trap `paintCap`'s own header records. Both branches go
+  through `fitGlyph` now, which is also why the fix reaches the picker tiles, the Your
+  Player preview, the recents row, the bench and the pitch at once: they are all
+  `paintFace` downstream.
+  ⚠️ The fit stays **width-only**. A height cap is free now the ink box is measured, but it
+  would resize every glyph in the game and the spill was measured — no key's ink reaches
+  further after this than before (max 22.8 inside a body of 26).
+  ⚠️ **THE MEAN IS THE SHARP INSTRUMENT AND A MAX-ABSOLUTE CHECK IS NOT, which a sabotage
+  proved.** The defect is systematic — every glyph low by the same amount — and per-glyph
+  rounding is ±0.5, the same size as the smaller of the two causes: putting the nudge back
+  moved the worst absolute offset only 1.0 → 1.5 and **passed** a max-only check. Averaged
+  over all 47 drawn glyphs the rounding cancels and the bias does not (-0.36 against +0.68).
+  `tests/textplates.mjs` keeps both, plus "the glyph is drawn at all" — or "it is centred"
+  is satisfied by a build that draws nothing.
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
