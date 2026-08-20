@@ -224,9 +224,34 @@ const r = await p.evaluate(async ()=>{
   out.masterGain = [g90, g10];
   note('sound volume', g90 !== null && g10 !== null && g90 !== g10, g90+' vs '+g10);
   M.sel.snd.vol=40; if (M.Aud && M.Aud.setVol) M.Aud.setVol(40);
-  M.sel.snd.muted=true;  const mutedNoThrow = (()=>{ try{ M.playSfx('kick'); return true; }catch(e){ return false; } })();
-  M.sel.snd.muted=false;
-  note('sound mute', mutedNoThrow);
+  // ⚠️ **MUTE IS MEASURED AS SILENCE, NOT AS A FLAG.** "sel.snd.muted flipped" is true of a
+  // build where nothing reads it — and there are now three writers (the Sound card, the HUD
+  // button and the pause row) feeding one predicate, so the flag proves less than ever.
+  // Counted at the AudioContext: `Aud.tone`/`Aud.noise` build an oscillator or a buffer
+  // source per voice, so muted has to produce ZERO of both and unmuted several.
+  // ⚠️ `playSfx` is deliberately NOT allowed an early return for mute — it is the one funnel
+  // for goal ducking and pad rumble — so it must still run through without throwing.
+  const voices = (muted) => {
+    const AC = M.Aud.ctx(); if (!AC) return -1;
+    const P = Object.getPrototypeOf(AC);
+    const o = P.createOscillator, n = P.createBufferSource; let c = 0;
+    P.createOscillator = function(){ c++; return o.apply(this, arguments); };
+    P.createBufferSource = function(){ c++; return n.apply(this, arguments); };
+    M.sel.snd.muted = muted;
+    let threw = false;
+    try { M.playSfx('kick'); M.playSfx('net'); } catch(e){ threw = true; }
+    P.createOscillator = o; P.createBufferSource = n;
+    return threw ? -1 : c;
+  };
+  const vLoud = voices(false), vMute = voices(true);
+  M.sel.snd.muted = false;
+  out.voices = [vLoud, vMute];
+  note('sound mute really silences', vLoud > 0 && vMute === 0, vLoud + ' voices loud vs ' + vMute + ' muted');
+  // ...and all three ways of setting it write the same one flag, so they cannot disagree.
+  M.toggleMute(); const afterToggle = M.sel.snd.muted;
+  M.toggleMute(); const backAgain = M.sel.snd.muted;
+  note('mute has ONE piece of state', afterToggle === true && backAgain === false,
+       'the HUD button, the pause row and the Sound card all write sel.snd.muted');
 
   // Colour-blind mode must change what's drawn, not just set a flag.
   M.sel.cb='off'; freshMatch(); const cbOff=paint();

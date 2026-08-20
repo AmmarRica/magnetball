@@ -3294,6 +3294,139 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   (the camera never even latches). ⚠️ `const GOALCAM` lives with the feel constants, not
   with the camera code: the slider wiring reads it during the bootstrap, and declared
   further down it was in the temporal dead zone there.
+- **THE HUD CORNERS PEEK** (`HUDPEEK`, `hudPeekAt`, `hudPeekInit`, `#hud.peekL/.peekR`).
+  The pitch is the picture, and three pills parked over it every second of every match are
+  furniture. Pause lives in the top-left corner and mute + full screen in the top-right, so
+  each side fades in when the pointer goes to the corner it is already in.
+  ⚠️ **The SCOREBUG never fades** — it is the one thing on that row you are *reading*
+  rather than reaching for.
+  ⚠️ **NO HOVER-CATCHER ELEMENT.** A div over the corner would have to be
+  `pointer-events: auto` to receive a hover, which makes it a lid over that part of the
+  pitch — and `zoneForTouch` splits the WHOLE screen into a move half and a kick half, so
+  there is no spare region to put one in (the same argument `SWIPEPAUSE` makes for being a
+  gesture rather than a region). One throttled `pointermove` adds no hit area at all.
+  ⚠️ **DESKTOP ONLY**, gated on `(hover: hover) and (pointer: fine)` in the CSS *and* in
+  the listener. There is no hover on a phone, so a fade there is a control nobody can bring
+  back; the touch build is byte-for-byte the behaviour it always had, which is what keeps
+  the 56px `SWIPEPAUSE` strip and `zoneForTouch` untouched.
+  ⚠️ **`pointer-events` goes with the opacity.** An invisible-but-clickable 44px target in
+  the corner is worse than either state — it eats a click on the pitch, which is the
+  `#lobbyStartBtn` bug from the other direction.
+  ⚠️ **`:focus-within` is not optional**: without it the buttons are unreachable by keyboard
+  outright, because you cannot hover in order to Tab.
+  ⚠️ The class is written only when the answer CHANGES — this fires on every mouse move, the
+  same argument `syncTiltUI` makes. And `syncTiltUI` writes an inline `transform` on `#hud`
+  itself, so the fade lives on `opacity` on the CHILDREN and the two cannot fight.
+  ⚠️ **A HIT TEST ALONE PROVES NOTHING HERE, and a sabotage got through on one.** The fade
+  and the `pointer-events` are two separate rules, so a build that keeps the buttons fully
+  VISIBLE and merely unclickable passed "the corners are out of the way" — which is the
+  worst of the three states: three pills over the pitch that do nothing when pressed. Same
+  trap on the keyboard check, where the `:not(:focus)` exemption keeps a focused button
+  hittable at opacity 0. `tests/taptargets.mjs` reads **opacity and the hit test together**,
+  on a desktop-shaped page — every other probe in that file runs on a `hasTouch` context
+  where the query does not match and the whole feature is invisible to them.
+- **MUTE IS A SHORTCUT, NOT A SECOND PIECE OF STATE** (`#muteBtn`, `#ovMute`, `toggleMute`,
+  `syncMuteUI`, `buildSndMaster`). `sel.snd.muted` has existed since the Sound card was
+  written and is read by exactly one predicate — `Aud.on()`, which guards `tone()` and
+  `noise()`. The HUD button and the pause row write that same flag, so there is nothing to
+  keep in step and **no audio-graph change at all**.
+  ⚠️ **`playSfx` must never grow a mute early-return.** It is the single funnel for
+  `vjDuckGoal()` and `rumbleGoal()` — the whole reason those hang off `playSfx('crowd')` is
+  so a fifth goal path cannot forget them — and a check at the top would silently kill goal
+  ducking and pad rumble along with the sound.
+  ⚠️ **`saveSel()` is mandatory, not tidiness.** `syncAdopt` SHALLOW-merges `sel`, so `snd`
+  is replaced wholesale by whatever the other window holds: toggle without pushing and
+  `/settings` still says `muted:false`, and its next write of any unrelated setting shoves
+  that stale `snd` back and un-mutes the game.
+  ⚠️ **It does NOT call `buildSettings()`** — a ~24ms re-render of a menu that, pressed from
+  the HUD, is not even on screen. `buildSndMaster()` was extracted so the Master tiles can
+  be repainted alone, which is also what stops the tiles and the toggles disagreeing.
+  ⚠️ **VJ music is deliberately NOT covered.** It rides its own bus and `Aud.on()` never
+  sees it. Muting by gain instead would put a **second owner on `master.gain`**, which
+  `Aud.setVol`, the VJ master fader and `vjPanic` all write already.
+  ⚠️ **Measured as SILENCE, not as a flag.** `tests/audit.mjs` counts oscillators and buffer
+  sources built on the live `AudioContext` across two `playSfx` calls: muted must produce
+  **zero** and unmuted several. "The flag flipped" is true of a build where nothing reads it,
+  and there are three writers now.
+- **TWO QUICK TOGGLES ON THE PAUSE SCREEN** (`#ovMute`, `#ovFull`), above Show mode because
+  those are the two you reach for and that one is a mode switch for guests.
+  ⚠️ **FIVE places must be kept in step**, and a miss in one of them is invisible until
+  somebody picks up a controller: the markup, the icon-flex CSS list, **`overButtons()`**
+  (a button missing from that array is unreachable by gamepad entirely), the `navsel`-
+  clearing array in `showOverlay`, and the `resumable ? '' : 'none'` gating beside it.
+  ⚠️ **DOM order IS `overButtons()`' order** — a D-pad walking a different order from the
+  one on screen reads as a broken cursor.
+  ⚠️ **Neither marks itself `navsel`, and `syncShowLock` does.** `navsel` is the CONTROLLER
+  CURSOR on this screen (`syncOverNav` writes it), so a toggle wearing it permanently is a
+  second thing claiming to be the selection — and three of them would make the cursor
+  unfindable. The LABEL carries the state, which is what "says which state it is IN" was for.
+  ⚠️ **Pause only**, the argument `ovSettings` and `ovShowLock` already make. But unlike
+  `#ovSettings` they are **not** hidden in show mode: sound and full screen are exactly the
+  two things a guest legitimately reaches for and neither is a setting they can break.
+- **THE SCORE IS THE READOUT AND THE CLOCK IS NOT**, and it shipped the other way round.
+  Measured at 1× on a 390px phone at 0–0: the score rendered as **two tiny coloured blocks**
+  — the Kenney zero at 16px is a filled rectangle whose counter disappears — beside a wide,
+  bright yellow `5:00` that read instantly. 0–0 is what every kickoff shows and what the
+  menu's attract demo shows, so the *least* important number was the legible one on the
+  first frame anybody ever sees. Score 30px, clock 11px and quiet.
+  ⚠️ **The team INKS stay**: they are what says which number is whose, and red-then-blue is
+  the order the result screen and the match history read in too.
+  ⚠️ The glows `.rd`/`.bl` carried were **already dead** — `body * { text-shadow: none }`
+  kills them — so they are gone rather than left looking load-bearing.
+  ⚠️ **`opacity` is 0.72 and it was 0.62 for one build**, which measured **3.99:1** against
+  Apologies!'s butter-yellow surface, under the 4.5 floor `tests/contrast.mjs` holds every
+  label to. Quieting a label by fading it is exactly how an accessibility floor gets broken
+  by a taste change; the size does most of the work anyway.
+- **SHOT, KEY PASS AND CLEARANCE ARE COUNTED BUT NOT CAPTIONED.** They had floaters and it
+  was text spam: a rendered 4v4 frame carried KEY PASS over SHOT over SHOT in one scramble
+  plus a stray SHOT over empty grass. `SHOT` fires on every strike including a rebound off
+  the boards a few frames later — which is what the per-(player, label) cooldown was
+  invented for, and that cooldown was treating a symptom. What is left on the pitch is the
+  four that are **events**: GOAL, ASSIST, SAVE, POST.
+  ⚠️ **Three `addFloater` calls deleted from beside three `ms.<stat>++` lines that still
+  run** — never a filter in `drawFloaters`, which would move the decision away from where
+  the stat is counted and break the system's one structural rule.
+  ⚠️ Everything cut still appears on the result screen, so the invariant points the way it
+  always did: a label can never claim something the result screen will not also show; it
+  may stay quiet about something the result screen does show.
+  ⚠️ `FLOAT.max` is **8**, down from 20 — with only event labels left there is no legitimate
+  way to reach twenty, so a cap that high was a ceiling on the pile-up being removed.
+- **THE BUILD STAMP IS DEBUG-ONLY** (`drawBuildTag`). It printed `v20260820…` over the
+  bottom-left of the pitch in every match on every player's screen. What it was for survives
+  and is better: the About card's version block is a one-tap copy that carries the screen
+  size and the layout with it. ⚠️ `tests/debug.mjs` used to assert it "shows regardless" and
+  now pins both states.
+- **THE NET IS A DIAMOND MESH THAT FADES INTO THE POCKET**, and it shipped as graph paper —
+  a uniform axis-aligned grid at full strength, which reads as a texture swatch pasted over
+  the goal. Two things fix it and both are needed: the strands run **diagonally**, which is
+  what a real net reads as from above and the one thing a square grid can never stop looking
+  like; and the whole thing **fades with depth**, from the goal line into the back, which is
+  the only cue a top-down view has that the pocket has any.
+  ⚠️ The fade is a stroke **gradient**, so it is still ONE `stroke()` — a per-line alpha
+  would be one path and one stroke per strand, on a thing drawn twice a frame.
+  ⚠️ Clipped to the pocket, because diagonals leave the box by definition. The gradient is
+  built in `wx`/`wy` space, *inside* `pitchXform`, so deck view rotates it for free.
+- **THE MENU LEADS WITH THE BUTTON THAT STARTS A MATCH.** Measured on a 390×844 phone,
+  KICK OFF sat at **y ≈ 525**, under a RECORD card of zeroes and a search box; it is at
+  **y ≈ 160** now. Three changes, none of them structural:
+  ⚠️ **`syncRecordCard()` hides `#recordCard` until a match has been played** — the same
+  "has PLAYED" question `dailyModalWanted` asks, and for the same reason: a record is a
+  record *of* something. `0W · 0L · 0D (0 played)` plus four lines of prose about a name
+  book nobody has filled in is not a first impression. It is not a `.card.collapsible`, so
+  it is in neither the jump bar nor the search index and hiding it costs nothing downstream.
+  ⚠️ **`#searchWrap` moved below `#jumpBar`** — a door labelled "search settings" standing
+  in front of the button that starts a match is the same mistake the jump bar itself was
+  moved for. Searching is what you do when you already know a setting exists and cannot find
+  it, which is never the first thing anybody wants from this screen.
+  ⚠️ **The `online` card folded into About.** It held **zero controls** — the whole card was
+  one paragraph — while costing a card, a jump chip and a search row, which is the exact
+  price the file uses to justify deleting the old Ball card. The paragraph survives verbatim;
+  only the box round it is gone. `tests/taptargets.mjs` looks for it by its words now.
+  ⚠️ **`SECTION_COLLAPSED_DEFAULT` had gone stale twice over** (it still listed `ball` and
+  `online`, and had never gained `replay`, `vj` or `about`) — and **`more` is deliberately
+  absent**, which is what makes it the one card open on a first run: `initCollapsibles` takes
+  the FIRST card whose default is open, and Modes & more is the discovery card. Adding it
+  "for completeness" collapses every card and the menu opens as eleven closed bars.
 - **HUD:** a 3-column grid — pause left, scorebug in the **middle column** (so it is centred
   on the screen, not among whatever buttons happen to show), fullscreen right. Settings is a
   **pause-menu** option (`ovSettings`), not a HUD gear one mis-tap from the live ball.

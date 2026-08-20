@@ -105,6 +105,7 @@ const taps = await p.evaluate(() => {
   // The HUD pair sit next to a live ball, where a near-miss is a tap on the pitch.
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
   o.pause = reach(document.getElementById('pauseBtn'));
+  o.mute  = reach(document.getElementById('muteBtn'));
   o.fs    = reach(document.getElementById('fsHudBtn'));
   M.toMenu();
 
@@ -154,12 +155,82 @@ const dead = await p.evaluate(() => {
     // ⚠️ Out of the SEARCH INDEX too, not just off the screen. CSS is only half a fix:
     // a control that is hidden but indexed still shows up in search and jumps you to it.
     indexedDead: idx.filter(r => /coming soon|room code/i.test((r.label || '') + ' ' + (r.hint || ''))).length,
-    // ...and the Online card still ANSWERS the question rather than vanishing.
-    onlineCard: !!document.querySelector('.card[data-sec="online"]'),
-    onlineSaysSomething: (document.querySelector('.card[data-sec="online"]') || {}).textContent || '',
+    // ⚠️ ...and the answer to "is there online?" SURVIVED being folded into About. The
+    // card is gone — it held zero controls, and a card is the wrong shape for one
+    // sentence — but the sentence is what the check was ever about, so it is now looked
+    // for by its words rather than by the box it used to sit in.
+    onlineCardGone: !document.querySelector('.card[data-sec="online"]'),
+    onlineSaysSomething: (document.querySelector('.card[data-sec="about"]') || {}).textContent || '',
   };
 });
 await p.close();
+
+// ================================================= the HUD corners peek =======
+// ⚠️ **A DESKTOP-ONLY RULE, so it needs a DESKTOP-SHAPED PAGE.** Every other probe in this
+// file runs on a `hasTouch` phone context, where `(hover: hover) and (pointer: fine)` does
+// not match and the buttons are solid — so the whole feature is invisible to them, and the
+// 44px check above passes on a build where the corner never reveals anything at all.
+// ⚠️ The claim has TWO halves and a check on either alone is worthless: the buttons must
+// really be UNREACHABLE at rest (a build that never hides passes "the button is 44px"), and
+// they must become reachable when the corner is hovered (a build that never shows passes
+// "the button is hidden"). Both are measured by hit-testing, never by reading a class.
+// ⚠️ And the SCOREBUG never fades either way — it is the thing you are reading.
+const peekPage = await mk({ viewport: { width: 1280, height: 860 } });
+await peekPage.evaluate(() => {
+  const M = window.__magnet;
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
+});
+await peekPage.waitForTimeout(300);
+const peekRead = () => peekPage.evaluate(() => {
+  const at = id => {
+    const e = document.getElementById(id); const r = e.getBoundingClientRect();
+    const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { hit: !!(t && (t === e || e.contains(t))), w: Math.round(r.width) };
+  };
+  // ⚠️ **OPACITY IS READ AS WELL AS THE HIT TEST, and that is not belt-and-braces — a
+  // sabotage got through on hit-testing alone.** The fade and the `pointer-events` are two
+  // separate rules, so a build that keeps the buttons fully VISIBLE and merely unclickable
+  // passed "the corners are out of the way" — which is the worst state of the three: three
+  // pills over the pitch that do nothing when pressed. Same trap on the focus check, where
+  // the `:not(:focus)` exemption keeps a focused button hittable at opacity 0. Both halves
+  // now have to agree.
+  return {
+    fine: matchMedia('(hover: hover) and (pointer: fine)').matches,
+    pause: at('pauseBtn'), mute: at('muteBtn'), fs: at('fsHudBtn'),
+    opL: +getComputedStyle(document.getElementById('hudLeft')).opacity,
+    opR: +getComputedStyle(document.getElementById('hudRight')).opacity,
+    bugOp: +getComputedStyle(document.getElementById('scorebug')).opacity,
+  };
+});
+// Park the pointer in the middle of the pitch, nowhere near either corner.
+await peekPage.mouse.move(640, 500); await peekPage.waitForTimeout(300);
+const peekIdle = await peekRead();
+await peekPage.mouse.move(1230, 26); await peekPage.waitForTimeout(300);
+const peekRight = await peekRead();
+await peekPage.mouse.move(40, 26); await peekPage.waitForTimeout(300);
+const peekLeft = await peekRead();
+// ⚠️ Keyboard: with NOTHING hovered, focusing a button must reveal its side. Without
+// `:focus-within` the buttons are unreachable by Tab outright — you cannot hover in order
+// to move focus there.
+await peekPage.mouse.move(640, 500); await peekPage.waitForTimeout(300);
+await peekPage.evaluate(() => document.getElementById('muteBtn').focus());
+await peekPage.waitForTimeout(300);
+const peekFocus = await peekRead();
+await peekPage.close();
+
+// And the same corner on a TOUCH page must not fade at all — there is no hover to bring it
+// back, and the top 56px is already SWIPEPAUSE's pull-down strip.
+const touchHud = await mk(phone);
+await touchHud.evaluate(() => { const M = window.__magnet; M.sel.mode='1v1'; M.sel.lobby='off'; M.startMatch(); });
+await touchHud.waitForTimeout(300);
+const peekTouch = await touchHud.evaluate(() => {
+  const at = id => { const e=document.getElementById(id); const r=e.getBoundingClientRect();
+    const t=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
+    return !!(t && (t===e || e.contains(t))); };
+  return { fine: matchMedia('(hover: hover) and (pointer: fine)').matches,
+           pause: at('pauseBtn'), mute: at('muteBtn'), fs: at('fsHudBtn') };
+});
+await touchHud.close();
 
 // ============================================================ landscape phone ==
 const land = await mk({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
@@ -221,8 +292,25 @@ ok('...and still toggles its help text', taps.infoStillToggles,
    'a pad that swallows the click is a fix that breaks the control');
 ok('.subchip clears 44px', taps.subchip.v >= 44, `${taps.subchip.v}px`);
 ok('.jumpchip clears 44px', taps.jumpchip.v >= 44, `${taps.jumpchip.v}px`);
-ok('the HUD pause and fullscreen clear 44px', taps.pause.v >= 44 && taps.fs.v >= 44,
-   `pause ${taps.pause.v}, fullscreen ${taps.fs.v} — they sit next to a live ball, where a near-miss is a tap on the pitch`);
+ok('the HUD pause, mute and fullscreen clear 44px', taps.pause.v >= 44 && taps.mute.v >= 44 && taps.fs.v >= 44,
+   `pause ${taps.pause.v}, mute ${taps.mute.v}, fullscreen ${taps.fs.v} — they sit next to a live ball, where a near-miss is a tap on the pitch`);
+ok('the HUD corners are OUT OF THE WAY until you go to them', peekIdle.fine &&
+   peekIdle.opL === 0 && peekIdle.opR === 0 &&
+   !peekIdle.pause.hit && !peekIdle.mute.hit && !peekIdle.fs.hit,
+   `${JSON.stringify(peekIdle)} — three pills parked over the pitch every second of every match are furniture, and INVISIBLE has to be checked alongside unclickable or a build that only stops the clicks passes`);
+ok('...the right corner brings back mute and full screen', peekRight.opR === 1 && peekRight.opL === 0 &&
+   peekRight.mute.hit && peekRight.fs.hit && !peekRight.pause.hit,
+   JSON.stringify(peekRight));
+ok('...the left corner brings back pause, and only pause', peekLeft.opL === 1 && peekLeft.opR === 0 &&
+   peekLeft.pause.hit && !peekLeft.mute.hit && !peekLeft.fs.hit,
+   JSON.stringify(peekLeft));
+ok('...the SCOREBUG never fades', peekIdle.bugOp === 1 && peekLeft.bugOp === 1,
+   `${peekIdle.bugOp} / ${peekLeft.bugOp} — it is the one thing on that row you are reading rather than reaching for`);
+ok('...and focus reveals a side with nothing hovered', peekFocus.opR === 1 && peekFocus.mute.hit,
+   `${JSON.stringify(peekFocus)} — without :focus-within the buttons are unreachable by Tab, because you cannot hover in order to move focus there`);
+ok('a touch device keeps all three solid', !peekTouch.fine && peekTouch.pause && peekTouch.mute && peekTouch.fs,
+   `${JSON.stringify(peekTouch)} — there is no hover on a phone, so a fade there is a control nobody can bring back`);
+
 ok('the range sliders have a real thumb hit area', (taps.sliderReach || 0) >= 20,
    `box ${taps.sliderBox}px, reach ${taps.sliderReach}px — recorded rather than "fixed": the element box measures small but the browser gives the thumb its own area, so changing it would be a fix for a problem that is not there`);
 
@@ -238,8 +326,10 @@ ok('the menu ships no dead controls', !dead.roomCode && !dead.shopSupport && !de
    JSON.stringify(dead));
 ok('...and none in the search index', dead.indexedDead === 0,
    `${dead.indexedDead} rows — CSS is only half a fix: a hidden-but-indexed control still turns up in search and jumps you to it`);
-ok('...and Online still answers the question', dead.onlineCard && /no online play/i.test(dead.onlineSaysSomething),
-   '"is there online?" is a real question and deserves a real answer, which is why the card stays as a sentence');
+ok('...and "is there online?" is still answered, in About', /no online play/i.test(dead.onlineSaysSomething),
+   'the card held zero controls and cost a jump chip and a search row for one paragraph — the paragraph is the part worth keeping');
+ok('...with no empty Online card left behind', dead.onlineCardGone,
+   'a card with nothing in it is a section header promising a section');
 
 ok('KICK OFF is above the fold in landscape', ls.aboveFold && ls.pressable,
    `${JSON.stringify(ls)} — it sat at y=393 on a 390px-tall viewport, three pixels below the fold, on the screen whose whole job is starting a match`);

@@ -28,19 +28,24 @@ const r = await p.evaluate(async ()=>{
   const statsInk = () => ink(8, ch-120, 260, 90);
   const stampInk = () => ink(8, ch-26,  150, 20);
 
-  // --- Build stamp shows regardless, and carries the real VERSION
-  await wait(200);
-  o.stampVisible = stampInk() > 20;
+  // ⚠️ **THE BUILD STAMP IS DEBUG-ONLY NOW, and this check used to say "shows regardless".**
+  // It printed `v20260820…` over the bottom-left of the pitch in every match on every
+  // player's screen — a build number is a thing a developer needs and a thing nobody else
+  // has any use for. What it was for survives and is better: the About card's version block
+  // is a one-tap copy that carries the screen size and layout with it, which is why
+  // `versionInDom` below is the half of this that still matters.
   o.versionIsTimeStamped = /^\d{8}\.\d{4}(AM|PM)$/.test(M.VERSION);
   o.versionInDom = (document.getElementById('ver')||{}).textContent === 'v'+M.VERSION;
 
-  // --- Toggle off: no stats block
+  // --- Toggle off: no stats block, and no stamp over the pitch either
   M.sel.debug=false; await wait(200);
   o.statsHiddenWhenOff = statsInk() < 15;
+  o.stampHiddenWhenOff = stampInk() < 15;
 
-  // --- Toggle on: stats block appears
+  // --- Toggle on: stats block appears, and so does the stamp
   M.sel.debug=true; await wait(250);
   o.statsShownWhenOn = statsInk() > 60;
+  o.stampShownWhenOn = stampInk() > 20;
 
   // --- The numbers are LIVE, not placeholders: change the sim, the block changes.
   const sample = () => { const d=c2.getImageData(8*DPR, Math.round((ch-120)*DPR),
@@ -78,7 +83,7 @@ const r = await p.evaluate(async ()=>{
 
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.stampVisible && r.versionIsTimeStamped && r.versionInDom &&
+const ok = r.stampHiddenWhenOff && r.stampShownWhenOn && r.versionIsTimeStamped && r.versionInDom &&
   r.statsHiddenWhenOff && r.statsShownWhenOn && r.readoutTracksBall && r.readoutTracksFeel &&
   r.toggleExists && r.toggleTurnsOn && r.toggleTurnsOff && r.drillSurvivesDebug &&
   errors.length === 0;

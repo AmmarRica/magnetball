@@ -72,7 +72,19 @@ const r = await p.evaluate(() => {
     // "did ASSIST appear" check and be useless.
     o.assistNotOnScorer = !on(scorer).includes('ASSIST');
   }
-  {   // SHOT + KEY PASS, through noteKick
+  {   // ⚠️ **SHOT, KEY PASS AND CLEARANCE ARE COUNTED AND NOT CAPTIONED**, and this block
+      // used to require the opposite. They were floaters and it was text spam: a rendered
+      // 4v4 frame carried KEY PASS over SHOT over SHOT in one scramble plus a stray SHOT
+      // over empty grass. `SHOT` fires on every strike including a rebound off the boards
+      // a few frames later — which is what the per-(player, label) cooldown below was
+      // invented for, and the cooldown was treating a symptom.
+      // ⚠️ The invariant still points the way it always did: a label may never claim
+      // something the result screen will not show. It may stay quiet about something the
+      // result screen does show, and these three are now that case — every one of them is
+      // in the result screen's per-team table or in `statLine`'s prose.
+      // ⚠️ So the STAT is what is asserted here, and asserted HARD: the three counters must
+      // still move exactly as they did. Deleting the caption must not quietly delete the
+      // record, which is the only way this change could go wrong.
     const w = stage();
     const shooter = w.players[0], feeder = w.players.find(q => q !== shooter && q.team === shooter.team);
     const s0 = shooter.ms.shots, k0 = feeder.ms.passKey;
@@ -80,8 +92,21 @@ const r = await p.evaluate(() => {
     M.noteKick(w, shooter, 8, 0, -1);
     o.shotStat = shooter.ms.shots - s0;
     o.keyStat = feeder.ms.passKey - k0;
-    o.shotMatchesStat = o.shotStat === 1 && on(shooter).includes('SHOT');
-    o.keyMatchesStat = o.keyStat === 1 && on(feeder).includes('KEY PASS');
+    o.shotCountedNotSaid = o.shotStat === 1 && !on(shooter).includes('SHOT');
+    o.keyCountedNotSaid = o.keyStat === 1 && !on(feeder).includes('KEY PASS');
+    // ⚠️ And the whole pitch stays quiet, not just those two bodies — a label landing on
+    // somebody else would pass a per-player check and still be the spam being removed.
+    o.nothingSaidAtAll = M.floaters.length === 0;
+  }
+  {   // CLEARANCE, the third one cut: same rule, its own probe.
+    const w = stage();
+    const back = w.players[0];
+    const own = back.team === 0 ? 1 : -1;              // own goal line
+    back.x = 0; back.y = own * w.field.L/2 * 0.9;
+    const c0 = back.ms.clears;
+    M.noteKick(w, back, 8, 0, -own);                   // struck from own half, up-field
+    o.clearStat = back.ms.clears - c0;
+    o.clearCountedNotSaid = o.clearStat === 1 && !on(back).includes('CLEARANCE');
   }
   {   // SAVE, through the threat model
     const w = stage();
@@ -321,7 +346,9 @@ const cool = await p.evaluate(() => {
   }
   o.shotsCounted = me.ms.shots - before;
   o.shotLabels = texts().filter(t => t === 'SHOT').length;
-  o.statIsUntouched = o.shotsCounted === 4 && o.shotLabels === 1;
+  // ⚠️ Four strikes, four shots on the record, and now ZERO captions — SHOT lost its
+  // floater entirely, so what this measures is the half that must never change.
+  o.statIsUntouched = o.shotsCounted === 4 && o.shotLabels === 0;
   M.clearFloaters();
   return o;
 });
@@ -331,8 +358,10 @@ ok('a goal moves the stat AND puts a label on the scorer', r.goalMatchesStat,
 ok('...and an assist on the team-mate', r.assistMatchesStat,
    `assists +${r.assistStat}, label ${r.assistLabel}`);
 ok('...and not on the scorer', r.assistNotOnScorer, 'a label that fires on everyone is useless');
-ok('a shot moves the stat and labels the shooter', r.shotMatchesStat, `shots +${r.shotStat}`);
-ok('...and the key pass labels the feeder', r.keyMatchesStat, `key passes +${r.keyStat}`);
+ok('a shot is COUNTED and not captioned', r.shotCountedNotSaid && r.nothingSaidAtAll,
+   `shots +${r.shotStat} — SHOT fires on every strike including a rebound off the boards, so a caption per shot is a permanent smear over the play`);
+ok('...the key pass too', r.keyCountedNotSaid, `key passes +${r.keyStat}`);
+ok('...and the clearance', r.clearCountedNotSaid, `clearances +${r.clearStat}`);
 ok('a save moves the stat and labels the keeper', r.saveMatchesStat, `saves +${r.saveStat}`);
 ok('a plain TOUCH produces no label at all', r.touchIsSilent,
    `touches +${r.touchStat}, labels ${JSON.stringify(r.touchTexts)} — everybody has touches, so a label on each is a smear`);
@@ -374,7 +403,7 @@ ok('...and BACK once it passes', cool.showsAfterTheGap,
 ok('a reset clears the cooldown with the labels', cool.resetClears,
    'a clock rewound to zero under timestamps from the last match reads as cooling down for ever');
 ok('THE STAT IS UNTOUCHED', cool.statIsUntouched,
-   `${cool.shotsCounted} shots counted, ${cool.shotLabels} label — only the caption is held back, so nobody's match record changes`);
+   `${cool.shotsCounted} shots counted, ${cool.shotLabels} labels — the caption is gone, the record is not`);
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
 console.log(JSON.stringify({ ...r, ...drawn, cool }, null, 1));

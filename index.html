@@ -355,6 +355,24 @@
          the menu is the 372px DOCK, not the 460px column, so a wider cap buys nothing
          where it is actually needed and only fires on a sub-900px window, where it
          spans 824px over 460px cards. Wrapping is the whole fix. */
+
+      /* ===== THE HUD CORNERS PEEK — see HUDPEEK ===== */
+      /* Pause on the left, mute and full screen on the right, both out of the way until
+         the pointer goes to the corner they live in. The SCOREBUG never fades: it is the
+         one thing on that row you are actually reading.
+         ⚠️ `pointer-events` has to go with the opacity. An invisible-but-clickable 44px
+         target parked in the corner is worse than either state — it eats a click on the
+         pitch, which is the `#lobbyStartBtn` bug from the other direction.
+         ⚠️ `:focus-within` is NOT optional. Without it the buttons become unreachable by
+         keyboard outright, because you cannot hover in order to Tab.
+         ⚠️ TOUCH IS UNTOUCHED. This query never matches on a phone, so the buttons stay
+         solid there and the 56px `SWIPEPAUSE` strip and `zoneForTouch`'s whole-screen
+         move/kick split behave exactly as they did. */
+      #hudLeft, #hudRight { opacity: 0; transition: opacity .18s ease; }
+      #hud.peekL #hudLeft, #hud.peekR #hudRight,
+      #hudLeft:focus-within, #hudRight:focus-within { opacity: 1; }
+      #hud:not(.peekL) #hudLeft  > *:not(:focus),
+      #hud:not(.peekR) #hudRight > *:not(:focus) { pointer-events: none; }
     }
     /* Photo pane: what you'd wear, next to the two ways of changing it. */
     .photorow { display: flex; align-items: center; gap: 14px; }
@@ -456,10 +474,11 @@
     #installBtn svg.ic { width:18px; height:18px; }
     /* Buttons that carry a drawn mark alongside their label. ⚠️ An inline SVG in a
        text button collapses to nothing without a box to sit in. */
-    #warmupBtn, #ovSettings, #ovRematch, #ovShowLock {
+    #warmupBtn, #ovSettings, #ovRematch, #ovShowLock, #ovMute, #ovFull {
       display:flex; align-items:center; justify-content:center; gap:8px;
     }
-    #warmupBtn svg.ic, #ovSettings svg.ic, #ovRematch svg.ic, #ovShowLock svg.ic { width:18px; height:18px; flex:none; }
+    #warmupBtn svg.ic, #ovSettings svg.ic, #ovRematch svg.ic, #ovShowLock svg.ic,
+    #ovMute svg.ic, #ovFull svg.ic { width:18px; height:18px; flex:none; }
     .toast .tic svg.ic { width:15px; height:15px; display:block; }
     .toast .tic { display:flex; align-items:center; }
     /* Label on the left, a small action on the right. */
@@ -943,13 +962,28 @@
       backdrop-filter: blur(6px); color: var(--overlay-ink);
       padding: 9px 18px; font-family: var(--pix); font-size: 16px; pointer-events: auto;
     }
-    .scorebug .sc { min-width: 20px; text-align: center; }
-    .scorebug .rd { color: var(--overlay-red); text-shadow: 0 0 10px rgba(255,59,107,.6); }
-    .scorebug .bl { color: var(--overlay-blue); text-shadow: 0 0 10px rgba(33,230,255,.6); }
-    .scorebug .tm { font-size: 12px; color: var(--overlay-yellow); min-width: 46px; text-align:center; }
+    /* ⚠️ THE SCORE IS THE READOUT AND THE CLOCK IS NOT, and it shipped the other way
+       round. Measured at 1x on a 390px phone at 0-0: the score rendered as two tiny
+       coloured BLOCKS — the Kenney zero at 16px is a filled rectangle whose counter
+       disappears — beside a wide, bright yellow `5:00` that read instantly. 0-0 is
+       what every kickoff shows and what the menu's attract demo shows, so the least
+       important number was the legible one on the first frame anybody ever sees.
+       ⚠️ The team INKS stay: they are what says which number is whose, and red-then-blue
+       is the order the result screen and the match history read in too.
+       ⚠️ The glows those two carried were already dead — `body * { text-shadow: none }`
+       up at the top kills them — so they are gone rather than left looking load-bearing. */
+    .scorebug .sc { min-width: 26px; text-align: center; font-size: 30px; line-height: 1; }
+    .scorebug .rd { color: var(--overlay-red); }
+    .scorebug .bl { color: var(--overlay-blue); }
+    /* ⚠️ `opacity` is 0.72 and it was 0.62 for one build — which measured **3.99:1** against
+       Apologies!'s butter-yellow surface, under the 4.5 floor `tests/contrast.mjs` holds
+       every label to. Quieting a label by fading it is exactly how an accessibility floor
+       gets broken by a taste change; the size does most of the work here anyway. */
+    .scorebug .tm { font-size: 11px; color: var(--overlay-ink); opacity: 0.72;
+                    min-width: 44px; text-align:center; letter-spacing: .5px; }
     /* ⚠️ 44px, up from 40. They sit next to a live ball, which is the one place a
        near-miss costs you something — a mis-tap here is a tap on the pitch. */
-    #pauseBtn, #resetBtn, #fsHudBtn {
+    #pauseBtn, #resetBtn, #fsHudBtn, #muteBtn {
       pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
       color: var(--overlay-ink); width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer;
@@ -1548,7 +1582,10 @@
       <span class="tm" id="clock">5:00</span>
       <span class="sc bl" id="scoreB">0</span>
     </div>
+    <!-- ⚠️ Mute is a SHORTCUT to `sel.snd.muted`, which the Sound card's Master tiles
+         have always owned — not a second piece of state. See toggleMute. -->
     <div class="hudside" id="hudRight">
+      <button id="muteBtn" aria-label="Mute">🔊</button>
       <button id="fsHudBtn" aria-label="Full screen">⛶</button>
     </div>
     <!-- The lobby's Start, on screen. Start was bound to a gamepad button or the
@@ -1642,13 +1679,6 @@
     <!-- The Match section's header IS the KICK OFF button: collapsed it is just the
          green bar you press to play, and the chevron on its right opens the match
          options underneath (mode, field, difficulty, …). -->
-    <!-- Find a control by name instead of remembering which card it lives on. The
-         index is built from the DOM on every open, so it can't offer something that
-         isn't there and can't miss something new. -->
-    <div id="searchWrap">
-      <input id="menuSearch" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false">
-      <div id="searchHits"></div>
-    </div>
     <!-- Add to home screen. Hidden until the browser actually offers it, and hidden
          again once installed — a dead button on a platform that never fires the
          prompt is worse than no button. -->
@@ -1766,6 +1796,19 @@
          "the kick off button is still under other tabs". The primary action is the topmost
          sticky thing now, and the sticky stack reads KICK OFF → chips → section headers. -->
     <div id="jumpBar"></div>
+    <!-- Find a control by name instead of remembering which card it lives on. The
+         index is built from the DOM on every open, so it can't offer something that
+         isn't there and can't miss something new.
+         ⚠️ **BELOW KICK OFF AND BELOW THE CHIPS**, and it shipped above both. A door
+         labelled "search settings" standing in front of the button that starts a match is
+         the same mistake the jump bar itself was moved for one comment up: searching is
+         what you do when you already know there is a setting and cannot find it, which is
+         never the first thing anybody wants from this screen. Nothing downstream cares
+         where it sits — `menuSearchIndex` is built from the cards, not from position. -->
+    <div id="searchWrap">
+      <input id="menuSearch" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false">
+      <div id="searchHits"></div>
+    </div>
     <div class="card collapsible collapsed" data-sec="more">
       <h2>Modes &amp; more</h2>
     <div class="navgroup">
@@ -2161,6 +2204,14 @@
       <div class="hint" style="text-align:left">Set the game's defaults once in a Google Sheet and every device you open Magnetball on starts there — the pitch, the difficulty, the theme, the Game Feel sliders. It is read, never written, so nothing about this device leaves it. Anything you change here still wins over the sheet, unless the sheet is set to <b>managed</b>, which is how a cabinet or a venue is kept identical. Read at launch from a copy kept on the device, so it works offline; the button pulls a fresh one now. See LEADERBOARD_SETUP.md for the tab.</div>
       <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
       <div style="height:14px"></div>
+      <!-- ⚠️ WAS ITS OWN CARD, and a card is the wrong shape for one sentence. `data-sec="online"`
+           held ZERO controls — the whole thing was this paragraph — while costing a card, a jump
+           chip and a row in the search index, which is the exact price the file uses a few
+           hundred lines up to justify deleting the old Ball card. "Is there online?" is still a
+           real question, so the answer survives verbatim; only the box round it is gone. -->
+      <label class="field">Is there online play?</label>
+      <div class="hint always" style="text-align:left">There is no online play. Every mode here is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. If you want to play somebody who is not in the room, the closest thing is a <b>saved replay</b>: they re-render at full quality on any device and are about 25KB, so a match is something you can send.</div>
+      <div style="height:14px"></div>
       <!-- ⚠️ THE WHOLE GAME IS ONE FILE, so "download it" is literally that rather than an
            installer, a package or a runtime. It matters most on Linux, where Firefox has no
            install-as-app at all and Chrome's is inconsistent — a saved .html works in every
@@ -2182,19 +2233,6 @@
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList" data-noi18n></div>
       <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
-    </div>
-
-    <!-- ⚠️ NO DEAD CONTROLS. This card used to ship a disabled Room code box and two
-         tiles reading "Host · soon" and "Join · soon" — the only things in the whole
-         menu that could not be pressed. A control that does nothing is worse than no
-         control: it is a promise the page cannot keep, it is the one thing a new player
-         is drawn to precisely because it looks like the interesting feature, and it
-         costs a row in the menu search index for something nobody can reach. The card
-         stays, because "is there online?" is a real question and it deserves a real
-         answer — but it is now a SENTENCE, not a form. -->
-    <div class="card collapsible collapsed" data-sec="online">
-      <h2>Online</h2>
-      <div class="hint always" style="text-align:left">There is no online play. Every mode here is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. If you want to play somebody who is not in the room, the closest thing is a <b>saved replay</b>: they re-render at full quality on any device and are about 25KB, so a match is something you can send.</div>
     </div>
 
     <button class="ghost" id="settingsReset" style="margin-top:2px">↺ Reset all settings to default</button>
@@ -2520,6 +2558,15 @@
     <!-- Show mode lives HERE and only here: a pause screen is somewhere a guest has no
          reason to go and you can always reach, and putting it in the menu would mean
          hiding it along with everything else the moment it was switched on. -->
+    <!-- ⚠️ The two quick toggles, PAUSE ONLY for the reason Settings and Show mode are:
+         over a result screen they would land between Restart and Main Menu. They say which
+         state they are IN rather than what pressing them does — syncShowLock's rule.
+         ⚠️ ABOVE Show mode, because these are the two you reach for and that one is a mode
+         switch for guests. DOM order here is the reading order AND `overButtons()`' order.
+         ⚠️ Unlike #ovSettings these are NOT hidden in show mode: sound and full screen are
+         exactly the two things a guest legitimately reaches for. -->
+    <button class="ghost" id="ovMute" style="display:none"><span class="btnlab">Sound</span></button>
+    <button class="ghost" id="ovFull" style="display:none"><span class="btnlab">Full screen</span></button>
     <button class="ghost" id="ovShowLock" style="display:none"><span class="btnlab">Show mode</span></button>
     <button class="ghost" id="ovRematch" style="display:none">Rematch</button>
     <button class="ghost" id="ovMenu">Main Menu</button>
@@ -4218,6 +4265,12 @@ const ICONS = {
   // closed and seated for locked, swung open to the right for unlocked, so the state
   // reads at 18px on a pause screen you are glancing at.
   lock:      'M6.6 10.6h10.8v9.8H6.6Z M8.8 10.6V7.8a3.2 3.2 0 0 1 6.4 0v2.8 M12 14v3',
+  // Speaker cone + two arcs; muted is the same cone with a cross, so the two read as
+  // one control in two states rather than two unrelated pictures.
+  sound:     'M4.4 9.4h3.2l4.2-3.4v12L7.6 14.6H4.4Z M15.4 9.2a4 4 0 0 1 0 5.6 M18 6.9a7.4 7.4 0 0 1 0 10.2',
+  mute:      'M4.4 9.4h3.2l4.2-3.4v12L7.6 14.6H4.4Z M15.6 9.8l4.8 4.4 M20.4 9.8l-4.8 4.4',
+  // Four corners pushed outward — the full-screen mark everybody already knows.
+  expand:    'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
   // --- replay library
   play:      'M8.4 5.6 18 12l-9.6 6.4Z',
   // ⚠️ Bars at 35% and 65% of the grid, not hard against the middle: the icons suite
@@ -4407,7 +4460,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0315AM';
+const VERSION = '20260820.0500AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4423,6 +4476,19 @@ const VERSION = '20260820.0315AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0500AM', title: 'A quieter pitch',
+    added: [
+      '<b>A mute button, next to full screen.</b> Both of them are also on the pause screen now as one-press toggles, so you can silence the game or go full screen without going near the menu.',
+      '<b>On a desktop the HUD buttons get out of the way.</b> Pause, mute and full screen fade out while you play and come back when you move the mouse to the corner they live in. The score never fades. On a phone nothing changes \u2014 there is no hover to bring them back.',
+    ],
+    changed: [
+      '<b>The score is now the big number and the clock is the small one.</b> It was the other way round: at 0-0 the score read as two coloured blocks beside a bright yellow clock you could see from across the room.',
+      '<b>Far less text over the play.</b> SHOT, KEY PASS and CLEARANCE no longer print over your head \u2014 they were stacking three deep in a scramble. Every one of them is still counted and still on the result screen; what is left on the pitch is GOAL, ASSIST, SAVE and POST.',
+      '<b>KICK OFF is the first thing on the menu.</b> Your record now waits until you have actually played a match instead of showing a card of zeroes, and the search box moved below the section chips.',
+      'The goal nets look like nets rather than graph paper, name plates are lighter, and the build number no longer sits over the corner of the pitch.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0315AM', title: 'Export the replay you are watching',
     added: [
       '<b>The replay transport has a Video button</b>, and it films whatever is on the screen \u2014 watching a goal saves that goal, watching a whole match saves the whole match. The button says which, so there is no guessing what you are about to get.',
@@ -6865,7 +6931,10 @@ const FLOAT = {
   gap: 15,         // stagger when one player earns several at once
   cool: 2,         // seconds before the SAME player may show the SAME label again
   size: 11,        // font px — screen, not world (see drawFloaters)
-  max: 20,         // hard cap; oldest goes
+  // ⚠️ 8, down from 20. With only the four EVENT labels left there is no legitimate way to
+  // reach twenty, so a cap that high was only ever a ceiling on a pile-up — and a pile-up
+  // is the thing being removed.
+  max: 8,          // hard cap; oldest goes
   // Nominal body radius, in world units, used only to clear a standing body in the side
   // view. A floater stores a POINT and not which body earned it (it outlives the body's
   // position on purpose — it stays where the thing happened), so there is no p.r to read.
@@ -7084,6 +7153,44 @@ function syncTiltUI(){
   const want = (ux || uy) ? `translate(${ux.toFixed(1)}px,${uy.toFixed(1)}px)` : '';
   if (want !== _hudShift){ _hudShift = want; h.style.transform = want; }
 }
+
+// ---------- THE HUD CORNERS PEEK -------------------------------------------
+// The pitch is the picture, and three pills parked over it every second of every match
+// are furniture. Pause lives in the top-left corner and mute/full screen in the top-right,
+// so each side fades in when the pointer goes to the corner it is in. The SCOREBUG never
+// fades — it is the one thing on that row you are reading rather than reaching for.
+//
+// ⚠️ **NO HOVER-CATCHER ELEMENT.** A div over the corner would have to be
+// `pointer-events: auto` to receive a hover, which makes it a lid over that part of the
+// pitch — and `zoneForTouch` splits the WHOLE screen into a move half and a kick half, so
+// there is no spare region to put one in. A `pointermove` test adds no hit area at all.
+// ⚠️ **DESKTOP ONLY**, gated on the same query the CSS uses. There is no hover on a phone,
+// so a fade there would be a control nobody can bring back; and the top 56px is already
+// `SWIPEPAUSE`'s pull-down strip, which must keep behaving exactly as it does.
+// ⚠️ The class is written only when the answer CHANGES — this fires on every mouse move,
+// which is the same argument `syncTiltUI` makes one function up.
+// ⚠️ The rects are far wider than the 44px buttons, so you can never be pressing a button
+// from outside the rect that reveals it. No hide delay is needed and none is used.
+const HUDPEEK = { w: 220, h: 88 };
+let _peekL = false, _peekR = false, _peekMQ = null;
+function hudPeekAt(x, y){
+  const h = $('hud'); if (!h) return;
+  const L = y <= HUDPEEK.h && x <= HUDPEEK.w;
+  const R = y <= HUDPEEK.h && x >= innerWidth - HUDPEEK.w;
+  if (L !== _peekL){ _peekL = L; h.classList.toggle('peekL', L); }
+  if (R !== _peekR){ _peekR = R; h.classList.toggle('peekR', R); }
+}
+function hudPeekInit(){
+  try { _peekMQ = matchMedia('(hover: hover) and (pointer: fine)'); } catch(_){ _peekMQ = null; }
+  addEventListener('pointermove', (e) => {
+    if (!_peekMQ || !_peekMQ.matches) return;
+    if (e.pointerType === 'touch') return;
+    hudPeekAt(e.clientX, e.clientY);
+  }, { passive: true });
+  // Leaving the window entirely is leaving the corner.
+  addEventListener('pointerleave', () => hudPeekAt(-1, -1), { passive: true });
+}
+
 // ⚠️ Advanced next to step(world), NEVER in a draw — the trails rule. Both the smoothing
 // and the recentring are per-step decays, so a draw-driven version would run 2.4× fast on
 // a 144Hz screen and the effect would feel different on different phones.
@@ -9577,8 +9684,15 @@ const UI_KEY = 'magnetball.ui';
 function loadUI(){ try { return JSON.parse(localStorage.getItem(UI_KEY)||'{}'); } catch(e){ return {}; } }
 function saveUI(o){ try { localStorage.setItem(UI_KEY, JSON.stringify(o)); } catch(e){} }
 const uiState = loadUI();
-const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true, online:true,
-  theme:true, display:true, ball:true, sound:true, feel:true };
+// ⚠️ One entry per `.card.collapsible`, and it had gone stale twice over: it still listed
+// `ball` (a card deleted when its one control moved into the Theme slots) and `online`
+// (folded into About), and had never gained `replay`, `vj` or `about`.
+// ⚠️ **`more` IS DELIBERATELY ABSENT**, which is what makes it the one card open on a first
+// run: `initCollapsibles` takes the FIRST card whose default is open, and Modes & more is
+// the discovery card — Season, Tournament, Gauntlet, Drills, Tutorial. Adding it "for
+// completeness" collapses every card and the menu opens as eleven closed bars.
+const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true,
+  theme:true, display:true, sound:true, feel:true, replay:true, vj:true, about:true };
 // Accordion: at most one section open. Opening one closes the rest, so the setup
 // screen is never a wall of every control at once and you don't lose your place
 // scrolling past six expanded cards.
@@ -9774,8 +9888,23 @@ function renderStats(){
   $('recLine').innerHTML = `${stats.wins}W · ${stats.losses}L · ${stats.draws}D  (${stats.played} played)<br>`
     + `goals ${stats.gf}-${stats.ga} (${gd>=0?'+':''}${gd}) · streak ${streakTxt} · best W${Math.max(0,stats.best)}<br>`
     + `<span style="color:var(--accent)">MMR ${stats.mmr||1000}</span> · peak ${stats.mmrPeak||stats.mmr||1000}`;
+  syncRecordCard();
   // Refresh customization pickers so anything newly unlocked shows up.
   if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
+}
+// ⚠️ **A CARD OF ZEROES IS NOT A FIRST IMPRESSION.** On a fresh install this was the FIRST
+// thing on the menu — `0W · 0L · 0D (0 played)`, `goals 0-0`, `MMR 1000`, and four lines of
+// grey prose about a name book nobody has filled in — sitting above the button that starts
+// a match. Measured on a 390×844 phone, KICK OFF was at y ≈ 525 with the card in.
+// ⚠️ Gated on "has PLAYED", not "has visited": the same question `dailyModalWanted` asks,
+// and for the same reason — a record is a record OF something.
+// ⚠️ Nothing is taken away. The moment a match finishes the card is there with a real row
+// in it, and the full career screen was always a tile under More.
+// ⚠️ `#recordCard` is not a `.card.collapsible`, so it is in neither the jump bar nor the
+// search index — hiding it costs nothing downstream, which is why this is one line.
+function syncRecordCard(){
+  const c = $('recordCard'); if (!c) return;
+  c.style.display = ((stats && (stats.played|0) > 0)) ? '' : 'none';
 }
 renderStats();
 
@@ -10258,6 +10387,50 @@ function toggleShowMode(){
   applyShowMode();
   toast(sel.showMode ? '🔒 Show mode on — menu trimmed for guests'
                      : '🔓 Show mode off — full menu back');
+}
+
+// ---------- Sound and full screen, reachable without the menu ---------------
+// ⚠️ MUTE IS A SHORTCUT, NOT A SECOND PIECE OF STATE. `sel.snd.muted` has existed since
+// the Sound card was written and is read by exactly one predicate — `Aud.on()`, which
+// guards `tone()` and `noise()`. The HUD button and the pause row write that same flag,
+// so there is nothing to keep in step and no audio-graph change at all.
+// ⚠️ **`playSfx` must never grow a mute early-return.** It is the single funnel for
+// `vjDuckGoal()` and `rumbleGoal()` — the whole reason those hang off `playSfx('crowd')`
+// is so a fifth goal path cannot forget them — and a check at the top would silently kill
+// goal ducking and pad rumble along with the sound.
+// ⚠️ **VJ music is deliberately NOT covered.** It rides its own bus and `Aud.on()` never
+// sees it. Muting by gain instead would put a SECOND OWNER on `master.gain`, which
+// `Aud.setVol`, the VJ master fader and `vjPanic` all write already — the VJ operator has
+// their own master, and two owners of one gain node is the bug this avoids.
+// ⚠️ Neither of these marks itself `navsel`, and `syncShowLock` above does. `navsel` is
+// the CONTROLLER CURSOR on this screen — `syncOverNav` writes it to say where you are —
+// so a toggle wearing it permanently is a second thing claiming to be the selection, and
+// three of them would make the cursor unfindable. The LABEL carries the state, which is
+// what "says which state it is IN" was always for.
+function muteOn(){ return !!(sel.snd && sel.snd.muted); }
+function syncMuteUI(){
+  const on = muteOn();
+  const h = $('muteBtn');
+  if (h){ h.textContent = on ? '🔇' : '🔊'; h.setAttribute('aria-label', on ? 'Unmute' : 'Mute'); }
+  const b = $('ovMute');
+  if (b){
+    b.innerHTML = (iconSvg(on ? 'mute' : 'sound') || (on ? '🔇' : '🔊')) +
+                  `<span class="btnlab">Sound: ${on ? 'OFF' : 'ON'}</span>`;
+  }
+}
+// ⚠️ `saveSel()` is mandatory, not tidiness. `syncAdopt` SHALLOW-merges `sel`, so `snd` is
+// replaced wholesale by whatever the other window holds: toggle without pushing and
+// `/settings` still says `muted:false`, and its next write of any unrelated setting shoves
+// that stale `snd` back and un-mutes the game.
+// ⚠️ And it does NOT call `buildSettings()` — that is a ~24ms re-render of a menu which,
+// pressed from the HUD, is not even on screen. Only the Master tiles are repainted, and
+// only if they exist.
+function toggleMute(){
+  if (!sel.snd) return;
+  sel.snd.muted = !sel.snd.muted; saveSel();
+  syncMuteUI();
+  if ($('sndMaster')) buildSndMaster();
+  if (!sel.snd.muted) playSfx('whistle');      // a confirmation you can hear
 }
 
 function showSubTab(group, pane){
@@ -10904,6 +11077,9 @@ $('ovMenu').onclick = toMenu;
 // mis-tap from the ball while the match was live.
 $('ovSettings').onclick = () => openLook();     // where you left off — see lastSection
 $('ovShowLock').onclick = toggleShowMode;
+$('ovMute').onclick = () => toggleMute();
+// Full screen needs a real user gesture, and a click on this button is one.
+$('ovFull').onclick = () => toggleFullscreen(true);
 $('ovRematch').onclick = () => { hideOverlay(); startMatch(); };
 
 function hideScreens(){ ['setup','how','drills','season','leaderboard','stats','shop','social','rogue','cocktailCfg','arcadeCfg','mapMaker','padConfig'].forEach(id=>{ const el=$(id); if(el){ el.classList.add('hidden'); el.classList.remove('docked'); } }); padBind.active=false; padBind.stick=false;
@@ -11011,17 +11187,40 @@ function toggleFullscreen(fromGesture){
     }
   } catch(e){ toast('Full screen unavailable'); }
 }
+// ⚠️ ONE function for every place that says whether full screen is on — the Display
+// card's button, the HUD's aria-label and the pause screen's row. Three copies is three
+// places to leave showing the state it was in a moment ago.
 function updateFsUI(){
   const on = isFullscreen();
   const b = $('fsBtn'); if (b) b.textContent = on ? '⛶ Exit full screen' : '⛶ Enter full screen';
   const h = $('fsHudBtn'); if (h) h.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+  const o = $('ovFull');
+  if (o){
+    o.innerHTML = (iconSvg('expand') || '⛶') +
+                  `<span class="btnlab">Full screen: ${on ? 'ON' : 'OFF'}</span>`;
+  }
+}
+// ⚠️ Its own function rather than a literal inside `buildSettings`, because the HUD mute
+// button and the pause row both have to repaint these two tiles and neither can afford a
+// whole-menu rebuild. The tiles and the toggles therefore cannot disagree about mute.
+function buildSndMaster(){
+  const mm=$('sndMaster'); if(!mm) return; mm.innerHTML='';
+  [['on','🔊 On'],['off','🔇 Muted']].forEach(([k,lab])=>{
+    const el=document.createElement('div'); const isSel=(k==='off')===!!sel.snd.muted;
+    el.className='opt'+(isSel?' sel':''); el.innerHTML=`<span>${lab}</span>`;
+    el.onclick=()=>{ if (sel.snd.muted !== (k==='off')) toggleMute(); };
+    mm.appendChild(el);
+  });
 }
 $('fsHudBtn').onclick = () => toggleFullscreen(true);
+$('muteBtn').onclick = () => toggleMute();
 document.addEventListener('fullscreenchange', ()=>{ updateFsUI(); resize(); });
 document.addEventListener('webkitfullscreenchange', ()=>{ updateFsUI(); resize(); });
 // No F shortcut: F11 is the browser's own, and a bare letter key is a bad thing to
 // swallow — it fought the seat-names box and anything else you type into.
 updateFsUI();
+syncMuteUI();
+hudPeekInit();
 
 // ============================================================
 //  DECK UI — drive the whole menu from a controller.
@@ -11951,13 +12150,7 @@ function buildSettings(){
       ar.appendChild(el);
     });
   }
-  const mm=$('sndMaster'); mm.innerHTML='';
-  [['on','🔊 On'],['off','🔇 Muted']].forEach(([k,lab])=>{
-    const el=document.createElement('div'); const isSel=(k==='off')===!!sel.snd.muted;
-    el.className='opt'+(isSel?' sel':''); el.innerHTML=`<span>${lab}</span>`;
-    el.onclick=()=>{ sel.snd.muted=(k==='off'); saveSel(); buildSettings(); if(!sel.snd.muted) playSfx('whistle'); };
-    mm.appendChild(el);
-  });
+  buildSndMaster();
   $('vol').value=sel.snd.vol; $('volVal').textContent=sel.snd.vol+'%';
   $('vol').oninput=()=>{ sel.snd.vol=+$('vol').value; $('volVal').textContent=sel.snd.vol+'%'; Aud.setVol(sel.snd.vol); saveSel(); };
   buildSlotPicker('sfx', $('sfxSetPick'));
@@ -17999,18 +18192,31 @@ function noteKick(w, p, power, nx, ny){
   if (p.ctrl === 'gamepad') padRumble(p.padIndex, 'kick', Math.min(1, power/9));
   const attackDir = p.team===0 ? -1 : 1;           // opponent goal sits at y = attackDir*halfL
   const halfL = w.field.L/2;
+  // ⚠️ **SHOT, KEY PASS AND CLEARANCE ARE COUNTED BUT NOT CAPTIONED.** They had floaters
+  // and it was text spam: a rendered 4v4 frame carried KEY PASS over SHOT over SHOT in one
+  // scramble plus a stray SHOT over empty grass. The play was right and the caption was
+  // noise — `SHOT` fires on every strike including a rebound off the boards a few frames
+  // later, which is exactly why the per-(player, label) cooldown had to be invented.
+  // ⚠️ What is left on the pitch is the four that are EVENTS — GOAL, ASSIST, SAVE, POST —
+  // and everything cut still appears on the result screen, in the per-team table or in
+  // `statLine`'s prose. So the system's invariant points the way it always did: a label can
+  // never claim something the result screen will not also show; it may stay quiet about
+  // something the result screen does show.
+  // ⚠️ The STATS are untouched. This is three `addFloater` calls removed from beside three
+  // `ms.<stat>++` lines that still run — never a filter in `drawFloaters`, which would put
+  // the decision somewhere other than where the stat is counted.
   // Shot: a real strike heading goalward.
   if (power > 4 && ny*attackDir > 0.25){
-    ms.shots++; addFloater(p, 'SHOT', TH.hudSub);
+    ms.shots++;
     // Playmaker: the previous distinct kicker was a teammate teeing this up.
     if (b.prevKicker && b.prevKicker!==p && b.prevKicker.team===p.team && (w.matchT-b.prevKickT) < 3 && b.prevKicker.ms){
-      b.prevKicker.ms.passKey++; addFloater(b.prevKicker, 'KEY PASS', TH.accent);
+      b.prevKicker.ms.passKey++;
     }
   }
   // The Wall: a clearance struck from your own half, sent upfield.
   const ownLineY = -attackDir*halfL;
   if (Math.abs(p.y-ownLineY) < halfL*0.55 && ny*attackDir > 0.15 && power > 3.5){
-    ms.clears++; addFloater(p, 'CLEARANCE', TH.hudSub);
+    ms.clears++;
   }
   // Save: you were the threatened team and you've just turned the ball away from goal.
   if (w.threat && w.threat.team===p.team && (w.ball.vy * w.threat.dir) <= 0.5){
@@ -18695,7 +18901,11 @@ function restartToWarmup(w){ restartMatch(w); enterWarmup(w); }
 // a table you don't want whoever mashes first deciding what happens next.
 let overNav = 0;
 function overButtons(){
-  return ['ovResume','ovSettings','ovShowLock','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
+  // ⚠️ A button missing from this list is unreachable by gamepad entirely — it is drawn,
+  // it is pressable by touch and mouse, and the D-pad walks straight past it.
+  // ⚠️ This list is the DOM order on purpose — a D-pad walking a different order from the
+  // one on screen reads as a broken cursor.
+  return ['ovResume','ovSettings','ovMute','ovFull','ovShowLock','ovRematch','ovMenu'].map($).filter(b => b && b.style.display !== 'none');
 }
 function syncOverNav(){
   const bs = overButtons();
@@ -22125,7 +22335,12 @@ function drawLobby(w){
 // was reported as hard to read — which is the one thing a name plate exists to be. Screen
 // pixels rather than world units for the reason the floaters use them: on the huge courts
 // `cam.s` falls until the whole pitch fits and a world-sized name is a smudge.
-const NAMEPLATE = { size: 13, halo: 5, gap: 16 };
+// ⚠️ `halo` is 3.6, down from 5. Two round-joined passes at 5px round a 13px face is a
+// solid slab a little wider than the letters — the docs already say a plate is OUTLINED
+// rather than BOXED, and at that weight it had stopped being one. It still has to lay the
+// backing solid (that is what the second pass is for), so this is as thin as it goes.
+// The fade rule is `haloAlpha`'s and is untouched.
+const NAMEPLATE = { size: 13, halo: 3.6, gap: 16 };
 // ⚠️ **A HALO MAY NEVER OUTLIVE THE TEXT IT IS BEHIND.** Text that fades is drawn as a
 // backing stroke plus a fill, and the two do not fade alike: the backing is the opposite
 // tone by design, so over a mid-green pitch a black halo at alpha 0.2 still reads clearly
@@ -22227,7 +22442,13 @@ function drawDemoTag(){
 // rather than printing numbers across a control.
 function debugFloor(){ return isTouchLayout() ? Math.round(Math.min(cw,ch)*0.34) + 16 : 12; }
 // Build stamp, bottom-left. Useful when reporting what you were playing.
+// ⚠️ **DEBUG ONLY.** This printed `v20260820…` over the bottom-left of the pitch in every
+// match on every player's screen — a build stamp is a thing a developer needs and a thing
+// nobody else has any use for. What it was actually for survives and is better: the About
+// card's whole version block is a ONE-TAP COPY (`aboutReport`), which is where anybody
+// reporting something is sent anyway, and it carries the screen size and the layout too.
 function drawBuildTag(){
+  if (!sel.debug) return;
   ctx.save();
   ctx.font = `10px 'Kenney', system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
@@ -24842,14 +25063,41 @@ function drawGoal(w, sign){
   ctx.moveTo(wx(-gh), wy(y)); ctx.lineTo(wx(-gh), wy(ny));
   ctx.lineTo(wx(gh), wy(ny)); ctx.lineTo(wx(gh), wy(y));
   ctx.stroke();
-  // net mesh
-  ctx.strokeStyle = TH.netMesh;
-  ctx.lineWidth = 1;
-  const step = 10*s;
-  ctx.beginPath();
-  for (let gx=wx(-gh); gx<=wx(gh); gx+=step){ ctx.moveTo(gx, wy(y)); ctx.lineTo(gx, wy(ny)); }
-  for (let gy=Math.min(wy(y),wy(ny)); gy<=Math.max(wy(y),wy(ny)); gy+=step){ ctx.moveTo(wx(-gh),gy); ctx.lineTo(wx(gh),gy); }
-  ctx.stroke();
+  // ⚠️ **THE NET IS A DIAMOND MESH THAT FADES INTO THE POCKET, and it shipped as GRAPH
+  // PAPER.** A uniform square grid at full strength across the whole pocket reads as a
+  // texture swatch pasted over the goal rather than as a net, which is what it looked like
+  // in every screenshot of the game.
+  // Two things fix it and both are needed. The strands run DIAGONALLY, which is what a real
+  // net's mesh reads as from above and is also the one thing an axis-aligned grid can never
+  // stop looking like; and the whole thing FADES with depth, from the goal line into the
+  // back, which is the only cue a top-down view has that the pocket has any at all.
+  // ⚠️ The fade is a stroke GRADIENT, so it is still ONE `stroke()` — a per-line alpha would
+  // be one path and one stroke per strand, on a thing drawn twice a frame.
+  // ⚠️ Clipped to the pocket, because diagonals leave the box by definition.
+  {
+    const x0 = wx(-gh), x1 = wx(gh);
+    const yA = Math.min(wy(y), wy(ny)), yB = Math.max(wy(y), wy(ny));
+    const W = x1 - x0, H = yB - yA;
+    if (W > 1 && H > 1){
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x0, yA, W, H); ctx.clip();
+      // Bright at the goal line, nearly gone at the back of the net.
+      const near = sign > 0 ? yA : yB, far = sign > 0 ? yB : yA;
+      const g = ctx.createLinearGradient(0, near, 0, far);
+      g.addColorStop(0, rgba(TH.netMesh, 0.95));
+      g.addColorStop(1, rgba(TH.netMesh, 0.18));
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1;
+      const step = 16*s;                    // coarser than the old 10: fewer, cleaner strands
+      ctx.beginPath();
+      for (let o = -H; o <= W + H; o += step){
+        ctx.moveTo(x0 + o, yA);       ctx.lineTo(x0 + o + H, yB);
+        ctx.moveTo(x0 + o + H, yA);   ctx.lineTo(x0 + o, yB);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
   // Killer Lobsters hive: BERRY.cells slots sunk into the net pocket, on the end this
   // team ATTACKS — the same end they shoot at and shove the snail into, so "your
   // hive" is never the opposite way round from everything else in the mode.
@@ -26332,7 +26580,7 @@ function showOverlay(title, sub, resumable){
   $('ovRematch').dataset.role = '';
   $('ovMenu').textContent = 'Main Menu';
   { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
-  ['ovResume','ovSettings','ovShowLock','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
+  ['ovResume','ovSettings','ovMute','ovFull','ovShowLock','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
   $('ovResume').style.display = resumable ? '' : 'none';
   // Settings is a PAUSE option — offered where the match is already stopped, never
   // over a result screen where it would just be clutter.
@@ -26340,6 +26588,12 @@ function showOverlay(title, sub, resumable){
   // ⚠️ Pause only, same as Settings — over a RESULT screen it would sit between
   // Restart and Main Menu, which is the worst place to put a mode switch.
   { const sl=$('ovShowLock'); if (sl) sl.style.display = resumable ? '' : 'none'; syncShowLock(); }
+  // ⚠️ The two quick toggles, pause only for the same reason — and repainted here, or the
+  // row opens claiming whatever state it was in the last time the screen was up.
+  // ⚠️ Unlike Settings these are NOT taken away in show mode: sound and full screen are
+  // the two things a guest legitimately wants and neither is a setting they can break.
+  { const m=$('ovMute'); if (m) m.style.display = resumable ? '' : 'none'; syncMuteUI(); }
+  { const fo=$('ovFull'); if (fo) fo.style.display = resumable ? '' : 'none'; updateFsUI(); }
   $('ovRematch').style.display = resumable ? 'none' : '';
   // ⚠️ Translated as it is SHOWN, not as it is written: a dozen callers set the title and
   // relabel these buttons (Restart / Cup / Retry / Drills / Bracket / Next), and every one
@@ -26879,7 +27133,8 @@ if (window.__MAGNETDEBUG) {
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
-    showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
+    toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
