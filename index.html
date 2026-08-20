@@ -4400,7 +4400,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0015AM';
+const VERSION = '20260820.0130AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4416,6 +4416,14 @@ const VERSION = '20260820.0015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0130AM', title: 'One ring, and its colour is your stamina',
+    added: [],
+    changed: [
+      '<b>The stamina gauge is now the ring round you, not a second circle inside it.</b> The ring is white for the sprint you still have and red for what you have spent. The old arc was a hairline under a faint full circle, and half-empty looked the same as empty at every screen size.',
+      '<b>It only appears once it is worth reading</b> \u2014 above 60% the ring is plain white as before \u2014 and it stays on screen while you are locked out, even with KICK released, so you can watch it come back.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0015AM', title: 'Faceoff Orbit',
     added: [
       '<b>A new pitch and a matching look: Faceoff Orbit.</b> A long, narrow deck hanging in space with a planet off to one side, an identical base at each end, and a hard split across the middle where the two halves meet. Pick the pitch under Match \u2192 Pitch and the look under Theme.',
@@ -6595,7 +6603,9 @@ const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
 // ⚠️ `refill` is LONGER than `secs` on purpose: a sprint you get back as fast as you
 // spend it is a permanent one. `sprintRefill()` floors it at the spend for the same
 // reason, so the sliders cannot be set to undo the mechanic.
-const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
+// ⚠️ `show` is the stamina below which the ring starts to show a GAP. Above it the ring
+// is simply whole, so ordinary play looks exactly as it did — see the wind-up ring block.
+const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, show:0.6 };
 // ⚠️ **THE TWO RINGS ROUND A PLAYER MUST NOT TOUCH, AND THEY DID.** The stamina clock is
 // drawn at 1.30r and the wind-up ring at 1.42r — 0.12r apart, which on a phone is **1.2
 // PIXELS** between two strokes that are 1.6px and up to 2.9px wide. They overlapped, the
@@ -6610,8 +6620,14 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135 };
 // outward one frame in.
 // ⚠️ Both floors are in PIXELS because that is what a thin arc is measured in: a stroke
 // under about two pixels is an anti-aliased suggestion rather than a line.
-const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 1.3, caseA: 0.75,
-               inset: 1.0, kickMin: 2.2, spent: '#e0563c' };
+// ⚠️ **ONE RING NOW, so everything that existed to fit a SECOND band beside it is gone**
+// — `stamW`, `stamMin`, `inset`, `gap`, `gapR` and the guide-ring clearance in
+// `ringLayout`. The stamina arc used to be its own circle just outside the guide ring and
+// it did not work at any screen size; see the wind-up ring block in `drawOneDisc`.
+// ⚠️ `case`/`caseA` and `ringCasing()` are GONE with the second ring: the casing existed
+// to lift a green arc off green grass (1.29:1 on Grass), and the gauge is carried by the
+// wind-up ring's own colour now — white against `RING.spent` — which needs no help.
+const RING = { kickMin: 2.2, spent: '#e0563c' };
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -6625,7 +6641,6 @@ const RING = { gap: 1.8, gapR: 0.04, stamW: 0.13, stamMin: 1.7, case: 1.3, caseA
 // under it. That is this file's standing idiom — the guide ring on every disc, the name
 // plate's halo, `paintCap`'s outline — and it buys the contrast without touching the hue,
 // on every palette, including ones nobody has made yet.
-function ringCasing(){ return relLum(TH.stripeA || TH.court || '#000000') > 0.55 ? '#ffffff' : '#000000'; }
 // ⚠️ **THE WIND-UP RING IS WHITE, and the palette's own `kickRing` is not used for it.**
 // Reported three times as not being visible, and this was the actual cause the first two
 // diagnoses missed: on GRASS — the default palette — `TH.kickRing` is `#f2c53d`, a muted
@@ -6645,50 +6660,22 @@ function kickRingInk(){ return relLum(TH.stripeA || TH.court || '#000000') > 0.5
 // it had found was the disc's own rim. The draw asks for a layout; so does the suite,
 // which then ties it to the picture by probing the gap the layout claims is there.
 function ringLayout(p, r){
-  const stamW = Math.max(RING.stamMin, r*RING.stamW);
-  // ⚠️ **THE STAMINA RING'S RADIUS IS DERIVED, not a multiple.** It was `r*SPRINT.ring`
-  // (1.30), and a fixed multiple is the wrong shape for it: what actually decides how
-  // close it can sit is the DISC GUIDE RING, which is structural and may never be covered
-  // — so the answer is "just outside the guide ring, wherever that is", which changes with
-  // the body size. Derived, it hugs the player at every radius and on every court, and
-  // `SPRINT.ring` is DELETED rather than left unread: a constant nothing uses is the
-  // second place a radius lives, and `tests/sprint.mjs` was already locating the arc
-  // with it — the same hard-coded-copy trap `tells.mjs` records for the wind-up ring.
-  const guideW = Math.max(1, r * DISC_GUIDE.w);
-  // ⚠️ **THE STAMINA ARC SITS JUST OUTSIDE THE GUIDE RING, and the wind-up ring is given
-  // room rather than squeezed against the body.** Both of those were arrived at by
-  // LOOKING at a rendered phone frame, which is what three rounds of arithmetic missed.
-  // ⚠️ Drawn ON the body (the previous attempt) the disc came out as a bullseye — team
-  // colour, then a green arc, then the guide ring, all inside twenty pixels — and the
-  // wind-up ring at the old 1.42 dial then had **1.1px** of pitch between it and the disc,
-  // so it read as a halo stuck to the player instead of a ring around them. The ask was a
-  // disc, a clear gap, then a ring; that needs the gap to be real.
-  // ⚠️ Which is why `KICKRING.def` is **2.00** and not 1.42. The reference drawing has the
-  // ring at about 1.4× a body with no guide ring and no stamina arc on it; the game's disc
-  // carries both, so the same *apparent* separation needs a bigger multiple.
-  const stamR = r + guideW + RING.inset + RING.case + stamW/2;
-  const gap = Math.max(RING.gap, r*RING.gapR);
-  // ⚠️ `RING.kickMin` is a floor in PIXELS, not a fraction of `r`: on a phone the body is
-  // ~9.8px, so `r*0.16` is 1.6px and the ring came out as a hairline. The fraction is what
-  // keeps it in proportion on a big body; the floor is what keeps it visible on a small one.
+  // ⚠️ **ONE RING.** This used to work out where a stamina arc could sit beside the
+  // wind-up ring without either covering the other or covering the disc's structural
+  // guide ring — three cased bands round a body that is 9.8px on a phone, which never
+  // fitted and never read. The stamina gauge is the wind-up ring's ARC LENGTH now, so
+  // there is nothing to lay out: the radius is the player's dial and the width is the
+  // charge tell.
+  // ⚠️ `RING.kickMin` is a floor in PIXELS, not a fraction of `r`: on a phone `r*0.16` is
+  // 1.6px and the ring came out as a hairline. The fraction keeps it in proportion on a
+  // big body; the floor keeps it visible on a small one.
   const kickW = Math.max(RING.kickMin, r*0.16) * (1 + chargeFrac(p)*0.45);
-  // ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets, never its width right
-  // now.** The stroke grows with the charge, so reserving against the live width made the
-  // ring CREEP OUTWARD as you held KICK — measured drifting 21.6 → 21.8px across one
-  // wind-up. A ring that is a tell about the shot must not also be a tell about itself.
-  // ⚠️ **A BAND IS THE STROKE PLUS ITS CASING, on both sides.** Clearing the strokes alone
-  // still overlapped — the casing is `RING.case` wider each side of each ring, so 2.6px of
-  // the daylight was already spoken for. Widening `gap` did not fix it and made it worse
-  // by pushing the wind-up ring's own casing further into the space: the edges are what
-  // has to clear, not the centre lines.
-  const stamOuter = stamR + stamW/2 + RING.case;
-  const kickHalf = kickW/2 + RING.case;
-  // ⚠️ **THE DIAL, FULL STOP — nothing pushes this any more.** It used to be reserved
-  // outward to clear the stamina ring, which is how a control the player had set to 1.42
-  // ended up drawn at 1.94. With the arc on the body there is nothing out here to clear.
+  // ⚠️ **THE DIAL, FULL STOP.** The radius is the kick REACH — a ball touching this ring
+  // is within kicking distance, by construction (see `kickRangeUnits`). Nothing pushes it.
   const kickR = r*kickRingMul();
-  return { stamR, stamW, kickR, kickW, gap, stamOuter, kickInner: kickR - kickHalf };
+  return { kickR, kickW, kickInner: kickR - kickW/2 };
 }
+
 const SPRINTOPT = {
   off: { name:'Off', emoji:'🚫', icon:'barrier' },
   on:  { name:'On',  emoji:'💨', icon:'bolt' },
@@ -25054,24 +25041,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // resting state and a permanent ring round every body is furniture.
     // ⚠️ Draw only: `advanceStamina` in the step loop owns the number (the trails rule).
     // ⚠️ ONE LAYOUT for both rings, worked out before either is drawn — see `ringLayout`.
-    const { stamR, stamW, kickR, kickW } = ringLayout(p, r);
-    if (sprintOn() && p.stam != null && p.stam < 0.999){
-      ctx.beginPath(); ctx.arc(x, y, stamR, 0, 2*Math.PI);
-      ctx.strokeStyle = rgba(TH.line || '#ffffff', 0.16);
-      ctx.lineWidth = stamW; ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, stamR, -Math.PI/2, -Math.PI/2 + 2*Math.PI*Math.max(0, p.stam));
-      // ⚠️ SPENT is a different colour, because "nearly empty" and "locked out until
-      // it refills" feel identical from the length of an arc alone.
-      // ⚠️ Cased in the pitch's opposite ink rather than recoloured — see `ringCasing`.
-      // Green on green grass is 1.29:1 and the colour still has to mean "go".
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = rgba(ringCasing(), RING.caseA);
-      ctx.lineWidth = stamW + RING.case*2; ctx.stroke();
-      ctx.strokeStyle = rgba(p.spent ? RING.spent : (TH.good || '#3ec06a'), 0.98);
-      ctx.lineWidth = stamW; ctx.stroke();
-      ctx.lineCap = 'butt';
-    }
+    const { kickR, kickW } = ringLayout(p, r);
     // ⚠️ **THE RING MEANS "KICK IS HELD", NOT "A SHOT IS WINDING UP", and that gate is why
     // it was reported missing four times.** It was `chargeOn() && (p.kick || charging)`, so
     // with **Hold to kick harder** switched off the ring was never drawn AT ALL — however
@@ -25082,7 +25052,26 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // coming" — which was the wrong reading of what the ring is for. It is a tell about
     // what YOU are doing (the button is down, you are about to kick or you are carrying),
     // and that is worth showing whether or not a wind-up is part of it.
-    if (p.kick || (chargeOn() && (p.chargeT||0) > 0.01)){
+    // ⚠️ **THE STAMINA GAUGE IS THIS RING'S COLOUR, and it used to be a second circle.**
+    // The old arc sat just outside the guide ring under a full-circle background track at
+    // 0.16 alpha, and measured on a phone it lit **118 of 120** probe angles at HALF
+    // stamina and **119** when spent — half and empty were the same shape, because the
+    // track is always complete and it swamped a 1.7px arc whose LENGTH was the only
+    // information. On a desktop body the two read 72 and 66: indistinguishable at every
+    // size. The arc, its casing and the track are all deleted.
+    // ⚠️ **The ring stays a COMPLETE circle, which is not a stylistic call.** Its radius is
+    // the kick REACH — a ball touching it is within range — so a ring with a piece missing
+    // is a lie about where you can kick, and `tests/tells.mjs` pins "full circle, never a
+    // sweep" for the separate reason that a sweeping ring reads as a loading bar. So the
+    // gauge is carried by COLOUR round a whole circle rather than by arc length.
+    // ⚠️ White is what you still have, `RING.spent` is what you have used, growing
+    // clockwise from twelve. That is a stronger pair than the old green-on-green (1.29:1
+    // on grass) and it works for a colour-blind player, where green-vs-red does not.
+    // ⚠️ **Nothing at all above `SPRINT.show`** — the red starts from zero at the threshold
+    // rather than appearing at 40% of the circle, so ordinary play is the plain white ring
+    // exactly as before and the gauge only exists once it is worth reading.
+    const stamShown = sprintsFor(p) && p.stam != null && (p.spent || p.stam < SPRINT.show);
+    if (p.kick || (chargeOn() && (p.chargeT||0) > 0.01) || stamShown){
       const f = chargeOn() ? chargeFrac(p) : 0;
       // ⚠️ **IT HAS TO READ THE MOMENT KICK GOES DOWN, not once it is charged.** The alpha
       // ramped 0.42 → 0.92, so the ring spent the start of every hold at well under half
@@ -25097,6 +25086,22 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.beginPath(); ctx.arc(x, y, kickR, 0, 2*Math.PI);
       ctx.strokeStyle = rgba(kickRingInk(), 0.88 + 0.12*f);
       ctx.lineWidth = kickW; ctx.stroke();
+      // ⚠️ The spent portion, over the top of the complete ring. Two rules, and they meet
+      // continuously at empty: while DRAINING the red grows from nothing at `SPRINT.show`
+      // to the whole circle at zero, and while LOCKED OUT it tracks the real deficit, so
+      // it shrinks back as the ring refills and you can watch yourself become able to
+      // sprint again. `spent` does not clear until stamina is full, which is why the
+      // second rule cannot simply be the first one read backwards.
+      if (stamShown){
+        const st = Math.max(0, Math.min(1, p.stam));
+        const used = p.spent ? 1 - st : Math.min(1, (SPRINT.show - st) / SPRINT.show);
+        if (used > 0.001){
+          ctx.beginPath();
+          ctx.arc(x, y, kickR, -Math.PI/2, -Math.PI/2 + 2*Math.PI*used);
+          ctx.strokeStyle = rgba(RING.spent, 0.95);
+          ctx.lineWidth = kickW; ctx.stroke();
+        }
+      }
     }
     // Fades out while the plate covers a disc or the ball. Draw is in local coords,
     // hit test in true screen space — same rect, the local frame is screen-aligned.
@@ -26738,7 +26743,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, haloAlpha, NAMEPLATE, RING, ringCasing, kickRingInk, ringLayout, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, RING, kickRingInk, ringLayout, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

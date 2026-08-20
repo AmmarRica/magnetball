@@ -195,11 +195,16 @@ const r = await p.evaluate(async ()=>{
   // 5) Wind-up is visible on the disc: a charged player differs from an idle one
   //    at the charge-ring radius.
   me.x=0; me.y=0; me.vx=0; me.vy=0; me.kick=false; me.chargeT=0;
+  // ⚠️ **STAMINA PINNED FULL, because this block is about the CHARGE.** The ring carries
+  // the stamina gauge in its colour now — part of it turns `RING.spent` red once you drop
+  // below `SPRINT.show` — so a part-drained player makes "solid" and "a full circle" mean
+  // something else entirely. Pin the state the checks describe rather than loosening them;
+  // the gauge has its own coverage in `tests/sprint.mjs`.
+  me.stam = 1; me.spent = false;
   M.resetTrails();
-  // ⚠️ The radius comes from `ringLayout`, never from a 1.42 written here. That constant
-  // is the wind-up ring's DIAL default, and the ring is pushed outward when it would
-  // collide with the stamina clock — so a hard-coded copy went on sampling bare grass and
-  // reported the wind-up ring as invisible on a build where it is drawn perfectly well.
+  // ⚠️ The radius comes from `ringLayout`, never from a 1.42 written here — that constant
+  // is only the wind-up ring's DIAL default, and a hard-coded copy went on sampling bare
+  // grass and reported the ring as invisible on a build where it draws perfectly well.
   const ringR = () => M.ringLayout(me, me.r*M.cam.s*M.cam.body).kickR;
   const ringAt = () => px(M.wx(me.x), M.wy(me.y) - ringR());      // top of the ring
   M.drawPitch(w); M.drawDiscs(w);

@@ -288,21 +288,23 @@ const det = await p.evaluate(() => {
            sample: a.slice(0, 60) };
 });
 
-// =========================== TWO RINGS, AND YOU CAN SEE BOTH OF THEM ==
-// ⚠️ Reported as "make sure you can see stamina and kick circles", and the geometry says
-// why you could not: the stamina clock sits at 1.30r and the wind-up ring at 1.42r, which
-// on a phone is **1.2 PIXELS** between strokes 1.6px and up to 2.9px wide. They overlapped
-// and the wind-up ring, drawn second, painted straight over the stamina arc — one fat gold
-// band and no stamina at all. It only became visible when Sprint shipped ON by default.
-// ⚠️ Measured by SCANNING OUTWARD along a ray and counting separate inked bands, which is
-// the claim itself: two rings you can tell apart is two runs of ink with pitch between
-// them. A build where they merge reads as one run however wide it is.
-// ⚠️ The ray goes straight UP, because the stamina arc is drawn clockwise from twelve — at
-// any other angle a part-drained ring may legitimately have no arc there, and the check
-// would pass on a build that draws no stamina at all.
-// ⚠️ Grass on purpose, and pinned: it is the DEFAULT palette and the one where both rings
-// were hardest to find (green `TH.good` on green mown stripes is 1.29:1, gold on green is
-// 2.09:1). A suite that samples pixels has to say which palette it is sampling.
+// ================================ ONE RING, AND ITS COLOUR IS THE GAUGE ==
+// ⚠️ **THE TWO-RING BLOCK IS GONE BECAUSE THE SECOND RING IS GONE**, and the reason is a
+// FALSE PASS THIS SUITE PRODUCED. The stamina arc was drawn under a full-circle background
+// track at 0.16 alpha. Measured on a phone, the ring lit **118 of 120** probe angles at
+// HALF stamina and **119** when spent — half and empty were the same shape, because the
+// track is always complete and swamped the 1.7px arc whose LENGTH was the only signal.
+// ⚠️ And this file HID that: the diff threshold in the block below was raised from 30 to
+// 90 with a comment calling the track a measurement artefact, which made
+// `isAnArcNotACircle` — a check whose own message reads "a progress bar that is always a
+// full ring shows no progress" — go green again. The check was tuned until it stopped
+// seeing precisely the thing it names. Lowered back to 30 now, as the proof.
+// ⚠️ The gauge is the wind-up ring's COLOUR: one complete circle, white for the stamina
+// you still have and `RING.spent` for what you have used. It must stay COMPLETE — that
+// radius is the kick reach, so a gap in it is a lie about where you can kick.
+// ⚠️ Grass on purpose, and pinned: the default palette and the one the old arc hid on
+// (green `TH.good` on green mown stripes is 1.29:1). A suite that samples pixels has to
+// say which palette it is sampling.
 const bands = await p.evaluate(() => {
   const M = window.__magnet, o = {};
   M.applyTheme('grass');
@@ -310,133 +312,112 @@ const bands = await p.evaluate(() => {
   M.setMatchSeed(7); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const me = w.players.find(q => q.ctrl === 'human1') || w.players[0];
-  me.x = 0; me.y = 0; me.vx = me.vy = 0;
+  me.x = 60; me.y = 90; me.vx = me.vy = 0; me.name = '';
   w.ball.x = 9000; w.ball.y = 9000;
   for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }
-  // Hold KICK for a second: the wind-up ring is up and the stamina ring is part drained.
-  for (let i = 0; i < 70; i++){
-    M.pads.p1.dx = 0; M.pads.p1.dy = 0; M.pads.p1.kick = true;
-    me.x = 0; me.y = 0; w.ball.x = 9000; w.ball.y = 9000;
-    M.step(w);
-  }
-  M.pads.p1.kick = false;
-  M.renderAlpha = 1; M.render();
-  o.stam = +me.stam.toFixed(2); o.charge = +(me.chargeT || 0).toFixed(2);
   const cv = document.getElementById('game'), c = cv.getContext('2d');
   const dpr = cv.width / cv.clientWidth;
-  const cx = M.wx(me.x), cy = M.wy(me.y);
-  const r = me.r * M.cam.s * M.cam.body;
-  // Plain pitch a long way out along the same ray, as the "this is court" reference.
-  const at = (rad) => { const px = Math.round(cx * dpr), py = Math.round((cy - rad) * dpr);
-                        const d = c.getImageData(px, py, 1, 1).data; return [d[0], d[1], d[2]]; };
-  const court = at(r * 6);
-  const far = (q) => Math.abs(q[0]-court[0]) + Math.abs(q[1]-court[1]) + Math.abs(q[2]-court[2]);
-  // Scan from just outside the disc's own rim out to well past the wind-up ring.
-  const runs = []; let cur = null;
-  for (let rad = r * 1.20; rad <= r * 2.6; rad += 0.25){
-    const inked = far(at(rad)) > 24;
-    if (inked){ if (!cur){ cur = { from: rad, to: rad, peak: 0, col: null }; runs.push(cur); }
-                cur.to = rad;
-                const q = at(rad), d = far(q);
-                if (d > cur.peak){ cur.peak = d; cur.col = q; } }
-    else cur = null;
-  }
-  o.runs = runs.length;
-  o.bandSpans = runs.map(x => [+x.from.toFixed(1), +x.to.toFixed(1)]);
-  // ⚠️ **NOT "there are two runs of ink".** The first version of this asserted exactly
-  // that, found two, and PASSED on a build with the rings back on top of each other —
-  // because one of the two it had found was the disc's own rim, which sits a couple of
-  // pixels further out than the scan started. The claim has to name the two rings.
-  const L = M.ringLayout(me, r);
-  o.layout = { stamR:+L.stamR.toFixed(1), stamW:+L.stamW.toFixed(1),
-               kickR:+L.kickR.toFixed(1), kickW:+L.kickW.toFixed(1), gap:+L.gap.toFixed(1),
-               stamOuter:+L.stamOuter.toFixed(1), kickInner:+L.kickInner.toFixed(1) };
-  // ⚠️ Measured on the BANDS — stroke plus casing — not the stroke centre lines. Clearing
-  // the strokes alone still left the two casings overlapping, and the first fix widened
-  // `gap` instead, which pushed the wind-up ring's own casing further in and made the
-  // reading WORSE: 110 of ink in what was supposed to be daylight.
-  o.clearance = +(L.kickInner - L.stamOuter).toFixed(2);
-  // ⚠️ Both rings are outside the disc again — the arc was moved ONTO the body for one
-  // build and the disc came out as a bullseye, with the wind-up ring then 1.1px off it.
-  // The wind-up dial is 2.00 now, which is what buys the daylight this measures.
-  o.reallyClear = o.clearance >= L.gap * 0.9;
-  // ⚠️ **AND THE WIND-UP RING DOES NOT CREEP OUTWARD AS YOU CHARGE.** Its stroke grows
-  // with the wind-up, and the reservation was computed from the width RIGHT NOW — so the
-  // ring drifted outward across a single hold (measured 21.6 → 21.8px). A ring that is a
-  // tell about the shot must not also be a tell about itself. Reserved on the widest it
-  // ever gets, so the radius is a constant; sampled at both ends of the charge, since one
-  // reading cannot see a drift.
-  const rq = me.r * M.cam.s * M.cam.body;
-  const was = me.chargeT;
-  me.chargeT = 0;    const kEmpty = M.ringLayout(me, rq).kickR;
-  me.chargeT = 999;  const kFull  = M.ringLayout(me, rq).kickR;
-  me.chargeT = was;
-  o.kickREmpty = +kEmpty.toFixed(2); o.kickRFull = +kFull.toFixed(2);
-  o.radiusHoldsStill = Math.abs(kFull - kEmpty) < 0.01;
-  // ⚠️ ...and the PICTURE agrees: ink where the layout puts each ring, plain pitch in the
-  // gap between them. Without this the layout could say anything and the draw ignore it.
-  const guideOutR = r + Math.max(1, r * M.DISC_GUIDE.w);
-  // ⚠️ The PEAK across the band, not the pixel at its centre. The centre of the stamina
-  // arc is the arc's own colour — which on grass is green on green, 66 away from the
-  // court — and the whole point of the casing is that it sits at the EDGES. Sampling the
-  // middle measures the thing that was already invisible and reports it as still
-  // invisible, which is how the first run of this failed a build that works.
-  const peak = (rad, half) => { let m = 0;
-    for (let d = -half; d <= half; d += 0.25) m = Math.max(m, far(at(rad + d)));
-    return Math.round(m); };
-  o.inkAtStam = peak(L.stamR, L.stamW/2 + M.RING.case);
-  o.inkAtKick = peak(L.kickR, L.kickW/2 + M.RING.case);
-  // ⚠️ **THE GAP PROBE IS GONE, and what replaces it is the check that should have caught
-  // this bug three reports ago.** "Plain pitch between the two rings" named something real
-  // while both rings were outside the disc; with the arc on the body they are on opposite
-  // sides of the rim, `reallyClear` asserts that from the layout and the guide-ring probe
-  // asserts it from the pixels, and all the old sample could still see was the wind-up
-  // ring's own casing — which is supposed to be there.
-  // ⚠️ What nothing measured was whether the ring is VISIBLE, and it was not: on GRASS, the
-  // default palette, `TH.kickRing` is `#f2c53d` — a muted gold — cased in black, so at the
-  // 2px a phone draws it the ring rendered as a dark grey smudge on green. Every geometry
-  // check passed throughout. The ring is picked for contrast now (`kickRingInk`), and this
-  // measures the RENDERED result: the brightest pixel in the ring's band against the court
-  // it is drawn on.
-  // ⚠️ Threshold from BOTH builds rather than the passing one: the gold build reaches 455
-  // of 765 against a court at 287 (a separation of 168), the contrast-picked one reaches
-  // 687 the instant KICK goes down and 765 at full charge (400+). 280 sits clear of both.
-  {
-    const q = at(r * 6); o.courtLum = q[0] + q[1] + q[2];
-    let best = 0;
-    for (let d = -(L.kickW/2 + M.RING.case); d <= L.kickW/2 + M.RING.case; d += 0.25){
-      const v = at(L.kickR + d); best = Math.max(best, Math.abs(v[0]+v[1]+v[2] - o.courtLum));
+  M.computeCam();
+  const r = me.r * M.cam.s * M.cam.body, L = M.ringLayout(me, r);
+  o.layout = { kickR: +L.kickR.toFixed(1), kickW: +L.kickW.toFixed(2), asR: +(L.kickR/r).toFixed(2) };
+  const px = M.wx(me.x) * dpr, py = M.wy(me.y) * dpr;
+  // ⚠️ **CLASSIFIED AS A DIFFERENCE against the rested body, never an absolute cut.** A
+  // fixed `sum > 640` worked on a 3x phone page and read ZERO on this 1x one, and a
+  // court-relative cut then read the whole ring as lit at rest because the reference
+  // landed on a different mown stripe. The rested body draws no ring at all, so it is the
+  // one honest baseline: anything that differs from it IS the ring, and the pixel's own
+  // hue says which half of the gauge it is.
+  const band = (kick, stam, spent) => {
+    me.kick = kick; me.stam = stam; me.spent = spent; me.chargeT = 0;
+    M.renderAlpha = 1; M.render();
+    const out = [];
+    for (let a = 0; a < 360; a += 3){
+      const t = (a - 90) * Math.PI/180;
+      let best = null, bestD = -1;
+      for (let d = -1.5; d <= 1.5; d += 0.5){
+        const rad = L.kickR + d;
+        const q = c.getImageData(Math.round(px + Math.cos(t)*rad*dpr),
+                                 Math.round(py + Math.sin(t)*rad*dpr), 1, 1).data;
+        const lum = q[0] + q[1] + q[2];
+        if (lum > bestD){ bestD = lum; best = [q[0], q[1], q[2]]; }
+      }
+      out.push(best);
     }
-    o.kickRingContrast = best;
+    return out;
+  };
+  const rested = band(false, 1, false);
+  const scan = (kick, stam, spent) => {
+    const now = band(kick, stam, spent);
+    let red = 0, pale = 0, none = 0;
+    for (let i = 0; i < now.length; i++){
+      const q = now[i], b0 = rested[i];
+      const diff = Math.abs(q[0]-b0[0]) + Math.abs(q[1]-b0[1]) + Math.abs(q[2]-b0[2]);
+      if (diff < 40) none++;
+      else if (q[0] > 150 && q[1] < 130 && q[2] < 120) red++;
+      else pale++;
+    }
+    return { red, pale, none };
+  };
+  o.idleFull      = scan(false, 1, false);
+  o.holdFull      = scan(true, 1, false);
+  o.holdAbove     = scan(true, Math.min(0.95, M.SPRINT.show + 0.1), false);
+  o.holdLow       = scan(true, M.SPRINT.show * 0.5, false);
+  o.spentReleased = scan(false, 0.02, true);
+  o.refilling     = scan(false, 0.5, true);
+  o.N = 120;
+  // ⚠️ ...and it grows CLOCKWISE FROM TWELVE, the one thing an angular count cannot say.
+  // Index 0 is straight up; part spent must be red at the top and pale at the bottom.
+  {
+    me.kick = true; me.stam = M.SPRINT.show * 0.5; me.spent = false; me.chargeT = 0;
+    M.renderAlpha = 1; M.render();
+    const at = (deg) => { const t = (deg - 90) * Math.PI/180;
+      let red = 0;
+      for (let d = -1.5; d <= 1.5; d += 0.5){
+        const rad = L.kickR + d;
+        const q = c.getImageData(Math.round(px + Math.cos(t)*rad*dpr),
+                                 Math.round(py + Math.sin(t)*rad*dpr), 1, 1).data;
+        if (q[0] > 150 && q[1] < 130 && q[2] < 120) red = 1;
+      }
+      return red; };
+    o.topIsRed = at(6) === 1 && at(20) === 1;
+    o.bottomIsNot = at(186) === 0 && at(200) === 0;
   }
-  // ⚠️ Thresholds picked off BOTH builds, not off the passing one: with the casing removed
-  // the stamina band reads 87 and the gap fills to 65, and with the rings overlapping the
-  // gap reads 78 — so 110 and 40 sit clear of every sabotage and clear of the real build's
-  // 167 and 8.
-  o.drawnWhereItSays = o.inkAtStam > 110 && o.inkAtKick > 110 && o.kickRingContrast > 280;
-  // ⚠️ ...and they are DIFFERENT MARKS. Sampled at the two radii the layout names, never
-  // at whatever the scan happened to find.
-  const a = at(L.stamR), b2 = at(L.kickR);   // the marks' own colours, band centres
-  o.innerCol = a; o.outerCol = b2;
-  o.ringsDiffer = Math.abs(a[0]-b2[0]) + Math.abs(a[1]-b2[1]) + Math.abs(a[2]-b2[2]) > 60;
   return o;
 });
 
-ok('the two rings clear each other', bands.reallyClear,
-   `${bands.clearance}px of daylight between them against a wanted gap of ${bands.layout.gap} — ${JSON.stringify(bands.layout)}; they sat 0.12r apart, which on a phone is 1.2 pixels between strokes 1.6 and 2.9 wide, and the wind-up ring is drawn second`);
-ok('...and the wind-up ring HOLDS STILL as the charge builds', bands.radiusHoldsStill,
-   JSON.stringify({ empty: bands.kickREmpty, full: bands.kickRFull }) +
-   ' — its stroke widens with the wind-up, so a reservation taken from the live width walks the whole ring outward while you hold KICK');
-ok('...and the picture agrees with the layout', bands.drawnWhereItSays,
-   `ink ${bands.inkAtStam} at the stamina radius, ${bands.inkAtKick} at the wind-up radius, ` +
-   `wind-up ring contrast ${bands.kickRingContrast} against a court at ${bands.courtLum} ` +
-   `(bands found: ${JSON.stringify(bands.bandSpans)}) — the palette's own kickRing is a muted gold on grass ` +
-   `and rendered as a grey smudge at the 2px a phone draws it, which every geometry check here passed straight through`);
-ok('...and they are different marks, not one ring split by an antialiased pixel', bands.ringsDiffer,
-   `inner ${JSON.stringify(bands.innerCol)} against outer ${JSON.stringify(bands.outerCol)}`);
-ok('...and both stand off the pitch on GRASS, the palette they hid on',
-   bands.inkAtStam > 110 && bands.inkAtKick > 110,
-   `${bands.inkAtStam} / ${bands.inkAtKick} against the court — green on green is 1.29:1 and gold on green 2.09:1, which is what the casing is for`);
+// Nothing at all in ordinary play: no second band, and no ring unless you ask for one.
+ok('a rested player who is not kicking wears NOTHING', bands.idleFull.none === bands.N,
+   JSON.stringify(bands.idleFull) + ' — the stamina gauge may not be furniture on every body');
+// ...and holding KICK is the plain white ring, unchanged, while there is nothing to say.
+ok('...holding KICK with plenty left is the plain ring', bands.holdFull.pale === bands.N && bands.holdFull.red === 0,
+   JSON.stringify(bands.holdFull));
+ok('...and it stays plain ABOVE the threshold', bands.holdAbove.red === 0,
+   JSON.stringify({ show: 'SPRINT.show', at: bands.holdAbove }) +
+   ' — "only when it matters" means the gauge does not exist until it is worth reading');
+// ⚠️ THE CLAIM THE OLD SUITE COULD NOT MAKE: half and empty are different shapes. The
+// build this replaces read 118 of 120 at half and 119 when spent — six angles apart.
+ok('the gauge SHOWS A LEVEL: part spent is part red', bands.holdLow.red > bands.N*0.25 && bands.holdLow.red < bands.N*0.75,
+   JSON.stringify(bands.holdLow) + ' — half drained must be about half the circle, not all of it');
+ok('...and empty is clearly MORE than half spent', bands.spentReleased.red > bands.holdLow.red + bands.N*0.25,
+   JSON.stringify({ half: bands.holdLow.red, empty: bands.spentReleased.red }) +
+   ' — the old arc read 118 at half and 119 at empty, indistinguishable at every screen size');
+// ⚠️ Visible with KICK RELEASED. Folding the gauge into a hold-only ring would mean you
+// could never watch it refill, and being locked out is exactly when you need to know.
+ok('...and being LOCKED OUT shows without holding KICK', bands.spentReleased.red > bands.N*0.8,
+   JSON.stringify(bands.spentReleased) + ' — you have to be able to watch it come back');
+ok('...and it visibly comes back as it refills', bands.refilling.red < bands.spentReleased.red - bands.N*0.25,
+   JSON.stringify({ empty: bands.spentReleased.red, halfway: bands.refilling.red }));
+// ⚠️ THE RING IS ALWAYS A COMPLETE CIRCLE. Its radius is the kick REACH, so a gap in it is
+// a lie about where you can kick — this is why the gauge is carried by colour and not by
+// arc length, and `tests/tells.mjs` pins the same circle from the other side.
+ok('...and it grows clockwise FROM TWELVE', bands.topIsRed && bands.bottomIsNot,
+   JSON.stringify({ topIsRed: bands.topIsRed, bottomIsNot: bands.bottomIsNot }) +
+   ' — an angular count cannot tell a gauge that fills from the top from one that fills from anywhere');
+ok('...and the circle is never broken, whatever the level',
+   [bands.holdFull, bands.holdLow, bands.spentReleased, bands.refilling]
+     .every(x => x.red + x.pale === bands.N),
+   JSON.stringify({ full: bands.holdFull, low: bands.holdLow, empty: bands.spentReleased, refill: bands.refilling }) +
+   ' — the radius is the reach, so a missing arc would be a lie about where the ball can be kicked from');
 
 // ==================================================== the ring, in pixels ==
 // ⚠️ Measured as RENDERED INK, never from the flag — a "stamina exists" check passes on
@@ -448,140 +429,6 @@ ok('...and both stand off the pitch on GRASS, the palette they hid on',
 // inked when rested; a full circle would show up as no difference.
 // ⚠️ THE PALETTE IS PINNED, because a suite that samples pixels has to say which one it
 // is sampling — grass puts mown stripes exactly where this is looking.
-const ring = await p.evaluate(() => {
-  const M = window.__magnet, o = {};
-  M.applyTheme('neon');
-  M.sel.sprint = 'on';
-  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(7); M.startMatch();
-  const w = M.world; w.state = 'play'; w.stateT = 2;
-  const me = w.players[0];
-  const cv = document.getElementById('game'), c = cv.getContext('2d');
-  const dpr = cv.width / cv.clientWidth;
-  const STEPA = 3, N = 360/STEPA;
-  const scan = () => {
-    M.computeCam(); M.render();
-    // ⚠️ Read the radius from `ringLayout`, never from a constant in the suite: the
-    // stamina ring is derived from the disc's guide ring now, so a copy here goes on
-    // sampling bare grass and reports a perfectly good arc as invisible.
-    const s = M.cam.s, rr = M.ringLayout(me, me.r * s * M.cam.body).stamR;
-    const cx = M.wx(me.x), cy = M.wy(me.y);
-    const on = [];
-    for (let k = 0; k < N; k++){
-      const t = (k*STEPA - 90) * Math.PI/180;
-      const px = Math.round((cx + Math.cos(t)*rr) * dpr), py = Math.round((cy + Math.sin(t)*rr) * dpr);
-      if (px < 0 || py < 0 || px >= cv.width || py >= cv.height){ on.push(false); continue; }
-      const d = c.getImageData(px, py, 1, 1).data;
-      on.push([d[0], d[1], d[2]]);
-    }
-    return on;
-  };
-  me.x = 0; me.y = 0; me.vx = me.vy = 0;
-  me.stam = 1; me.spent = false;  const rest = scan();
-  me.stam = 0.5; me.spent = false; const half = scan();
-  me.stam = 0.02; me.spent = true; const low  = scan();
-  // ⚠️ **A DIFFERENCE against the rested body, not absolute brightness.** The probe used
-  // `r+g+b > 200`, which works while the arc is drawn over the PITCH and reads almost
-  // nothing once it moved onto the disc — the body is already bright, so "is this pixel
-  // lit" stops separating the arc from the player underneath it. Rested is the baseline
-  // because that is the one state where the arc is not drawn at all.
-  // ⚠️ The threshold has to clear the arc's own BACKGROUND TRACK, which is drawn as a full
-  // circle at 0.16 alpha whenever the ring is up. At 30 the track registered at every
-  // angle, so half stamina measured 100 of 120 and "it is an arc, not a full circle" went
-  // red on a build whose arc is plainly half a circle. The lit arc is far brighter than
-  // the track, so a higher cut separates them without naming either.
-  const extra = a => a.map((q, k) => Math.abs(q[0]-rest[k][0]) + Math.abs(q[1]-rest[k][1])
-                                   + Math.abs(q[2]-rest[k][2]) > 90);
-  const eh = extra(half), el = extra(low);
-  const count = a => a.reduce((n, v) => n + (v ? 1 : 0), 0);
-  o.restInk = 0; o.halfExtra = count(eh); o.lowExtra = count(el);
-  o.probes = N;
-  // ⚠️ Drawn only when there is something to say: rested adds nothing over the disc.
-  o.hiddenWhenRested = count(extra(rest)) === 0;   // rested differs from itself nowhere
-  o.shownWhenDrained = o.halfExtra > N*0.20;
-  // ...an ARC, not a full circle: half stamina must leave a real gap.
-  o.isAnArcNotACircle = o.halfExtra < N*0.72;
-  // ...and it SHRINKS as the ring drains, which is the whole of "progress bar".
-  o.shrinksAsItDrains = o.lowExtra < o.halfExtra;
-  // ⚠️ ...starting at TWELVE O'CLOCK and sweeping like a clock hand. Index 0 is
-  // straight up, so the inked run has to begin there.
-  // ⚠️ **The run BEGINS at the top and the other side of twelve is dark** — which is what
-  // "sweeps like a clock hand" actually claims, and it is robust where `eh[0] && eh[1]`
-  // was not: sample 0 sits exactly on the arc's round start cap, and once the arc moved
-  // onto the body that single pixel came out matching the art under it. Measured: index 0
-  // false with 1..7 all true, on a build where the arc plainly starts at twelve.
-  o.startsAtTwelve = eh[1] === true && eh[2] === true &&
-                     eh[N-2] === false && eh[N-3] === false;
-  // ⚠️ **AND IT MUST NOT SWALLOW THE DISC'S GUIDE RING**, which is the claim that replaced
-  // the old magic 1.30: the stamina radius is derived from the guide ring's own width, so
-  // that ring is what decides how close the arc can sit, and it is structural — every skin
-  // gets one because a player is a circle of radius `r` and that circle is what collides.
-  // Probed the same way as the gap between the two rings, one layer in: the daylight
-  // between the guide ring's outer edge and the stamina band's inner edge must be real.
-  {
-    const s = M.cam.s, rr = me.r * s * M.cam.body;
-    const L = M.ringLayout(me, rr);
-    const guideOut = rr + Math.max(1, rr * M.DISC_GUIDE.w);
-    // ⚠️ The arc is back OUTSIDE the guide ring — it was moved onto the body for one build
-    // and the disc came out as a bullseye — so the clearance is measured the way it always
-    // was: the arc's inner edge must clear the guide band's outer edge. The guide ring is
-    // structural, every skin gets one, because a player is a circle of radius `r` and that
-    // circle is what collides.
-    const stamIn = L.stamR - L.stamW/2 - M.RING.case;
-    o.guideOut = +guideOut.toFixed(2); o.stamIn = +stamIn.toFixed(2);
-    o.clearsTheGuideRing = stamIn > guideOut;
-    // ⚠️ **AND THE PIXELS AGREE — measured as "unchanged", not as "bare pitch".** The
-    // daylight between the two is a fraction of a pixel wide by design (the arc hugs the
-    // player), so a midpoint probe reads the antialiased edges of both and reports 426 of
-    // 765 on a build where nothing overlaps at all. What the claim actually says is that
-    // the arc does not PAINT OVER the guide ring, so the honest measurement is the guide
-    // ring's own pixels with the arc up against the same pixels with it down.
-    const ringPx = () => { M.computeCam(); M.render();
-      const cx = M.wx(me.x), cy = M.wy(me.y), out = [];
-      for (let k = 0; k < N; k++){
-        const t = (k*STEPA - 90) * Math.PI/180;
-        // ⚠️ Sample the guide ring ITSELF, at `rr`. The first version probed
-        // `guideOut * 0.985`, and `guideOut` is `r + lw` — the OUTER edge of the band, so
-        // that lands in the daylight beyond it and measured the stamina arc's own casing
-        // rather than the ring it is supposed to be protecting. It reported 290 of change
-        // on a build where the guide ring is untouched.
-        const px = Math.round((cx + Math.cos(t)*rr) * dpr);
-        const py = Math.round((cy + Math.sin(t)*rr) * dpr);
-        const d = c.getImageData(px, py, 1, 1).data; out.push([d[0], d[1], d[2]]);
-      }
-      return out; };
-    const cx0 = M.wx(me.x), cy0 = M.wy(me.y);
-    const arcPx = () => { const out = [];
-      for (let k = 0; k < N; k++){
-        const t = (k*STEPA - 90) * Math.PI/180;
-        const px = Math.round((cx0 + Math.cos(t)*L.stamR) * dpr);
-        const py = Math.round((cy0 + Math.sin(t)*L.stamR) * dpr);
-        const d = c.getImageData(px, py, 1, 1).data; out.push([d[0], d[1], d[2]]);
-      }
-      return out; };
-    me.stam = 1; me.spent = false;   M.computeCam(); M.render();
-    const guideBare = ringPx(); const arcBare = arcPx();
-    me.stam = 0.5; me.spent = false; const guideArc  = ringPx();
-    let worst = 0;
-    for (let k = 0; k < N; k++)
-      worst = Math.max(worst, Math.abs(guideArc[k][0]-guideBare[k][0])
-                            + Math.abs(guideArc[k][1]-guideBare[k][1])
-                            + Math.abs(guideArc[k][2]-guideBare[k][2]));
-    o.guideUntouched = worst;
-    // ⚠️ ...and the arc really was drawn in that render, or "untouched" is what you get
-    // from comparing two identical pictures.
-    // ⚠️ ...measured HERE at the arc's own radius, not reused from `halfExtra`, which is
-    // sampled outside the disc and now reads nothing at all.
-    let moved = 0;
-    for (let k = 0; k < N; k++){
-      const d2 = arcPx()[k];
-      if (Math.abs(d2[0]-arcBare[k][0]) + Math.abs(d2[1]-arcBare[k][1]) + Math.abs(d2[2]-arcBare[k][2]) > 30) moved++;
-    }
-    o.arcAngles = moved;
-    o.arcWasUp = moved > N*0.20;
-  }
-  M.sel.sprint = 'off';
-  return o;
-});
 // ============================ drag-only sliders, and swipe-down to pause ==
 // ⚠️ A native range input JUMPS to wherever you press it. On a phone that is a trap: the
 // sliders are wide, they sit in a column you scroll with your thumb, and a graze anywhere
@@ -705,19 +552,6 @@ ok('...and with nobody holding KICK it is the same match either way', det.idleSa
 ok('...but hold KICK and it is a different match', det.onDiffers,
    'if switching it on changes nothing for the one seat that has a ring then nothing was wired up');
 
-ok('the ring is not drawn when you are rested', ring.hiddenWhenRested,
-   `${ring.restInk} of ${ring.probes} probe angles inked with a full ring — a permanent ring round every body is furniture`);
-ok('...is drawn when it is draining', ring.shownWhenDrained,
-   `${ring.halfExtra} of ${ring.probes} angles inked over the rested baseline`);
-ok('...as an ARC, not a full circle', ring.isAnArcNotACircle,
-   `${ring.halfExtra} of ${ring.probes} at half stamina — a progress bar that is always a full ring shows no progress`);
-ok('...that SHRINKS as it drains', ring.shrinksAsItDrains,
-   `${ring.halfExtra} at half, ${ring.lowExtra} at empty`);
-ok('...sweeping from twelve o\'clock', ring.startsAtTwelve,
-   'it is a clock, and a clock hand starts at the top');
-ok('...and it never swallows the disc\'s GUIDE RING', ring.clearsTheGuideRing && ring.arcWasUp && ring.guideUntouched <= 24,
-   JSON.stringify({ guideOut: ring.guideOut, stamIn: ring.stamIn, worstPixelChange: ring.guideUntouched, arcWasUp: ring.arcWasUp }) +
-   ' — the stamina radius is DERIVED from the guide ring\'s width rather than a fixed multiple, so that ring is what decides how close the arc can sit, and it is structural: every skin gets one because a player is a circle of radius r and that circle is what collides');
 
 ok('a slider ignores a touch on its TRACK', drag.found && drag.trackRefusedOnTouch,
    `grab window ${drag.grabPx}px — a range input jumps to wherever you press, and on a phone that rewrites a tuned value from a graze while scrolling`);
@@ -737,7 +571,7 @@ ok('...and a touch in the strip drives no pad at all', swipe.stripDrivesNothing,
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ r, det, ring, drag, swipe }, null, 1));
+console.log(JSON.stringify({ r, det, bands, drag, swipe }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL sprint\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS sprint');

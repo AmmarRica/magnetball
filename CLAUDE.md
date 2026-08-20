@@ -2406,130 +2406,45 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the tail instead read **0**, because 90 steps at full pelt puts the body into
   `integrate`'s boundary clamp and it is pressed against a wall. The body is held at the
   centre and everyone else parked at the far end; only its velocity is being measured.
-  ⚠️ **THE TWO RINGS ROUND A PLAYER MUST NOT TOUCH, AND THEY DID** (`RING`, `ringLayout`,
-  `ringCasing`). The stamina clock sits at 1.30r and the wind-up ring at 1.42r — **0.12r
-  apart, which on a phone is 1.2 PIXELS** between strokes 1.6px and up to 2.9px wide. They
-  overlapped, the wind-up ring is drawn second, and it painted straight over the stamina
-  arc: holding KICK showed one fat gold band and no stamina at all. Invisible while Sprint
-  was off by default; the first thing anybody saw once it shipped on.
-  ⚠️ `ringLayout(p, r)` **reserves the stamina ring's footprint and pushes the wind-up ring
-  out to clear it**, rather than moving either to a new fixed multiple — the wind-up radius
-  is a player DIAL and keeps whatever it is set to unless it would collide.
-  ⚠️ **THE STAMINA RADIUS IS DERIVED, and `SPRINT.ring` (1.30) IS DELETED.** Reported as
-  *"I don't see a circle around the player anymore"*, and the measurement is the report:
-  on Classic (body 11.1px) the wind-up ring was sitting at **1.94r** against a dial of
-  1.42, so the circle that used to hug the player was a wide faint ring at nearly twice the
-  body radius and the thing beside the player was a partial arc. A fixed multiple is the
-  wrong shape for the stamina ring anyway: what decides how close it can sit is the **disc
-  guide ring**, which is structural and may never be covered — so the answer is "just
-  outside the guide ring, wherever that is", which moves with the body size. Derived, it
-  hugs the player at every radius and on every court, and there is no constant left for
-  anybody to keep in step with `DISC_GUIDE.w`. `tests/sprint.mjs` was locating the arc with
-  that very constant, which is the hard-coded-copy trap `tells.mjs` records for the wind-up
-  ring one entry down; it reads `ringLayout` now.
-  ⚠️ **THE RESERVATION USES THE WIDEST the wind-up ring ever gets**, never its width right
-  now: the stroke grows with the charge, so a live reading walked the whole ring outward
-  across one hold (21.3 → 21.8px). A ring that is a tell about the shot must not also be a
-  tell about itself. Sampled at both ends of the charge, since one reading cannot see a drift.
-  ⚠️ **AND THE ANSWER IN THE END WAS TO PUT THE ARC ON THE BODY.** Reported a second time
-  as *"I still don't see the circle that indicates the kick"*, and the measurement said why:
-  the tightening below was taken on a DESKTOP-sized body (11.1px) where it read 1.94r →
-  1.81r, and on a **PHONE** — body 9.8px — it still measured **1.92r**, because the gap and
-  the casings are fixed PIXEL amounts, so the smaller the body the bigger a fraction of `r`
-  they eat. The phone is the worst case and the worst case is where the report came from.
-  So `stamR` is now just INSIDE the guide ring, drawn over the player's own body, and
-  `kickR` is `r*kickRingMul()` with **nothing pushing it** — the collision case is gone
-  rather than negotiated, and the dial means what it says at every body size (measured 1.42r
-  on a phone). It is also the most literal reading of "stamina closer to the player".
-  ⚠️ **The window inside is narrow at BOTH ends and `RING.inset` was swept, not picked**:
-  too shallow and the arc's casing paints on the guide ring (31 of change at 0.6, where a
-  clean build reads 0), too deep and the faceplate swallows it (at 1.4 the arc's top was
-  invisible and a nearly-empty ring showed nothing at all). 1.0 is where both readings are
-  good.
-  ⚠️ **THREE CONCENTRIC BANDS DO NOT FIT ROUND A SMALL BODY, and that is the real limit
-  that forced it** — kept here because it is why the outside was abandoned.** Guide ring, stamina ring and wind-up ring are each a stroke plus a casing either
-  side — about 3.2px — and between the disc rim and the dial's 1.42r there is 4.7px of
-  room. So the dial cannot be honoured while a stamina ring exists, and the tightening only
-  buys so much: **1.94r → 1.81r** measured, with the gap from the body edge falling from
-  0.94r to 0.81r. Every number was found by sweeping against the pixels rather than picked
-  — `clear` below 0.8 has the arc's casing painting on the guide ring, and `gap` below 1.8
-  leaves 58 of ink in the daylight where a real gap reads 8, which is inside the range the
-  sabotage builds produce (65 and 78) and so no longer separates them.
-  ⚠️ **A BAND IS THE STROKE PLUS ITS CASING**, on both sides. Clearing the strokes alone
-  still overlapped (2.6px of the daylight was already spoken for), and widening the gap
-  instead made it **worse** — it pushed the wind-up ring's own casing further in, and the
-  probe read 110 of ink in what was supposed to be clear pitch. The edges clear, not the
-  centre lines.
-  ⚠️ Reserved on `sprintsFor(p)`, **never on "is the stamina ring on screen right now"** —
-  it appears the frame after KICK goes down, so a live test jumps the wind-up ring outward
-  one frame in.
-  ⚠️ **THE RING MEANS "KICK IS HELD", NOT "A SHOT IS WINDING UP", and that gate is why it
-  was reported missing FOUR TIMES.** It was `chargeOn() && (p.kick || charging)`, so with
-  **Hold to kick harder** switched off the ring was never drawn at all — however hard you
-  pressed, on any pitch, at any size. Three rounds of retuning the radius, the width and
-  the colour could not make a ring appear that the draw was refusing to reach, and every
-  measurement I took was on a build with charging ON, so none of them could see it.
-  ⚠️ The old reasoning was "with charging off the ring promises power that is not coming",
-  and that was the wrong reading of what the ring is FOR: it is a tell about what the
-  PLAYER is doing — the button is down, you are about to kick or you are carrying — which
-  is worth showing whether or not a wind-up is part of it. The charge now only modulates
-  the width and the brightness.
-  ⚠️ **A REPORT THAT SURVIVES THREE FIXES MEANS THE DIAGNOSIS IS WRONG, not the tuning.**
-  Each round changed something real and measurable and the answer came back unchanged. What
-  finally settled it was rendering a real phone frame and LOOKING at it — the ring was
-  drawing, bright and white, jammed against the disc with **1.1px** of pitch between them,
-  so it read as a halo on the body rather than a ring around it. Three rounds of arithmetic
-  never asked what the picture looked like.
-  ⚠️ **AND THE STANDOFF WAS NEVER THE COMPLAINT — I inferred that and it cost three
-  builds.** The original ring sat at 1.94r and the report was "I cannot see it"; I read
-  that as "it is too far out" and spent two changes pulling it in to 1.42r, which made it
-  worse. The dial's default is **2.00** now, which is essentially back where it started.
-  What was actually wrong was the COLOUR (a muted gold on green) and the alpha, both fixed
-  above. **Ask which property is wrong before tuning one.**
-  ⚠️ `KICKRING.def` is 2.00 and not the reference drawing's ~1.4 because that drawing has a
-  bare disc: the game's carries a guide ring and, next to it, the stamina arc, so the same
-  *apparent* gap needs a bigger multiple.
-  ⚠️ **THE WIND-UP RING IS PICKED FOR CONTRAST, and the palette's own `kickRing` is not
-  used for it** (`kickRingInk`). Reported three times as not being visible, and this was
-  the actual cause the first two diagnoses missed — both of those were about GEOMETRY, and
-  the geometry was only half of it. On **Grass, the default palette, `TH.kickRing` is
-  `#f2c53d`**, a muted gold, cased in black: at the 2px a phone draws it that is a dark
-  grey smudge on green rather than a circle round the player. Measured, the rendered ring
-  peaked at **455 of 765 against a court at 287**; picked for contrast it reaches **687 the
-  instant KICK goes down and 765 at full charge**.
-  ⚠️ **The ring's hue carries NO meaning**, which is what makes this allowed — it says "you
-  are winding up" and nothing more. That is exactly the difference from the stamina arc,
-  whose green-for-go and red-for-spent are the whole point and which is therefore left
-  alone; see the entry below, where running those two through `readableInk` was tried and
-  reverted.
-  ⚠️ White on any ordinary pitch — it is the colour the markings are already drawn in — and
-  black on a light one, because Highlighter's acid yellow and Apologies!' butter board
-  would swallow white outright. The casing is always the opposite tone, so the pair reads
-  on a palette nobody has made yet.
-  ⚠️ **The alpha ramped 0.42 → 0.92 and now runs 0.88 → 1.0.** A ring that spends the start
-  of every hold at under half strength is invisible exactly when you press the button; the
-  charge is carried by the WIDTH instead, and `RING.kickMin` is a floor in PIXELS rather
-  than a fraction of `r`, because `r*0.16` on a 9.8px phone body is a 1.6px hairline.
-  ⚠️ **The TOUCH PAD's ring is deliberately NOT changed** — it is a UI control with its own
-  design and its own pulse, and rewiring it to the contrast ink broke that pulse outright.
-  ⚠️ **BOTH RINGS ARE CASED IN THE PITCH'S OPPOSITE INK, and RECOLOURING THEM WAS TRIED
-  FIRST AND WAS WRONG.** The problem is real — on Grass, the default palette, `TH.good` is
-  `#3ec06a` against mown stripes of `#2f9e52`, a green ring on green grass at **1.29:1**,
-  and the gold wind-up ring is 2.09:1. But running them through `readableInk`, the way the
-  ball's spot colour is, took the green to **#164325** and the spent red to **#65271b**:
-  `pickTextColor` finds more headroom below mid-green than above it, so both were pushed
-  DOWN. A dark green arc on grass reads as a shadow, the one distinction the ring exists to
-  make — green for go, red for locked out — collapsed into two dark browns, and the gold
-  ring came out near-black. So the colour is left alone and a thin casing is drawn under
-  it: this file's standing idiom (the guide ring on every disc, the name plate's halo,
-  `paintCap`'s outline), and it works on palettes nobody has made yet.
-  ⚠️ `tests/sprint.mjs` asks `ringLayout` for the geometry and then **ties it to the
-  picture** — ink at each radius, plain pitch at the midpoint. Its first version counted
-  inked bands along a ray, found two, and **passed on a build with the rings back on top of
-  each other**, because one of the two it had found was the disc's own rim. And the ink is
-  the PEAK across a band, not the pixel at its centre: the centre of the stamina arc is
-  green on green by definition and the casing is at the edges, so sampling the middle
-  measures the thing that was invisible and reports it as still invisible.
+  ⚠️ **THE GAUGE IS THE WIND-UP RING'S COLOUR, and it used to be a second circle.**
+  Asked for as "how do I make this visible while keeping the design minimalistic", and the
+  measurement is the answer: the old arc sat just outside the guide ring under a
+  full-circle background track at 0.16 alpha, and on a phone it lit **118 of 120** probe
+  angles at HALF stamina and **119** when spent. Half and empty were the same shape,
+  because the track is always complete and swamped a 1.7px arc whose LENGTH was the only
+  information. On a desktop body the two read 72 and 66 — indistinguishable at every size.
+  ⚠️ **AND THIS FILE'S OWN SUITE HID IT.** `tests/sprint.mjs` raised its diff threshold
+  from 30 to 90 with a comment calling the track a measurement artefact, which made
+  `isAnArcNotACircle` — a check whose message reads *"a progress bar that is always a full
+  ring shows no progress"* — go green again. The check was tuned until it stopped seeing
+  precisely the thing it names. **A threshold raised to make a check pass is a defect
+  report, not a fix.**
+  ⚠️ So there is ONE ring: white for the stamina you still have, `RING.spent` for what you
+  have used, growing clockwise from twelve. Measured on a phone it now reads 0 red at full,
+  **61 of 120** at half drained and **118** when spent — 57 angles between half and empty
+  where there used to be six.
+  ⚠️ **IT STAYS A COMPLETE CIRCLE, which is not a stylistic call.** The radius is the kick
+  REACH, so a ring with a piece missing is a lie about where you can kick — which is why
+  the gauge is carried by COLOUR and not by arc length. That also keeps `tests/tells.mjs`'
+  "full circle, never a sweep" intact, the check that records the rejected loading-bar
+  version.
+  ⚠️ **Nothing at all above `SPRINT.show` (0.6)**, so ordinary play is the plain white ring
+  exactly as before: the red grows from zero at the threshold rather than appearing at 40%
+  of the circle. "Minimal" here is absence, not smallness.
+  ⚠️ **Two rules, meeting continuously at empty.** Draining, the red is
+  `(show − stam) / show`; LOCKED OUT it is `1 − stam`, so it shrinks back as the ring
+  refills and you can watch yourself become able to sprint again. `spent` does not clear
+  until stamina is full, which is why the second rule cannot be the first read backwards.
+  ⚠️ **The ring shows while spent even with KICK RELEASED.** Folding the gauge into a
+  hold-only ring would mean never seeing it refill, and being locked out is exactly when
+  you need to know. `tests/sprint.mjs` pins that from both ends.
+  ⚠️ White-against-red also beats the old green-against-red for a colour-blind player, and
+  it sidesteps the contrast problem that recolouring was reverted for: `TH.good` is
+  **1.29:1** on grass, and nothing here is drawn in it any more.
+  ⚠️ **`ringLayout` collapsed and `ringCasing()` is gone**, with `RING.stamW`, `stamMin`,
+  `inset`, `gap`, `gapR`, `case` and `caseA`. Every one of them existed to fit a SECOND
+  cased band beside the first around a body that is 9.8px on a phone. The whole
+  two-rings-must-not-touch class of bug stops existing rather than being negotiated.
   ⚠️ The ring is drawn only while there is something to say (a permanent ring round
   every body is furniture), sweeps from twelve o'clock, and turns to `RING.spent` when
   spent — "nearly empty" and "locked out" feel identical from an arc length alone. The
