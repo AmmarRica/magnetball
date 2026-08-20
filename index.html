@@ -374,6 +374,25 @@
       #hud:not(.peekL) #hudLeft  > *:not(:focus),
       #hud:not(.peekR) #hudRight > *:not(:focus) { pointer-events: none; }
     }
+    /* ---------- Pitch picker: one row of shape tabs over a single grid ---------- */
+    /* ⚠️ The tiles are HIDDEN, never removed: `#fields` stays one `.opts.tilewrap` holding
+       all 33, so `#fields .opt` still means every field and a saved custom map is still
+       findable in there whichever group it belongs to. */
+    .shapetabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+    .shapechip {
+      font-family: var(--pix); font-size: 11px; letter-spacing: .5px;
+      min-height: 44px; padding: 6px 14px; border-radius: 999px;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--field); color: var(--muted);
+      border: 1px solid var(--edge); cursor: pointer;
+    }
+    .shapechip:hover { border-color: var(--cyan); color: var(--text); }
+    .shapechip.sel { border-color: var(--accent); color: var(--accent); }
+    .shapechip .n { opacity: .55; font-size: 10px; }
+    #fields.shape-square .opt:not([data-shape="square"]),
+    #fields.shape-round  .opt:not([data-shape="round"]),
+    #fields.shape-other  .opt:not([data-shape="other"]) { display: none; }
+
     /* Photo pane: what you'd wear, next to the two ways of changing it. */
     .photorow { display: flex; align-items: center; gap: 14px; }
     .photoprev { width: 66px; height: 66px; flex: 0 0 auto; image-rendering: auto; }
@@ -983,11 +1002,21 @@
                     min-width: 44px; text-align:center; letter-spacing: .5px; }
     /* ⚠️ 44px, up from 40. They sit next to a live ball, which is the one place a
        near-miss costs you something — a mis-tap here is a tap on the pitch. */
+    /* ⚠️ **THE HUD MARKS ARE DRAWN, NOT TYPED.** Mute shipped as `🔊` and rendered as a
+       full-colour emoji megaphone beside a monochrome `⏸` and `⛶` — the one illustrated
+       thing in the row. And the other two were only monochrome by luck: `⏸` and `⛶` are
+       text glyphs whose presentation is the platform's to decide, so on a phone they can
+       come out as colour emoji too. An inline SVG at one stroke weight in `currentColor`
+       is identical everywhere, which is what `ICONS` exists for.
+       ⚠️ `#resetBtn` keeps its `↺` — there is no undo mark in the set and inventing one is
+       a different job. Flex centring holds a text glyph exactly as well as an SVG. */
     #pauseBtn, #resetBtn, #fsHudBtn, #muteBtn {
       pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
       backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
       color: var(--overlay-ink); width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer;
     }
+    #pauseBtn svg.ic, #fsHudBtn svg.ic, #muteBtn svg.ic { width: 20px; height: 20px; }
 
     /* Goal replay / clip-share buttons — appear under the scorebug after a goal */
     #replayBar {
@@ -1714,6 +1743,13 @@
 
       <div class="subpane" data-pane="pitch">
       <label class="field">Field</label>
+      <!-- ⚠️ **NOT `.subtabs` / `.subpane` / `.subchip`, deliberately.** `showSubTab` scopes
+           to the whole CARD and toggles every `.subpane` in it, so a nested pane here would
+           be blanked by the Match card's own chips — and `menuSearchIndex`'s `paneOf` uses
+           `closest('.subpane')`, so every field tile would start reporting its shape as its
+           PANE and all 33 would silently drop out of the search index in show mode. Its own
+           class names keep `paneOf` answering `pitch`. See buildFieldShapeTabs. -->
+      <div class="shapetabs" id="fieldShapes"></div>
       <div class="opts tilewrap" id="fields"></div>
       <div style="height:14px"></div>
       <label class="field">Ball</label>
@@ -2794,6 +2830,21 @@ const FIELDS = {
   // painter draws into them, and the two ends are meant to read as built structures.
   faceoff: { name:'Faceoff Orbit', emoji:'🛰️', W:340, L:1020, goal:150, corner:0, net:66 },
 };
+// ⚠️ **A FIELD'S SHAPE IS `(corner, cut)`, AND IT IS THREE PHYSICS CLASSES, not a
+// continuum.** `buildGeometry` emits a plain rectangle for `corner === 0`, **four arcs**
+// for a rounded one (`collideArc`), and **four extra straight walls** for a chamfered one
+// (`collideWall`). `DYN_FIELDS.pooltable.path` and `drawFieldPreview` carry the same
+// three-way branch, which is why the picker can group on it honestly: a tab is a class of
+// court, not a bin somebody sorted by eye.
+// ⚠️ **ONE classifier, and this is the fourth place the expression was about to be
+// written.** The map maker's own corner-style picker had it inline; it reads this now, so
+// the tab you browse under and the control you build with cannot drift apart.
+// ⚠️ **Truthiness, never `in`.** A shipped field mostly OMITS `cut` entirely, while
+// `mapClean` always emits it as a real boolean (`cut: !!m.cut`) — `!!f.cut` covers both.
+// ⚠️ `other` is a genuine catch-all rather than a synonym for chamfered: a shape that does
+// not exist yet lands somewhere sensible instead of falling out of the picker.
+function fieldShape(f){ return ((f && f.corner) | 0) <= 0 ? 'square' : (f && f.cut ? 'other' : 'round'); }
+const FIELD_SHAPES = [['square', 'Square'], ['round', 'Rounded'], ['other', 'Other']];
 
 // ============================================================
 //  MAP MAKER — fields you build yourself
@@ -4460,7 +4511,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0730AM';
+const VERSION = '20260820.0845AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4476,6 +4527,15 @@ const VERSION = '20260820.0730AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0845AM', title: 'Pitches by shape',
+    added: [
+      '<b>The Field picker is grouped by shape</b> \u2014 Square, Rounded and Other. Every tab still shows every size, smallest to largest, so it is grouped by the shape of the court and never by how big it is. Thirty-three pitches in one grid was a lot to read; it opens on whichever group your current pitch belongs to.',
+    ],
+    changed: [
+      '<b>The buttons at the top of the screen are drawn marks now.</b> Mute was a colour emoji sitting next to two flat symbols; pause, mute and full screen are all one weight and one colour, and they look the same on every phone and desktop instead of whatever that device felt like drawing.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0730AM', title: 'Just a number',
     added: [],
     changed: [
@@ -9046,6 +9106,10 @@ function buildOpts(containerId, obj, key, extra){
       // emoji next to a pitch that looked identical on all three.
       const N=128;                                  // drawn at 2× the display size so the bands stay crisp
       const cv=document.createElement('canvas'); cv.width=cv.height=N;
+      // ⚠️ The shape rides on the TILE as a data attribute and the container hides the
+      // groups it is not showing. `#fields` stays exactly one `.opts.tilewrap` holding
+      // every field, which is what keeps `#fields .opt` meaning what it always did.
+      if (key==='field') el.dataset.shape = fieldShape(o);
       const F = key==='field' ? o : (FIELDS[sel.field]||FIELDS.classic);
       drawFieldPreview(cv.getContext('2d'), F, N, N,
                        key==='grass' ? k : sel.grass, key!=='field',
@@ -9695,8 +9759,41 @@ const GRASS = { stripes:{name:'Stripes',emoji:'🟩'}, vertical:{name:'Vertical'
   rings:{name:'Rings',emoji:'🎯'}, solid:{name:'Solid',emoji:'⬛'} };
 // Both tile sets paint with the live TH palette, so a theme switch has to redraw
 // them or the pitches keep the old colours.
+// ⚠️ **THE OPEN TAB IS DERIVED FROM `sel.field`, so the pitch you have picked is always the
+// one you can see.** Held in a `let` as well, because `buildOpts` rebuilds the tiles on every
+// pick and a tab you switched to without picking anything has to survive that.
+let fieldShapeTab = null;
+function fieldShapeNow(){
+  return fieldShapeTab || fieldShape(FIELDS[sel.field] || FIELDS.classic);
+}
+function setFieldShapeTab(sh){
+  fieldShapeTab = sh;
+  const wrap = $('fields');
+  if (wrap) for (const [k] of FIELD_SHAPES) wrap.classList.toggle('shape-' + k, k === sh);
+  const row = $('fieldShapes');
+  if (row) for (const c of row.children) c.classList.toggle('sel', c.dataset.shape === sh);
+}
+// ⚠️ A group with nothing in it hides its chip — the `buildSubTabs` precedent. All three are
+// populated by the shipped table and a custom map can only add, but a chip that shows an
+// empty grid is a worse answer than no chip.
+function buildFieldShapeTabs(){
+  const row = $('fieldShapes'); if (!row) return;
+  row.innerHTML = '';
+  const n = {}; for (const k in FIELDS) n[fieldShape(FIELDS[k])] = (n[fieldShape(FIELDS[k])] || 0) + 1;
+  const live = FIELD_SHAPES.filter(([k]) => n[k] > 0);
+  for (const [k, lab] of live){
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.className = 'shapechip'; bt.dataset.shape = k;
+    bt.innerHTML = `<span>${lab}</span><span class="n">${n[k]}</span>`;
+    bt.onclick = () => setFieldShapeTab(k);
+    row.appendChild(bt);
+  }
+  const want = live.some(([k]) => k === fieldShapeNow()) ? fieldShapeNow() : (live[0] || ['square'])[0];
+  setFieldShapeTab(want);
+}
 function refreshPitchTiles(){
   if ($('fields'))   buildOpts('fields', FIELDS, 'field');
+  if ($('fields'))   buildFieldShapeTabs();
   if ($('grass'))    buildOpts('grass', GRASS, 'grass');
   if ($('pitches'))  buildOpts('pitches', PITCH, 'pitch');
 }
@@ -9705,6 +9802,9 @@ function refreshPitchTiles(){
 function buildMatchOpts(){
   buildOpts('modes', MODES, 'mode', o=>o.desc);
   buildOpts('fields', FIELDS, 'field');
+  // ⚠️ AFTER the tiles: the chip row counts what is in `FIELDS`, which a saved or deleted
+  // custom map changes, and it is what re-applies the hiding class to a freshly built grid.
+  buildFieldShapeTabs();
   buildOpts('grass', GRASS, 'grass');
   // Nav tiles carry their icon name in markup and are painted here — one place, so a
   // tile can't end up with an icon the registry doesn't have.
@@ -10485,7 +10585,8 @@ function muteOn(){ return !!(sel.snd && sel.snd.muted); }
 function syncMuteUI(){
   const on = muteOn();
   const h = $('muteBtn');
-  if (h){ h.textContent = on ? '🔇' : '🔊'; h.setAttribute('aria-label', on ? 'Unmute' : 'Mute'); }
+  if (h){ h.innerHTML = iconSvg(on ? 'mute' : 'sound') || (on ? '🔇' : '🔊');
+          h.setAttribute('aria-label', on ? 'Unmute' : 'Mute'); }
   const b = $('ovMute');
   if (b){
     b.innerHTML = (iconSvg(on ? 'mute' : 'sound') || (on ? '🔇' : '🔊')) +
@@ -10680,6 +10781,12 @@ function menuSearchGo(row){
   if (!row) return;
   openSection(row.sec);
   if (row.group && row.pane) showSubTab(row.group, row.pane);
+  // ⚠️ **A FIELD TILE MAY BE IN A SHAPE GROUP THAT IS NOT SHOWING.** Without this, searching
+  // a rounded pitch scrolls to a tile with no height — `tests/menufind.mjs` measures exactly
+  // that, and it passes today only because Colossus happens to be square and Classic is the
+  // default. Three lines make it true for every field, custom maps included.
+  { const sh = row.node && row.node.dataset && row.node.dataset.shape;
+    if (sh && row.node.closest && row.node.closest('#fields')) setFieldShapeTab(sh); }
   const inp = $('menuSearch'); if (inp) inp.value = '';
   menuSearchClose();
   // Opening a card and switching a pane both change the layout, so land on the next
@@ -11267,7 +11374,11 @@ function toggleFullscreen(fromGesture){
 function updateFsUI(){
   const on = isFullscreen();
   const b = $('fsBtn'); if (b) b.textContent = on ? '⛶ Exit full screen' : '⛶ Enter full screen';
-  const h = $('fsHudBtn'); if (h) h.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+  // ⚠️ The MARK does not change with the state — there is one `expand` icon and the
+  // aria-label is what says which way it goes, exactly as it always did with the glyph.
+  const h = $('fsHudBtn');
+  if (h){ h.innerHTML = iconSvg('expand') || '⛶';
+          h.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen'); }
   const o = $('ovFull');
   if (o){
     o.innerHTML = (iconSvg('expand') || '⛶') +
@@ -11294,6 +11405,8 @@ document.addEventListener('webkitfullscreenchange', ()=>{ updateFsUI(); resize()
 // swallow — it fought the seat-names box and anything else you type into.
 updateFsUI();
 syncMuteUI();
+// Pause is the one HUD mark with no state, so it is written once rather than from a sync.
+{ const pb = $('pauseBtn'); if (pb) pb.innerHTML = iconSvg('pause') || '⏸'; }
 hudPeekInit();
 
 // ============================================================
@@ -11819,7 +11932,12 @@ function buildMapMaker(){
   const cp = $('mapCornerPick');
   if (cp){
     cp.innerHTML = '';
-    const style = mapEdit.corner <= 0 ? 'square' : (mapEdit.cut ? 'cut' : 'round');
+    // ⚠️ Reads `fieldShape`, the one classifier, rather than spelling the same three-way
+    // split out again — the tab you browse a pitch under and the control you build one with
+    // must agree. Only the third NAME differs: the picker says "Chamfered" because you are
+    // choosing that specific corner, while the browse tab says "Other" because it is a
+    // catch-all for anything that is neither square nor rounded.
+    const style = { square:'square', round:'round', other:'cut' }[fieldShape(mapEdit)];
     [['square','Square','⬛'],['round','Rounded','⬤'],['cut','Chamfered','⬢']].forEach(([k,lab,em]) => {
       const el = document.createElement('div');
       el.className = 'opt' + (style === k ? ' sel' : '');
@@ -27177,6 +27295,7 @@ function updLater(){ updSeen = updFound; updFound = null; updHide(); }
 if (window.__MAGNETDEBUG) {
   window.__magnet = {
     get world(){ return world; }, get TH(){ return TH; }, pads, sel, FIELDS, SFX, THEMES,
+    fieldShape, FIELD_SHAPES, buildFieldShapeTabs, setFieldShapeTab, fieldShapeNow,
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, set lastReplay(v){ lastReplay = v; }, playReplay, saveClip, repMime,

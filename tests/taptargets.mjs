@@ -107,6 +107,16 @@ const taps = await p.evaluate(() => {
   o.pause = reach(document.getElementById('pauseBtn'));
   o.mute  = reach(document.getElementById('muteBtn'));
   o.fs    = reach(document.getElementById('fsHudBtn'));
+  // ⚠️ **THE HUD MARKS ARE DRAWN, NOT TYPED.** Mute shipped as `🔊` and rendered as a
+  // full-colour emoji megaphone beside a monochrome `⏸` and `⛶` — the one illustrated thing
+  // in the row. And those two were monochrome only by luck: they are TEXT glyphs whose
+  // presentation the platform decides, so on a phone they can come out as colour emoji too.
+  // ⚠️ Checked alongside the 44px reach above on purpose: an inline SVG is a child element,
+  // so it is exactly the kind of change that can quietly become the thing `elementFromPoint`
+  // returns. `reach`'s `hits()` accepts `el.contains(t)`, and these two assertions together
+  // are what say so.
+  o.hudDrawn = ['pauseBtn','muteBtn','fsHudBtn']
+    .filter(id => !document.getElementById(id).querySelector('svg.ic'));
   M.toMenu();
 
   // ⚠️ The range SLIDERS were checked and deliberately left alone: the element box
@@ -294,6 +304,8 @@ ok('.subchip clears 44px', taps.subchip.v >= 44, `${taps.subchip.v}px`);
 ok('.jumpchip clears 44px', taps.jumpchip.v >= 44, `${taps.jumpchip.v}px`);
 ok('the HUD pause, mute and fullscreen clear 44px', taps.pause.v >= 44 && taps.mute.v >= 44 && taps.fs.v >= 44,
    `pause ${taps.pause.v}, mute ${taps.mute.v}, fullscreen ${taps.fs.v} — they sit next to a live ball, where a near-miss is a tap on the pitch`);
+ok('...and all three carry a DRAWN mark, not a typed one', taps.hudDrawn.length === 0,
+   `${JSON.stringify(taps.hudDrawn)} still text — a text glyph is the platform's to render, and mute came out as a colour emoji beside two monochrome ones`);
 ok('the HUD corners are OUT OF THE WAY until you go to them', peekIdle.fine &&
    peekIdle.opL === 0 && peekIdle.opR === 0 &&
    !peekIdle.pause.hit && !peekIdle.mute.hit && !peekIdle.fs.hit,

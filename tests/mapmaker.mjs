@@ -144,6 +144,37 @@ const o = await p.evaluate(() => {
   o.roundMakesArcs   = o.geoRound.arcs === 4 && o.geoSquare.arcs === 0;
   o.chamferMakesWalls = o.geoChamfer.arcs === 0 && o.geoChamfer.walls > o.geoSquare.walls;
 
+  // ---- THE PITCH PICKER IS GROUPED BY SHAPE -------------------------------
+  // ⚠️ **`fieldShape` IS CHECKED AGAINST THE GEOMETRY, never against `corner`/`cut`.**
+  // Comparing the classifier to the table it reads is comparing the table with itself and
+  // would pass on a build with the branch inverted. `buildGeometry` is the independent
+  // witness, and it is the reason a shape TAB is honest: square is a plain rectangle, round
+  // emits four ARCS (`collideArc`), chamfered emits four extra WALLS (`collideWall`).
+  o.shapeMatchesGeometry = ['square','round','other'].every(sh => {
+    const f = sh === 'square' ? { ...base, corner:0 }
+            : sh === 'round'  ? { ...base, corner:180, cut:false }
+                              : { ...base, corner:180, cut:true };
+    if (M.fieldShape(M.mapClean(f)) !== sh) return false;
+    const g = geo(f);
+    return sh === 'square' ? g.arcs === 0
+         : sh === 'round'  ? g.arcs === 4
+                           : (g.arcs === 0 && g.walls > o.geoSquare.walls);
+  });
+  // ⚠️ Every field lands in exactly ONE group and the groups union to FIELDS — what stops a
+  // new field silently falling out of the picker, the argument `placedFlags()` makes for the
+  // continents table. `!!f.cut` matters: a shipped field OMITS `cut`, `mapClean` emits it.
+  const shapeKeys = M.FIELD_SHAPES.map(([k]) => k);
+  const bucket = {}; for (const k of shapeKeys) bucket[k] = 0;
+  let unclassified = 0;
+  for (const k in M.FIELDS){
+    const sh = M.fieldShape(M.FIELDS[k]);
+    if (bucket[sh] === undefined) unclassified++; else bucket[sh]++;
+  }
+  o.shapeBuckets = bucket;
+  o.everyFieldHasAGroup = unclassified === 0 &&
+    Object.values(bucket).reduce((a,b)=>a+b,0) === Object.keys(M.FIELDS).length;
+  o.everyGroupHasSomeone = shapeKeys.every(k => bucket[k] > 0);
+
   // ---------------------------------------------------------------- 1, 6 --
   // Save a real one and check it lands in FIELDS and in the picker.
   M.mapEditKey = null;
@@ -155,6 +186,47 @@ const o = await p.evaluate(() => {
   o.markedCustom = M.FIELDS[key] && M.FIELDS[key].custom === true;
   M.buildMatchOpts();
   o.inPicker = [...document.querySelectorAll('#fields .opt')].some(e => /Testpitch/.test(e.textContent));
+  // ⚠️ ...and a saved map is filed under its own SHAPE. The test map is corner 60, uncut, so
+  // it belongs with the rounded ones — which is the point of "no code anywhere asks whether
+  // a field is user-made": it lands in a group for free.
+  o.savedMapShape = M.fieldShape(M.FIELDS[key]);
+  { const tile = [...document.querySelectorAll('#fields .opt')].find(e => /Testpitch/.test(e.textContent));
+    o.savedMapTagged = !!tile && tile.dataset.shape === o.savedMapShape; }
+
+  // ---- the tabs SHOW one group and HIDE the rest, without deleting anything ----
+  // ⚠️ Measured as rendered HEIGHT, never as a class — and paired with the hidden tiles
+  // still being IN `#fields`, because a build that deletes them passes any visibility check
+  // while breaking `#fields .opt`, which is what `audit`, `grasstiles` and `inPicker` above
+  // all mean by "the Field picker".
+  // ⚠️ **`openLook`, not `openSection`.** The map maker was opened further up and
+  // `openMapMaker` calls `hideScreens()`, so `#setup` is still hidden here — every tile AND
+  // every chip measured 0 height and the whole block failed for a reason that had nothing to
+  // do with the tabs. `openLook` puts the menu back and opens the card; the Pitch pane then
+  // has to be selected too, because a `.subpane` is `display:none` until its chip is picked.
+  M.openLook('match'); M.showSubTab('match', 'pitch');
+  const shapeOf = el => el.dataset.shape;
+  const shown = () => [...document.querySelectorAll('#fields .opt')].filter(e => e.getBoundingClientRect().height > 0);
+  o.tabCounts = {}; o.tabShowsOnlyItsOwn = true; o.tabKeepsTheRest = true;
+  for (const [k] of M.FIELD_SHAPES){
+    M.setFieldShapeTab(k);
+    const vis = shown();
+    o.tabCounts[k] = vis.length;
+    if (!vis.length || !vis.every(e => shapeOf(e) === k)) o.tabShowsOnlyItsOwn = false;
+    if (document.querySelectorAll('#fields .opt').length !== Object.keys(M.FIELDS).length) o.tabKeepsTheRest = false;
+  }
+  o.tabsCoverEverything =
+    Object.values(o.tabCounts).reduce((a,b)=>a+b,0) === Object.keys(M.FIELDS).length;
+  // ⚠️ The chips are 44px targets like every other chip row in the menu.
+  o.chipHeights = [...document.querySelectorAll('#fieldShapes .shapechip')].map(c => Math.round(c.getBoundingClientRect().height));
+  o.chipsAreTargets = o.chipHeights.length === M.FIELD_SHAPES.length && o.chipHeights.every(h => h >= 44);
+  // ⚠️ **THE SEARCH MUST LAND ON A VISIBLE TILE**, whichever group the field is in. Without
+  // the hook in `menuSearchGo` this scrolls to a tile with zero height.
+  { const row = M.menuSearchIndex().find(r => r.node && r.node.dataset && r.node.dataset.shape === 'other');
+    o.searchTarget = row ? row.label : null;
+    if (row){ M.setFieldShapeTab('square'); M.menuSearchGo(row);
+              o.searchRevealsIt = row.node.getBoundingClientRect().height > 0; }
+    else o.searchRevealsIt = false; }
+  M.setFieldShapeTab(M.fieldShape(M.FIELDS[M.sel.field] || M.FIELDS.classic));
   // ⚠️ SAVES IN PLACE. An edit keeps its key, or every map vote cast on it is orphaned and
   // any saved replay naming that field can no longer find it.
   M.mapEdit.name = 'Renamed';
@@ -255,6 +327,10 @@ ok('a typed name cannot carry markup', o.nameStripped && o.nameKept,
 ok('the preview draws', o.previewDrew);
 ok('the corner STYLE changes the geometry', o.roundMakesArcs && o.chamferMakesWalls,
    JSON.stringify({ sq: o.geoSquare, round: o.geoRound, cut: o.geoChamfer }));
+ok('...and `fieldShape` agrees with that geometry', o.shapeMatchesGeometry,
+   'the classifier is checked against buildGeometry, not against the corner/cut it reads — comparing the table with itself would pass on an inverted branch');
+ok('every field lands in exactly one shape group', o.everyFieldHasAGroup && o.everyGroupHasSomeone,
+   `${JSON.stringify(o.shapeBuckets)} of ${Object.keys(o.shapeBuckets).length} groups — a field with no group falls out of the Pitch picker entirely`);
 ok('...and the PREVIEW follows it, in the corner', o.squareVsRound > 200 && o.roundVsChamfer > 200,
    `square↔round ${o.squareVsRound}, round↔chamfer ${o.roundVsChamfer} pixels differ in the corner quadrant — the preview is drawn from buildGeometry, so a change the physics makes has to show; a hand-drawn one would happily draw the same rectangle for all three`);
 ok('...and the same field twice is the same picture', o.sameTwice === 0,
@@ -262,6 +338,14 @@ ok('...and the same field twice is the same picture', o.sameTwice === 0,
 
 ok('a saved map IS a FIELDS entry', o.inFields && o.markedCustom, `key ${o.key}`);
 ok('...and appears in the Field picker', o.inPicker);
+ok('...filed under its own shape', o.savedMapTagged, `${o.savedMapShape} — a custom field is just a FIELDS entry, so it groups for free`);
+ok('a shape tab shows its own fields and no others', o.tabShowsOnlyItsOwn && o.tabsCoverEverything,
+   `${JSON.stringify(o.tabCounts)} — measured as rendered height, not as a class`);
+ok('...and the ones it hides are still in #fields', o.tabKeepsTheRest,
+   'a build that DELETES them passes any visibility check while breaking `#fields .opt`, which audit, grasstiles and the picker check above all rely on');
+ok('...the chips are 44px targets', o.chipsAreTargets, JSON.stringify(o.chipHeights));
+ok('...and the menu search reveals a tile in a hidden group', o.searchRevealsIt,
+   `${o.searchTarget} — without the hook in menuSearchGo the jump scrolls to a tile with zero height`);
 ok('an edit SAVES IN PLACE', o.keyStable && o.renamed && o.onlyOne,
    'sel.field, the map votes and every saved replay refer to a field by key — re-keying an edit orphans every vote cast on it');
 ok('a match on it gets that geometry', o.geomFromField);

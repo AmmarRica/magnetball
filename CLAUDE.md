@@ -3380,6 +3380,55 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   (the camera never even latches). ⚠️ `const GOALCAM` lives with the feel constants, not
   with the camera code: the slider wiring reads it during the bootstrap, and declared
   further down it was in the temporal dead zone there.
+- **THE HUD MARKS ARE DRAWN, NOT TYPED** (`ICONS` → `iconSvg` → `#pauseBtn`, `#muteBtn`,
+  `#fsHudBtn`). Mute shipped as `🔊` and rendered as a **full-colour emoji megaphone** beside
+  a monochrome `⏸` and `⛶` — the one illustrated thing in the row, and reported as exactly
+  that. ⚠️ **The other two were monochrome only by luck**: `⏸` and `⛶` are TEXT glyphs whose
+  presentation the platform decides, so on a phone — where this game is mostly played — they
+  can come out as colour emoji too. An inline SVG at one stroke weight in `currentColor` is
+  identical everywhere, which is the whole reason the icon set exists. All three now go
+  through it and `ICONS` already had `pause`, `sound`, `mute` and `expand`, so no new artwork.
+  ⚠️ **`#resetBtn` keeps its `↺`** — there is no undo mark in the set and inventing one is a
+  different job. It shares the button rule, and flex centring holds a text glyph as happily
+  as an SVG.
+  ⚠️ **Full screen's MARK does not change with the state** — one `expand` icon, with the
+  `aria-label` carrying which way it goes, exactly as it did with the glyph.
+  ⚠️ `tests/taptargets.mjs` checks the drawn mark **alongside** the 44px reach, on purpose:
+  an inline SVG is a child element, so this is precisely the change that can quietly become
+  what `elementFromPoint` returns. `reach`'s `hits()` accepts `el.contains(t)`; the two
+  assertions together are what say so.
+- **THE PITCH PICKER IS GROUPED BY SHAPE** (`fieldShape`, `FIELD_SHAPES`,
+  `buildFieldShapeTabs`, `setFieldShapeTab`, `#fieldShapes`). Square · Rounded · Other, each
+  showing every size — the field list was one flat grid of 33.
+  ⚠️ **A field's shape is `(corner, cut)`, and it is THREE PHYSICS CLASSES rather than a
+  continuum**, which is what makes a tab honest: `buildGeometry` emits a plain rectangle for
+  `corner === 0`, **four arcs** for a rounded one (`collideArc`) and **four extra straight
+  walls** for a chamfered one (`collideWall`). `DYN_FIELDS.pooltable.path` and
+  `drawFieldPreview` carry the same three-way branch.
+  ⚠️ **ONE classifier**, and this was the fourth place the expression was about to be
+  written — the map maker's corner-style picker had it inline and reads `fieldShape` now, so
+  the tab you browse under and the control you build with cannot drift. Only the third NAME
+  differs: the picker says *Chamfered* because you are choosing that corner, the browse tab
+  says *Other* because it is a catch-all for anything that is neither square nor rounded.
+  ⚠️ **Truthiness, never `in`.** A shipped field mostly OMITS `cut`; `mapClean` always emits
+  it as a real boolean. `!!f.cut` covers both, and a custom map therefore files itself.
+  ⚠️ **The tiles are HIDDEN by a `data-shape` attribute, not moved.** `#fields` stays exactly
+  one `.opts.tilewrap` holding all 33, because `#fields .opt` is what `tests/audit.mjs`,
+  `tests/grasstiles.mjs` and the map maker's own picker check all mean by "the Field picker".
+  ⚠️ **NOT `.subtabs` / `.subpane` / `.subchip`, deliberately.** `showSubTab` scopes to the
+  whole CARD and toggles every `.subpane` in it, so a nested pane would be blanked by the
+  Match card's own chips — and `menuSearchIndex`'s `paneOf` uses `closest('.subpane')`, so
+  every field tile would report its SHAPE as its pane and all 33 would silently drop out of
+  the search index in show mode. Its own class names keep `paneOf` answering `pitch`.
+  ⚠️ **The open tab is DERIVED from `sel.field`**, so the pitch you have selected is always
+  the one you can see — and held in a `let` too, because `buildOpts` rebuilds the tiles on
+  every pick and a tab you switched to without picking has to survive that.
+  ⚠️ **`menuSearchGo` activates the tile's group.** Without it, searching a rounded pitch
+  scrolls to a tile with no height; `tests/menufind.mjs` measures that, and it passed before
+  only because Colossus happens to be square and Classic is the default.
+  ⚠️ **The area sort is untouched**, within each group — `buildOpts` sorts fields by `W*L`,
+  so every tab still reads small → large. Grouping by shape is explicitly not grouping by
+  size. A group with no members hides its chip (the `buildSubTabs` precedent).
 - **THE HUD CORNERS PEEK** (`HUDPEEK`, `hudPeekAt`, `hudPeekInit`, `#hud.peekL/.peekR`).
   The pitch is the picture, and three pills parked over it every second of every match are
   furniture. Pause lives in the top-left corner and mute + full screen in the top-right, so
