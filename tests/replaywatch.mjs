@@ -160,10 +160,11 @@ const page = async () => {
   ok('the bar is really on screen', shape.visible,
      'it was 0px tall while it lived inside #hud');
   ok('...and inside the viewport', shape.onScreen);
-  // ⚠️ SEVEN now: pause, four speeds, Save and exit. The count is pinned on purpose —
-  // a control arriving on this bar should make somebody look — and Save moved here
-  // from the in-match bar, which is never to offer a file write mid-match.
-  ok('every control is a 44px target', shape.taps.length === 7 && shape.taps.every(t => t >= 44),
+  // ⚠️ EIGHT now: pause, four speeds, Save, Video and exit. The count is pinned on purpose
+  // — a control arriving on this bar should make somebody look — and both writers moved
+  // here from the in-match bar, which is never to offer a file write mid-match. Video is
+  // the one export whose scope is not chosen from a menu: it films whatever is on screen.
+  ok('every control is a 44px target', shape.taps.length === 8 && shape.taps.every(t => t >= 44),
      shape.taps.join());
   ok('four speeds are offered', shape.speeds.length === shape.speedList.length && shape.speeds.length >= 3,
      shape.speeds.join());

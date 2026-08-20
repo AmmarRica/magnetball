@@ -1088,6 +1088,61 @@ ok('...named apart from a goal clip, and not a container lying about its codec',
 ok('...and the live match is put back afterwards', mv.worldRestored,
    'playReplayFile swaps the world for one rebuilt from the document');
 
+// ============================================================
+//  THE VIDEO EXPORT FOLLOWS WHAT YOU ARE WATCHING
+// ============================================================
+// ⚠️ The transport's Video button is the ONLY export whose scope is not chosen from a
+// menu — it is whatever is on the screen. Watching a goal must film that goal; watching a
+// whole match must film the whole match. Two claims, and the label is half of each: a
+// button that says "Match video" over a goal replay is a promise the file will not keep.
+// ⚠️ **IT CANNOT FILM WHILE IT IS PLAYING.** `playReplayFile` returns at its first line
+// when `replay.active` is set, so a recorder started from the button's own click films
+// nothing and writes an empty file. The button marks the document and ENDS the viewing;
+// `watchReplayFile` does the recording in its `finally`, which is also the only moment the
+// screens are still hidden. So the check drives the REAL button and waits on the real
+// `watchReplayFile` promise — calling `recordAndShareClip` directly would prove nothing
+// about the wiring, which is the entire feature.
+const scope = await vpage.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  const realClick = HTMLAnchorElement.prototype.click, named = [], labels = [];
+  HTMLAnchorElement.prototype.click = function(){ if (this.download) named.push(this.download); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const film = async (doc) => {
+    const done = M.watchReplayFile(null, () => doc);
+    const ctl = document.getElementById('repCtl'), btn = document.getElementById('repVidBtn');
+    for (let i=0;i<400 && ctl.classList.contains('hidden'); i++) await wait(25);
+    o.transportShown = !ctl.classList.contains('hidden');
+    labels.push(btn.textContent);
+    btn.click();
+    await done;
+  };
+  try {
+    // A goal: fill the rolling buffer, freeze it the way a goal does, build the file.
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=false;
+    M.setMatchSeed(21); M.startMatch();
+    { const w = M.world; w.state='play'; w.stateT=1; for (let i=0;i<400;i++) M.step(w); M.repOnGoal(w); }
+    await film(M.repFileBuild());
+    // A match: kickoff to whistle, deliberately short — the export plays it back in full.
+    M.setMatchSeed(22); M.startMatch();
+    { const w = M.world; w.state='play'; w.stateT=2; for (let i=0;i<240;i++) M.step(w);
+      M.endMatch(w); M.finishMatch(w); }
+    await film(M.repMatchFileBuild());
+  } finally { HTMLAnchorElement.prototype.click = realClick; }
+  o.labels = labels; o.named = named;
+  o.labelledByKind = /goal/i.test(labels[0]||'') && !/match/i.test(labels[0]||'') &&
+                     /match/i.test(labels[1]||'');
+  o.filedByKind = named.length === 2 &&
+                  /magnetball-goal-/.test(named[0]) && /magnetball-match-/.test(named[1]);
+  return o;
+});
+
+ok('the replay transport labels its export for what is being watched', scope.labelledByKind,
+   JSON.stringify(scope.labels) + ' — a button reading "Match video" over a goal replay is a promise the file will not keep');
+ok('...and the file it writes is the thing that was on the screen', scope.filedByKind,
+   JSON.stringify(scope.named));
+ok('...with the transport actually up when it was pressed', scope.transportShown === true,
+   'the button marks the document and ends the viewing; the recording happens in watchReplayFile\'s finally');
+
 ok('a replay is DRAWN BETWEEN its frames', tween.drawsBetween,
    `${tween.distinct} distinct ball positions from a ${tween.recorded}-frame recording — a stepping build cannot exceed its own frame count, and a match replay is sampled at 30Hz and halves past the cap`);
 await vpage.close();

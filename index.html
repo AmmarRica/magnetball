@@ -1589,6 +1589,13 @@
            screen's size in your theme. Here rather than on the in-match bar, because a
            replay you chose to watch is not interrupting anything. -->
       <button id="repSaveBtn" type="button" aria-label="Save this replay">⤓ Save</button>
+      <!-- ⚠️ A VIDEO of whatever you are watching, and the SCOPE FOLLOWS THE REPLAY: on a
+           goal it films the goal, on a match it films the match. The result screen has had
+           both exports since they were built, but they are the wrong place to ask from —
+           by the time you are watching a replay you have already chosen which one, and
+           being made to go back and pick again is the thing that was reported. The label
+           says which it will be, because "Video" alone does not. -->
+      <button id="repVidBtn" type="button" aria-label="Export this replay as video">⤓ Video</button>
       <button id="repExit" type="button" aria-label="Stop watching">✕</button>
     </div>
   </div>
@@ -4400,7 +4407,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0245AM';
+const VERSION = '20260820.0315AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4416,6 +4423,14 @@ const VERSION = '20260820.0245AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0315AM', title: 'Export the replay you are watching',
+    added: [
+      '<b>The replay transport has a Video button</b>, and it films whatever is on the screen \u2014 watching a goal saves that goal, watching a whole match saves the whole match. The button says which, so there is no guessing what you are about to get.',
+      'A match is filmed at normal speed and a goal at whatever speed you were watching it, so a slowed-down goal exports slowed down.',
+    ],
+    changed: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0245AM', title: 'The bots got names',
     added: [],
     changed: [
@@ -11204,6 +11219,21 @@ $('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
     };
   }
 }
+// ⚠️ **IT CANNOT RECORD WHILE IT IS PLAYING.** `playReplayFile` returns immediately when
+// `replay.active` is set, so the recorder's own playback would be a no-op and the file
+// would come out empty. The button therefore marks what to film and ENDS the viewing;
+// `watchReplayFile` does the recording in its `finally`, while the screens are still
+// hidden — so you watch it being filmed rather than staring at a menu for the length of a
+// match, which is the complaint `saveMatchClip`'s own label already exists to avoid.
+let _repFilmDoc = null;
+$('repVidBtn').onclick = (e) => {
+  const b = e.currentTarget;
+  if (!replay.doc){ const was = b.textContent; b.textContent = '\u26a0 Nothing to film';
+                    setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2200); return; }
+  _repFilmDoc = replay.doc;
+  b.textContent = '\u25cf REC';
+  replayAbort();
+};
 $('repSaveBtn').onclick = (e) => {
   const b = e.currentTarget, was = b.textContent;
   b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
@@ -14499,7 +14529,7 @@ let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
 let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
 let repGoalIdx = -1;     // where in repBuf the ball actually crossed
-const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60, ended:false, restart:false, finish:null };
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60, ended:false, restart:false, finish:null, doc:null };
 
 // ============================================================
 //  THE WHOLE MATCH — a second, un-ringed buffer
@@ -14751,6 +14781,15 @@ function repCtlShow(){
       host.appendChild(b);
     }
   }
+  // ⚠️ The label names the SCOPE, so it cannot be a surprise: a goal replay offers a goal
+  // video and a match replay offers the match. Set here rather than in the markup because
+  // the transport is one bar reused for both.
+  { const vb = $('repVidBtn');
+    if (vb){
+      const kind = replay.doc && replay.doc.kind === 'match' ? 'match' : 'goal';
+      vb.textContent = kind === 'match' ? '\u2913 Match video' : '\u2913 Goal video';
+      vb.disabled = !replay.doc;
+    } }
   repCtlSync();
 }
 function repCtlHide(){ const el = $('repCtl'); if (el) el.classList.add('hidden');
@@ -15369,6 +15408,11 @@ async function playReplayFile(doc, speed, opts){
   if (replay.active) return;
   const prevWorld = world, prevLast = lastReplay;
   try {
+    // ⚠️ Stashed so the transport's Video button can film exactly what is on screen. The
+    // document is the only thing that knows whether this is a goal or a whole match
+    // (`doc.kind`), and deriving it from the frames instead would be a second answer to a
+    // question the file already answers.
+    replay.doc = doc;
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames: repDecodeFrames(doc.frames, doc.players.length),
                    goalAt: (doc.goalAt != null ? doc.goalAt : -1),
@@ -15377,6 +15421,7 @@ async function playReplayFile(doc, speed, opts){
     computeCam();
     await playReplay(speed || 1, opts);
   } finally {
+    replay.doc = null;
     world = prevWorld; lastReplay = prevLast;
     if (world) computeCam();
     render();
@@ -15429,7 +15474,22 @@ async function watchReplayFile(back, pick){
   // finished sits at z-index above the canvas and reads as part of the replay.
   { const bn = $('banner'); if (bn){ bn.textContent = ''; bn.classList.remove('show'); } }
   try { await playReplayFile(doc, null, { controls:true }); }
-  finally { if (back) back(); }
+  finally {
+    // ⚠️ **The film happens HERE, before `back()`**, for two reasons. The screens are still
+    // hidden, so the replay is visible while it is being recorded rather than playing
+    // behind a full-bleed menu; and `replay.active` is false by now, which is the only
+    // state in which `playReplayFile` will actually play anything.
+    // ⚠️ A match is filmed at 1x and a goal at the transport's own speed, the same split
+    // `saveMatchClip` and `saveClip` already make: a match is watched at the speed it
+    // happened, a goal is worth slowing down.
+    if (_repFilmDoc){
+      const film = _repFilmDoc; _repFilmDoc = null;
+      const speed = film.kind === 'match' ? 1 : null;
+      const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind);
+      toast(why || '\u2713 Video saved');
+    }
+    if (back) back();
+  }
 }
 // From the menu's Replays card: plays to the end, then comes straight back to the card
 // it was started from. ⚠️ Only an EXIT comes back: running to the end holds on the last

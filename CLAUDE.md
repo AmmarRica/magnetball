@@ -3111,6 +3111,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ It plays through `playReplayFile`, which swaps `world` for one rebuilt from the
   document and restores it in a `finally` — so the match behind the result screen is
   untouched and a throw mid-recording cannot strand the game holding a replay's world.
+- **THE EXPORT ON THE TRANSPORT FILMS WHAT YOU ARE WATCHING** (`#repVidBtn`,
+  `replay.doc`, `_repFilmDoc`). Every other export picks its scope from a menu; this one
+  is the only one whose scope is *whatever is on the screen* — a goal replay saves the
+  goal, a whole-match replay saves the match.
+  ⚠️ **THE LABEL IS HALF THE FEATURE**, which is why `repCtlShow` reads the kind off the
+  document rather than leaving one word for both: a button reading "Match video" over a
+  goal replay is a promise the file will not keep, and the two files differ by minutes.
+  ⚠️ **IT CANNOT RECORD WHILE IT IS PLAYING.** `playReplayFile` returns at its first line
+  when `replay.active` is set, so a recorder started from the button's own click films an
+  empty file. The button therefore only MARKS the document and calls `replayAbort()`; the
+  recording happens in **`watchReplayFile`'s `finally`** — the one moment `replay.active`
+  is false *and* `hideScreens()` is still in effect, so you watch it being filmed instead
+  of staring at a menu for the length of a match.
+  ⚠️ Which is also why `replay.doc` exists at all: the transport is UI and the thing being
+  watched is a document one layer down, so it is stashed on the way in and cleared in the
+  same `finally` that restores the world.
+  ⚠️ **A match is filmed at 1×, a goal at the transport's own speed** — the split
+  `saveMatchClip` and `saveClip` already make. A match is watched at the speed it happened;
+  a goal is the thing worth slowing down, so a slowed-down goal exports slowed down.
+  ⚠️ `tests/replayfile.mjs` drives the REAL button and awaits the real `watchReplayFile`
+  promise: calling `recordAndShareClip` directly would prove nothing about the wiring,
+  which is the entire feature.
 - **A REPLAY IS DRAWN BETWEEN ITS FRAMES** (`repTween`). A match replay is sampled at 30Hz
   by design and **halves itself** past `REPMATCH.max`, so a long one is held at 15 — and
   stepping a recording frame by frame at a rate you can afford to store is exactly what
