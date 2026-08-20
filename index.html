@@ -4460,7 +4460,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0615AM';
+const VERSION = '20260820.0730AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4476,6 +4476,14 @@ const VERSION = '20260820.0615AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0730AM', title: 'Just a number',
+    added: [],
+    changed: [
+      '<b>The default player is just a shirt number now \u2014 no eyes and no hat.</b> The star cap you started with was drawn over the middle of your disc and covered the number underneath it, and it was a cap you had not unlocked yet. If your player is still wearing the old star and googly eyes, this build quietly moves you across; anything you picked yourself is left alone.',
+      '<b>Two people can no longer kick off in the same shirt.</b> If several of you walked onto the same half in warm-up, some of you could start the match wearing the same number. Your own number still carries across from warm-up to kickoff unchanged, and anyone wearing a flag, an animal or a photo keeps it.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0615AM', title: 'The number sits in the middle now',
     added: [],
     changed: [
@@ -7286,12 +7294,53 @@ let rafId = 0;
 // ============================================================
 // Factory defaults for the player's look/name — the single source of truth for
 // both a first-time profile and the optional "reset appearance" path.
-// Players wear a NUMBER by default, like a shirt — countryballs are opt-in.
-function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'star', flag:'num1', eyes:'googly', photo:'', spin:true }; }
+// ⚠️ **JUST A NUMBER: no eyes and no hat**, asked for in those words, and the file had
+// already said so twice without carrying it through — `defaultSel`'s "a green pitch and
+// numbered players … is what a reset should give you back", and the note where the
+// first-run continent lineup was deleted for contradicting the same thing.
+// ⚠️ **THE CAP WAS THE VISIBLE HALF, and it hid the number.** `paintCap` is centred on the
+// faceplate on purpose (a crown over a shirt number), and at a disc's size the ★ simply
+// covered the `１` underneath — measured as **231 changed pixels** on a 52px disc against
+// the same disc with no cap. Rendered at 6× the default player was a star, not a number.
+// ⚠️ **The eyes were never drawn at all.** `paintFace` returns in its `TEXTS` branch, so the
+// eyes fallback is unreachable behind any numbered faceplate — measured at **0** changed
+// pixels. `eyes:'none'` is therefore honesty rather than a visual change: it makes the Eyes
+// picker say None instead of highlighting a Googly nobody can see, and it is what the data
+// should say if the player later switches their faceplate to Plain.
+// ⚠️ **The old default cap was itself LOCKED.** `CAPS.star` carries `req:{wins:1}`, so a
+// brand-new player wore a cap they had not unlocked and `buildCaps` drew that tile as
+// selected AND `🔒 Win 1 match` at the same time. Both `none` values are free.
+// ⚠️ Edit the VALUES here, never the shape: `tests/matchend.mjs` compares a reset profile to
+// this object with a whole-object `JSON.stringify`, so the key set and order are load-bearing.
+function defaultProfile(){ return { name:'You', color:'#46d17a', cap:'none', flag:'num1', eyes:'none', photo:'', spin:true }; }
 function loadProfile() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem('magnetball.profile')||'{}'); } catch(e){}
   const def = defaultProfile();
+  // ⚠️ **A DEVICE STILL WEARING THE OLD DEFAULT IS MOVED ON, ONCE.** Changing the factory
+  // default only ever reaches a fresh install, so without this the person who reported the
+  // hat would still be wearing it and would have to go and find Reset.
+  // ⚠️ **BOTH must match.** Somebody who picked the star on its own, or googly on its own,
+  // made a choice and keeps it. The PAIR is the fingerprint of an install nobody has touched.
+  // ⚠️ **ONE-SHOT, and that is the one place `normalizeLook`'s precedent does NOT transfer.**
+  // That fold is a pure key rename, so the old key is unreachable afterwards and re-running
+  // it is free. Star-plus-googly stays pickable by hand for ever, so a fold that ran every
+  // launch would silently un-pick it the next morning for anybody who chose it deliberately.
+  // ⚠️ **THE OLD PAIR IS INLINED, and it was a `const` for one build.** `loadProfile()` is
+  // CALLED from `let profile = loadProfile()` near the top of the file, so a `const` declared
+  // beside it is in the temporal dead zone at that moment — and the `try/catch` here, which
+  // exists for a browser that refuses localStorage, swallowed the ReferenceError whole. The
+  // fold simply never ran and nothing said so. **Eighteenth TDZ bite in this file, and the
+  // first one a catch block hid.**
+  try {
+    if (!localStorage.getItem('magnetball.lookfold')){
+      localStorage.setItem('magnetball.lookfold', '1');
+      if (d.cap === 'star' && d.eyes === 'googly'){
+        d.cap = def.cap; d.eyes = def.eyes;
+        localStorage.setItem('magnetball.profile', JSON.stringify(d));
+      }
+    }
+  } catch(e){}
   return {
     name: (d.name||'').slice(0,12) || def.name,
     color: d.color || def.color,
@@ -14270,8 +14319,11 @@ function startMatch(opts){
 function teamTint(team, idx){ return teamColOf(team); }
 // Bots wear NO cap. They used to cycle through the whole CAPS table, which put a
 // different hat on every disc on the pitch — busy, and it made a cap read as
-// decoration rather than as YOUR mark. Colour, shirt number and eyes still vary per
-// bot, so they remain individuals; the headgear is the player's alone.
+// decoration rather than as YOUR mark; the headgear is the player's alone.
+// ⚠️ This used to claim bots also vary by EYES, and that was measured false: `paintFace`
+// returns in its `TEXTS` branch, so the eyes fallback is unreachable behind any numbered
+// faceplate — 0 changed pixels. A bot's `eyes` is dead data, kept only because
+// `spawnLobbyBot` must stay deterministic. Colour and shirt number carry it.
 const BOT_CAP = 'none';
 // ⚠️ `BOT_FACE` and `BOT_GLYPH` are declared UP WITH `TEAM_COLS`, not here beside the
 // thing they belong with — `paintFace` reads them and it is called during the
@@ -17519,12 +17571,40 @@ function spawnLobbyBot(w, team, seat, used){
 // the two bots are 5 and 6, which is what a team sheet looks like. Only BOTS are
 // renumbered — a person's faceplate is their own, and overwriting a photo or a flag
 // with a number is taking away the thing they chose.
+//
+// ⚠️ **IT COUNTED HEADS, AND TWO PEOPLE COULD KICK OFF IN THE SAME SHIRT.** The old version
+// tallied how MANY humans were on a side to reserve the low numbers, and never looked at
+// WHICH numbers those humans were actually wearing. Every human keeps the number they were
+// minted with, and the warm-up lobby exists precisely so people can change halves — so three
+// people who all walk onto one side arrive holding whatever they were dealt at `startMatch`.
+// Measured on a 3v3: team 1 kicked off as **num1, num2, num1**.
+// ⚠️ The fix is to reserve the numbers people are REALLY wearing, and to move a human only
+// when they collide with another human on the same side.
+// ⚠️ **And only a human wearing a NUMBER is ever moved.** A flag, an animal, a photo or a
+// symbol is the thing that player chose, and the rule above still stands: two of those can
+// sit side by side without clashing, because neither is claiming a number at all.
+// ⚠️ **A lone human's number is untouched, which is the whole point.** Your shirt has to be
+// the same in warm-up and at kickoff — that is what was asked for — so nothing here fires
+// unless a second person is genuinely holding the same number.
 function numberTheSides(w){
+  const numOf = (p) => {
+    const m = /^num(\d)$/.exec(p.flag || '');
+    return m ? +m[1] : null;
+  };
   for (const team of [0, 1]){
     const side = w.players.filter(p => p.team === team);
-    let n = 0;
-    for (const p of side) if (p.ctrl !== 'bot') n++;      // people take the low numbers
-    for (const p of side) if (p.ctrl === 'bot') p.flag = shirtNo(++n);
+    const taken = new Set();
+    const free = () => { let n = 1; while (taken.has(shirtNo(n))) n++; return shirtNo(n); };
+    // People first, in the order they are on the pitch: keep the number you are wearing
+    // unless somebody on this side already has it.
+    for (const p of side){
+      if (p.ctrl === 'bot') continue;
+      if (numOf(p) === null) continue;                   // a flag / animal / photo is theirs
+      if (taken.has(p.flag)) p.flag = free();
+      taken.add(p.flag);
+    }
+    // ...then the bots take whatever numbers are actually left.
+    for (const p of side) if (p.ctrl === 'bot'){ p.flag = free(); taken.add(p.flag); }
   }
 }
 // Resolve the sides people picked, balance them with bots, and kick off.

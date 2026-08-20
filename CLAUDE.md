@@ -1000,6 +1000,60 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   over all 47 drawn glyphs the rounding cancels and the bias does not (-0.36 against +0.68).
   `tests/textplates.mjs` keeps both, plus "the glyph is drawn at all" — or "it is centred"
   is satisfied by a build that draws nothing.
+- **THE DEFAULT PLAYER IS JUST A NUMBER — no eyes, no hat** (`defaultProfile()`). Asked for
+  in those words, and the file had already said so twice without carrying it through to the
+  cap: `defaultSel`'s *"a green pitch and numbered players … is what a reset should give you
+  back"*, and the note where the first-run continent lineup was deleted for contradicting the
+  same thing.
+  ⚠️ **THE CAP WAS THE VISIBLE HALF, AND IT HID THE NUMBER.** `paintCap` is centred on the
+  faceplate on purpose (a crown over a shirt number), and at a disc's size the ★ simply
+  covered the `１` — measured at **231 changed pixels** on a 52px disc against the same disc
+  with no cap. Rendered at 6× the default player was a star, not a number.
+  ⚠️ **The eyes were never drawn at all**, and that is why the eyes half is honesty rather
+  than a visual change: `paintFace` returns in its `TEXTS` branch, so the eyes fallback is
+  **unreachable behind any numbered faceplate** — measured at **0** changed pixels. Eyes only
+  ever draw when the faceplate is `none`. `eyes:'none'` makes the Eyes picker say None instead
+  of highlighting a Googly nobody can see.
+  ⚠️ **The old default cap was itself LOCKED.** `CAPS.star` carries `req:{wins:1}`, so a
+  brand-new player wore a cap they had not unlocked and `buildCaps` drew that tile as selected
+  *and* `🔒 Win 1 match` at once. Both `none` values are free, are the first tile in each
+  picker, are skipped by Recents and the Unlocked strip (*"'none' is a reset, not a choice"*),
+  and are already what every bot wears.
+  ⚠️ **Edit the VALUES, never the shape.** `tests/matchend.mjs` compares a reset profile to
+  `defaultProfile()` with a whole-object `JSON.stringify`, so the key set and order are
+  load-bearing. All three reset paths read it — `resetSettings`, the `↺ Reset look` button and
+  `loadProfile`'s per-field fallbacks — so one edit covers them.
+  ⚠️ **A DEVICE STILL WEARING THE OLD PAIR IS MOVED ON, ONCE** (`loadProfile`,
+  `magnetball.lookfold`). Changing a factory default only ever reaches a fresh install, so
+  without this the person who reported the hat still has it. **Both** `cap === 'star'` and
+  `eyes === 'googly'` must match — the pair is the fingerprint of an install nobody has
+  touched, and somebody who picked either one alone keeps it.
+  ⚠️ **ONE-SHOT, and this is the one place `normalizeLook`'s precedent does NOT transfer.**
+  That fold is a pure key rename, so the old key is unreachable afterwards and re-running is
+  free. Star-plus-googly stays pickable by hand for ever, so an unguarded fold would silently
+  un-pick it the next morning.
+  ⚠️ **The old pair is INLINED, and it was a `const` for one build.** `loadProfile()` is called
+  from `let profile = loadProfile()` near the top of the file, so a `const` declared beside it
+  is in the temporal dead zone at that moment — and the `try/catch` there, which exists for a
+  browser that refuses `localStorage`, **swallowed the ReferenceError whole**. The fold simply
+  never ran and nothing said so. **Eighteenth TDZ bite in this file, and the first one a catch
+  block hid.**
+  ⚠️ Bots keep **🤖 in warm-up** (`BOT_FACE`), asked for: numbering runs per team and the
+  teams are still forming, so a number shown early is a lie waiting to happen.
+- **TWO PEOPLE MAY NOT KICK OFF IN THE SAME SHIRT** (`numberTheSides`). It counted human
+  **heads** to reserve the low numbers and never looked at *which* numbers those humans were
+  wearing. Every human keeps the number they were minted with and the warm-up lobby exists so
+  people can change halves — so three people who all walk onto one side arrive holding
+  whatever `startMatch` dealt them. Measured on a 3v3: team 1 kicked off as **num1, num2,
+  num1**.
+  ⚠️ It reserves the numbers people are **really** wearing, and moves a human only when they
+  collide with another human on the same side; the bots then take what is actually left.
+  ⚠️ **Only a human wearing a NUMBER is ever moved.** A flag, an animal, a photo or a symbol
+  is the thing that player chose — the standing rule is *"a person's faceplate is their own"* —
+  and two of those can sit side by side without clashing, because neither claims a number.
+  ⚠️ **A lone human's number is untouched, and that is the point.** Your shirt has to read the
+  same in warm-up and at kickoff, which is what was asked for, so nothing fires unless a second
+  person is genuinely holding the same number. `tests/textplates.mjs` pins both directions.
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was

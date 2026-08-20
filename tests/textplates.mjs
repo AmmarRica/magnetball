@@ -24,6 +24,34 @@ const r = await p.evaluate(async ()=>{
   o.defaultIsANumber = /^num\d$/.test(M.defaultProfile().flag);
   o.freshProfileIsANumber = /^num\d$/.test(M.profile.flag);
 
+  // ---- ...and JUST a number: no eyes, no hat ------------------------------
+  // ⚠️ The default used to be `cap:'star'`, and a cap is drawn CENTRED on the faceplate,
+  // so at a disc's size the star simply covered the `１` underneath — measured at 231
+  // changed pixels on a 52px disc. Rendered at 6x, the default player was a star.
+  // ⚠️ **MEASURED AS PIXELS, not as the flag.** "`profile.cap === 'none'`" is true of a
+  // build that draws the cap anyway, and what was reported is what is on the disc.
+  // ⚠️ **AND as the flag as well, which is not belt-and-braces.** The eyes half is
+  // INVISIBLE on a numbered disc — `paintFace` returns in its `TEXTS` branch, so the eyes
+  // fallback is unreachable and `eyes:'googly'` measures 0 changed pixels. A pixel-only
+  // check therefore cannot see the eyes default at all; the value has to be read too, and
+  // it matters because the Eyes picker highlights whatever it says.
+  const dp = M.defaultProfile();
+  o.defaultNoHat = dp.cap === 'none';
+  o.defaultNoEyes = dp.eyes === 'none';
+  const DR = 26, DN = 96, DC = DN/2;
+  const shot = (over) => { const cv=document.createElement('canvas'); cv.width=cv.height=DN;
+    const c=cv.getContext('2d');
+    M.drawDisc(c, DC, DC, DR, Object.assign({}, M.profile, over||{}));
+    return c.getImageData(0,0,DN,DN).data; };
+  const same = (a,b2) => { for (let i=0;i<a.length;i++) if (a[i]!==b2[i]) return false; return true; };
+  const diffInk = (a,b2) => { let n=0; for (let i=0;i<a.length;i+=4){
+    if (Math.abs(a[i]-b2[i])+Math.abs(a[i+1]-b2[i+1])+Math.abs(a[i+2]-b2[i+2]) > 60) n++; } return n; };
+  const asShipped = shot();
+  o.defaultDiscIsBare = same(asShipped, shot({ cap:'none', eyes:'none' }));
+  // ⚠️ Paired with the NUMBER still being there, or "no hat" is satisfied by a disc with
+  // nothing drawn on it at all — which is a different bug wearing the same green.
+  o.defaultDiscHasItsNumber = diffInk(asShipped, shot({ flag:'none' })) > 40;
+
   // ---- A pitch reads like a team sheet: 1..N per side, you are 1, no clashes
   M.sel.mode='4v4'; M.startMatch();
   const w=M.world;
@@ -36,6 +64,41 @@ const r = await p.evaluate(async ()=>{
   o.eachTeamUnique = new Set(nums(t0)).size === t0.length && new Set(nums(t1)).size === t1.length;
   o.teamsNumberFromOne = Math.min(...nums(t0)) === 1 && Math.min(...nums(t1)) === 1;
   o.shirtNoWraps = M.shirtNo(10) === 'num0' && M.shirtNo(3) === 'num3';
+
+  // ---- TWO PEOPLE MAY NOT KICK OFF IN THE SAME SHIRT ----------------------
+  // ⚠️ `numberTheSides` used to count human HEADS to reserve the low numbers and never
+  // looked at WHICH numbers those humans were wearing. Every human keeps the number they
+  // were minted with and the warm-up lobby exists so people can change halves, so three
+  // people who all walk onto one side arrive holding whatever `startMatch` dealt them.
+  // Measured on a 3v3: team 1 kicked off as num1, num2, num1.
+  {
+    const w2 = (()=>{ M.sel.mode='3v3'; M.sel.lobby='off'; M.setMatchSeed(11); M.startMatch(); return M.world; })();
+    const side = w2.players.filter(q=>q.team===0);
+    // Force the collision the lobby can really produce: two people on one side, both
+    // holding the number they were dealt.
+    side[0].ctrl='human1'; side[0].flag='num1';
+    side[1].ctrl='gamepad'; side[1].flag='num1';
+    M.numberTheSides(w2);
+    const f = side.map(q=>q.flag);
+    o.collisionFlags = f;
+    o.noTwoInTheSameShirt = new Set(f).size === f.length && f.every(x=>/^num\d$/.test(x));
+    // ⚠️ **A LONE HUMAN'S NUMBER MUST NOT MOVE** — your shirt has to be the same in warm-up
+    // and at kickoff, which is the thing that was asked for. Nothing may fire unless a
+    // second person is genuinely holding the same number.
+    M.sel.mode='3v3'; M.setMatchSeed(5); M.startMatch();
+    const w3 = M.world, you = w3.players.find(q=>q.ctrl==='human1');
+    const was = you.flag; M.numberTheSides(w3);
+    o.loneNumberKept = was === you.flag && /^num\d$/.test(was);
+    // ⚠️ ...and a person wearing a FLAG, ANIMAL or PHOTO is never renumbered. That is the
+    // standing rule — a person's faceplate is their own — and it is why this cannot be
+    // "renumber everybody from 1". The bots must route around them.
+    you.flag = 'poland'; M.numberTheSides(w3);
+    o.flagFaceplateKept = you.flag === 'poland';
+    you.flag = 'photo'; M.numberTheSides(w3);
+    o.photoFaceplateKept = you.flag === 'photo';
+    const others = w3.players.filter(q=>q.team===you.team && q!==you).map(q=>q.flag);
+    o.botsRouteRound = new Set(others).size === others.length && others.every(x=>/^num\d$/.test(x));
+  }
 
   // ---- Every glyph from the list is present and unlocked
   o.textCount = M.TEXT_KEYS.length;
@@ -158,6 +221,46 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+// ===================== A DEVICE STILL WEARING THE OLD DEFAULT ================
+// ⚠️ Changing the factory default only ever reaches a FRESH install, so without a fold the
+// person who reported the hat would still be wearing it and would have to go and find
+// Reset. The fold moves a stored profile holding EXACTLY the old default pair
+// (cap 'star' AND eyes 'googly') on to none/none.
+// ⚠️ **BOTH must match, and the two negatives below are the whole point of that rule.**
+// Somebody who picked the star on its own, or googly on its own, made a choice.
+// ⚠️ **AND IT IS ONE-SHOT.** Star-plus-googly stays pickable by hand for ever, so a fold
+// that ran every launch would silently un-pick it the next morning. The last case seeds
+// the marker to prove the fold stands down once it has had its turn.
+// ⚠️ Needs its own page per case: the fold reads `localStorage` during the bootstrap, so it
+// cannot be driven from the suite's live page.
+const seeded = async (prof, extra) => {
+  const ctx = await b.newContext();
+  const pg = await ctx.newPage();
+  await pg.addInitScript(([pr, ex]) => {
+    window.__MAGNETDEBUG = true; localStorage.clear();
+    localStorage.setItem('magnetball.firstrun', '1');
+    localStorage.setItem('magnetball.profile', JSON.stringify(pr));
+    if (ex) for (const k in ex) localStorage.setItem(k, ex[k]);
+  }, [prof, extra || null]);
+  await pg.goto('file://' + process.cwd() + '/index.html');
+  await pg.waitForTimeout(700);
+  const got = await pg.evaluate(() => [window.__magnet.profile.cap, window.__magnet.profile.eyes]);
+  await ctx.close();
+  return got.join('/');
+};
+const BASE = { name:'You', color:'#46d17a', flag:'num1', photo:'', spin:true };
+const fold = {
+  pair:      await seeded({ ...BASE, cap:'star',  eyes:'googly' }),
+  starOnly:  await seeded({ ...BASE, cap:'star',  eyes:'angry'  }),
+  gogOnly:   await seeded({ ...BASE, cap:'crown', eyes:'googly' }),
+  alreadyRan:await seeded({ ...BASE, cap:'star',  eyes:'googly' }, { 'magnetball.lookfold':'1' }),
+};
+r.foldMovesTheOldPair    = fold.pair === 'none/none';
+r.foldLeavesAStarAlone   = fold.starOnly === 'star/angry';
+r.foldLeavesGooglyAlone  = fold.gogOnly === 'crown/googly';
+r.foldIsOneShot          = fold.alreadyRan === 'star/googly';
+r.fold = fold;
+
 console.log(JSON.stringify(r,null,1));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must = ['defaultIsANumber','freshProfileIsANumber','allNumbers','noCountryballsByDefault',
@@ -166,7 +269,10 @@ const must = ['defaultIsANumber','freshProfileIsANumber','allNumbers','noCountry
   'textIsACategory','countsIncludeText','oneTilePerGlyph','everyTilePaints',
   'plateChangesTheDisc','differentDigitsDiffer','differentStylesDiffer','blankDraws',
   'pickEquips','pickPersists','wornInMatch','wideGlyphStaysInside',
-  'everyGlyphHasInk','blankHasNone','glyphIsCentred','nothingSpills'];
+  'everyGlyphHasInk','blankHasNone','glyphIsCentred','nothingSpills',
+  'defaultNoHat','defaultNoEyes','defaultDiscIsBare','defaultDiscHasItsNumber',
+  'noTwoInTheSameShirt','loneNumberKept','flagFaceplateKept','photoFaceplateKept','botsRouteRound',
+  'foldMovesTheOldPair','foldLeavesAStarAlone','foldLeavesGooglyAlone','foldIsOneShot'];
 const bad = must.filter(k => r[k] !== true);
 const ok = bad.length === 0 && errors.length === 0;
 if (bad.length) console.log('FAILED:', bad);
