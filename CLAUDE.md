@@ -1915,6 +1915,40 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Turkey and Russia sit in Europe and **Australia in Asia**: the tie-break is the
   confederation they play football in, and Australia is also the only Oceania country
   here — a continent of one cannot field a side. `tests/continents.mjs`.
+- **BOT NAMES ARE PARK-FOOTBALL NICKNAMES** (`BOT_NAMES`, `pickNames`). Asked whether the
+  player names could look better and "less AI looking", and the typography was not the
+  problem — the tell was the list. It was `Nico Vega Blaze Kai Rush Zed Milo Ivy Rex Juno
+  Ace Fox Neo Sol Wren Dex Pip Rio Sy Bolt Onyx Ash Koda Lex`, and measured: **22 of 24
+  were 3-4 letters**, **29% contained x or z** against about 2% in real names, five ended
+  -ex/-ox/-yx, and twelve were the same "short cool codename" idea. Nothing in it was
+  ORDINARY, which is the giveaway.
+  ⚠️ **Two things carry the fix.** The lengths are **RAGGED** (2 to 6) — eight identical
+  stubs down the pitch is half of what reads as generated — and every name has a REASON: a
+  role, a physique, a way of playing, a personality. That is what generated names never
+  have, and it is why a nickname cannot be mistaken for one.
+  ⚠️ **AT LEAST 16 ENTRIES, a hard floor rather than taste.** `LOBBY.maxPerSide` is 8, so
+  sixteen bots can be on the pitch; `pickNames` filters the pool by a `used` Set and when it
+  EMPTIES, `(i*7+3) % 0` is NaN, the splice yields undefined, and every overflow bot comes
+  out called **`Bot1`** — `spawnLobbyBot`'s own `|| 'Bot'+(seat+1)` never fires, because
+  `'Bot1'` is already truthy. 33 gives headroom.
+  ⚠️ **NOTHING HERE MAY BE A KEY IN `STRINGS`**, and this caught TWO on the way in:
+  **`Rookie`** (a difficulty tier) and **`Skip`** (the replay button). `renderMatchStats`
+  writes the result-screen name with `textContent` but is not `noI18n`-marked, so either
+  would have been *translated* on every non-English device. `tests/lang.mjs` names the trap.
+  ⚠️ **SIX CHARACTERS, and the RESULT SCREEN sets that, not the pitch.** The nameplate is
+  comfortable at seven — the crowded case draws no plate at all, since `labelBallFade` and
+  `LABEL_MIN` hide any name within ~141 world units of the ball — but the per-team table's
+  name column is **43px** on a 360px phone and `Stopper` needed 47, so it ellipsised and
+  `tests/matchstats.mjs` caught it. `Stopper`/`Skipper`/`Stretch` became
+  `Hoofer`/`Chief`/`Lanky`.
+  ⚠️ **Never `You` or `Player`** — the name book refuses both as "a made-up name is never
+  recorded", and `isHero` would crown a same-named team-0 bot as "You" on the result screen.
+  ⚠️ **No rhyme clusters.** Rex/Dex/Lex is what gave the old list away, so only one of
+  Baz/Gaz. ⚠️ **Generic nicknames only, never a real footballer's** — `Nobby` was drafted
+  and dropped for exactly that, the standing trademark rule applied to people.
+  ⚠️ `pickNames` is unchanged and **must stay RNG-free**: it is reachable from inside
+  `step()` via `stepLobbyBots` and `evenUpSides`, and is safe only because it indexes
+  arithmetically. `tests/lobbykb.mjs` pins that by running one lobby twice on a seed.
 - **A RECORD PER NAME** (`NAMEBOOK`, `nameBook`, `nameKey`, `noteNameResult`,
   `nameBookTable`, `buildNameBook`; `magnetball.names`). The cabinet's book: the NAME is
   the identity, so you type one and the machine remembers what that name did. Pairs with

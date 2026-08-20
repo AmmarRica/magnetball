@@ -4400,7 +4400,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.0130AM';
+const VERSION = '20260820.0245AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4416,6 +4416,14 @@ const VERSION = '20260820.0130AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260820.0245AM', title: 'The bots got names',
+    added: [],
+    changed: [
+      '<b>Bot players are now called what people actually get called at a kickabout</b> \u2014 Gaffer, Boots, Lanky, Nutmeg, Sparky, Ox. The old names were a row of interchangeable short codenames and it showed.',
+      'The lengths vary now too, so a team sheet reads like a team sheet instead of eight identical stubs.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.0130AM', title: 'One ring, and its colour is your stamina',
     added: [],
     changed: [
@@ -13694,7 +13702,53 @@ function padSeatOrder(t0, t1){
 // ============================================================
 //  NAME POOL for bots
 // ============================================================
-const BOT_NAMES = ['Nico','Vega','Blaze','Kai','Rush','Zed','Milo','Ivy','Rex','Juno','Ace','Fox','Neo','Sol','Wren','Dex','Pip','Rio','Sy','Bolt','Onyx','Ash','Koda','Lex'];
+// ⚠️ **PARK-FOOTBALL NICKNAMES, and the register is the whole point.** The list used to be
+// `Nico Vega Blaze Kai Rush Zed Milo Ivy Rex Juno Ace Fox Neo Sol Wren Dex Pip Rio Sy Bolt
+// Onyx Ash Koda Lex`, and it was reported as looking machine-generated. Measured, it was:
+// **22 of 24 were 3-4 letters**, **29% contained x or z** against about 2% in real names,
+// five ended -ex/-ox/-yx (Rex, Fox, Dex, Onyx, Lex), and twelve were the same "short cool
+// codename" idea. Nothing in it was ORDINARY, which is the giveaway — a real group of
+// people always has a boring name in it.
+// ⚠️ Two rules keep it honest. The lengths stay **RAGGED** (2 to 7), because eight
+// identical stubs down the pitch is half of what reads as generated; and every name has a
+// REASON — a role, a physique, a way of playing, a personality — which is the thing
+// generated names never have.
+// ⚠️ **No rhyme clusters.** Rex/Dex/Lex is exactly what gave the old list away, so only one
+// of Baz/Gaz, and the -PER family stops at Keeper/Skipper/Stopper.
+// ⚠️ **AT LEAST 16 ENTRIES, and that is a hard floor rather than taste.** `LOBBY.maxPerSide`
+// is 8, so sixteen bots can be on the pitch at once; `pickNames` filters the pool by a
+// `used` Set and if it EMPTIES, `(i*7+3) % 0` is NaN, the splice yields undefined, and every
+// overflow bot comes out called **`Bot1`** — `spawnLobbyBot`'s own `|| 'Bot'+(seat+1)`
+// fallback never fires, because `'Bot1'` is already truthy.
+// ⚠️ **Nothing here may be a key in `STRINGS`** — and this caught one on the first pass:
+// TWO of them were caught this way: `Rookie` (a DIFFICULTY TIER) and `Skip` (the replay
+// button), either of which would have been renamed on every non-English device. Now
+// `Sprog` and `Chief`.
+// ⚠️ **Nothing here may be a key in `STRINGS`.** `renderMatchStats` writes the result-screen
+// name with `textContent` but is not `noI18n`-marked, so a bot called `Save` or `Home` would
+// be TRANSLATED on a non-English device. `tests/lang.mjs` flags that trap by name.
+// ⚠️ **Never `You` or `Player`**: the name book refuses both as "a made-up name is never
+// recorded", and `isHero` would crown a same-named team-0 bot as "You" on the result screen.
+// ⚠️ **ASCII and ≤6 characters.** The UI face covers Latin-1 and nothing beyond, and NOTHING
+// truncates a bot name anywhere — the nameplate has no clamp at all, so a long one runs off
+// the screen edge. ⚠️ **SIX, not seven, and the RESULT SCREEN is what decides it, not the
+// pitch.** The nameplate is comfortable at seven (the crowded case draws no plate at all —
+// `labelBallFade` and `LABEL_MIN` hide any name within ~141 world units of the ball), but
+// the per-team table's name column is **43px** on a 360px phone and `Stopper` needs 47, so
+// it ellipsised. Measured, not guessed; `Stopper`/`Skipper`/`Stretch` became
+// `Hoofer`/`Skip`/`Lanky`.
+// ⚠️ **Generic nicknames only, never a real footballer's.** `Nobby` was drafted and dropped
+// for exactly that — the standing rule that renamed the themes applies to people too.
+const BOT_NAMES = [
+  // role
+  'Gaffer','Keeper','Chief','Hoofer',
+  // built like
+  'Tank','Legs','Lofty','Titch','Bones','Lanky','Bear','Ox','Chunk',
+  // plays like
+  'Boots','Nutmeg','Megs','Sniper','Rocket','Hammer','Wall','Ghost','Chip','Volley',
+  // just what everyone calls them
+  'Smiler','Digger','Sparky','Chalky','Dusty','Doc','Baz','Nipper','Sprog','Bugsy',
+];
 function pickNames(n, used){
   const out=[]; const pool=BOT_NAMES.filter(x=>!used.has(x));
   for(let i=0;i<n;i++){ const idx = (i*7+3)%pool.length; const nm = pool.splice(idx% pool.length,1)[0]||('Bot'+(i+1)); used.add(nm); out.push(nm); }
@@ -26743,7 +26797,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, haloAlpha, NAMEPLATE, RING, kickRingInk, ringLayout, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, RING, kickRingInk, ringLayout, BOT_NAMES, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

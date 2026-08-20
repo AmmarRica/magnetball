@@ -108,6 +108,48 @@ const r = await p.evaluate(() => {
   o.searchBackToEn = $('menuSearch').placeholder;
   o.attrRoundTrip = /Search settings/.test(o.searchBackToEn);
 
+  // ---- 3b. A BOT NAME MAY NEVER BE A TRANSLATION KEY ----------------------
+  // ⚠️ This lives here because the sharpest rule on `BOT_NAMES` is an i18n one:
+  // `renderMatchStats` writes the result-screen name with `textContent` but is NOT
+  // `noI18n`-marked, so a bot called `Save` or `Home` gets TRANSLATED on a non-English
+  // device — the same trap the block below names for typed names. It caught one on the
+  // first pass: **`Rookie` was in the draft and it is a DIFFICULTY TIER**, so every
+  // Spanish device would have renamed that bot mid-table.
+  // ⚠️ The other rules are here too, because they are all "what a bot name may be" and
+  // none of them has anywhere better to live:
+  //  - **at least 16 entries**, a hard floor: `LOBBY.maxPerSide` is 8, so sixteen bots can
+  //    be on the pitch, and when `pickNames`' pool empties `(i*7+3) % 0` is NaN and every
+  //    overflow bot comes out called `Bot1`;
+  //  - **distinct case-insensitively** — `used.has()` is an exact match, and `isHero`
+  //    compares a name against the player's;
+  //  - **ASCII and short** — the UI face covers Latin-1 and nothing beyond, and NOTHING
+  //    truncates a bot name anywhere, the nameplate least of all;
+  //  - **never `You` or `Player`**, which the name book refuses as made-up.
+  // ⚠️ And the RAGGED LENGTHS, which is not housekeeping: the list this replaced had 22 of
+  // 24 names at 3-4 letters, and that uniformity is most of what read as machine-generated.
+  {
+    const names = M.BOT_NAMES || [];
+    o.botCount = names.length;
+    o.botEnough = names.length >= 16;
+    o.botDistinct = new Set(names.map(n => n.toLowerCase())).size === names.length;
+    o.botAscii = names.every(n => /^[\x20-\x7e]+$/.test(n));
+    // ⚠️ **SIX, and the RESULT SCREEN is what sets it, not the pitch.** The nameplate is
+    // fine at seven; the per-team table's name column is 43px on a 360px phone and
+    // `Stopper` needed 47, so it ellipsised and `tests/matchstats.mjs` caught it.
+    o.botShort = names.every(n => n.length <= 6);
+    o.botNotReserved = !names.some(n => ['you','player'].includes(n.toLowerCase()));
+    // ⚠️ `STRINGS` is keyed by the ENGLISH STRING directly, with an array of translations
+    // as the value — there is no per-language sub-object. The first version of this read
+    // `M.STRINGS.es`, which is `undefined`, so it tested an empty object and reported NO
+    // collisions on a build with `Rookie` back in the list. Verified by sabotage.
+    const clash = names.filter(n => Object.prototype.hasOwnProperty.call(M.STRINGS, n));
+    o.botClashes = clash;
+    o.botNoClash = clash.length === 0;
+    const lens = new Set(names.map(n => n.length));
+    o.botLengths = [...lens].sort((a, b) => a - b);
+    o.botRagged = lens.size >= 5;
+  }
+
   // ---- 4. WHAT MUST NEVER BE TRANSLATED -----------------------------------
   setLang('es');
   // ⚠️ A person's own words. Every one of these is set to a string that IS in the table,
@@ -271,6 +313,18 @@ ok('Automatic is the default and reads the browser', r.defaultIsAuto && !!r.auto
 ok('an unknown code falls back to English', r.junkFallsBack === 'en', r.junkFallsBack);
 ok('the walk costs nothing in English', r.englishIsFree,
    r.walkEnMs + 'ms English vs ' + r.walkEsMs + 'ms Spanish — it runs on every option tap, and an unskipped walk measured 5.6ms against buildSettings\' own 24ms; requiring Spanish to be SLOWER is what stops "0ms" being true of a walk that never runs at all');
+ok('the bot names are a big enough pool', r.botEnough,
+   `${r.botCount} names — under 16 the pool can empty on a 16-bot pitch, and every overflow bot is then called Bot1`);
+ok('...all distinct, ASCII and short', r.botDistinct && r.botAscii && r.botShort,
+   JSON.stringify({ distinct: r.botDistinct, ascii: r.botAscii, short: r.botShort }) +
+   ' — the UI face covers Latin-1, nothing truncates a bot name anywhere, and SIX is the cap because the result screen name column is 43px on a phone (Stopper needed 47 and ellipsised)');
+ok('...none of them is You or Player', r.botNotReserved,
+   'the name book refuses both as a made-up name, and isHero would crown a same-named bot as "You"');
+ok('...and NONE is a translation key', r.botNoClash,
+   JSON.stringify(r.botClashes) + ' — renderMatchStats is not noI18n-marked, so a bot called Save or Home is renamed on a Spanish device; "Rookie" was caught this way, being a difficulty tier');
+ok('...and their LENGTHS are ragged', r.botRagged,
+   JSON.stringify(r.botLengths) + ' — the list this replaced had 22 of 24 at 3-4 letters, and that uniformity is most of what read as machine-generated');
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
 console.log(JSON.stringify(r, null, 1));
