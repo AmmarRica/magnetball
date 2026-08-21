@@ -4622,7 +4622,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260821.1105PM';
+const VERSION = '20260822.1220AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4638,6 +4638,16 @@ const VERSION = '20260821.1105PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260822.1220AM', title: 'Joining and leaving in warm-up',
+    added: [
+      '<b>Plug a controller in during warm-up and you now get a body.</b> It arrives beside the halfway line, undecided, and you walk onto whichever half you want \u2014 the same as if you had been there when the lobby opened. Before this the game brought a ball on for you and gave you nothing to drive.',
+    ],
+    changed: [
+      '<b>Unplug during warm-up and your place is given up properly.</b> A bot takes the shirt so the sides stay even, and plugging back in gets you your own player again, name and all.',
+      '<b>The key you are standing on lights up</b> on the warm-up keyboard, so you can see which letter KICK is about to type.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260821.1105PM', title: 'A staggered line, and new names',
     added: [],
     changed: [
@@ -17974,9 +17984,91 @@ function lobbyAllInGoal(w){
   return hs.length > 0 && hs.every(p => lobbyInGoal(w, p) >= 0);
 }
 
+// ⚠️ **A PAD ARRIVING OR LEAVING DURING WARM-UP — the one room built for exactly that,
+// and the one room that ignored it.** `pollDropIn` returns early on `w.state ===
+// 'warmup'` under the comment *"warm-up already hands seats to pads (that is what it is
+// for)"*, and it does not: seats are dealt ONCE, in `startMatch`, and `subWaitFor` is the
+// only other thing in the file that ever hands one out. So a controller woken up in the
+// lobby got a BALL (`syncLobbyBalls` runs every step) and a reset idle clock
+// (`stepLobbyClock` watches the pad count) and **no body to drive** — the four-controllers
+// bug one layer along: the game could see the pad and gave it nothing.
+// ⚠️ **A JOINER WALKS STRAIGHT ON — no touchline, no START.** That is the whole
+// difference from the mid-match path, and it is the character of the room: bodies arrive
+// on the halfway line undecided, exactly where `enterWarmup` puts everybody, and you pick
+// a side by walking into a half. Asking for a START out here would be asking for the
+// button that ENDS warm-up.
+// ⚠️ **A LEAVER BECOMES A BOT IN PLACE**, which is `dropOut`'s rule mid-match and needs
+// no new machinery at all: `lobbyPlan` is read fresh every frame, so the side that just
+// lost a person is one short, the converted body is the spare bot standing right there,
+// and `stepLobbyBots` puts it back in the same shirt on the same step. Left as a seat it
+// is a body nobody can drive AND a body `lobbyPlan` still counts as a person on that
+// half — so the preview lies and `lobbyStart` fields a statue for the whole match.
+// ⚠️ It keeps `_padWas`, so a pad that hiccups and comes back **reclaims its own body** —
+// name, colour, faceplate and the letters already spelled on the keyboard. Same latch
+// `subWaitFor` reads, and the same reason: minting a fresh P3 strands the first one.
+// ⚠️ **Gated on `padsTakeSeats()` and deliberately NOT on `sel.dropIn`.** That setting is
+// about interrupting a match in progress; this room's entire purpose is people arriving
+// and picking sides, so gating it there would make the lobby refuse the one thing it is
+// for. With `sel.controllers` off there are no pad seats at all and none of this runs.
+// ⚠️ **A CUP TIE TAKES NO JOINERS.** A tie is two entrants and one body a side — that is
+// why `startCupMatch` borrows 1v1 — so a third pad walking on would field a bot against
+// somebody the draw never named. Leavers are still handled: an undriveable body is worse
+// in a tournament, not better.
+function pollLobbyPads(w){
+  if (!padsTakeSeats()) return;
+  const live = new Set(connectedGamepadIndices());
+  // Leavers first, so a pad unplugged and replugged inside one step is not two bodies —
+  // the ordering `pollDropIn` already settles for the match.
+  for (const p of w.players){
+    if (p.ctrl !== 'gamepad' || live.has(p.padIndex)) continue;
+    p.ctrl = 'bot'; p._padWas = p.padIndex;
+    p.padIndex = -1; p.rotQuarter = 0;
+    p.inX = 0; p.inY = 0; p.kick = false; p.kickUsed = false;
+    p._lobT = undefined; p._lobTo = null;      // a new job is a new walk
+    toast(p.name + ' unplugged', 'err', 'gamepad');
+  }
+  if (w.cup) { applySeatRotation(w.players); return; }
+  const held = new Set(w.players.filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
+  for (const i of live){
+    if (held.has(i)) continue;
+    const back = w.players.find(p => p.ctrl === 'bot' && p._padWas === i);
+    if (back){
+      back.ctrl = 'gamepad'; back.padIndex = i; back._padWas = null;
+      back._lobT = undefined; back._lobTo = null; back._lobArr = true;
+      toast(back.name + ' back', 'ok', 'gamepad');
+      continue;
+    }
+    if (lobbyHumans(w).length >= LOBBY.maxPerSide * 2) continue;
+    // Beside the halfway line, alternating either side of it and stepping outward a
+    // body at a time — the same ±34 `enterWarmup` spreads people along, so a joiner
+    // lands among them rather than on top of one. Nobody already standing is moved:
+    // where they walked to is the one thing they have said so far.
+    const seat = lobbyHumans(w).length;
+    const used = new Set(w.players.map(p => p.name));
+    let n = 2; while (used.has('P' + n)) n++;
+    const y = (seat % 2 ? 1 : -1) * 34;
+    const team = y >= 0 ? 0 : 1;
+    const p = mkPlayer(team, 'P' + n, teamTint(team, n), BOT_CAP, 'gamepad',
+                       shirtNo(n), randEyes(n));
+    p.padIndex = i; p.ms = freshMs();
+    p.x = Math.max(-w.field.W/2 + p.r, Math.min(w.field.W/2 - p.r,
+                   (seat % 2 ? 1 : -1) * 34 * Math.ceil(seat/2)));
+    p.y = y;
+    // ⚠️ Every site that puts a body on the pitch pushes out of a gap block — a block is
+    // a barrier and not a container, so a body spawned INSIDE one is touched by none of
+    // its four segments and stands there for the rest of the match.
+    if (w.field.gap){ const q = gapPush(w.field, p.x, p.y, p.r + 4); p.x = q.x; p.y = q.y; }
+    w.players.push(p);
+    toast(p.name + ' joined — walk onto a side', 'ok', 'gamepad');
+  }
+  applySeatRotation(w.players);
+}
 function stepWarmup(w){
   const L = w.lobby;
   w.ball.x = 0; w.ball.y = 0; w.ball.vx = 0; w.ball.vy = 0;
+  // ⚠️ FIRST, so the roster is right before the bots are built to order, before
+  // `lobbyPlan` draws the side preview and before `syncLobbyBalls` counts the balls.
+  pollLobbyPads(w);
   stepLobbyBots(w);
   stepLobbyKeys(w);
   // Live side preview — the number under each half comes straight from where people
@@ -22741,11 +22833,22 @@ function drawLobbyKeys(w, ox, oy){
   const kb = w.kb; if (!kb) return;
   const T = TH;
   // One pass over the bodies rather than a search per key.
+  // ⚠️ **THE KEY YOU ARE STANDING ON LIGHTS UP, and for one build NOTHING DID.** This
+  // read `Math.min(1, (p.kbT||0) / LOBBYKB.dwell)` — and the dwell was DELETED when
+  // nothing-presses-itself replaced it (see `LOBBYKB`), so the divisor was `undefined`,
+  // `f` was `NaN`, `NaN > 0` is false and the map was **never written**. Every key drew
+  // at its resting alpha, so the board gave no feedback at all about which letter KICK
+  // was about to press — the one thing a highlight is for.
+  // ⚠️ **Binary, not a ramp, and that follows from the dwell being gone**: there is no
+  // progress to show any more, only "this is the one". Ramping it off `kbT` instead
+  // would strobe a held +/− square five times a second at `LOBBYKB.repeat` — the pulse
+  // the wind-up ring was reported for.
+  // ⚠️ Brighter than the `picked` state below on purpose: standing on a key is a thing
+  // you are doing right now, and the swatch highlight is a thing that is already true.
   const fill = new Map();
   for (const p of w.players){
     if (!p.kbKey || p.ctrl === 'bot') continue;
-    const f = Math.min(1, (p.kbT || 0) / LOBBYKB.dwell);
-    if (f > (fill.get(p.kbKey) || 0)) fill.set(p.kbKey, f);
+    fill.set(p.kbKey, 1);
   }
   const ink = T.line || '#ffffff';
   ctx.save();
@@ -27953,6 +28056,7 @@ if (window.__MAGNETDEBUG) {
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
+    pollLobbyPads, stepWarmup, stepLobbyKeys,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,
     get resultIdle(){ return resultIdle; }, set resultIdle(v){ resultIdle=v; },

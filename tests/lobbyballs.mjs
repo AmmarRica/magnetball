@@ -64,8 +64,15 @@ const r = await p.evaluate(() => {
   o.bothHalvesStocked = o.topHalf >= 1 && o.botHalf >= 1;
   // ⚠️ Somebody JOINS. `lobbyHumans` is what the count reads, so promoting a bot to a
   // human seat is the same event as a pad waking up, without needing a fake gamepad.
+  // ⚠️ Promoted to a TOUCH seat, and it used to be `ctrl:'gamepad'` with `padIndex:3`.
+  // That stopped being a shortcut and started being a lie the moment `pollLobbyPads`
+  // arrived: it runs first in `stepWarmup` and hands back any gamepad seat whose pad is
+  // not in `connectedGamepadIndices()`, so a seat claiming a pad that was never plugged
+  // in was converted straight back to a bot in the same step and no ball ever arrived.
+  // That is the fix working. This block is about the BALL COUNT following the number of
+  // people in the room, and a touch seat is a person by the same predicate.
   const bot = w.players.find(q => q.ctrl === 'bot');
-  bot.ctrl = 'gamepad'; bot.padIndex = 3;
+  bot.ctrl = 'human2';
   M.step(w);
   o.afterJoin = allBalls(w).length;
   o.joinBringsABall = o.afterJoin === o.oneHuman + 1;

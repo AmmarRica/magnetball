@@ -2833,6 +2833,34 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
+- **A PAD ARRIVING OR LEAVING DURING WARM-UP** (`pollLobbyPads`, called first in
+  `stepWarmup`). ⚠️ **The one room built for people joining was the one room that ignored
+  them.** `pollDropIn` returns early on `w.state === 'warmup'` under the comment *"warm-up
+  already hands seats to pads (that is what it is for)"* — and it does not: seats are dealt
+  ONCE, in `startMatch`, and `subWaitFor` is the only other thing in the file that ever
+  hands one out. So a controller woken up in the lobby got a BALL (`syncLobbyBalls` runs
+  every step) and a reset idle clock (`stepLobbyClock` watches the pad count) and **no body
+  to drive**. Same shape as `sel.controllers` shipping `off`: the game could see the pad and
+  gave it nothing.
+  ⚠️ **A JOINER WALKS STRAIGHT ON — no touchline, no START.** That is the whole difference
+  from the mid-match path and it is the character of the room: a body arrives beside the
+  halfway line undecided, exactly where `enterWarmup` puts everybody, and you pick a side by
+  walking into a half. Asking for a START out here would be asking for the button that ENDS
+  warm-up.
+  ⚠️ **A LEAVER BECOMES A BOT IN PLACE**, which is `dropOut`'s rule mid-match and needs no
+  new machinery: `lobbyPlan` is read fresh every frame, so the half that just lost a person
+  is one short, the converted body is the spare bot standing right there, and
+  `stepLobbyBots` puts it back in the same shirt on the same step. Left as a seat it is a
+  body nobody can drive AND one `lobbyPlan` still counts as a person on that half — so the
+  preview lies and `lobbyStart` fields a statue for the whole match. It keeps `_padWas`, so
+  a pad that hiccups and comes back **reclaims its own body**, name and typed letters
+  included.
+  ⚠️ **Gated on `padsTakeSeats()` and deliberately NOT on `sel.dropIn`** — that setting is
+  about interrupting a match in progress, and this room's entire purpose is people arriving
+  and picking sides. ⚠️ **A cup tie takes no joiners**: a tie is two entrants and one body a
+  side (which is why `startCupMatch` borrows 1v1), so a third pad would field a bot against
+  somebody the draw never named. Leavers are still handled — an undriveable body is worse in
+  a tournament, not better. `tests/warmupjoin.mjs`.
 - **A GOAL BELONGS TO THE HALF IN FRONT OF IT** (`lobbyInGoal`, `lobbyAllInGoal`).
   ⚠️ `lobbyOutside` used to call the pocket "sitting this one out", so **everybody into
   a goal** — the third way to start a match, alongside START and the countdown — handed
@@ -2915,10 +2943,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the keys is *undecided* and walking into a half is still the side pick the lobby
   already had. On the pitch it would be a second meaning for standing somewhere,
   fighting the one the lobby exists for.
-  ⚠️ **A DWELL, never a footstep.** A key is a body and a half across, so walking over one
-  crosses it in ~0.18s while standing presses at `LOBBYKB.dwell`; without that, crossing
-  the keyboard on the way to the pitch spells a word. Latched until the body LEAVES that
-  key, or standing still types sixty letters a second.
+  ⚠️ **NOTHING PRESSES ITSELF — KICK is the press, and `LOBBYKB.dwell` NO LONGER EXISTS.**
+  There was a dwell (stand on a key for 0.4s and it typed) and it fired while you were
+  only crossing the board on your way to the pitch, which is a keyboard typing at you.
+  It also made a DOUBLE LETTER unreachable: a dwell has to latch until the body LEAVES
+  the key or standing still types sixty letters a second, so "QQ" meant walking off Q and
+  back on. A tap fires the key under you at once and re-arms on release.
+  ⚠️ **`drawLobbyKeys` WENT ON DIVIDING BY THE DELETED CONSTANT for a build**, and the
+  failure was silent in the worst way: `(p.kbT||0) / undefined` is `NaN`, `NaN > 0` is
+  false, so the highlight map was never written and **no key ever lit up**. The board gave
+  no feedback at all about which letter KICK was about to press. The highlight is BINARY
+  now, which is what is left once there is no progress to show — and a ramp off `kbT`
+  would strobe a held +/− square five times a second at `LOBBYKB.repeat`, which is the
+  pulse the wind-up ring was reported for.
   ⚠️ **The first press CLEARS** — you are writing your name, not appending to "You".
   ⚠️ **LAID OUT IN SCREEN TERMS, THEN MAPPED TO THE WORLD.** A keyboard IS its layout —
   rows running across, under the pitch — so `buildLobbyKeys` builds the whole block in a
@@ -2934,13 +2971,10 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   its side — still outside the pitch, so `lobbySideOf` still answers −1 and the
   placement rule the feature rests on is intact. The recentre is along **`u`**, the axis
   the pitch is centred on.
-  ⚠️ **KICK PRESSES THE KEY UNDER YOU, and it is the only way to type a DOUBLE LETTER.**
-  The dwell has to latch until the body LEAVES the key (standing still would otherwise
-  type sixty letters a second), which makes "QQ" reachable only by walking off Q and
-  back on. A tap fires at once and re-arms on release. ⚠️ Latched on the **BUTTON**, not
-  the key, so holding KICK and walking across the board does not type the row you
-  crossed; and a tap sets `kbDone` and winds `kbT` to zero, or the dwell fires again on
-  top of it a moment later.
+  ⚠️ **Latched on the BUTTON, not the key**, so holding KICK and walking across the board
+  does not type the row you crossed. ⚠️ **A +/− square REPEATS while KICK is held and a
+  letter never does** (`LOBBYKB.repeat`): a letter you meant once is a letter, but going
+  1v1 to 8v8 a tap at a time is fourteen taps, which is a chore rather than a control.
   ⚠️ **THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES**, and the letters are
   the whole point of the feature, so this is the thing to check after touching any of
   it. `drawLobbyKeys` runs AFTER `pitchXform` is restored, on points put through
