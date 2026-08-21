@@ -595,6 +595,19 @@
     /* Slot tiles: smaller than a bundle, big enough to tell two pool balls apart. */
     #slotRows .opt canvas, #sfxSetPick .opt canvas { width: 56px; height: 56px; }
     #slot_palette .opt canvas { width: 60px; height: 38px; }
+    /* Your own pitch/surround colours, under the palette tiles. ⚠️ The swatch is 44px
+       so it clears the tap-target floor the whole menu is held to — a native colour
+       input renders tiny by default and would be the hardest thing on the page to hit,
+       which is exactly what .infobtn was fixed for. */
+    .colrow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0 2px; }
+    .colcell { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; }
+    .colcell input[type="color"] {
+      width: 44px; height: 44px; padding: 0; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--edge); background: transparent;
+    }
+    .colcell input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+    .colcell input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 7px; }
+    .colreset { min-height: 44px; padding: 0 14px; font-size: 12px; }
     .opt.locked { opacity: .6; }
     .opt.locked canvas { filter: grayscale(1) brightness(.7); }
 
@@ -4609,7 +4622,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260821.1120AM';
+const VERSION = '20260821.0215PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4625,6 +4638,14 @@ const VERSION = '20260821.1120AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260821.0215PM', title: 'Pick your own pitch colour',
+    added: [
+      '<b>You can set the pitch and the surround to any colour you like</b> \u2014 Theme \u2192 Background, under the palette tiles. Pick a palette for everything else and then make the grass whatever green (or purple) you want.',
+      'The mown stripes, the markings and the scorebug all follow the colour you pick, so a court can never end up with lines you cannot see on it. One button puts the palette\u2019s own colours back.',
+    ],
+    changed: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260821.1120AM', title: 'Finding the gap',
     added: [
       '<b>A second pitch with a gap in it: Island.</b> Exactly the size of Classic, so it is the court you already know with a hole in the middle of it — and the lanes either side are wide, where Faceoff Orbit\u2019s are a squeeze.',
@@ -5467,7 +5488,14 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // what "a football game" looks like before you have chosen anything, and it is
             // what a reset should give you back. `neon` was a striking first impression and
             // a strange default — it is one tap away in Theme.
-            look: { palette:'grass', field:'none', discs:'none', ball:'classic', trail:'dots' },
+            // ⚠️ `court` and `surround` are the player's OWN colours, laid over whatever
+            // palette is picked, and empty means "use the palette's". They live in `look`
+            // beside the slots but are deliberately NOT slots: `SLOT_KEYS` drives the
+            // Theme card's chips, `bundleSlots` and `currentBundle`, so a seventh entry
+            // there would give them a tab of their own and make a bundle's identity
+            // depend on them — pick a colour and your theme would read "Custom".
+            look: { palette:'grass', field:'none', discs:'none', ball:'classic', trail:'dots',
+                    court:'', surround:'' },
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
             // Gamepad button map (standard layout defaults: dpad 12-15 + A). Rebindable.
@@ -6182,9 +6210,44 @@ function cachedSwatch(key, make, fixed){
   if (cv === undefined){ cv = make() || null; m.set(key, cv); }
   return cv;
 }
+// A hex, or '' for anything else. The stored value comes from a colour input, an
+// imported save (`applySaveDoc` validates nothing) or a shared settings sheet, so it is
+// checked rather than trusted — the standing rule that every lookup off `sel` falls back.
+function lookHex(v){ return /^#[0-9a-f]{6}$/i.test(v || '') ? v.toLowerCase() : ''; }
+function courtCol(){ return lookHex(sel.look && sel.look.court); }
+function surroundCol(){ return lookHex(sel.look && sel.look.surround); }
+// ⚠️ **THE PALETTE'S OWN COLOURS, WITH YOURS ON TOP — AND IT RETURNS A COPY.**
+// `applyTheme` did `TH = t.pitch`, a direct reference into the shipped `THEMES` table, so
+// writing an override into `TH` would edit the palette ITSELF for the rest of the
+// session: switch away and back and your colour would still be baked into Grass.
+// Untouched when you have chosen nothing, so the default path allocates nothing.
+function paintedPitch(t){
+  const p = t.pitch, c = courtCol(), s = surroundCol();
+  if (!c && !s) return p;
+  const out = Object.assign({}, p);
+  if (c){
+    out.court = c;
+    // ⚠️ **THE MOW SURVIVES.** Six of the shipped palettes set `stripeA === stripeB` on
+    // purpose — a metal deck and a tactics board do not have mown stripes — so the two
+    // are re-derived by asking whether THIS palette is striped at all, never by always
+    // adding a stripe or always removing one.
+    const flat = p.stripeA === p.stripeB;
+    out.stripeA = c;
+    out.stripeB = flat ? c
+      : rgbToHex(mixCol(c, relLum(c) > 0.35 ? '#000000' : '#ffffff', 0.08));
+    // ⚠️ **A FLOOR, NOT A REPAINT** — the rule `ballSpotInk` already follows. A marking
+    // that still reads is left exactly as the palette drew it; one that has vanished into
+    // the colour you picked is swapped for the ink that colour can carry. 2.5 is MEASURED:
+    // the lowest any shipped palette scores is 2.62 (GameMan's white on sky blue), so no
+    // shipped court can be repainted by this line — it only ever fires on a choice.
+    if (contrastRatio(flatten(p.line, c), c) < 2.5) out.line = pickTextColor(c);
+  }
+  if (s) out.fieldBg = s;
+  return out;
+}
 function applyTheme(key){
   const t = THEMES[key] || THEMES.neon;
-  TH = t.pitch;
+  TH = paintedPitch(t);
   clearSwatchCache();          // every cached tile was painted against the old inks
   const r = document.documentElement.style, u = t.ui;
   r.setProperty('--bg-grad', u.grad);
@@ -6219,7 +6282,11 @@ function applyTheme(key){
 
   // The floating pills (scorebug, HUD buttons, replay bar, toasts) get their own
   // surface and their own inks, because what's behind them is the court, not the page.
-  const pill = flatten(rgba(u.bg, OVERLAY_A), t.pitch.court || u.bg);
+  // ⚠️ `TH.court`, not `t.pitch.court` — the scorebug and the HUD buttons float over the
+  // court, so their inks have to be picked against the colour actually being painted. Read
+  // from the palette instead, a chosen court would leave the pill ink measured against a
+  // background that is no longer there.
+  const pill = flatten(rgba(u.bg, OVERLAY_A), TH.court || u.bg);
   r.setProperty('--overlay', rgba(u.bg, OVERLAY_A));
   r.setProperty('--overlay-solid', pill);
   r.setProperty('--overlay-ink', rgbToHex(readableInk(u.text, pill)));
@@ -6679,9 +6746,17 @@ function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
 
 // By index, not on the player — see labelA above for why.
 const SLOTS = {
-  palette: { label:'Background', emoji:'🎨', hint:'Page and pitch colours.',
+  palette: { label:'Background', emoji:'🎨', hint:'Page and pitch colours. Pick a palette, then set the pitch and the surround to any colour you like — the markings, the mow and the scorebug all follow.',
              keys:()=>Object.keys(THEMES), name:k=>THEMES[k].name,
-             get:()=>sel.look.palette, set:k=>{ sel.look.palette = k; applyTheme(k); } },
+             get:()=>sel.look.palette, set:k=>{ sel.look.palette = k; applyTheme(k); },
+             // ⚠️ An `extra` hook rather than an `if (slot === 'palette')` in the pane
+             // loop: the loop stays one generic builder and the slot that wants a control
+             // of its own declares it, which is the same shape as everything else here.
+             // ⚠️ Wrapped in an arrow, not `extra: buildCourtColours`. `SLOTS` is a
+             // top-level `const` whose initialiser runs immediately, so a bare reference
+             // is read AT BOOT — fine for a `function` declaration, and the nineteenth
+             // temporal-dead-zone crash in this file the day somebody makes it a `const`.
+             extra: (pane) => buildCourtColours(pane) },
   field:   { label:'Field', emoji:'🏟', hint:"What's painted on the pitch itself.",
              keys:()=>['none'].concat(Object.keys(DYN_FIELDS)),
              name:k=>k==='none' ? 'Plain' : DYN_FIELDS[k].name,
@@ -9785,6 +9860,72 @@ function buildBallLookPick(){ const h = $('ballLookPick'); if (h) buildSlotPicke
 // One tile strip for one theme slot, painted into whatever host is handed over —
 // the Theme card stacks all five, the Ball and Sound cards each show one of them
 // again. Same builder, same state, so a card can't drift from the theme.
+// YOUR OWN PITCH AND SURROUND COLOURS, under the palette tiles.
+// ⚠️ **A palette is all-or-nothing, and that was the actual gap.** The Theme card already
+// had "Background — page and pitch colours" and "Field — what's painted on the pitch", so
+// a third tab called Pitch background would have been a new door onto a room you are
+// already standing in: the mistake recorded when the standalone Ball card was deleted.
+// What could not be done at all was saying "make the court THIS green", so that is what
+// this adds, in the tab that already claims to own the colours.
+// ⚠️ **Two native `<input type="color">`**, not a grid of preset swatches: presets are
+// another `THEMES`-shaped list to keep in step, and the platform picker is already
+// keyboard-accessible and knows about the phone's own colour UI. There is precedent —
+// VJ Mode's deck tint is the same control.
+// ⚠️ **Empty means "the palette's", and that is why Reset CLEARS rather than writing the
+// palette's current colour in.** Stored, a court colour copied from Grass would silently
+// stop following the palette: switch to Rockpool and you would still be on Grass's green
+// with no way to tell why.
+function buildCourtColours(pane){
+  if (!pane) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'colrow';
+  const one = (key, label) => {
+    const box = document.createElement('label');
+    box.className = 'colcell';
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    // ⚠️ The INPUT shows the palette's colour when nothing is chosen, so opening the
+    // picker starts from what you can see rather than from black. `sel.look[key]` stays
+    // empty until you actually pick, which is what keeps it following the palette.
+    const live = key === 'court' ? (TH.court || '#000000') : (TH.fieldBg || '#000000');
+    inp.value = lookHex(sel.look[key]) || (lookHex(live) || '#000000');
+    inp.oninput = () => {
+      sel.look[key] = lookHex(inp.value);
+      applyTheme(sel.look.palette); saveSel();
+      syncCourtColours();
+    };
+    const cap = document.createElement('span');
+    cap.textContent = label;
+    box.appendChild(inp); box.appendChild(cap);
+    return box;
+  };
+  wrap.appendChild(one('court', 'Pitch'));
+  wrap.appendChild(one('surround', 'Surround'));
+  const rst = document.createElement('button');
+  rst.type = 'button'; rst.className = 'ghost colreset'; rst.id = 'colReset';
+  rst.textContent = '↺ Palette colours';
+  rst.onclick = () => {
+    sel.look.court = ''; sel.look.surround = '';
+    applyTheme(sel.look.palette); saveSel();
+    buildSettings(); updatePreview();
+  };
+  wrap.appendChild(rst);
+  pane.appendChild(wrap);
+  // ⚠️ The button is passed IN, not looked up. `buildCourtColours` is called from the
+  // pane loop BEFORE the pane is appended to `#slotRows`, so the whole subtree is still
+  // detached and `getElementById` finds nothing — the lookup form silently did nothing
+  // and shipped a Reset that was live with no colours to reset.
+  syncCourtColours(rst);
+}
+// Only the "using your colours / using the palette's" state, written on every pick.
+// ⚠️ NOT a `buildSettings()` — that is a ~24ms rebuild of eleven cards, and this runs on
+// every drag of a colour wheel. Same argument `syncArcade` and `buildSndMaster` make.
+function syncCourtColours(btn){
+  const b = btn || $('colReset'); if (!b) return;
+  const on = !!(courtCol() || surroundCol());
+  b.disabled = !on;
+  b.style.opacity = on ? '' : '.45';
+}
 function buildSlotPicker(slot, host){
   const S = SLOTS[slot]; if (!host || !S) return;
   host.innerHTML = '';
@@ -12374,6 +12515,8 @@ function buildSettings(){
       const row=document.createElement('div'); row.className='opts tilewrap'; row.id='slot_'+slot;
       pane.appendChild(row);
       buildSlotPicker(slot, row);
+      // A slot may carry its own control under the tiles — see SLOTS.palette.
+      if (S.extra) S.extra(pane);
       const h=document.createElement('div'); h.className='hint'; h.style.textAlign='left'; h.textContent=S.hint;
       pane.appendChild(h);
       sr.appendChild(pane);
@@ -27832,7 +27975,7 @@ if (window.__MAGNETDEBUG) {
     vjDeckAudio, vjDeckVideo, get vjView(){ return vjView; }, set vjView(v){ vjView=v; },
     vjCueDevice, vjDevices, vjKey, vjPush, VJ_CMDS,
     bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
-    bundlePitch, selectField,
+    bundlePitch, selectField, paintedPitch, courtCol, surroundCol, lookHex,
     liveSlots, applySlots, drawSlotsSwatch,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
     get swatchCache(){ return swatchCache; }, get swatchFixed(){ return swatchFixed; },

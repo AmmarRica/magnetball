@@ -544,6 +544,47 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
+- **YOUR OWN PITCH AND SURROUND COLOURS** (`sel.look.court`, `sel.look.surround`,
+  `lookHex`, `courtCol`, `surroundCol`, `paintedPitch`, `buildCourtColours`,
+  `syncCourtColours`). Two colour inputs under the palette tiles in Theme → Background.
+  ⚠️ **NOT a seventh SLOT, and that is load-bearing.** `SLOT_KEYS` drives the Theme card's
+  chips, `bundleSlots` AND `currentBundle` — so a colour slot would give it a tab of its
+  own *and* make a bundle's identity depend on it, which means picking a colour would
+  silently rename your theme to **Custom**. It lives in `sel.look` beside the slots and is
+  not one. `tests/courtcolour.mjs` pins that from both ends.
+  ⚠️ **NOT A NEW TAB EITHER.** The card already had *Background — page and pitch colours*
+  and *Field — what's painted on the pitch*, so a third "Pitch background" tab would be a
+  new door onto a room you are already standing in — the argument that deleted the
+  standalone Ball card. What could not be done at all was saying "make the court THIS
+  green", so that is what was added, in the tab that already claims the colours.
+  ⚠️ **`paintedPitch` RETURNS A COPY, and the reason is a landmine.** `applyTheme` did
+  `TH = t.pitch` — a direct reference into the shipped `THEMES` table — so writing an
+  override into `TH` would edit the palette ITSELF for the rest of the session: switch away
+  and back and your colour is still baked into Grass, with nothing to point at.
+  ⚠️ **THE MOW SURVIVES.** Six palettes ship `stripeA === stripeB` on purpose (a metal deck
+  and a tactics board have no mown stripes), so the two are re-derived by asking whether
+  THIS palette is striped — never by always adding a stripe or always removing one.
+  ⚠️ **The marking ink is a FLOOR, not a repaint** — the rule `ballSpotInk` already follows.
+  A line that still reads is left exactly as the palette drew it; one that has vanished into
+  the chosen colour is swapped for the ink that colour can carry. **2.5 is MEASURED**: the
+  worst any shipped palette scores is **2.62** (GameMan's white on sky blue), so no shipped
+  court can be repainted by that line — it only ever fires on a choice.
+  ⚠️ **Checking that is VACUOUS the obvious way, and a sabotage proved it.** With no colour
+  set `paintedPitch` early-returns before the floor is reached, so "no palette is repainted
+  with nothing chosen" passes on a build whose threshold repaints everything. The suite sets
+  each palette's court to **its own colour** — a no-op choice that still runs the whole path.
+  ⚠️ **`--overlay-*` reads `TH.court`, not `t.pitch.court`**: the scorebug and HUD buttons
+  float over the court, so their inks must be picked against the colour actually painted.
+  ⚠️ **Empty means "the palette's", which is why Reset CLEARS rather than storing the
+  palette's current colour** — stored, it would stop following the palette and you could not
+  tell why. ⚠️ `lookHex` validates, because the value can arrive from an imported save
+  (`applySaveDoc` validates nothing) or a shared settings sheet.
+  ⚠️ `buildCourtColours` is reached through an **`extra` hook on the slot**, so the pane loop
+  stays one generic builder — and it is wrapped in an arrow (`extra:(pane)=>…`) because
+  `SLOTS` is a top-level `const` whose initialiser runs at boot. ⚠️ `syncCourtColours` takes
+  the button as an ARGUMENT: the pane is still detached from the document when it runs, so a
+  `getElementById` there silently does nothing and shipped a Reset that was live with no
+  colours to reset. Render only — `tests/courtcolour.mjs` hashes the world over 900 steps.
 - **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares six — `palette`
   (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
   (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key), `trail` (a `TRAIL_LOOKS` key)
@@ -3765,7 +3806,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 117 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 118 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
