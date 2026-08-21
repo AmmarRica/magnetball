@@ -2828,7 +2828,12 @@ const FIELDS = {
   // stops being a corridor and starts being a pitch.
   // ⚠️ Corners are SQUARE. A rounded end would round off the base platforms the field
   // painter draws into them, and the two ends are meant to read as built structures.
-  faceoff: { name:'Faceoff Orbit', emoji:'🛰️', W:340, L:1020, goal:150, corner:0, net:66 },
+  // ⚠️ **THE GAP IS THE ONLY INTERIOR GEOMETRY ANY FIELD HAS**, and it is on the FIELD
+  // rather than in the painter — `DYN_FIELDS.faceoff` may be swapped out for Grass and the
+  // hole in the middle has to still be there, because it is where a body can go.
+  // See `gapRects` below for what the three fractions mean and why they are those numbers.
+  faceoff: { name:'Faceoff Orbit', emoji:'🛰️', W:340, L:1020, goal:150, corner:0, net:66,
+             gap:{ w:0.50, l:0.34, slot:0.15 } },
 };
 // ⚠️ **A FIELD'S SHAPE IS `(corner, cut)`, AND IT IS THREE PHYSICS CLASSES, not a
 // continuum.** `buildGeometry` emits a plain rectangle for `corner === 0`, **four arcs**
@@ -2843,8 +2848,91 @@ const FIELDS = {
 // `mapClean` always emits it as a real boolean (`cut: !!m.cut`) — `!!f.cut` covers both.
 // ⚠️ `other` is a genuine catch-all rather than a synonym for chamfered: a shape that does
 // not exist yet lands somewhere sensible instead of falling out of the picker.
-function fieldShape(f){ return ((f && f.corner) | 0) <= 0 ? 'square' : (f && f.cut ? 'other' : 'round'); }
+// ⚠️ A GAP is a FOURTH physics class and so it answers `other` before anything else is
+// asked. `other` was written as a genuine catch-all for exactly this — a shape that did
+// not exist yet — so this is the case it was left open for rather than a new bin.
+function fieldShape(f){
+  if (f && f.gap) return 'other';
+  return ((f && f.corner) | 0) <= 0 ? 'square' : (f && f.cut ? 'other' : 'round');
+}
 const FIELD_SHAPES = [['square', 'Square'], ['round', 'Rounded'], ['other', 'Other']];
+
+// ============================================================
+//  THE GAP — a hole in the middle of the pitch
+// ============================================================
+// A region players cannot walk into, sitting in the middle of the court, so the only way
+// from your end to theirs is one of the two channels down the touchlines.
+//
+// ⚠️ **ONE spec, ONE reader.** `f.gap` is three fractions and `gapRects` is the only
+// place in the file that turns them into rectangles — the physics, the pitch drawing,
+// the picker tile, the bot targets and the theme's own seam all ask it. Four hand-written
+// copies of the boundary shape is already the file's standing complaint about
+// `buildGeometry`/`drawPitch`/`drawFieldPreview`/`pooltable.path`; the gap does not get
+// to repeat it.
+// ⚠️ **FRACTIONS of the field, never pixels from a drawing** — the same rule
+// `TARGET_SPOTS` and `DYN_FIELDS.tacticsboard` follow. The courts run from Futsal to
+// Leviathan and differ threefold, so a gap given in world units would be a bollard on one
+// and a wall across the other.
+//
+// ⚠️ **IT IS SPLIT AT THE HALFWAY LINE, and that is not decoration.** The kickoff spot is
+// dead centre (`resetKickoff` puts the ball at 0,0) and `KICKOFF_CIRCLE_R === CENTER_R` —
+// the half-line rule's gate IS the drawn circle — so a single unbroken block over the
+// middle would put the ball, the centre circle and the gate somewhere no one can stand.
+// The slot runs SIDEWAYS, connecting the two channels to each other, so it costs the
+// feature nothing: it is not a way to reach the other END.
+//
+// The three numbers are taste; what they must satisfy is not, and `tests/gapfield.mjs`
+// pins the invariants rather than the numbers:
+//   • the channels take two bodies abreast — `W/2 - hx` is 85 on Faceoff against a
+//     30-wide player and a 20-wide ball, and anything tighter means you cannot get past
+//     a defender at all on a court this thin;
+//   • the slot clears `CENTER_R` (58) with room for a body either side of the ball;
+//   • the blocks clear the kickoff formation — `layTeam` puts the lead body at
+//     `±halfL*0.30`, which is ±153 here against a block edge at 122.
+function gapRects(f){
+  const g = f && f.gap;
+  if (!g) return [];                       // every other field: no allocation, no work
+  const hx = f.W * g.w / 2, hy = f.L * g.l / 2, sl = f.L * g.slot / 2;
+  return [ { x0:-hx, x1:hx, y0:-hy, y1:-sl },      // the block in team 1's half
+           { x0:-hx, x1:hx, y0: sl, y1: hy } ];    // ...and its mirror in team 0's
+}
+// Nudge a point out of whichever block holds it, by the shortest way out. Returns the
+// point untouched when it is already clear, which is every point on every other field.
+// ⚠️ The pad is the caller's radius: a body's CENTRE being outside the rect is not
+// enough, or it stands half inside the wall it is supposed to be kept out of.
+function gapPush(f, x, y, pad){
+  const rs = gapRects(f);
+  for (const g of rs){
+    const p = pad || 0;
+    if (x < g.x0 - p || x > g.x1 + p || y < g.y0 - p || y > g.y1 + p) continue;
+    const dL = x - (g.x0 - p), dR = (g.x1 + p) - x, dT = y - (g.y0 - p), dB = (g.y1 + p) - y;
+    const m = Math.min(dL, dR, dT, dB);
+    if (m === dL) x = g.x0 - p; else if (m === dR) x = g.x1 + p;
+    else if (m === dT) y = g.y0 - p; else y = g.y1 + p;
+  }
+  return { x, y };
+}
+// Does the segment a→b cross a gap block? Used to decide whether a bot needs to go round.
+function gapBlocks(f, ax, ay, bx, by, pad){
+  const p = pad || 0;
+  for (const g of gapRects(f)){
+    if (segRectHit(ax, ay, bx, by, g.x0 - p, g.y0 - p, g.x1 + p, g.y1 + p)) return g;
+  }
+  return null;
+}
+// Segment vs axis-aligned rect, by the slab method — no allocation, no trig.
+function segRectHit(ax, ay, bx, by, x0, y0, x1, y1){
+  if ((ax >= x0 && ax <= x1 && ay >= y0 && ay <= y1)) return true;
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dy = by - ay;
+  for (const [p, q] of [[-dx, ax - x0], [dx, x1 - ax], [-dy, ay - y0], [dy, y1 - ay]]){
+    if (p === 0){ if (q < 0) return false; continue; }
+    const r = q / p;
+    if (p < 0){ if (r > t1) return false; if (r > t0) t0 = r; }
+    else       { if (r < t0) return false; if (r < t1) t1 = r; }
+  }
+  return t0 <= t1;
+}
 
 // ============================================================
 //  MAP MAKER — fields you build yourself
@@ -4511,7 +4599,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260820.1000AM';
+const VERSION = '20260821.0930AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4527,6 +4615,17 @@ const VERSION = '20260820.1000AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260821.0930AM', title: 'A gap in the middle',
+    added: [
+      '<b>Faceoff Orbit has a hole in the middle of it that you cannot walk into.</b> To get from your end to the other one you have to take one of the two lanes down the sides, so every attack is a choice of which way round to go and every defence is a guess at which one you picked. The ball bounces off it too, so you can pass and shoot off its faces.',
+      'The kickoff spot, the centre circle and the halfway line are all still open — the hole is in two pieces with a gap across the middle, and that gap runs sideways, so it lets you switch lanes but never takes you to the other end.',
+    ],
+    changed: [
+      '<b>Faceoff Orbit has moved to the \u201cOther\u201d tab in the pitch picker</b>, because it is no longer an ordinary rectangle.',
+      'The bots know about the hole and run round it rather than into it.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260820.1000AM', title: 'Faceoff Orbit actually orbits',
     added: [],
     changed: [
@@ -9457,6 +9556,15 @@ function drawFieldPreview(c, F, cw, ch, grass, bare, surface){
   c.beginPath(); c.moveTo(L,cy); c.lineTo(R,cy); c.stroke();
   c.beginPath(); c.arc(cx,cy, Math.max(4*k, CENTER_R*s), 0, 7); c.stroke();
   c.beginPath(); c.arc(cx,cy, 1.8*k, 0, 7); c.fillStyle=dot; c.fill();
+  // The gap, from the SAME `gapRects` the physics reads — a tile that showed a plain
+  // rectangle would be offering a pitch that is not the one you get, which is the
+  // argument this file already makes for the map maker drawing its preview from
+  // `buildGeometry`.
+  for (const g of gapRects(F)){
+    const gx=X(g.x0), gy=Y(g.y0), gw=(g.x1-g.x0)*s, ghh=(g.y1-g.y0)*s;
+    c.fillStyle = T.fieldBg || '#0a0d18'; c.fillRect(gx, gy, gw, ghh);
+    c.strokeStyle = T.obstacle || line; c.lineWidth = 1.5*k; c.strokeRect(gx, gy, gw, ghh);
+  }
   // goals — top defends blue, bottom red (matches drawGoal)
   const goal=(sign,col)=>{ const y=Y(sign*hl), ny=y+sign*net*s;
     c.strokeStyle=col; c.lineWidth=bare?3*k:2*k;
@@ -14552,6 +14660,27 @@ function buildGeometry(w){
       for (const co of corners) w.arcs.push({cx:co.cx, cy:co.cy, r:c, a0:co.a0, a1:co.a1, bCoef:cB, ballOnly:true});
     }
   }
+
+  // ---- the gap: the one surface on the pitch that stops a PLAYER -----------
+  // ⚠️ **NOT `ballOnly`, and that is the whole feature.** Every boundary wall above is,
+  // so a player may step a stride over the line to get at a wall-hugging ball; these are
+  // the exact opposite. `integrate` runs `if (!wall.ballOnly) collideWall(p, wall)`, so a
+  // plain untagged wall is already the mechanism — it is what `dWall` gives a drill.
+  // ⚠️ `collideWall` derives its normal per contact from the closest point on the segment
+  // and never stores one, so four segments enclose a rectangle that ejects a body from
+  // whichever side it is on. Nothing special is needed to make it solid both ways.
+  // ⚠️ `draw:true` is what `renderDrill` already paints interior walls with, so Break the
+  // Targets — the one drill that calls this function — gets the picture for free.
+  // ⚠️ `isGap` is for the reader and for the suites, never for the collider: nothing in
+  // the physics branches on it, or there would be two ideas of what a wall is.
+  for (const g of gapRects(f)){
+    w.walls.push(
+      {a:{x:g.x0,y:g.y0}, b:{x:g.x1,y:g.y0}, bCoef:cB, isGap:true, draw:true},
+      {a:{x:g.x1,y:g.y0}, b:{x:g.x1,y:g.y1}, bCoef:cB, isGap:true, draw:true},
+      {a:{x:g.x1,y:g.y1}, b:{x:g.x0,y:g.y1}, bCoef:cB, isGap:true, draw:true},
+      {a:{x:g.x0,y:g.y1}, b:{x:g.x0,y:g.y0}, bCoef:cB, isGap:true, draw:true},
+    );
+  }
 }
 
 function resetKickoff(w, initial){
@@ -14581,8 +14710,8 @@ function resetKickoff(w, initial){
   // Arrange players by team on their own half.
   const t0 = w.players.filter(p=>p.team===0);
   const t1 = w.players.filter(p=>p.team===1);
-  layTeam(t0, +1, halfL);   // team0 attacks up, starts on bottom half (+y)
-  layTeam(t1, -1, halfL);   // team1 on top half (-y)
+  layTeam(t0, +1, halfL, f);   // team0 attacks up, starts on bottom half (+y)
+  layTeam(t1, -1, halfL, f);   // team1 on top half (-y)
 
   for (const p of w.players){ p.kickUsed=false; p.kick=false; p.inX=0; p.inY=0; p.trap=false; p.trapT=0; p.trapUsed=false; p.chargeT=0; }
   w.finalGoal = false;              // ...and the slow-mo flag never survives a restart
@@ -14597,7 +14726,7 @@ function resetKickoff(w, initial){
   resetTrails();       // players teleport to their marks — don't smear a tail across the pitch
   playSfx('whistle');            // referee whistle at match start / after a reset to centre
 }
-function layTeam(list, side, halfL){
+function layTeam(list, side, halfL, field){
   const n = list.length;
   const spread = Math.min(list.length>1 ? 140 : 0, 160);
   list.forEach((p,i) => {
@@ -14606,6 +14735,11 @@ function layTeam(list, side, halfL){
     const depth = i===0 ? 0.30 : 0.55;
     p.x = off;
     p.y = side * halfL * depth;
+    // ⚠️ The gap is sized so the default lead spot clears it, but the roster is not
+    // fixed — a 6v6 spreads bodies right across the middle band — so the mark is put
+    // outside the blocks rather than trusted to be. `homeX/homeY` is written from the
+    // pushed spot, or `applyKickoffLine` walks them straight back into the wall.
+    if (field && field.gap){ const q = gapPush(field, p.x, p.y, p.r + 4); p.x = q.x; p.y = q.y; }
     p.homeX = p.x; p.homeY = p.y;              // formation spot (used to hold at kickoff)
     p.vx = 0; p.vy = 0;
     p.faceY = -side; p.faceX = 0;
@@ -17488,8 +17622,15 @@ function lobbySpotFor(w, team, slot, n){
   const side = team === 0 ? 1 : -1;
   const cnt = Math.max(1, n || 1), i = slot || 0;
   const span = Math.min(w.field.W * 0.72, cnt * 62);
-  return { x: cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span,
-           y: side * (w.field.L/2) * 0.30 };
+  const x = cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span;
+  const y = side * (w.field.L/2) * 0.30;
+  // ⚠️ Same rule as `layTeam` and `placeBerry`: nothing may be PLACED inside a gap
+  // block, because a block is a barrier and not a container — `collideWall` only acts
+  // within one radius of a face, so a body put down in the middle of four segments is
+  // touched by none of them and parks there. And `walkTo` sets position directly on a
+  // body `integrate` is ghosting, so it walks straight in. Faceoff Orbit's lobby row
+  // sits at exactly `±L/2 * 0.30`, which is inside a block.
+  return w.field.gap ? gapPush(w.field, x, y, PLAYER.r + 6) : { x, y };
 }
 // Staging movement, not gameplay: positions are set directly and velocity is held at
 // zero, exactly as the touchline placement already did. These bots never run the AI.
@@ -18998,6 +19139,14 @@ function placeBerry(w, b, i){
   const t = BERRY.ringMin + rnd() * (BERRY.ringMax - BERRY.ringMin);
   b.x = (rnd()*2 - 1) * halfW * 0.72;
   b.y = side * halfL * t;
+  // ⚠️ **NOTHING MAY EVER BE PLACED INSIDE A GAP BLOCK, because a block is a BARRIER and
+  // not a container.** `collideWall` bails at `dist >= d.r`, so it only ever acts within
+  // one radius of a face — a body deep inside four segments is touched by none of them
+  // and simply sits there for the rest of the match. Measured on Faceoff Orbit before
+  // this line: **three of the six berries spawned inside the gap** and never came out,
+  // which is half the mode's objective unreachable. Spawning is the only way in, so
+  // guarding the spawn is the whole fix. Same reason `layTeam` pushes a formation mark.
+  if (w.field.gap){ const q = gapPush(w.field, b.x, b.y, b.r + 6); b.x = q.x; b.y = q.y; }
   b.vx = 0; b.vy = 0; b.sqT = 0; b._goalCd = 0;
   b._px = b.x; b._py = b.y;    // a respawn is a teleport: don't let ix/iy streak it across
 }
@@ -19799,6 +19948,10 @@ const BOT = {
   separateR: 78,
   separateChaser: 0.35,      // the chaser yields less: it has somewhere to be
   wWall: 0.55,               // off-ball players peel away from the boards
+  // A gap block between a bot and where it wants to be. Heavier than the boards, and it
+  // has to be: peeling off a touchline is a preference, getting round the one thing on
+  // the pitch you cannot walk through is the only way to arrive at all.
+  wGap: 0.95,
   wallR: 46,
 
   // --- Interception. Fixed iteration count, no solver, no wall bounces.
@@ -20117,6 +20270,27 @@ function botSeparate(p, mates, out){
 }
 // Peel off the boards. Only for players who aren't going for the ball — a chaser
 // pinning a ball against the wall is doing its job.
+// Get round a gap block. A stick vector, like everything else in Layer 0 — see the call
+// site for why this is not a waypoint.
+// ⚠️ **The crossing is tested against the BARE block, never a padded one.** A body's
+// centre can never be inside the bare rect (`collideWall` holds it a radius off), so the
+// test is honest; padded, a bot standing against a face counts as *inside* the region and
+// the term never switches off, which is a body shoved sideways along a wall it has
+// already cleared.
+// ⚠️ **The side is decided by where the BODY is, and that is what makes it stable.**
+// Moving toward the nearer end makes it nearer still, so the choice reinforces itself
+// instead of flipping every tick; a "shortest total path" test flips whenever the two are
+// close, which is a bot juddering on the spot in front of the block.
+// ⚠️ The lateral push is the whole vector — there is deliberately no component AWAY from
+// the face. `collideWall` already cancels the seek's push into it, and adding a repulsion
+// on top just stops the bot hugging the block, which is the shortest way round it.
+function botGapAvoid(w, p, out){
+  out.x = 0; out.y = 0;
+  const t = p.aiTarget; if (!t) return;
+  const g = gapBlocks(w.field, p.x, p.y, t.x, t.y, 0);
+  if (!g) return;
+  out.x = (p.x - g.x0) <= (g.x1 - p.x) ? -1 : 1;
+}
 function botWallAvoid(w, p, out){
   const mW = w.field.W/2, mL = w.field.L/2;
   let x=0, y=0;
@@ -20809,19 +20983,57 @@ function runBot(w, p){
     if (p.team === 0) p.aiTarget.y = clamp(p.aiTarget.y, p.r + 6, mL);
     else              p.aiTarget.y = clamp(p.aiTarget.y, -mL, -(p.r + 6));
   }
+  // --- the gap: don't stand in it, and go ROUND it ------------------------
+  // ⚠️ **ONE PLACE, on purpose.** Bots have no obstacle awareness whatsoever — the
+  // formation slot, the support-grid cell and the strike waypoint are each clamped to the
+  // pitch RECTANGLE and will all happily name a point inside the gap, and `botArrive`
+  // then writes a stick straight at it for ever. This is downstream of all three, so one
+  // call covers every source rather than three that can drift.
+  // ⚠️ The stalemate breaker cannot help here and it was checked: it is armed on `wedged`
+  // — the strike waypoint being OUTSIDE the pitch rectangle — which an interior block
+  // never satisfies, and `botWallTangent` reads the boundary, so even armed it would push
+  // the ball back into the gap.
+  // ⚠️ **A DETOUR, not a repulsion field.** Pushed away from the face, a bot simply
+  // stalls against it; aimed at the block's CORNER it walks round. The blocks are convex,
+  // so one waypoint is enough and no pathfinding is needed.
+  // ⚠️ `botWallAvoid` is deliberately left alone — it is about the boards, and it stands
+  // down for the chaser, which is the one body that most needs to get round the gap.
+  // ⚠️ Inert on every other field: `gapRects` returns [] and both helpers return at once.
+  // ⚠️ Only the TARGET is corrected here — a slot or a grid cell inside the gap is a
+  // point no body can ever reach, so `botArrive` would write a stick at a wall for ever.
+  // Going ROUND the block is a STEERING job and is done in Layer 0 below, for the reason
+  // recorded there.
+  if (w.field && w.field.gap){
+    const q = gapPush(w.field, p.aiTarget.x, p.aiTarget.y, p.r + 6);
+    p.aiTarget.x = q.x; p.aiTarget.y = q.y;
+  }
 
   // --- Layer 0: arrive, then separate, then peel off the boards. Steering runs
   // every tick even though the target only moves at 10Hz.
-  const seek = {x:0,y:0}, sep = {x:0,y:0}, wall = {x:0,y:0};
+  const seek = {x:0,y:0}, sep = {x:0,y:0}, wall = {x:0,y:0}, gapv = {x:0,y:0};
   botArrive(w, p, p.aiTarget.x, p.aiTarget.y, seek);
   botSeparate(p, mates, sep);
   if (!iAmChaser && p.aiState !== 'carry') botWallAvoid(w, p, wall);
+  // ⚠️ **THE GAP IS A STEERING TERM, NOT A WAYPOINT, and the waypoint version was built
+  // first and measured worse than nothing.** Replacing `aiTarget` with a corner to walk
+  // round: (a) parks a bot ON the corner, because the corner is a place you ARRIVE at and
+  // the block is still between it and the real target — worst continuous pin against a
+  // face went from 19s with no gap handling at all to 51s with it; and (b) YANKS THE
+  // CHASER OFF THE BALL whenever the run at it happens to clip a block, which over three
+  // 90-second bot matches cost **7 goals down to 1**. A stick vector cannot do either: the
+  // bot keeps seeking the thing it wants and is pushed sideways while the block is in the
+  // way, which is what rounds it. That is also what Layer 0 IS — "everything here returns
+  // a stick vector; nothing writes a position, a velocity or a force".
+  // ⚠️ Applies to the chaser too, unlike `botWallAvoid`. That one stands down for a
+  // chaser because pinning a ball against the boards is doing its job; there is no such
+  // thing as pinning a ball against the middle of the pitch.
+  if (w.field && w.field.gap) botGapAvoid(w, p, gapv);
   // ⚠️ Space is the axis that most changes how a side LOOKS: a playmaker peeling off to
   // find room and a terrier happy to stand on top of somebody are the same steering
   // weight at two settings, and it is what stops every plan producing the same shape.
   const sw = BOT.wSeparate * botTypeM(p, 'space') * (iAmChaser ? BOT.separateChaser : 1);
-  let mx = seek.x*BOT.wSeek + sep.x*sw + wall.x*BOT.wWall;
-  let my = seek.y*BOT.wSeek + sep.y*sw + wall.y*BOT.wWall;
+  let mx = seek.x*BOT.wSeek + sep.x*sw + wall.x*BOT.wWall + gapv.x*BOT.wGap;
+  let my = seek.y*BOT.wSeek + sep.y*sw + wall.y*BOT.wWall + gapv.y*BOT.wGap;
   const ml = Math.hypot(mx,my);
   if (ml > 1){ mx/=ml; my/=ml; }
   p.inX = mx; p.inY = my;
@@ -22799,6 +23011,17 @@ function drawPitch(w){
   ctx.beginPath(); ctx.arc(wx(0), wy(0), CENTER_R*s, 0, 2*Math.PI); ctx.stroke();
   ctx.beginPath(); ctx.arc(wx(0), wy(0), 3, 0, 2*Math.PI); ctx.fillStyle=TH.centerDot; ctx.fill();
 
+  // ---- the gap ------------------------------------------------------------
+  // ⚠️ **Drawn HERE, not by the theme.** The gap is geometry — it is where a body can go
+  // — so it has to be on the pitch under every palette, and `DYN_FIELDS.faceoff` is a
+  // slot somebody may swap for Grass. It reads `gapRects` like everything else, so the
+  // shape you see and the shape you bounce off cannot disagree.
+  // ⚠️ Filled in `TH.fieldBg` — the OFF-PITCH tone — because what this is is the pitch not
+  // being there. Stroked in `TH.obstacle`, which every palette defines and which is the
+  // ink `renderDrill` already paints an interior wall in: on a light court the fill alone
+  // would be a pale patch on a pale pitch.
+  drawGap(w, s);
+
   // The net pocket mirrored onto the pitch: same mouth width, same depth, in FRONT
   // of the goal line. Gives you a read on how deep you are without looking at the
   // net. Drawn OPEN (three sides) — the goal line closes it, exactly like a six-yard
@@ -22820,6 +23043,42 @@ function drawPitch(w){
 
   // Goal nets (crosshatch) + goal line coloring
   drawGoal(w, -1); drawGoal(w, 1);
+  ctx.restore();
+}
+// The two blocks, on the pitch. Its own function because `drawPitch` is already long and
+// because the picker tile wants the same shape from a different projection — the only
+// thing the two share is `gapRects`, which is the point.
+function drawGap(w, s){
+  const rs = gapRects(w.field);
+  if (!rs.length) return;
+  ctx.save();
+  ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
+  ctx.setLineDash([]);
+  // ⚠️ MULTIPLY, never assign — the same rule the halfway-line gate and the goal boxes
+  // follow. `drawPitch` has already set `globalAlpha` to `vjMarkA()`, so a bare `= 1`
+  // here would undim the second block while the first stayed dimmed under heavy video.
+  const _mA = ctx.globalAlpha;
+  for (const g of rs){
+    const x = wx(g.x0), y = wy(g.y0), ww = (g.x1-g.x0)*s, hh = (g.y1-g.y0)*s;
+    ctx.fillStyle = TH.fieldBg || '#0a0d18';
+    ctx.fillRect(x, y, ww, hh);
+    ctx.strokeStyle = TH.obstacle || TH.line;
+    ctx.lineWidth = Math.max(2, 3*s);
+    ctx.strokeRect(x, y, ww, hh);
+    // A few hatch strokes so it reads as a hole rather than as a differently coloured
+    // part of the pitch — the same thing the drawing that asked for this used. Held
+    // well back, because it is scenery for a region nobody may stand in.
+    ctx.globalAlpha = 0.28 * _mA;
+    ctx.lineWidth = Math.max(1, 1.5*s);
+    const step = Math.max(10, ww/9);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, ww, hh); ctx.clip();   // hatching stays inside the block
+    ctx.beginPath();
+    for (let d = -hh; d < ww; d += step){ ctx.moveTo(x+d, y+hh); ctx.lineTo(x+d+hh, y); }
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = _mA;
+  }
   ctx.restore();
 }
 // Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
@@ -23576,21 +23835,40 @@ DYN_FIELDS.faceoff = {
     half(-1); half(1);
 
     // ---- the split down the middle -----------------------------------------
-    // A dark seam across the halfway line with a lit causeway through it. The seam is the
-    // "two worlds" read; the causeway is what stops it looking like a wall.
-    const seamH = H * ORBIT.seam;
-    c.fillStyle = voidCol; c.globalAlpha = 0.55;
-    c.fillRect(L, midY - seamH/2, W, seamH);
-    c.globalAlpha = 1;
-    const cw = W * ORBIT.causeway;
-    c.fillStyle = deck;
-    c.fillRect(L + (W - cw)/2, midY - seamH/2, cw, seamH);
-    c.strokeStyle = edge; c.globalAlpha = 0.8; c.lineWidth = Math.max(1, W*0.006);
-    c.beginPath();
-    c.moveTo(L + (W - cw)/2, midY - seamH/2); c.lineTo(L + (W - cw)/2, midY + seamH/2);
-    c.moveTo(L + (W + cw)/2, midY - seamH/2); c.lineTo(L + (W + cw)/2, midY + seamH/2);
-    c.stroke();
-    c.globalAlpha = 1;
+    // ⚠️ **THE SEAM FOLLOWS THE REAL GAP, and it used to be its exact opposite.** This
+    // painted a dark band across halfway with a lit causeway 30% of the width through the
+    // MIDDLE — "the middle is the way through, the sides are void" — which is now false
+    // twice over: the middle is the one place a body cannot go, and the sides are the
+    // only way past. A decoration that disagrees with the physics is the thing this file
+    // keeps having to fix (the wind-up ring, the map maker's preview, the replay drawn at
+    // ninety degrees), so it reads `gapRects` rather than being tuned to look right.
+    // ⚠️ The gap is the FIELD's, so it is only there when this theme is worn on that
+    // field — slots mix, and the theme over Classic keeps the seam it always had.
+    // ⚠️ With a gap there is NOTHING to draw here, and that is the point rather than an
+    // omission: the gap IS the split, `drawPitch` owns it (it is geometry, so it has to
+    // be on the pitch under every palette), and a second copy underneath would be covered
+    // by the first anyway — verified on a render, where the lip drawn here came back
+    // invisible under `drawGap`'s own stroke. What had to go was the causeway, not the
+    // idea. `edge` is still lit down each channel edge by the base plating above.
+    const gaps = (w && w.field) ? gapRects(w.field) : [];
+    if (!gaps.length) {
+      // No gap on this field: the original seam, a dark band across the halfway line with
+      // a lit causeway through it. The seam is the "two worlds" read; the causeway is
+      // what stops it looking like a wall.
+      const seamH = H * ORBIT.seam;
+      c.fillStyle = voidCol; c.globalAlpha = 0.55;
+      c.fillRect(L, midY - seamH/2, W, seamH);
+      c.globalAlpha = 1;
+      const cw = W * ORBIT.causeway;
+      c.fillStyle = deck;
+      c.fillRect(L + (W - cw)/2, midY - seamH/2, cw, seamH);
+      c.strokeStyle = edge; c.globalAlpha = 0.8; c.lineWidth = Math.max(1, W*0.006);
+      c.beginPath();
+      c.moveTo(L + (W - cw)/2, midY - seamH/2); c.lineTo(L + (W - cw)/2, midY + seamH/2);
+      c.moveTo(L + (W + cw)/2, midY - seamH/2); c.lineTo(L + (W + cw)/2, midY + seamH/2);
+      c.stroke();
+      c.globalAlpha = 1;
+    }
     c.restore();
   },
 };
@@ -27372,6 +27650,7 @@ if (window.__MAGNETDEBUG) {
   window.__magnet = {
     get world(){ return world; }, get TH(){ return TH; }, pads, sel, FIELDS, SFX, THEMES,
     fieldShape, FIELD_SHAPES, buildFieldShapeTabs, setFieldShapeTab, fieldShapeNow,
+    gapRects, gapPush, gapBlocks,
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, set lastReplay(v){ lastReplay = v; }, playReplay, saveClip, repMime,

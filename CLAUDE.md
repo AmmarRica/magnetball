@@ -101,6 +101,89 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   **ball** but not players — that's every boundary INCLUDING the net, so the classic
   step-out margin is uniform all the way round. What actually holds a player in is
   `integrate`'s clamp to `halfL/halfW + 20`, never a wall. `tests/netpass.mjs`.
+- **THE GAP — a hole in the middle of the pitch** (`f.gap`, `gapRects`, `gapPush`,
+  `gapBlocks`, `segRectHit`, `drawGap`, `botGapAvoid`, `BOT.wGap`). Asked for with a
+  drawing: a box in the middle you cannot walk into, and two curved arrows showing that
+  to reach the other end you go ROUND it. On **Faceoff Orbit** only.
+  ⚠️ **THE ONLY INTERIOR GEOMETRY ANY FIELD HAS, and the first `FIELDS` entry that changes
+  the PHYSICS rather than the rectangle.** It is on the FIELD, not in the painter:
+  `DYN_FIELDS.faceoff` is a cosmetic slot somebody may swap for Grass, and where a body
+  can go must not depend on the theme you are wearing.
+  ⚠️ **ONE spec, ONE reader.** `f.gap` is three fractions and `gapRects` is the only place
+  that turns them into rectangles — `buildGeometry`, `drawPitch`, `drawFieldPreview`,
+  `layTeam`, the bots and the theme's own seam all ask it. The boundary shape is already
+  hand-written in four places (`buildGeometry`/`drawPitch`/`drawFieldPreview`/
+  `pooltable.path`) and is this file's standing complaint; the gap does not get to repeat it.
+  ⚠️ **FRACTIONS of the field, never pixels** — the `TARGET_SPOTS`/`tacticsboard` rule.
+  The three numbers are taste; the invariants under them are not, and `tests/gapfield.mjs`
+  pins those rather than the numbers: the channels take two bodies abreast (85 units on a
+  340-wide court), the slot clears `CENTER_R`, and the blocks stay inside the pitch.
+  ⚠️ **SPLIT AT THE HALFWAY LINE.** `resetKickoff` puts the ball at (0,0) and
+  `KICKOFF_CIRCLE_R === CENTER_R` — the half-line rule's gate IS the drawn circle — so one
+  unbroken block over the middle is a ball, a centre circle and a gate nobody can reach.
+  The slot runs SIDEWAYS, connecting the two channels to each other, so it costs the
+  feature nothing: it is not a way to reach the other END.
+  ⚠️ **The eight walls are NOT `ballOnly`**, which is the whole feature — every boundary
+  wall is, so a player may step a stride over the line, and this is the exact opposite.
+  `integrate` already runs `if (!wall.ballOnly) collideWall(p, wall)`, which is the same
+  mechanism `dWall` gives a drill, and `collideWall` derives its normal per contact from
+  the closest point on the segment, so four segments enclose a rectangle that ejects from
+  whichever side a body is on. `draw:true` gets `renderDrill` to paint it for free.
+  `isGap` is for the reader and the suites; nothing in the physics branches on it.
+  ⚠️ **The ball bounces off it too**, so you can pass and bank off its faces. A void the
+  ball could cross has a dead-ball case — a ball at rest in the middle is reachable by
+  nobody — and bots would aim through a region they cannot follow into. `predictsGoal`
+  and `botPickAim`'s bank candidates both walk `w.walls`, so both are right for free.
+  ⚠️ **THE BOTS' PART IS A STEERING TERM, NOT A WAYPOINT, and the waypoint version was
+  built first and measured WORSE THAN NOTHING.** Bots have no obstacle awareness at all:
+  `botWallAvoid` reads only the field rectangle, and the formation slot, the support-grid
+  cell and the strike waypoint are each clamped to that same rectangle, so all three will
+  happily name a point inside the gap. Replacing `aiTarget` with a corner to walk round
+  (a) **parks a bot ON the corner** — a corner is a place you ARRIVE at, and the block is
+  still between it and the real target, so the worst continuous pin against a face went
+  from 19s with no gap handling at all to **51s** with it — and (b) **yanks the chaser off
+  the ball** whenever its run clips a block, which cost **7 goals down to 1** over three
+  90-second bot matches while every containment check stayed green. A stick vector can do
+  neither: the bot keeps seeking what it wants and is pushed sideways while the block is
+  in the way. That is also what Layer 0 IS.
+  ⚠️ So there are exactly two hooks: `gapPush` on `runBot`'s **single** final target clamp
+  (downstream of all three target sources, so one call covers them) and on `layTeam`'s
+  formation marks; and `botGapAvoid` in the Layer-0 blend at `BOT.wGap`. Measured:
+  pinned **0.34%** of bot-time against **4.25%** with it off, worst pin **1.7s** against
+  **6.5s**, and 6 goals against 7.
+  ⚠️ **The crossing test uses the BARE block; the push uses a PAD.** Backwards, a body
+  standing against a face counts as *inside* the padded region, the term never switches
+  off and the bot is shoved sideways along a wall it has already cleared — the same shape
+  as the corner dead end.
+  ⚠️ **`botGapAvoid` picks its side from where the BODY is**, not from the shorter total
+  path: moving toward the nearer end makes it nearer still, so the choice reinforces
+  itself, where a path-length test flips whenever the two are close and the bot judders.
+  ⚠️ **It applies to the CHASER too**, unlike `botWallAvoid` — that one stands down for a
+  chaser because pinning a ball against the boards is doing its job, and there is no such
+  thing as pinning a ball against the middle of the pitch.
+  ⚠️ **`fieldShape` answers `other` for a gap field before it looks at `(corner, cut)`** —
+  which is what files it under the Other tab, and `other` was already written as a genuine
+  catch-all for "a shape that does not exist yet".
+  ⚠️ **`mapClean` is a whitelist rebuild and DROPS `gap`**, so a custom map cannot carry
+  one and cloning Faceoff into the map maker gives a gapless copy. That is the scope line,
+  not a bug: the editor has nine sliders and no way to express an interior region, and a
+  control it cannot draw a preview of would be lying about the field it makes.
+  ⚠️ **A BLOCK IS A BARRIER, NOT A CONTAINER — nothing may ever be PLACED inside one.**
+  `collideWall` bails at `dist >= d.r`, so four segments only act within one radius of a
+  face: a body put down in the MIDDLE of a block is touched by none of them and sits there
+  for the rest of the match, with no backstop anywhere. Spawning is the only way in, so
+  every site that puts a body on the pitch pushes out through `gapPush` — `layTeam`
+  (formation marks, and `homeX/homeY` is written from the pushed spot or `applyKickoffLine`
+  walks them back in), **`placeBerry`** and **`lobbySpotFor`**. Both of the latter two were
+  real: **three of the six Killer Lobsters berries spawned inside**, half that mode's
+  objective permanently unreachable, and the warm-up lobby's row sits at exactly
+  `±L/2 * 0.30`, which is inside a block on this court — and `walkTo` sets position
+  directly on a body `integrate` is ghosting, so a bot walks straight in. `subOnSpot` is
+  already clear at `±(W/2 - 2r)` and was checked rather than assumed.
+  ⚠️ `clampBallInside` gives no interior backstop and does not claim to — it never modelled
+  rounded corners either. It cannot: at the default `ballCap` the sub-stepping gives 4.6
+  units of travel against a ball radius of 10, so a segment cannot be stepped over.
+  `tests/gapfield.mjs`.
 - **Input:** touch pads (`pads.p1/p2`, `onDown/onMove/onUp`), keyboard (`pollKeys`), gamepads
   (`gamepadPad`). `applyHumanInput(p, pad)` maps a pad to a player and applies cocktail rotation.
   **KICK is `padKickHeld(g)`, the one place that knows which button kicks.** ⚠️ `sel.pad.kick`
@@ -720,12 +803,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   this takes after is symmetrical end to end so neither side has anything the other does
   not. Every element is drawn from a `half()` helper called twice with the sign flipped, so
   the two ends cannot drift apart.
-  ⚠️ **AND IT IS SPLIT DOWN THE MIDDLE**, asked for directly: a dark seam across the
-  halfway line with a lit causeway through it, so the court reads as two worlds meeting
-  rather than one pitch with a line painted on it. ⚠️ The seam is DECORATION — the ball
-  crosses it exactly as it crosses anything else. A painter may never change where a body
-  can go; the field rectangle is what the physics knows about, and containment was measured
-  over 4,000 steps with hard kicks (zero escapes, the ball reaching 566 against a 510 half
+  ⚠️ **AND IT IS SPLIT DOWN THE MIDDLE**, asked for directly — and the split is REAL now,
+  not painted. See **THE GAP** below: `FIELDS.faceoff` carries a `gap`, the split is two
+  solid blocks either side of the halfway line, and the way to the other end is one of the
+  two channels down the touchlines. The painter's old seam-and-causeway is kept for the
+  no-gap case only (slots mix — this theme can be worn on Classic) and is otherwise gone,
+  because it drew the exact opposite of the truth: a lit causeway 30% of the width through
+  the MIDDLE, which is now the one place a body cannot go.
+  ⚠️ **The rule the seam obeyed still stands and has simply moved house**: a PAINTER may
+  never change where a body can go. What changed is that the FIELD now says so, which is a
+  different layer — `DYN_FIELDS.faceoff` is a cosmetic slot somebody may swap for Grass,
+  and the hole in the middle has to be there either way. Containment was measured over
+  4,000 steps with hard kicks (zero escapes, the ball reaching 566 against a 510 half
   length plus a 66 net, which is the goal and not an escape).
   ⚠️ `FIELDS.faceoff` is **long and narrow on purpose** — 340 across a 1020 length. The
   shape is the whole idea: two bases with nowhere to go but at each other. Corners are
@@ -3647,7 +3736,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 115 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 117 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260814.0210AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260821.0930AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -234,6 +234,31 @@ enforcing it. Ranked by how quietly it would break.
   mapping, whether a seat was handed out, the chosen axes, every live axis value, held
   buttons. **One paste of that line, with the stick pushed hard right, closes this.** Until it
   arrives the fix is unverified on the actual hardware.
+
+---
+
+## 🕳 Faceoff Orbit: a gap in the middle, two ways round
+
+- [x] **A hole in the middle of the pitch that players cannot walk into**, asked for with a
+  drawing: a box in the middle, and two curved arrows showing you have to go round it.
+  `FIELDS.faceoff` carries a `gap` of three FRACTIONS; `gapRects` is the one place that
+  turns them into rectangles, and `buildGeometry`, `drawPitch`, `drawFieldPreview`,
+  `layTeam`, the bots and the theme's own seam all ask it.
+- [x] **Solid, so the ball bounces off it too** — a void the ball could cross has a dead
+  ball nobody can reach, and bots would aim through a region they cannot follow into.
+  `predictsGoal` and `botPickAim`'s bank shots are right for free, both walking `w.walls`.
+- [x] **Split at the halfway line.** The kickoff spot is dead centre and the half-line
+  rule's gate IS the drawn centre circle, so one unbroken block is a ball, a circle and a
+  gate nobody can reach. The slot runs sideways: it switches lanes, it does not reach the
+  other end.
+- [x] **Filed under Other** — `fieldShape` answers `other` for a gap field before it looks
+  at `(corner, cut)`, which is the catch-all that group was written for.
+- [x] **The bots' part is a STEERING TERM, and the waypoint version measured worse than
+  nothing** — it parked bots on the corner (19s → 51s worst pin) and yanked the chaser off
+  the ball (7 goals → 1). Shipped: `gapPush` on the one final target clamp and on the
+  formation marks, `botGapAvoid` in the Layer-0 blend. Pinned 0.34% of bot-time against
+  4.25% with it off, worst pin 1.7s against 6.5s, 6 goals against 7.
+- [x] New suite `tests/gapfield.mjs`, four sabotages, each caught by different checks.
 
 ---
 
