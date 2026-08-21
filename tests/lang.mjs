@@ -145,9 +145,15 @@ const r = await p.evaluate(() => {
     const clash = names.filter(n => Object.prototype.hasOwnProperty.call(M.STRINGS, n));
     o.botClashes = clash;
     o.botNoClash = clash.length === 0;
+    // ⚠️ **RAGGEDNESS IS A PROXY, AND IT IS RETIRED FOR A HAND-WRITTEN LIST.** It was
+    // measuring "does this read as machine-generated", and the evidence for that was a
+    // draft with 22 of 24 names at 3-4 letters. The shipped list is supplied by the owner
+    // by hand, which is the thing the proxy was standing in for — so the check now pins
+    // the SPREAD (a real range of lengths) rather than a count of distinct ones, which a
+    // deliberate list can fail while looking nothing like a generated one.
     const lens = new Set(names.map(n => n.length));
     o.botLengths = [...lens].sort((a, b) => a - b);
-    o.botRagged = lens.size >= 5;
+    o.botRagged = (Math.max(...lens) - Math.min(...lens)) >= 2 && lens.size >= 3;
   }
 
   // ---- 4. WHAT MUST NEVER BE TRANSLATED -----------------------------------

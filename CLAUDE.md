@@ -1246,6 +1246,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   never quite the mark you played with. **Bots wear `BOT_CAP` ('none')**: cycling the whole
   CAPS table put a different hat on every disc and made a cap read as decoration rather than
   as yours. Bots still vary by colour, shirt number and eyes.
+- **THE KICKOFF LINE IS STAGGERED, AND THE STAGGER IS DELIBERATELY TINY** (`layTeam`).
+  The rule was `depth = i===0 ? 0.30 : 0.55`, which put every body past the first on the
+  SAME y: measured on a 4v4 as three of the four standing shoulder to shoulder with the
+  fourth alone out on a wing. It alternates between two depths now, so no row holds more
+  than two.
+  ⚠️ **A FULL 1-2-1 DIAMOND WAS BUILT FIRST AND REVERTED, because it broke the one
+  guarantee the AI has.** Spreading the rows over 0.28..0.78 of the half and widening to
+  ±136 INVERTED THE DIFFICULTY LADDER inside two bot plans — `tests/botplans.mjs` measured
+  Insane finishing **-3** against Rookie under `balanced` and -1 under `press`, over twelve
+  matches with the sides swapped, against a baseline minimum of +6. Difficulty is the
+  control a player reaches for, so a formation that makes picking Pro matter less than
+  picking a shape is not a formation worth having.
+  ⚠️ So the x offsets are left EXACTLY as they were and **only the depth moves**, by
+  0.03..0.07 of the half — 11-27 world units on Classic — with nothing deeper than the old
+  0.55. `layTeam`'s marks are load-bearing for bot balance, not decoration: keep any change
+  to them small and re-measure `botplans`.
+  ⚠️ **AND IT TURNED `tests/sprint.mjs` RED THROUGH A LEFTOVER GOAL FLASH.** `shake` and
+  `flash` are module-level juice decayed in `decayJuice()`, which `loop()` calls and a
+  headless probe never does — and `startMatch` does not clear them. So the bot matches in
+  that suite's earlier blocks left a full-screen wash in the last scorer's team colour
+  still on the canvas, and the sprint gauge was sampled THROUGH it: every one of 900,000
+  pixels differed between two builds, the court reading 103,127,75 under a red flash and
+  45,143,125 under a blue one. Change anything that alters a bot match — a kickoff mark, a
+  bot name — and the last scorer changes with it. **Any suite that samples pixels after a
+  bot match must call `juiceReset()`**, which is the one owner of that state.
 - **Kickoff possession:** `kickoffFreePass` gates the centre circle on `w.kickTeam` — the
   side that CONCEDED. ⚠️ `kickTeam` was written on every goal and **read by nothing**, so
   the gate stood open to both teams and a restart was a race for a loose ball, which in
@@ -2187,17 +2212,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ Turkey and Russia sit in Europe and **Australia in Asia**: the tie-break is the
   confederation they play football in, and Australia is also the only Oceania country
   here — a continent of one cannot field a side. `tests/continents.mjs`.
-- **BOT NAMES ARE PARK-FOOTBALL NICKNAMES** (`BOT_NAMES`, `pickNames`). Asked whether the
-  player names could look better and "less AI looking", and the typography was not the
-  problem — the tell was the list. It was `Nico Vega Blaze Kai Rush Zed Milo Ivy Rex Juno
-  Ace Fox Neo Sol Wren Dex Pip Rio Sy Bolt Onyx Ash Koda Lex`, and measured: **22 of 24
-  were 3-4 letters**, **29% contained x or z** against about 2% in real names, five ended
-  -ex/-ox/-yx, and twelve were the same "short cool codename" idea. Nothing in it was
-  ORDINARY, which is the giveaway.
-  ⚠️ **Two things carry the fix.** The lengths are **RAGGED** (2 to 6) — eight identical
-  stubs down the pitch is half of what reads as generated — and every name has a REASON: a
-  role, a physique, a way of playing, a personality. That is what generated names never
-  have, and it is why a nickname cannot be mistaken for one.
+- **THE BOT NAMES ARE THE OWNER'S LIST, SUPPLIED VERBATIM** (`BOT_NAMES`, `pickNames`) —
+  `Mike vape air fire light like crum skele dusa salt bolt jake showy viola moon sun sky
+  rave bear cat dog trash boots`. It replaced a set of park-football nicknames wholesale.
+  ⚠️ **`Nipper` IS BANNED OUTRIGHT**, asked for in those words, so it must not come back in
+  any future edit to this table.
+  ⚠️ **The casing is theirs**: lower case reads as a nickname, the pitch nameplate
+  upper-cases everything anyway, and the only place it shows as typed is the result table.
+  ⚠️ **`showmar` came in seven characters and ships as `showy`**, on the owner's call —
+  the six-character rule below, measured: `showmar` is **51px** against a 43px column.
+  `show` was the obvious trim and is REFUSED, because it is a key in `STRINGS` and a bot
+  called that would be TRANSLATED out from under itself. Every other entry fits untouched.
+  ⚠️ **The old list's reasoning still binds anything that replaces this one**, and is kept
+  because it is what the constraints below are FOR. The set before the nicknames was
+  `Nico Vega Blaze Kai Rush Zed Milo Ivy Rex Juno Ace Fox Neo Sol Wren Dex Pip Rio Sy Bolt
+  Onyx Ash Koda Lex`, and measured: **22 of 24 were 3-4 letters**, **29% contained x or z**
+  against about 2% in real names, five ended -ex/-ox/-yx, and twelve were the same "short
+  cool codename" idea. Nothing in it was ORDINARY, which is the giveaway. The lengths must
+  stay **RAGGED** — eight identical stubs down the pitch is half of what reads as
+  generated. ⚠️ `tests/lang.mjs` measures the raggedness as a **SPREAD plus a count of
+  distinct lengths** rather than "at least four different lengths": a supplied list is
+  whatever the owner typed, and a suite that dictates its shape is a suite refusing the
+  owner's answer.
   ⚠️ **AT LEAST 16 ENTRIES, a hard floor rather than taste.** `LOBBY.maxPerSide` is 8, so
   sixteen bots can be on the pitch; `pickNames` filters the pool by a `used` Set and when it
   EMPTIES, `(i*7+3) % 0` is NaN, the splice yields undefined, and every overflow bot comes
@@ -2215,8 +2251,8 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `Hoofer`/`Chief`/`Lanky`.
   ⚠️ **Never `You` or `Player`** — the name book refuses both as "a made-up name is never
   recorded", and `isHero` would crown a same-named team-0 bot as "You" on the result screen.
-  ⚠️ **No rhyme clusters.** Rex/Dex/Lex is what gave the old list away, so only one of
-  Baz/Gaz. ⚠️ **Generic nicknames only, never a real footballer's** — `Nobby` was drafted
+  ⚠️ **No rhyme clusters.** Rex/Dex/Lex is what gave the codename list away.
+  ⚠️ **Generic nicknames only, never a real footballer's** — `Nobby` was drafted
   and dropped for exactly that, the standing trademark rule applied to people.
   ⚠️ `pickNames` is unchanged and **must stay RNG-free**: it is reachable from inside
   `step()` via `stepLobbyBots` and `evenUpSides`, and is safe only because it indexes

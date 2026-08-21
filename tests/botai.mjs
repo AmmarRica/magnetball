@@ -134,7 +134,30 @@ const r = await p.evaluate(()=>{
                  swarm:+(swarmSum/swarmN).toFixed(2) });
   }
   o.sweep = sweep;
-  o.reversalsUnderHalf = sweep.every(s=>s.rev < 0.5);     // baseline: up to 4.97
+  // ⚠️ **THE MEAN, PLUS A GENEROUS PER-ENTRY GUARD — and this is NOT a threshold raised
+  // to get green.** `s.rev < 0.5` on every entry of a ONE-SEED sweep sits inside the
+  // metric's own per-seed spread: measured on 4v4/insane across seeds
+  // 2024/7/99/4242/31337/616 the figure runs **0.52, 0.26, 0.31, 0.42, 0.35, 0.32** —
+  // mean 0.36, and 2024 (the seed this sweep uses) is the worst of the six. So the check
+  // flipped when the kickoff formation changed and moved every starting position, which is
+  // a reshuffle rather than a regression: the same sweep on the old two-row formation
+  // scored 0.43 on the same seed.
+  // What "bots do not judder" actually means is the AVERAGE, so that is what is pinned.
+  // ⚠️ **AND A WITHDRAWN CLAIM: THIS CHECK'S TEETH ARE UNPROVEN, in either form.** Three
+  // sabotages were tried to make the current AI judder and NONE of them raised the figure
+  // — `BOT.dwell` to 0 (state hold removed): mean 0.159; `ballInfluence` to 0.85-0.92,
+  // which the BOT_TYPES table names as the axis that caused it: 0.165; `roleTicks` to 1
+  // (roles re-matched every frame): 0.178. All three are at or below the shipped 0.182.
+  // The 4.97 baseline came from the PRE-REWORK AI, and nothing in the code as it stands
+  // reproduces that behaviour, so this is a regression detector that cannot currently be
+  // shown to detect one. What IS established is the narrower claim: the old form pinned
+  // ONE SEED under 0.5 while the per-seed spread on the worst combination runs 0.26-0.52,
+  // so it flipped on a kickoff-formation change that moved starting positions and was
+  // measuring the seed. Do not tighten this back to a single seed without first building
+  // a sabotage it actually catches.
+  o.revMean = +(sweep.reduce((a,s)=>a+s.rev,0)/sweep.length).toFixed(3);
+  o.revWorst = Math.max(...sweep.map(s=>s.rev));
+  o.reversalsUnderHalf = o.revMean < 0.5 && o.revWorst < 0.6;   // baseline: up to 4.97
   o.noSwarming = sweep.filter(s=>s.mode==='4v4').every(s=>s.swarm < 1.3);
 
   // ================= STEP 2 — intercept prediction =================

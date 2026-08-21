@@ -134,8 +134,20 @@ const fit = await p.evaluate(()=>{
   w.score=[3,2];
   M.showOverlay('YOU WIN!','3 – 2', false);
   M.renderMatchStats(w);
+  // ⚠️ **THE ROWS MUST HAVE SIZE, and this guard is not decoration.**
+  // `#ovStats.lean .statstbl` is `display:none` at <= STATS_WIDE and this block runs at
+  // 360px, so a folded table makes every row ZERO-SIZED — `scrollWidth - clientWidth`
+  // becomes 0 - 0 and both the overflow and the name-clipping checks below pass on any
+  // build at all. Measured on a fresh 360px page: `Stopper`, the very name the
+  // six-character rule was derived from (47px into a 43px column), reports NO clipping
+  // while folded. It survives here only because `statsOpen` latches open in the
+  // desktop-width block above and is sticky for the session — which is exactly the kind
+  // of accident that stops being true when somebody reorders the file.
+  const stEl = document.getElementById('ovStats');
+  stEl.classList.remove('lean');
   const rows=[...document.querySelectorAll('#ovStats .statsrow')];
   o.rows = rows.length;
+  o.rowsHaveSize = rows.length > 0 && rows.every(x => x.scrollWidth > 0);
   // No row may be wider than the panel holding it, and no cell may be clipped.
   o.overflow = rows.map(row=>{
     const pan = row.closest('.tpanel');
@@ -160,7 +172,7 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must=['rowPerPlayer','hasHeader','headsAreWords','screenMatchesTable','noKey','fewColumns',
   'touchesDropped','everyNumberMatches','nothingLost','quietSaysNothing','zeroesMarked',
   'yourRowMarked','teamsTagged','bothTeamsShown','discsDrawn','clearsOnReopen','noStatsInDrills',
-  'fitsPhone','stacked'];
+  'fitsPhone','stacked','rowsHaveSize'];
 const bad = must.filter(k=>all[k]!==true);
 if (all.namesClipped > 0) bad.push('namesClipped='+all.namesClipped);
 const ok = bad.length===0 && errors.length===0;

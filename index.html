@@ -4622,7 +4622,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260821.0215PM';
+const VERSION = '20260821.1105PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4638,6 +4638,14 @@ const VERSION = '20260821.0215PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260821.1105PM', title: 'A staggered line, and new names',
+    added: [],
+    changed: [
+      '<b>Teams no longer kick off standing in one flat line.</b> On a 4v4 three of the four bodies were shoulder to shoulder on the same mark; the back line is split across two depths now, so no row holds more than two.',
+      '<b>New names for the bots.</b>',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260821.0215PM', title: 'Pick your own pitch colour',
     added: [
       '<b>You can set the pitch and the surround to any colour you like</b> \u2014 Theme \u2192 Background, under the palette tiles. Pick a palette for everything else and then make the grass whatever green (or purple) you want.',
@@ -14479,15 +14487,20 @@ function padSeatOrder(t0, t1){
 // `Hoofer`/`Skip`/`Lanky`.
 // ⚠️ **Generic nicknames only, never a real footballer's.** `Nobby` was drafted and dropped
 // for exactly that — the standing rule that renamed the themes applies to people too.
+// ⚠️ **THE LIST IS THE OWNER'S, supplied verbatim.** It replaces the park-football
+// nicknames wholesale, and **`Nipper` is banned outright** — asked for in those words, so
+// it must not come back in any future edit to this table.
+// ⚠️ The casing is theirs too: lower case reads as a nickname, and the pitch nameplate
+// upper-cases everything anyway, so the only place it shows is the result-screen table.
+// ⚠️ **`showmar` came in SEVEN characters and is `showy` here, on the owner's call.** The
+// result table's name column is 43px on a 360px phone and `showmar` measures **51px**, so
+// it ellipsised — the same failure that had `Stopper` (47px) renamed to `Hoofer`. `showy`
+// is 36px. `show` was the obvious trim and is REFUSED: it is a key in `STRINGS`, so a bot
+// called that would be TRANSLATED out from under itself on a Spanish or French device.
+// Every other entry measures 17-41px and fits untouched.
 const BOT_NAMES = [
-  // role
-  'Gaffer','Keeper','Chief','Hoofer',
-  // built like
-  'Tank','Legs','Lofty','Titch','Bones','Lanky','Bear','Ox','Chunk',
-  // plays like
-  'Boots','Nutmeg','Megs','Sniper','Rocket','Hammer','Wall','Ghost','Chip','Volley',
-  // just what everyone calls them
-  'Smiler','Digger','Sparky','Chalky','Dusty','Doc','Baz','Nipper','Sprog','Bugsy',
+  'Mike','vape','air','fire','light','like','crum','skele','dusa','salt','bolt',
+  'jake','showy','viola','moon','sun','sky','rave','bear','cat','dog','trash','boots',
 ];
 function pickNames(n, used){
   const out=[]; const pool=BOT_NAMES.filter(x=>!used.has(x));
@@ -14934,13 +14947,30 @@ function resetKickoff(w, initial){
   resetTrails();       // players teleport to their marks — don't smear a tail across the pitch
   playSfx('whistle');            // referee whistle at match start / after a reset to centre
 }
+// ⚠️ **STAGGERED, NOT ONE LINE — and deliberately a SMALL change.** The rule was
+// `depth = i===0 ? 0.30 : 0.55`, which put every body past the first on the SAME y:
+// measured on a 4v4 as three of the four standing shoulder to shoulder at y = 209 with
+// the fourth alone out on a wing. The back line is split across two depths now, so no
+// row holds more than two.
+// ⚠️ **A FULL 1-2-1 DIAMOND WAS BUILT FIRST AND REVERTED, because it broke the one
+// guarantee the AI has.** Spreading the rows over 0.28..0.78 of the half and widening to
+// ±136 moved the kickoff marks far enough to INVERT THE DIFFICULTY LADDER inside two bot
+// plans — `tests/botplans.mjs` measured Insane finishing -3 against Rookie under
+// `balanced` and -1 under `press`, over twelve matches with the sides swapped. Difficulty
+// is the control a player reaches for, so a formation that makes picking Pro mean less
+// than picking a shape is not a formation worth having. `layTeam`'s marks are
+// load-bearing for bot balance, not decoration: keep any change to them small and
+// re-measure `botplans` and `sprint`.
+// ⚠️ The x offsets are therefore left EXACTLY as they were, and only the depth moves —
+// by 0.03..0.07 of the half, which is 11-27 world units on Classic.
 function layTeam(list, side, halfL, field){
   const n = list.length;
   const spread = Math.min(list.length>1 ? 140 : 0, 160);
   list.forEach((p,i) => {
     const off = n===1 ? 0 : (i/(n-1)-0.5)*spread*2*0.9;
-    // first player closer to ball, rest slightly back
-    const depth = i===0 ? 0.30 : 0.55;
+    // First body closest to the ball; the rest alternate between two depths so the line
+    // is staggered rather than flat.
+    const depth = i===0 ? 0.30 : (i % 2 ? 0.48 : 0.55);
     p.x = off;
     p.y = side * halfL * depth;
     // ⚠️ The gap is sized so the default lead spot clears it, but the roster is not

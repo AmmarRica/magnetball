@@ -310,6 +310,17 @@ const bands = await p.evaluate(() => {
   M.applyTheme('grass');
   M.sel.sprint = 'on'; M.sel.mode = '1v1'; M.sel.lobby = 'off';
   M.setMatchSeed(7); M.startMatch();
+  // ⚠️ **A LEFTOVER GOAL FLASH WAS TINTING THE WHOLE PICTURE, and it made this block
+  // read the FORMATION.** `shake`/`flash` are module-level juice, decayed in `decayJuice()`
+  // — which `loop()` calls and a headless probe never does — and `startMatch` does not
+  // clear them. The blocks above play bot matches, so whoever scored last left a
+  // full-screen wash in THEIR team's colour still on the canvas: measured as every one of
+  // the 900,000 pixels differing between two builds, the court reading 103,127,75 under a
+  // red flash and 45,143,125 under a blue one. Change anything that alters a bot match —
+  // a kickoff mark, a bot name — and the last scorer changes with it, so this block went
+  // red for a formation tweak it cannot otherwise see (it is a 1v1, and only bodies past
+  // the first moved). `juiceReset()` is the one owner of that state.
+  M.juiceReset();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const me = w.players.find(q => q.ctrl === 'human1') || w.players[0];
   me.x = 60; me.y = 90; me.vx = me.vy = 0; me.name = '';
@@ -327,21 +338,29 @@ const bands = await p.evaluate(() => {
   // landed on a different mown stripe. The rested body draws no ring at all, so it is the
   // one honest baseline: anything that differs from it IS the ring, and the pixel's own
   // hue says which half of the gauge it is.
+  // ⚠️ **THE SAMPLE TAKEN IS THE ONE THAT DIFFERS MOST, never the BRIGHTEST, and picking
+  // the brightest is what made this block fragile.** The ring is ~2px wide and the radii
+  // are stepped half a pixel, so most angles sample the ANTIALIASED EDGE as well as the
+  // ink: on a spent ring the edge blend came back 189,137,107 against the red core's
+  // 225,95,69 — brighter summed, and green 137 fails the red test, so nearly every angle
+  // was filed as `pale` and a fully spent ring measured 17 red out of 120. Which sample
+  // is brightest then turns on sub-pixel luck. The largest difference from the rested
+  // frame at the SAME radius is the ring ink by construction, which is what the paragraph
+  // above already says the baseline is for — and it is right for both halves of the
+  // gauge, since white over grass differs more than any blend of it does.
   const band = (kick, stam, spent) => {
     me.kick = kick; me.stam = stam; me.spent = spent; me.chargeT = 0;
     M.renderAlpha = 1; M.render();
     const out = [];
     for (let a = 0; a < 360; a += 3){
-      const t = (a - 90) * Math.PI/180;
-      let best = null, bestD = -1;
+      const t = (a - 90) * Math.PI/180, row = [];
       for (let d = -1.5; d <= 1.5; d += 0.5){
         const rad = L.kickR + d;
         const q = c.getImageData(Math.round(px + Math.cos(t)*rad*dpr),
                                  Math.round(py + Math.sin(t)*rad*dpr), 1, 1).data;
-        const lum = q[0] + q[1] + q[2];
-        if (lum > bestD){ bestD = lum; best = [q[0], q[1], q[2]]; }
+        row.push([q[0], q[1], q[2]]);
       }
-      out.push(best);
+      out.push(row);
     }
     return out;
   };
@@ -350,8 +369,12 @@ const bands = await p.evaluate(() => {
     const now = band(kick, stam, spent);
     let red = 0, pale = 0, none = 0;
     for (let i = 0; i < now.length; i++){
-      const q = now[i], b0 = rested[i];
-      const diff = Math.abs(q[0]-b0[0]) + Math.abs(q[1]-b0[1]) + Math.abs(q[2]-b0[2]);
+      let q = null, diff = -1;
+      for (let j = 0; j < now[i].length; j++){
+        const s = now[i][j], b0 = rested[i][j];
+        const d = Math.abs(s[0]-b0[0]) + Math.abs(s[1]-b0[1]) + Math.abs(s[2]-b0[2]);
+        if (d > diff){ diff = d; q = s; }
+      }
       if (diff < 40) none++;
       else if (q[0] > 150 && q[1] < 130 && q[2] < 120) red++;
       else pale++;
