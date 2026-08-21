@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260821.0930AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260821.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 
@@ -234,6 +234,25 @@ enforcing it. Ranked by how quietly it would break.
   mapping, whether a seat was handed out, the chosen axes, every live axis value, held
   buttons. **One paste of that line, with the stick pushed hard right, closes this.** Until it
   arrives the fix is unverified on the actual hardware.
+
+---
+
+## 🧭 The gap nobody could find, and a second court to put one on
+
+- [x] **Picking the Faceoff Orbit theme did not put you on the Faceoff Orbit pitch**, and
+  nothing said so — `THEME_BUNDLES.faceoff.field` is a `DYN_FIELDS` PAINTER and
+  `FIELDS.faceoff` is the COURT, two tables reached from two cards under one name.
+  Reported as *"I selected the theme and I can't see the correct pitch"*.
+- [x] A bundle may now carry **`pitch`** (a `FIELDS` key, deliberately not `field`);
+  `applyBundle` applies it through `selectField` and **toasts**. Reverses the standing
+  "a theme may not pick your pitch" rule, which lost to somebody trying to play the map.
+- [x] **`bundleSlots`/`currentBundle` stay slots-only** — the pitch is what a bundle DOES,
+  not what it IS, or changing your court would rename your theme to Custom.
+- [x] **`selectField` clears the sticky shape tab.** Without it the tile the theme just
+  selected sits hidden under the old group: measured 0px before, 94px after.
+- [x] **Island** — a second gap court at Classic's exact 440 × 760, with its **own**
+  fractions, because the slot must clear an absolute `CENTER_R` and Faceoff's 0.15 is
+  under it on a 760 length. `tests/gapfield.mjs` now loops every check over both.
 
 ---
 

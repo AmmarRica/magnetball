@@ -1979,7 +1979,7 @@
       <div class="subpane" data-pane="bundle">
         <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
         <div class="opts tilewrap" id="themePick"></div>
-        <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every other tab in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them.</div>
+        <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every other tab in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them. A theme changes how the game <i>looks</i>; the <b>pitch you play on</b> is a separate choice under <b>Match &rarr; Pitch</b>. A few themes are drawn for one particular court and will switch you to it and say so, and you can change it back there afterwards.</div>
       </div>
       <div id="slotRows"></div>
     </div>
@@ -2834,6 +2834,16 @@ const FIELDS = {
   // See `gapRects` below for what the three fractions mean and why they are those numbers.
   faceoff: { name:'Faceoff Orbit', emoji:'🛰️', W:340, L:1020, goal:150, corner:0, net:66,
              gap:{ w:0.50, l:0.34, slot:0.15 } },
+  // ⚠️ **CLASSIC'S EXACT SIZE, WITH A HOLE IN IT.** Everybody knows what 440 × 760 plays
+  // like, so putting the gap on it is the most legible possible second example — and it
+  // is the opposite court to Faceoff Orbit, which is a corridor with tight channels.
+  // ⚠️ **THE FRACTIONS ARE NOT FACEOFF'S, AND THEY CANNOT BE.** The slot has to clear
+  // `CENTER_R`, which is an absolute 58 world units, so the fraction it needs RISES as
+  // the court gets shorter: `slot: 0.15` is 76.5 units on a 1020 length and only **57**
+  // on a 760 one, which is inside the centre circle. Every gap field carries its own
+  // three numbers, and `tests/gapfield.mjs` checks the invariants on all of them.
+  island:  { name:'Island',   emoji:'🕳️', W:440, L:760,  goal:150, corner:0, net:64,
+             gap:{ w:0.50, l:0.42, slot:0.22 } },
 };
 // ⚠️ **A FIELD'S SHAPE IS `(corner, cut)`, AND IT IS THREE PHYSICS CLASSES, not a
 // continuum.** `buildGeometry` emits a plain rectangle for `corner === 0`, **four arcs**
@@ -4599,7 +4609,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260821.0930AM';
+const VERSION = '20260821.1120AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4615,6 +4625,16 @@ const VERSION = '20260821.0930AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260821.1120AM', title: 'Finding the gap',
+    added: [
+      '<b>A second pitch with a gap in it: Island.</b> Exactly the size of Classic, so it is the court you already know with a hole in the middle of it — and the lanes either side are wide, where Faceoff Orbit\u2019s are a squeeze.',
+    ],
+    changed: [
+      '<b>Picking a theme now puts you on the pitch it was drawn for, and tells you it did.</b> Choosing Faceoff Orbit under Theme only changed how the game looked; the court with the gap in it is a separate choice under Match \u2192 Pitch, and nothing said so. You can still change the pitch afterwards and your theme keeps its name.',
+      'The Theme card says plainly that a theme is how the game looks and the pitch is a different setting.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260821.0930AM', title: 'A gap in the middle',
     added: [
       '<b>Faceoff Orbit has a hole in the middle of it that you cannot walk into.</b> To get from your end to the other one you have to take one of the two lanes down the sides, so every attack is a choice of which way round to go and every defence is a guess at which one you picked. The ball bounces off it too, so you can pass and shoot off its faces.',
@@ -6687,12 +6707,19 @@ const SLOT_KEYS = Object.keys(SLOTS);
 // Every palette is a bundle; only the ones that own more than colour say so here.
 const THEME_BUNDLES = {
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
-  // ⚠️ Slots only, like every other bundle — no field key. A theme may not reach into the
-  // Match card and choose the pitch you play on; `FIELDS.faceoff` is the shape this look
-  // was drawn for and it is picked there, in Pitch, like any other court. The painter is
-  // written in FRACTIONS of whatever rectangle it is handed, so on a square court it
-  // still lays out two bases and a seam — just a chunkier one.
-  faceoff:   { field:'faceoff',   discs:'none',  ball:'plain', sfx:'space' },
+  // ⚠️ **`pitch` IS A `FIELDS` KEY AND `field` IS A `DYN_FIELDS` KEY, and those two
+  // meanings sharing one word is the whole of what went wrong here.** This entry sets
+  // `look.field:'faceoff'` — the painter, the starfield and the bases — while the COURT
+  // with the gap in it is `FIELDS.faceoff`, a different table reached from a different
+  // card. Picking the theme painted the sky and left you on Classic, and it was reported
+  // as *"I selected the theme and I can't see the correct pitch"*.
+  // ⚠️ **This REVERSES the standing rule that a theme may never pick your pitch**, which
+  // was written here and lost to somebody trying to play the map. A bundle already sets
+  // six slots in one tap, so setting the court too is what "pick this whole look" reads
+  // as — and `applyBundle` says so out loud rather than moving it under you.
+  // ⚠️ **Only this bundle carries one.** Every other look is a TREATMENT that works on any
+  // rectangle; this one is a picture OF a particular court.
+  faceoff:   { field:'faceoff',   discs:'none',  ball:'plain', sfx:'space', pitch:'faceoff' },
   pool:      { field:'pooltable', discs:'pool',  ball:'plain', sfx:'pool'  },
   vsoccer:   { field:'vscourt',   discs:'arrow', ball:'plain', sfx:'classic' },
   shrimp:    { field:'seabed',    discs:'crablobster', ball:'plain', sfx:'classic' },
@@ -6720,11 +6747,22 @@ const THEME_BUNDLES = {
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
+// ⚠️ **SLOTS ONLY — `pitch` is deliberately NOT in here.** The pitch is something a bundle
+// DOES, never part of what a bundle IS: `currentBundle()` matches the live slots against
+// this, so folding the court in would mean changing your pitch afterwards silently renamed
+// your theme to **Custom**. That is exactly the kind of lie `currentBundle` was derived
+// rather than stored to prevent.
 function bundleSlots(k){
   if (!THEMES[k]) return null;
   const b = THEME_BUNDLES[k] || {};
   return { palette:k, field:b.field||'none', discs:b.discs||'none',
            ball:b.ball||'classic', trail:b.trail||'dots', sfx:b.sfx||'classic' };
+}
+// The court a bundle was drawn for, or null. Guarded against a key `FIELDS` does not
+// have — the standing rule that every registry lookup off a stored value falls back.
+function bundlePitch(k){
+  const p = (THEME_BUNDLES[k] || {}).pitch;
+  return (p && FIELDS[p]) ? p : null;
 }
 function currentBundle(){
   for (const k of bundleKeys()){
@@ -6737,6 +6775,15 @@ function bundleName(){ const k = currentBundle(); return k ? THEMES[k].name : 'C
 function applyBundle(k){
   const s = bundleSlots(k); if (!s) return;
   for (const x of SLOT_KEYS) SLOTS[x].set(s[x]);
+  // ⚠️ **AND THE COURT IT WAS DRAWN FOR, out loud.** See THEME_BUNDLES.faceoff for why
+  // this reverses the old rule. It is safe to put here because `applyBundle` has exactly
+  // ONE caller in the file — a tile's onclick — so it can never fire from the bootstrap
+  // and cannot move somebody's court at load. `normalizeLook`'s legacy fold reads
+  // `bundleSlots` directly and so is untouched by this.
+  // ⚠️ Silent when there is nothing to do: no write and no toast if you are already on it,
+  // or trying themes on while parked on the right court nags once per tap.
+  const pitch = bundlePitch(k);
+  if (pitch && sel.field !== pitch) selectField(pitch, FIELDS[pitch].name);
   saveSel();
 }
 function setSlot(slot, k){
@@ -9907,6 +9954,24 @@ function buildFieldShapeTabs(){
   }
   const want = live.some(([k]) => k === fieldShapeNow()) ? fieldShapeNow() : (live[0] || ['square'])[0];
   setFieldShapeTab(want);
+}
+// THE ONE PLACE THE GAME CHOOSES A PITCH FOR YOU. Everywhere else a court is picked by a
+// tile the player pressed, and the tile knows which tab it is in because they are standing
+// in it.
+// ⚠️ **CLEARING THE STICKY TAB IS THE WHOLE POINT.** `fieldShapeNow()` returns
+// `fieldShapeTab` once the player has tapped a shape chip, and `buildFieldShapeTabs()`
+// honours it — so setting `sel.field` to a court in a DIFFERENT group leaves the row on
+// the old tab with the tile we just selected hidden by the CSS. Nulling it makes the row
+// follow the selection, which is the behaviour on a fresh load anyway.
+// ⚠️ It TELLS you (`toast`), because a setting that moves under your hand is worse than
+// one you had to go and find — which is the complaint this whole change came from.
+function selectField(key, why){
+  if (!FIELDS[key]) return;
+  sel.field = key;
+  fieldShapeTab = null;
+  saveSel();
+  refreshPitchTiles();
+  if (why) toast('Pitch set to ' + why, 'ok', 'stadium');
 }
 function refreshPitchTiles(){
   if ($('fields'))   buildOpts('fields', FIELDS, 'field');
@@ -27767,6 +27832,7 @@ if (window.__MAGNETDEBUG) {
     vjDeckAudio, vjDeckVideo, get vjView(){ return vjView; }, set vjView(v){ vjView=v; },
     vjCueDevice, vjDevices, vjKey, vjPush, VJ_CMDS,
     bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
+    bundlePitch, selectField,
     liveSlots, applySlots, drawSlotsSwatch,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,
     get swatchCache(){ return swatchCache; }, get swatchFixed(){ return swatchFixed; },

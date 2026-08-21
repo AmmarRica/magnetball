@@ -104,7 +104,16 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **THE GAP — a hole in the middle of the pitch** (`f.gap`, `gapRects`, `gapPush`,
   `gapBlocks`, `segRectHit`, `drawGap`, `botGapAvoid`, `BOT.wGap`). Asked for with a
   drawing: a box in the middle you cannot walk into, and two curved arrows showing that
-  to reach the other end you go ROUND it. On **Faceoff Orbit** only.
+  to reach the other end you go ROUND it. On **Faceoff Orbit** and **Island**.
+  ⚠️ **THE THREE FRACTIONS CANNOT BE SHARED BETWEEN COURTS.** The slot has to clear
+  `CENTER_R`, which is an ABSOLUTE 58 world units, so the fraction it needs RISES as
+  the court gets shorter: Faceoff's `slot: 0.15` is 76.5 units on a 1020 length and
+  only **57** on Island's 760 — inside the circle. Every gap field carries its own
+  three numbers and `tests/gapfield.mjs` checks the invariants on **all** of them,
+  which is the check a suite written against `faceoff` by name could never make.
+  ⚠️ **Island is Classic's exact 440 × 760**, on purpose: everybody knows what that
+  court plays like, so it is the most legible possible second example, and its 110
+  channels are the opposite of Faceoff's corridor.
   ⚠️ **THE ONLY INTERIOR GEOMETRY ANY FIELD HAS, and the first `FIELDS` entry that changes
   the PHYSICS rather than the rectangle.** It is on the FIELD, not in the painter:
   `DYN_FIELDS.faceoff` is a cosmetic slot somebody may swap for Grass, and where a body
@@ -819,10 +828,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `FIELDS.faceoff` is **long and narrow on purpose** — 340 across a 1020 length. The
   shape is the whole idea: two bases with nowhere to go but at each other. Corners are
   SQUARE, because a rounded end would round off the base platforms drawn into it.
-  ⚠️ **The BUNDLE carries slots only, with no field key**, like every other one: a theme may
-  not reach into the Match card and pick the pitch you play on. The painter is written in
-  FRACTIONS of whatever rectangle it is handed, so on a square court it still lays out two
-  bases and a seam — just a chunkier one.
+  ⚠️ **THE BUNDLE NAMES ITS PITCH, and that REVERSES the rule that used to be written
+  here.** It said a theme may not reach into the Match card and pick the pitch you play on;
+  it lost to somebody trying to play the map. `THEME_BUNDLES.faceoff.field` is a
+  **`DYN_FIELDS` painter** and `FIELDS.faceoff` is the **court** — two tables, two cards,
+  one name — so picking the theme painted the sky and left you on Classic, and it was
+  reported as *"I selected the theme and I can't see the correct pitch"*. Same shape as
+  `sel.controllers` shipping `off` and Sprint shipping off: a feature nobody can reach is a
+  feature that does not exist.
+  ⚠️ So a bundle may carry **`pitch`** (a `FIELDS` key, deliberately NOT called `field`,
+  because those two meanings sharing one word is the whole of what went wrong), and
+  `applyBundle` applies it through `selectField` and **says so with a toast** rather than
+  moving it under you. Only this bundle has one — every other look is a treatment that
+  works on any rectangle. Silent when you are already on it.
+  ⚠️ **`bundleSlots` and `currentBundle` stay SLOTS-ONLY.** The pitch is what a bundle
+  DOES, never part of what it IS: folded into the identity, changing your court afterwards
+  would silently rename your theme to **Custom**, which is the class of lie `currentBundle`
+  is derived rather than stored to avoid. `tests/gapfield.mjs` pins it from both ends.
+  ⚠️ **`selectField` is the one place the game chooses a court for you, and clearing the
+  sticky shape tab is its whole reason for existing.** `fieldShapeNow()` returns
+  `fieldShapeTab` once the player has tapped a shape chip and `buildFieldShapeTabs()`
+  honours it — so moving `sel.field` into a different group leaves the row on the old tab
+  with the tile just selected hidden by the CSS. Measured: 0px tall before, 94px after.
+  The painter is written in FRACTIONS of whatever rectangle it is handed, so on a square
+  court it still lays out two bases and a seam — just a chunkier one.
   ⚠️ The planet is placed off the **PITCH** box, never off the oversized region the void is
   painted into: positioned in that region's own fractions it landed at y = 1280 on a 1000px
   canvas — off screen entirely, because the region is three times the pitch each way and

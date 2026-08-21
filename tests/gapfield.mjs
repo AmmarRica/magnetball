@@ -57,141 +57,198 @@ const t = await p.evaluate(() => {
   o.fieldCount = Object.keys(M.FIELDS).length;
   o.rects = M.gapRects(M.FIELDS.faceoff);
 
-  const f = M.FIELDS.faceoff, g = o.rects[1];
-  // The three invariants the fractions have to satisfy, stated as the reasons rather
-  // than as the numbers — retuning `gap` is allowed, breaking these is not.
-  o.channel = f.W / 2 - g.x1;
-  o.channelTakesTwo = o.channel >= 2 * (M.PLAYER ? M.PLAYER.r * 2 : 30);
-  o.slotClearsCircle = g.y0 - M.CENTER_R >= 15;
-  o.blocksInsideThePitch = g.y1 < f.L / 2 && g.x1 < f.W / 2;
-  o.symmetric = o.rects[0].y0 === -g.y1 && o.rects[0].y1 === -g.y0 &&
-                o.rects[0].x0 === g.x0 && o.rects[0].x1 === g.x1;
+  // ⚠️ **THE INVARIANTS ARE CHECKED ON EVERY GAP FIELD, never on one by name.** The three
+  // fractions cannot be shared between courts: the slot has to clear `CENTER_R`, which is
+  // an absolute 58 world units, so the fraction it needs RISES as the court gets shorter.
+  // Faceoff's `slot: 0.15` is 76.5 units on a 1020 length and only 57 on a 760 one, which
+  // is inside the circle — so a second gap court that copied the numbers would be broken
+  // in a way no check written against `faceoff` could see.
+  o.inv = {};
+  for (const k of o.withGaps){
+    const f = M.FIELDS[k], rs = M.gapRects(f), g = rs[1];
+    o.inv[k] = {
+      channel: f.W / 2 - g.x1,
+      channelTakesTwo: (f.W / 2 - g.x1) >= 2 * (M.PLAYER ? M.PLAYER.r * 2 : 30),
+      slotClearsCircle: g.y0 - M.CENTER_R >= 15,
+      blocksInsideThePitch: g.y1 < f.L / 2 && g.x1 < f.W / 2,
+      deep: g.y1 - g.y0 > 20,
+      symmetric: rs[0].y0 === -g.y1 && rs[0].y1 === -g.y0 && rs[0].x0 === g.x0 && rs[0].x1 === g.x1,
+    };
+  }
 
   // ⚠️ Filed under Other, which is what was asked for. `other` was already written as a
   // genuine catch-all for "a shape that does not exist yet", so this is that case.
-  o.shape = M.fieldShape(M.FIELDS.faceoff);
+  o.shapes = {};
+  for (const k of o.withGaps) o.shapes[k] = M.fieldShape(M.FIELDS[k]);
   o.classicShape = M.fieldShape(M.FIELDS.classic);
 
   // Geometry, from the real builder.
   M.sel.mode = '1v1'; M.sel.controllers = 'off'; M.sel.kickoffRule = 'off'; M.sel.lobby = 'off';
-  M.sel.field = 'faceoff'; M.setMatchSeed(3); M.startMatch();
-  const w = M.world;
-  o.gapWalls = w.walls.filter(x => x.isGap).length;
-  o.solidWalls = w.walls.filter(x => !x.ballOnly).length;
-  o.everyGapWallIsSolid = w.walls.filter(x => x.isGap).every(x => !x.ballOnly);
-  o.boundaryStillBallOnly = w.walls.filter(x => !x.isGap).every(x => !!x.ballOnly);
+  o.geom = {};
+  for (const k of o.withGaps){
+    M.sel.field = k; M.setMatchSeed(3); M.startMatch();
+    const w = M.world;
+    o.geom[k] = {
+      gapWalls: w.walls.filter(x => x.isGap).length,
+      solidWalls: w.walls.filter(x => !x.ballOnly).length,
+      everyGapWallIsSolid: w.walls.filter(x => x.isGap).every(x => !x.ballOnly),
+      boundaryStillBallOnly: w.walls.filter(x => !x.isGap).every(x => !!x.ballOnly),
+    };
+  }
   M.sel.field = 'classic'; M.startMatch();
   o.classicSolidWalls = M.world.walls.filter(x => !x.ballOnly).length;
   return o;
 });
 
-ok('exactly one shipped field has a gap', t.withGaps.length === 1 && t.withGaps[0] === 'faceoff',
-   JSON.stringify(t.withGaps) + ` of ${t.fieldCount} — gapRects returning [] is what makes every helper inert on the rest`);
+const GAPS = t.withGaps;
+ok('the gap fields are exactly the two shipped ones', GAPS.join(',') === 'faceoff,island',
+   JSON.stringify(GAPS) + ` of ${t.fieldCount} — gapRects returning [] is what makes every helper inert on the rest`);
 ok('...and Classic has no wall that blocks a player', t.classicSolidWalls === 0,
    `${t.classicSolidWalls} — every boundary wall is ballOnly, and the gap is the only exception anywhere`);
-ok('the gap is eight walls, all solid to players', t.gapWalls === 8 && t.everyGapWallIsSolid && t.solidWalls === 8,
-   JSON.stringify({ gap: t.gapWalls, solid: t.solidWalls }));
-ok('...and the boundary is still ballOnly', t.boundaryStillBallOnly,
-   'the step-out margin has to stay uniform all the way round — the gap is interior, not a board');
-ok('the two blocks mirror about the halfway line', t.symmetric, JSON.stringify(t.rects));
-ok('the channels take two bodies abreast', t.channelTakesTwo,
-   `${t.channel} units — any tighter and you cannot get past a defender at all on a court this thin`);
-ok('the slot clears the centre circle', t.slotClearsCircle,
-   'KICKOFF_CIRCLE_R === CENTER_R: the half-line rule\'s gate IS the drawn circle, so a block over it is a gate nobody can stand in');
-ok('the blocks stay inside the pitch', t.blocksInsideThePitch, JSON.stringify(t.rects));
-ok('a gap field is filed under Other', t.shape === 'other', t.shape);
+for (const k of GAPS){
+  const g = t.geom[k], v = t.inv[k];
+  ok(`${k}: the gap is eight walls, all solid to players`,
+     g.gapWalls === 8 && g.everyGapWallIsSolid && g.solidWalls === 8, JSON.stringify(g));
+  ok(`${k}: ...and the boundary is still ballOnly`, g.boundaryStillBallOnly,
+     'the step-out margin has to stay uniform all the way round — the gap is interior, not a board');
+  ok(`${k}: the two blocks mirror about the halfway line`, v.symmetric, JSON.stringify(v));
+  ok(`${k}: the channels take two bodies abreast`, v.channelTakesTwo,
+     `${v.channel} units — any tighter and you cannot get past a defender at all`);
+  // ⚠️ The check that catches a second court built by copying Faceoff's fractions: the
+  // slot is a FRACTION and the circle it must clear is an ABSOLUTE 58.
+  ok(`${k}: the slot clears the centre circle`, v.slotClearsCircle,
+     'KICKOFF_CIRCLE_R === CENTER_R: the half-line rule\'s gate IS the drawn circle, so a block over it is a gate nobody can stand in');
+  ok(`${k}: the blocks stay inside the pitch`, v.blocksInsideThePitch, JSON.stringify(v));
+  ok(`${k}: ...and are deep enough to be a barrier`, v.deep, JSON.stringify(v));
+  ok(`${k}: is filed under Other`, t.shapes[k] === 'other', String(t.shapes[k]));
+}
 ok('...and an ordinary rectangle is still Square', t.classicShape === 'square', t.classicShape);
 
 // ============================================ players: kept out, and let round ==
-const move = await p.evaluate(() => {
-  const M = window.__magnet, o = {};
-  // ⚠️ The ball is parked somewhere LEGAL and RE-PARKED every step — see the header.
-  // Every other body is parked too, or a bot wanders into the body being measured.
-  const park = (w) => {
-    w.ball.x = 120; w.ball.y = 430; w.ball.vx = 0; w.ball.vy = 0;
-    w.players.slice(1).forEach(q => { q.x = -120; q.y = -430; q.vx = 0; q.vy = 0; });
-  };
-  const fresh = () => {
-    M.sel.mode = '1v1'; M.sel.controllers = 'off'; M.sel.kickoffRule = 'off'; M.sel.lobby = 'off';
-    M.sel.field = 'faceoff'; M.setMatchSeed(7); M.startMatch();
-    const w = M.world; w.state = 'play'; w.stateT = 2; park(w); return w;
-  };
-  const rects = w => M.gapRects(w.field);
-  const inGap = (w, x, y) => rects(w).some(g => x > g.x0 && x < g.x1 && y > g.y0 && y < g.y1);
-  const drive = (w, me, dx, dy, n) => {
-    M.pads.p1.dx = dx; M.pads.p1.dy = dy;
-    let entered = 0;
-    for (let i = 0; i < n; i++){ M.step(w); park(w); if (inGap(w, me.x, me.y)) entered++; }
-    M.pads.p1.dx = 0; M.pads.p1.dy = 0;
-    return entered;
-  };
-  const at = (x, y) => { const w = fresh(), me = w.players[0]; me.x = x; me.y = y; me.vx = 0; me.vy = 0; return [w, me]; };
+// ⚠️ **EVERY PROBE POSITION IS DERIVED FROM THE FIELD, never typed in.** The first version
+// used absolute coordinates tuned to Faceoff Orbit — y = ±400 on a court whose half length
+// is 510 — and the same numbers on the 760-long Island are past the goal line, so the
+// second court would have been "tested" from outside the pitch.
+const move = await p.evaluate((keys) => {
+  const M = window.__magnet, out = {};
+  for (const key of keys){
+    const o = {};
+    // ⚠️ The ball is parked somewhere LEGAL and RE-PARKED every step — see the header.
+    // Every other body is parked too, or a bot wanders into the body being measured.
+    const bounds = () => M.world.bounds;
+    const park = (w) => {
+      const b = w.bounds;
+      w.ball.x = b.halfW * 0.7; w.ball.y = b.halfL * 0.85; w.ball.vx = 0; w.ball.vy = 0;
+      w.players.slice(1).forEach(q => { q.x = -b.halfW * 0.7; q.y = -b.halfL * 0.85; q.vx = 0; q.vy = 0; });
+    };
+    const fresh = () => {
+      M.sel.mode = '1v1'; M.sel.controllers = 'off'; M.sel.kickoffRule = 'off'; M.sel.lobby = 'off';
+      M.sel.field = key; M.setMatchSeed(7); M.startMatch();
+      const w = M.world; w.state = 'play'; w.stateT = 2; park(w); return w;
+    };
+    const rects = w => M.gapRects(w.field);
+    const inGap = (w, x, y) => rects(w).some(g => x > g.x0 && x < g.x1 && y > g.y0 && y < g.y1);
+    const drive = (w, me, dx, dy, n) => {
+      M.pads.p1.dx = dx; M.pads.p1.dy = dy;
+      let entered = 0;
+      for (let i = 0; i < n; i++){ M.step(w); park(w); if (inGap(w, me.x, me.y)) entered++; }
+      M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+      return entered;
+    };
+    const at = (fn) => { const w = fresh(), me = w.players[0]; const s2 = fn(rects(w)[1], w.bounds);
+      me.x = s2.x; me.y = s2.y; me.vx = 0; me.vy = 0; return [w, me]; };
 
-  { const [w, me] = at(0, 20);   o.fromSlot   = { in: drive(w, me, 0, 1, 600), y: +me.y.toFixed(1), edge: rects(w)[1].y0 }; }
-  { const [w, me] = at(0, 400);  o.fromBehind = { in: drive(w, me, 0, -1, 600), y: +me.y.toFixed(1), edge: rects(w)[1].y1 }; }
-  { const [w, me] = at(-230, 400); o.atCorner = { in: drive(w, me, 0.7, -0.7, 600) }; }
-  for (const [k, x] of [['right', 135], ['left', -135]]){
-    const [w, me] = at(x, -400);
-    o['channel_' + k] = { in: drive(w, me, 0, 1, 900), y: +me.y.toFixed(1), reached: me.y > w.bounds.halfL - 40 };
+    // straight at the near face, from inside the halfway slot
+    { const [w, me] = at(g => ({ x: 0, y: g.y0 * 0.25 }));
+      o.fromSlot = { in: drive(w, me, 0, 1, 600), y: +me.y.toFixed(1), edge: rects(w)[1].y0 }; }
+    // ...and at the far face, from up-field of the block
+    { const [w, me] = at((g, b) => ({ x: 0, y: Math.min(b.halfL - 40, g.y1 + 150) }));
+      o.fromBehind = { in: drive(w, me, 0, -1, 600), y: +me.y.toFixed(1), edge: rects(w)[1].y1 }; }
+    // ...and diagonally at a corner of it
+    { const [w, me] = at((g, b) => ({ x: -(b.halfW - 20), y: Math.min(b.halfL - 40, g.y1 + 120) }));
+      o.atCorner = { in: drive(w, me, 0.7, -0.7, 600) }; }
+    // both channels, end to end. ⚠️ Paired with the checks above on purpose: "a player
+    // cannot enter the gap" is equally true of a pitch nobody can cross at all.
+    for (const [nm, sgn] of [['right', 1], ['left', -1]]){
+      const [w, me] = at((g, b) => ({ x: sgn * (g.x1 + b.halfW) / 2, y: -(b.halfL - 60) }));
+      o['channel_' + nm] = { in: drive(w, me, 0, 1, 1200), y: +me.y.toFixed(1),
+                             reached: me.y > w.bounds.halfL - 60 };
+    }
+    // ...and across the halfway slot, which is what keeps the kickoff spot reachable
+    { const [w, me] = at((g, b) => ({ x: -(g.x1 + b.halfW) / 2, y: 0 }));
+      const started = me.x;
+      o.acrossSlot = { in: drive(w, me, 1, 0, 900), x: +me.x.toFixed(1),
+                       crossed: me.x > -started * 0.6 }; }
+    out[key] = o;
   }
-  { const [w, me] = at(-135, 0);
-    o.acrossSlot = { in: drive(w, me, 1, 0, 600), x: +me.x.toFixed(1), crossed: me.x > 100 }; }
-  return o;
-});
+  return out;
+}, GAPS);
 
-ok('a player driven at a block is stopped by it', move.fromSlot.in === 0 && move.fromSlot.y < move.fromSlot.edge,
-   JSON.stringify(move.fromSlot));
-ok('...from the far side too', move.fromBehind.in === 0 && move.fromBehind.y > move.fromBehind.edge,
-   JSON.stringify(move.fromBehind));
-ok('...and driven diagonally at a corner', move.atCorner.in === 0, JSON.stringify(move.atCorner));
-// ⚠️ Paired with the checks above on purpose. "A player cannot enter the gap" is equally
-// true of a pitch nobody can cross at all, which is the build this must not become.
-ok('the right-hand channel runs end to end', move.channel_right.in === 0 && move.channel_right.reached,
-   JSON.stringify(move.channel_right));
-ok('...and so does the left-hand one', move.channel_left.in === 0 && move.channel_left.reached,
-   JSON.stringify(move.channel_left));
-ok('the slot crosses from one channel to the other', move.acrossSlot.in === 0 && move.acrossSlot.crossed,
-   JSON.stringify(move.acrossSlot) + ' — the slot is what keeps the kickoff spot reachable');
+for (const k of GAPS){
+  const m = move[k];
+  ok(`${k}: a player driven at a block is stopped by it`,
+     m.fromSlot.in === 0 && m.fromSlot.y < m.fromSlot.edge, JSON.stringify(m.fromSlot));
+  ok(`${k}: ...from the far side too`,
+     m.fromBehind.in === 0 && m.fromBehind.y > m.fromBehind.edge, JSON.stringify(m.fromBehind));
+  ok(`${k}: ...and driven diagonally at a corner`, m.atCorner.in === 0, JSON.stringify(m.atCorner));
+  ok(`${k}: the right-hand channel runs end to end`,
+     m.channel_right.in === 0 && m.channel_right.reached, JSON.stringify(m.channel_right));
+  ok(`${k}: ...and so does the left-hand one`,
+     m.channel_left.in === 0 && m.channel_left.reached, JSON.stringify(m.channel_left));
+  ok(`${k}: the slot crosses from one channel to the other`,
+     m.acrossSlot.in === 0 && m.acrossSlot.crossed,
+     JSON.stringify(m.acrossSlot) + ' — the slot is what keeps the kickoff spot reachable');
+}
 
 // ================================================= the ball, and the kickoff ==
-const ball = await p.evaluate(() => {
-  const M = window.__magnet, o = {};
-  M.sel.mode = '1v1'; M.sel.controllers = 'off'; M.sel.lobby = 'off';
-  M.sel.field = 'faceoff'; M.setMatchSeed(9); M.startMatch();
-  const w = M.world; w.state = 'play'; w.stateT = 2;
-  const inGap = (x, y) => M.gapRects(w.field).some(g => x > g.x0 && x < g.x1 && y > g.y0 && y < g.y1);
-  // Fired at every face, at and beyond the speed cap. ⚠️ Never STARTED inside — the first
-  // run of this seeded a shot at (0,-95), which is in a block, and reported 800 frames
-  // "inside" as though the wall had failed.
-  const shots = [[0,-400,0,30], [0,400,0,-30], [-260,-260,26,20], [260,260,-26,-20],
-                 [0,-40,0,-30], [-260,0,30,4], [0,40,4,30], [0,-400,0,60], [-260,-260,45,32]];
-  let inside = 0, startedInside = 0;
-  for (const [x, y, vx, vy] of shots){
-    if (inGap(x, y)){ startedInside++; continue; }
-    w.ball.x = x; w.ball.y = y; w.ball.vx = vx; w.ball.vy = vy;
-    for (let i = 0; i < 900; i++){ M.moveBall(w, w.ball, []); if (inGap(w.ball.x, w.ball.y)) inside++; }
-  }
-  o.shots = shots.length; o.inside = inside; o.startedInside = startedInside;
+const ball = await p.evaluate((keys) => {
+  const M = window.__magnet, out = {};
+  for (const key of keys){
+    const o = {};
+    M.sel.mode = '1v1'; M.sel.controllers = 'off'; M.sel.lobby = 'off';
+    M.sel.field = key; M.setMatchSeed(9); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    const rs = M.gapRects(w.field), g = rs[1], b = w.bounds;
+    const inGap = (x, y) => rs.some(r => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1);
+    // Fired at every face, at and beyond the speed cap, from positions derived from the
+    // court. ⚠️ Never STARTED inside — the first run seeded a shot at (0,-95), which is in
+    // a block, and reported 800 frames "inside" as though the wall had failed.
+    const far = b.halfL * 0.8, wide = b.halfW * 0.85, near = g.y0 * 0.5;
+    const shots = [[0,-far,0,30], [0,far,0,-30], [-wide,-far,26,20], [wide,far,-26,-20],
+                   [0,-near,0,-30], [-wide,0,30,4], [0,near,4,30],
+                   [0,-far,0,60], [-wide,-far,45,32]];
+    let inside = 0, startedInside = 0;
+    for (const [x, y, vx, vy] of shots){
+      if (inGap(x, y)){ startedInside++; continue; }
+      w.ball.x = x; w.ball.y = y; w.ball.vx = vx; w.ball.vy = vy;
+      for (let i = 0; i < 900; i++){ M.moveBall(w, w.ball, []); if (inGap(w.ball.x, w.ball.y)) inside++; }
+    }
+    o.shots = shots.length; o.inside = inside; o.startedInside = startedInside;
 
-  // Kickoff at every roster size: nobody, and no ball, starts in a block.
-  o.badStarts = [];
-  for (const mode of ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6']){
-    M.sel.mode = mode; M.setMatchSeed(21); M.startMatch();
-    const w2 = M.world;
-    if (inGap(w2.ball.x, w2.ball.y)) o.badStarts.push(mode + ':ball');
-    w2.players.forEach((q, i) => { if (inGap(q.x, q.y)) o.badStarts.push(`${mode}:p${i}`); });
-    // ...and the mark they are held on at kickoff is the pushed one, or applyKickoffLine
-    // walks them straight back into the wall.
-    w2.players.forEach((q, i) => { if (inGap(q.homeX, q.homeY)) o.badStarts.push(`${mode}:home${i}`); });
+    // Kickoff at every roster size: nobody, and no ball, starts in a block.
+    o.badStarts = [];
+    for (const mode of ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6']){
+      M.sel.mode = mode; M.setMatchSeed(21); M.startMatch();
+      const w2 = M.world;
+      if (inGap(w2.ball.x, w2.ball.y)) o.badStarts.push(mode + ':ball');
+      w2.players.forEach((q, i) => { if (inGap(q.x, q.y)) o.badStarts.push(`${mode}:p${i}`); });
+      // ...and the mark they are held on at kickoff is the pushed one, or applyKickoffLine
+      // walks them straight back into the wall.
+      w2.players.forEach((q, i) => { if (inGap(q.homeX, q.homeY)) o.badStarts.push(`${mode}:home${i}`); });
+    }
+    out[key] = o;
   }
-  return o;
-});
+  return out;
+}, GAPS);
 
-ok('the probe never starts the ball inside a block', ball.startedInside === 0, `${ball.startedInside}`);
-ok('the ball bounces off the gap and never rests in it', ball.inside === 0,
-   `${ball.inside} frames inside over ${ball.shots} shots × 900 steps at and above the speed cap`);
-ok('nobody kicks off inside the gap, at any roster size', ball.badStarts.length === 0,
-   JSON.stringify(ball.badStarts) + ' — layTeam pushes the mark out, and homeX/homeY is written from the pushed spot');
+for (const k of GAPS){
+  const bl = ball[k];
+  ok(`${k}: the probe never starts the ball inside a block`, bl.startedInside === 0, `${bl.startedInside}`);
+  ok(`${k}: the ball bounces off the gap and never rests in it`, bl.inside === 0,
+     `${bl.inside} frames inside over ${bl.shots} shots × 900 steps at and above the speed cap`);
+  ok(`${k}: nobody kicks off inside the gap, at any roster size`, bl.badStarts.length === 0,
+     JSON.stringify(bl.badStarts) + ' — layTeam pushes the mark out, and homeX/homeY is written from the pushed spot');
+}
 
 // ============================== nothing may be PLACED inside a block ==
 // ⚠️ **A BLOCK IS A BARRIER, NOT A CONTAINER, and this is the sharpest thing the suite
@@ -223,15 +280,18 @@ const placed = await p.evaluate(() => {
     o.berrySeeds.push(atSpawn);
   }
 
-  // The warm-up lobby row, at every side size the stepper can reach.
+  // The warm-up lobby row, at every side size the stepper can reach, on EVERY gap court.
   o.lobbySpots = [];
-  const stub = { field: M.FIELDS.faceoff, bounds: { halfW: 170, halfL: 510 } };
-  for (let cnt = 1; cnt <= 8; cnt++)
-    for (let i = 0; i < cnt; i++)
-      for (const team of [0, 1]){
-        const sp = M.lobbySpotFor(stub, team, i, cnt);
-        if (inGap(stub, sp.x, sp.y)) o.lobbySpots.push([cnt, i, team]);
-      }
+  for (const key of Object.keys(M.FIELDS).filter(x => M.gapRects(M.FIELDS[x]).length)){
+    const f = M.FIELDS[key];
+    const stub = { field: f, bounds: { halfW: f.W / 2, halfL: f.L / 2 } };
+    for (let cnt = 1; cnt <= 8; cnt++)
+      for (let i = 0; i < cnt; i++)
+        for (const team of [0, 1]){
+          const sp = M.lobbySpotFor(stub, team, i, cnt);
+          if (inGap(stub, sp.x, sp.y)) o.lobbySpots.push([key, cnt, i, team]);
+        }
+  }
 
   // ...and a real lobby, settled: no body ends up standing in a block.
   M.sel.mode = '4v4'; M.sel.lobby = 'on';
@@ -412,6 +472,76 @@ for (const pal of ['faceoff', 'grass', 'chalk']){
 ok('the picker tile draws the gap too', drawn.tileDiff > 200,
    `${drawn.tileDiff} pixels — a tile showing a plain rectangle would be offering a pitch you do not get`);
 
+// ============================= a theme may name the pitch it was drawn for ==
+// ⚠️ Reported as *"I selected the theme and I can't see the correct pitch"*. The theme and
+// the court share the name `faceoff` and are different tables reached from different cards:
+// `THEME_BUNDLES.faceoff.field` is a DYN_FIELDS PAINTER, `FIELDS.faceoff` is the court with
+// the gap. Picking the theme painted the sky and left you on Classic.
+const theme = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const tileH = (re) => {
+    const t = [...document.querySelectorAll('#fields .opt')].find(x => re.test(x.textContent));
+    return t ? +t.getBoundingClientRect().height.toFixed(0) : -1;
+  };
+  M.openLook('match'); if (M.showSubTab) M.showSubTab('match', 'pitch');
+
+  // Only bundles that were drawn FOR a court carry one. Everything else is a treatment
+  // that works on any rectangle and must never move somebody's pitch.
+  o.withPitch = M.bundleKeys().map(k => [k, M.bundlePitch(k)]).filter(x => x[1]);
+
+  // ⚠️ Start on Classic AND with the shape row stuck on a different tab. That second half
+  // is the real trap: `fieldShapeNow()` is sticky once a chip has been tapped, so a theme
+  // that moves `sel.field` into another group can leave the tile it just selected HIDDEN.
+  M.sel.field = 'classic'; M.saveSel(); M.refreshPitchTiles();
+  M.setFieldShapeTab('square');
+  o.hiddenBefore = tileH(/Faceoff/i);
+  const n0 = document.querySelectorAll('#toasts .toast').length;
+  M.applyBundle('faceoff');
+  o.toasts = document.querySelectorAll('#toasts .toast').length - n0;
+  o.toastText = [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).slice(-1)[0] || '';
+  o.field = M.sel.field;
+  o.tab = [...document.querySelectorAll('#fieldShapes .sel')].map(x => x.dataset.shape)[0];
+  o.visibleAfter = tileH(/Faceoff/i);
+  o.markedSelected = ![...document.querySelectorAll('#fields .opt.sel')]
+    .every(x => !/Faceoff/i.test(x.textContent));
+
+  // Picking it again while already there writes nothing and says nothing.
+  const n1 = document.querySelectorAll('#toasts .toast').length;
+  M.applyBundle('faceoff');
+  o.secondToast = document.querySelectorAll('#toasts .toast').length - n1;
+
+  // ⚠️ THE IDENTITY INVARIANT: the pitch is something a bundle DOES, not part of what it
+  // IS. Folded into `bundleSlots`, changing your court afterwards would silently rename
+  // your theme to Custom.
+  o.bundleBefore = M.currentBundle();
+  M.selectField('island');
+  o.bundleAfterPitchChange = M.currentBundle();
+  o.fieldAfter = M.sel.field;
+
+  // ...and a bundle with no pitch leaves the court exactly where it is.
+  const plain = M.bundleKeys().find(k => !M.bundlePitch(k) && k !== 'faceoff');
+  M.applyBundle(plain);
+  o.plainBundle = plain; o.fieldAfterPlain = M.sel.field;
+  return o;
+});
+
+ok('only a bundle drawn for a court names one', theme.withPitch.length === 1 && theme.withPitch[0][0] === 'faceoff',
+   JSON.stringify(theme.withPitch) + ' — every other look is a treatment that works on any rectangle');
+ok('picking the theme puts you on its pitch', theme.field === 'faceoff', theme.field);
+ok('...and says so', theme.toasts === 1 && /Faceoff Orbit/.test(theme.toastText),
+   JSON.stringify({ n: theme.toasts, text: theme.toastText }) + ' — a setting that moves under your hand is worse than one you had to find');
+ok('...and the picker follows it', theme.tab === 'other' && theme.visibleAfter > 0 && theme.markedSelected,
+   JSON.stringify({ tab: theme.tab, before: theme.hiddenBefore, after: theme.visibleAfter }) +
+   ' — fieldShapeNow() is sticky, so without clearing it the tile just selected stays hidden');
+ok('...and the tile really was hidden to begin with', theme.hiddenBefore === 0,
+   `${theme.hiddenBefore}px — if it was visible anyway the check above proves nothing`);
+ok('picking it again while already there is silent', theme.secondToast === 0, `${theme.secondToast} toasts`);
+ok('changing the pitch afterwards does NOT rename the theme', theme.bundleAfterPitchChange === 'faceoff',
+   `${theme.bundleBefore} -> ${theme.bundleAfterPitchChange} — the pitch is what a bundle DOES, not what it IS`);
+ok('...and the pitch really did change', theme.fieldAfter === 'island', theme.fieldAfter);
+ok('a bundle with no pitch leaves your court alone', theme.fieldAfterPlain === 'island',
+   `${theme.plainBundle} moved it to ${theme.fieldAfterPlain}`);
+
 // =========================================================== the Other tab ==
 const tab = await p.evaluate(() => {
   const M = window.__magnet, o = {};
@@ -435,7 +565,7 @@ ok('...with every tile still in the DOM', tab.stillInTheDom);
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ t, move, ball, bots, drawn, tab }, null, 1));
+console.log(JSON.stringify({ t, move, ball, placed, bots, drawn, theme, tab }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL gapfield\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS gapfield');
