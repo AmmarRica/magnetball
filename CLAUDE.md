@@ -550,6 +550,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   "fixes" it back**: a player on Leviathan is **4.5px** across on a 1280×900 desktop and
   3.5px on a 390×844 phone, and on Colossus 8.9px and 6.9px. That is what a court sixteen
   times Giant's area looks like when all of it has to fit on the screen at once.
+  ⚠️ **AND THE SCREEN THIS IS PLAYED ON IS A TV, which is the owner's answer to that cost
+  and is why the small end is acceptable.** Measured full-screen, a Leviathan player is
+  **5.5px** across at 1080p, **7.5px** at 1440p and **11.6px** on a 4K TV at native CSS
+  pixels — against the **14px** the floor was faking. So on the screen these courts are
+  actually played on, the floor was buying almost nothing and charging the collision
+  mismatch for it; physical size helps again on top of that, since the same mark on a 65"
+  panel is a far bigger thing to the eye than on a 13" laptop. **Do not re-inflate bodies
+  on the strength of a laptop screenshot.**
   ⚠️ **The check is the EXCESS over the collider, never the RATIO, and the obvious
   arithmetic version is VACUOUS** — comparing `p.r*s + b.r*s` against `(p.r + b.r)*s` is
   the same expression on both sides and passes on every build, which is what got written
