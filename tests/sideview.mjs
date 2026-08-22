@@ -242,7 +242,7 @@ const px = await p.evaluate(()=>{
     const pAt = M.screenPt(M.wx(-60), M.wy(PY)), bAt = M.screenPt(M.wx(60), M.wy(BY));
     const pBase = snap(pAt[0], pAt[1]), bBase = snap(bAt[0], bAt[1]);
     place(true); settle();
-    const pr = w.players[0].r * M.cam.s * M.cam.body, br = w.ball.r * M.cam.s * M.cam.body;
+    const pr = w.players[0].r * M.cam.s, br = w.ball.r * M.cam.s;
     const body = diffBox(snap(pAt[0], pAt[1]), pBase);
     const ball = diffBox(snap(bAt[0], bAt[1]), bBase);
     // The region is centred on the GROUND point; the art is a lift above it.
@@ -327,7 +327,7 @@ const px = await p.evaluate(()=>{
   o.depthAxisReadable = Math.abs(s1[1] - s0[1]) > 2;
   const ballSpot = (bxw) => {
     const g = M.screenPt(M.wx(bxw), M.wy(0));
-    return [g[0], g[1] - M.sideLift(w.ball.r * M.cam.s * M.cam.body)];
+    return [g[0], g[1] - M.sideLift(w.ball.r * M.cam.s)];
   };
   park(0, 0, 0); park(1, FAR, FAR); park(2, FAR, FAR); park(3, FAR, FAR);
   w.ball.x = FAR; w.ball.y = FAR; settle();

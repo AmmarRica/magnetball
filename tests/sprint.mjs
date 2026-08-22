@@ -329,7 +329,7 @@ const bands = await p.evaluate(() => {
   const cv = document.getElementById('game'), c = cv.getContext('2d');
   const dpr = cv.width / cv.clientWidth;
   M.computeCam();
-  const r = me.r * M.cam.s * M.cam.body, L = M.ringLayout(me, r);
+  const r = me.r * M.cam.s, L = M.ringLayout(me, r);
   o.layout = { kickR: +L.kickR.toFixed(1), kickW: +L.kickW.toFixed(2), asR: +(L.kickR/r).toFixed(2) };
   const px = M.wx(me.x) * dpr, py = M.wy(me.y) * dpr;
   // ⚠️ **CLASSIFIED AS A DIFFERENCE against the rested body, never an absolute cut.** A

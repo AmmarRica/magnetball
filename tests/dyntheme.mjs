@@ -251,7 +251,7 @@ const r = await p.evaluate(async ()=>{
     w.players.slice(1).forEach(q=>{ q.x=1e4; q.y=1e4; });
     w.ball.x=1e4; w.ball.y=1e4;
     for (let i=0;i<6;i++) M.render();
-    const s2 = M.cam.s * M.cam.body, R = me.r * s2;
+    const s2 = M.cam.s, R = me.r * s2;
     const ink = (dx,dy) => {
       const [sx,sy] = M.screenPt(M.wx(me.x)+dx, M.wy(me.y)+dy);
       const d = c2.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data;
@@ -315,7 +315,7 @@ const r = await p.evaluate(async ()=>{
     me.x=-90; me.y=0; them.x=90; them.y=0;
     w.ball.x=1e4; w.ball.y=1e4;
     for (let i=0;i<5;i++) M.render();
-    const s3 = M.cam.s * M.cam.body;
+    const s3 = M.cam.s;
     // ⚠️ A WINDOW MEAN, not one pixel. The bodies are dithered now, so a single
     // sample lands on a dot or a gap and reports whichever it hit — the question
     // being asked is how dark that patch of the disc is, which is a density.

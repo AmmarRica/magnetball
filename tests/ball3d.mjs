@@ -237,7 +237,7 @@ const r = await p.evaluate(() => {
     M.setMatchSeed(11); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 2;
     M.computeCam();
-    o.phoneBallPx = +(w.ball.r * M.cam.s * M.cam.body).toFixed(2);
+    o.phoneBallPx = +(w.ball.r * M.cam.s).toFixed(2);
     o.engagesOnAPhone = M.ballIs3D(o.phoneBallPx);
   }
 
@@ -424,7 +424,7 @@ const r = await p.evaluate(() => {
     const BIG = 46;
     const shoot = (roll) => {
       // The quarter-turn the deck view uses, with a scale big enough to measure.
-      M.cam.rot = -Math.PI/2; M.cam.sq = 1; M.cam.body = 1;
+      M.cam.rot = -Math.PI/2; M.cam.sq = 1;
       M.cam.s = BIG / w.ball.r; M.cam.ox = gc.width/2; M.cam.oy = gc.height/2;
       gx.fillStyle = '#7f7f7f'; gx.fillRect(0, 0, gc.width, gc.height);
       w.ball.roll = roll; M.markPrev(w); M.renderAlpha = 1;

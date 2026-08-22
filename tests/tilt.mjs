@@ -233,7 +233,7 @@ const shad = await p.evaluate(()=>{
     M.resetTrails();
     M.computeCam(); M.render();
     const [sx, sy] = M.screenPt(M.wx(0), M.wy(0));
-    const r = w.players[0].r * M.cam.s * M.cam.body;
+    const r = w.players[0].r * M.cam.s;
     // ⚠️ A window around the DISC AND ITS SHADOW only. The plate is kept out of it by
     // emptying the name above rather than by where this window falls — it used to sit
     // above the disc and now hangs below, so a window tuned to miss it in one direction is

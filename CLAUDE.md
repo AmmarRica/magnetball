@@ -523,12 +523,43 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   replay is not the step loop — without it every animated theme froze the moment a goal
   went in. Per frame rather than per tick also means it correctly runs in slow motion
   with the action.
-- **Body size floor:** `cam.body` (`MIN_BODY_PX`). On the huge courts the whole pitch must fit
-  on screen, so `cam.s` falls until a player disc is **2.25px** — every disc the same dot. Discs
-  and the ball are drawn at `MIN_BODY_PX` or their true size, whichever is larger, through ONE
-  shared multiplier so they stay in proportion. ⚠️ **Render only** — physics, kick range, hit
-  tests and bots all read `p.r`, and `tests/bigcourt.mjs` steps the same seed with the floor on
-  and forced to 1 and requires the world bit-identical. Exactly `1` on any ordinary court.
+- **A BODY IS DRAWN AT THE SIZE IT COLLIDES AT, ON EVERY COURT, AND THE SIZE FLOOR IS
+  GONE** (`MIN_BODY_PX`, `cam.body`, both deleted). There was a floor: on the huge courts
+  the whole pitch has to fit on screen, so `cam.s` falls until a player is a couple of
+  pixels, and every disc and the ball were scaled up to a minimum by ONE shared multiplier
+  "so they stay in proportion".
+  ⚠️ **They stayed in proportion to each other and not to the PITCH, which is the half that
+  matters.** SIZES were multiplied and SEPARATIONS were not, and every distance on a pitch
+  is a separation — so at the moment two bodies touched, the drawn radii summed to
+  `cam.body ×` the drawn gap between their centres and the picture showed them
+  interpenetrating by exactly that much. Reported as *"collision size does not match the
+  visuals, causing ball to go inside player"*, and measured on Leviathan: at contact the
+  ball's centre was **3.75px** from the player's centre while the player was drawn at a
+  radius of **7px** — the ball was drawn wholly inside the body it was resting against.
+  ⚠️ **It reached the KICK RING too, which is worse, because that ring is a promise about
+  the physics rather than a decoration** — *"a ball touching this ring is within kicking
+  distance, by construction"*. `ringLayout` is handed the drawn body radius, so the ring
+  came out **3.11×** its true reach on Leviathan and **1.57×** on Colossus: the ball sat
+  well inside the ring and would not kick.
+  ⚠️ **NO CAP COULD FIX IT, and that was worked through rather than assumed.** The overlap
+  is `(cam.body − 1) × gap`, so ANY multiplier above 1 draws interpenetration and capping
+  only chooses how big a lie to tell. This is the **VideoSoccer arrowhead decided again** —
+  there the drawn shape was a third bigger than the collider and the DRAWING was made to
+  match the physics, never the other way round.
+  ⚠️ **What it costs is real, was measured before choosing, and is pinned so nobody
+  "fixes" it back**: a player on Leviathan is **4.5px** across on a 1280×900 desktop and
+  3.5px on a 390×844 phone, and on Colossus 8.9px and 6.9px. That is what a court sixteen
+  times Giant's area looks like when all of it has to fit on the screen at once.
+  ⚠️ **The check is the EXCESS over the collider, never the RATIO, and the obvious
+  arithmetic version is VACUOUS** — comparing `p.r*s + b.r*s` against `(p.r + b.r)*s` is
+  the same expression on both sides and passes on every build, which is what got written
+  first. A body must be drawn with a PEN (an outline, a rim, a soft shadow), so the painted
+  silhouette is always a few pixels wider than the collider: on a 6px body that is a ratio
+  of 1.78 and on a 35px body 1.17, so ratio says nothing. What a pen does and a scale
+  cannot is **stay the same number of pixels as the body shrinks** — measured across a 5.6×
+  range of `cam.s` the excess is a flat 2.9-4.8px, where the floor added 2.11× the body on
+  Leviathan alone. `tests/bigcourt.mjs` measures all three (ball, disc, ring) in rendered
+  pixels as a difference against the same frame with the body taken away.
 - **Sound sets (`SFX_SETS`):** ⚠️ a set is a whole ROOM picked at once, which is why it
   exists rather than six separate dials — a solenoid flipper thunk under a referee's pea
   whistle is two places at the same time. **Pinball** is the fourth: plunger, flipper, pop

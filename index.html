@@ -4248,7 +4248,7 @@ function sideViewWant(){
 function sideLift(r){ return SIDE.h * r; }
 function sideBallLift(w){
   const b = w && w.ball; if (!b) return 0;
-  return sideLift(b.r * cam.s * cam.body);
+  return sideLift(b.r * cam.s);
 }
 // ============================================================
 //  DIGITAL THUMBSTICK
@@ -4622,7 +4622,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260822.0135AM';
+const VERSION = '20260822.0310AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4638,6 +4638,14 @@ const VERSION = '20260822.0135AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260822.0310AM', title: 'What you see is what you hit',
+    changed: [
+      '<b>On the biggest pitches, players and the ball are now drawn at the size they actually are.</b> They were being scaled up so they would not be tiny dots \u2014 but only their SIZES were, not the gaps between them, so a ball resting against you was drawn inside you. Bodies are small on Colossus and Leviathan now, and everything you see is where it really is.',
+      '<b>The ring around your player is your real kicking range again on those courts.</b> It was drawn up to three times too big on Leviathan, so the ball could sit well inside it and still not connect.',
+    ],
+    added: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260822.0135AM', title: 'Unplug and plug back in',
     changed: [
       '<b>A controller that comes back gets its own player again, even on a different port.</b> Reconnecting rarely gives a pad the slot it had before, and the game was only recognising the slot \u2014 so someone who unplugged mid-match came back as a brand-new player with none of their goals, and the one they had been playing was left on the bench for the rest of the game.',
@@ -18393,7 +18401,7 @@ function drawFloaters(sx, sy, bx, by){
     // ⚠️ Plus the body height in the side view. `screenPt` lands on the GROUND, and out
     // there a body stands a full radius and a bit above it, so an unadjusted label would
     // sit across the middle of the player it is naming.
-    const stand = sideNow ? sideLift(FLOAT.anchorR * cam.s * cam.body) : 0;
+    const stand = sideNow ? sideLift(FLOAT.anchorR * cam.s) : 0;
     const y = Math.max(FLOAT.size + 2, py + sy + by - climb - stand - f.tier * FLOAT.gap);
     // ⚠️ THE HALO GOES FIRST, the name plates' rule and for the same reason: black over a
     // mid-green pitch keeps far more contrast at a given alpha than a pale fill does, so
@@ -21472,7 +21480,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 // ============================================================
 //  RENDER
 // ============================================================
-let cam = { s:1, ox:0, oy:0, body:1, sq:1 };   // body = render-only size floor, see MIN_BODY_PX; sq = SIDE view squash
+let cam = { s:1, ox:0, oy:0, sq:1 };           // sq = SIDE view squash
 // ---------- Goal camera ------------------------------------------------------
 // On a goal the view pushes in on whoever last touched the ball and eases back out
 // when the celebration ends. Render layer only — it moves `cam`, which no physics,
@@ -21561,13 +21569,6 @@ function resize(){
     dockOrFull('setup', null, true);   // automatic: keep the collapse state as-is
   }
 }
-// Smallest a player disc may be drawn. Below this the faceplate, the shirt number
-// and the team colour are all unreadable, and every disc reads as the same dot.
-// ⚠️ Declared ABOVE computeCam, which reads it. It sat below and only survived
-// because computeCam's one bootstrap-time caller is guarded by `if (world)`, and
-// world is still null there — luck, not design. Two TDZ incidents are already
-// recorded in CLAUDE.md (VJUI, GOALCAM); this is the same shape.
-const MIN_BODY_PX = 7;
 function computeCam(){
   const f = world.field;
   const padL = uiPadLeft || 0;              // keep the pitch clear of a docked panel
@@ -21665,16 +21666,33 @@ function computeCam(){
   // the TOP of the frame where the far touchline is, not split evenly above and below.
   if (sideNow) cam.oy += SIDE.head * cam.s * 0.5;
   applyGoalCam();
-  // ⚠️ RENDER ONLY. On the huge courts the whole pitch still has to fit on screen, so
-  // cam.s falls far enough that a player disc is 2 pixels across — measured 2.1px on
-  // Leviathan, which is a dot you cannot tell from any other dot. Bodies get a floor:
-  // discs and the ball are drawn at MIN_BODY_PX or their true size, whichever is
-  // bigger, by ONE shared multiplier so their sizes stay in proportion to each other.
-  // Nothing else uses it — the physics radius, the kick range, the hit tests and the
-  // bots all read p.r, so a Leviathan match plays exactly as it would if you could
-  // not see it. On any normal court the multiplier is exactly 1.
-  const pr = (world.players && world.players[0] ? world.players[0].r : 14) * cam.s;
-  cam.body = pr > 0 ? Math.max(1, MIN_BODY_PX / pr) : 1;
+  // ⚠️ **A BODY IS DRAWN AT THE SIZE IT COLLIDES AT, ON EVERY COURT, AND THERE IS NO
+  // FLOOR ANY MORE.** There was one (`MIN_BODY_PX`, `cam.body`): on the huge courts the
+  // whole pitch has to fit on screen, so `cam.s` falls until a player is a couple of
+  // pixels, and every disc and the ball were scaled up to a minimum size by one shared
+  // multiplier. It was called render-only and it was — but SIZES were multiplied and
+  // SEPARATIONS were not, and every distance on the pitch is a separation. So at the
+  // moment two bodies touched, the drawn radii summed to `cam.body ×` the drawn gap
+  // between their centres, and the picture showed them interpenetrating by exactly that
+  // much. Reported as *"collision size does not match the visuals, causing ball to go
+  // inside player"*, and measured on Leviathan: at contact the ball's centre was
+  // **3.75px** from the player's centre while the player was drawn at a radius of
+  // **7px** — the ball was drawn entirely inside the body it was resting against.
+  // ⚠️ **It reached the KICK RING too, which is worse, because that ring is a promise
+  // about the physics rather than a decoration** (see `kickRangeUnits` — *"a ball
+  // touching this ring is within kicking distance, by construction"*). `ringLayout` is
+  // handed the drawn body radius, so the ring came out **3.11×** its true reach on
+  // Leviathan and **1.57×** on Colossus: the ball sat well inside the ring and would
+  // not kick.
+  // ⚠️ **No cap could fix it, and that was worked through rather than assumed.** The
+  // overlap is `(cam.body − 1) × gap`, so ANY multiplier above 1 draws interpenetration;
+  // capping only chooses how big a lie to tell. This is the VideoSoccer arrowhead
+  // decided again — the drawn shape was a third bigger than the collider and the
+  // DRAWING was made to match the physics, never the other way round.
+  // ⚠️ What it costs is real and was measured before choosing: a player on Leviathan is
+  // 4.5px across on a 1280×900 desktop and 3.5px on a 390×844 phone, and on Colossus
+  // 8.9px and 6.9px. That is what a court sixteen times Giant's area looks like when it
+  // all has to fit on the screen at once.
 }
 
 function wx(x){ return cam.ox + x*cam.s; }
@@ -26200,7 +26218,7 @@ function drawBenchDiscs(w){
   const s = cam.s;
   ctx.globalAlpha = 0.45;
   for (const p of w.bench){
-    const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s*cam.body;
+    const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s;
     uprightAt(x, y, (px, py) => {
       ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
       ctx.fillStyle = TH.discRim; ctx.fill();
@@ -26219,7 +26237,7 @@ function drawDiscs(w){
     const p = w.players[i];
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
     // plates lie on their side in deck view. Callback x/y are the upright frame.
-    uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s*cam.body, s, i));
+    uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
   }
 }
 
@@ -26237,11 +26255,11 @@ function drawBodiesSide(w, dx, dy){
   const list = [];
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
-    list.push({ p, i, ball:null, x: wx(ix(p)), y: wy(iy(p)), r: p.r*s*cam.body });
+    list.push({ p, i, ball:null, x: wx(ix(p)), y: wy(iy(p)), r: p.r*s });
   }
   for (const b of [w.ball].concat(w.extraBalls || [])){
     if (!b || b.banked) continue;
-    list.push({ p:null, i:-1, ball:b, x: wx(ix(b)), y: wy(iy(b)), r: b.r*s*cam.body });
+    list.push({ p:null, i:-1, ball:b, x: wx(ix(b)), y: wy(iy(b)), r: b.r*s });
   }
   // ⚠️ Sorted on the REAL on-screen y (`screenPt`, which carries both the quarter-turn
   // and the squash), never on a world axis: which world axis runs into the screen
@@ -26607,7 +26625,7 @@ function drawDiscTrails(w){
       t.x = wx(d.x); t.y = wy(d.y); t.a = d.a;
     }
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    look.draw(ctx, trailPts, hist.length, col, p.r*s*cam.body, p.team);
+    look.draw(ctx, trailPts, hist.length, col, p.r*s, p.team);
   }
 }
 
@@ -26673,7 +26691,7 @@ function drawBallTrail(w){
   ctx.restore();
 }
 function drawBall(w){
-  const s=cam.s, b=w.ball, r=b.r*s*cam.body;
+  const s=cam.s, b=w.ball, r=b.r*s;
   // Upright like the discs, so the drop shadow and 3D highlight keep falling the
   // same way on screen no matter which way the pitch is turned.
   uprightAt(wx(ix(b)), wy(iy(b)), (x, y) => drawOneBall(b, x, y, r, s));
@@ -28166,7 +28184,6 @@ if (window.__MAGNETDEBUG) {
     get discTrails(){ return discTrails; }, get ballTrail(){ return ballTrail; }, CHARGE,
     deckFocusables, deckMove, deckActivate, deckPaint, deckSection, deckSlide,
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
-    MIN_BODY_PX,
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
     teamTint, teamColOf, applyTeamColours, setTeamCol, TEAM_COLS, BOT_FACE, numberTheSides, lobbyInGoal, lobbyAllInGoal, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
