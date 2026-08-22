@@ -37,7 +37,7 @@ await p.waitForTimeout(900);
 // connectedGamepadIndices requires both — some mobile browsers expose a stub with neither.
 const FIX = `
   const M = window.__magnet;
-  const pad = (down) => ({ connected:true, mapping:'standard', axes:[0,0,0,0],
+  const pad = (down) => ({ connected:true, mapping:'standard', id:'Fake Controller (STANDARD GAMEPAD)', axes:[0,0,0,0],
     buttons: Array.from({length:17}, (_,i)=>({ pressed:(down||[]).includes(i),
                                               value:(down||[]).includes(i)?1:0 })) });
   const realPads = navigator.getGamepads;
@@ -144,6 +144,91 @@ const r = await p.evaluate(new Function(FIX + `
   PADS = [pad([])]; drive(w, 2);
   o.reclaimsBody = waiting(w).length === 1 && waiting(w)[0] === left &&
                    waiting(w)[0].ms.goals === 2;
+  // ⚠️ ...AND IT DRIVES AGAIN. "The same body came back" and "that person can play" are
+  // different claims — the seat is only real once padIndex is pointing at the pad that
+  // actually returned, and a body handed back with a stale index sits there for the rest
+  // of the match looking exactly like a reclaim that worked. Same lesson fourpads
+  // records: a seat existing is not a pad moving its own body.
+  PADS = [pad([START])]; drive(w, 2); PADS = [pad([])]; drive(w, 1);
+  w.state = 'goal'; drive(w, 2); w.state = 'play'; w._subDone = false; drive(w, 2);
+  o.reclaimedComesBackOn = w.players.includes(left);
+  if (o.reclaimedComesBackOn){
+    // Park everybody else at the far end and take the ball away, or a shove from a bot
+    // reads as the stick working. Only this body's own travel is being measured.
+    for (const q of w.players) if (q !== left){ q.x = 0; q.y = 9e3; }
+    w.ball.x = 9e3; w.ball.y = 9e3;
+    left.x = 0; left.y = 0; left.vx = left.vy = 0;
+    PADS = [Object.assign(pad([]), { axes:[1,0,0,0] })];
+    for (let i=0;i<40;i++){ M.step(w); M.pollDropIn(w); }
+    o.reclaimedDrives = left.x > 40 && Math.abs(left.y) < 10;
+    o.reclaimedTravel = [Math.round(left.x), Math.round(left.y)];
+  }
+
+  // ---- 5b. ...AND IT COMES BACK ON A DIFFERENT INDEX -----------------------
+  // ⚠️ THE CASE THAT ACTUALLY STRANDED PEOPLE. _padWas matched on the index alone, and
+  // a pad does not always get its old slot back — unplug one while another is connected,
+  // or replug over Bluetooth, and the browser hands out the next FREE index. Measured on
+  // the build before the fix: a guest with two goals came back as a brand-new P2 with
+  // none, and the half-match they had played sat on the bench, unreachable, for the rest
+  // of the game. The device id is the fallback.
+  // ⚠️ The old slot is left as a NULL HOLE rather than spliced out, because that is what
+  // a browser really does — splicing renumbers every pad above it and the check would be
+  // measuring its own stub.
+  {
+    const w2 = match('3v3');
+    PADS = [pad([])]; drive(w2, 3);
+    const guest = waiting(w2)[0];
+    const guestName = guest.name;
+    PADS = [pad([START])]; drive(w2, 2); PADS = [pad([])]; drive(w2, 1);
+    w2.state = 'goal'; drive(w2, 2); w2.state = 'play'; w2._subDone = false; drive(w2, 2);
+    o.movedIdxCameOn = w2.players.includes(guest);
+    guest.ms.goals = 2;
+    PADS = []; drive(w2, 3);
+    PADS = [null, pad([])]; drive(w2, 3);          // back, on index 1
+    const wl = waiting(w2);
+    o.movedIdxOneBody   = wl.length === 1;
+    o.movedIdxSameBody  = wl.length === 1 && wl[0] === guest && wl[0].name === guestName;
+    o.movedIdxKeptGoals = wl.length === 1 && wl[0].ms.goals === 2;
+    o.movedIdxNewIndex  = wl.length === 1 && wl[0].padIndex === 1;
+    o.movedIdxNames     = wl.map(q => q.name);
+  }
+
+  // ---- 5c. TWO IDENTICAL CONTROLLERS, and why the INDEX is tried first ------
+  // ⚠️ gamepad.id is a MODEL NAME, so two of the same controller report the same string
+  // and the device fallback cannot tell them apart. That is exactly why it is a fallback:
+  // the index is tried first, and it is the only match that cannot be a guess. Sabotage
+  // shows why this block has to exist at all — dropping the index branch entirely leaves
+  // every other check in this suite green, because with one pad the device matches too.
+  {
+    const w3 = match('3v3');
+    PADS = [pad([]), pad([])]; drive(w3, 3);       // same id on both, by construction
+    const g = waiting(w3);
+    o.twoGuests = g.length === 2;
+    if (o.twoGuests){
+      g[0].name = 'GuestA'; g[1].name = 'GuestB';
+      const idxOf = {}; g.forEach(q => { idxOf[q.name] = q.padIndex; });
+      o.twoGuestIdx = [idxOf.GuestA, idxOf.GuestB];
+      // ⚠️ They have to COME ON first. A body that never made it onto the pitch is
+      // deliberately discarded when its pad goes away (dropOut's !wasOn branch clears
+      // the touchline), so a twin check on two waiting bodies measures two bodies that
+      // no longer exist — which is what the first version of this block did, and it
+      // reported a brand-new P2 for a reason that had nothing to do with the rule.
+      PADS = [pad([START]), pad([START])]; drive(w3, 2);
+      PADS = [pad([]), pad([])];           drive(w3, 1);
+      goal(w3); w3.state = 'play'; w3._subDone = false; drive(w3, 2);
+      o.twinsCameOn = g.every(q => w3.players.includes(q));
+      PADS = []; drive(w3, 3);                     // both walk away
+      o.bothGone = waiting(w3).length === 0;
+      // Only the one that was on slot 1 comes back, on slot 1.
+      PADS = [null, pad([])]; drive(w3, 3);
+      const backList = waiting(w3);
+      const want = idxOf.GuestA === 1 ? 'GuestA' : 'GuestB';
+      o.twinBackOne  = backList.length === 1;
+      o.twinRightOne = backList.length === 1 && backList[0].name === want;
+      o.twinGot      = backList.map(q => q.name);
+      o.twinWanted   = want;
+    }
+  }
 
   // ---- the prompt actually says what will happen ---------------------------
   // ⚠️ It has to be on screen and it has to be HONEST: the side it names is read through
@@ -360,6 +445,15 @@ ok(all.leftToBench && all.noOrphanOnPitch, 'a departed player was left on the pi
 ok(all.keptNameStats, 'a departed player lost its name or its stats');
 ok(all.onScoresheet, 'a player who left mid-match vanished from the scoresheet — the half they played would read as though it never happened');
 ok(all.reclaimsBody, 'a controller coming back got a fresh body instead of reclaiming its own, stranding its half-match on the bench');
+ok(all.reclaimedComesBackOn && all.reclaimedDrives,
+   `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
+ok(all.movedIdxCameOn, 'the guest never made it onto the pitch, so the different-index check below is measuring nothing');
+ok(all.twoGuests && all.twinsCameOn && all.bothGone,
+   `the two-identical-controllers fixture did not set up (two guests ${all.twoGuests}, both came on ${all.twinsCameOn}, both left ${all.bothGone}), so the check below measures nothing`);
+ok(all.twinBackOne && all.twinRightOne,
+   `two identical controllers: slot 1 came back and got ${JSON.stringify(all.twinGot)} instead of ${all.twinWanted} — gamepad.id is a MODEL name, so the device fallback cannot tell two of the same pad apart and the INDEX has to be tried first`);
+ok(all.movedIdxOneBody && all.movedIdxSameBody && all.movedIdxKeptGoals && all.movedIdxNewIndex,
+   `a controller that came back on a DIFFERENT index was treated as a new player: ${JSON.stringify(all.movedIdxNames)}, one body ${all.movedIdxOneBody}, same body ${all.movedIdxSameBody}, goals kept ${all.movedIdxKeptGoals}, new index ${all.movedIdxNewIndex} — a pad rarely gets its old slot back once another is connected, and matching on the index alone stranded a two-goal half-match on the bench`);
 ok(all.undecidedFollowsCoop, `an undecided joiner went to ${all.undecidedVersus} on Versus and ${all.undecidedCoop} on Co-op — Extra controllers already means exactly this question`);
 ok(all.oneVoneGrew, `a 1v1 became ${JSON.stringify(all.oneVone)} instead of a 2v2`);
 ok(all.capHolds, `pads kept arriving and the sides reached ${JSON.stringify(all.cappedSides)} — the per-side cap has to hold`);
@@ -370,7 +464,7 @@ ok(all.idempotent, 'evenUpSides changed a balanced pitch, so it is not safe to c
 ok(all.settingOff, 'Joining late = At kickoff still produced a waiting player');
 ok(all.touchInput, 'a waiting player appeared while Input was set to Touch');
 ok(all.demo, 'a controller joined the attract-mode demo behind the menu');
-ok(all.warmup, 'drop-in fired during warm-up, which already hands seats to pads');
+ok(all.warmup, 'drop-in fired during warm-up. It used to say warm-up "already hands seats to pads", which was simply untrue and is the bug tests/warmupjoin.mjs was written for; warm-up has its own path now (pollLobbyPads) and the two must not both run, or a joiner gets a body AND a touchline stranger');
 ok(all.over, 'a controller joined after the final whistle');
 ok(all.nullWorld, 'dropInBlocked did not reject a null world');
 ok(all.worksUngated, 'with every gate open it stopped working, so the gate checks passed for free');

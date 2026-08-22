@@ -4622,7 +4622,7 @@ const PANEL = detectPanel();
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260822.1220AM';
+const VERSION = '20260822.0135AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4638,6 +4638,14 @@ const VERSION = '20260822.1220AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260822.0135AM', title: 'Unplug and plug back in',
+    changed: [
+      '<b>A controller that comes back gets its own player again, even on a different port.</b> Reconnecting rarely gives a pad the slot it had before, and the game was only recognising the slot \u2014 so someone who unplugged mid-match came back as a brand-new player with none of their goals, and the one they had been playing was left on the bench for the rest of the game.',
+      'The same fix covers warm-up, where a controller coming back keeps the name and colours you had already set up.',
+    ],
+    added: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260822.1220AM', title: 'Joining and leaving in warm-up',
     added: [
       '<b>Plug a controller in during warm-up and you now get a body.</b> It arrives beside the halfway line, undecided, and you walk onto whichever half you want \u2014 the same as if you had been there when the lobby opened. Before this the game brought a ball on for you and gave you nothing to drive.',
@@ -10731,6 +10739,32 @@ function tryKickOff(){
   if (typeof replayAbort === 'function') replayAbort();
   if (arcadeSpend()) startMatch({ lobby: false });
 }
+// ⚠️ **A PAD DOES NOT ALWAYS COME BACK ON THE INDEX IT LEFT, and matching only on the
+// index stranded people.** `_padWas` is what hands somebody their own body back after a
+// cable is kicked out — and unplug pad 0 while pad 1 is still connected, or replug over
+// Bluetooth, and the browser hands out the next FREE slot rather than the old one.
+// Measured: a guest with two goals who came back as index 1 was given a brand-new `P2`
+// with none, and the half-match they had played sat on the bench for the rest of the game
+// as a body nobody could reach. Both the mid-match path and warm-up had it.
+// ⚠️ **The INDEX still wins, and is tried first.** It is the only match that cannot be a
+// guess: that slot was theirs a moment ago and nothing else can be holding it.
+// ⚠️ **The DEVICE is the fallback, and it is a best guess by construction** — `gamepad.id`
+// is a model name, so two identical controllers report the same string. It can therefore
+// hand the wrong one of two orphaned bodies back, or give a newly-arrived third pad a body
+// somebody else walked off with. That is worth it: the alternative is minting a stranger
+// every single time, which loses the name, the shirt and the goals with certainty rather
+// than on a coincidence. Only ORPHANS are eligible (`_padWas != null`), so a body a live
+// pad is driving can never be taken away from it.
+function padIdOf(i){
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  return (gps[i] && gps[i].id) || '';
+}
+function padReclaim(bodies, padIndex, padId){
+  const byIndex = bodies.find(p => p._padWas === padIndex);
+  if (byIndex) return byIndex;
+  if (!padId) return null;
+  return bodies.find(p => p._padWas != null && p._padId === padId) || null;
+}
 function connectedGamepadIndices(){
   // A cabinet's four panels, presented as four pads. Everything downstream — seat handout,
   // drop-in, the warm-up lobby, evening the sides up — goes through this one list.
@@ -14604,6 +14638,7 @@ function startMatch(opts){
       for (const pl of order){
         if (gi >= gpads.length) break;
         pl.ctrl = 'gamepad'; pl.padIndex = gpads[gi++];
+        pl._padId = padIdOf(pl.padIndex);            // so a reconnect can find this body
         if (pl !== you){ pl.name = 'P'+pn; pn++; }   // humans get P2, P3, …
       }
     }
@@ -15157,7 +15192,11 @@ function dropInBlocked(w){
   // The attract-mode demo behind the menu is not a match to join, and pressing a button
   // there is how you navigate the menu.
   if (w.demo || w.drillMode || w.tutorial || w.train) return true;
-  // Warm-up already hands seats to pads (that is what it is for), and after the whistle
+  // ⚠️ Warm-up has its OWN path (`pollLobbyPads`), and this line used to say warm-up
+  // "already hands seats to pads (that is what it is for)" — which was untrue and is the
+  // whole of the bug `tests/warmupjoin.mjs` exists for: seats are dealt once, in
+  // `startMatch`. The two must not both run, or a pad waking up in the lobby would get a
+  // body on the halfway line AND a stranger waiting on the touchline. After the whistle
   // there is nothing left to play.
   return w.state === 'warmup' || w.state === 'over' || w.endRamp != null;
 }
@@ -18031,9 +18070,12 @@ function pollLobbyPads(w){
   const held = new Set(w.players.filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
   for (const i of live){
     if (held.has(i)) continue;
-    const back = w.players.find(p => p.ctrl === 'bot' && p._padWas === i);
+    // ⚠️ Through `padReclaim`, the same rule the mid-match path uses: the index first,
+    // then the DEVICE, because a pad that comes back is often handed a different slot.
+    const padId = padIdOf(i);
+    const back = padReclaim(w.players.filter(p => p.ctrl === 'bot'), i, padId);
     if (back){
-      back.ctrl = 'gamepad'; back.padIndex = i; back._padWas = null;
+      back.ctrl = 'gamepad'; back.padIndex = i; back._padWas = null; back._padId = padId;
       back._lobT = undefined; back._lobTo = null; back._lobArr = true;
       toast(back.name + ' back', 'ok', 'gamepad');
       continue;
@@ -18050,7 +18092,7 @@ function pollLobbyPads(w){
     const team = y >= 0 ? 0 : 1;
     const p = mkPlayer(team, 'P' + n, teamTint(team, n), BOT_CAP, 'gamepad',
                        shirtNo(n), randEyes(n));
-    p.padIndex = i; p.ms = freshMs();
+    p.padIndex = i; p._padId = padIdOf(i); p.ms = freshMs();
     p.x = Math.max(-w.field.W/2 + p.r, Math.min(w.field.W/2 - p.r,
                    (seat % 2 ? 1 : -1) * 34 * Math.ceil(seat/2)));
     p.y = y;
@@ -18673,9 +18715,14 @@ function subWaitFor(w, padIndex){
   // ⚠️ A controller that hiccups and comes back reclaims ITS OWN body, name, stats and
   // all. Minting a fresh P3 instead would leave P2's half-match stranded on the bench and
   // put a second body on the touchline for one person.
-  const mine = (w.bench || []).find(p => p._padWas === padIndex);
+  // ⚠️ Through `padReclaim`, which falls back to the DEVICE when the index has moved — a
+  // pad does not always come back on the slot it left, and matching only on the index is
+  // exactly how the stranding above happened anyway.
+  const padId = padIdOf(padIndex);
+  const mine = padReclaim(w.bench || [], padIndex, padId);
   if (mine){
     mine.ctrl = 'gamepad'; mine.padIndex = padIndex; mine._padWas = null;
+    mine._padId = padId;
     mine.sittingOut = true; mine._subIn = false;
     toast(mine.name + ' back — walk to a side, then START', 'ok', 'gamepad');
     return mine;
@@ -18686,7 +18733,7 @@ function subWaitFor(w, padIndex){
   const team = subDefaultTeam(w);
   const p = mkPlayer(team, 'P' + n, teamTint(team, n), BOT_CAP, 'gamepad',
                      shirtNo(n), randEyes(n));
-  p.padIndex = padIndex; p.sittingOut = true; p.ms = freshMs();
+  p.padIndex = padIndex; p._padId = padId; p.sittingOut = true; p.ms = freshMs();
   const g = subGate(w);
   p.x = g.x; p.y = g.y;
   (w.bench = w.bench || []).push(p);

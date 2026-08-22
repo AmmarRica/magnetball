@@ -2833,6 +2833,34 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
+- **A PAD DOES NOT ALWAYS COME BACK ON THE INDEX IT LEFT** (`padReclaim`, `padIdOf`,
+  `p._padId`). `_padWas` is what hands somebody their own body back after a cable is kicked
+  out, and it matched on the INDEX alone — but unplug pad 0 while pad 1 is still connected,
+  or replug over Bluetooth, and the browser hands out the next FREE slot rather than the old
+  one. Measured: a guest with two goals who came back as index 1 was given a brand-new `P2`
+  with none, and the half-match they had played sat on the bench, unreachable, for the rest
+  of the game. Both `subWaitFor` and warm-up's `pollLobbyPads` had it.
+  ⚠️ **The INDEX still wins and is tried first** — it is the only match that cannot be a
+  guess, because that slot was theirs a moment ago and nothing else can be holding it.
+  ⚠️ **The DEVICE is the fallback and is a best guess BY CONSTRUCTION**: `gamepad.id` is a
+  model name, so two identical controllers report the same string. It can hand the wrong one
+  of two orphaned bodies back. That is worth it — the alternative loses the name, the shirt
+  and the goals with *certainty* rather than on a coincidence.
+  ⚠️ **Only ORPHANS are eligible** (`_padWas != null`), so a body a live pad is driving can
+  never be taken from it. Drop that guard and a second pad connecting steals the first one's
+  body outright, which is what the sabotage measures.
+  ⚠️ **Two identical controllers are what make the index branch load-bearing**, and without
+  a test for them it is unproven: with a single pad the device matches too, so deleting the
+  index branch leaves every other check green. `tests/dropin.mjs` plays two same-id pads,
+  brings BOTH on, unplugs both and returns one on its own slot.
+  ⚠️ **A body that never made it onto the pitch is DISCARDED, not remembered** — `dropOut`'s
+  `!wasOn` branch clears the touchline — so any reconnect check has to bring the guest on
+  first or it is measuring bodies that no longer exist. That mistake was made twice while
+  writing these.
+  ⚠️ **"It came back" and "it can play" are different claims**: the seat is only real once
+  `padIndex` points at the pad that actually returned, and a body handed back with a stale
+  index sits there looking exactly like a reclaim that worked. `tests/dropin.mjs` drives the
+  stick and measures the travel, the `fourpads` lesson again.
 - **A PAD ARRIVING OR LEAVING DURING WARM-UP** (`pollLobbyPads`, called first in
   `stepWarmup`). ⚠️ **The one room built for people joining was the one room that ignored
   them.** `pollDropIn` returns early on `w.state === 'warmup'` under the comment *"warm-up
@@ -2854,7 +2882,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   body nobody can drive AND one `lobbyPlan` still counts as a person on that half — so the
   preview lies and `lobbyStart` fields a statue for the whole match. It keeps `_padWas`, so
   a pad that hiccups and comes back **reclaims its own body**, name and typed letters
-  included.
+  included — through `padReclaim`, the same rule the mid-match path uses (below).
   ⚠️ **Gated on `padsTakeSeats()` and deliberately NOT on `sel.dropIn`** — that setting is
   about interrupting a match in progress, and this room's entire purpose is people arriving
   and picking sides. ⚠️ **A cup tie takes no joiners**: a tie is two entrants and one body a

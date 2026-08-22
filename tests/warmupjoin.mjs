@@ -44,7 +44,10 @@ page.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifes
 // test would be measuring its own stub.
 await page.addInitScript(() => {
   window.__MAGNETDEBUG = true;
-  const mk = i => ({ index: i, id: 'Fake Pad ' + i, connected: true, mapping: 'standard',
+  // ⚠️ `id` is the DEVICE, and it is a separate argument from the index on purpose: the
+  // same physical controller coming back on a different slot has to keep reporting the
+  // same string, or the device fallback is being handed a case it can never meet.
+  const mk = (i, id) => ({ index: i, id: id || ('Fake Pad ' + i), connected: true, mapping: 'standard',
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) });
   window.__mk = mk;
@@ -140,6 +143,27 @@ const r = await page.evaluate(() => {
   o.reclaimedSameBody = !!back && back.name === 'Joiner';
   o.reclaimedNoDouble = w.players.filter(p => p.name === 'Joiner').length;
   o.humansAfterReclaim = M.lobbyHumans(w).length;
+
+  // ---- 4. ...and it comes back on a DIFFERENT INDEX ---------------------------------
+  // ⚠️ THE CASE THAT ACTUALLY STRANDED PEOPLE, and warm-up had it as squarely as the
+  // match did. A pad does not always get its old slot back: unplug one while another is
+  // connected, or replug over Bluetooth, and the browser hands out the next FREE index.
+  // Matching on the index alone, the person came back as a brand-new P-number and the
+  // body they had named and dressed stayed on the pitch as a bot nobody could reach. The
+  // device id is the fallback, so the old slot is left as a NULL HOLE here rather than
+  // spliced out — which is what a browser really does, and splicing would renumber every
+  // pad above it and make the check measure its own stub.
+  window.__pads[1] = null;
+  warm(6);
+  o.goneAgain = !seatFor(1);
+  window.__pads[2] = window.__mk(2, 'Fake Pad 1');   // same DEVICE, slot it has never used
+  warm(6);
+  const moved = seatFor(2);
+  o.movedIdxBack = !!moved;
+  o.movedIdxSameBody = !!moved && moved.name === 'Joiner';
+  o.movedIdxNoDouble = w.players.filter(p => p.name === 'Joiner').length;
+  o.movedIdxHumans = M.lobbyHumans(w).length;
+  o.movedIdxNames = M.lobbyHumans(w).map(p => p.name);
   return o;
 });
 
@@ -182,6 +206,11 @@ ok('A CONTROLLER THAT COMES BACK RECLAIMS ITS OWN BODY', r.reclaimed && r.reclai
    ' — minting a fresh P3 strands the first one, name, colour, faceplate and typed letters and all');
 ok('...and does not leave a second copy behind', r.reclaimedNoDouble === 1 && r.humansAfterReclaim === 2,
    JSON.stringify({ copies: r.reclaimedNoDouble, humans: r.humansAfterReclaim }));
+ok('...even when it comes back on a DIFFERENT INDEX', r.goneAgain && r.movedIdxBack && r.movedIdxSameBody,
+   JSON.stringify({ goneAgain: r.goneAgain, back: r.movedIdxBack, sameBody: r.movedIdxSameBody, names: r.movedIdxNames }) +
+   ' — a pad rarely gets its old slot back once another is connected, and matching on the index alone left the body they had named on the pitch as a bot nobody could reach');
+ok('...still without a second copy', r.movedIdxNoDouble === 1 && r.movedIdxHumans === 2,
+   JSON.stringify({ copies: r.movedIdxNoDouble, humans: r.movedIdxHumans, names: r.movedIdxNames }));
 
 // ===================================================== the key under your feet =====
 // ⚠️ GRASS ON PURPOSE, and pinned: a suite that samples pixels has to say which palette
