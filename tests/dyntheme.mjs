@@ -20,6 +20,14 @@ await p.waitForTimeout(600);
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   const cv=document.getElementById('game'), c2=cv.getContext('2d');
   const DPR = cv.width / cv.clientWidth;
@@ -330,7 +338,13 @@ const r = await p.evaluate(async ()=>{
     // The pale bar has to allow for the shading dots: at the rim the dither is 80%
     // dense, so "white body" means mostly white, not every pixel white.
     const pale = c3 => c3[0]>150 && c3[1]>150 && c3[2]>150;
-    const R = me.r * s3;
+    // WARNING: WORLD UNITS, and this was `me.r * s3` — the body's radius in SCREEN
+    // pixels added to WORLD coordinates, since `at()` takes world points. It only ever
+    // landed on the disc because cam.s happened to be near 1 on this page; the moment the
+    // camera scale moved (a match now collapses the side dock, so the pitch gets the
+    // width back and cam.s rises) every offset below was multiplied by it and 0.62r
+    // became a sample outside the body. void s3 keeps the reading, which is worth having.
+    const R = me.r; void s3;
     // The field is yellow: green-ish channel high, blue low.
     o.chalkCourt = at(0, w.field.L*0.30);
     o.courtIsYellow = o.chalkCourt[0] > 120 && o.chalkCourt[1] > 140 && o.chalkCourt[2] < 110;

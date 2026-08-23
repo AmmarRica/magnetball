@@ -415,10 +415,84 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
   allErrs.push(...errs); await p.close();
 }
 
+// ---------- SELECT: warm-up from the menu, a quarter turn inside it ----------
+// WARNING: SELECT MEANS TWO THINGS AND THE SCREEN DECIDES WHICH. With nothing running it
+// opens WARM-UP — a controller previously had no way at all into the room built for
+// controllers and had to reach for a mouse. Once something is live it goes back to
+// turning that pad's controls a quarter turn. Both halves are checked, because either
+// alone passes a build that only ever does the other one.
+{
+  const { p, errs } = await page(2);
+  Object.assign(o, await p.evaluate(async ()=>{
+    const M=window.__magnet; const r={}; const wait=ms=>new Promise(z=>setTimeout(z,ms));
+    const d=document.getElementById('dmCollect'); if(d) d.click();
+    M.sel.controllers='on'; M.sel.mode='2v2'; M.applyDisplayMode();
+    const press = (i)=>{ window.__pads[i].buttons[8]=true; M.pollSeatRotate();
+                         window.__pads[i].buttons[8]=false; M.pollSeatRotate(); };
+    M.toMenu(); await wait(80);
+    r.idleFirst = !M.world || !!M.world.demo;
+    press(0); await wait(120);
+    r.selectOpensWarmup = !!M.world && M.world.state === 'warmup' && !M.world.demo;
+    // ⚠️ Reported rather than thrown. Sabotaging the idle branch leaves `world` null, and
+    // a suite that dies on a TypeError says "something broke" where it could have said
+    // which claim failed. Same rule tests/warmupjoin.mjs records.
+    if (!M.world) return r;
+    // ...and now that something IS running, the same button turns a seat instead.
+    const was = M.seatRotOf(1);
+    press(1);
+    r.selectTurnsSeat = M.seatRotOf(1) === (was + 1) % 4;
+    r.stillInWarmup = M.world.state === 'warmup';
+    // The first pad's SELECT in here must not open a SECOND lobby either — it is the
+    // same rule from the other side.
+    const before = M.world;
+    press(0); await wait(80);
+    r.noSecondLobby = M.world === before;
+    return r;
+  }));
+  allErrs.push(...errs); await p.close();
+}
+
+// ---------- The host is PLAYER ONE, not whoever is first in the roster ----------
+// WARNING: the host's START begins the match and everybody else's only readies them, so
+// with the host read off roster order the person standing at the panel marked 1 could
+// press START and watch nothing happen — reported from a four-panel cabinet. The roster
+// is deliberately shuffled so pad 0's body is LAST, which is what a real seat handout can
+// produce, and pad 0 still has to be the one that starts it.
+{
+  const { p, errs } = await page(2);
+  Object.assign(o, await p.evaluate(async ()=>{
+    const M=window.__magnet; const r={};
+    const d=document.getElementById('dmCollect'); if(d) d.click();
+    M.sel.controllers='on'; M.sel.mode='2v2'; M.applyDisplayMode();
+    M.setMatchSeed(3); M.startMatch();
+    const w=M.world;
+    const hs = M.lobbyHumans(w);
+    const p0 = hs.find(q=>q.padIndex===0), p1 = hs.find(q=>q.padIndex===1);
+    r.twoPads = !!p0 && !!p1;
+    if (!r.twoPads) return r;
+    // Put pad 0's body at the BACK of the roster; pad 1's body is now first.
+    w.players = w.players.filter(q=>q!==p0).concat([p0]);
+    r.rosterFirstIsPad1 = M.lobbyHumans(w)[0] === p1;
+    r.hostIsPad0 = M.lobbyHost(w) === p0;
+    // Pad 1 presses START: it only readies them.
+    window.__pads[1].buttons[9]=true; M.step(w);
+    window.__pads[1].buttons[9]=false; M.step(w);
+    r.rosterFirstDoesNotStart = w.state === 'warmup';
+    // Pad 0 presses START: the match begins.
+    window.__pads[0].buttons[9]=true; M.step(w);
+    window.__pads[0].buttons[9]=false; M.step(w);
+    r.padZeroStarts = w.state !== 'warmup';
+    return r;
+  }));
+  allErrs.push(...errs); await p.close();
+}
+
 await b.close();
 console.log(JSON.stringify(o,null,1));
 console.log('ERRORS:', allErrs.length?allErrs.slice(0,5):'none');
-const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWaitOutside','botsOnOwnHalf',
+const must = ['selectOpensWarmup','selectTurnsSeat','stillInWarmup','noSecondLobby',
+  'twoPads','rosterFirstIsPad1','hostIsPad0','rosterFirstDoesNotStart','padZeroStarts',
+  'entersWarmup','twoBotsWaiting','botsOffThePitch','botsWaitOutside','botsOnOwnHalf',
   'botsInTheMiddle','botsSettle','botsSwappedSides','backToOnePerSide','botsIdle',
   'nothingScored','stickMovesYou','kickMovesTheBall','stillNothingScored','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',

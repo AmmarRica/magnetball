@@ -5006,7 +5006,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260823.0230PM';
+const VERSION = '20260823.0645PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5022,6 +5022,19 @@ const VERSION = '20260823.0230PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260823.0645PM', title: 'Warm-up, reconnects and a bigger pitch',
+    changed: [
+      '<b>On a wide screen the pitch now turns to fill it.</b> An upright court on a 16:9 TV left most of the screen as surround \u2014 turned goal-to-goal it is very nearly twice the size. Display \u2192 Pitch direction still has Upright and Sideways if you want to decide for yourself.',
+      '<b>The bots stay off the pitch during warm-up and walk on when you kick off.</b> The half you are standing on still says how many you are getting; they just wait outside the line until the whistle.',
+      '<b>The shirt colours are laid out as two blocks, one per side.</b> Sixteen in a row read as one long strip with nothing to say which half was whose.',
+      'Starting a match now folds the menu away on a desktop, so the pitch gets the whole window.',
+    ],
+    added: [
+      '<b>Plug your controller back in and press START to take your player straight back.</b> You come on at once instead of waiting for the next goal, walking on through the touchline gate \u2014 and while you are walking you cannot bump anybody or touch the ball.',
+      '<b>SELECT opens warm-up from the menu.</b> During a match it still turns your controls a quarter turn.',
+    ],
+    fixed: 'Player 1\u2019s START now starts the match from warm-up, and a shirt colour reaches everybody on that side.',
+  },
   { v: '20260823.0230PM', title: 'The VJ decks get their own page',
     changed: [
       '<b>The VJ decks moved to their own full-screen page.</b> They were squeezed into the settings column and looked terrible there. Open <b>vj/</b> under the game\u2019s address \u2014 or press the button on the VJ Mode card \u2014 and the whole rig fills the window, with the two decks side by side on a wide screen.',
@@ -12714,10 +12727,13 @@ function pitchHorizontal(){
 // ⚠️ **THE PITCH BOX, never the warm-up span.** `buildLobbyKeys` asks this to decide which
 // way to lay the keyboard out, and the keyboard is *part of* that span — so answering off
 // the span would make the answer depend on its own consequence.
-// ⚠️ **A REAL GAIN, not any gain** (`ORIENT_GAIN`). On a near-square window the two fits
-// are within a percent of each other, and a bare `>` flips the pitch — and with it every
-// player's stick — on a one-pixel resize.
-const ORIENT_GAIN = 1.04;
+// ⚠️ **A BIG GAIN, not any gain** (`ORIENT_GAIN`), and this number was 1.04 first and it
+// was wrong. Turning the pitch turns EVERY PLAYER'S STICK with it (`applySeatRotation`),
+// so it is not a framing tweak — it is a change to what "up" means. On a square 900 x 900
+// window a portrait court fits 12% bigger turned, which is not worth that; on a 16:9
+// panel it is **91%** bigger, which plainly is. 1.35 sits in the gap, and a margin that
+// wide is also what stops a one-pixel resize flipping the pitch back and forth.
+const ORIENT_GAIN = 1.35;
 function fitsBetterTurned(){
   if (!world || !world.field || !cw || !ch) return false;
   const f = world.field;
@@ -18653,10 +18669,20 @@ const AUTO = { warmup: 30, result: 30 };
 // from inside `step()`.
 function lobbySpotFor(w, team, slot, n){
   const side = team === 0 ? 1 : -1;
-  const cnt = Math.max(1, n || 1), i = slot || 0;
-  const span = Math.min(w.field.L * 0.44, (cnt - 1) * LOBBY.benchStep);
+  const i = slot || 0;
+  // ⚠️ **PAST THE FURNITURE, TOWARD THEIR OWN END** — and the first build put them level
+  // with the middle of their half, which is exactly where the lobby's controls are. The
+  // keyboard and the colour swatches both sit outside a touchline (which one depends on
+  // whether the pitch is turned), and both are centred on the pitch's own axis: the
+  // swatch blocks reach 152 units either side of the halfway line and the keyboard 175.
+  // A row at 0.34 of the half was 129 on Classic, so the waiting bots stood ON the keys
+  // and ON the shirts, and looked like they were pressing them. The column starts beyond
+  // both and grows outward toward the goal line.
+  // ⚠️ On a side with a lot of bots and nobody on it the last of them meet `integrate`'s
+  // clamp and bunch at the line — which is untidy and is the right way round: they are
+  // still off the pitch and still off the controls.
   const x = side * (w.field.W/2 + LOBBY.benchGap);
-  const y = side * (w.field.L/2) * 0.34 + (cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span);
+  const y = side * ((w.field.L/2) * 0.56 + i * LOBBY.benchStep);
   // ⚠️ Kept even though the spot is now outside the pitch and a gap block never is:
   // `gapPush` is inert out here, and the day somebody moves this row back inside the
   // touchline the guard has to already be in place. Same rule as `layTeam` and

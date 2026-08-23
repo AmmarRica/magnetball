@@ -13,6 +13,14 @@ await p.waitForTimeout(600);
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
 
   const rig = (oneHand) => {
@@ -109,6 +117,14 @@ await p2.goto('file://' + process.cwd() + '/index.html');
 await p2.waitForTimeout(700);
 const t = await p2.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   // --- ⚠️ SWEEPING ACROSS THE CENTRE IS NOT A RELEASE -----------------------
   // The pulse armed and fired off MAGNITUDE alone, so dragging a thumb from one direction
   // to the opposite one — over the middle of the stick, never lifting — passed through the

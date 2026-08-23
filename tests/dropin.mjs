@@ -37,6 +37,14 @@ await p.waitForTimeout(900);
 // connectedGamepadIndices requires both — some mobile browsers expose a stub with neither.
 const FIX = `
   const M = window.__magnet;
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const pad = (down) => ({ connected:true, mapping:'standard', id:'Fake Controller (STANDARD GAMEPAD)', axes:[0,0,0,0],
     buttons: Array.from({length:17}, (_,i)=>({ pressed:(down||[]).includes(i),
                                               value:(down||[]).includes(i)?1:0 })) });
@@ -149,8 +157,18 @@ const r = await p.evaluate(new Function(FIX + `
   // actually returned, and a body handed back with a stale index sits there for the rest
   // of the match looking exactly like a reclaim that worked. Same lesson fourpads
   // records: a seat existing is not a pad moving its own body.
+  // WARNING: A RECONNECT IS A TAKEOVER NOW, NOT A JOIN — the press puts them straight
+  // back on, MID-PLAY, with no goal in between. That is the whole change, so the goal is
+  // deliberately not staged here: if this only passes once a goal has been forced, the
+  // old wait is still in place. The walk in through the gate then has to be allowed to
+  // finish before anything is measured, or stepSubWalk is still steering the body and
+  // the probe below reads the walk instead of the stick.
+  w.state = 'play'; w.stateT = 1; w._subDone = true;   // mid-play, and the goal hook spent
   PADS = [pad([START])]; drive(w, 2); PADS = [pad([])]; drive(w, 1);
-  w.state = 'goal'; drive(w, 2); w.state = 'play'; w._subDone = false; drive(w, 2);
+  o.reclaimedState = w.state;
+  o.reclaimedComesBackOnAtOnce = w.players.includes(left) && w.state === 'play';
+  for (let i = 0; i < 240 && left._subTo; i++){ M.step(w); M.pollDropIn(w); }
+  o.reclaimedWalkFinished = !left._subTo;
   o.reclaimedComesBackOn = w.players.includes(left);
   if (o.reclaimedComesBackOn){
     // Park everybody else at the far end and take the ball away, or a shove from a bot
@@ -377,6 +395,14 @@ const gate = await p.evaluate(new Function(FIX + `
 // seed, 600 steps, whole world hashed: once with the poll firing every step, once never.
 const det = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const realPads = navigator.getGamepads;
   const hash = (w) => { let h = 2166136261;
     const s = JSON.stringify(w.players.map(q=>[q.x,q.y,q.vx,q.vy,q.faceX,q.faceY,q.gait]))
@@ -406,6 +432,14 @@ const det = await p.evaluate(()=>{
 // ---- and the control is reachable, and survives a reload -------------------
 const ui = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.controllers='on'; M.sel.mode='1v1'; M.buildSettings && M.buildSettings();
   M.updatePadInfo && M.updatePadInfo();
   const row = document.getElementById('dropInRow');
@@ -445,6 +479,8 @@ ok(all.leftToBench && all.noOrphanOnPitch, 'a departed player was left on the pi
 ok(all.keptNameStats, 'a departed player lost its name or its stats');
 ok(all.onScoresheet, 'a player who left mid-match vanished from the scoresheet — the half they played would read as though it never happened');
 ok(all.reclaimsBody, 'a controller coming back got a fresh body instead of reclaiming its own, stranding its half-match on the bench');
+ok(all.reclaimedComesBackOnAtOnce && all.reclaimedWalkFinished,
+   `a reconnecting player did not come straight back on: onAtOnce ${all.reclaimedComesBackOnAtOnce}, walkFinished ${all.reclaimedWalkFinished}. Unplugging benches the body and a filler bot takes the shirt; coming back it used to be handed over as a stranger ("START = JOIN HOME") and then made to wait for a goal, which is a long time out of a match you were already playing for a cable somebody kicked`);
 ok(all.reclaimedComesBackOn && all.reclaimedDrives,
    `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
 ok(all.movedIdxCameOn, 'the guest never made it onto the pitch, so the different-index check below is measuring nothing');

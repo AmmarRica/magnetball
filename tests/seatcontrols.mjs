@@ -45,6 +45,14 @@ const withPads = async (n, opts = {}) => {
 const p = await withPads(2);
 const share = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const me = M.firstHumanSeat(w);
@@ -91,6 +99,14 @@ const share = await p.evaluate(() => {
 // ============================ 2 & 3. SELECT turns the seat, and the icon ==
 const rot = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.seatRot = {};
   M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
@@ -128,6 +144,14 @@ const rot = await p.evaluate(() => {
 // readout the feature has.
 const icon = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.seatRot = {};
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
@@ -152,6 +176,14 @@ const icon = await p.evaluate(() => {
 // ================================================== 4. every button kicks ==
 const kick = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.pad = Object.assign({}, M.sel.pad, { kick: null });   // no hand binding
   const g = () => navigator.getGamepads()[0];
   const press = i => { window.__pads[0].buttons[i].pressed = true;
@@ -175,6 +207,14 @@ await p.close();
 const four = await withPads(4);
 const lob = await four.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   // ⚠️ MEASURED ON A PALETTE WHOSE PLATE IS NOT THE PITCH. On grass, `TH.nameBg` is within
   // a few points of the turf, so a colour probe counts the whole field and reports 106,082
   // "plate pixels" across the middle of the play — which reads as "the prompts are still on

@@ -174,7 +174,7 @@ ok('a junk stored colour is ignored', slots.junkIgnored,
    'an imported save validates nothing and a shared settings sheet is one typo from anything');
 
 // ============================================= render only, and reachable ==
-const rest = await p.evaluate(() => {
+const rest = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
   // ⚠️ Hash the WORLD with and without a colour: this must not be able to touch physics.
   const run = (court) => {
@@ -197,7 +197,12 @@ const rest = await p.evaluate(() => {
   M.sel.look.court = ''; M.applyTheme(M.sel.look.palette);
 
   // The control itself: present, 44px, and actually hit-testable.
+  // WARNING: a match started earlier in this suite, and a match now collapses the side
+  // dock (matchCollapse) — the panel slides off the left of the window, so a rect read
+  // before it has slid back reports the control 300px off screen and elementFromPoint
+  // answers nothing. openLook drops the match's own collapse; the wait is for the slide.
   M.openLook('theme'); M.showSubTab('theme', 'palette');
+  await new Promise(z => setTimeout(z, 400));
   const ins = [...document.querySelectorAll('.colcell input[type=color]')];
   o.count = ins.length;
   o.sizes = ins.map(i => { const r = i.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });

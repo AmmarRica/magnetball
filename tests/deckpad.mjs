@@ -16,6 +16,14 @@ await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   const B={A:0,B:1,LB:4,RB:5,SELECT:8,START:9};
   const press=async(i)=>{ window.__pad.buttons[i]=true; M.pollDeckUI(); await new Promise(r=>setTimeout(r,20));
@@ -27,7 +35,7 @@ const r = await p.evaluate(async ()=>{
   // --- start a real match: menu should collapse, pad goes to the game
   M.startMatch();
   await new Promise(r=>setTimeout(r,150));
-  o.collapsedOnStart = M.sel.dockCollapsed===true;
+  o.collapsedOnStart = M.dockCollapsedNow()===true;
   o.menuNotOwningPad = M.deckMenuOwnsPad()===false;
   o.notPausedOnStart = M.paused===false;
 
@@ -44,17 +52,17 @@ const r = await p.evaluate(async ()=>{
   o.playerMovesWhenCollapsed = drive(40) > 15;
 
   // --- A while collapsed must NOT reopen the menu (A is KICK)
-  const before = M.sel.dockCollapsed;
+  const before = M.dockCollapsedNow();
   await press(B.A);
-  o.aDoesNotReopen = M.sel.dockCollapsed===before && before===true;
+  o.aDoesNotReopen = M.dockCollapsedNow()===before && before===true;
   // START also must not reopen
   await press(B.START);
-  o.startDoesNotReopen = M.sel.dockCollapsed===true;
+  o.startDoesNotReopen = M.dockCollapsedNow()===true;
 
   // --- SELECT opens the menu, pauses the match, and takes the pad
   await press(B.SELECT);
   await new Promise(r=>setTimeout(r,120));
-  o.selectOpens = M.sel.dockCollapsed===false;
+  o.selectOpens = M.dockCollapsedNow()===false;
   o.menuOwnsPadWhenOpen = M.deckMenuOwnsPad()===true;
   o.pausedWhileMenuOpen = M.paused===true;
 
@@ -65,7 +73,7 @@ const r = await p.evaluate(async ()=>{
   // --- SELECT again closes, resumes, returns pad to game
   await press(B.SELECT);
   await new Promise(r=>setTimeout(r,120));
-  o.selectCloses = M.sel.dockCollapsed===true;
+  o.selectCloses = M.dockCollapsedNow()===true;
   o.resumedAfterClose = M.paused===false;
   o.menuReleasesPad = M.deckMenuOwnsPad()===false;
   me.x=0; me.y=60; me.vx=0; me.vy=0;

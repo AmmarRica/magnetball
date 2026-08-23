@@ -33,6 +33,11 @@ await p.waitForTimeout(800);
 // ===================================================== the parser ===================
 const pr = await p.evaluate(() => {
   const M = window.__magnet;
+  // ⚠️ **PINNED UPRIGHT.** `sel.orient` defaults to `auto`, which now means "whichever
+  // way fills the screen", and the probes below map world points with `wx`/`wy` — which
+  // are deliberately in UN-ROTATED world space. The deck block further down forces its
+  // own quarter-turn through `sel.display` and probes a canvas CORNER, so it is unaffected.
+  M.sel.orient = 'v';
   const ID = 'dQw4w9WgXcQ';
   return {
     watch:   M.ytIdFrom('https://www.youtube.com/watch?v=' + ID),
@@ -63,6 +68,11 @@ ok('...and everything else parses to NOTHING',
 // ===================================================== the layer, end to end ========
 const r = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // ⚠️ **PINNED UPRIGHT.** `sel.orient` defaults to `auto`, which now means "whichever
+  // way fills the screen", and the probes below map world points with `wx`/`wy` — which
+  // are deliberately in UN-ROTATED world space. The deck block further down forces its
+  // own quarter-turn through `sel.display` and probes a canvas CORNER, so it is unaffected.
+  M.sel.orient = 'v';
   M.applyTheme('grass');
   M.sel.mode = '1v1'; M.sel.lobby = 'off';
   M.setMatchSeed(5); M.startMatch();
@@ -129,12 +139,15 @@ const r = await p.evaluate(() => {
   // this probe PASSED with the setTransform deleted, which is the vacuity it had to lose.
   M.vjExec('yt', { id: 'dQw4w9WgXcQ' });
   M.vjExec('yt', { op: 0.55 });
-  const dispWas = M.sel.display;
+  const dispWas = M.sel.display, orWas = M.sel.orient;
+  // ⚠️ Back to `auto` for this one block: the pin above is `v`, which is a HARD override
+  // and blocks the deck layout's own quarter-turn — the very thing being probed.
+  M.sel.orient = 'auto';
   M.sel.display = 'deck';
   shot();
   o.deckRot = M.cam.rot;                  // proof the quarter-turn actually took
   o.deckCornerA = cornerAlpha();
-  M.sel.display = dispWas;
+  M.sel.display = dispWas; M.sel.orient = orWas;
   // ---- clearing the id removes the iframe and reseals the canvas ----
   M.vjExec('yt', { id: '' });
   o.clearedIframe = !!iframe();
@@ -179,6 +192,11 @@ ok('PANIC kills it outright', !r.panicIframe, 'the background video is a deck fo
 // ===================================================== render only ==================
 const det = await p.evaluate(() => {
   const M = window.__magnet;
+  // ⚠️ **PINNED UPRIGHT.** `sel.orient` defaults to `auto`, which now means "whichever
+  // way fills the screen", and the probes below map world points with `wx`/`wy` — which
+  // are deliberately in UN-ROTATED world space. The deck block further down forces its
+  // own quarter-turn through `sel.display` and probes a canvas CORNER, so it is unaffected.
+  M.sel.orient = 'v';
   const hash = (ww) => {
     const n = x => x.toFixed(9), a = [ww.state, n(ww.stateT), ww.score.join(':')];
     for (const q of ww.players) a.push(n(q.x), n(q.y), n(q.vx), n(q.vy));
@@ -207,6 +225,11 @@ ok('the layer is RENDER ONLY — the world is bit-identical with it on and off',
 // DOM — including that a dropped link lands, which is the feature as asked for.
 const ui = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // ⚠️ **PINNED UPRIGHT.** `sel.orient` defaults to `auto`, which now means "whichever
+  // way fills the screen", and the probes below map world points with `wx`/`wy` — which
+  // are deliberately in UN-ROTATED world space. The deck block further down forces its
+  // own quarter-turn through `sel.display` and probes a canvas CORNER, so it is unaffected.
+  M.sel.orient = 'v';
   M.vjBuildPanel();
   const inEl = document.getElementById('vjYtUrl');
   o.hasInput = !!inEl;

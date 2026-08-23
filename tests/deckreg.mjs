@@ -50,8 +50,13 @@ const deck = await dp.evaluate(async ()=>{
   o.ballEscapes=esc; o.badPlayers=bad;
   o.rot = M.cam.rot;
   // switching back and forth is stable
-  M.sel.display='auto'; M.applyDisplayMode(); await new Promise(r=>setTimeout(r,120));
+  // ⚠️ Asked with `orient:'v'`, because `auto` no longer means upright — it means
+  // "whichever way fills the screen" (tests/orient.mjs). What is being checked here is
+  // that leaving the deck layout drops DECK's forced landscape, and that is a different
+  // claim from "the pitch is upright" now.
+  M.sel.display='auto'; M.sel.orient='v'; M.applyDisplayMode(); await new Promise(r=>setTimeout(r,120));
   M.computeCam(); o.backToPortrait=(M.cam.rot||0)===0;
+  M.sel.orient='auto';
   M.sel.display='deck'; M.applyDisplayMode(); await new Promise(r=>setTimeout(r,120));
   M.computeCam(); o.backToDeck=Math.abs(M.cam.rot+Math.PI/2)<0.001;
   M.sel.display='cocktail'; M.applyDisplayMode(); await new Promise(r=>setTimeout(r,120));

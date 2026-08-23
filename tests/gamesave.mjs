@@ -30,6 +30,14 @@ await p.waitForTimeout(800);
 // ============================================ 1 + 2. the wind-up ring ==
 const ring = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   o.dial = { def: M.KICKRING.def, mul: M.kickRingMul() };
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.sel.charge = 'on'; M.setMatchSeed(4); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
@@ -131,6 +139,14 @@ const ring = await p.evaluate(() => {
 // ================================================= 3. the name plates ==
 const labels = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   o.dim = M.LABEL_DIM;
   o.near = M.LABEL_BALL.near;
   o.hidesCompletely = M.LABEL_DIM === 0 && M.LABEL_BALL.near === 0;
@@ -165,6 +181,14 @@ const labels = await p.evaluate(() => {
 // ====================================== 4. no saving in the middle of a match ==
 const btns = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const bar = document.getElementById('replayBar');
   o.inMatchButtons = [...bar.querySelectorAll('button')].map(x => x.id);
   o.noSaveOnTheMatchBar = !o.inMatchButtons.some(id => /save/i.test(id));
@@ -191,6 +215,14 @@ const btns = await p.evaluate(() => {
 // ==================================================== 5. the game save ==
 const save = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   // Something distinctive in every corner the save is meant to carry.
   M.sel.kickRing = 205; M.sel.hitStop = 9; M.sel.mode = '4v4';
   M.profile.name = 'Rosalind';
@@ -249,8 +281,26 @@ const save = await p.evaluate(async () => {
 });
 
 // The two buttons are real, reachable press targets in the About card.
-const ui = await p.evaluate(() => {
+const ui = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
+  // WARNING: A MATCH STARTED EARLIER IN THIS SUITE, AND A MATCH NOW COLLAPSES THE DOCK
+  // (matchCollapse). buildSettings + openSection do not go through dockOrFull, so the
+  // card is built inside a panel that is slid off the screen and elementFromPoint at the
+  // button's own centre answers the canvas. Opening it is what a person does with the
+  // ‹ tab, and it is also what clears the match's own collapse.
+  M.setDockCollapsed(false);
+  // ...and let the slide finish. The dock animates in, so a rect read on the same frame
+  // catches the panel still 287px off the left of the window and elementFromPoint at the
+  // button's own centre answers nothing at all.
+  await new Promise(r => setTimeout(r, 400));
   M.buildSettings(); M.openSection('about');
   const ex = document.getElementById('saveExportBtn'), im = document.getElementById('saveImportBtn');
   o.present = !!ex && !!im;
@@ -259,6 +309,7 @@ const ui = await p.evaluate(() => {
   const r = ex.getBoundingClientRect();
   const hit = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
   o.pressable = !!hit && (hit === ex || ex.contains(hit));
+  o.hitWas = hit ? (hit.id || hit.tagName) + '.' + hit.className : null;
   o.size = [Math.round(r.width), Math.round(r.height)];
   // ⚠️ Import ARMS rather than firing: it replaces your record with somebody's file.
   const was = im.textContent;

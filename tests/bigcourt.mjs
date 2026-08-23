@@ -37,6 +37,14 @@ await p.waitForTimeout(800);
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
 
   // ---- it really is the biggest, and by how much ---------------------------
   const areas = Object.entries(M.FIELDS).map(([k,f])=>[k, f.W*f.L]).sort((a,c)=>c[1]-a[1]);
@@ -157,6 +165,14 @@ await p2.goto('file://' + process.cwd() + '/index.html');
 await p2.waitForTimeout(800);
 const px = await p2.evaluate(() => {
   const M = window.__magnet, rows = [];
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   const cv = document.getElementById('game'), c = cv.getContext('2d');
   const dpr = cv.width / cv.clientWidth;
   for (const k of ['classic','giant','colossus','leviathan']){

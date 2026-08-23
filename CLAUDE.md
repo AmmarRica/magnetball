@@ -3337,6 +3337,14 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `drawLobby` prints "1 PLAYER +1 BOT" over each half and that is still exactly what Start
   fields. What changed is that the count is READ rather than counted off the pitch, and
   the waiting row is still on the side each bot will play for.
+  ⚠️ **THE WAITING ROW HAS TO CLEAR THE LOBBY'S OWN CONTROLS, and the first build did
+  not.** The keyboard and the colour swatches both sit outside a touchline — which one
+  depends on whether the pitch is turned — and both are centred on the pitch's axis: the
+  swatch blocks reach 152 units either side of the halfway line and the keyboard 175. A
+  waiting row at `0.34` of the half is 129 on Classic, so the bots stood ON the keys and
+  ON the shirts and looked like they were pressing them. The column starts beyond both
+  (`0.56`) and grows outward toward the goal line, spaced at `LOBBY.benchStep` so two
+  name plates do not run into each other.
   ⚠️ **The walk-on is staged from `lobbyStart`, AFTER `resetKickoff`** — the marks are
   already right, so it only picks each bot up, stashes its mark on `_subTo` (which
   `stepSubWalk` already knows how to walk to) and puts the body back outside. **A beat

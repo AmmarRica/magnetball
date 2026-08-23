@@ -51,6 +51,14 @@ const withPads = async (n) => {
 const p = await withPads(4);
 const o = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   // ⚠️ NOTHING IS CONFIGURED FIRST. That is the whole point — the report was four
   // controllers that could not join on the settings a player actually has.
   o.defaultControllers = M.defaultSel().controllers;
@@ -77,6 +85,14 @@ const o = await p.evaluate(() => {
 // ============================================ each pad drives its own body, alone ==
 const drive = await p.evaluate(() => {
   const M = window.__magnet, o = { rows: [] };
+  // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
+  // auto, which now means "whichever way fills the screen" — on a wide page that turns
+  // the pitch a quarter, which moves every world point on screen and rotates every seat's
+  // stick. A suite that samples PIXELS or drives a STICK and does not say which way the
+  // pitch faces is measuring whichever the window happened to pick.
+  // (No backticks in here: this file builds pages with new Function() + a template
+  // literal, and a backtick in a comment closes it early.)
+  M.sel.orient = 'v';
   M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.setMatchSeed(5); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const seats = w.players.filter(q => q.ctrl === 'gamepad');
@@ -162,7 +178,11 @@ const kb = await none.evaluate(() => {
   M.pads.p1.dx = 1; M.pads.p1.dy = 0;
   for (let i = 0; i < 30; i++) M.step(w);
   M.pads.p1.dx = 0;
-  return { moved: +me.x.toFixed(1) };
+  // WARNING: DISPLACEMENT, not me.x. The claim is "the keyboard still moves you", and
+  // which world axis a screen-right push lands on depends on which way the pitch is
+  // facing — sel.orient 'auto' now turns it whenever a turn fits the window better, and
+  // applySeatRotation turns the stick with it. Reading one axis measured the orientation.
+  return { moved: +Math.hypot(me.x, me.y).toFixed(1) };
 });
 await none.close();
 
