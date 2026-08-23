@@ -65,11 +65,15 @@ const r = await p.evaluate(async ()=>{
     if(Math.abs(w.ball.x)>w.bounds.halfW+40||Math.abs(w.ball.y)>w.bounds.halfL+w.bounds.net+40) esc++; }
   o.ballEscapes=esc;
 
-  // Auto mode restores portrait
-  M.sel.display='auto'; M.applyDisplayMode();
+  // ⚠️ Leaving the deck layout drops deck's FORCED landscape — which is no longer the
+  // same claim as "the pitch is upright", because `orient:'auto'` now turns the pitch on
+  // any window a turn fits better on (see tests/orient.mjs). Asked with `orient:'v'`, so
+  // the only thing that could still be turning it is deck's forcing.
+  M.sel.display='auto'; M.sel.orient='v'; M.applyDisplayMode();
   await new Promise(r=>setTimeout(r,120));
   M.computeCam();
   o.autoRotBack = (M.cam.rot||0)===0;
+  M.sel.orient='auto'; M.applyDisplayMode();
   o.bodyDeckOff = !document.body.classList.contains('deck');
   return o;
 });

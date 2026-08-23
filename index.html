@@ -4097,6 +4097,13 @@ const LOBBYKB = {
   // the pitch is taken off the pitch. Two strips and a stepper at 42 units of clearance
   // measurably shrank it; these are the smallest sizes that are still a body wide.
   sw: 30,            // a colour swatch
+  // ⚠️ **TWO ROWS PER SIDE, AND A REAL GAP BETWEEN THE SIDES.** Eight swatches in one
+  // line, laid end to end with the other team's eight, read as a single strip of sixteen
+  // — reported from a cabinet, where nothing on screen said which half of that strip was
+  // whose. Four across and two deep says "two blocks" before anybody counts anything, and
+  // it halves the across-span (275 units to 135 a side), which the camera gets back.
+  swCols: 4,         // swatches per row
+  swSplit: 34,       // world units between the two teams' blocks, about a body
   diff: 34,          // a difficulty pad
   side: 20,          // world units between a touchline and the strips beside it
 };
@@ -11958,10 +11965,11 @@ $('playBtn').onclick = tryKickOff;
 // Warm-up on demand. startMatch only drops into the lobby by itself when there are
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
 // useful for trying controls, or for picking sides with no controller connected.
-$('warmupBtn').onclick = () => {
+function openWarmup(){
   if (typeof replayAbort === 'function') replayAbort();   // same reason as tryKickOff
   startMatch(); if (world && world.state !== 'warmup') enterWarmup(world);
-};
+}
+$('warmupBtn').onclick = openWarmup;
 // Reset just your look — name, colour, cap, face, eyes — without touching settings
 // or progress. Sits beside Name because that's the top of what it resets.
 $('lookReset').onclick = () => {
@@ -12236,13 +12244,20 @@ function dockOrFull(id, build, auto){
     el.classList.add('docked');
     document.body.classList.add('panel-open');
     deskDockId = id;
-    if (isDeck() && !auto && sel.dockCollapsed){
-      sel.dockCollapsed = false; saveSel();
+    // Asking for a page is asking to see it: an explicit navigation drops the match's
+    // own collapse, on every layout. Without this, opening Settings from the pause menu
+    // mid-match docks a panel that is collapsed to nothing.
+    // ⚠️ Read BEFORE the clear, or the deck's "opening a page pauses the match" branch
+    // below never fires: the match's own collapse is the thing it is reacting to.
+    const wasCollapsed = dockCollapsedNow();
+    if (!auto) matchCollapse = false;
+    if (isDeck() && !auto && wasCollapsed){
+      if (sel.dockCollapsed){ sel.dockCollapsed = false; saveSel(); }
       // Opening a page over a live match pauses it, same rule as Select.
       if (world && running && !world.demo && world.state !== 'over' && !paused){ paused = true; deckPausedByMenu = true; }
     }
-    uiPadLeft = sel.dockCollapsed ? 0 : DOCK_W;   // collapsed → pitch uses full width
-    document.body.classList.toggle('dock-collapsed', !!sel.dockCollapsed);
+    uiPadLeft = dockCollapsedNow() ? 0 : DOCK_W;   // collapsed → pitch uses full width
+    document.body.classList.toggle('dock-collapsed', dockCollapsedNow());
     updateDockToggle();
     settingsDocked = (id === 'settings');   // keep the legacy flag meaningful
     ensureDemo();                           // there is always a live match on the right
@@ -12257,28 +12272,39 @@ function dockOrFull(id, build, auto){
   if (typeof _syncHash === 'function') _syncHash(ROUTE_OF[id] || 'home');
 }
 
+// ⚠️ **A MATCH STARTING COLLAPSES THE DOCK, and it must NOT write `sel.dockCollapsed`.**
+// That key is the player's own answer to the ‹ / › tab and is persisted, so setting it at
+// every kickoff would silently destroy a preference somebody set once and never get it
+// back. `matchCollapse` is a per-match override that reads ON TOP of it, and is dropped
+// the moment the dock is opened by hand, a page is navigated to, or the match ends.
+// ⚠️ It was already done for the Steam Deck and only there, by writing the stored key —
+// the pitch on a desktop kept a 372px menu column beside it for the whole match, which is
+// a fifth of a 1920 screen given to a menu nobody is reading.
+let matchCollapse = false;
+function dockCollapsedNow(){ return matchCollapse || !!sel.dockCollapsed; }
 // Desktop dock collapse/expand — hides the left menu so the pitch gets the full
 // width. Persisted in sel.dockCollapsed; the ‹ / › tab on the dock edge toggles it.
 function updateDockToggle(){
   const b = $('dockToggle'); if(!b) return;
-  b.textContent = sel.dockCollapsed ? '›' : '‹';
-  b.setAttribute('aria-label', sel.dockCollapsed ? 'Open menu panel' : 'Collapse menu panel');
+  b.textContent = dockCollapsedNow() ? '›' : '‹';
+  b.setAttribute('aria-label', dockCollapsedNow() ? 'Open menu panel' : 'Collapse menu panel');
 }
 let deckPausedByMenu = false;    // we paused for the deck menu → ours to un-pause
 function setDockCollapsed(v){
+  matchCollapse = false;                 // a hand on the tab outranks the match's own collapse
   sel.dockCollapsed = !!v; saveSel();
-  document.body.classList.toggle('dock-collapsed', sel.dockCollapsed);
-  uiPadLeft = (sel.dockCollapsed || !deskDockId || !dockCapable()) ? 0 : DOCK_W;
+  document.body.classList.toggle('dock-collapsed', dockCollapsedNow());
+  uiPadLeft = (dockCollapsedNow() || !deskDockId || !dockCapable()) ? 0 : DOCK_W;
   updateDockToggle();
   // Freeze play while the menu is up, or you concede while navigating. Leaves the
   // idle demo alone, and won't un-pause a match the player paused themselves.
   if (isDeck() && world && running && !world.demo && world.state !== 'over'){
-    if (!sel.dockCollapsed && !paused){ paused = true; deckPausedByMenu = true; }
-    else if (sel.dockCollapsed && deckPausedByMenu){ paused = false; deckPausedByMenu = false; lastT = 0; acc = 0; }
+    if (!dockCollapsedNow() && !paused){ paused = true; deckPausedByMenu = true; }
+    else if (dockCollapsedNow() && deckPausedByMenu){ paused = false; deckPausedByMenu = false; lastT = 0; acc = 0; }
   }
   resize();
 }
-$('dockToggle').onclick = () => setDockCollapsed(!sel.dockCollapsed);
+$('dockToggle').onclick = () => setDockCollapsed(!dockCollapsedNow());
 
 // ---- Full screen ----------------------------------------------------------
 // Browsers only grant fullscreen from a real user gesture, so this is wired to
@@ -12352,7 +12378,7 @@ let deckUI = { idx:0, prev:{}, repeat:0, on:false };
 // True while the open deck menu is holding the controller — the match must ignore
 // pad/keyboard input for that whole time, or navigating also drives your player.
 function deckMenuOwnsPad(){
-  if (!isDeck() || !deskDockId || sel.dockCollapsed) return false;
+  if (!isDeck() || !deskDockId || dockCollapsedNow()) return false;
   if (!document.body.classList.contains('panel-open')) return false;
   // Trust the DOM, not just the flag: if the panel isn't actually on screen the
   // game keeps the pad. Belt-and-braces so no state mismatch can steal input.
@@ -12382,7 +12408,7 @@ function deckSetMenuOpen(open){
 }
 function deckPaint(){
   document.querySelectorAll('.deckfocus').forEach(el => el.classList.remove('deckfocus'));
-  if (!isDeck() || sel.dockCollapsed) return;
+  if (!isDeck() || dockCollapsedNow()) return;
   const list = deckFocusables(); if (!list.length) return;
   deckUI.idx = Math.max(0, Math.min(deckUI.idx, list.length-1));
   const el = list[deckUI.idx];
@@ -12436,8 +12462,8 @@ function pollDeckUI(){
     let g = null;
     for (const c of gps) if (c && c.connected){ g = c; break; }   // any pad drives the UI
     if (g){
-      if (deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(!!sel.dockCollapsed);
-      if (!sel.dockCollapsed){
+      if (deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(dockCollapsedNow());
+      if (!dockCollapsedNow()){
         // ⚠️ Through `padStick`, not axes[0]/[1]: on a pad with a non-standard mapping the
         // menu would be D-pad only for exactly the same reason the player would not move.
         const [ax, ay] = padStick(g);
@@ -12473,7 +12499,7 @@ requestAnimationFrame(pollDeckUI);
 // Keyboard mirrors the pad so the layout is testable (and usable) without one.
 window.addEventListener('keydown', e => {
   if (!isDeck()) return;
-  if (e.key === 'Escape'){ e.preventDefault(); deckSetMenuOpen(!!sel.dockCollapsed); }   // not Tab: that's keyboard nav
+  if (e.key === 'Escape'){ e.preventDefault(); deckSetMenuOpen(dockCollapsedNow()); }   // not Tab: that's keyboard nav
 });
 
 // ---- Settings (sound + game feel), openable from the menu and mid-game
@@ -12607,6 +12633,7 @@ function openLook(section){
   const target = section || lastSection();
   buildSettings();
   if (isDesktop()) sel.deskDock = true, saveSel();
+  matchCollapse = false;                                         // ...and drops the match's own collapse
   if (sel.dockCollapsed) sel.dockCollapsed = false, saveSel();   // opening settings expands the dock
   dockOrFull('setup');
   const card = document.querySelector('.card.collapsible[data-sec="'+target+'"]');
@@ -12673,7 +12700,51 @@ function dockCapable(){ return isDeck() || isDesktop(); }
 function pitchHorizontal(){
   if (sel.display === 'cocktail') return false;
   const o = sel.orient || 'auto';
-  return o === 'h' || (o === 'auto' && isDeck());
+  if (o === 'h') return true;
+  if (o === 'v') return false;
+  return isDeck() || fitsBetterTurned();
+}
+// ⚠️ **AUTO MEANS "WHICHEVER WAY FILLS THE SCREEN", and it used to mean `isDeck()`.**
+// `computeCam` fits the whole span, so an upright 440 x 760 Classic on a 1920 x 1080 panel
+// settles at `cam.s` 1.03 and the pitch is 455 of 1920 pixels across with surround either
+// side of it — reported as *"lot of dead space in the court"*, and measured as exactly
+// that. The same court turned goal-to-goal fits at 1.97, very nearly double. Turning it is
+// what a wide screen wants and the machinery has been there all along; only the question
+// was wrong.
+// ⚠️ **THE PITCH BOX, never the warm-up span.** `buildLobbyKeys` asks this to decide which
+// way to lay the keyboard out, and the keyboard is *part of* that span — so answering off
+// the span would make the answer depend on its own consequence.
+// ⚠️ **A REAL GAIN, not any gain** (`ORIENT_GAIN`). On a near-square window the two fits
+// are within a percent of each other, and a bare `>` flips the pitch — and with it every
+// player's stick — on a one-pixel resize.
+const ORIENT_GAIN = 1.04;
+function fitsBetterTurned(){
+  if (!world || !world.field || !cw || !ch) return false;
+  const f = world.field;
+  const across = f.W + 60, down = f.L + 2*(f.net || 0) + 60;
+  const availW = Math.max(80, cw - (uiPadLeft || 0));
+  const availH = Math.max(80, ch - (isDeck() ? 64 : 96));
+  const flat = Math.min(availW/across, availH/down);
+  const turn = Math.min(availW/down,  availH/across);
+  return turn > flat * ORIENT_GAIN;
+}
+// ⚠️ **THE ANSWER IS VIEWPORT-DEPENDENT NOW, so it has to be re-asked on a RESIZE** — and
+// two of its readers are answered on a LAYOUT CHANGE rather than per frame, which is the
+// whole hazard `SIDE` records one layer along. `applySeatRotation` decides which way a
+// stick points, and `buildLobbyKeys`' `turned` decides whether the keyboard's rows run
+// across the screen or up the side of it. `resize()` called neither, so without this a
+// window that crosses the threshold hands every player a stick 90 degrees wrong and leaves
+// the lobby laid out for the orientation it is no longer in.
+// ⚠️ `var`, not `let`: `resize()` runs during the bootstrap and this sits two thirds of the
+// way up the file. `undefined` is neither true nor false, so the first call always syncs.
+var _turnWas;
+function syncPitchTurn(){
+  const now = pitchHorizontal();
+  if (now === _turnWas) return;
+  _turnWas = now;
+  if (!world) return;
+  applySeatRotation(world.players);
+  if (world.state === 'warmup' && world.kb) buildLobbyKeys(world);
 }
 // ============================================================
 //  SELECT TURNS YOUR CONTROLS A QUARTER TURN
@@ -12721,15 +12792,31 @@ function applySeatRotation(players){
 // of the two this is the one you need while standing in the wrong place. Start (9) still
 // starts, and `#lobbyStartBtn` is on screen throughout warm-up.
 const _selPrev = {};
+// ⚠️ **SELECT MEANS TWO THINGS, AND WHICH ONE IS DECIDED BY WHAT IS ON SCREEN.** With
+// nothing live — the menu, the attract demo, a finished match — the first pad's SELECT
+// opens WARM-UP, which is the room a controller wants and previously took a trip to the
+// menu with a mouse to reach. Once something is running it goes back to turning that
+// pad's controls a quarter turn, which is the only thing it can usefully mean while you
+// are standing at a pitch.
+// ⚠️ **THE FIRST PAD ONLY** for the menu half: four people leaning on SELECT must not
+// open four lobbies. The quarter-turn half stays per pad, because that is a statement
+// about where one person is standing.
+// ⚠️ The idle branch is ABOVE the arcade stand-down: a cabinet with a real controller
+// plugged into it is an ordinary setup, and an arcade panel reports no button 8 anyway,
+// so nothing there can fire this by accident.
 function pollSeatRotate(){
-  if (!padsTakeSeats() || arcadeMode()) return;
+  if (!padsTakeSeats()) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
-  for (const i of connectedGamepadIndices()){
+  const idx = connectedGamepadIndices();
+  const idle = !running || !world || !!world.demo || world.state === 'over';
+  for (const i of idx){
     const g = gps[i];
     const now = !!(g && btn(g, 8));
     const was = _selPrev[i];
     _selPrev[i] = now;
-    if (now && !was) bumpSeatRot(i);
+    if (!now || was) continue;
+    if (idle){ if (i === idx[0]) openWarmup(); continue; }
+    if (!arcadeMode()) bumpSeatRot(i);
   }
 }
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
@@ -15242,6 +15329,10 @@ function startMatch(opts){
   // copies it onto the whole side; both are overwritten here, on purpose.
   applyTeamColours(players);
   applySeatRotation(players);
+  // Prime the turn watcher against THIS court: `fitsBetterTurned` reads the field, so a
+  // Futsal match and a Leviathan one can answer differently on the same window, and a
+  // stale record here would make the next resize either miss a flip or fake one.
+  _turnWas = undefined;
 
   const bp = BALLS[sel.ball] || BALLS.normal;
   const fv = feelVals();
@@ -15346,11 +15437,13 @@ function startMatch(opts){
     $('resetBtn').style.display='none';
     hideOverlay();
     $('ovRematch').style.display='none';
-    // Deck: resize() re-docks the menu for the desktop "menu left / pitch right"
-    // shell, so collapse it first — kicking off should hand the pad to the game
-    // and give the pitch the whole screen. Select brings the menu back.
-    if (isDeck()){
-      sel.dockCollapsed = true; saveSel();
+    // ⚠️ **A MATCH STARTING COLLAPSES THE SIDE MENU.** `resize()` re-docks the menu for
+    // the "menu left / pitch right" shell, so it has to be collapsed here — kicking off
+    // hands the pad to the game and the pitch the whole screen. It was the Steam Deck
+    // only; on a desktop the dock stayed open and took `DOCK_W` off the court for the
+    // whole match. Through `matchCollapse`, so nobody's stored preference is rewritten.
+    if (dockCapable()){
+      matchCollapse = true;
       document.body.classList.add('dock-collapsed');
       deckPausedByMenu = false;
       updateDockToggle();
@@ -15545,6 +15638,7 @@ function resetKickoff(w, initial){
   // put everybody on their mark — so a walk-on that was still in progress is finished
   // by definition rather than left steering a body away from its kickoff position.
   w._subDone = false;
+  w.entryT = 0;                     // ...and no walk-on beat left over from the last one
   for (const p of w.players) p._subTo = null;
   w.state = 'kickoff'; w.stateT = 0;
   w.kickedOff = false;
@@ -15777,6 +15871,12 @@ function dropOut(w, p){
   // guest goes back to 3v3 when they leave; a 4v4 that was always a 4v4 stays one and
   // a bot takes the empty shirt instead. Which of those happens is decided by the
   // floor in subPer, not by two branches here that could drift apart.
+  // ⚠️ Remembered so coming back can put it back. If the match was above its kickoff
+  // floor the unplug SHRINKS it (4v4 down to 3v3) and no filler bot appears; if it was
+  // at the floor the size holds and a bot takes the empty shirt. `subSwapNow` has to
+  // undo whichever of those happened, and the only honest way to know is to have read
+  // the number before it moved.
+  p._subPerWas = subPer(w);
   w.subPer = subPer(w) - 1;
   subOff(w, p);
   evenUpSides(w);
@@ -17433,6 +17533,7 @@ function step(w){
       } else { resetKickoff(w); w.state='kickoff'; w.stateT=0; w._autoReplayed=false; }
     }
   } else if (w.state === 'kickoff'){
+    if (w.entryT > 0) w.entryT -= STEP;
     // Ball stays parked at centre while players get into position; it only goes
     // live once a human plays it (or a short fallback for bot-only games).
     // ⚠️ A TOUCH IS ENOUGH — it is not only a kick any more. The ball is frozen here
@@ -17440,7 +17541,7 @@ function step(w){
     // went straight through the thing it was standing on and the match sat waiting for
     // a button. Running onto the ball and driving away with it is the ordinary way to
     // start, and having to stop and press KICK first is a rule nobody is told about.
-    if (w.stateT > 0.5){
+    if (w.stateT > 0.5 && !entryBusy(w)){
       const b=w.ball; let go=false;
       for (const p of w.players){
         if (p.ctrl==='bot') continue;
@@ -17867,6 +17968,14 @@ function integrate(w, ballFrozen, playersFrozen){
       p.vy += p.inY * a;
     }
     for (const p of discs){
+      // ⚠️ **A BODY BEING WALKED ON OR OFF MAY NOT TOUCH THE BALL EITHER.** `staged`
+      // already keeps it out of `collideDiscs` below, but ball control was ungated — and
+      // it never mattered while the only walk-on happened at a GOAL, with the ball parked
+      // on the centre spot. A returning player now swaps in mid-play (see `subSwapNow`)
+      // and the bots walk out at kickoff, so a ghost that cannot be tackled and can still
+      // trap the ball is a real hole. One predicate, read here and by the collision pass,
+      // so the two can never disagree about who is a ghost.
+      if (bodyStaged(p)) continue;
       handleBallControl(w, p, nearestControlBall(w, p, ball), ballFrozen);
       handleSnailKick(w, p, ballFrozen);
       handleKickPush(w, p);
@@ -17897,7 +18006,11 @@ function integrate(w, ballFrozen, playersFrozen){
   // testing the target alone would leave every bot on the pitch permanently ghosted and
   // you could stand inside one. `_lobArr` is set by `stepLobbyBots` the step `walkTo`
   // reports it got there, and cleared the moment it is given a new place to be.
-  const staged = q => !!((q._lobTo && !q._lobArr) || q._subTo || q._subPath);
+  // ⚠️ Named `staged` locally only so the loops below read as they always did; the answer
+  // lives in `bodyStaged`, which the ball-control pass above calls DIRECTLY — a local
+  // `const` alias declared here is in the temporal dead zone up there, and aliasing it
+  // took the page out on the first step. Nineteenth TDZ bite in this file.
+  const staged = bodyStaged;
   if (!playersFrozen){
     for (let i=0;i<discs.length;i++){
       if (staged(discs[i])) continue;
@@ -17907,7 +18020,7 @@ function integrate(w, ballFrozen, playersFrozen){
       }
     }
     for (const p of discs){
-      if (staged(p)) continue;
+      if (bodyStaged(p)) continue;
       for (const post of w.posts) collideDiscs(p, post);
       // Skip `ballOnly` boundary walls/arcs so players can step slightly outside.
       for (const wall of w.walls) if (!wall.ballOnly) collideWall(p, wall);
@@ -18058,7 +18171,22 @@ function lobbyWanted(w){
 }
 // Everyone a human is driving, in seat order. The FIRST one is the host.
 function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
-function lobbyHost(w){ return lobbyHumans(w)[0] || null; }
+// ⚠️ **THE HOST IS PLAYER ONE, not whoever happens to be first in the roster.** The
+// host's START kicks the match off and everybody else's only toggles their ready flag —
+// so with the host read off roster order, the person standing at the panel marked 1 could
+// press START and watch nothing happen at all, which is how it was reported. Seats are
+// handed out in an order that changes with the mode, with the field and with who joined
+// when; a pad index does not. The keyboard seat outranks every pad, because on a machine
+// with a keyboard that is player one by definition.
+function seatOrdinal(p){
+  return p.ctrl === 'human1' ? -2 : p.ctrl === 'human2' ? -1
+       : (p.padIndex >= 0 ? p.padIndex : 99);
+}
+function lobbyHost(w){
+  let best = null;
+  for (const p of lobbyHumans(w)) if (!best || seatOrdinal(p) < seatOrdinal(best)) best = p;
+  return best;
+}
 
 // ⚠️ `lite` is warm-up with the CUSTOMISATION taken out — no keyboard, no colour
 // swatches — and the tournament is the one caller. There you are playing AS a country,
@@ -18068,6 +18196,11 @@ function lobbyHost(w){ return lobbyHumans(w)[0] || null; }
 // MATCH rather than about how a body looks.
 function enterWarmup(w, lite){
   w.lobbyLite = !!lite;
+  // ⚠️ The START edge is latched per key in `_startPrev`, and a player who came in here
+  // by holding START on the menu is still holding it — so the edge never fires and the
+  // one button the lobby exists to get you past does nothing until they let go and press
+  // again. Cleared on the way in, so the next press is always an edge.
+  _startPrev = {};
   // Anyone who sat the last one out is back in the pool — warm-up is where you
   // choose, so nobody is stuck on the bench across matches.
   if (w.bench && w.bench.length){
@@ -18183,16 +18316,21 @@ function buildLobbyKeys(w){
   // colours beside both halves and mean nothing. There they are two rows above the
   // pitch instead, one over each half. Team 0 defends +y: flat that is the bottom
   // half (v > 0), turned it is the right one (u > 0).
-  const nSw = TEAM_COLS.length, swSpan = nSw*K.sw + (nSw-1)*K.gap;
+  // ⚠️ TWO ROWS, and the second one stacks AWAY from the pitch (`deep`) rather than
+  // toward it — the row nearest the touchline is the one you reach first, and pushing
+  // the overflow inward would put swatches between a player and the line they walk over
+  // to pick a side.
+  const cols = Math.max(1, K.swCols), swSpan = cols*K.sw + (cols-1)*K.gap;
   const splitU = turned;                       // do the halves divide left/right?
   if (!lite) [1, 0].forEach(team => {
     const sign = team === 0 ? 1 : -1;          // team 0 is the +ve side of the split
-    const base = sign > 0 ? K.gap/2 : -(K.gap/2 + swSpan);
+    const base = sign > 0 ? K.swSplit/2 : -(K.swSplit/2 + swSpan);
     TEAM_COLS.forEach((c, i) => {
-      const along = base + i*(K.sw + K.gap);
+      const along = base + (i % cols)*(K.sw + K.gap);
+      const deep  = Math.floor(i / cols)*(K.sw + K.gap);
       raw.push({ k: { colTeam: team, col: c.col, label: '' },
-                 u: splitU ? along : -(across + K.side + K.sw),
-                 v: splitU ? -(down + K.side + K.sw) : along,
+                 u: splitU ? along : -(across + K.side + K.sw + deep),
+                 v: splitU ? -(down + K.side + K.sw + deep) : along,
                  du: K.sw, dv: K.sw });
     });
   });
@@ -18500,26 +18638,40 @@ const LOBBY_WALK = { on: 6.5, off: 11 };     // world units per step
 // again. The lobby's clock RESETS on any sign of life, so it only ever runs out on
 // a room that has genuinely stopped deciding.
 const AUTO = { warmup: 30, result: 30 };
-// ⚠️ BOTS STAND NEXT TO EACH OTHER, in one row across their own half. They used to
-// take a seeded RANDOM spot each, which scattered them over the half and made a side
-// look like a crowd rather than a team waiting to play — and it meant the preview
-// moved every time the size dial was touched. `slot` is the bot's place in the row and
-// `n` how many there are, so the row stays centred as it grows.
-// No PRNG at all now, which is one less thing that has to stay deterministic.
+// ⚠️ **A WAITING BOT STANDS OUTSIDE THE TOUCHLINE, IN ITS OWN HALF — IT IS NOT ON THE
+// PITCH.** Asked for as *"only have bots walk in to balance once a match starts"*, and
+// the picture is the argument: on a 2v2 the lobby had four robots standing on the grass
+// and two people, so the room you were choosing sides in was mostly filled by bodies
+// nobody was driving. Out here they still say which side they will be on and how many of
+// them there are, and the grass belongs to the people until the whistle.
+// ⚠️ **The preview promise moves from BODIES to WORDS, and it is still kept.** The rule
+// was *"the lobby shows the match you'd get, not a row on the touchline"* — `drawLobby`
+// prints "1 PLAYER +1 BOT" over each half and that is still exactly what Start fields.
+// What changes is that the count is read rather than counted off the pitch.
+// ⚠️ `slot` is the bot's place in its side's column and `n` how many there are, so the
+// column stays centred as it grows. No PRNG at all, which it has to be: this is reached
+// from inside `step()`.
 function lobbySpotFor(w, team, slot, n){
   const side = team === 0 ? 1 : -1;
   const cnt = Math.max(1, n || 1), i = slot || 0;
-  const span = Math.min(w.field.W * 0.72, cnt * 62);
-  const x = cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span;
-  const y = side * (w.field.L/2) * 0.30;
-  // ⚠️ Same rule as `layTeam` and `placeBerry`: nothing may be PLACED inside a gap
-  // block, because a block is a barrier and not a container — `collideWall` only acts
-  // within one radius of a face, so a body put down in the middle of four segments is
-  // touched by none of them and parks there. And `walkTo` sets position directly on a
-  // body `integrate` is ghosting, so it walks straight in. Faceoff Orbit's lobby row
-  // sits at exactly `±L/2 * 0.30`, which is inside a block.
+  const span = Math.min(w.field.L * 0.44, (cnt - 1) * LOBBY.benchStep);
+  const x = side * (w.field.W/2 + LOBBY.benchGap);
+  const y = side * (w.field.L/2) * 0.34 + (cnt === 1 ? 0 : (i/(cnt-1) - 0.5) * span);
+  // ⚠️ Kept even though the spot is now outside the pitch and a gap block never is:
+  // `gapPush` is inert out here, and the day somebody moves this row back inside the
+  // touchline the guard has to already be in place. Same rule as `layTeam` and
+  // `placeBerry` — nothing may be PLACED inside a block, because a block is a barrier
+  // and not a container.
   return w.field.gap ? gapPush(w.field, x, y, PLAYER.r + 6) : { x, y };
 }
+// ⚠️ **ONE ANSWER TO "IS THIS BODY BEING WALKED, RATHER THAN PLAYED?"** — read by
+// `integrate`'s collision pass, by its ball-control pass and by `runBot`'s call site.
+// It was a local arrow inside `integrate` while it only had to answer for collisions.
+// ⚠️ Only while it is still WALKING. A lobby bot keeps `_lobTo` after it arrives, so
+// testing the target alone would leave every bot on the pitch permanently ghosted and
+// you could stand inside one. `_lobArr` is set by `stepLobbyBots` the step `walkTo`
+// reports it got there, and cleared the moment it is given a new place to be.
+function bodyStaged(q){ return !!((q._lobTo && !q._lobArr) || q._subTo || q._subPath); }
 // Staging movement, not gameplay: positions are set directly and velocity is held at
 // zero, exactly as the touchline placement already did. These bots never run the AI.
 function walkTo(p, to, sp){
@@ -18575,6 +18727,18 @@ function stepLobbyBots(w){
     }
     if (t < 0) leaving.push(b);
   });
+  // ⚠️ **A PERSON WEARS THE SHIRT OF THE SIDE THE PLAN GIVES THEM, not the side they were
+  // minted on.** `applyTeamColours` reads `p.team`, and until the whistle a human's team
+  // was whatever `startMatch` dealt them — so two people who had both walked onto the
+  // same half were drawn in the same colour as each other AND as the half they had just
+  // left, with the head count above their heads saying something else entirely. Reported
+  // as changing a shirt colour not reaching everybody on that side, and it is really the
+  // shirt naming the wrong side. `lobbyPlan` is already the one answer to who is on which
+  // half; this is the shirt reading it.
+  // ⚠️ Bodies standing OUTSIDE the touchline (`plan.out`) are deliberately untouched —
+  // they are sitting this one out and have no side to wear.
+  plan.a.forEach(p => { p.team = 0; });
+  plan.b.forEach(p => { p.team = 1; });
   // ⚠️ Colour follows the team a bot was just handed, every step — a body that swaps
   // halves to fill a gap has to be wearing that half's shirt before it gets there.
   applyTeamColours(w.players);
@@ -18893,6 +19057,39 @@ function lobbyStart(w){
   // `numberTheSides` runs after them. Same beat as `applyTeamColours` two lines up.
   if (w.cup){ cupDress(w); cupTickerStart(); }
   resetKickoff(w, true);
+  stageEntry(w);
+}
+// ⚠️ **THE BOTS WALK ON WHEN THE MATCH STARTS.** The complement of keeping them off the
+// grass during warm-up: `resetKickoff` has just put every body on its mark, so the marks
+// are already right — this picks each bot up, stashes its mark on `_subTo` (which
+// `stepSubWalk` already knows how to walk to) and puts the body back outside the
+// touchline it was waiting on.
+// ⚠️ **A BEAT FIRST** (`ENTRY.wait`). Setting off in the same frame the screen changes
+// reads as bodies sliding into place; a second of stillness is what makes it a team
+// coming out. Counted down in `step()`'s kickoff branch — never in a draw, the trails
+// rule — and there is no randomness anywhere in it.
+// ⚠️ **Only out of WARM-UP.** A plain KICK OFF never showed the bots early, so there is
+// nothing there for the walk-on to resolve, and a second added to every match start is a
+// second charged to people who did not ask for it.
+// ⚠️ Humans are left exactly where `resetKickoff` put them: a person who walked onto a
+// half chose that, and marching them back out to walk in again undoes it.
+const ENTRY = { wait: 1.0 };
+function stageEntry(w){
+  const bots = w.players.filter(p => p.ctrl === 'bot');
+  if (!bots.length) return;
+  [0, 1].forEach(t => {
+    const list = bots.filter(p => p.team === t);
+    list.forEach((p, i) => {
+      p._subTo = { x: p.x, y: p.y };
+      const spot = lobbySpotFor(w, t, i, list.length);
+      p.x = spot.x; p.y = spot.y;
+      p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+    });
+  });
+  w.entryT = ENTRY.wait;
+}
+function entryBusy(w){
+  return !!w && (w.entryT > 0 || w.players.some(p => p._subTo));
 }
 // ---------- Floating stat text ----------------------------------------------
 // A short label over a player the moment they do something the match record will
@@ -19090,7 +19287,7 @@ function padFor(p){
 // first; after that the HOST's START begins the match and everyone else's marks
 // them ready (which is only ever a display — nobody is blocked by someone idling).
 const START_BTN = 9;                       // standard mapping: Start / Options / +
-let _startPrev = {};
+var _startPrev = {};   // `var`: `enterWarmup` clears this and sits above the declaration (TDZ)
 // The on-screen Start, and the one place that decides whether it is showing.
 // ⚠️ It goes through lobbyStart() — the SAME path the gamepad Start and the idle
 // auto-start use — so a touch player gets the plan lobbyPlan drew, not a second
@@ -19266,6 +19463,13 @@ function subFloorOf(w){
                           w.players.filter(p => p.team === 1).length);
   return w.subFloor;
 }
+// ⚠️ ONE OWNER for "which bot comes off this side" — `evenUpSides` acts on it and
+// `drawSubPrompts` names it, so the shirt a returning player is told they are taking is
+// the shirt they actually get. Last on the side, which is the order they arrived in.
+function subSwapOut(w, team){
+  const list = w.players.filter(p => p.team === team && p.ctrl === 'bot');
+  return list[list.length - 1] || null;
+}
 // ⚠️ THE ONE OWNER of "both sides field the same number, and never fewer than the mode
 // asked for". A join, an unplug and a swap all come through here, so the three cannot
 // disagree about what a balanced pitch is — which is exactly how a 4v3 would survive
@@ -19290,8 +19494,7 @@ function evenUpSides(w){
     // human pulled off the pitch by a roster count is a controller that stops working
     // mid-match for no reason its holder can see.
     while (side().length > want){
-      const list = side().filter(p => p.ctrl === 'bot');
-      const bot = list[list.length - 1];
+      const bot = subSwapOut(w, t);
       if (!bot) break;
       subOff(w, bot);
     }
@@ -19324,8 +19527,8 @@ function subWaitFor(w, padIndex){
   if (mine){
     mine.ctrl = 'gamepad'; mine.padIndex = padIndex; mine._padWas = null;
     mine._padId = padId;
-    mine.sittingOut = true; mine._subIn = false;
-    toast(mine.name + ' back — walk to a side, then START', 'ok', 'gamepad');
+    mine.sittingOut = true; mine._subIn = false; mine._subBack = true;
+    toast(mine.name + ' back — press START to take over', 'ok', 'gamepad');
     return mine;
   }
   if (benchHumans(w).length + w.players.length >= LOBBY.maxPerSide * 2) return null;
@@ -19355,9 +19558,53 @@ function pollSubReady(w){
     const key = 'sub' + p.padIndex, was = _startPrev[key];
     _startPrev[key] = pressed;
     if (!pressed || was) continue;
+    // ⚠️ **A RETURNING PLAYER GOES ON AT ONCE, not at the next goal.** They were already
+    // in this match; the wait is a penalty for a cable somebody kicked out. A genuinely
+    // new pad still comes on at a goal, because that is a person joining rather than a
+    // person resuming.
+    if (p._subBack){ subSwapNow(w, p); continue; }
     p._subIn = !p._subIn;
     toast(p.name + (p._subIn ? ' on at the next goal' : ' waiting'), p._subIn ? 'ok' : '', 'gamepad');
   }
+}
+// The side a returning player goes back to. ⚠️ One function, because the prompt and the
+// swap must agree — a label that promises HOME and a swap that gives AWAY is worse than
+// no label. Where they are STANDING wins (they may want the other half now); otherwise
+// the side they were playing for when the plug came out.
+function subBackTeam(w, p){
+  const pick = subSideOf(w, p);
+  if (pick >= 0) return pick;
+  return (p.team === 0 || p.team === 1) ? p.team : subDefaultTeam(w);
+}
+// ⚠️ **A RECONNECTING PLAYER SWAPS STRAIGHT BACK IN, MID-PLAY.** Unplugging sends the
+// body to the bench with its name, its shirt and its stats, and `evenUpSides` puts a
+// filler bot in the empty place — so coming back, the player was being handed their own
+// body as if they were a stranger and then made to wait for a goal.
+// ⚠️ **The arithmetic is `evenUpSides`', not this function's.** All this does is put the
+// person back on their side and restore the size the match was at before they left; the
+// one owner of "both sides field the same number" then works out whether that means
+// dropping a filler bot from this side (the match was at its floor) or adding one to the
+// other side (the match had shrunk). Two branches here would be a second implementation
+// of the thing that already exists to stop a 4v3.
+// ⚠️ **It walks in through the gate**, like every other body that crosses — and while it
+// walks it is `staged`, so it cannot collide with anybody and cannot touch the ball. That
+// is what makes a mid-play substitution fair: the extra body can affect nothing until it
+// has arrived.
+function subSwapNow(w, p){
+  const team = subBackTeam(w, p);
+  w.bench = (w.bench || []).filter(q => q !== p);
+  p.team = team; p.sittingOut = false; p._subIn = false; p._subBack = false;
+  p._subPath = null;
+  p.vx = 0; p.vy = 0; p.inX = 0; p.inY = 0; p.kick = false;
+  const g = subGate(w);
+  p.x = g.x; p.y = g.y;
+  p._subTo = subOnSpot(w, team);
+  w.players.push(p);
+  if (p._subPerWas != null){ w.subPer = Math.max(subPer(w), p._subPerWas); p._subPerWas = null; }
+  applyTeamColours(w.players);
+  evenUpSides(w);
+  toast(p.name + ' back on for ' + (team === 0 ? 'HOME' : 'AWAY'), 'ok', 'gamepad');
+  return true;
 }
 // A goal has gone in: bring on anybody who asked, then even the sides up. ⚠️ Called from
 // the goal state exactly once per goal (`w._subDone`), not from the five places that set
@@ -19387,6 +19634,7 @@ function runSubs(w){
 // way the lobby's staging already does it, so `integrate` has nothing to fight — and the
 // AI is suppressed for a bot mid-walk at the one place runBot is called.
 function stepSubWalk(w){
+  if (w.entryT > 0) return;          // the beat before a team comes out — see stageEntry
   for (const p of w.players){
     if (!p._subTo) continue;
     if (walkTo(p, p._subTo, LOBBY_WALK.on)) p._subTo = null;
@@ -22153,6 +22401,7 @@ function resize(){
   cv.style.width = cw+'px'; cv.style.height = ch+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = false;   // crisp, chunky pixels (Amiga look)
+  if (world) syncPitchTurn();
   if (world) computeCam();
   // Widened to desktop during a live match with nothing docked yet — bring the
   // main menu in on the left. (deskDockId is set inside dockOrFull, so the guard
@@ -22790,8 +23039,8 @@ function startDrill(key){
   hideOverlay();
   // Deck: same handover as kicking off — starting a drill gives the pad to the
   // drill, not the menu. Select brings the menu back.
-  if (isDeck()){
-    sel.dockCollapsed = true; saveSel();
+  if (dockCapable()){
+    matchCollapse = true;
     document.body.classList.add('dock-collapsed');
     deckPausedByMenu = false;
     updateDockToggle();
@@ -23434,11 +23683,17 @@ function drawSubPrompts(w){
   for (const p of benchHumans(w)){
     const [sx, sy] = screenPt(wx(ix(p)), wy(iy(p)));
     const pick = subSideOf(w, p);
-    // The side it would ACTUALLY get, undecided included — read through the same two
-    // functions runSubs uses, so the label cannot promise a side the goal won't give.
-    const team = pick >= 0 ? pick : subDefaultTeam(w);
-    const where = (team === 0 ? 'HOME' : 'AWAY') + (pick < 0 ? '?' : '');
-    const txt = p._subIn ? 'ON AT NEXT GOAL · ' + where : 'START = JOIN ' + where;
+    // The side it would ACTUALLY get, undecided included — read through the same
+    // functions the swap uses, so the label cannot promise a side it won't give.
+    const team = p._subBack ? subBackTeam(w, p) : (pick >= 0 ? pick : subDefaultTeam(w));
+    const where = (team === 0 ? 'HOME' : 'AWAY') + (pick < 0 && !p._subBack ? '?' : '');
+    // ⚠️ A RETURNING PLAYER IS TOLD IT IS A TAKEOVER, and told whose shirt — "JOIN HOME"
+    // reads as starting again from nothing when what actually happens is they get their
+    // own half-match back. The name comes from `subSwapOut`, the same function
+    // `evenUpSides` acts on.
+    const out = p._subBack ? subSwapOut(w, team) : null;
+    const txt = p._subBack ? ('START = TAKE OVER' + (out ? ' · ' + out.name.toUpperCase() : ' · ' + where))
+              : p._subIn ? 'ON AT NEXT GOAL · ' + where : 'START = JOIN ' + where;
     // ⚠️ Held inside the canvas. The body is OUTSIDE the touchline by definition, so a
     // label centred on it hangs off the edge of the screen and loses its last few words —
     // which on this label are the side you are about to be given.
@@ -28822,6 +29077,9 @@ if (window.__MAGNETDEBUG) {
     set updSeen(v){ updSeen = v; }, set updFound(v){ updFound = v; },
     SUB, subGate, subOnSpot, subSideOf, subDefaultTeam, subPer, subFloorOf, evenUpSides,
     subOff, subWaitFor, pollSubReady, runSubs, stepSubWalk, benchHumans, allBodies,
+    subSwapNow, subSwapOut, subBackTeam, bodyStaged, stageEntry, entryBusy, ENTRY,
+    pollSeatRotate, openWarmup, dockCollapsedNow, fitsBetterTurned,
+    lobbySpotFor, syncPitchTurn, get matchCollapse(){ return matchCollapse; },
     matchRoster, spawnLobbyBot, benchSlots, walkTo, drawSubPrompts,
     TILT, TILTOPT, get tilt(){ return tilt; }, tiltOn, tiltLift, tiltGround, advanceTilt,
     TOUCHDIG, TOUCHDIGOPT, touchIsDigital, digitalVec, onDown, onMove, onUp, drawPad, padFor, gamepadPad, get keys(){ return keys; },

@@ -21,37 +21,37 @@ const r = await p.evaluate(async ()=>{
 
   // ---- match start: menu closed, game owns pad
   M.startMatch(); await wait(200);
-  o.startCollapsed = M.sel.dockCollapsed===true;
+  o.startCollapsed = M.dockCollapsedNow()===true;
   o.startGameOwnsPad = M.deckMenuOwnsPad()===false;
 
   // ---- REGRESSION: the gear / explicit navigation must actually SHOW the menu
   M.openStats(); await wait(150);
-  o.gearNavExpands = M.sel.dockCollapsed===false && M.deckMenuOwnsPad()===true;
+  o.gearNavExpands = M.dockCollapsedNow()===false && M.deckMenuOwnsPad()===true;
   o.gearNavPauses = M.paused===true;
 
   // ---- Select closes it again and hands the pad back
   await press(B.SELECT); await wait(150);
-  o.selectCloses = M.sel.dockCollapsed===true && M.deckMenuOwnsPad()===false;
+  o.selectCloses = M.dockCollapsedNow()===true && M.deckMenuOwnsPad()===false;
   o.resumedOnClose = M.paused===false;
 
   // ---- Select opens it again
   await press(B.SELECT); await wait(150);
-  o.selectOpens = M.sel.dockCollapsed===false && M.deckMenuOwnsPad()===true;
+  o.selectOpens = M.dockCollapsedNow()===false && M.deckMenuOwnsPad()===true;
   await press(B.SELECT); await wait(150);   // back to playing
 
   // ---- REGRESSION: after a match ends, toMenu must show a visible menu
   M.world.state='over';
   M.toMenu(); await wait(200);
-  o.menuVisibleAfterMatch = M.sel.dockCollapsed===false && !!document.querySelector('.screen.docked:not(.hidden)');
+  o.menuVisibleAfterMatch = M.dockCollapsedNow()===false && !!document.querySelector('.screen.docked:not(.hidden)');
 
   // ---- Select works when NOTHING is docked (drill) — always opens/closes
   M.startDrill('straight_up'); await wait(200);
-  o.drillStartsCollapsed = M.sel.dockCollapsed===true;      // drill owns the pad, like a match
+  o.drillStartsCollapsed = M.dockCollapsedNow()===true;      // drill owns the pad, like a match
   o.drillGameOwnsPad = M.deckMenuOwnsPad()===false;
   await press(B.SELECT); await wait(250);
-  o.selectOpensFromDrill = M.sel.dockCollapsed===false && M.deckMenuOwnsPad()===true;
+  o.selectOpensFromDrill = M.dockCollapsedNow()===false && M.deckMenuOwnsPad()===true;
   await press(B.SELECT); await wait(200);
-  o.selectClosesFromDrill = M.sel.dockCollapsed===true && M.deckMenuOwnsPad()===false;
+  o.selectClosesFromDrill = M.dockCollapsedNow()===true && M.deckMenuOwnsPad()===false;
 
   // ---- while the menu is OPEN the pad must not drive the player
   M.sel.mode='1v1'; M.startMatch(); await wait(200);
@@ -71,7 +71,7 @@ const r = await p.evaluate(async ()=>{
 
   // ---- A never reopens the menu while playing (A is KICK)
   await press(B.A); await wait(60);
-  o.aStillDoesNotReopen = M.sel.dockCollapsed===true;
+  o.aStillDoesNotReopen = M.dockCollapsedNow()===true;
   return o;
 });
 console.log(JSON.stringify(r,null,2));

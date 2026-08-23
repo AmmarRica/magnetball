@@ -12,8 +12,18 @@ const r = await p.evaluate(async ()=>{
   const H=-1.5708;
 
   M.sel.display='auto'; M.sel.orient='auto'; M.applyDisplayMode(); await wait(120);
-  M.sel.mode='1v1'; M.startMatch(); await wait(120);
-  o.autoDesktopUpright = rotOf()===0;
+  M.sel.mode='1v1'; M.sel.field='classic'; M.startMatch(); await wait(120);
+  // ⚠️ **AUTO NOW MEANS "WHICHEVER WAY FILLS THE SCREEN", and it used to mean `isDeck()`.**
+  // On this landscape window an upright 440x760 court fits at a scale that leaves most of
+  // the width as surround — reported as dead space in the court. The claim is not just
+  // "it turned": it is that turning it makes the pitch BIGGER, measured as the drawn
+  // scale both ways, so a build that turns the pitch for no gain fails here.
+  o.autoDesktopSideways = rotOf()===H;
+  const scaleAt = (or) => { M.sel.orient=or; M.applyDisplayMode(); M.computeCam(); return M.cam.s; };
+  const sUp = scaleAt('v'), sSide = scaleAt('h');
+  M.sel.orient='auto'; M.applyDisplayMode(); await wait(60);
+  o.sidewaysIsBigger = sSide > sUp * 1.2;
+  o.gain = +(sSide/sUp).toFixed(2);
 
   // Force sideways on a normal desktop layout (decoupled from Steam Deck)
   M.sel.orient='h'; M.applyDisplayMode(); await wait(120);
@@ -65,9 +75,27 @@ const r = await p.evaluate(async ()=>{
   o.orientFocusable = M.deckFocusables().some(el=>el.closest && el.closest('#orientPick'));
   return o;
 });
+// ⚠️ **AND A PORTRAIT WINDOW IS LEFT ALONE**, which is the other half of "whichever way
+// fills the screen" — a tall court on a tall screen loses by turning, and a build that
+// simply always turns would pass every check above. Its own page, because a viewport is
+// not something `evaluate` can change.
+const pp = await b.newPage({ viewport:{width:390,height:844} });
+pp.on('pageerror',e=>errors.push('phone: '+e.message));
+await pp.addInitScript(()=>{window.__MAGNETDEBUG=true;});
+await pp.goto('file://' + process.cwd() + '/index.html');
+await pp.waitForTimeout(600);
+const phone = await pp.evaluate(()=>{
+  const M=window.__magnet;
+  M.sel.display='auto'; M.sel.orient='auto'; M.sel.field='classic'; M.sel.mode='1v1';
+  M.applyDisplayMode(); M.startMatch(); M.computeCam();
+  return { turned: M.pitchHorizontal(), fits: M.fitsBetterTurned(), rot:+(M.cam.rot||0).toFixed(3) };
+});
+await pp.close();
+r.portraitStaysUpright = phone.turned===false && phone.fits===false && phone.rot===0;
+r.phone = phone;
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
-const ok = r.autoDesktopUpright&&r.forcedSideways&&r.seatRotatedLive&&r.deckForcedUpright&&
+const ok = r.autoDesktopSideways&&r.sidewaysIsBigger&&r.portraitStaysUpright&&r.forcedSideways&&r.seatRotatedLive&&r.deckForcedUpright&&
   r.seatUnrotatedLive&&r.autoDeckSideways&&r.cocktailStaysUpright&&r.orientTiles===3&&
   r.pickerSetsSideways&&r.ballEscapes===0&&r.fsBtnExists&&r.fsHudBtnExists&&r.fsLabel&&
   r.fsIsFocusable&&r.orientFocusable&&errors.length===0;

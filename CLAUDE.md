@@ -235,6 +235,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   pitch to find out what it did.
   ⚠️ Select is therefore **no longer an alternative START**. Start (9) still starts, and
   `#lobbyStartBtn` is on screen throughout warm-up.
+  ⚠️ **AND WITH NOTHING RUNNING IT OPENS WARM-UP INSTEAD** — the menu, the attract demo or
+  a finished match. A controller had no way at all into the room built for controllers:
+  you had to reach for a mouse, find `#warmupBtn` and press it. A quarter-turn means
+  nothing on a menu, so the button is free there, and `pollSeatRotate` is the one place
+  that decides which of the two SELECT means. ⚠️ **The first pad only** for that half —
+  four people leaning on SELECT must not open four lobbies — while the quarter-turn stays
+  per pad, because that one is a statement about where a person is standing.
+  ⚠️ The idle branch sits **above** the arcade stand-down: a cabinet with a real pad
+  plugged into it is an ordinary setup, and an arcade panel reports no button 8 at all.
 - **EVERY BUTTON KICKS** (`padKickHeld`, `KICK_NEVER`) — nothing to learn, nothing to bind,
   and it cannot be wrong on a pad that numbers its buttons oddly, which is what the old
   fixed list (`KICK_FALLBACK`) risked. ⚠️ **Three exclusions, and the D-PAD is the one that
@@ -403,6 +412,47 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   so `tiltAsk` hangs off the first `pointerdown`, not off boot. Off on desktop, and off under
   `prefers-reduced-motion` — whose query object is built **once**, because `tiltLift()` is
   called for every body on every frame.
+- **AUTO MEANS "WHICHEVER WAY FILLS THE SCREEN"** (`pitchHorizontal`, `fitsBetterTurned`,
+  `ORIENT_GAIN`, `syncPitchTurn`). `sel.orient` has always offered Auto / Upright /
+  Sideways, and `auto` meant `isDeck()` — so on every other machine the pitch stayed
+  upright however wide the screen was. `computeCam` fits the whole span, so an upright
+  440 × 760 Classic on a 1920 × 1080 panel settles at `cam.s` **1.03** and the pitch is
+  455 of 1920 pixels across with surround either side of it. Reported as *"lot of dead
+  space in the court"*, and measured as exactly that: turned goal-to-goal the same court
+  fits at **1.97**, and on a 1280 × 800 window the gain is **1.82×**. Upright and Sideways
+  are still hard overrides and cocktail is still locked upright.
+  ⚠️ **THE PITCH BOX, never the warm-up span.** `buildLobbyKeys` asks this question to
+  decide which way to lay the keyboard out, and the keyboard is *part of* that span — so
+  answering off the span makes the answer depend on its own consequence.
+  ⚠️ **A REAL GAIN, not any gain** (`ORIENT_GAIN`, 1.04). On a near-square window the two
+  fits are within a percent of each other and a bare `>` flips the pitch — and with it
+  every player's stick — on a one-pixel resize.
+  ⚠️ **THE ANSWER IS VIEWPORT-DEPENDENT NOW, so `resize()` has to re-ask it**
+  (`syncPitchTurn`), and two of its readers are answered on a LAYOUT CHANGE rather than
+  per frame: `applySeatRotation` decides which way a stick points, and `buildLobbyKeys`'
+  `turned` decides whether the rows run across the screen or up the side of it. `resize()`
+  called neither, so without this a window crossing the threshold hands every player a
+  stick 90° wrong and leaves the lobby laid out for the orientation it is no longer in.
+  It is the hazard `SIDE` records one layer along, arriving from the other direction.
+  ⚠️ `_turnWas` is a **`var`**: `resize()` runs during the bootstrap and this sits two
+  thirds of the way up the file. It is also reset in `startMatch`, because
+  `fitsBetterTurned` reads the FIELD and a Futsal match and a Leviathan one can answer
+  differently on the same window.
+  ⚠️ **A portrait window is left alone**, which is the other half of the rule — a tall
+  court on a tall screen loses by turning, and a build that simply always turned would
+  pass every "it turned" check. `tests/orient.mjs` measures the gain and the phone case.
+- **A MATCH STARTING COLLAPSES THE SIDE MENU** (`matchCollapse`, `dockCollapsedNow`).
+  `resize()` auto-docks `#setup` on the left during a live match and `uiPadLeft = DOCK_W`
+  takes that width off the court — a fifth of a 1920 screen given to a menu nobody is
+  reading. It was already done for the Steam Deck, and only there.
+  ⚠️ **It must NOT write `sel.dockCollapsed`.** That key is the player's own answer to the
+  ‹ / › tab and is persisted, so setting it at every kickoff would silently destroy a
+  preference somebody set once and never get it back. `matchCollapse` reads ON TOP of it
+  and is dropped by `setDockCollapsed` (a hand on the tab), by any explicit `dockOrFull`
+  (asking for a page is asking to see it — otherwise Settings from the pause menu docks a
+  panel collapsed to nothing) and by `toMenu`, which goes through `dockOrFull`.
+  ⚠️ `dockOrFull` reads `dockCollapsedNow()` **before** clearing it, or the deck's
+  "opening a page pauses the match" branch never fires: the collapse is what it reacts to.
 - **`pitchXform(dx, dy)` is the ONE pitch transform** — an offset then deck view's
   quarter-turn. `render()` uses it twice (ground, then bodies) and `drawReplayFrame` once;
   three hand-written copies is how the replay came to be drawn at ninety degrees to the match
@@ -2761,6 +2811,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
     slot) for bodies going off, both through the lobby's own `walkTo`. ⚠️ `_subTo` also
     suppresses the AI at the `runBot` call site — `walkTo` sets position directly, so a thinking
     bot fights it and jitters on the touchline.
+  - **A RECONNECTING PLAYER SWAPS STRAIGHT BACK IN, MID-PLAY** (`_subBack`, `subSwapNow`,
+    `subBackTeam`, `subSwapOut`). Unplugging benches the body with its name, its shirt and
+    its stats and `evenUpSides` puts a filler bot in the empty place — and coming back, the
+    player was handed their own body as if they were a stranger (*"START = JOIN HOME"*) and
+    then made to wait for a goal. That is a long time out of a match you were already
+    playing, for a cable somebody kicked. ⚠️ **Still a PRESS**: a pad waking up in a bag
+    must not walk a stranger into the play, and the person coming back may not be ready the
+    instant the plug goes in. The prompt says **`START = TAKE OVER`** and names the bot
+    wearing their shirt. ⚠️ **The arithmetic is `evenUpSides`', not `subSwapNow`'s** — all
+    it does is put the person back on their side and restore `_subPerWas`, the size the
+    match was at *before* they left; the one owner of "both sides field the same number"
+    then works out whether that means dropping a filler bot from this side (the match was
+    at its kickoff floor) or adding one to the other side (the match had shrunk). Two
+    branches here would be a second implementation of the thing that exists to stop a 4v3.
+    ⚠️ `_subPerWas` has to be read in `dropOut` **before** the decrement, because which of
+    those two happened is exactly what the number that moved records. ⚠️ **`subSwapOut` is
+    one owner for "which bot comes off this side"** — `evenUpSides` acts on it and
+    `drawSubPrompts` names it, so the shirt somebody is told they are taking is the shirt
+    they get. ⚠️ It walks in through the gate and is `bodyStaged` the whole way, so it can
+    neither collide nor touch the ball until it has arrived — which is what makes a
+    mid-play substitution fair.
   - **Unplugging** hands the body back through the gate keeping its name and stats, and a pad
     that hiccups and returns **reclaims its own body** (`_padWas`) rather than minting a P3 and
     stranding a half-match on the bench. ⚠️ `matchRoster()` is what the result screen reads, so
@@ -2937,11 +3008,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   Flat the halves are top and bottom, so the strips are two columns down one side;
   turned they are LEFT and RIGHT, so a column would put both teams' colours beside both
   halves and mean nothing — there they are two rows above the pitch.
+  ⚠️ **FOUR ACROSS AND TWO DEEP PER SIDE, with a real gap between the sides**
+  (`LOBBYKB.swCols`, `LOBBYKB.swSplit`). Eight in a line, laid end to end with the other
+  team's eight, reads as **one strip of sixteen** — reported from a cabinet, where nothing
+  on screen said which half of that strip was whose. Two blocks is a shape you see before
+  you count anything, and it halves the across-span (275 units a side down to 135), which
+  the camera gets back. ⚠️ The second row stacks **away** from the pitch: the row nearest
+  the touchline is the one you reach first, and overflowing inward would put swatches
+  between a player and the line they walk over to pick a side.
   ⚠️ **Difficulty is a ROW under the keyboard, numbered 1..7**, with the picked tier
   named once below it. A column out to one side lands exactly where the head count
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
+- **THE LOBBY HOST IS PLAYER ONE, not whoever is first in the roster** (`lobbyHost`,
+  `seatOrdinal`). The host's START kicks the match off and everybody else's only toggles
+  their ready flag — so with the host read off roster order, the person standing at the
+  panel marked 1 could press START and watch nothing happen, which is how it was reported.
+  Seats are handed out in an order that changes with the mode, with the field and with who
+  joined when; a pad index does not. The keyboard seat outranks every pad, because on a
+  machine with a keyboard that is player one by definition.
+  ⚠️ **`enterWarmup` clears `_startPrev`.** The START press is edge-detected per key, so a
+  player who came in here by holding START on the menu is still holding it, no edge ever
+  fires, and the one button the lobby exists to get you past does nothing until they let
+  go and press again.
 - **A PAD DOES NOT ALWAYS COME BACK ON THE INDEX IT LEFT** (`padReclaim`, `padIdOf`,
   `p._padId`). `_padWas` is what hands somebody their own body back after a cable is kicked
   out, and it matched on the INDEX alone — but unplug pad 0 while pad 1 is still connected,
@@ -3016,6 +3106,19 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   **not** a `TEXTS` entry (that table is the picker's list, and this is what a body IS,
   not a cosmetic), and it is declared **up with `TEAM_COLS`** because `paintFace` reads
   it during the bootstrap — the **fifteenth TDZ bite** in this file.
+- **A BODY BEING WALKED ON OR OFF DOES NOT COLLIDE — AND MAY NOT TOUCH THE BALL**
+  (`bodyStaged`, read by `integrate`'s collision pass, by its ball-control pass and by
+  `runBot`'s call site). ⚠️ The ball half is new and it is load-bearing now: it was an
+  ungated `handleBallControl` over every `w.players` entry, which never mattered while the
+  only walk-on happened at a GOAL with the ball parked on the centre spot. A returning
+  player swaps in **mid-play** (`subSwapNow`) and the bots walk on at kickoff, so a ghost
+  that cannot be tackled and can still trap the ball is a real hole. ⚠️ **One predicate,
+  three readers** — it was a local arrow inside `integrate` while it only had to answer
+  for collisions, and a second copy would be a second opinion about who is a ghost.
+  ⚠️ `const staged = bodyStaged` inside `integrate` is an alias for readability only, and
+  the ball-control pass calls `bodyStaged` **directly**: that pass runs above the alias's
+  declaration, so reading the alias there is a temporal dead zone and took the page out on
+  the first step. **Nineteenth TDZ bite in this file.**
 - **A BODY BEING WALKED ON OR OFF DOES NOT COLLIDE** (`staged` in `integrate`).
   `walkTo` sets position directly and holds velocity at zero, so `collideDiscs` — which
   pushes BOTH bodies — shoved it off its line and the next step walked it back, which is
@@ -3225,6 +3328,34 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   so the on-pitch preview can't disagree with what Start does. Standing on a half picks that
   team *including when everyone picks the same one* (six pads on one half = 6v6 vs bots);
   `spawnLobbyBot` builds bots to order when the mode's roster runs short.
+  ⚠️ **BOTS WAIT OUTSIDE THE TOUCHLINE IN WARM-UP AND WALK ON AT THE WHISTLE**
+  (`lobbySpotFor`, `stageEntry`, `ENTRY.wait`, `entryBusy`), asked for as *"only have bots
+  walk in to balance once a match starts"*. On a 2v2 the lobby had four robots standing on
+  the grass and two people, so the room you choose sides in was mostly bodies nobody was
+  driving. **This reverses the rule written below** — *"the lobby shows the match you'd
+  get, not a row on the touchline"* — and the promise it was protecting survives, because
+  `drawLobby` prints "1 PLAYER +1 BOT" over each half and that is still exactly what Start
+  fields. What changed is that the count is READ rather than counted off the pitch, and
+  the waiting row is still on the side each bot will play for.
+  ⚠️ **The walk-on is staged from `lobbyStart`, AFTER `resetKickoff`** — the marks are
+  already right, so it only picks each bot up, stashes its mark on `_subTo` (which
+  `stepSubWalk` already knows how to walk to) and puts the body back outside. **A beat
+  first** (`ENTRY.wait`, 1s): setting off in the frame the screen changes reads as bodies
+  sliding into place, and a second of stillness is what makes it a team coming out.
+  Counted down in `step()`'s kickoff branch — never in a draw — with no randomness at all.
+  ⚠️ **`entryBusy` also holds the kickoff touch off**, or somebody can play the ball while
+  half a side is still walking. ⚠️ **Only out of WARM-UP.** A plain KICK OFF never showed
+  the bots early, so there is nothing there for a walk-on to resolve, and a second added
+  to every match start is charged to people who did not ask for it.
+  ⚠️ **A PERSON WEARS THE SHIRT OF THE SIDE THE PLAN GIVES THEM.** `applyTeamColours`
+  reads `p.team`, and until the whistle a human's team was whatever `startMatch` dealt
+  them — so two people who had both walked onto the same half were drawn in the same
+  colour as each other AND as the half they had just left, with the head count above their
+  heads saying something else. Reported as changing a shirt colour not reaching everybody
+  on that side, and it is really the shirt naming the wrong side. `stepLobbyBots` writes
+  `p.team` from `plan.a`/`plan.b` every step, so the shirt reads the one source of truth
+  the head count already reads. Bodies in `plan.out` are left alone: they are sitting this
+  one out and have no side to wear.
   ⚠️ Standing **on** the halfway line is not a side pick — it is where everyone spawns
   (`LOBBY.neutral`). Walking into a half is one. Without that distinction a lone player was
   auto-assigned team 0 however far they walked, and the on-screen preview — computed separately

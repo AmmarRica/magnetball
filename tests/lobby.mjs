@@ -38,15 +38,20 @@ const o = {}; const allErrs = [];
     r.twoBotsWaiting = r.benched === 2;
     r.botsOffThePitch = w.players.filter(q=>q.ctrl==='bot')
       .every(q => Math.abs(q.x) > w.field.W/2 + q.r);
-    // Bots the plan needs WALK ON to a spot in the middle of their own half, so the
-    // lobby shows the match you'd get. One human a side in a 2v2 needs one bot each.
+    // ⚠️ **THE BOTS THE PLAN NEEDS STAY OFF THE GRASS UNTIL THE WHISTLE, and this check
+    // used to assert the exact opposite** (`botsWalkedOn`: every needed bot standing in
+    // the middle of its own half). Asked for as *"only have bots walk in to balance once
+    // a match starts"* — on a 2v2 the lobby had four robots on the pitch and two people,
+    // so the room you pick sides in was mostly bodies nobody was driving. The count is
+    // still the promise, and it is still kept: the right NUMBER of bots exist, on the
+    // right sides, waiting outside their own half's touchline.
     for(let i=0;i<200;i++) M.step(w);
     const bots = () => w.players.filter(q=>q.ctrl==='bot');
     const onPitch = q => Math.abs(q.x) < w.field.W/2 - q.r && Math.abs(q.y) < w.field.L/2 - q.r;
-    r.botsWalkedOn = bots().length === 2 && bots().every(onPitch);
-    // ...on their own half, and not stacked on the touchline.
+    r.botsWaitOutside = bots().length === 2 && bots().every(q => !onPitch(q));
+    // ...on their own half, so the preview still says which side each one is for.
     r.botsOnOwnHalf = bots().every(q => (q.team===0 ? q.y > 0 : q.y < 0));
-    r.botsInTheMiddle = bots().every(q => Math.abs(q.y) < w.field.L/2 * 0.62);
+    r.botsInTheMiddle = bots().every(q => Math.abs(q.y) < w.field.L/2 * 0.90);
     // Having arrived they settle — no jitter, no drift.
     const px = bots().map(q=>q.x.toFixed(3)+','+q.y.toFixed(3)).join('|');
     for(let i=0;i<90;i++) M.step(w);
@@ -413,7 +418,7 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
 await b.close();
 console.log(JSON.stringify(o,null,1));
 console.log('ERRORS:', allErrs.length?allErrs.slice(0,5):'none');
-const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWalkedOn','botsOnOwnHalf',
+const must = ['entersWarmup','twoBotsWaiting','botsOffThePitch','botsWaitOutside','botsOnOwnHalf',
   'botsInTheMiddle','botsSettle','botsSwappedSides','backToOnePerSide','botsIdle',
   'nothingScored','stickMovesYou','kickMovesTheBall','stillNothingScored','noPadsNoLobby',
   'hostStarts','guestCannotStart','guestReadies','alwaysBalanced','modeSetsTheFloor',
