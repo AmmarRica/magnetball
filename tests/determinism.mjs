@@ -93,6 +93,32 @@ const r = await p.evaluate(async (FRAMES)=>{
   o.noMathRandomInStep = leak === null;
   o.leak = leak ? String(leak).split('\n').slice(0,4).join(' / ') : null;
 
+  // ⚠️ **AUTOMATIC QUALITY MAY NOT REACH THE SIM, and this is the check that says so.**
+  // A slow machine now drops the dot trails and the kick sparks off the measured frame
+  // rate — so a value derived from how fast the hardware happens to be running is one
+  // branch away from the physics. If it ever got in, a pinned seed would stop reproducing,
+  // every saved replay would play back wrong, and two people on one couch would get
+  // different results from the same inputs. Same seed, same inputs, both tiers, hashed.
+  // ⚠️ `render()` is driven as well as `step()`, because the whole point is that the
+  // DRAWING is what changes — a hash taken without rendering would pass on a build that
+  // wired quality straight into `integrate`.
+  const qhash = (pin) => {
+    M.qualityPin(pin);
+    M.sel.mode='4v4'; M.sel.autoRec='off';
+    M.setMatchSeed(4242); M.startMatch();
+    const w2 = M.world; w2.state='play'; w2.stateT=2;
+    w2.players.forEach(q=>{ q.ctrl='bot'; });
+    for (let i=0;i<900;i++){ M.step(w2); if (i%3===0) M.render(); }
+    const n=[+w2.ball.x.toFixed(6), +w2.ball.y.toFixed(6), w2.score[0], w2.score[1]];
+    for (const q of w2.players) n.push(+q.x.toFixed(6), +q.y.toFixed(6), q.ms.goals, q.ms.shots);
+    return n.join(',');
+  };
+  o.qualHi = qhash(true);
+  o.qualLo = qhash(false);
+  o.qualitySameWorld = o.qualHi === o.qualLo;
+  o.qualityIsRenderOnly = typeof M.fullQuality === 'function';
+  M.qualityPin(null);
+
   M.sel.mode='1v1'; M.setMatchSeed(null);
   return o;
 }, FRAMES);
@@ -104,9 +130,12 @@ ok(r.reproducible, `the same seed gave two different matches: ${r.at3600}`);
 ok(r.seedMatters, 'two different seeds gave the identical match — the seed is not reaching the sim');
 ok(r.kqReproducible, `Killer Lobsters did not reproduce on one seed: ${r.kqAt3600}`);
 ok(r.noMathRandomInStep, `Math.random was called from inside step(): ${r.leak}`);
+ok(r.qualityIsRenderOnly, 'fullQuality() is missing — the auto-quality check below is vacuous');
+ok(r.qualitySameWorld,
+   'AUTO-QUALITY REACHED THE SIM: the same seed gave two different worlds at the two tiers, so a slow machine plays a different match and no replay can reproduce');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-console.log(JSON.stringify(r, null, 1));
+console.log(JSON.stringify({ ...r, qualHi: r.qualHi.length + ' chars', qualLo: r.qualLo.length + ' chars' }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\ndeterminism OK');

@@ -3016,8 +3016,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the camera gets back. ⚠️ The second row stacks **away** from the pitch: the row nearest
   the touchline is the one you reach first, and overflowing inward would put swatches
   between a player and the line they walk over to pick a side.
-  ⚠️ **Difficulty is a ROW under the keyboard, numbered 1..7**, with the picked tier
-  named once below it. A column out to one side lands exactly where the head count
+  ⚠️ **Difficulty is a ROW under the keyboard, numbered 1..7** and standing off it by
+  `LOBBYKB.diffGap` — which was `gap*2` = 10 world units, rendering as a **5-7px** gap, so
+  the row read as the keyboard's fourth row rather than as a separate control. Measured
+  cost of the separation: **≈0.9% of pitch scale per 10 units** in portrait and **1.3%** in
+  deck view, because `computeCam` frames the whole block. 30 buys a 23px gap for −2.6% of
+  the pitch. The `−` stepper plate hangs off `blockBot` and moves with the row.
+  The picked tier is named once below it. A column out to one side lands exactly where the head count
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
@@ -3433,6 +3438,104 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `tests/menunav.mjs` checks it **scrolls away**, not merely that `position` is not
   sticky: without that, "not sticky" is satisfied by a row that never moved because
   nothing scrolled.
+- **THE STEP CAP AND THE dt CLAMP ARE ONE DECISION** (`MAX_DT`, `MAX_STEPS`). `dt` is
+  clamped so a backgrounded tab does not simulate the minutes it was away, and the step
+  loop is capped so a slow frame cannot spiral. The clamp was 0.1s and the cap a
+  hard-coded **5** — but 0.1s is **SIX** steps at 1/60, so even a frame the clamp had
+  already trimmed could not be retired and every one of them banked the remainder.
+  ⚠️ **Measured, and the debt is real**: under CPU throttling at 12× the accumulator
+  reached **0.68s** (averaging 0.49s) — half a second of input latency that never comes
+  back, and `renderAlpha` pinned at 1 so every body is drawn a whole step stale. Deriving
+  the cap from the clamp bounds it at one step at every throttle.
+  ⚠️ `acc % STEP` after the loop, not `acc = 0` — the modulo keeps the sub-step phase so
+  interpolation keeps working through an overload.
+  ⚠️ **It does NOT make a slow machine run at full speed and must not be sold as if it
+  does.** The sim advances at `MAX_STEPS × fps` steps a second, so at 5fps it runs at 42%
+  of real time whatever happens here. `matchT` was measured before and after and is
+  unchanged (14.63 → 14.58). The cure for the speed is a cheaper frame; this fixes the
+  debt piled on top of it.
+- **AUTOMATIC QUALITY, AND IT MAY ONLY EVER TOUCH RENDER** (`QUAL`, `qualityStep`,
+  `fullQuality`, `_qualPin`). Below 40fps sustained for two seconds the dot trails go,
+  then the kick sparks; back above 52fps for a second and they return. Nothing to find in
+  a menu — asked for that way.
+  ⚠️ **THE RENDER-ONLY RULE IS THE DETERMINISM RULE, not a style preference.** A pinned
+  seed must reproduce a match bit-exactly, so nothing the SIM reads may depend on how fast
+  the machine is running — one branch the wrong side of that and no replay plays back, no
+  seeded test reproduces, and two people on one couch get different physics from the same
+  inputs. `advanceTrails` and `advanceFx` keep running exactly as they did; only the
+  DRAWING is dropped. `tests/determinism.mjs` hashes the world at both tiers, driving
+  `render()` as well as `step()` — a hash taken without rendering passes on a build that
+  wires quality straight into `integrate`, which is the sabotage that proved it.
+  ⚠️ **The BALL's streak is never dropped** — it is the one thing everybody is tracking,
+  the same rule that stops a cosmetic trail slot switching it off.
+  ⚠️ Long hysteresis on purpose: one slow frame is a garbage collection, not a slow
+  machine, and flipping on it is a visible flicker of the whole picture.
+- **THE FRAME BUDGET IS MEASURED, AND FOUR THINGS WERE PAYING FOR IT.** Profiled at
+  1280×800 with a step/render split at 1v1, 4v4 and 8v8. What was actually expensive, in
+  order, and all four fixes are behaviour-neutral:
+  ⚠️ **The bot SUPPORT GRID was 47% of the whole step** (`botUpdateSupportGrid`) — 48
+  cells, each running `botLaneClear` and `botAperture` over every opponent, twice a step.
+  `safety` and `shot` are both `Math.min(1, …)`, so a cell can never score above
+  `2 + band*0.8 − crowd*0.9`; when that ceiling is already at or below the best so far the
+  cell cannot win and the two expensive calls are skipped. **Provably identical output**,
+  and measured as such: a seeded 8v8 hashed over 3,000 steps gives the same world with the
+  pruning and without. The cell already being run to is never pruned, because `hereS`
+  needs its exact score.
+  ⚠️ **Canvas text was 38% of render** — `fitGlyph` measured every glyph twice per body
+  per frame, 48 `measureText` a frame at 8v8. Cached on the INTEGER font size, never on a
+  width-per-pixel ratio: `tests/textplates.mjs` pins the ink centre to within a pixel and
+  a scaled measurement can drift where an exact one cannot.
+  ⚠️ **The colour maths ran every frame for values that change never** — `relLum` 110
+  calls a frame, `rgba` 97, `readableInk` looping up to 21 times per body. All memoised.
+  `rgba` caches the PARSE and never the (colour, alpha) pair — a fading trail dot varies
+  alpha continuously, so the pair would grow without limit.
+  ⚠️ **The dot trails re-parsed a colour string per dot** — 192 of them at 8v8. The colour
+  is set once and the fade rides `globalAlpha`, multiplied by whatever the caller had.
+  ⚠️ **Debunked, so nobody spends a day there**: `predictsGoal` is FREE (0 calls in 15s of
+  8v8 — every kick went through `releaseTrap`, which skips `maybeHitStop`); `collideDiscs`
+  is 0.012ms for all 120 pairs; `advanceTrails`/`advanceFloaters`/`advanceStamina` are
+  below the measurement floor; nothing creates a gradient or a canvas per body per frame.
+- **THE WARM-UP LOBBY RENDERED SLOWER THAN AN 8v8 MATCH** (`lobbyKeyGeo`). Measured: 0.95ms
+  against 0.60ms, and that is the reported frame skipping. `drawLobbyKeys` rebuilt 53
+  world-space plates from scratch every frame — ~406 `screenPt`, 38 `measureText`, 78
+  `ctx.font` writes and ~700 array allocations — and every number of it is a pure function
+  of `(kb, cam)`. Cached on a `cam` signature; **a rebuild mints a new `kb` object**, so
+  `_sig` is `undefined` on it and the cache cannot go stale in either direction, which is
+  worth more than an invalidation call somebody has to remember. Now 0.58ms.
+- **A BODY NOBODY CAN SEE IS NOT PAINTED** (`bodyOffScreen`), and until now every one was.
+  `drawOneDisc` is the most expensive thing in the renderer and there was no culling
+  anywhere. ⚠️ **It does not fire in the lobby**, and that is worth knowing before anybody
+  goes looking: `computeCam` grows the frame to hold the keyboard and `lobbyReach` clamps
+  bodies into that same box, deliberately. It fires on the BENCH during a match and hard
+  during the goal camera's push-in. ⚠️ The pad is generous — the kick ring reaches 2×, the
+  name plate hangs below, and the point is missing the shake/tilt offset — so the
+  arithmetic is biased toward painting a body that turns out not to be needed. Culling one
+  that IS needed is a body popping out of existence at the screen edge.
+  ⚠️ **A BOT WAITING FOR THE WHISTLE IS NOT DRAWN AT ALL**, which is a separate rule from
+  the cull and is what the report actually wanted. Gated on `warmup` alone, so the walk-on
+  in `kickoff` is fully visible. `drawLobby`'s head count still says how many are coming —
+  it reads `lobbyPlan`, never the pitch.
+- **THE SPRINT RING STARTS AT A TIME, NOT A FRACTION** (`SPRINT.showAfter`, `sprintShow`).
+  It was `show: 0.6`, which at the default 3s drain put the first red pixel at step 73 —
+  **1.217 seconds** of holding KICK with nothing on the ring. ⚠️ A fraction cannot express
+  "half a second in", because the Sprint length slider runs 0.5s to 15s and the fraction
+  that means it is different at every setting. ⚠️ **`SPRINT.show` was DELETED rather than
+  left behind**: `tests/sprint.mjs` derives three probes from it, and a stale constant that
+  nothing consumes is exactly how a suite goes quietly vacuous. ⚠️ Floors at 0 — below a
+  0.5s sprint you are already spent by the half-second mark and the spent rule takes it,
+  which is the right answer rather than an edge case.
+- **THE RESULT SCREEN FOLDS UNTIL IT FITS** (`fitStatsToScreen`, `_statsFold`). Measured:
+  a 1280×900 desktop overflowed at **3v3** (920px in 900) and by ~500px at 8v8, every time,
+  starting open. ⚠️ **The default is now whether it FITS, not a width** — `innerWidth > 720`
+  is a guess about a phone and says nothing about how many players are on the scoresheet.
+  ⚠️ **The ribbons fold with the table**, reversing an earlier rule: at 8v8 they are 412px
+  of an 1133px screen, the biggest block on it. The SCORE never folds — it is the result,
+  not a breakdown of it. ⚠️ **It is measured LAST**, after `renderMapVote`, or the vote's
+  117px on a phone is missing from the sum. ⚠️ **And re-asked on the next frame**, because
+  the UI face is a web font and blocks grow when it lands — the desktop 3v3 case came back
+  "fits" and settled at 920. The re-check may only ever fold FURTHER, never re-open, or
+  every result screen flashes. `tests/resultfit.mjs` had three assertions reversed for this
+  and they were rewritten rather than nudged.
 - **FPS readout:** `fps` / `trackFps(dt)`, the last row of `drawDebug`'s panel so it lands
   directly above the version tag. ⚠️ The one timer here that is deliberately **not step-locked**
   — it is counted in `loop()` off wall-clock, because the sim rate is pinned at 1/60 by design

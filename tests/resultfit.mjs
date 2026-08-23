@@ -166,7 +166,8 @@ async function openResult(w, h, mobile){
       // ⚠️ Folded must HIDE, never DELETE. The rows stay in the DOM so nothing has to
       // be rebuilt, and so a screen reader / find-in-page still has the numbers.
       rowsInDom: rows(), rowsVisibleFolded: shown(),
-      // The score and the ribbons are the RESULT, not a breakdown of it — they stay.
+      // The SCORE is the result rather than a breakdown of it, so it stays whatever
+      // happens; the ribbons now fold with the table (see the assertions below).
       scoresFolded: [...host.querySelectorAll('.ovsnum')].filter(s => s.getBoundingClientRect().height > 0).length,
       ribbonsFolded: [...host.querySelectorAll('.awrow')].filter(s => s.getBoundingClientRect().height > 0).length,
     };
@@ -174,6 +175,7 @@ async function openResult(w, h, mobile){
     o.openAfterTap = !host.classList.contains('lean');
     o.rowsVisibleOpen = shown();
     o.openH = host.getBoundingClientRect().height;
+    o.ribbonsOpen = [...host.querySelectorAll('.awrow')].filter(s => s.getBoundingClientRect().height > 0).length;
     o.flag = M.statsOpen;
     // ...and nothing was lost: every non-zero prose line is still there when open.
     o.prose = [...host.querySelectorAll('.sdid')].map(x => x.textContent).filter(Boolean).length;
@@ -186,7 +188,15 @@ async function openResult(w, h, mobile){
   ok('fold: rows are hidden, not deleted', fold.rowsInDom === 6 && fold.rowsVisibleFolded === 0,
      fold.rowsInDom + ' in DOM, ' + fold.rowsVisibleFolded + ' visible');
   ok('fold: the scores stay', fold.scoresFolded === 2, fold.scoresFolded + ' visible');
-  ok('fold: the ribbons stay', fold.ribbonsFolded === aw.total, fold.ribbonsFolded + ' visible');
+  // ⚠️ **THE RIBBONS FOLD TOO NOW, and this assertion used to say the opposite** ("the
+  // ribbons stay", `ribbonsFolded === aw.total`). That was right at 3v3 and wrong at 8v8,
+  // where the ribbons are 412px of an 1133px screen — the biggest single block on it, and
+  // the reason the result still scrolled with the table already hidden. What may never
+  // fold is the SCORE, checked directly above: that is the result, not a breakdown of it.
+  ok('fold: the ribbons fold with the table', fold.ribbonsFolded === 0,
+     fold.ribbonsFolded + ' visible while folded — at 8v8 they are the tallest block on the screen');
+  ok('fold: ...and they come back when it opens', fold.ribbonsOpen === aw.total,
+     fold.ribbonsOpen + ' of ' + aw.total + ' — hidden, never deleted');
   ok('fold: a tap opens it', fold.openAfterTap && fold.rowsVisibleOpen === 6 && fold.flag === true,
      JSON.stringify({ open: fold.openAfterTap, rows: fold.rowsVisibleOpen, flag: fold.flag }));
   ok('fold: nothing is lost when open', fold.prose >= 4, fold.prose + ' prose lines');
@@ -287,13 +297,30 @@ async function openResult(w, h, mobile){
       folded: host.classList.contains('lean'),
       rowsVisible: [...host.querySelectorAll('.statsrow:not(.shead)')]
         .filter(r => r.getBoundingClientRect().height > 0).length,
+      rowsInDom: host.querySelectorAll('.statsrow:not(.shead)').length,
+      scrollH: ov.scrollHeight, clientH: ov.clientHeight,
+      rowsAfterTap: (() => {
+        const h = host.querySelector('.statshead'); if (h) h.click();
+        return [...host.querySelectorAll('.statsrow:not(.shead)')]
+          .filter(r => r.getBoundingClientRect().height > 0).length;
+      })(),
       minTop: Math.min(...[...ov.children].filter(c => c.getBoundingClientRect().height > 0)
         .map(c => c.getBoundingClientRect().top)),
       overflowY: getComputedStyle(ov).overflowY,
     };
   });
-  ok('desktop: starts open', !wide.folded);
-  ok('desktop: all six rows shown', wide.rowsVisible === 6, wide.rowsVisible + ' visible');
+  // ⚠️ **THE DESKTOP DEFAULT IS NOW A MEASURED FIT, NOT A WIDTH, and these two assertions
+  // reversed with it.** They pinned "a wide screen starts open, showing all six rows",
+  // which read as generous and was measured as wrong: a 1280x900 desktop overflowed at
+  // **3v3** (920px of content in 900) and by ~500px at 8v8, every time, starting open.
+  // What is pinned instead is the property that was actually wanted — the screen FITS —
+  // plus the table still being one tap away and nothing being deleted to achieve it.
+  ok('desktop: the result fits without scrolling', wide.scrollH <= wide.clientH + 2,
+     wide.scrollH + ' of ' + wide.clientH + ' — folding exists to make this true at any roster size');
+  ok('desktop: the rows are hidden, not deleted', wide.rowsInDom === 6,
+     wide.rowsInDom + ' in DOM');
+  ok('desktop: and a tap still shows all six', wide.rowsAfterTap === 6,
+     wide.rowsAfterTap + ' visible after opening it');
   ok('desktop: nothing above the viewport', wide.minTop >= -1, 'topmost child at y=' + wide.minTop);
   ok('desktop: the overlay can still scroll if it needs to', /auto|scroll/.test(wide.overflowY));
   await p.close();

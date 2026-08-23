@@ -384,15 +384,37 @@ const bands = await p.evaluate(() => {
   };
   o.idleFull      = scan(false, 1, false);
   o.holdFull      = scan(true, 1, false);
-  o.holdAbove     = scan(true, Math.min(0.95, M.SPRINT.show + 0.1), false);
-  o.holdLow       = scan(true, M.SPRINT.show * 0.5, false);
+  // ⚠️ **DERIVED FROM `sprintShow()`, NOT FROM A CONSTANT.** The threshold used to be
+  // `SPRINT.show`, a fraction; it is a TIME now (`SPRINT.showAfter`) turned into a
+  // fraction by `sprintShow()`, because the fraction that means "half a second in" is
+  // different at every setting of the Sprint length slider. The old key was deleted
+  // outright: had it survived, these three probes would have gone on reading it and
+  // passing while measuring a threshold the game no longer uses.
+  o.show          = M.sprintShow();
+  o.holdAbove     = scan(true, o.show + (1 - o.show)*0.5, false);   // safely above it
+  o.holdLow       = scan(true, o.show * 0.5, false);
   o.spentReleased = scan(false, 0.02, true);
   o.refilling     = scan(false, 0.5, true);
+  // ⚠️ **THE HEADLINE CLAIM, AND NOTHING CHECKED IT BEFORE.** Every probe above sets
+  // `stam` by hand, so they pin the SHAPE of the gauge and say nothing at all about WHEN
+  // it starts — which is the thing that was actually reported ("the circle stays white for
+  // a bit before running out"). Measured on the old build: the first red pixel landed at
+  // step 73, **1.217 s**. Driven through the real `advanceStamina` so the drain rate and
+  // the threshold are tested together, and bracketed either side of half a second rather
+  // than pinned to one step, so retuning the drain cannot make it vacuous.
+  const heldFor = (secs) => {
+    me.stam = 1; me.spent = false; me.kick = true;
+    const n = Math.round(secs * 60);
+    for (let i = 0; i < n; i++) M.advanceStamina(w, me);
+    return { stam: +me.stam.toFixed(4), spent: me.spent, ...scan(true, me.stam, me.spent) };
+  };
+  o.held040 = heldFor(0.40);
+  o.held075 = heldFor(0.75);
   o.N = 120;
   // ⚠️ ...and it grows CLOCKWISE FROM TWELVE, the one thing an angular count cannot say.
   // Index 0 is straight up; part spent must be red at the top and pale at the bottom.
   {
-    me.kick = true; me.stam = M.SPRINT.show * 0.5; me.spent = false; me.chargeT = 0;
+    me.kick = true; me.stam = M.sprintShow() * 0.5; me.spent = false; me.chargeT = 0;
     M.renderAlpha = 1; M.render();
     const at = (deg) => { const t = (deg - 90) * Math.PI/180;
       let red = 0;
@@ -415,8 +437,13 @@ ok('a rested player who is not kicking wears NOTHING', bands.idleFull.none === b
 // ...and holding KICK is the plain white ring, unchanged, while there is nothing to say.
 ok('...holding KICK with plenty left is the plain ring', bands.holdFull.pale === bands.N && bands.holdFull.red === 0,
    JSON.stringify(bands.holdFull));
+ok('the ring is still PLAIN at 0.4s of holding KICK', bands.held040.red === 0,
+   JSON.stringify(bands.held040) + ' — half a second is the promise, so it must not start before it');
+ok('...and the red HAS started by 0.75s', bands.held075.red > 0,
+   JSON.stringify(bands.held075) +
+   ' — the old build showed nothing until 1.217s, which is what "stays white for a bit" was');
 ok('...and it stays plain ABOVE the threshold', bands.holdAbove.red === 0,
-   JSON.stringify({ show: 'SPRINT.show', at: bands.holdAbove }) +
+   JSON.stringify({ show: bands.show, at: bands.holdAbove }) +
    ' — "only when it matters" means the gauge does not exist until it is worth reading');
 // ⚠️ THE CLAIM THE OLD SUITE COULD NOT MAKE: half and empty are different shapes. The
 // build this replaces read 118 of 120 at half and 119 when spent — six angles apart.

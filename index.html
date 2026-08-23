@@ -1380,6 +1380,12 @@
     .statstog { font-family: var(--pix); font-size:11px; letter-spacing:.5px; color: var(--accent); }
     /* Folded: the numbers go, the score and the ribbons stay. */
     #ovStats.lean .statstbl { display:none; }
+    /* ⚠️ THE RIBBONS FOLD TOO, and for one build only the table did. That was right at
+       3v3 and wrong at 8v8, where the ribbons are 412px of an 1133px screen — the single
+       biggest block on it, and the reason the result still scrolled with the table
+       already hidden. The SCORE stays whatever happens: it is the result, not a
+       breakdown of it. */
+    #ovStats.lean .tpawards { display:none; }
     /* ---- THE DRILL BOARD: your three best runs, on the screen that just set one.
        ⚠️ The medal colours are handed in as `--m` from GHOST.cols, never written here:
        these are the same three colours the ghosts are painted in on the pitch, so the row
@@ -4105,6 +4111,14 @@ const LOBBYKB = {
   swCols: 4,         // swatches per row
   swSplit: 34,       // world units between the two teams' blocks, about a body
   diff: 34,          // a difficulty pad
+  // ⚠️ **THE DIFFICULTY ROW STANDS OFF THE KEYBOARD, and it used to be `gap*2` = 10 world
+  // units** — which renders as a **5-7px** gap at every viewport, so the row read as the
+  // keyboard's fourth row rather than as a separate control. Measured cost of the extra
+  // separation: about **0.9% of pitch scale per 10 units** in portrait and **1.3%** in the
+  // turned/deck view, because `computeCam` frames the whole block. 30 buys a 23px gap for
+  // −2.6% of the pitch; at +60 the keys are still all on screen and still clear of
+  // `#lobbyStartBtn` in all three viewports, so this is taste inside a measured budget.
+  diffGap: 30,       // world units between the bottom of the keyboard and the difficulty row
   side: 20,          // world units between a touchline and the strips beside it
 };
 // ============================================================
@@ -5006,7 +5020,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260823.0645PM';
+const VERSION = '20260823.0745PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5022,6 +5036,18 @@ const VERSION = '20260823.0645PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260823.0745PM', title: 'Smoother at every size',
+    changed: [
+      '<b>The game runs a lot lighter, and big teams feel it most.</b> Eight a side used to lose its footing on a slower machine. The heavy parts have been cut back without changing how anything plays \u2014 the bots make exactly the same decisions they always did.',
+      '<b>The warm-up room was quietly the heaviest screen in the game</b>, slower to draw than a live match. It is not any more.',
+      '<b>When a machine still cannot keep up, the trimmings step aside on their own.</b> The little dot trails behind the players and the sparks off a kick drop out while the going is hard, and come back when there is room. Nothing to find and nothing to switch on.',
+      '<b>The result screen fits on one screen.</b> The player table and the award ribbons fold away when there is not room for them, and the heading opens them again. The score is always there.',
+      '<b>The stamina ring starts emptying half a second after you hold KICK</b>, instead of staying white for over a second and then dropping away.',
+      '<b>Bots waiting for kick-off no longer stand around the warm-up pitch</b> \u2014 they walk on at the whistle. The bot difficulty row has moved clear of the keyboard as well.',
+    ],
+    added: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260823.0645PM', title: 'Warm-up, reconnects and a bigger pitch',
     changed: [
       '<b>On a wide screen the pitch now turns to fill it.</b> An upright court on a 16:9 TV left most of the screen as surround \u2014 turned goal-to-goal it is very nearly twice the size. Display \u2192 Pitch direction still has Upright and Sideways if you want to decide for yourself.',
@@ -6591,11 +6617,28 @@ const THEMES = {
 // is the difference between clearing AA and missing it (grass measured 4.37 with
 // #10131c, 4.95 with #000000).
 const INK_DARK = '#000000', INK_LIGHT = '#ffffff';
+// ⚠️ **THE COLOUR MATHS IS MEMOISED, because it was being redone every frame for values
+// that change roughly never.** Measured at 8v8: `relLum` 110 calls a frame and `rgba` 97,
+// driven by `readableInk` inside `drawOneDisc` and by one `rgba()` per trail dot. Every
+// one of these is a pure function of a palette colour, and a palette changes when somebody
+// picks a theme — not sixty times a second.
+// ⚠️ Capped and cleared rather than unbounded: `rgba` in particular is called with a
+// CONTINUOUSLY VARYING alpha (a fading trail dot), so the cache is on the PARSE of the
+// colour and never on the (colour, alpha) pair — cache that and it grows without limit.
+const MEMO_CAP = 512;
+function memoGet(m, k, make){
+  let v = m.get(k);
+  if (v === undefined){ v = make(); if (m.size >= MEMO_CAP) m.clear(); m.set(k, v); }
+  return v;
+}
+const _lumMemo = new Map();
 function relLum(hex){
-  const c = (hex||'').replace('#','');
-  const v = [0,2,4].map(i => parseInt(c.substr(i,2),16)/255)
-    .map(x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4));
-  return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
+  return memoGet(_lumMemo, hex || '', () => {
+    const c = (hex||'').replace('#','');
+    const v = [0,2,4].map(i => parseInt(c.substr(i,2),16)/255)
+      .map(x => x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4));
+    return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
+  });
 }
 function contrastRatio(a, b){
   const L1 = relLum(a), L2 = relLum(b);
@@ -6608,16 +6651,22 @@ function pickTextColor(hex){
 // Keep a colour's hue but push it toward whichever ink the background wants, only
 // as far as it takes to clear AA. Raw team colours on the dark name plate measured
 // as low as 3.06:1 (mono blue) — this keeps them recognisably red/blue and legible.
+const _inkMemo = new Map();
 function readableInk(col, bg, target){
-  if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
-  const want = target || 4.5;
-  const toward = pickTextColor(bg);          // dark bg -> lighten, light bg -> darken
-  let out = col;
-  for (let t = 0; t <= 1.0001; t += 0.05){
-    out = t === 0 ? col : mixCol(col, toward, t);
-    if (contrastRatio(rgbToHex(out), bg) >= want) break;
-  }
-  return out;
+  // ⚠️ Up to 21 iterations, each a `mixCol` + a regex in `rgbToHex` + two `relLum`s with
+  // three `Math.pow` apiece — run once per body per frame from `drawOneDisc`. Pure in its
+  // three arguments, and the argument set is a handful of palette inks.
+  return memoGet(_inkMemo, (col||'') + '|' + (bg||'') + '|' + (target||''), () => {
+    if (!/^#[0-9a-f]{6}$/i.test(col||'')) return pickTextColor(bg);
+    const want = target || 4.5;
+    const toward = pickTextColor(bg);        // dark bg -> lighten, light bg -> darken
+    let out = col;
+    for (let t = 0; t <= 1.0001; t += 0.05){
+      out = t === 0 ? col : mixCol(col, toward, t);
+      if (contrastRatio(rgbToHex(out), bg) >= want) break;
+    }
+    return out;
+  });
 }
 // mixCol returns an rgb() string; contrast maths wants hex.
 function rgbToHex(c){
@@ -6784,16 +6833,26 @@ function invertInk(col){
 // site says "this colour, that much of it", and the theme's own 0.95 is a choice the
 // theme made — replacing it would let `rgba(c, 1)` come back more opaque than the
 // palette ever wanted.
+// ⚠️ The PARSE is cached, never the (colour, alpha) pair — see MEMO_CAP. A trail dot's
+// alpha fades continuously, so keying on the pair would mint a new entry every frame.
+// ⚠️ It still MULTIPLIES by the colour's own alpha, so a call site can never come back
+// more opaque than the palette asked for — that is what makes a non-hex `line` safe.
+const _rgbaMemo = new Map();
 function rgba(col, a){
-  let c = (col||'').trim();
-  if (c[0] === '#'){
-    if (c.length === 4) c = '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
-    const n = parseInt(c.slice(1), 16);
-    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
-  }
-  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,/]\s*([\d.]+)\s*)?\)$/i.exec(c);
-  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${a * (m[4] === undefined ? 1 : +m[4])})`;
-  return c;
+  const key = col || '';
+  const p = memoGet(_rgbaMemo, key, () => {
+    let c = key.trim();
+    if (c[0] === '#'){
+      if (c.length === 4) c = '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+      const n = parseInt(c.slice(1), 16);
+      return [(n>>16)&255, (n>>8)&255, n&255, 1];
+    }
+    const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,/]\s*([\d.]+)\s*)?\)$/i.exec(c);
+    if (m) return [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]];
+    return null;                              // not a colour we can take apart — hand it back
+  });
+  if (!p) return key;
+  return `rgba(${p[0]},${p[1]},${p[2]},${a * p[3]})`;
 }
 
 // ============================================================
@@ -7117,13 +7176,25 @@ function applySfxSet(k){
 // out of its way to avoid. Screen space is also what lets the picker tile call the
 // real painter instead of drawing a picture of it.
 const TRAIL_LOOKS = {
+  // ⚠️ **THE COLOUR IS SET ONCE AND THE FADE RIDES `globalAlpha`.** This built a fresh
+  // `rgba()` string and re-assigned `fillStyle` for EVERY dot — 16 discs x 12 dots = 192
+  // colour strings parsed by the canvas every frame, measured at 27% of the whole render
+  // at 8v8. The paint is identical: `rgba(col, 1)` is the colour at its own alpha, and
+  // `globalAlpha` then applies exactly the factor the string used to carry.
+  // ⚠️ MULTIPLIED by whatever alpha the caller already had, not overwritten — a look does
+  // not get to decide it is opaque inside a fade somebody else started.
   dots:  { name:'Dots', draw(c, pts, n, col, rr){
+    const g0 = c.globalAlpha;
+    c.save();
+    c.fillStyle = rgba(col, 1);
     for (let k = 0; k < n; k++){
       const d = pts[k], f = (k+1) / n;                // older dots smaller + fainter
+      c.globalAlpha = g0 * 0.70 * d.a * (0.35 + 0.65*f);
       c.beginPath(); c.arc(d.x, d.y, rr*(0.15 + 0.19*f), 0, 2*Math.PI);
-      c.fillStyle = rgba(col, 0.70 * d.a * (0.35 + 0.65*f));
       c.fill();
-    } } },
+    }
+    c.restore();
+  } },
   // Even, round and soft — the same size all the way back, so it reads as something
   // FLYING leaving a wake rather than as a tail narrowing to a point.
   orbs:  { name:'Orbs', draw(c, pts, n, col, rr){
@@ -7464,7 +7535,17 @@ const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
 // reason, so the sliders cannot be set to undo the mechanic.
 // ⚠️ `show` is the stamina below which the ring starts to show a GAP. Above it the ring
 // is simply whole, so ordinary play looks exactly as it did — see the wind-up ring block.
-const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, show:0.6 };
+// ⚠️ **`showAfter` IS A TIME, and it replaced a fraction (`show: 0.6`).** The report was
+// that the ring "stays white for a bit before running out". Measured: at the default 3.0s
+// sprint the drain is 1/180 a step, so a threshold of 0.6 put the first red pixel at step
+// 73 — **1.217 seconds** of holding KICK with nothing on the ring at all. Half a second is
+// what was asked for.
+// ⚠️ A fraction cannot express that, which is why the shape changed rather than the
+// number. The Sprint length slider runs 0.5s to 15s, so the fraction that means "half a
+// second in" is different at every setting — 0.833 at the default, 0.967 at 15s. Only a
+// time stays true across the dial, and `sprintShow()` is the one place it is turned back
+// into a fraction.
+const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, showAfter:0.5 };
 // ⚠️ **THE TWO RINGS ROUND A PLAYER MUST NOT TOUCH, AND THEY DID.** The stamina clock is
 // drawn at 1.30r and the wind-up ring at 1.42r — 0.12r apart, which on a phone is **1.2
 // PIXELS** between two strokes that are 1.6px and up to 2.9px wide. They overlapped, the
@@ -7572,6 +7653,18 @@ function sprintSlow(){
 function sprintBoost(){
   const v = sel.feel.sprintBoost == null ? SPRINT.boost : +sel.feel.sprintBoost;
   return Math.max(100, Math.min(250, v || SPRINT.boost)) / 100;
+}
+// The stamina level at which the ring starts turning red — derived from `SPRINT.showAfter`
+// so that "half a second of holding KICK" stays true at every Sprint length.
+// ⚠️ **THE ONE READER, and `SPRINT.show` was DELETED rather than left behind.** A stale
+// constant that nothing consumes is how a suite goes quietly vacuous: `tests/sprint.mjs`
+// derives three of its probes from this value, and had the old key survived, those probes
+// would have gone on passing while measuring a threshold the game no longer used.
+// ⚠️ Floors at 0 on purpose. Below a 0.5s sprint you are already SPENT by the half-second
+// mark, so there is no draining window left to show and the spent rule takes it — which is
+// the right answer, not an edge case to special-case.
+function sprintShow(){
+  return Math.max(0, Math.min(1, 1 - SPRINT.showAfter / sprintSecs()));
 }
 // ⚠️ STEP LOOP ONLY — this is a clock, so it belongs beside the physics and never in a
 // draw (the trails rule). No randomness at all, so determinism is untouched.
@@ -10064,19 +10157,38 @@ function photoFromFile(file){
 // ⚠️ The fit is still WIDTH-only, deliberately: a height cap is free now that the ink box
 // is measured, but it would resize every glyph in the game, and the spill was measured — no
 // key's ink reaches further after this than before.
+// ⚠️ **THE FIT IS CACHED, and it was two `measureText` calls PER BODY PER FRAME.**
+// Measured at 8v8: 48 `measureText` a frame, three per body — two here and one for the
+// name plate — and canvas text was 38% of the whole render. The fit is a pure function of
+// (glyph, radius): the same shirt number on the same size of disc measures the same thing
+// sixty times a second.
+// ⚠️ **Keyed on the INTEGER font size, not on a ratio.** Storing a width-per-pixel ratio
+// and scaling it is tempting and is a worse idea: `tests/textplates.mjs` pins the glyph's
+// ink centre to within a pixel, and the whole reason that check exists is that the
+// centring used to be off by a hair. An exact measurement for that exact size cannot
+// drift; a scaled one can. `r` is stable frame to frame (it only moves with `cam.s`), so
+// the integer key hits on every frame anyway.
+const _glyphMemo = new Map();
 function fitGlyph(c, t, x, y, r, ink){
   c.save();
   c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   c.fillStyle = ink;
   // Fit the glyph to the plate: measure once and scale, so a two-character avatar
   // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
-  let px = Math.round(r*1.15);
-  c.font = px+'px '+TEXT_FONT;
-  const fit = r*1.34, wid = c.measureText(t).width;
-  if (wid > fit){ px = Math.max(4, Math.round(px * fit / wid)); c.font = px+'px '+TEXT_FONT; }
-  const m = c.measureText(t);
-  const a = m.actualBoundingBoxAscent, d = m.actualBoundingBoxDescent;
-  c.fillText(t, x, y + ((isFinite(a) && isFinite(d)) ? (a - d)/2 : 0));
+  const px0 = Math.round(r*1.15), fit = r*1.34;
+  const f = memoGet(_glyphMemo, t + '|' + px0 + '|' + Math.round(fit*4), () => {
+    let px = px0;
+    c.font = px+'px '+TEXT_FONT;
+    const wid = c.measureText(t).width;
+    if (wid > fit){ px = Math.max(4, Math.round(px * fit / wid)); c.font = px+'px '+TEXT_FONT; }
+    const m = c.measureText(t);
+    const a = m.actualBoundingBoxAscent, d = m.actualBoundingBoxDescent;
+    // ⚠️ The `isFinite` guard is not padding — `TEXTS.blank` is a braille blank that
+    // produces no ink at all, so its metrics come back unusable. See the header above.
+    return { px, dy: (isFinite(a) && isFinite(d)) ? (a - d)/2 : 0 };
+  });
+  c.font = f.px+'px '+TEXT_FONT;
+  c.fillText(t, x, y + f.dy);
   c.restore();
 }
 function paintFace(c, x, y, r, o){
@@ -14354,7 +14466,7 @@ function cupEnd(w){
   $('ovSub').textContent = sc + rp;
   $('ovSub').style.display = '';
   { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
-    const st=$('ovStats'); if (st) st.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML=''; _statsFold = null;
     const vt=$('ovVote'); if (vt) vt.innerHTML=''; }
   const nx = cupNext();
   $('ovResume').style.display = '';
@@ -15839,6 +15951,36 @@ function trackFps(dt){
   fps = fps ? fps + (now - fps) * 0.09 : now;
   _fpsT = 0;
 }
+// ============================================================
+//  AUTOMATIC QUALITY — a slow machine gets help without being asked
+// ============================================================
+// ⚠️ **RENDER ONLY, AND THAT IS NOT A STYLE PREFERENCE — IT IS THE DETERMINISM RULE.**
+// A pinned seed has to reproduce a match bit-exactly, so nothing the SIM reads may depend
+// on how fast the machine happens to be running: do that and no replay plays back, no
+// seeded test reproduces, and two people on one couch get different physics from the same
+// inputs. So `advanceTrails`, `advanceFx` and the rest keep running exactly as they did —
+// only the DRAWING of them is dropped. The world is untouched, which is what
+// `tests/determinism.mjs` and the hash in `tests/gamesave.mjs` are there to prove.
+// ⚠️ **What goes, and in what order**: the dot tails behind the players first, then the
+// kick sparks, then the soft shadow under each body. The BALL's streak is never dropped —
+// it is the one thing everybody on the pitch is tracking, the same rule that stops a
+// cosmetic trail slot from switching it off.
+// ⚠️ **Hysteresis, and a long one.** A single slow frame is a garbage collection, not a
+// slow machine; flipping quality on one is a visible flicker of the whole picture. It
+// takes two seconds under 40fps to engage and a second over 52 to let go, so the two
+// thresholds can never chatter against each other.
+// ⚠️ `_qualPin` exists for the suites, and is deliberately NOT a setting — the owner asked
+// for this to be automatic with nothing to find. A pixel test that drives the real rAF
+// loop on a loaded CI box would otherwise measure whatever quality that box could manage.
+const QUAL = { drop: 40, raise: 52, dropFrames: 120, raiseFrames: 60 };
+let _qualLow = false, _qualN = 0, _qualPin = null;
+function qualityStep(){
+  if (_qualPin !== null || !fps) return;
+  const want = _qualLow ? fps < QUAL.raise : fps < QUAL.drop;
+  if (want === _qualLow){ _qualN = 0; return; }
+  if (++_qualN >= (_qualLow ? QUAL.raiseFrames : QUAL.dropFrames)){ _qualLow = want; _qualN = 0; }
+}
+function fullQuality(){ return _qualPin !== null ? _qualPin : !_qualLow; }
 
 // ============================================================
 //  DROP-IN — a controller joins a match already in progress
@@ -15915,6 +16057,15 @@ function pollDropIn(w){
   pollSubReady(w);
 }
 
+// ⚠️ **THESE TWO NUMBERS ARE ONE DECISION AND THEY USED TO DISAGREE.** `dt` is clamped so
+// a tab that was in the background does not try to simulate the minutes it was away, and
+// the step loop is capped so a slow frame cannot spiral. The clamp was 0.1s and the cap
+// was a hard-coded `5` — but 0.1s is SIX steps at 1/60, so even a frame the clamp had
+// already trimmed could not be fully retired and every single one of them banked the
+// leftover. Deriving the cap from the clamp is what makes "a clamped frame is exactly
+// consumable" true by construction rather than by two literals happening to match.
+const MAX_DT = 0.1;
+const MAX_STEPS = Math.ceil(MAX_DT / STEP);   // 6
 function loop(t){
   pumpTelemetry();
   if (!running){ return; }
@@ -15922,7 +16073,7 @@ function loop(t){
   if (replay.active){ lastT = 0; return; }   // a replay owns the canvas; freeze the live game
   if (!lastT) lastT = t;
   let dt = (t - lastT) / 1000; lastT = t;
-  if (dt > 0.1) dt = 0.1;               // clamp big gaps
+  if (dt > MAX_DT) dt = MAX_DT;         // clamp big gaps — see MAX_STEPS
   trackFps(dt);                         // wall-clock, deliberately not step-locked
   // The result screen is a paused state, so its pad chooser has to poll from here.
   if (paused){ pollOverOptions(); stepResultClock(dt); render(); return; }
@@ -15948,10 +16099,11 @@ function loop(t){
   // away. Reading input in a draw is also the trails smell: it is per-frame work, and this
   // is where per-frame work goes.
   pollKeys();
+  qualityStep();          // ...and re-ask whether this machine can afford the trimmings
   pollSeatRotate();       // SELECT turns a seat's controls a quarter turn — once per frame
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
-  while (acc >= STEP && steps < 5){
+  while (acc >= STEP && steps < MAX_STEPS){
     step(world);
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
     if (motionOK()) advanceDynField();   // ...and so does an animated theme's field, when
@@ -15969,6 +16121,23 @@ function loop(t){
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
     acc -= STEP; steps++;
   }
+  // ⚠️ **HITTING THE CAP SHEDS THE SURPLUS, IT DOES NOT BANK IT.** Without this `acc`
+  // grows without bound on a machine that cannot keep up: `dt` is clamped to `MAX_DT` and
+  // the loop can only ever retire `MAX_STEPS`, so every overloaded frame adds whatever is
+  // left over to a debt that is never repaid. Two things follow, and both were measured
+  // as part of the 8v8 report. `renderAlpha` is `acc / STEP` clamped to 1, so once the
+  // debt passes one step the interpolation is pinned at 1 and every body is drawn a whole
+  // step stale — the picture stops moving smoothly between steps, which is most of what
+  // "movement did not feel smooth" is. And the debt itself is latency: the sim is running
+  // against a clock further and further behind the one the player's hands are on.
+  // ⚠️ **The MODULO, not zero.** `acc % STEP` keeps the sub-step phase, so `renderAlpha`
+  // stays a real fraction and interpolation keeps working through the overload; zeroing it
+  // would snap every body onto the step boundary and add a judder of its own.
+  // ⚠️ **This does NOT make a slow machine run at full speed, and it must not be sold as
+  // if it does.** The sim advances at `MAX_STEPS × fps` steps a second, so at 5 fps it is
+  // running at 42% of real time whatever happens here — that is the machine, and the only
+  // cure for it is a cheaper frame. What this fixes is the unbounded debt on top.
+  if (acc >= STEP) acc = acc % STEP;
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
   render();
   renderAlpha = 1;                 // anything drawing outside the loop gets the exact state
@@ -18305,7 +18474,7 @@ function buildLobbyKeys(w){
   // could be raised and never lowered. The stepper is gone from a lite lobby now for a
   // different reason (see below), which leaves this as the guard that stops the same
   // collapse arriving with the next short layout.
-  const blockBot = Math.max(kbBot + K.gap*2 + K.diff, top + K.pad*2 + K.gap*3);
+  const blockBot = Math.max(kbBot + K.diffGap + K.diff, top + K.pad*2 + K.gap*3);
   // ⚠️ THE TEAM-SIZE STEPPER IS IN THE CORNER, not tucked against the letters. It is
   // not part of typing your name, and standing beside the board to change the match
   // size means never brushing a letter on the way. Bottom-right of the whole layout,
@@ -18365,7 +18534,7 @@ function buildLobbyKeys(w){
   // picked. Same argument the menu's own difficulty ramp is built on.
   dkeys.forEach((dk, i) =>
     raw.push({ k: { diff: dk, label: String(i+1) },
-               u: -dRow/2 + i*(K.diff + K.gap), v: kbBot + K.gap*2, du: K.diff, dv: K.diff }));
+               u: -dRow/2 + i*(K.diff + K.gap), v: kbBot + K.diffGap, du: K.diff, dv: K.diff }));
   // ⚠️ THE LETTERS ARE RECENTRED ACROSS THE SCREEN (`u`), and only the letters. That is
   // the axis the pitch is centred on, and the strips beside the pitch are deliberately
   // NOT part of the sum — they are pinned to the touchlines, so folding them into the
@@ -20678,6 +20847,9 @@ function finishMatch(w){
   renderAwards(w);
   renderMatchStats(w);
   renderMapVote(w);
+  // Last, once every block that occupies height is on screen — see fitStatsToScreen.
+  fitStatsToScreen();
+  requestAnimationFrame(() => fitStatsToScreen(true));   // ...and again once the font has landed
   // Restart is the default — the common case is "again, same teams". Warm-up is
   // there for when somebody wants to swap sides or sit one out.
   $('ovResume').textContent = '↻ Restart';
@@ -20853,7 +21025,7 @@ function statLine(ms){
 // ⚠️ It stays in TEAM order, red then blue, exactly as the scorebug has read all
 // match — the title carries whether that is a win for you.
 function renderMatchStats(w){
-  const host = $('ovStats'); if (!host) return; host.innerHTML='';
+  const host = $('ovStats'); if (!host) return; host.innerHTML=''; _statsFold = null;
   if (!w || w.drillMode || w.tutorial || !w.players || !w.players.length) return;
   const won = w.score[0] === w.score[1] ? -1 : (w.score[0] > w.score[1] ? 0 : 1);
   const teamName = t => w.mode && w.mode.twoP ? (t === 0 ? 'PLAYER 1' : 'PLAYER 2')
@@ -20881,19 +21053,34 @@ function renderMatchStats(w){
   // ribbons, and the table of numbers is one tap away.
   // Only the TABLE folds: the score and the award ribbons stay, because they are the
   // result rather than a breakdown of it.
-  if (statsOpen === null) statsOpen = window.innerWidth > STATS_WIDE;
+  // ⚠️ **THE DEFAULT IS WHETHER IT FITS, and it used to be a WIDTH.** `innerWidth > 720`
+  // is a decent guess about a phone and says nothing about the thing that actually
+  // matters, which is how many players are on the scoresheet: measured, a 1280x900
+  // desktop overflows at **3v3** (975px of content) and by ~500px at 8v8, and every one
+  // of those started OPEN. The fit is measured below, once the panels exist.
+  const fitDecides = statsOpen === null;
   const head = document.createElement('button'); head.className='statshead'; head.type='button';
   const cap = document.createElement('span'); cap.textContent = 'MATCH STATS';
   const tog = document.createElement('span'); tog.className='statstog';
   head.append(cap, tog);
   const syncFold = () => {
-    host.classList.toggle('lean', !statsOpen);
-    head.setAttribute('aria-expanded', String(statsOpen));
-    tog.textContent = statsOpen ? 'HIDE PLAYERS ▲' : 'SHOW PLAYERS ▼';
+    host.classList.toggle('lean', !openNow);
+    head.setAttribute('aria-expanded', String(openNow));
+    tog.textContent = openNow ? 'HIDE PLAYERS ▲' : 'SHOW PLAYERS ▼';
   };
+  // ⚠️ `openNow` is what is on SCREEN; `statsOpen` is what the PLAYER chose, and stays
+  // null until they touch the heading. Keeping them apart is what lets the default be
+  // re-decided for each match — a 3v3 that fits and an 8v8 that does not want different
+  // answers — without ever overriding somebody who has said what they want.
+  let openNow = fitDecides ? true : statsOpen;
+  // ⚠️ Handed out so `fitStatsToScreen` can re-run it. The fit CANNOT be measured in here:
+  // `finishMatch` renders the map vote AFTER this function, and on a phone that block is
+  // 117px — measure without it and the screen still overflows by exactly the thing that
+  // was not on it yet.
+  _statsFold = (open) => { openNow = open; syncFold(); };
   // Sticky for the session, deliberately: someone who opens it once is someone who
   // reads it, and making them re-open it after every match is the same nag repeated.
-  head.onclick = () => { statsOpen = !statsOpen; syncFold(); };
+  head.onclick = () => { openNow = !openNow; statsOpen = openNow; syncFold(); };
   syncFold();
   host.appendChild(head);
   // Awards are grouped by the team of whoever won them, so each panel can carry
@@ -20955,6 +21142,30 @@ function renderMatchStats(w){
   host.appendChild(panels);
   // ⚠️ No acronym key any more, deliberately: the headers are words and the rest is
   // prose, so a legend would be a glossary for a page with no jargon on it.
+}
+// The live fold, published by `renderMatchStats` so the fit can be measured after every
+// other block is on screen. Cleared by `showOverlay`, which is the one place the result
+// screen's contents are emptied — a stale fold would be pointed at a detached node.
+let _statsFold = null;
+// ⚠️ **THE DEFAULT IS MEASURED, ONCE, AFTER EVERYTHING IS RENDERED.** Open it, ask the
+// overlay whether it overflows, and fold if it does. That is the only test that survives
+// a roster of any size on a window of any shape — the width threshold it replaces called
+// a 1280x900 desktop "roomy" and then overflowed it at 3v3.
+// ⚠️ Only when the player has NOT chosen (`statsOpen === null`). Somebody who opened the
+// table once is somebody who reads it, and re-folding it under them every match is the
+// nag the stickiness exists to prevent.
+// ⚠️ **AND IT HAS TO BE RE-ASKED, because the first answer is measured too early.**
+// Measured: a 1280x900 desktop at 3v3 came back as fitting and then settled at 920px —
+// the UI face is a web font shipped in `assets/`, so blocks grow when it arrives, and
+// the first measurement can land before that. One re-check on the next frame catches it.
+// ⚠️ **`recheck` NEVER RE-OPENS.** Opening it again to re-measure would paint the open
+// state for a frame, which is a flash on every result screen. A second look may only
+// ever fold further, so the worst case is that it stays folded — never a flicker.
+function fitStatsToScreen(recheck){
+  const ov = $('overlay');
+  if (!ov || !_statsFold || statsOpen !== null) return;
+  if (!recheck) _statsFold(true);
+  if (ov.scrollHeight > ov.clientHeight + 2) _statsFold(false);
 }
 // ============================================================
 //  MAP VOTES — "was this map good at THIS size?"
@@ -21953,15 +22164,24 @@ function botUpdateSupportGrid(w, team){
   // The attacking half only: a support spot behind your own carrier isn't support.
   const y0 = 0, y1 = attackDir*halfL*0.92;
   let bestS = -1e9, best = null, hereS = -1e9;
+  // ⚠️ **THE EXPENSIVE HALF OF A CELL IS SKIPPED WHEN IT CANNOT WIN, and the answer is
+  // provably unchanged.** This grid was 47% of the whole step at 8v8 — 48 cells, each
+  // running `botLaneClear` and `botAperture` over every opponent, twice a step. But
+  // `safety` and `shot` are both `Math.min(1, ...)`, so a cell's score can never exceed
+  // `1 + 1 + band*0.8 - crowd*0.9`, and `band` and `crowd` are cheap. If that ceiling is
+  // already at or below the best score so far, the cell could not have become `best`
+  // (`s <= upper <= bestS` fails the strict `s > bestS`), so the two expensive calls are
+  // pure waste and are skipped.
+  // ⚠️ **The cell we are ALREADY running to is never pruned**, because `hereS` needs its
+  // exact score — the hysteresis below compares against it, and a pruned `hereS` would
+  // leave it at -1e9 and make the bot move every single tick.
+  // ⚠️ Order of visiting changes how much gets pruned and nothing else: `bestS` is a
+  // running maximum over the same set either way.
+  const fromPt = { x: 0, y: 0 };            // one scratch point, not 48
   for (let i=0;i<BOT.gridX;i++){
     for (let j=0;j<BOT.gridY;j++){
       const cx = -halfW*0.86 + (i+0.5)*(halfW*1.72/BOT.gridX);
       const cy = y0 + (j+0.5)*((y1-y0)/BOT.gridY);
-      // Can the carrier reach me, could I then shoot, am I the right distance out,
-      // and is anyone already standing here?
-      const safety = botLaneClear(w, me, carrier.x, carrier.y, cx, cy);
-      const ap = botAperture(w, me, {x:cx,y:cy}, goalY, gh);
-      const shot = Math.min(1, ap.span / 0.6);
       const d = Math.hypot(cx-carrier.x, cy-carrier.y);
       const band = d < BOT.gridBand[0] ? d/BOT.gridBand[0]
                  : d > BOT.gridBand[1] ? Math.max(0, 1 - (d-BOT.gridBand[1])/BOT.gridBand[1]) : 1;
@@ -21969,10 +22189,17 @@ function botUpdateSupportGrid(w, team){
       for (const q of squad){ if (q===me) continue;
         const qd = Math.hypot(q.x-cx, q.y-cy);
         if (qd < BOT.gridCrowd) crowd += (BOT.gridCrowd-qd)/BOT.gridCrowd; }
+      const here = !!(me.aiSpot && Math.abs(me.aiSpot.x-cx) < 1 && Math.abs(me.aiSpot.y-cy) < 1);
+      if (!here && 2 + band*0.8 - crowd*0.9 <= bestS) continue;
+      // Can the carrier reach me, and could I then shoot?
+      const safety = botLaneClear(w, me, carrier.x, carrier.y, cx, cy);
+      fromPt.x = cx; fromPt.y = cy;
+      const ap = botAperture(w, me, fromPt, goalY, gh);
+      const shot = Math.min(1, ap.span / 0.6);
       const s = safety*1.0 + shot*1.0 + band*0.8 - crowd*0.9;
       if (s > bestS){ bestS = s; best = {x:cx, y:cy}; }
       // Score the cell we're already running to, so we only move for a real gain.
-      if (me.aiSpot && Math.abs(me.aiSpot.x-cx) < 1 && Math.abs(me.aiSpot.y-cy) < 1) hereS = s;
+      if (here) hereS = s;
     }
   }
   // Hysteresis: adjacent cells score within a hair of each other, and swapping
@@ -22429,6 +22656,7 @@ function resize(){
   ctx.imageSmoothingEnabled = false;   // crisp, chunky pixels (Amiga look)
   if (world) syncPitchTurn();
   if (world) computeCam();
+  fitStatsToScreen(true);          // a window that shrank under a result screen folds it
   // Widened to desktop during a live match with nothing docked yet — bring the
   // main menu in on the left. (deskDockId is set inside dockOrFull, so the guard
   // below prevents re-entry when dockOrFull calls resize again.)
@@ -23267,7 +23495,7 @@ function showDrillResult(title, sub, completed, board){
   // straight after a match came up with that match's team panels, its ribbons and its map
   // vote still sitting under the drill's own title.
   { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
-    const st=$('ovStats'); if (st) st.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML=''; _statsFold = null;
     const vt=$('ovVote'); if (vt) vt.innerHTML=''; }
   if (board) buildDrillBoard(board.key, board.rank, board.t);
   if (completed){
@@ -23768,9 +23996,51 @@ function shirtPath(c, x, y, W, H){
   c.quadraticCurveTo(x + 0.50*W, y + 0.17*H, x + 0.34*W, y);
   c.closePath();
 }
+// ⚠️ **THE KEYBOARD'S SCREEN GEOMETRY IS CACHED, and redoing it every frame was the
+// warm-up frame skipping.** Measured: `drawLobbyKeys` was ~406 `screenPt`, 38
+// `measureText`, 78 `ctx.font` writes and ~700 array allocations PER FRAME over 53
+// plates — and the whole lobby rendered SLOWER (0.95ms) than a live 8v8 match (0.60ms).
+// ⚠️ Every one of those numbers is a pure function of `(kb, cam)`. `kb.keys` are world
+// space and are only rebuilt by `buildLobbyKeys` — at `enterWarmup` and on an orientation
+// flip — never per frame and never per step.
+// ⚠️ **The signature is the whole of `cam`, and a rebuild mints a NEW `kb` object**, so
+// `_sig` is `undefined` on it and the cache cannot go stale in either direction. That is
+// worth more than a manual invalidation call somebody has to remember.
+// ⚠️ The shake/tilt offset `ox, oy` is deliberately NOT baked in: it changes every frame
+// and is added at draw time, which is exactly why the rest of this is cacheable at all.
+function lobbyKeyGeo(kb){
+  const sig = cam.s + '|' + cam.ox + '|' + cam.oy + '|' + cam.rot + '|' + cam.sq;
+  if (kb._sig === sig) return kb._geo;
+  const geo = kb.keys.map(k => {
+    const pts = [[k.x, k.y], [k.x + k.w, k.y], [k.x + k.w, k.y + k.h], [k.x, k.y + k.h]]
+      .map(([x, y]) => screenPt(wx(x), wy(y)));
+    let lo0 = Infinity, hi0 = -Infinity, lo1 = Infinity, hi1 = -Infinity;
+    for (const q of pts){ if (q[0] < lo0) lo0 = q[0]; if (q[0] > hi0) hi0 = q[0];
+                          if (q[1] < lo1) lo1 = q[1]; if (q[1] > hi1) hi1 = q[1]; }
+    const bw = hi0 - lo0, bh = hi1 - lo1;
+    const c = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
+    const g = { pts, bw, bh, cx: c[0], cy: c[1], fs: 0 };
+    if (k.colTeam === undefined){
+      // The label's fitted size — the only part that needs the canvas, and the reason
+      // this used to cost a `measureText` per key per frame.
+      let fs = k.act ? 26 : (k.ch && k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
+      fs = Math.min(fs, bh * 0.62);
+      ctx.save();
+      ctx.font = `${fs}px ${LOBBY_FONT}`;
+      const tw = ctx.measureText(k.label).width;
+      if (tw > bw * 0.80) fs = fs * (bw * 0.80) / tw;
+      ctx.restore();
+      g.fs = Math.max(5, fs);
+    }
+    return g;
+  });
+  kb._sig = sig; kb._geo = geo;
+  return geo;
+}
 function drawLobbyKeys(w, ox, oy){
   const kb = w.kb; if (!kb) return;
   const T = TH;
+  const geo = lobbyKeyGeo(kb);
   // One pass over the bodies rather than a search per key.
   // ⚠️ **THE KEY YOU ARE STANDING ON LIGHTS UP, and for one build NOTHING DID.** This
   // read `Math.min(1, (p.kbT||0) / LOBBYKB.dwell)` — and the dwell was DELETED when
@@ -23792,9 +24062,8 @@ function drawLobbyKeys(w, ox, oy){
   const ink = T.line || '#ffffff';
   ctx.save();
   ctx.lineJoin = 'round';
-  for (const k of kb.keys){
-    const pts = [[k.x, k.y], [k.x + k.w, k.y], [k.x + k.w, k.y + k.h], [k.x, k.y + k.h]]
-      .map(([x, y]) => screenPt(wx(x), wy(y)));
+  for (let gi = 0; gi < kb.keys.length; gi++){
+    const k = kb.keys[gi], g = geo[gi], pts = g.pts;
     ctx.beginPath();
     ctx.moveTo(pts[0][0] + ox, pts[0][1] + oy);
     for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0] + ox, pts[i][1] + oy);
@@ -23815,12 +24084,8 @@ function drawLobbyKeys(w, ox, oy){
     // follow the pitch; the shirt is a picture of what you are picking, and a picture on
     // its side reads worse — the same split the letters are drawn under.
     if (k.colTeam !== undefined){
-      const xs2 = pts.map(q => q[0]), ys2 = pts.map(q => q[1]);
-      const bw2 = Math.max.apply(null, xs2) - Math.min.apply(null, xs2);
-      const bh2 = Math.max.apply(null, ys2) - Math.min.apply(null, ys2);
-      const sw2 = Math.min(bw2, bh2) * 0.86, sh2 = sw2 * 0.92;
-      const [sxp, syp] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
-      screenUpright(sxp + ox, syp + oy, (cx2, cy2) => {
+      const sw2 = Math.min(g.bw, g.bh) * 0.86, sh2 = sw2 * 0.92;
+      screenUpright(g.cx + ox, g.cy + oy, (cx2, cy2) => {
         shirtPath(ctx, cx2 - sw2/2, cy2 - sh2/2, sw2, sh2);
         ctx.fillStyle = rgba(k.col, 0.55 + 0.45*Math.max(f, on));
         ctx.fill();
@@ -23836,24 +24101,16 @@ function drawLobbyKeys(w, ox, oy){
     // a word, and a word on its side is not readable. `screenUpright`, not `uprightAt` —
     // this is drawn after the pitch transform is restored, so there is no turn to cancel
     // and cancelling one anyway is what laid every letter down in deck view.
-    const [lx, ly] = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
+    const lx = g.cx, ly = g.cy;
     // ⚠️ AND IT IS SHRUNK TO FIT THE PLATE IT IS ON, measured off that plate's four
     // SCREEN corners. A key is wide in world x, and deck view turns world x into screen
     // y — so SPACE and DEL, the two keys whose label is a word, were drawn at their
     // full width across a plate that is now the narrow way round and ran off both ends
     // of it. The same fit covers the huge courts, where `cam.s` falls until a whole
     // pitch fits and an 18px letter is wider than the key under it.
-    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
-    const bw = Math.max.apply(null, xs) - Math.min.apply(null, xs);
-    const bh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
     screenUpright(lx + ox, ly + oy, (x, y) => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      let fs = k.act ? 26 : (k.ch && k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
-      fs = Math.min(fs, bh * 0.62);
-      ctx.font = `${fs}px ${LOBBY_FONT}`;
-      const tw = ctx.measureText(k.label).width;
-      if (tw > bw * 0.80) fs = fs * (bw * 0.80) / tw;
-      ctx.font = `${Math.max(5, fs)}px ${LOBBY_FONT}`;
+      ctx.font = `${g.fs}px ${LOBBY_FONT}`;
       ctx.fillStyle = rgba(ink, 0.55 + 0.45*f);
       ctx.fillText(k.label, x, y);
     });
@@ -27087,11 +27344,42 @@ function advanceLabels(){
 // Sitting this one out: drawn faded, on the sideline, so it reads as "waiting" rather
 // than "missing". Its own function because the side view draws the bodies in depth order
 // and still wants the bench exactly as it is — flat on the touchline, behind everything.
+// ⚠️ **A BODY NOBODY CAN SEE IS NOT PAINTED, and until now every one of them was.**
+// There was no culling anywhere: `drawDiscs`, `drawBenchDiscs` and `drawBodiesSide` all
+// walked their whole list unconditionally, and `drawOneDisc` is the single most expensive
+// thing in the renderer — a shadow, a skin, a guide ring, a rim, a face, a cap, two rings
+// and a name plate whose occlusion test is O(bodies) all on its own.
+// ⚠️ **It fires during PLAY, not in the lobby**, and that is worth knowing before anybody
+// goes looking for it in warm-up: `computeCam` grows the frame to hold the keyboard and
+// `lobbyReach` clamps every body into that same box, deliberately — the rule is that the
+// box a player is held in and the box that is framed are one box. Off screen happens to
+// the BENCH during a match, and hard during the goal camera's 1.8x push-in.
+// ⚠️ **The pad is generous on purpose.** The kick ring reaches 2x the body radius, the
+// name plate hangs below it, and this point is missing the shake/tilt offset that
+// `pitchXform` adds at draw time — so the arithmetic is deliberately biased toward
+// painting a body that turns out not to be needed. Culling one that IS needed is a body
+// popping out of existence at the edge of the screen; the other way costs nothing.
+function bodyOffScreen(p){
+  const q = screenPt(wx(ix(p)), wy(iy(p)));
+  const pad = p.r * cam.s * 2.2 + 40;
+  return q[0] + pad < 0 || q[0] - pad > cw || q[1] + pad < 0 || q[1] - pad > ch;
+}
+// ⚠️ **ONE ANSWER TO "IS THIS BODY ON SCREEN AT ALL", AND ITS TRAIL HAS TO ASK IT TOO.**
+// It shipped for one build as a test inside `drawDiscs` alone, and the waiting bots duly
+// vanished — leaving four little columns of DOT TRAIL hanging outside each touchline
+// where the bodies used to be. `advanceTrails` keeps recording every player (it is step
+// state, and must), so anything that decides not to paint a body has to decide the same
+// thing about the tell behind it.
+function bodyPainted(w, p){
+  if (w.state === 'warmup' && p.ctrl === 'bot') return false;
+  return !bodyOffScreen(p);
+}
 function drawBenchDiscs(w){
   if (!w.bench || !w.bench.length) return;
   const s = cam.s;
   ctx.globalAlpha = 0.45;
   for (const p of w.bench){
+    if (bodyOffScreen(p)) continue;
     const x = wx(ix(p)), y = wy(iy(p)), r = p.r*s;
     uprightAt(x, y, (px, py) => {
       ctx.beginPath(); ctx.arc(px, py, r+Math.max(2, r*0.16), 0, 2*Math.PI);
@@ -27109,6 +27397,14 @@ function drawDiscs(w){
   drawBenchDiscs(w);
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i];
+    // ⚠️ **A BOT WAITING FOR THE WHISTLE IS NOT DRAWN AT ALL.** Bots stand outside the
+    // touchline through warm-up now, and the camera deliberately frames that ground — so
+    // they are on screen, in the way, and doing nothing. The head count over each half
+    // already says how many are coming (`drawLobby` reads it from `lobbyPlan`, never off
+    // the pitch), which is the part worth showing; the bodies arrive at kickoff, when
+    // `stageEntry` walks them on. Gated on `warmup` alone, so the walk-on itself — which
+    // happens in `kickoff` — is fully visible.
+    if (!bodyPainted(w, p)) continue;
     // Position turns with the pitch, the disc doesn't — otherwise faces and name
     // plates lie on their side in deck view. Callback x/y are the upright frame.
     uprightAt(wx(ix(p)), wy(iy(p)), (x, y) => drawOneDisc(w, p, x, y, p.r*s, s, i));
@@ -27286,10 +27582,11 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // ⚠️ White is what you still have, `RING.spent` is what you have used, growing
     // clockwise from twelve. That is a stronger pair than the old green-on-green (1.29:1
     // on grass) and it works for a colour-blind player, where green-vs-red does not.
-    // ⚠️ **Nothing at all above `SPRINT.show`** — the red starts from zero at the threshold
+    // ⚠️ **Nothing at all above `sprintShow()`** — the red starts from zero at the threshold
     // rather than appearing at 40% of the circle, so ordinary play is the plain white ring
     // exactly as before and the gauge only exists once it is worth reading.
-    const stamShown = sprintsFor(p) && p.stam != null && (p.spent || p.stam < SPRINT.show);
+    const stamShow = sprintShow();
+    const stamShown = sprintsFor(p) && p.stam != null && (p.spent || p.stam < stamShow);
     if (p.kick || (chargeOn() && (p.chargeT||0) > 0.01) || stamShown){
       const f = chargeOn() ? chargeFrac(p) : 0;
       // ⚠️ **IT HAS TO READ THE MOMENT KICK GOES DOWN, not once it is charged.** The alpha
@@ -27306,14 +27603,15 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       ctx.strokeStyle = rgba(kickRingInk(), 0.88 + 0.12*f);
       ctx.lineWidth = kickW; ctx.stroke();
       // ⚠️ The spent portion, over the top of the complete ring. Two rules, and they meet
-      // continuously at empty: while DRAINING the red grows from nothing at `SPRINT.show`
+      // continuously at empty: while DRAINING the red grows from nothing at `sprintShow()`
       // to the whole circle at zero, and while LOCKED OUT it tracks the real deficit, so
       // it shrinks back as the ring refills and you can watch yourself become able to
       // sprint again. `spent` does not clear until stamina is full, which is why the
       // second rule cannot simply be the first one read backwards.
       if (stamShown){
         const st = Math.max(0, Math.min(1, p.stam));
-        const used = p.spent ? 1 - st : Math.min(1, (SPRINT.show - st) / SPRINT.show);
+        const used = p.spent ? 1 - st
+                   : stamShow > 0 ? Math.min(1, (stamShow - st) / stamShow) : 1;
         if (used > 0.001){
           ctx.beginPath();
           ctx.arc(x, y, kickR, -Math.PI/2, -Math.PI/2 + 2*Math.PI*used);
@@ -27487,12 +27785,18 @@ function advanceTrails(w){
 
 let trailPts = [];                        // reused scratch — see TRAIL_LOOKS above
 function drawDiscTrails(w){
+  // ⚠️ The first thing to go when the machine cannot keep up — see `fullQuality`. Gated
+  // HERE rather than at the call site so the replay path and the live pitch agree, and so
+  // there is one place to look. `advanceTrails` still runs: the recording is sim state and
+  // dropping it would change the world, which auto-quality may never do.
+  if (!fullQuality()) return;
   const s = cam.s;
   if (discTrails.length !== w.players.length) return;
   const look = trailLook();
   for (let i = 0; i < w.players.length; i++){
     const p = w.players[i], hist = discTrails[i];
     if (!hist || !hist.length) continue;
+    if (!bodyPainted(w, p)) continue;      // no body, no tell — see bodyPainted
     while (trailPts.length < hist.length) trailPts.push({x:0, y:0, a:1});
     for (let k = 0; k < hist.length; k++){
       const t = trailPts[k], d = hist[k];
@@ -28039,6 +28343,8 @@ function advanceFx(){
   }
 }
 function drawFx(){
+  // ...and the sparks second. `advanceFx` keeps ageing them in the step loop regardless.
+  if (!fullQuality()) return;
   const s=cam.s;
   // ⚠️ On a two-tone palette a spark keeps its colour across the touchline and vanishes into
   // whichever side matches it — so `flipFx` themes draw it as its own NEGATIVE once it is off
@@ -28426,7 +28732,7 @@ function showOverlay(title, sub, resumable){
   // into #ovStats and the sub is empty unless there is RP or a snail to report.
   $('ovSub').style.display = sub ? '' : 'none';
   { const aw=$('ovAwards'); if (aw) aw.innerHTML='';
-    const st=$('ovStats'); if (st) st.innerHTML='';
+    const st=$('ovStats'); if (st) st.innerHTML=''; _statsFold = null;
     const vt=$('ovVote'); if (vt) vt.innerHTML=''; }    // awards/stats/vote only on a match result
   // Restore the standard match/pause buttons (the drill result repurposes them).
   $('ovResume').textContent = 'Resume'; $('ovResume').onclick = () => togglePause(false);
@@ -29093,7 +29399,7 @@ if (window.__MAGNETDEBUG) {
     CLOUD, cloudRec, cloudSaveRec, cloudApply, cloudSchemaAt, cloudCoerce, cloudParse,
     cloudFetch, cloudRefresh, buildCloudInfo, gvizRows, loadSel,
     chargeOn, chargeSecs, chargeMul, chargeFrac, CHARGE, CHARGEOPT,
-    SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, sprintBoost, advanceStamina,
+    SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, sprintBoost, sprintShow, advanceStamina,
     SWIPEPAUSE, onDown, onMove, onUp, SLIDER_GRAB, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
     drawOneDisc, motionOK, prefersReducedMotion, firstHumanSeat, mergePads, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
@@ -29118,6 +29424,9 @@ if (window.__MAGNETDEBUG) {
     KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
+    get acc(){ return acc; }, get renderAlpha(){ return renderAlpha; }, MAX_DT, MAX_STEPS,
+    QUAL, fullQuality, qualityStep, qualityPin(v){ _qualPin = v; },
+    get qualityLow(){ return _qualLow; },
     spawnKickFx, spawnTouchFx, drawFx, padInk, debugFloor, drawBuildTag,
     onDeviceTilt, tiltReset, tiltAsk, prefersReducedMotion, pitchXform,
     tiltTurf, tiltUI, syncTiltUI, restingJoyPos,
