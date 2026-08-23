@@ -1,5 +1,5 @@
 // Magnetball service worker — offline + installable.
-const CACHE = 'magnetball-v4';   // bumped to evict the stale index.html described below
+const CACHE = 'magnetball-v5';   // v5 evicts the old app icon; v4 evicted a stale index.html
 // './settings/' is the panel route — a stub that fetches index.html, so both need
 // to be cached for the settings window to open offline.
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './settings/', './settings/index.html'];

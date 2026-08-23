@@ -1391,6 +1391,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   live and hides on `appinstalled` or in standalone. ⚠️ The prompt cannot be asked for —
   it arrives once, as an event — so an always-on button is dead on iOS and after install,
   and a dead button in a menu is worse than no button.
+- **THE APP ICON IS JUST A COURT** (`icon.svg` — the favicon, the apple-touch-icon and the
+  manifest icon, and the only logo IMAGE the project has; the `.logo` on screen is a text
+  wordmark). It carried two player discs and a ball as well, which at the size an icon is
+  actually seen — 48px in a tab, 64px on a home screen — was three coloured dots sitting on
+  the markings rather than three things anybody could make out.
+  ⚠️ **AND IT NOW FITS THE MASKABLE SAFE ZONE, which it did not.** `manifest.json` declares
+  the icon `"purpose": "any maskable"`, which lets a launcher crop it to a CIRCLE of 80%
+  diameter — radius 204.8 of 512 about the centre. The old drawing put the court's corners
+  **252** out and the ends of the goals **213**, so on a round mask the pitch lost its
+  corners and both goals lost their ends. Nothing would ever have said so: you only see it
+  on a launcher that crops, which is not the one anybody is looking at while drawing it.
+  The furthest marking is 196 now.
+  ⚠️ **Only the CONTENT is held to the safe zone — the background is meant to fill the whole
+  square**, because that is what gives a crop something to show. Measuring "every pixel the
+  icon drew" instead reports 122,557 outside on a perfectly good icon, which is what the
+  first run of `tests/icon.mjs` did.
+  ⚠️ **A player is a filled DISC and a goal is a thin STROKE, so a pixel count cannot tell
+  them apart** — the two goals' strokes come to about the same area as the two discs did.
+  What separates them is the longest unbroken RUN of team colour down a column: 30 for a
+  goal, 68 for a disc. ⚠️ Bumping `CACHE` in `sw.js` is REQUIRED for an icon change and not
+  tidying: the worker is network-first for HTML and **cache-first for everything else**, so
+  an existing install keeps the old icon until the cache is evicted.
 - **Icons:** `ICONS` (one 24×24 grid, one stroke weight, `currentColor`) → `iconSvg(name)` →
   `optGlyph(entry)`, which every option tile and nav tile goes through. ⚠️ **Opting in is an
   `icon:` FIELD, never a lookup by emoji** — emoji are not unique across tables (⚡ is both the

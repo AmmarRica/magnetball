@@ -4940,7 +4940,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260822.0520AM';
+const VERSION = '20260822.0655AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4956,6 +4956,14 @@ const VERSION = '20260822.0520AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260822.0655AM', title: 'A cleaner icon',
+    changed: [
+      '<b>The app icon is just the pitch now.</b> It had two players and a ball on it as well, which at the size an icon is actually seen \u2014 a tab, a home screen \u2014 was three coloured dots on top of the markings rather than three things you could make out.',
+      'It also fits inside the circle some phones crop app icons to. It did not before, so on those launchers the pitch lost its corners and both goals lost their ends.',
+    ],
+    added: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260822.0520AM', title: 'Point a phone at it',
     added: [
       '<b>A QR code of the game\u2019s address, under About.</b> Point a phone camera at it and the game opens on that phone \u2014 a quick way to hand somebody the game without spelling out a link. The address is written under the code as well, for anybody typing it in.',
