@@ -1457,6 +1457,13 @@
     .copyhint { font-family: var(--pix); font-size:10px; letter-spacing:.5px;
       color: var(--muted); text-align:right; padding:0 10px; }
     #aboutInfo.copied .copyhint { color: var(--accent); }
+    /* ⚠️ THE WHITE PLATE IS PART OF THE CODE, not decoration. A QR needs a light ground
+       and a quiet zone; the canvas carries four modules of white itself, and this plate
+       is what stops a dark menu crowding the edge of it. Deliberately NOT themed. */
+    .qrbox { display:inline-block; background:#fff; padding:8px; border-radius:10px;
+             line-height:0; }
+    .qrbox canvas { display:block; image-rendering: pixelated; }
+    .qrurl { font-size:11px; color:var(--muted); margin-top:6px; word-break:break-all; }
     /* 44px: these are the two things anyone opens About to press. */
     #updCheckBtn { display:block; width:100%; min-height:44px; }
     #repList { display:flex; flex-direction:column; gap:6px; margin:2px 0 4px; }
@@ -2278,6 +2285,13 @@
         <button class="ghost" id="saveImportBtn" type="button">⤒ Import save…</button>
       </div>
       <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season, tournament or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
+      <div style="height:14px"></div>
+      <!-- ⚠️ A URL somebody can point a phone at, without typing it. The encoder is
+           written out in this file (there is no library and no CDN here) and it takes a
+           STRING, so the join-a-room screen can hand it a room link unchanged. -->
+      <label class="field">Open it on another device</label>
+      <div id="qrWrap" data-noi18n></div>
+      <div class="hint always" style="text-align:left">Point a phone camera at the code and it opens this game. Everything is on the device it is opened on, so the other phone starts fresh &mdash; it is a quick way to hand somebody the game, not a way to share your save. Use <b>Export save</b> above for that.</div>
       <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList" data-noi18n></div>
@@ -4616,13 +4630,317 @@ function detectPanel(){
 }
 const PANEL = detectPanel();
 
+// ============================================================
+//  QR CODE — a URL somebody can point a phone at
+// ============================================================
+// ⚠️ **WRITTEN OUT, because the alternative is a dependency and this game has none.**
+// Every QR library is an npm package or a CDN script, and a server-rendered image is a
+// network round trip on a page that has to work offline from a file on a disk. So the
+// encoder is here: byte mode, error correction level M, versions 1-10, which is 213
+// bytes — any URL, with room to spare for a room code on the end of one.
+//
+// ⚠️ **IT TAKES A STRING, NOT A LOCATION, and that is the whole point of its shape.**
+// The About card passes the page's own address; the join-a-room screen this is really
+// for will pass a room URL, and neither one is baked in here. `qrMatrix` is the encoder
+// and `qrCanvas` is the only thing that knows about pixels.
+//
+// ⚠️ **DARK ON WHITE, ALWAYS, and it deliberately does NOT follow the theme.** A QR is
+// not a decoration: scanners expect dark modules on a light ground, and a palette that
+// happens to be low-contrast produces a code that will not read at all. The white card
+// behind it is what says "this is a code" rather than a picture.
+//
+// ⚠️ **THE QUIET ZONE IS PART OF THE CODE.** Four modules of white all the way round is
+// the specification's minimum, and without it a scanner cannot find the finder patterns
+// against whatever is behind the canvas. It is added at DRAW time rather than baked into
+// the matrix, so the matrix stays exactly the symbol.
+const QR = {
+  // Data codewords, EC codewords per block, and the block split, at EC level M.
+  // ⚠️ Verified rather than trusted: `tests/qrcode.mjs` counts the modules the function
+  // patterns leave free and requires it to equal `codewords x 8 + remainder bits` on
+  // every version, which checks this table and the pattern placement against each other.
+  //        data  ec   g1  g1len  g2  g2len
+  cap: {  1: [16, 10,  1, 16,  0,  0],
+          2: [28, 16,  1, 28,  0,  0],
+          3: [44, 26,  1, 44,  0,  0],
+          4: [64, 18,  2, 32,  0,  0],
+          5: [86, 24,  2, 43,  0,  0],
+          6: [108,16,  4, 27,  0,  0],
+          7: [124,18,  4, 31,  0,  0],
+          8: [154,22,  2, 38,  2, 39],
+          9: [182,22,  3, 36,  2, 37],
+         10: [216,26,  4, 43,  1, 44] },
+  // Alignment-pattern centres per version. v1 has none.
+  align: { 1:[], 2:[6,18], 3:[6,22], 4:[6,26], 5:[6,30], 6:[6,34],
+           7:[6,22,38], 8:[6,24,42], 9:[6,26,46], 10:[6,28,50] },
+  // Remainder bits after the codewords: 0 for v1, 7 for v2-6, 0 for v7-13.
+  rem: { 1:0, 2:7, 3:7, 4:7, 5:7, 6:7, 7:0, 8:0, 9:0, 10:0 },
+  ecBits: 0,          // level M is 00 in the format information
+  quiet: 4,
+};
+// GF(256) with the QR primitive polynomial. Built once.
+const QR_EXP = new Uint8Array(512), QR_LOG = new Uint8Array(256);
+(function(){
+  let x = 1;
+  for (let i = 0; i < 255; i++){ QR_EXP[i] = x; QR_LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (let i = 255; i < 512; i++) QR_EXP[i] = QR_EXP[i - 255];
+})();
+function qrMul(a, b){ return (a && b) ? QR_EXP[QR_LOG[a] + QR_LOG[b]] : 0; }
+// g(x) = product of (x - a^i), coefficients highest degree first.
+function qrGen(n){
+  let g = [1];
+  for (let i = 0; i < n; i++){
+    const ng = new Array(g.length + 1).fill(0);
+    for (let j = 0; j < g.length; j++){
+      ng[j]     ^= g[j];                        // times x
+      ng[j + 1] ^= qrMul(g[j], QR_EXP[i]);      // times a^i
+    }
+    g = ng;
+  }
+  return g;
+}
+// The Reed-Solomon remainder: the EC codewords for one block.
+function qrEc(data, n){
+  const g = qrGen(n), res = data.slice().concat(new Array(n).fill(0));
+  for (let i = 0; i < data.length; i++){
+    const c = res[i]; if (!c) continue;
+    for (let j = 1; j <= n; j++) res[i + j] ^= qrMul(g[j], c);
+  }
+  return res.slice(data.length);
+}
+// ⚠️ BCH, not a table. The format and version strings are both short BCH codes, and the
+// published tables of them are exactly the kind of thing that gets one row wrong in a
+// copy — `tests/qrcode.mjs` checks the property instead (the string, unmasked, is
+// divisible by the generator), which is what the table is FOR.
+function qrFormatBits(mask){
+  const v = (QR.ecBits << 3) | mask;
+  let d = v << 10;
+  for (let i = 14; i >= 10; i--) if ((d >>> i) & 1) d ^= 0x537 << (i - 10);
+  return ((v << 10) | d) ^ 0x5412;
+}
+function qrVersionBits(ver){
+  let d = ver << 12;
+  for (let i = 17; i >= 12; i--) if ((d >>> i) & 1) d ^= 0x1f25 << (i - 12);
+  return (ver << 12) | d;
+}
+// The eight mask patterns, by their formulas rather than by lookup.
+const QR_MASKS = [
+  (i, j) => (i + j) % 2 === 0,
+  (i, j) => i % 2 === 0,
+  (i, j) => j % 3 === 0,
+  (i, j) => (i + j) % 3 === 0,
+  (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
+  (i, j) => (i * j) % 2 + (i * j) % 3 === 0,
+  (i, j) => ((i * j) % 2 + (i * j) % 3) % 2 === 0,
+  (i, j) => ((i + j) % 2 + (i * j) % 3) % 2 === 0,
+];
+// How many characters a version holds in byte mode: the codewords, less the 4-bit mode
+// indicator and the character count. The count is 8 bits below version 10 and 16 at 10.
+function qrCharCountBits(ver){ return ver < 10 ? 8 : 16; }
+function qrCapacity(ver){
+  return Math.floor((QR.cap[ver][0] * 8 - 4 - qrCharCountBits(ver)) / 8);
+}
+// The smallest version that holds this many bytes, or 0 if none of them does.
+function qrPickVersion(len){
+  for (let v = 1; v <= 10; v++) if (len <= qrCapacity(v)) return v;
+  return 0;
+}
+// Text to codewords: the bit stream, padded, split into blocks, each block's EC
+// computed, then the whole lot interleaved the way the specification asks for.
+function qrCodewords(bytes, ver){
+  const [dataCw, ecCw, g1, g1len, g2, g2len] = QR.cap[ver];
+  const bits = [];
+  const push = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  push(4, 4);                                   // byte mode
+  push(bytes.length, qrCharCountBits(ver));
+  for (const b of bytes) push(b, 8);
+  for (let i = 0; i < 4 && bits.length < dataCw * 8; i++) bits.push(0);   // terminator
+  while (bits.length % 8) bits.push(0);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8){
+    let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+    data.push(b);
+  }
+  const pad = [0xec, 0x11];
+  for (let i = 0; data.length < dataCw; i++) data.push(pad[i % 2]);
+  // Split into blocks, longest last, exactly as the table describes them.
+  const blocks = [], ecs = [];
+  let at = 0;
+  for (let i = 0; i < g1; i++){ blocks.push(data.slice(at, at + g1len)); at += g1len; }
+  for (let i = 0; i < g2; i++){ blocks.push(data.slice(at, at + g2len)); at += g2len; }
+  for (const bl of blocks) ecs.push(qrEc(bl, ecCw));
+  // Interleave: the first codeword of every block, then the second, and so on; then the
+  // same for the error correction. A block that has run out is skipped, not padded.
+  const out = [];
+  const maxLen = Math.max(g1len, g2len);
+  for (let i = 0; i < maxLen; i++) for (const bl of blocks) if (i < bl.length) out.push(bl[i]);
+  for (let i = 0; i < ecCw; i++) for (const e of ecs) out.push(e[i]);
+  return out;
+}
+// The function patterns: finders, separators, timing, alignment, the dark module, and
+// the areas the format and version information will be written into. `res` marks every
+// module the data must step over.
+function qrFrame(ver){
+  const size = 17 + 4 * ver;
+  const m = [], res = [];
+  for (let i = 0; i < size; i++){ m.push(new Array(size).fill(0)); res.push(new Array(size).fill(0)); }
+  const set = (r, c, v) => { m[r][c] = v; res[r][c] = 1; };
+  const finder = (r0, c0) => {
+    for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++){
+      const rr = r0 + r, cc = c0 + c;
+      if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+      const on = (r >= 0 && r <= 6 && (c === 0 || c === 6)) ||
+                 (c >= 0 && c <= 6 && (r === 0 || r === 6)) ||
+                 (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+      set(rr, cc, on ? 1 : 0);                  // the -1 ring is the separator
+    }
+  };
+  finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+  for (let i = 8; i < size - 8; i++){ set(6, i, i % 2 === 0 ? 1 : 0); set(i, 6, i % 2 === 0 ? 1 : 0); }
+  const cs = QR.align[ver];
+  for (const r of cs) for (const c of cs){
+    // Not over the three finders.
+    if ((r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8)) continue;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++)
+      set(r + dr, c + dc, (Math.abs(dr) === 2 || Math.abs(dc) === 2 || (dr === 0 && dc === 0)) ? 1 : 0);
+  }
+  set(size - 8, 8, 1);                          // the dark module
+  for (let i = 0; i < 9; i++){ if (!res[8][i]) set(8, i, 0); if (!res[i][8]) set(i, 8, 0); }
+  for (let i = 0; i < 8; i++){ if (!res[8][size-1-i]) set(8, size-1-i, 0); if (!res[size-1-i][8]) set(size-1-i, 8, 0); }
+  if (ver >= 7){
+    for (let i = 0; i < 18; i++){
+      set(size - 11 + (i % 3), Math.floor(i / 3), 0);
+      set(Math.floor(i / 3), size - 11 + (i % 3), 0);
+    }
+  }
+  return { m, res, size };
+}
+// The zigzag: two-module columns from the right, skipping the vertical timing column.
+function qrPlace(m, res, size, cw){
+  let bit = 0;
+  const next = () => {
+    const i = bit >> 3, b = 7 - (bit & 7); bit++;
+    return i < cw.length ? ((cw[i] >>> b) & 1) : 0;    // remainder bits are zero
+  };
+  let up = true;
+  for (let col = size - 1; col > 0; col -= 2){
+    if (col === 6) col--;
+    for (let n = 0; n < size; n++){
+      const row = up ? size - 1 - n : n;
+      for (let c = 0; c < 2; c++){
+        const cc = col - c;
+        if (!res[row][cc]) m[row][cc] = next();
+      }
+    }
+    up = !up;
+  }
+}
+function qrPenalty(m, size){
+  let p = 0, dark = 0;
+  const run = (get) => {
+    for (let a = 0; a < size; a++){
+      let len = 1, prev = get(a, 0);
+      for (let b = 1; b < size; b++){
+        const v = get(a, b);
+        if (v === prev) len++;
+        else { if (len >= 5) p += 3 + (len - 5); prev = v; len = 1; }
+      }
+      if (len >= 5) p += 3 + (len - 5);
+    }
+  };
+  run((a, b) => m[a][b]); run((a, b) => m[b][a]);
+  for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++){
+    const v = m[r][c];
+    if (v === m[r][c+1] && v === m[r+1][c] && v === m[r+1][c+1]) p += 3;
+  }
+  const A = [1,0,1,1,1,0,1,0,0,0,0], B = [0,0,0,0,1,0,1,1,1,0,1];
+  const hit = (get, a, b, pat) => { for (let k = 0; k < 11; k++) if (get(a, b + k) !== pat[k]) return false; return true; };
+  for (let a = 0; a < size; a++) for (let b = 0; b + 11 <= size; b++){
+    if (hit((x, y) => m[x][y], a, b, A) || hit((x, y) => m[x][y], a, b, B)) p += 40;
+    if (hit((x, y) => m[y][x], a, b, A) || hit((x, y) => m[y][x], a, b, B)) p += 40;
+  }
+  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (m[r][c]) dark++;
+  p += 10 * Math.floor(Math.abs(dark * 100 / (size * size) - 50) / 5);
+  return p;
+}
+// ⚠️ **THE FIRST COPY RUNS DOWN COLUMN 8 AND ALONG ROW 8, IN THAT ORDER, and getting it
+// the other way round is a bug NO ROUND TRIP CAN SEE.** It shipped transposed — bit 0 at
+// (row 8, col 0) instead of (row 0, col 8) — and the suite's own decoder read it back the
+// same transposed way, so the two agreed with each other and disagreed with every scanner
+// in the world. Caught by diffing whole matrices against an independent encoder, which is
+// the only check that could: the data area was byte-identical and exactly the twelve
+// format modules were wrong.
+function qrWriteFormat(m, size, mask){
+  const f = qrFormatBits(mask);
+  for (let i = 0; i < 15; i++){
+    const v = (f >>> i) & 1;
+    // first copy: down the left of the top-right finder, then left along row 8
+    if (i < 6)        m[i][8] = v;
+    else if (i === 6) m[7][8] = v;
+    else if (i === 7) m[8][8] = v;
+    else if (i === 8) m[8][7] = v;
+    else              m[8][14 - i] = v;
+    // second copy: in from the right along row 8, then up column 8 from the bottom
+    if (i < 8) m[8][size - 1 - i] = v;
+    else       m[size - 15 + i][8] = v;
+  }
+}
+// ⚠️ Returns the matrix as rows of 0/1, WITHOUT the quiet zone, or null if the text does
+// not fit. A caller that ignores the null draws nothing rather than drawing a code that
+// says the wrong thing.
+function qrMatrix(text){
+  const bytes = Array.from(new TextEncoder().encode(String(text == null ? '' : text)));
+  const ver = qrPickVersion(bytes.length);
+  if (!ver) return null;
+  const cw = qrCodewords(bytes, ver);
+  const { m, res, size } = qrFrame(ver);
+  qrPlace(m, res, size, cw);
+  if (ver >= 7){
+    const vb = qrVersionBits(ver);
+    for (let i = 0; i < 18; i++){
+      const v = (vb >>> i) & 1;
+      m[size - 11 + (i % 3)][Math.floor(i / 3)] = v;
+      m[Math.floor(i / 3)][size - 11 + (i % 3)] = v;
+    }
+  }
+  // Every mask is tried and the least ugly one wins — that is what the penalty rules are.
+  let best = null, bestP = Infinity, bestMask = 0;
+  for (let k = 0; k < 8; k++){
+    const t = m.map(row => row.slice());
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
+      if (!res[r][c] && QR_MASKS[k](r, c)) t[r][c] ^= 1;
+    qrWriteFormat(t, size, k);
+    const p = qrPenalty(t, size);
+    if (p < bestP){ bestP = p; best = t; bestMask = k; }
+  }
+  best.version = ver; best.mask = bestMask; best.size = size;
+  return best;
+}
+// A canvas holding the code, quiet zone included, dark on white. `target` is the wanted
+// width in CSS pixels; the module size is a whole number of DEVICE pixels, because a QR
+// drawn on fractional boundaries is a QR with soft edges and scanners dislike them.
+function qrCanvas(text, target){
+  const m = qrMatrix(text);
+  if (!m) return null;
+  const q = QR.quiet, n = m.size + q * 2;
+  const dpr = Math.max(1, Math.min(3, Math.round(window.devicePixelRatio || 1)));
+  const px = Math.max(1, Math.floor(((target || 180) * dpr) / n));
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = n * px;
+  cv.style.width = cv.style.height = (n * px / dpr) + 'px';
+  const c = cv.getContext('2d');
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#000000';
+  for (let r = 0; r < m.size; r++) for (let cc = 0; cc < m.size; cc++)
+    if (m[r][cc]) c.fillRect((cc + q) * px, (r + q) * px, px, px);
+  return cv;
+}
 // Build version under the title. Format: YYYYMMDD.build — bump on every change.
 // ⚠️ Declared UP HERE. It used to sit two thirds of the way down the file, which was fine
 // while only render-time code read it — then `buildNews()` started reading it during the
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260822.0310AM';
+const VERSION = '20260822.0520AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4638,6 +4956,15 @@ const VERSION = '20260822.0310AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260822.0520AM', title: 'Point a phone at it',
+    added: [
+      '<b>A QR code of the game\u2019s address, under About.</b> Point a phone camera at it and the game opens on that phone \u2014 a quick way to hand somebody the game without spelling out a link. The address is written under the code as well, for anybody typing it in.',
+    ],
+    changed: [
+      '<b>The bold text in this list is bold again.</b> Every entry starts with a bold sentence and the tags were being printed as words instead, on every release since this card existed.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260822.0310AM', title: 'What you see is what you hit',
     changed: [
       '<b>On the biggest pitches, players and the ball are now drawn at the size they actually are.</b> They were being scaled up so they would not be tiny dots \u2014 but only their SIZES were, not the gaps between them, so a ball resting against you was drawn inside you. Bodies are small on Colossus and Leviathan now, and everything you see is where it really is.',
@@ -16603,6 +16930,48 @@ function buildAbout(){
     el.textContent = 'up to date as far as we know';
   }
   buildCloudInfo();
+  buildShareQr();
+}
+// ⚠️ **THE ADDRESS SOMEBODY ELSE CAN OPEN, which is not `location.href`.** That carries
+// whatever query and hash this session happens to be carrying, and on a `file://` page it
+// is an absolute path on this disk — a code that leads to a folder nobody else has, with
+// the owner's home directory printed under it. Origin plus path, http(s) only.
+function shareUrl(){
+  if (!/^https?:$/.test(location.protocol)) return '';
+  return location.origin + location.pathname;
+}
+// ⚠️ Built as NODES and rebuilt whole, because the canvas is one. Nothing here is a
+// string of markup: the URL under the code is text the browser wrote, not text we
+// interpolated. ⚠️ On a file:// page it says why there is no code rather than showing
+// one that cannot work — the `downloadOffline` rule, and the reason `buildAbout` refuses
+// to claim "up to date" with no server to ask.
+function buildShareQr(){
+  const host = $('qrWrap'); if (!host) return;
+  host.textContent = '';
+  const url = shareUrl();
+  if (!url){
+    const p = document.createElement('div');
+    p.className = 'pathval';
+    p.textContent = 'You are playing a copy saved on this device, so there is no address to share.';
+    host.appendChild(p);
+    return;
+  }
+  const cv = qrCanvas(url, 180);
+  if (!cv){
+    const p = document.createElement('div');
+    p.className = 'pathval';
+    p.textContent = url;
+    host.appendChild(p);
+    return;
+  }
+  const box = document.createElement('div');
+  box.className = 'qrbox';
+  box.appendChild(cv);
+  host.appendChild(box);
+  const cap = document.createElement('div');
+  cap.className = 'qrurl mono';
+  cap.textContent = url;
+  host.appendChild(cap);
 }
 // Where the defaults came from. ⚠️ It says which of the three it is rather than only
 // reporting success: "using built-in defaults" and "pulled an hour ago" are different
@@ -27935,8 +28304,26 @@ function releaseBlock(rel){
   v.textContent = 'v' + rel.v + (rel.v === VERSION ? ' · you have this' : '');
   head.append(t, v); wrap.appendChild(head);
   const ul = document.createElement('ul'); ul.className = 'rellist';
-  for (const line of (rel.added || [])){ const li = document.createElement('li'); li.textContent = line; ul.appendChild(li); }
-  for (const line of (rel.changed || [])){ const li = document.createElement('li'); li.className = 'chg'; li.textContent = line; ul.appendChild(li); }
+  // ⚠️ **`<b>` IS RENDERED, and for a long time it was PRINTED.** Every entry in
+  // `CHANGELOG` leads with a bold sentence and this built the line with `textContent`, so
+  // what a player actually read was `<b>On the biggest pitches...</b>` with the tags in
+  // it, on every release since the card existed.
+  // ⚠️ Fixed by parsing the ONE tag rather than by reaching for `innerHTML`. The text is a
+  // literal in this file today, but the same renderer draws the update modal, and a
+  // changelog is exactly the sort of thing that later gets fetched from somewhere; a
+  // splitter that knows about `<b>` and nothing else cannot grow a hole.
+  const relLine = (li, line) => {
+    let bold = false;
+    for (const part of String(line).split(/(<b>|<\/b>)/)){
+      if (part === '<b>'){ bold = true; continue; }
+      if (part === '</b>'){ bold = false; continue; }
+      if (!part) continue;
+      li.appendChild(bold ? Object.assign(document.createElement('b'), { textContent: part })
+                          : document.createTextNode(part));
+    }
+  };
+  for (const line of (rel.added || [])){ const li = document.createElement('li'); relLine(li, line); ul.appendChild(li); }
+  for (const line of (rel.changed || [])){ const li = document.createElement('li'); li.className = 'chg'; relLine(li, line); ul.appendChild(li); }
   if (ul.children.length) wrap.appendChild(ul);
   // ⚠️ ONE line for every bug fixed, on purpose. A player does not care which flex column
   // was centring its overflow, and a changelog that itemises internals is one nobody reads
@@ -28119,6 +28506,7 @@ if (window.__MAGNETDEBUG) {
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
+    qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
     toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     pollLobbyPads, stepWarmup, stepLobbyKeys,

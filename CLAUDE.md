@@ -1345,6 +1345,48 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   hunting for it. ⚠️ The hint says plainly that the **career and settings do not come with
   it** — a file on disk is a different origin, so the browser keeps the saves apart — and
   that the optional `assets/` artwork falls back if it is not beside the file.
+- **A QR CODE OF THE PAGE'S OWN ADDRESS** (`QR`, `qrMatrix`, `qrCanvas`, `shareUrl`,
+  `buildShareQr`; About card). Point a phone at it and the game opens.
+  ⚠️ **THE ENCODER IS WRITTEN OUT, because the alternative is a dependency.** Every QR
+  library is an npm package or a CDN script and a server-rendered image is a network round
+  trip on a page that has to work from a file on a disk. Byte mode, EC level M, versions
+  1-10 — 213 bytes, which is any URL with a room code on the end of it.
+  ⚠️ **IT TAKES A STRING, NOT A LOCATION**, which is the whole point of its shape: About
+  passes the page address and the join-a-room screen this is really for will pass a room
+  URL, with nothing to change here.
+  ⚠️ **`shareUrl()` is origin + pathname, NEVER `location.href`** — that carries whatever
+  query and hash this session happens to have, and on a `file://` page it is an absolute
+  path on somebody's disk. Off that protocol the card says there is no address to share,
+  the `downloadOffline` rule: relabel rather than hide, and never claim what you cannot do.
+  ⚠️ **DARK ON WHITE, and it deliberately does not follow the theme** — a QR is not a
+  decoration, scanners want a light ground, and a low-contrast palette makes a code that
+  will not read. The QUIET ZONE is four modules of white, added at draw time so the matrix
+  stays exactly the symbol; without it a scanner cannot find the finder patterns at all.
+  ⚠️ **THE FORMAT INFORMATION RUNS DOWN COLUMN 8 AND ALONG ROW 8, and it shipped
+  TRANSPOSED — a bug no round trip could ever catch.** `tests/qrcode.mjs` writes its own
+  decoder, and the decoder read the format back the same transposed way the encoder wrote
+  it, so the two agreed with each other, round-tripped perfectly and disagreed with every
+  scanner in the world. Four self-contained checks all passed on that build.
+  ⚠️ **What caught it was diffing whole matrices against an INDEPENDENT encoder** (`segno`
+  and OpenCV's decoder, from pip — a dev-time cross-check, never a suite dependency), and
+  what is kept from that is one complete symbol pinned in the suite. Established and worth
+  not repeating: v3, v7, v9 and v10 at exact capacity are byte-identical to `segno`;
+  `segno` appends a spurious zero codeword when the stream is already byte-aligned
+  (`8 - (length % 8)` yields 8 rather than 0), which the specification does not ask for
+  and this encoder does not do, so below capacity the two legitimately differ; the mask is
+  chosen by the specification's own penalty rules and agrees with an independent scoring of
+  them where `segno` sometimes does not; and over 150 random URLs read back by a real
+  decoder this encoder failed 4 against `segno`'s 5 — the detector's limit, not either
+  encoder's.
+  ⚠️ The fixture is pinned at a string of v3's **exact byte capacity**, because that is
+  where the padding disagreement cannot arise. `tests/qrcode.mjs`.
+- **`<b>` IN THE CHANGELOG IS RENDERED, and for a long time it was PRINTED**
+  (`releaseBlock`). Every `CHANGELOG` entry leads with a bold sentence and the list item
+  was built with `textContent`, so what a player read was `<b>On the biggest pitches…</b>`
+  with the tags in it, on every release since the card existed. Fixed by parsing the ONE
+  tag rather than reaching for `innerHTML`: the text is a literal in this file today, the
+  same renderer draws the update modal, and a splitter that knows about `<b>` and nothing
+  else cannot grow a hole.
 - **Add to home screen:** `#installBtn` appears only while `beforeinstallprompt` is
   live and hides on `appinstalled` or in standalone. ⚠️ The prompt cannot be asked for —
   it arrives once, as an event — so an always-on button is dead on iOS and after install,
