@@ -27,7 +27,7 @@ await p.waitForTimeout(800);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
   const berries = w => w.extraBalls.filter(x=>x.isBerry);
-  const start = seed => { M.sel.mode='kq'; M.setMatchSeed(seed); M.startMatch();
+  const start = seed => { M.sel.mode='kq'; M.sel.length='5'; M.setMatchSeed(seed); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2; return w; };
 
   // ---- they exist, they are in play, and they are not the ball ------------

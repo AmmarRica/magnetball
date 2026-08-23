@@ -38,6 +38,7 @@ const r = await p.evaluate(() => {
 
   // ---- 1. off is genuinely off ------------------------------------------------
   M.sel.sprint = 'off';
+  M.sel.length = '5';   // timed play — every number in this file was measured under it
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(7); M.startMatch();
   {
     const w = M.world; w.state = 'play'; w.stateT = 2;

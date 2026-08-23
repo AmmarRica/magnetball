@@ -1,8 +1,8 @@
 // Magnetball service worker — offline + installable.
-const CACHE = 'magnetball-v5';   // v5 evicts the old app icon; v4 evicted a stale index.html
+const CACHE = 'magnetball-v6';   // v6 precaches the /vj route; v5 evicted the old app icon
 // './settings/' is the panel route — a stub that fetches index.html, so both need
 // to be cached for the settings window to open offline.
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './settings/', './settings/index.html'];
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './settings/', './settings/index.html', './vj/', './vj/index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

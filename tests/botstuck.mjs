@@ -74,7 +74,7 @@ const sweep = await p.evaluate(() => {
 // =========================================== it does not fire in ordinary play ==
 const normal = await p.evaluate(() => {
   const M = window.__magnet, o = {};
-  M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+  M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false; M.sel.length = '5';
   M.setMatchSeed(9); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   let ticksStuck = 0, samples = 0, maxRun = 0;

@@ -250,7 +250,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   appends, so without it every `fill()` repaints the earlier plates over their own text —
   four boxes came out with only the last one's words in them.
 - **The default is a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
-  `grass`, `defaultProfile().flag` = `num1`). ⚠️ The first-run continent lineup is **not
+  `grass`, `defaultProfile().flag` = `num1`), **and the default match is FIRST TO 3**
+  (`defaultSel().length = 'g3'`), asked for. ⚠️ A goals-based default ENDS matches at
+  three goals, which is invisible to a person and load-bearing for the suites: ~94 of
+  them start matches without pinning a length, and every long bot measurement (botai,
+  botplans, kqberry, botstuck, sprint) was taken under timed play — those five pin
+  `sel.length='5'` explicitly now. A new suite that measures anything across a whole
+  match must pin its length too. ⚠️ The first-run continent lineup is **not
   applied any more** — it dressed a brand-new install in country flags, which is the
   opposite of "players are numbered". `CONTINENTS` and `placedFlags` stay, because they are
   what prove every `FLAGS` entry is reachable from the pickers.
@@ -3410,7 +3416,7 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   section headers, so `syncSticky()` folds the jump bar's height into `--sticky-top`.
   `tests/menunav.mjs`.
 - **VJ Mode (render/audio layer ONLY):** two video decks + two DJ decks, operated from
-  `/settings` while the game runs fullscreen. **Default off**; `sel.vj.on` is the only part
+  **the `/vj` route** while the game runs fullscreen. **Default off**; `sel.vj.on` is the only part
   in `sel` — decks, library and files live in `vj`, deliberately outside it, because
   `saveSel()` serialises all of `sel` to localStorage and `syncAdopt()` shallow-merges it.
   Every tunable is in the `VJ` block.
@@ -3425,6 +3431,20 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **`ctx.filter` at full resolution cost 2.2× the entire frame budget** (45.9ms vs 20.4ms
   for the same two draws). Deck looks render through a `VJ.videoFxRes` intermediate; tint is
   a composite op, which is free. A deck at zero opacity is not decoded at all.
+  ⚠️ **THE DECK SURFACE IS THE `/vj` ROUTE, FULL SCREEN, AND IT IS GONE FROM
+  `/settings`** (`vj/index.html`, `VJVIEW`, `vjOpenView`, `body.vjview`). It built into
+  the settings accordion and was reported looking exactly like what it was: a DJ rig
+  squeezed into a 460px settings column. The route is the /settings stub mechanism — it
+  fetches the one index.html and flags itself `vj` — so the decks are the same code
+  everywhere; the page then strips itself to the VJ card at full width by CLASS, never by
+  deleting nodes. /settings and the in-game card keep a signpost link (`#vjOpenBtn`,
+  `a.ghost` — the ghost dress had to learn anchors, or it rendered as a blue hyperlink).
+  ⚠️ **Two traps, both shipped for one build each**: a bare `[data-sec="vj"]` selector
+  matches a JUMP-BAR CHIP before the card (chips carry `data-sec` too), so the class came
+  off the chip and the route was a heading with nothing under it; and `initCollapsibles`
+  runs after the view builder at boot and re-collapsed the page's one card — the
+  accordion machinery stands down under `VJVIEW`. `tests/vjroute.mjs` measures rendered
+  boxes, not classes, for exactly that reason.
   ⚠️ **A YOUTUBE VIDEO CAN BE THE BACKGROUND, AND IT CANNOT BE A DECK — that is a
   platform fact, not a choice** (`vj.yt`, `ytIdFrom`, `vjYtSync`, `vjYtA`, the `yt`
   command; panel row under Video decks). The embed iframe is the only way YouTube plays

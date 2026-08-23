@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Magnetball — VJ</title>
+  <meta name="theme-color" content="#0b3d1f" />
+  <style>body{background:#0b0f18;color:#dfe7f2;font:14px system-ui,sans-serif;margin:0;padding:28px}a{color:#3ee08a}</style>
+</head>
+<body>
+  <p id="msg">Loading VJ decks…</p>
+  <script>
+  // The VJ deck surface, full screen. Same mechanism as /settings — it fetches the
+  // one and only index.html and flags itself — so the decks run the same code
+  // everywhere and cannot drift. The flag value 'vj' is what makes the page show
+  // ONLY the deck surface instead of the settings accordion.
+  //
+  // <base href="../"> keeps every relative path (assets, manifest, sw.js) resolving
+  // against the site root even though we're one directory down.
+  (function(){
+    var BASE = '../';
+    fetch(BASE + 'index.html', { cache: 'no-cache' })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(html){
+        var inject = '<base href="' + BASE + '">' +
+                     '<scr' + 'ipt>window.__MAGNETPANEL="vj";</scr' + 'ipt>';
+        if (/<head(\s[^>]*)?>/i.test(html)) html = html.replace(/<head(\s[^>]*)?>/i, function(m){ return m + inject; });
+        else html = inject + html;
+        document.open(); document.write(html); document.close();
+      })
+      .catch(function(e){
+        document.getElementById('msg').innerHTML =
+          'Could not load the game files (' + e.message + ').<br><a href="../">Back to Magnetball</a>';
+      });
+  })();
+  </script>
+</body>
+</html>

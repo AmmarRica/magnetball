@@ -74,6 +74,25 @@
     #ytbg { position: fixed; inset: 0; overflow: hidden; pointer-events: none;
             background: #000; display: none; }
     #ytbg.live { display: block; }
+    /* ---------- The /vj route: the deck surface, full screen ---------- */
+    /* ⚠️ Everything else HIDDEN rather than removed — same document, same DOM shape.
+       The card sheds its accordion dress: no collapse chevron, no card border, the
+       full window width. The decks were reported looking terrible for exactly one
+       reason: a DJ rig laid out into a 460px settings column. */
+    body.vjview #setup > :not(.card[data-sec="vj"]) { display: none !important; }
+    body.vjview #setup { display: block; padding: 18px 22px; }
+    body.vjview .card[data-sec="vj"] { display: block !important; width: auto; max-width: 1180px; margin: 0 auto;
+      border: 0; background: none; padding: 0; }
+    body.vjview .card[data-sec="vj"] > h2 { pointer-events: none; font-size: 22px; }
+    body.vjview .card[data-sec="vj"] > h2::after { display: none; }
+    /* On the /vj page itself the signpost TO /vj and its hints are a door painted on
+       the wall of the room you are standing in. */
+    body.vjview #vjOpenBtn, body.vjview .card[data-sec="vj"] > .hint { display: none !important; }
+    body.vjview .vjrow { flex-wrap: wrap; }
+    /* Two decks side by side once there is room for them. */
+    @media (min-width: 900px){
+      body.vjview .vjdecks { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    }
     #vjYtUrl { flex: 1; min-width: 200px; background: #0d1117; color: var(--ink, #dfe8f2);
                border: 1px solid #2a3442; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
     #vjYtUrl.bad { border-color: #e05a5a; }
@@ -539,12 +558,15 @@
       background: var(--panel); border: 1px solid var(--edge);
       border-radius: 14px; padding: 16px; margin-top: 10px;
     }
-    button.ghost {
+    /* ⚠️ `a.ghost` too — the VJ card's "open the decks" is a LINK (it navigates to the
+       /vj route, which a button cannot honestly do), and styled for buttons only it
+       rendered as a default blue hyperlink in the middle of the card. */
+    button.ghost, a.ghost {
       background: rgba(255,255,255,0.03); color: var(--text);
       border: 1px solid var(--edge); border-radius: 9px;
       padding: 13px 18px; font-family: var(--pix); font-size: 12px; cursor: pointer;
     }
-    button.ghost:active { transform: translateY(1px); }
+    button.ghost:active, a.ghost:active { transform: translateY(1px); }
     /* Two buttons under the names box. They wrap rather than shrink — on a narrow
        phone "Fill example names" squeezed to three lines beside Clear. */
     .namebtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -2237,7 +2259,14 @@
     </div>
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
-      <div class="hint" style="text-align:left">Two video decks and two DJ decks, run from here while the game plays fullscreen on the projector. Everything is off until you turn it on, and the game looks and sounds exactly as normal until then.</div>
+      <!-- ⚠️ THE DECKS DO NOT LIVE HERE ANY MORE. They built into this card on the
+           /settings route and were reported looking exactly like what they were: a DJ
+           rig squeezed into a 460px settings column. The deck surface is the /vj route
+           now — full screen, nothing else on it — and this card is the signpost.
+           #vjPanel stays as the build target; only vjOpenView (the /vj route) fills it. -->
+      <div class="hint always" style="text-align:left">Two video decks, two DJ decks, and a background video — run from their own full-screen page while the game plays on the projector. Everything is off until you turn it on there, and the game looks and sounds exactly as normal until then.</div>
+      <a class="ghost" id="vjOpenBtn" href="vj/" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">🎛 Open the VJ decks</a>
+      <div class="hint" style="text-align:left">Opens in its own tab or window &mdash; put it on the laptop screen and the game on the projector. Bookmark <b>vj/</b> under the game&rsquo;s address to go straight there.</div>
       <div id="vjPanel"></div>
     </div>
     <!-- About. The version and the update check live HERE rather than under the title and
@@ -4638,14 +4667,27 @@ let profile = loadProfile();
 //  from a stale localStorage read while a game page is live.
 // ============================================================
 function detectPanel(){
-  if (window.__MAGNETPANEL === 'settings') return true;
+  if (window.__MAGNETPANEL === 'settings' || window.__MAGNETPANEL === 'vj') return true;
   try {
-    if (/[?&]panel=settings(&|$)/.test(location.search)) return true;
-    if (/\/settings\/?$/.test(location.pathname)) return true;
+    if (/[?&]panel=(settings|vj)(&|$)/.test(location.search)) return true;
+    if (/\/(settings|vj)\/?$/.test(location.pathname)) return true;
   } catch(_){}
   return false;
 }
 const PANEL = detectPanel();
+// ⚠️ /vj is a PANEL — it drives the game over the channel and never runs a match — and
+// on top of that it is the DECK SURFACE: the page strips itself down to the VJ card,
+// full screen. One extra flag rather than a third kind of page, so every `PANEL` gate
+// (no update prompts, no cloud pull, no game loop) covers it for free.
+function detectVjView(){
+  if (window.__MAGNETPANEL === 'vj') return true;
+  try {
+    if (/[?&]panel=vj(&|$)/.test(location.search)) return true;
+    if (/\/vj\/?$/.test(location.pathname)) return true;
+  } catch(_){}
+  return false;
+}
+const VJVIEW = detectVjView();
 
 // ============================================================
 //  QR CODE — a URL somebody can point a phone at
@@ -4957,7 +4999,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260823.1240PM';
+const VERSION = '20260823.0230PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4973,6 +5015,14 @@ const VERSION = '20260823.1240PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260823.0230PM', title: 'The VJ decks get their own page',
+    changed: [
+      '<b>The VJ decks moved to their own full-screen page.</b> They were squeezed into the settings column and looked terrible there. Open <b>vj/</b> under the game\u2019s address \u2014 or press the button on the VJ Mode card \u2014 and the whole rig fills the window, with the two decks side by side on a wide screen.',
+      '<b>Matches now default to First to 3.</b> Timed matches are still right there under Match.',
+    ],
+    added: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260823.1240PM', title: 'A video behind the game',
     added: [
       '<b>VJ Mode can play a YouTube video behind the whole game.</b> Paste or drop a link in the VJ panel, and the video shows through the pitch by however much you set \u2014 the lines, the players and the ball stay solid on top.',
@@ -5862,7 +5912,7 @@ const CHANGELOG = [
 // stops either way, so nothing about the save, the presets or the physics changes — but
 // "45" told a player nothing, while "4.5" is a number you can aim at.
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
+function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'g3', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:195, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
@@ -9511,6 +9561,19 @@ function vjDrawMeters(V){
 }
 
 // ---------- Building the panel ----------------------------------------------
+// The /vj route: strip the page to the deck surface and build it full width.
+// ⚠️ By CLASS on the body plus one CSS block, never by deleting nodes — the settings
+// accordion is still this same document, and a build that removed cards would be a
+// second DOM shape for every suite and every getElementById to trip over.
+function vjOpenView(){
+  document.body.classList.add('vjview');
+  // ⚠️ `.card[data-sec="vj"]` — the jump bar's CHIPS carry data-sec too, and a bare
+  // attribute selector found a chip first: the class came off the chip, the card stayed
+  // collapsed, and the route shipped as a heading with nothing under it.
+  const card = document.querySelector('.card[data-sec="vj"]');
+  if (card) card.classList.remove('collapsed');
+  vjBuildPanel();
+}
 function vjBuildPanel(){
   const host = $('vjPanel'); if (!host) return;
   host.innerHTML = '';
@@ -10731,6 +10794,7 @@ function lastSection(){
   return 'theme';
 }
 function collapseAllSections(){
+  if (VJVIEW) return;      // the /vj route's one card stays open — see initCollapsibles
   document.querySelectorAll('.card.collapsible').forEach(card=>{
     card.classList.add('collapsed');
     uiState[card.dataset.sec] = true;
@@ -10745,6 +10809,12 @@ function syncChevrons(){
   });
 }
 function initCollapsibles(){
+  // ⚠️ The /vj route is ONE card, permanently open — the accordion re-collapsing it
+  // after `vjOpenView` is exactly what shipped a page with a heading and nothing under
+  // it. The guard lives here rather than in CSS because out-muscling
+  // `.collapsed > * { display:none !important }` per child would also have to know
+  // which children are flex rows.
+  if (VJVIEW) return;
   const cards = [...document.querySelectorAll('.card.collapsible')];
   // Honour the stored state, but never restore two open at once — an older build
   // could have left several expanded.
@@ -13254,7 +13324,10 @@ function buildSettings(){
   // Changing the Warm-up lobby pick or the display mode changes whether the Warm-up
   // button has anywhere to go, and both of those rebuild the settings.
   syncWarmupOffer();
-  if (PANEL && !$('vjPanel').childElementCount) vjBuildPanel();
+  // ⚠️ The deck surface builds ONLY on /vj now. It used to build inside /settings and
+  // was reported looking exactly like what it was: a DJ rig squeezed into a 460px
+  // settings column. /settings and the in-game card keep a pointer to the route instead.
+  if (VJVIEW && !$('vjPanel').childElementCount) vjOpenView();
   // ⚠️ THE LANGUAGE PASS GOES LAST, after everything above has finished writing fresh
   // ENGLISH into the DOM. It ran before `buildSubTabs()` for one build and the chip rows
   // were the one part of the menu that stayed in English — a walk can only translate what
@@ -28707,7 +28780,7 @@ if (window.__MAGNETDEBUG) {
     DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
-    ytIdFrom, vjYtA, vjYtSync, vjExec,
+    ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
     vjEqDb, vjDuckGoal, vjTake, vjVideoOpacity, vjVideoAudio, vjExec, vjCmd, vjSnap, vjTick,
     vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,
