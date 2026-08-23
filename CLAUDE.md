@@ -3537,6 +3537,24 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   Shown only while VJ Mode is on (off must stay the untouched game), spans built as
   NODES because the message is typed by a person, in `vj` never `sel` (tonight's words,
   the video-id argument), and PANIC clears it. `tests/vjdecks.mjs` holds all of this.
+  ⚠️ **THE TIMELINES ARE SEEK BARS, NOT PICTURES** (`vjSeekBar`, `vjDrawVTime`; the
+  audio WAVEFORM canvas and the video deck's TIMELINE canvas). Reported as *"allow me
+  to skip songs by clicking on that timeline"* — the waveform drew a playhead and
+  ignored every click. Click to jump, drag to scrub (moves throttled to ~45ms so a
+  drag does not flood the channel). ⚠️ **Canvas pointer events, deliberately NOT a
+  range input**, twice over: the waveform already IS the timeline, so a slider under
+  it says the same thing twice; and `SLIDER_GRAB` refuses track taps on touch sliders —
+  right for a settings column you scroll with a thumb, exactly wrong for a seek bar
+  whose whole job is jump-to-here. ⚠️ The panel handler reads the DURATION off
+  `vjView` and the command clamps against the deck's own — the panel is a peer.
+  ⚠️ A test clicking a canvas in the COLLAPSED card reads a zero-width rect and every
+  click lands at position 0 — open the card first or the check is vacuous.
+  ⚠️ **DROP A FILE ON A DECK AND IT LOADS THERE** (`vjDropZone`, on every strip; the
+  library list takes drops too). The literal reading of "drop into Deck A or B", and
+  the third door in beside the deck's LOAD and the library's → A / → B. **Strict about
+  kind**: a video dropped on an audio deck flashes a refusal (`.badfile`) rather than
+  landing somewhere a rule picked — a drop that guesses is the "→ offline deck" secret
+  coming back through a window.
 - **About card (`data-sec="about"`, `buildAbout`, `buildNews`)** — the version (`#ver`),
   **Check for updates** (`#updCheckBtn`) and the **changelog** (`#newsList`), in that order.
   Not under the title and above the fold: the version and the check are things you go

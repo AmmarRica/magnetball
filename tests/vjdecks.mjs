@@ -40,11 +40,14 @@ await p.waitForTimeout(800);
 const tr = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
   const tick = () => new Promise(r => setTimeout(r, 0));
-  M.vjArm(); M.vjSetOn(true);
+  M.vjArm();
   const v = M.vj.va;
-  // A stand-in element that records what the transport does to it.
+  // A stand-in element that records what the transport does to it. ⚠️ readyState 1,
+  // deliberately: the attract demo renders in the background of this whole suite, and
+  // a stub the seam considers drawable (readyState >= 2) reaches ctx.drawImage as a
+  // plain object the moment vj.on and an opacity line up — a timing-dependent throw.
   const el = { currentTime: 5, loop: true, playbackRate: 1, muted: true,
-    videoWidth: 64, videoHeight: 32, readyState: 4,
+    videoWidth: 64, videoHeight: 32, readyState: 1,
     play(){ return Promise.resolve(); }, pause(){}, load(){}, removeAttribute(){} };
   v.el = el; v.ready = true; v.dur = 60; v.opacity = 1; v.paused = false;
   M.vjExec('vplay', { d: 'a', v: true }); await tick();
@@ -282,9 +285,82 @@ ok('...for the audio decks too', /CROSSFADER/.test(ui.aFaded) && /VOLUME is at z
 ok('THE YT LAYER SAYS IT IS SILENT, AND WHY', /silent/.test(ui.ytStat) && /own frame/.test(ui.ytStat),
    ui.ytStat + ' — "audio from the youtube video not working" is answered in the UI, not the docs');
 
+// ===================================================== the timeline is a seek bar ==
+// "Allow me to skip songs by clicking on that timeline" — the waveform and the video
+// timeline are clickable, through the REAL pointer handlers. On this page PANEL is
+// false, so vjCmd executes locally and the click's effect lands on the deck itself.
+// ⚠️ The card ships collapsed and a hidden canvas has a zero-width rect, which makes
+// every click read as position 0 — the card is opened first, or the check is vacuous.
+const sk = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.vjArm();
+  M.vjBuildPanel();
+  const card = document.querySelector('.card[data-sec="vj"]');
+  if (card) card.classList.remove('collapsed');
+  // the panel draws from vjView; the command lands on vj.* — both need the duration
+  const mkEl = () => ({ currentTime: 0, loop: true, playbackRate: 1, muted: true,
+    readyState: 1,   // below the seam's drawable threshold — see the transport block
+    play(){ return Promise.resolve(); }, pause(){}, load(){}, removeAttribute(){} });
+  M.vj.a.el = mkEl(); M.vj.a.ready = true; M.vj.a.dur = 100;
+  M.vj.va.el = mkEl(); M.vj.va.ready = true; M.vj.va.dur = 200;
+  M.vjView = { a: { dur: 100 }, va: { dur: 200 } };
+  const click = (id, frac) => {
+    const cvEl = document.getElementById(id);
+    const r = cvEl.getBoundingClientRect();
+    o[id + 'w'] = Math.round(r.width);
+    cvEl.dispatchEvent(new PointerEvent('pointerdown',
+      { clientX: r.left + r.width * frac, clientY: r.top + 2, buttons: 1, bubbles: true, cancelable: true }));
+  };
+  click('vjWavea', 0.5);  o.audioSeek = M.vj.a.el.currentTime;     // half of 100
+  click('vjWavea', 0.9);  o.audioSeek2 = M.vj.a.el.currentTime;
+  click('vjVSeeka', 0.25); o.videoSeek = M.vj.va.el.currentTime;   // quarter of 200
+  o.wide = o.vjWaveaw > 50 && o.vjVSeekaw > 50;
+  M.vj.a.el = null; M.vj.a.ready = false; M.vj.a.dur = 0;
+  M.vj.va.el = null; M.vj.va.ready = false; M.vj.va.dur = 0;
+  M.vjView = null;
+  return o;
+});
+ok('the canvases render at a real width, or the clicks below prove nothing', sk.wide, JSON.stringify(sk));
+ok('CLICKING THE WAVEFORM SEEKS THE TRACK', Math.abs(sk.audioSeek - 50) <= 2 && Math.abs(sk.audioSeek2 - 90) <= 2,
+   JSON.stringify(sk) + ' — the waveform is the timeline, not a picture');
+ok('CLICKING THE VIDEO TIMELINE SEEKS THE CLIP', Math.abs(sk.videoSeek - 50) <= 2, JSON.stringify(sk));
+
+// ===================================================== drop a file on a deck =======
+const dp = await p.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  const strips = [...document.querySelectorAll('#vjPanel .vjstrip')];   // audio a, b, video a, b
+  const wav = (() => {
+    const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const w = (off, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(off + i, str.charCodeAt(i)); };
+    w(0,'RIFF'); dv.setUint32(4, 36 + n*2, true); w(8,'WAVE'); w(12,'fmt ');
+    dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+    w(36,'data'); dv.setUint32(40,n*2,true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i*2, Math.sin(i/sr*2*Math.PI*330)*9000, true);
+    return new File([buf], 'drop.wav', { type: 'audio/wav' });
+  })();
+  const drop = (elx, file) => { const dt = new DataTransfer(); dt.items.add(file);
+    elx.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); };
+  // the right kind lands: a wav on audio deck B loads it (PANEL false -> loads directly)
+  drop(strips[1], wav);
+  for (let i = 0; i < 30 && !M.vj.b.ready; i++) await new Promise(r => setTimeout(r, 100));
+  o.audioLanded = M.vj.b.ready && M.vj.b.name === 'drop.wav';
+  // the wrong kind is REFUSED visibly, never guessed into another deck
+  const before = M.vj.va.name;
+  drop(strips[2], wav);
+  o.flashed = strips[2].classList.contains('badfile');
+  await new Promise(r => setTimeout(r, 150));
+  o.videoUntouched = M.vj.va.name === before && !M.vj.va.ready;
+  M.vjExec('eject', { kind: 'audio', d: 'b' });
+  return o;
+});
+ok('A FILE DROPPED ON A DECK LOADS INTO THAT DECK', dp.audioLanded,
+   JSON.stringify(dp) + ' — the literal reading of "drop into Deck A or B"');
+ok('...and the wrong kind flashes a refusal instead of guessing', dp.flashed && dp.videoUntouched, JSON.stringify(dp));
+
 await p.close();
 await b.close();
 if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));
-console.log(JSON.stringify({ tr, rot, ld, yt, tk, ui }, null, 1));
+console.log(JSON.stringify({ tr, rot, ld, yt, tk, ui, sk, dp }, null, 1));
 if (fails.length){ console.log('FAIL vjdecks'); for (const f of fails) console.log('  ' + f); process.exit(1); }
 console.log('PASS vjdecks');

@@ -711,6 +711,10 @@
     .vjthumb { width:100%; max-height:120px; aspect-ratio:16/9; object-fit:contain;
                background:#000; border-radius:6px; border:1px solid var(--edge); display:block; }
     .vjthumb.empty { display:none; }
+    /* Drop targets: a deck lights up while a file is over it, and flashes a refusal
+       for the wrong kind — a drop that guesses is the "→ offline deck" secret back. */
+    .vjstrip.drop { border-color:var(--accent); background:rgba(33,230,255,.06); }
+    .vjstrip.badfile { border-color:var(--red, #ff3b6b); }
     #vjYtThumb { width:128px; aspect-ratio:16/9; object-fit:cover; background:#000;
                  border-radius:6px; border:1px solid var(--edge); }
     #vjYtThumb.empty { display:none; }
@@ -9613,6 +9617,7 @@ function vjPanelRender(){
   if (!V){ return; }
   vjSyncControls(V);
   vjDrawWave('a', V.a); vjDrawWave('b', V.b);
+  vjDrawVTime('a', V.va); vjDrawVTime('b', V.vb);
   vjDrawMeters(V);
 }
 // Push values into controls the operator is not currently holding. Rebuilding the
@@ -9666,7 +9671,6 @@ function vjSyncControls(V){
     on('vjVLoop'+id, !!v.loop);
     for (const rt of [0,1,2,3]) on('vjVRot'+id+rt, (v.rot||0) === rt);
     set('vjVOp'+id, Math.round(v.opacity*100));
-    if (v.dur) set('vjVSeek'+id, Math.round(v.pos/v.dur*1000));
     set('vjVTintAmt'+id, Math.round(v.tintAmt*100));
     set('vjVRate'+id, Math.round(v.rate*100));
     on('vjVAudio'+id, v.audioOn);
@@ -9717,7 +9721,7 @@ function vjSyncControls(V){
 function vjVStatText(V, id){
   const v = V['v'+id]; if (!v) return '';
   if (!V.armed) return 'NOT ARMED — press Arm audio on the game page';
-  if (!v.ready) return 'empty — LOAD a clip here, or send one from the Library';
+  if (!v.ready) return 'empty — drop a video file on this deck, LOAD one, or send it from the Library';
   if (!V.on) return 'loaded, dark — VJ MODE is OFF';
   if (v.opacity <= 0.004) return 'loaded, dark — OPACITY is at zero';
   const xg = vjXGain(V.vxf, id, V.vxfCurve);
@@ -9729,7 +9733,7 @@ function vjVStatText(V, id){
 function vjAStatText(V, id){
   const d = V[id]; if (!d) return '';
   if (!V.armed) return 'NOT ARMED — press Arm audio on the game page';
-  if (!d.ready) return 'empty — LOAD a track here, or send one from the Library';
+  if (!d.ready) return 'empty — drop an audio file on this deck, LOAD one, or send it from the Library';
   if (!d.playing) return 'loaded, stopped — ▶ to play';
   if (d.assign === 'off') return 'playing, silent — ASSIGN is off';
   if (d.assign === 'cue') return 'playing in the HEADPHONES only — ASSIGN is cue';
@@ -9964,8 +9968,13 @@ function vjBuildPanel(){
   fi.accept='audio/*,video/*'; fi.className='vjfile';
   fi.onchange = ()=>{ vjAddFiles([...fi.files]); fi.value=''; };
   host.append(fi);
-  host.append(el('div','vjnote','Each row loads into the deck YOU pick — → A or → B. House rule worth keeping: load the deck that is faded out (its status line says which), so the room never hears or sees a track arrive.'));
+  host.append(el('div','vjnote','Each row loads into the deck YOU pick — → A or → B — or drop a file straight onto a deck above. House rule worth keeping: load the deck that is faded out (its status line says which), so the room never hears or sees a track arrive.'));
   const libHost = el('div','vjlib'); libHost.id='vjLib'; host.append(libHost);
+  // Dropped files land in the library too — the file input is the door, not the only one.
+  libHost.addEventListener('dragover', e => e.preventDefault());
+  libHost.addEventListener('drop', e => { e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)
+      vjAddFiles([...e.dataTransfer.files]); });
 
   // ---- presets ------------------------------------------------------------
   host.append(el('h3','vjh','💾 Presets'));
@@ -9982,6 +9991,68 @@ function vjBuildPanel(){
 function vjCanvas(id, w, h){ const c=document.createElement('canvas'); c.id=id; c.width=w; c.height=h;
   c.className='vjcv'; return c; }
 
+// ---- CLICK THE TIMELINE TO JUMP --------------------------------------------
+// The waveform and the video timeline are SEEK BARS, not pictures — "skip songs by
+// clicking on that timeline" is the ask, in those words. Pointer events on the canvas
+// rather than a range input, for two reasons: the waveform already IS the timeline
+// (a second slider under it would be the same information twice), and SLIDER_GRAB
+// deliberately refuses track taps on touch sliders — right for a settings column you
+// scroll with a thumb, exactly wrong for a seek bar whose whole job is jump-to-here.
+// Dragging scrubs; moves are throttled so a drag does not flood the channel.
+function vjSeekBar(cvEl, getDeck, seek){
+  cvEl.style.cursor = 'pointer';
+  cvEl.style.touchAction = 'none';
+  let lastT = 0;
+  const at = ev => {
+    const d = getDeck(); if (!d || !d.dur) return;
+    const now = performance.now();
+    if (ev.type === 'pointermove' && now - lastT < 45) return;
+    lastT = now;
+    const r = cvEl.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width)));
+    seek(frac * d.dur);
+  };
+  cvEl.addEventListener('pointerdown', ev => { ev.preventDefault();
+    try { cvEl.setPointerCapture(ev.pointerId); } catch(_){}
+    at(ev); });
+  cvEl.addEventListener('pointermove', ev => { if (ev.buttons & 1) at(ev); });
+}
+// The video deck's timeline: progress fill + playhead, drawn each panel tick beside
+// the waveforms. It shares the seek wiring above.
+function vjDrawVTime(id, v){
+  const cvT = $('vjVSeek'+id); if (!cvT || !v) return;
+  const c = cvT.getContext('2d'), w = cvT.width, h = cvT.height;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(0, 0, w, h);
+  if (v.dur){
+    const x = v.pos / v.dur * w;
+    c.fillStyle = 'rgba(255,255,255,0.22)'; c.fillRect(0, 0, x, h);
+    c.fillStyle = '#fff'; c.fillRect(Math.max(0, Math.round(x) - 1), 0, 2, h);
+  }
+}
+
+// ---- DROP A FILE ON A DECK -------------------------------------------------
+// The literal reading of "drop into Deck A or B", and the third door in after the
+// deck's LOAD and the library's → A / → B. Strict about kind — a video dropped on an
+// audio deck flashes a refusal rather than silently landing somewhere else: a drop
+// that guesses is the "→ offline deck" secret coming back through a window.
+function vjDropZone(strip, kind, id){
+  strip.addEventListener('dragover', e => { e.preventDefault(); strip.classList.add('drop'); });
+  strip.addEventListener('dragleave', () => strip.classList.remove('drop'));
+  strip.addEventListener('drop', e => {
+    e.preventDefault(); strip.classList.remove('drop');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const isVid = /^video\//.test(f.type) || /\.(mp4|webm|mov|mkv)$/i.test(f.name);
+    if ((kind === 'video') !== isVid){
+      strip.classList.add('badfile');
+      setTimeout(() => strip.classList.remove('badfile'), 900);
+      return;
+    }
+    vjSendFile(kind, id, f);
+  });
+}
+
 function vjAudioStrip(id, el, row, btn, slider, lab){
   const s = el('div','vjstrip');
   const head = row('vjhead');
@@ -9990,7 +10061,10 @@ function vjAudioStrip(id, el, row, btn, slider, lab){
               vjLoadBtn('audio', id, btn),
               btn('vjAEject'+id,'⏏', ()=>vjCmd('eject',{kind:'audio', d:id})));
   s.append(head);
-  s.append(vjCanvas('vjWave'+id, 420, VJUI.waveH));
+  // The waveform is the track's TIMELINE: click it to jump, drag it to scrub.
+  const wv = vjCanvas('vjWave'+id, 420, VJUI.waveH);
+  vjSeekBar(wv, ()=>vjView && vjView[id], t=>vjCmd('seek',{d:id, v:t}));
+  s.append(wv);
   s.append((()=>{const t=el('div','vjstat',''); t.id='vjAStat'+id; return t;})());
   const t1 = row();
   t1.append(btn('vjPlay'+id,'▶︎/❚❚', ()=>vjCmd('play',{d:id, v: !(vjView&&vjView[id]&&vjView[id].playing)})),
@@ -10052,6 +10126,7 @@ function vjAudioStrip(id, el, row, btn, slider, lab){
     asg.append(btn('vjAsg'+id+a, a, ()=>vjCmd('deck',{d:id,set:{assign:a}})));
   asg.append(btn('vjCue'+id,'🎧 CUE', ()=>vjCmd('deck',{d:id,set:{cue: !(vjView&&vjView[id]&&vjView[id].cue)}})));
   s.append(asg);
+  vjDropZone(s, 'audio', id);
   return s;
 }
 
@@ -10091,11 +10166,12 @@ function vjVideoStrip(id, el, row, btn, slider, lab){
             btn('vjVLoop'+id,'LOOP', ()=>vjCmd('vset',{d:id,set:{loop: !(vjView&&vjView['v'+id]&&vjView['v'+id].loop)}})),
             (()=>{const t=el('div','vjpos','0:00 / 0:00'); t.id='vjVPos'+id; return t;})());
   s.append(tp);
+  // The timeline: click to jump, drag to scrub — a canvas seek bar, not a range input,
+  // for the reason written on vjSeekBar.
   const sc = row();
-  sc.append(lab('SCRUB'), slider('vjVSeek'+id,0,1000,1, frac=>{
-    const v = vjView && vjView['v'+id];
-    if (v && v.dur) vjCmd('vseek',{d:id, v: frac/1000 * v.dur});
-  }, 0));
+  const tl = vjCanvas('vjVSeek'+id, 420, 12);
+  vjSeekBar(tl, ()=>vjView && vjView['v'+id], t=>vjCmd('vseek',{d:id, v:t}));
+  sc.append(lab('TIMELINE'), tl);
   s.append(sc);
   const o = row();
   o.append(lab('OPACITY'), slider('vjVOp'+id,0,100,1, v=>vjCmd('vop',{d:id, v:v/100}), 0));
@@ -10130,6 +10206,7 @@ function vjVideoStrip(id, el, row, btn, slider, lab){
             slider('vjVAudioGain'+id,0,100,1, v=>vjCmd('vset',{d:id,set:{audioGain:v/100}}), 0));
   s.append(au);
   s.append(el('div','vjnote','Off by default. Video and music are decoupled — any clip plays under any unrelated track.'));
+  vjDropZone(s, 'video', id);
   return s;
 }
 
@@ -29102,7 +29179,7 @@ if (window.__MAGNETDEBUG) {
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,
     vjDrawFit, vjEject, vjSendFile, vjVideoWants, vjVideoPlay, vjTickerSync,
     get vjTickerOn(){ return vjTickerOn; }, vjVStatText, vjAStatText, vjYtStatText,
-    vjSyncControls, tickerFill, vjAddFiles, vjBuildLib,
+    vjSyncControls, tickerFill, vjAddFiles, vjBuildLib, vjSeekBar, vjDropZone, vjDrawVTime,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
     vjEqDb, vjDuckGoal, vjTake, vjVideoOpacity, vjVideoAudio, vjExec, vjCmd, vjSnap, vjTick,
     vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,
