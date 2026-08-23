@@ -68,6 +68,18 @@
     button.primary { box-shadow: 0 4px 14px rgba(0,0,0,.30) !important; }
 
     #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+    /* The VJ background video. `pointer-events:none` twice over — a layer that eats a tap
+       is the #lobbyStartBtn bug from the other direction — and sized to COVER: a 16:9
+       frame centred and scaled up until both axes are filled, whatever the window is. */
+    #ytbg { position: fixed; inset: 0; overflow: hidden; pointer-events: none;
+            background: #000; display: none; }
+    #ytbg.live { display: block; }
+    #vjYtUrl { flex: 1; min-width: 200px; background: #0d1117; color: var(--ink, #dfe8f2);
+               border: 1px solid #2a3442; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+    #vjYtUrl.bad { border-color: #e05a5a; }
+    #ytbg iframe { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+                   width: max(100vw, 177.78vh); height: max(100vh, 56.25vw);
+                   border: 0; pointer-events: none; }
 
     /* ---------- Screens ---------- */
     .screen {
@@ -1615,6 +1627,11 @@
   </style>
 </head>
 <body>
+  <!-- ⚠️ The VJ background-video layer. BEFORE the canvas on purpose: both are
+       position:fixed with no z-index, so DOM order is what stacks the canvas above it —
+       the video can only ever show through where the canvas is made transparent, which
+       is the same structural guarantee the video decks have (players paint later). -->
+  <div id="ytbg" aria-hidden="true"></div>
   <canvas id="game"></canvas>
 
   <!-- HUD -->
@@ -4940,7 +4957,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260822.0655AM';
+const VERSION = '20260823.1240PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -4956,6 +4973,14 @@ const VERSION = '20260822.0655AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260823.1240PM', title: 'A video behind the game',
+    added: [
+      '<b>VJ Mode can play a YouTube video behind the whole game.</b> Paste or drop a link in the VJ panel, and the video shows through the pitch by however much you set \u2014 the lines, the players and the ball stay solid on top.',
+      'It plays muted and needs the network; the sound stays with your decks, and PANIC kills it along with everything else.',
+    ],
+    changed: [],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260822.0655AM', title: 'A cleaner icon',
     changed: [
       '<b>The app icon is just the pitch now.</b> It had two players and a ball on it as well, which at the size an icon is actually seen \u2014 a tab, a home screen \u2014 was three coloured dots on top of the markings rather than three things you could make out.',
@@ -8556,6 +8581,7 @@ const VJ = {
   videoFxRes:   0.5,      // filtered decks render through an intermediate at this
                           // scale — ctx.filter cost is per-pixel, and at full res it
                           // measured 2.2x the whole frame budget on its own.
+  ytDefault:    0.55,     // background-video opacity a fresh layer starts at
   // Audio deck EQ. Shelf/peak corner frequencies and the gain that counts as a kill.
   eqLowHz:      250,
   eqMidHz:      1000,
@@ -8634,6 +8660,9 @@ const vj = {
   cue:{ level:0.8, deviceId:'', el:null, dest:null, ok:false, why:'' },
   outDeviceId:'',
   lib:{ audio:[], video:[] },
+  // The YouTube background layer. In `vj`, never `sel` — the id is a thing you loaded
+  // for tonight, not a setting, and `saveSel`/`syncAdopt` must not carry it.
+  yt:{ id:'', op:0 },
   pendingTake:null,
   // Everything the panel needs to draw itself, refreshed at VJ.meterHz.
   _lastPush:0,
@@ -9001,7 +9030,78 @@ function vjTake(){
 // ---------- The render seam --------------------------------------------------
 // Called from drawPitch between the surface and the markings. Returns immediately
 // when VJ Mode is off, so this is a branch and nothing else on the normal path.
+// ---------- Background video (a YouTube embed BEHIND the canvas) -------------
+// ⚠️ **A YOUTUBE VIDEO CANNOT BE A DECK, and that is a platform fact rather than a
+// choice.** The embed iframe is the only way YouTube plays, and an iframe cannot be
+// drawn into a canvas — so it cannot go through `vjPaintVideo`, cannot be filtered,
+// tinted or crossfaded, and cannot feed the audio graph. What it CAN be is the layer
+// behind everything: the iframe sits under the canvas (DOM order — see the markup), and
+// `vjPaintVideo` punches the painted ground translucent with `destination-out` at the
+// exact seam the decks already own. Everything painted BEFORE that seam (the surround
+// fill, the court, the mow, a DYN_FIELDS painter) lets the video through by the layer's
+// opacity; everything painted AFTER it — markings, trails, discs, ball, HUD — is as
+// opaque as it ever was. The two structural guarantees survive untouched, and the
+// markings additionally keep their `vjMarkA` floor.
+// ⚠️ **The iframe loads nothing of YouTube's INTO this page** — no API script, no SDK.
+// It is a plain embed on the privacy-enhanced domain, muted (autoplay policy requires
+// it, and its audio could not join the mix bus anyway — the media is cross-origin).
+// Like the leaderboard's sheets endpoint, it is a service the game calls when asked;
+// the game itself stays dependency-free and works offline with the layer simply dark.
+// ⚠️ **The ID is VALIDATED to exactly eleven [A-Za-z0-9_-]**, because it is interpolated
+// into an iframe `src`: an unvalidated "id" is an open door to embedding an arbitrary
+// page behind the game.
+// ⚠️ In `vj`, never `sel` — tonight's video is not a setting (`saveSel` serialises all
+// of `sel` and `syncAdopt` shallow-merges it, the arcade-takings argument).
+function ytIdFrom(str){
+  const t = String(str || '').trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(t)) return t;
+  const m = t.match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : '';
+}
+function vjYtA(){
+  return (!PANEL && vj.on && vj.yt.id && vj.yt.el) ? Math.max(0, Math.min(1, vj.yt.op)) : 0;
+}
+// The one owner of the iframe. Called from the `yt` command, `vjSetOn` and `vjPanic`;
+// it reads the state and makes the DOM match, so there is no add path and remove path
+// to drift apart.
+function vjYtSync(){
+  const host = $('ytbg'); if (!host || PANEL) return;
+  const want = vj.on && vj.yt.id;
+  const cur = vj.yt.el;
+  if (!want){
+    if (cur){ cur.remove(); vj.yt.el = null; }
+    host.classList.remove('live');
+    return;
+  }
+  const src = 'https://www.youtube-nocookie.com/embed/' + vj.yt.id +
+    '?autoplay=1&mute=1&controls=0&loop=1&playlist=' + vj.yt.id +
+    '&playsinline=1&rel=0&iv_load_policy=3&modestbranding=1';
+  if (!cur || cur.dataset.vid !== vj.yt.id){
+    if (cur) cur.remove();
+    const f = document.createElement('iframe');
+    f.dataset.vid = vj.yt.id;
+    f.allow = 'autoplay; encrypted-media';
+    f.title = 'Background video';
+    f.src = src;
+    host.appendChild(f);
+    vj.yt.el = f;
+  }
+  host.classList.add('live');
+}
 function vjPaintVideo(L, T, W, H){
+  // ⚠️ The background punch runs even with no DECK loaded — `vj.va` gates the decks
+  // below, not this — and at IDENTITY transform over the whole canvas: this is called
+  // inside `pitchXform` plus the turf tilt, and a punch in that frame would cut a
+  // rotated rectangle out of the wrong part of the screen in deck view.
+  const ya = vjYtA();
+  if (ya > 0.004){
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = ya;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.restore();
+  }
   if (!vj.on || !vj.va) return;
   for (const [v, side] of [[vj.va,'a'], [vj.vb,'b']]){
     if (!v || !v.ready || !v.el || v.el.readyState < 2) continue;
@@ -9105,6 +9205,7 @@ function vjPanic(){
     vjDisarmChain();
   }
   if (sel.vj) sel.vj.on = false;
+  vj.yt.id = ''; vjYtSync();   // the background video is a deck for PANIC purposes
   toast('VJ PANIC — decks killed, theme restored', 'warn', '🛑');
   vjPush(true);
 }
@@ -9119,6 +9220,7 @@ function vjSetOn(on){
     for (const v of [vj.va, vj.vb]) if (v) vjVideoPlay(v, false);
     vjDisarmChain();
   }
+  vjYtSync();                  // the background layer follows vj.on, both directions
   vjApplyMix();
   vjPush(true);
 }
@@ -9172,6 +9274,12 @@ const VJ_CMDS = {
   vaudio:  a => vjVideoAudio(a.d==='b'?vj.vb:vj.va, a.v),
   vseek:   a => { const v=a.d==='b'?vj.vb:vj.va; if(v.el) try{ v.el.currentTime=+a.v; }catch(_){} },
   preset:  a => vjPresetApply(a),
+  // Background video: {id} sets/clears the layer (already validated panel-side, and
+  // validated AGAIN here — the panel is a peer, not a trust boundary), {op} moves it.
+  yt:      a => { if (a && 'id' in a) vj.yt.id = ytIdFrom(a.id);
+                  if (a && 'op' in a) vj.yt.op = Math.max(0, Math.min(1, +a.op || 0));
+                  if (vj.yt.id && vj.yt.op === 0) vj.yt.op = VJ.ytDefault;
+                  vjYtSync(); vjPush(true); },
 };
 function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (f) try { f(arg); } catch(e){ console.warn('vj', cmd, e); } }
 
@@ -9189,6 +9297,7 @@ function vjSnap(full){
     dur:v.dur, pos:v.pos, opacity:v.opacity, fitMode:v.fitMode, rate:v.rate,
     tint:v.tint, tintAmt:v.tintAmt, filter:v.filter, audioOn:v.audioOn, audioGain:v.audioGain });
   return { on:vj.on, armed:vj.armed, armError:vj.armError,
+    yt:{ id:vj.yt.id, op:vj.yt.op },
     a:deck(vj.a), b:deck(vj.b), va:vid(vj.va), vb:vid(vj.vb),
     xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
     master:vj.master, masterL:vj.masterL, masterR:vj.masterR,
@@ -9459,6 +9568,40 @@ function vjBuildPanel(){
   qrow.append(lab('TAKE lands on'));
   for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>{ VJ.takeQuant=q; vjCmd('vset',{d:'a',set:{}}); }));
   host.append(qrow);
+
+  // ---- background video ---------------------------------------------------
+  // ⚠️ A YouTube embed cannot be a deck (an iframe cannot be drawn into a canvas), so
+  // this is its own layer BEHIND the whole game — see the write-up at `ytIdFrom`.
+  host.append(el('h3','vjh','📺 Background video'));
+  const yrow = row('vjyt');
+  const yIn = document.createElement('input');
+  yIn.type = 'text'; yIn.id = 'vjYtUrl'; yIn.placeholder = 'Paste or drop a YouTube link…';
+  yIn.autocomplete = 'off'; yIn.spellcheck = false;
+  const ySet = (raw) => {
+    const id = ytIdFrom(raw);
+    if (!id){ yIn.classList.add('bad'); setTimeout(()=>yIn.classList.remove('bad'), 900); return; }
+    yIn.value = raw; vjCmd('yt', { id });
+  };
+  yIn.addEventListener('keydown', e => { if (e.key === 'Enter') ySet(yIn.value); });
+  yrow.append(yIn,
+    btn('vjYtSet','SET', ()=>ySet(yIn.value)),
+    btn('vjYtClr','CLEAR', ()=>{ yIn.value=''; vjCmd('yt', { id:'' }); }));
+  host.append(yrow);
+  const yorow = row();
+  yorow.append(lab('SHOW-THROUGH'),
+    slider('vjYtOp',0,100,1, v=>vjCmd('yt', { op: v/100 }), Math.round(VJ.ytDefault*100)));
+  host.append(yorow);
+  // ⚠️ Dropping a link works ANYWHERE on the row, not only in the box — a VJ mid-set is
+  // dragging from another window and should not have to hit a text input.
+  for (const zone of [yrow, yorow]){
+    zone.addEventListener('dragover', e => { e.preventDefault(); });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      const txt = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+      if (txt) ySet(txt.split('\n')[0]);
+    });
+  }
+  host.append(el('div','vjnote','Plays muted behind the whole game — the pitch fades by the SHOW-THROUGH amount, the lines and the players never do. It needs the network, it cannot be beat-synced or filtered (YouTube only plays in its own frame), and its sound cannot join the mix: audio stays with the decks.'));
 
   // ---- game SFX + cue -----------------------------------------------------
   host.append(el('h3','vjh','⚽ Game sound'));
@@ -28564,6 +28707,7 @@ if (window.__MAGNETDEBUG) {
     DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
+    ytIdFrom, vjYtA, vjYtSync, vjExec,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
     vjEqDb, vjDuckGoal, vjTake, vjVideoOpacity, vjVideoAudio, vjExec, vjCmd, vjSnap, vjTick,
     vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,

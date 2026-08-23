@@ -3425,6 +3425,36 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **`ctx.filter` at full resolution cost 2.2× the entire frame budget** (45.9ms vs 20.4ms
   for the same two draws). Deck looks render through a `VJ.videoFxRes` intermediate; tint is
   a composite op, which is free. A deck at zero opacity is not decoded at all.
+  ⚠️ **A YOUTUBE VIDEO CAN BE THE BACKGROUND, AND IT CANNOT BE A DECK — that is a
+  platform fact, not a choice** (`vj.yt`, `ytIdFrom`, `vjYtSync`, `vjYtA`, the `yt`
+  command; panel row under Video decks). The embed iframe is the only way YouTube plays
+  and an iframe cannot be drawn into a canvas, so it cannot be filtered, tinted,
+  crossfaded or beat-synced, and its audio cannot join the mix. What it CAN be is the
+  layer behind everything: the iframe sits UNDER the canvas (DOM order — it is the
+  element before `#game`, both fixed, no z-index) and `vjPaintVideo` punches the painted
+  ground translucent with `destination-out` at the exact seam the decks already own.
+  Everything painted before the seam — surround, court, mow, a `DYN_FIELDS` painter —
+  lets the video through by the layer's opacity; markings, trails, discs, ball and HUD
+  paint after and stay opaque, so both structural guarantees survive untouched.
+  ⚠️ **The punch runs at IDENTITY transform** (`setTransform`), because the seam sits
+  inside `pitchXform` plus the turf tilt: punched in that frame, deck view's quarter-turn
+  cuts a rotated rectangle and leaves the screen corners sealed — and at rotation zero
+  the mistake is invisible, which a sabotage proved by passing every other check.
+  ⚠️ **The ID is a security boundary**: it is interpolated into an iframe `src`, so
+  `ytIdFrom` accepts exactly eleven `[A-Za-z0-9_-]` (from watch/youtu.be/shorts/embed/
+  live URLs on YouTube's OWN hosts, or bare) and the command validates AGAIN game-side —
+  the /settings panel is a peer, not a trust boundary. A `watch?v=` on any other host
+  parses to nothing.
+  ⚠️ **No script of YouTube's enters the page** — no IFrame API, no SDK. A plain embed on
+  the privacy-enhanced domain (`youtube-nocookie.com`), muted (autoplay policy requires
+  it, and the audio could not join the bus anyway — the media is cross-origin). Like the
+  leaderboard's sheets endpoint: a service called when asked, and the game stays
+  dependency-free and works offline with the layer simply dark.
+  ⚠️ **In `vj`, never `sel`** — tonight's video is not a setting (the arcade-takings
+  argument). VJ OFF parks the layer and keeps the id, so switching the rig off is not
+  choosing a new video; PANIC clears the id outright. `tests/vjyt.mjs`, whose probes are
+  the canvas's own ALPHA channel — the iframe never loads in a headless run, but the hole
+  in the canvas either exists or it does not.
   The limiter is inserted on arm and **removed** when VJ Mode is off, so "additive" is literal.
   `Aud` gained buses (`sfxBus → mainMix → master`); with VJ off that is three unity gains and
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
