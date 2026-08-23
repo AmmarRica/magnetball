@@ -60,6 +60,10 @@ await start();
 o.sliderFocusReleased = await (async ()=>{
   // Focus a Game Feel slider and check it IS focused (or the rest is vacuous)
   await p.evaluate(()=>{
+    // ⚠️ Game Feel is a PANE of the Options card now, so its sliders are `display:none`
+    // until the section is opened — and `focus()` on a hidden input silently does nothing,
+    // which made `focusedBefore` false and the whole check vacuous.
+    window.__magnet.openSection('feel');
     const inp=document.querySelector(window.__magnet.feelSliderGroups().map(g=>'#'+window.__magnet.feelSliderWrapId(g)+' input').join(', '));
     inp.focus(); });
   const focusedBefore = await p.evaluate(()=>document.activeElement.tagName === 'INPUT');

@@ -352,7 +352,13 @@ const ui = await p.evaluate(()=>{
   const host = document.getElementById('sideViewPick');
   o.exists = !!host;
   o.tiles = host ? host.querySelectorAll('.opt').length : 0;
-  o.inGameFeel = !!(host && host.closest('.card') && host.closest('.card').dataset.sec === 'feel');
+  // ⚠️ **THE NEAREST `[data-sec]`, NOT THE NEAREST `.card`.** Controls, Display, Sound,
+  // Game Feel and About are PANES of the Options card now, and each carries its own
+  // `data-sec` — so a `.card` lookup answers `options` for all five and this check would
+  // be asking which card rather than which section. `:not(.jumpchip)` because the jump
+  // bar's chips carry `data-sec` too.
+  const secOf = el => el && el.closest('#setup [data-sec]:not(.jumpchip)');
+  o.inGameFeel = !!(secOf(host) && secOf(host).dataset.sec === 'feel');
   M.sel.sideView = 'show'; M.saveSel();
   return o;
 });

@@ -26,8 +26,10 @@ await p.waitForTimeout(700);
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
-  const card = document.querySelector('#setup .card.collapsible[data-sec="theme"]');
-  card.classList.remove('collapsed');
+  // ⚠️ Theme is a section inside Display inside Options now, so there is no
+  // `.card[data-sec="theme"]` to un-collapse. `openSection` is the one thing that knows
+  // how to reach a nested section, and using it means this cannot go stale again.
+  M.openSection('theme');
   M.buildSettings();
   const slots = () => Object.fromEntries(M.SLOT_KEYS.map(k=>[k, M.SLOTS[k].get()]));
 

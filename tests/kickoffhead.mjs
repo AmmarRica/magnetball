@@ -86,8 +86,10 @@ const r = await p.evaluate(async ()=>{
   const openOnes = () => [...document.querySelectorAll('#setup .card.collapsible')]
     .filter(c=>!c.classList.contains('collapsed')).map(c=>c.dataset.sec);
   o.matchAloneWhenOpen = JSON.stringify(openOnes()) === '["match"]';
+  // ⚠️ Theme is a section inside Display inside Options, so the CARD that opens is
+  // `options` — the accordion still leaves exactly one open, which is the claim.
   M.openLook('theme'); await wait(80);
-  o.otherSectionClosesMatch = JSON.stringify(openOnes()) === '["theme"]';
+  o.otherSectionClosesMatch = JSON.stringify(openOnes()) === '["options"]';
 
   // --- The other sections' sticky headers pin below the KICK OFF bar, and the
   // offset is measured from the HEADER (a sticky button nested in a sticky header
@@ -114,8 +116,14 @@ const r = await p.evaluate(async ()=>{
   // ...measured on the REAL pinned rectangles rather than the computed `top` values, because
   // what was reported is what you SEE: three bars, nested, in that order, with no gaps.
   const su2 = document.getElementById('setup');
-  su2.scrollTop = 1400;
-  const feelHdr = document.querySelector('#setup .card.collapsible[data-sec="feel"] > h2');
+  // ⚠️ **OPEN A CARD FIRST, AND SCROLL TO THE BOTTOM, NOT TO A MAGIC 1400.** With eleven
+  // collapsed cards the page was over 1400px tall by itself; with four it is not, so the
+  // scroll clamped a few pixels down, nothing pinned, and this measured a page that had
+  // barely moved. A pinning check needs something to scroll past.
+  M.openSection('options'); await wait(80);
+  su2.scrollTop = su2.scrollHeight;
+  // Game Feel is a pane of Options now — the card whose header pins is Options.
+  const feelHdr = document.querySelector('#setup .card.collapsible[data-sec="options"] > h2');
   const kb = head.getBoundingClientRect(), jb = jump.getBoundingClientRect(),
         hb = feelHdr.getBoundingClientRect();
   o.pinned = { kick:[Math.round(kb.top), Math.round(kb.bottom)],

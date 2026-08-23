@@ -132,8 +132,10 @@ const taps = await p.evaluate(() => {
 // ================================================================ sound tabs ==
 const sound = await p.evaluate(() => {
   const M = window.__magnet, o = {};
+  // ⚠️ Sound is a PANE of the Options card now, and it carries its own `data-sec` — so
+  // the node to measure is the section, not the card that happens to contain it.
   M.openLook('sound');
-  const card = document.querySelector('.card[data-sec="sound"]');
+  const card = document.querySelector('#setup [data-sec="sound"]:not(.jumpchip)');
   o.chips = [...card.querySelectorAll('.subchip')].length;
   o.panes = [...card.querySelectorAll('.subpane')].map(e => e.dataset.pane);
   // ⚠️ Built FROM `SFX_CATS`, never a second list: a seventh category must arrive with its
@@ -144,8 +146,10 @@ const sound = await p.evaluate(() => {
   o.screenfuls = +(card.getBoundingClientRect().height / window.innerHeight).toFixed(2);
   // Master / Volume / Set stay OUTSIDE the tabs: all three act on the whole card, and a
   // set fills in every pane at once.
-  o.masterOutside = !document.getElementById('sndMaster').closest('.subpane');
-  o.setOutside    = !document.getElementById('sfxSetPick').closest('.subpane');
+  // ⚠️ Outside the SOUND tabs specifically — both now sit inside the Options card's own
+  // `sound` pane, which is a different tab row one level up and not what this is about.
+  o.masterOutside = !document.getElementById('sndMaster').closest('.subpane[data-group="sound"]');
+  o.setOutside    = !document.getElementById('sfxSetPick').closest('.subpane[data-group="sound"]');
   // Switching works, and only one pane shows.
   M.showSubTab('sound', 'net');
   const on = [...card.querySelectorAll('.subpane')].filter(e => e.classList.contains('on'));
@@ -170,7 +174,7 @@ const dead = await p.evaluate(() => {
     // sentence — but the sentence is what the check was ever about, so it is now looked
     // for by its words rather than by the box it used to sit in.
     onlineCardGone: !document.querySelector('.card[data-sec="online"]'),
-    onlineSaysSomething: (document.querySelector('.card[data-sec="about"]') || {}).textContent || '',
+    onlineSaysSomething: (document.querySelector('#setup [data-sec="about"]:not(.jumpchip)') || {}).textContent || '',
   };
 });
 await p.close();

@@ -10,6 +10,11 @@ const r = await p.evaluate(async ()=>{
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.sel.display='deck'; M.applyDisplayMode();
   await new Promise(r=>setTimeout(r,150));
+  // ⚠️ Start from nothing open. Match is the card open on a first run now, so the first
+  // COLLAPSED header found below would expand one card and — the accordion — close a
+  // bigger one, which measures as fewer controls rather than more.
+  M.collapseAllSections();
+  await new Promise(r=>setTimeout(r,80));
   M.deckPaint();
   o.focusables = M.deckFocusables().length;
   // find a collapsed card header in the focus list and activate it

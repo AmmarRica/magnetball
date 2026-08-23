@@ -68,9 +68,11 @@ const r = await p.evaluate(async ()=>{
   o.fsIsFocusable = false;
   M.sel.display='deck'; M.applyDisplayMode(); await wait(200);
   M.setDockCollapsed(false); await wait(120);
-  // expand the Display card so its controls are reachable, then look for fsBtn
-  const hdr=[...M.deckFocusables()].find(el=>el.tagName==='H2' && /display/i.test(el.textContent));
-  if (hdr){ hdr.click(); await wait(80); }
+  // ⚠️ Display is a PANE of Options now, not a card with an `h2` of its own — so there is
+  // no heading in the focus list to click. `openSection` is the one thing that knows how to
+  // reach a section wherever it lives, and going through it means this cannot go stale
+  // again the next time the menu is rearranged.
+  M.openSection('display'); await wait(80);
   o.fsIsFocusable = M.deckFocusables().some(el=>el.id==='fsBtn');
   o.orientFocusable = M.deckFocusables().some(el=>el.closest && el.closest('#orientPick'));
   return o;

@@ -91,7 +91,14 @@ const s = await ps.evaluate(() => {
   const o = {};
   o.decksBuilt = document.getElementById('vjPanel').childElementCount;
   o.vjview = document.body.classList.contains('vjview');
-  document.querySelector('.card[data-sec="vj"] > h2').click();
+  // ⚠️ **THE VJ CARD IS NOT ON /settings EITHER ANY MORE.** It is hidden everywhere but
+  // the /vj route — asked for, and consistent: one surface for the decks. So the signpost
+  // moved OUT of it, into About, and that is where this looks for it. The card node still
+  // has to exist (this is the same document /vj serves) and still has to be `display:none`.
+  const vjCard = document.querySelector('#setup > .card[data-sec="vj"]');
+  o.cardStillExists = !!vjCard;
+  o.cardHiddenHere = !!vjCard && getComputedStyle(vjCard).display === 'none';
+  window.__magnet.openSection('about');
   const link = document.getElementById('vjOpenBtn');
   o.linkThere = !!link;
   o.linkHref = link ? link.getAttribute('href') : '';
@@ -106,8 +113,10 @@ const s = await ps.evaluate(() => {
 await ps.close();
 ok('THE DECKS ARE GONE FROM /settings', s.decksBuilt === 0 && !s.vjview,
    JSON.stringify(s) + ' — removing them from this screen is the ask, in those words');
-ok('...and the signpost to /vj is there instead', s.linkThere && s.linkVisible && s.linkHref === 'vj/' && s.linkNewTab,
-   JSON.stringify(s) + ' — a card that says the decks moved without saying where is a feature deleted');
+ok('...and the CARD is gone from this screen too', s.cardStillExists && s.cardHiddenHere,
+   JSON.stringify(s) + ' — one surface for the decks; the node must survive because /vj serves this same document');
+ok('...and the signpost to /vj is in About instead', s.linkThere && s.linkVisible && s.linkHref === 'vj/' && s.linkNewTab,
+   JSON.stringify(s) + ' — hiding the card without saying where the decks went is a feature deleted');
 ok('...dressed as a button, not a bare hyperlink', s.linkStyled, JSON.stringify(s));
 
 // ===================================================== the game page ===============
@@ -121,6 +130,10 @@ const g = await pg.evaluate(() => {
   o.vjview = M.VJVIEW;
   o.decksBuilt = document.getElementById('vjPanel').childElementCount;
   o.linkThere = !!document.getElementById('vjOpenBtn');
+  const vjCard = document.querySelector('#setup > .card[data-sec="vj"]');
+  o.cardHidden = !!vjCard && getComputedStyle(vjCard).display === 'none';
+  o.aboutHasIt = !!(document.getElementById('vjOpenBtn') || {}).closest &&
+                 document.getElementById('vjOpenBtn').closest('[data-sec="about"]') !== null;
   // ⚠️ FIRST TO 3 IS THE DEFAULT MATCH LENGTH — asked for alongside this route. The
   // value is the LENGTHS key 'g3', and it must exist there or startMatch hands
   // `undefined.goals` to the whistle.
@@ -132,6 +145,8 @@ const g = await pg.evaluate(() => {
 await pg.close();
 ok('the game page keeps the signpost and never the decks', !g.vjview && g.decksBuilt === 0 && g.linkThere,
    JSON.stringify(g));
+ok('...with the VJ card hidden and the signpost filed under About', g.cardHidden && g.aboutHasIt,
+   JSON.stringify(g) + ' — a feature you cannot find is a feature that does not exist, so the one line saying where it went stays');
 ok('FIRST TO 3 IS THE DEFAULT MATCH LENGTH', g.defLen === 'g3' && g.lenExists && g.lenIsFirstTo3,
    JSON.stringify({ len: g.defLen, exists: g.lenExists, goals3: g.lenIsFirstTo3 }) +
    ' — and it must be a real LENGTHS key, or a fresh install hands undefined to the whistle');

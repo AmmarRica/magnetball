@@ -156,7 +156,13 @@ const r = await p.evaluate(() => {
   const host = document.getElementById('touchDigPick');
   o.controlExists = !!host;
   o.controlTiles = host ? host.querySelectorAll('.opt').length : 0;
-  o.inControlsCard = !!(host && host.closest('.card') && host.closest('.card').dataset.sec === 'controls');
+  // ⚠️ **THE NEAREST `[data-sec]`, NOT THE NEAREST `.card`.** Controls, Display, Sound,
+  // Game Feel and About are PANES of the Options card now, and each carries its own
+  // `data-sec` — so a `.card` lookup answers `options` for all five and this check would
+  // be asking which card rather than which section. `:not(.jumpchip)` because the jump
+  // bar's chips carry `data-sec` too.
+  const secOf = el => el && el.closest('#setup [data-sec]:not(.jumpchip)');
+  o.inControlsCard = !!(secOf(host) && secOf(host).dataset.sec === 'controls');
   o.findableBySearch = M.menuSearchRank(M.menuSearchIndex(), 'thumbstick').length > 0
                     && M.menuSearchRank(M.menuSearchIndex(), 'digital').length > 0;
   return o;

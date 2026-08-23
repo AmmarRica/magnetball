@@ -68,17 +68,24 @@ const r = await p.evaluate(() => {
 
   // ---- 2. it actually translates ------------------------------------------
   setLang('en');
-  o.enHeads = heads().join('|');
+  // ⚠️ **HEADINGS *AND* THE OPTIONS CHIPS.** Display, Sound, Controls, Game Feel and
+  // About are chips inside the Options card now rather than card headings, so a
+  // heading-only read would say the settings words had vanished when they had only
+  // moved. This is a translation check, not a layout one — `named` is what has to hold.
+  // ⚠️ The ROUND TRIP below compares against `o.enHeads`, so both sides must be measured
+  // the same way: one helper, used everywhere, or English-restored looks like a change.
+  const named = () => heads().concat(chips('options')).join('|');
+  o.enHeads = named();
   o.enHasSettingsWords = /Display/.test(o.enHeads) && /Sound/.test(o.enHeads);
   setLang('es');
-  o.esHeads = heads().join('|');
+  o.esHeads = named();
   o.esNamed = /Pantalla/.test(o.esHeads) && /Sonido/.test(o.esHeads) && /Tu jugador/.test(o.esHeads);
   o.esKick = document.querySelector('#matchCard > h2').textContent.trim().split('\n').map(x => x.trim()).join(' ');
   o.esKickNamed = /SAQUE/.test(o.esKick);
   // ⚠️ The chip rows, which is the check that catches the pass running too early.
   M.openSection('match');
   o.esChips = chips('match').join(',');
-  o.esChipsNamed = o.esChips === 'Juego,Campo,Jugadores,Reglas';
+  o.esChipsNamed = o.esChips === 'Juego,Modos,Bots,Campo,Jugadores,Reglas';
   // ...and an ATTRIBUTE, which is a separate code path from the text nodes.
   o.esSearch = $('menuSearch').placeholder;
   o.esSearchNamed = /Buscar/.test(o.esSearch);
@@ -94,16 +101,16 @@ const r = await p.evaluate(() => {
   o.backButton = M.L('← Back');
   o.arrowKeyIntact = o.backButton === '← Atrás';
   setLang('de');
-  o.deHeads = heads().join('|');
+  o.deHeads = named();
   o.deNamed = /Anzeige/.test(o.deHeads) && /Einstellungen|Steuerung/.test(o.deHeads);
 
   // ---- 3. THE ROUND TRIP ---------------------------------------------------
   // The stash is what makes this possible at all: by now the DOM holds German, and the
   // table is keyed on English.
   setLang('fr');
-  o.frNamed = /Affichage/.test(heads().join('|'));
+  o.frNamed = /Affichage/.test(named());
   setLang('en');
-  o.backToEn = heads().join('|');
+  o.backToEn = named();
   o.roundTrip = o.backToEn === o.enHeads;
   o.searchBackToEn = $('menuSearch').placeholder;
   o.attrRoundTrip = /Search settings/.test(o.searchBackToEn);

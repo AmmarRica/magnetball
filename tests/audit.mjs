@@ -41,13 +41,19 @@ const r = await p.evaluate(async ()=>{
   // those — so "the node exists" stopped being the same as "you can get to it".
   // Every pane must be reachable from a chip in its own tab row, or the controls
   // inside it are orphaned however present they are in the DOM.
+  // ⚠️ **MATCHED BY `data-group`, NOT BY "the first `.subtabs` in the card".** That was
+  // true while a card held exactly one tab row and it is what made nesting impossible:
+  // Options holds five panes AND the Theme row inside one of them, so a card-level lookup
+  // finds Options' chips for every Theme pane and calls all six orphans. A pane declares
+  // which row owns it; that row is the only one that may claim it. A pane with no
+  // `data-group` at all is an orphan by definition — it is invisible to `showSubTab`.
   out.orphanPanes = [...document.querySelectorAll('#setup .subpane')]
     .filter(pane => {
-      const card = pane.closest('.card');
-      const row = card && card.querySelector('.subtabs');
+      const g = pane.dataset.group;
+      const row = g && document.querySelector(`.subtabs[data-tabs="${g}"]`);
       return !row || !row.querySelector(`.subchip[data-pane="${pane.dataset.pane}"]`);
     })
-    .map(pane => pane.dataset.pane);
+    .map(pane => (pane.dataset.group || '?') + '/' + pane.dataset.pane);
   out.paneCount = document.querySelectorAll('#setup .subpane').length;
   for (const [key, sel] of Object.entries(CONTROLS)){
     const n = document.querySelectorAll(sel).length;
@@ -281,7 +287,7 @@ const r = await p.evaluate(async ()=>{
   for (const k of M.FLAG_KEYS) try { M.drawDiscs && null; cc.clearRect(0,0,64,64);
     M.drawFieldPreview && null; window.__magnet.updatePreview && null;
     M.buildFlagPicker(); } catch(e){ out.cosmeticThrows.push('flag '+k+':'+e.message); break; }
-  try { M.buildEyesPicker(); M.buildCaps(); M.buildUnlocked(); } catch(e){ out.cosmeticThrows.push('picker:'+e.message); }
+  try { M.buildEyesPicker(); M.buildCaps(); M.buildSeatPick(); } catch(e){ out.cosmeticThrows.push('picker:'+e.message); }
 
   M.saveSel();
   return out;

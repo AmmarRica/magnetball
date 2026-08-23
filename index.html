@@ -79,6 +79,12 @@
        The card sheds its accordion dress: no collapse chevron, no card border, the
        full window width. The decks were reported looking terrible for exactly one
        reason: a DJ rig laid out into a 460px settings column. */
+    /* ⚠️ **THE VJ CARD IS ONLY EVER ON THE /vj ROUTE.** It is hidden on the game menu and
+       on /settings alike — asked for, and consistent: one surface for the decks, with a
+       signpost to it in About. It stays a DIRECT CHILD of #setup, because the rule below
+       isolates it by that relationship. */
+    #setup > .card[data-sec="vj"] { display: none; }
+    body.vjview #setup > .card[data-sec="vj"] { display: block; }
     body.vjview #setup > :not(.card[data-sec="vj"]) { display: none !important; }
     body.vjview #setup { display: block; padding: 18px 22px; }
     body.vjview .card[data-sec="vj"] { display: block !important; width: auto; max-width: 1180px; margin: 0 auto;
@@ -454,6 +460,12 @@
     .ghost.mini.primaryish { color: var(--go); border-color: var(--go); }
     .subpane { display: none; }
     .subpane.on { display: block; }
+    /* A section living INSIDE a pane — Theme inside Display. It needs to read as a
+       separate thing rather than as more of the pane above it, so it gets a rule and a
+       heading. ⚠️ Deliberately NOT another card: a card inside a card is two borders and
+       two lots of padding, and the accordion's "at most one open" rule counts cards. */
+    .subsec { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line, #2a2f3a); }
+    .subsechead { margin: 0 0 12px; font-size: 17px; font-weight: 800; letter-spacing: .2px; }
     .navtile {
       display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 4px; cursor: pointer;
       background: rgba(255,255,255,.03); border: 1px solid var(--edge); border-radius: 11px;
@@ -811,20 +823,20 @@
        ⚠️ CSS is only half of it — `shownInShowMode` does the same filtering in JS for
        the sub-tab chips, the jump bar and the menu search, because `display:none`
        hides a control from the eye and from nothing else. */
-    body.showmode #setup .card.collapsible:not([data-sec="match"]):not([data-sec="more"]) { display: none !important; }
+    body.showmode #setup .card.collapsible:not([data-sec="match"]) { display: none !important; }
     body.showmode #setup #recordCard { display: none !important; }
-    /* The Match card keeps Game + Pitch; Players and Rules are configuration. */
+    /* The Match card keeps Game + Pitch + Modes; the rest is configuration. */
     body.showmode #matchCard .subpane[data-pane="players"],
+    body.showmode #matchCard .subpane[data-pane="bots"],
     body.showmode #matchCard .subpane[data-pane="rules"] { display: none !important; }
-    /* More keeps a single tile, so its heading and the other two groups go with it —
-       a card called "More" listing one thing under three labels reads as breakage. */
-    body.showmode [data-sec="more"] > h2,
-    body.showmode [data-sec="more"] .navgroup .navlab { display: none !important; }
-    body.showmode [data-sec="more"] .navtile:not(#howBtn) { display: none !important; }
-    body.showmode [data-sec="more"] .navgroup:not(:has(#howBtn)) { display: none !important; }
+    /* Modes keeps a single tile, so the group labels go with it — a tab listing one
+       thing under three headings reads as breakage. */
+    body.showmode .subpane[data-pane="modes"] .navgroup .navlab { display: none !important; }
+    body.showmode .subpane[data-pane="modes"] .navtile:not(#howBtn) { display: none !important; }
+    body.showmode .subpane[data-pane="modes"] .navgroup:not(:has(#howBtn)) { display: none !important; }
     /* One tile left, so it takes the row. A single small tile floating in a full-width
        box reads as something that failed to load. */
-    body.showmode [data-sec="more"] .navgrid { grid-template-columns: 1fr !important; }
+    body.showmode .subpane[data-pane="modes"] .navgrid { grid-template-columns: 1fr !important; }
     /* ⚠️ `:has()` is recent; without it the empty groups would just be blank space
        rather than broken, and the rule above still removes every tile. */
     body.showmode #jumpBar { display: none !important; }   /* one section left to jump to */
@@ -909,37 +921,6 @@
     #dockToggle { display: none; }
 
     /* ---------- Unlocked customizations summary (top of Your Player) ---------- */
-    #unlockedBox { margin: 2px 0 0; }
-    .unlHead { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
-    .unlHead small { font-family: var(--pix); font-size: 10px; color: var(--muted); }
-    .unlBar {
-      height: 6px; border-radius: 999px; margin: 6px 0 8px;
-      background: rgba(128,128,128,.22); overflow: hidden;
-    }
-    .unlBar > i { display:block; height:100%; width:0;
-      background: var(--accent); border-radius: 999px; transition: width .35s ease; }
-    .unlChips { display:flex; flex-wrap:wrap; gap:6px; }
-    .unlChip {
-      font-family: var(--pix); font-size: 9px; line-height:1;
-      padding: 5px 8px; border-radius: 999px;
-      border: 1px solid var(--edge); background: rgba(128,128,128,.10); color: var(--text);
-    }
-    .unlChip b { color: var(--accent); font-weight: 700; }
-    /* One horizontally-scrolling row so a big collection never pushes the rest of
-       the card off screen. */
-    .unlStrip {
-      display:flex; gap:6px; margin-top:8px; padding-bottom:4px;
-      overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
-    }
-    .unlStrip:empty { display:none; }
-    .unlItem {
-      flex: 0 0 auto; width:44px; height:44px; border-radius:10px; cursor:pointer;
-      border:1px solid var(--edge); background: rgba(128,128,128,.10);
-      display:flex; align-items:center; justify-content:center; position:relative;
-    }
-    .unlItem canvas { width:34px; height:34px; image-rendering:auto; }
-    .unlItem .capGlyph { font-size:17px; line-height:1; }
-    .unlItem.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 
     /* A picker option whose backing art isn't shipped — visibly unavailable
        rather than a switch that silently does nothing. */
@@ -1005,6 +986,11 @@
       text-align: center; pointer-events: none;
     }
     body.deck.panel-open:not(.dock-collapsed) #deckHint { display: block; }
+    /* ⚠️ Off a deck the menu is the whole page rather than a 372px dock, and the hint has
+       to say something DIFFERENT there — SELECT does not close anything off a deck, and B
+       closes the open card instead of the menu. One strip, two texts, written by
+       `syncPadHint` so the two can never drift from what `pollDeckUI` actually does. */
+    body.padmenu:not(.deck) #deckHint { display: block; width: 100%; }
 
     /* ---------- In-game HUD ---------- */
     #hud {
@@ -1791,22 +1777,64 @@
       <!-- Four things you might be here for, not one list of thirteen. -->
       <div class="subtabs" data-tabs="match"></div>
 
-      <div class="subpane" data-pane="game">
+      <div class="subpane" data-group="match" data-pane="game">
       <label class="field">Mode</label>
       <div class="opts" id="modes"></div>
-      <div style="height:14px"></div>
-      <label class="field">Difficulty <small style="color:var(--muted)">(bots)</small></label>
-      <div class="opts" id="diffs"></div>
-      <div style="height:14px"></div>
-      <label class="field">Bot strategy</label>
-      <div class="opts" id="botPlans"></div>
-      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits and how hard they press. Difficulty still decides how good they are. ⚠️ The shapes are <b>not equally effective</b>, so this is picking an opponent rather than turning a dial.</div>
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
       </div>
 
-      <div class="subpane" data-pane="pitch">
+      <!-- ⚠️ **MODES IS A MATCH TAB, NOT A CARD.** Season, Tournament, Gauntlet, Drills and
+           the Tutorial are all *a match you are about to play*, so they belong behind KICK
+           OFF with the mode, the pitch and the rules — not in a twelfth top-level card
+           called "Modes & more" that a player had to know to open. Stats/Ranks/Daily/Shop/
+           Watch and How to play come with them: they are the same kind of thing (a screen
+           you go to), and splitting them across two doors was the accident of history. -->
+      <div class="subpane" data-group="match" data-pane="modes">
+    <div class="navgroup">
+      <div class="navlab">Play</div>
+      <div class="navgrid">
+        <button class="navtile" id="seasonBtn" data-icon="trophy">Season</button>
+        <button class="navtile" id="cupBtn" data-icon="bracket">Tournament</button>
+        <button class="navtile" id="rogueBtn" data-icon="skull">Gauntlet</button>
+        <button class="navtile" id="drillsBtn" data-icon="target">Drills</button>
+        <button class="navtile" id="tutBtn" data-icon="mortar">Tutorial</button>
+      </div>
+    </div>
+    <div class="navgroup">
+      <div class="navlab">Progress</div>
+      <div class="navgrid">
+        <button class="navtile" id="statsBtn" data-icon="chartline">Stats</button>
+        <button class="navtile" id="lbBtn" data-icon="chartbars">Ranks</button>
+        <button class="navtile" id="dailyBtn" data-icon="gift">Daily</button>
+        <button class="navtile" id="shopBtn" data-icon="bag">Shop</button>
+        <button class="navtile" id="socialBtn" data-icon="phone">Watch</button>
+      </div>
+    </div>
+    <div class="navgroup">
+      <div class="navlab">Help</div>
+      <div class="navgrid">
+        <button class="navtile" id="howBtn" data-icon="question">How to play</button>
+      </div>
+    </div>
+      </div>
+
+      <!-- ⚠️ **WHO YOU ARE PLAYING IS ITS OWN TAB.** Difficulty and Bot strategy sat under
+           Game with Mode and Match length, which is four different questions in one list —
+           and the two of them are the same question asked twice (how good the AI is, and
+           what shape it plays). `BOT_PLANS` is explicitly a DIFFERENT AXIS from difficulty
+           and the menu now says so by putting them side by side and nothing else with them. -->
+      <div class="subpane" data-group="match" data-pane="bots">
+      <label class="field">Difficulty</label>
+      <div class="opts" id="diffs"></div>
+      <div style="height:14px"></div>
+      <label class="field">Bot strategy</label>
+      <div class="opts" id="botPlans"></div>
+      <div class="hint always" style="text-align:left; margin-top:4px">How the AI sides set up &mdash; where their line sits and how hard they press. Difficulty still decides how good they are. ⚠️ The shapes are <b>not equally effective</b>, so this is picking an opponent rather than turning a dial.</div>
+      </div>
+
+      <div class="subpane" data-group="match" data-pane="pitch">
       <label class="field">Field</label>
       <!-- ⚠️ **NOT `.subtabs` / `.subpane` / `.subchip`, deliberately.** `showSubTab` scopes
            to the whole CARD and toggles every `.subpane` in it, so a nested pane here would
@@ -1835,7 +1863,7 @@
       </div>
       </div>
 
-      <div class="subpane" data-pane="players">
+      <div class="subpane" data-group="match" data-pane="players">
       <label class="field">Input <small id="padInfo" style="color:var(--muted)"></small></label>
       <div class="opts" id="controllers"></div>
       <div style="height:14px"></div>
@@ -1866,7 +1894,7 @@
       </div>
       </div>
 
-      <div class="subpane" data-pane="rules">
+      <div class="subpane" data-group="match" data-pane="rules">
       <label class="field">Kickoff rule</label>
       <div class="opts" id="kickoffRule"></div>
       <div class="hint always" style="text-align:left; margin-top:4px">Nobody crosses halfway until the ball is played — except inside the centre circle, which stays open so you can turn and pass back. Cross anywhere else and you're pushed home. Free-for-all once it's played.</div>
@@ -1910,47 +1938,27 @@
       <input id="menuSearch" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false">
       <div id="searchHits"></div>
     </div>
-    <div class="card collapsible collapsed" data-sec="more">
-      <h2>Modes &amp; more</h2>
-    <div class="navgroup">
-      <div class="navlab">Play</div>
-      <div class="navgrid">
-        <button class="navtile" id="seasonBtn" data-icon="trophy">Season</button>
-        <button class="navtile" id="cupBtn" data-icon="bracket">Tournament</button>
-        <button class="navtile" id="rogueBtn" data-icon="skull">Gauntlet</button>
-        <button class="navtile" id="drillsBtn" data-icon="target">Drills</button>
-        <button class="navtile" id="tutBtn" data-icon="mortar">Tutorial</button>
-      </div>
-    </div>
-    <div class="navgroup">
-      <div class="navlab">Progress</div>
-      <div class="navgrid">
-        <button class="navtile" id="statsBtn" data-icon="chartline">Stats</button>
-        <button class="navtile" id="lbBtn" data-icon="chartbars">Ranks</button>
-        <button class="navtile" id="dailyBtn" data-icon="gift">Daily</button>
-        <button class="navtile" id="shopBtn" data-icon="bag">Shop</button>
-        <button class="navtile" id="socialBtn" data-icon="phone">Watch</button>
-      </div>
-    </div>
-    <div class="navgroup">
-      <div class="navlab">Help</div>
-      <div class="navgrid">
-        <button class="navtile" id="howBtn" data-icon="question">How to play</button>
-      </div>
-    </div>
-    </div>
-
-
     <div class="card collapsible collapsed" data-sec="player">
       <h2><span style="display:inline-flex;align-items:center;gap:9px"><span>Your Player</span><canvas id="pvMini" width="52" height="52" style="width:26px;height:26px;image-rendering:auto"></canvas></span></h2>
-      <div id="unlockedBox">
-        <div class="unlHead"><span class="field" style="margin:0">Unlocked</span><small id="unlTotal"></small></div>
-        <div class="unlBar"><i id="unlFill"></i></div>
-        <div class="unlChips" id="unlChips"></div>
-        <div class="unlStrip" id="unlStrip"></div>
-        <div class="hint" style="text-align:left;margin-top:2px">Tap anything here to wear it.</div>
+      <!-- ⚠️ **THE UNLOCKED STRIP IS GONE, and what it did is not lost.** It was a
+           progress bar, five counters and a row of every cosmetic you own, sitting ABOVE
+           the controls that actually change your player — so the first thing on the card
+           was a summary of the pickers rather than a picker. Every item in it is in its
+           own tab a few pixels below, next to the locked ones, which is where you go to
+           choose one; the strip was a second door onto the same room and the "Tap anything
+           here to wear it" line existed only to explain that it was one.
+           ⚠️ `UNL_CATS` and `unlockCounts` STAY — they are what the unlock counters on the
+           individual pickers read, and what proves every FLAGS entry is reachable. -->
+      <!-- ⚠️ **WHICH PLAYER AM I DRESSING?** With four pads in a cabinet this card only
+           ever edited seat one, so three people had no way to pick a colour at all. The
+           row is hidden when there is only one seat to choose from — a picker with one
+           option is furniture. -->
+      <div id="seatPickWrap" style="display:none">
+        <label class="field">Player</label>
+        <div class="opts" id="seatPick"></div>
+        <div class="hint" style="text-align:left; margin-top:4px">Each seat keeps its own name, colour and face. <b>Player 1</b> is you &mdash; your record, your unlocks and your leaderboard entry are always seat one, however many people are playing.</div>
+        <div style="height:14px"></div>
       </div>
-      <div style="height:14px"></div>
       <div class="fieldrow">
         <label class="field" for="pname" style="margin:0">Name</label>
         <button class="ghost mini" id="lookReset" type="button">↺ Reset look</button>
@@ -1961,7 +1969,7 @@
            screens — and the faceplate ones (flags / animals / text) all write the SAME
            slot, so at most one of them was ever relevant to what you were doing. -->
       <div class="subtabs" data-tabs="player"></div>
-      <div class="subpane" data-pane="colour">
+      <div class="subpane" data-group="player" data-pane="colour">
         <label class="field">Colour</label>
         <div class="swatches" id="swatches"></div>
         <div style="height:14px"></div>
@@ -1969,35 +1977,35 @@
         <div class="opts" id="spinPick"></div>
         <div class="hint" style="text-align:left; margin-top:4px">Only changes themes whose players have a front — Shrimp, VideoSoccer arrowheads. Off keeps your body pointing up the pitch, which some people find easier to track. A round theme (Pool, Mono) looks the same either way, and every theme draws a ring at your real size regardless.</div>
       </div>
-      <div class="subpane" data-pane="cap">
+      <div class="subpane" data-group="player" data-pane="cap">
         <label class="field">Cap</label>
         <div class="opts" id="caps"></div>
       </div>
-      <div class="subpane" data-pane="flag">
+      <div class="subpane" data-group="player" data-pane="flag">
         <label class="field">Countryball <small id="unlockCount" style="color:var(--muted);font-weight:400"></small></label>
         <label class="field recentlab" id="flagRecentLab" style="display:none">Recent</label>
         <div class="opts tilewrap recentrow" id="flagRecent" style="display:none"></div>
         <div class="opts tilewrap" id="flagPick"></div>
       </div>
-      <div class="subpane" data-pane="animal">
+      <div class="subpane" data-group="player" data-pane="animal">
         <label class="field">Animal</label>
         <label class="field recentlab" id="animalRecentLab" style="display:none">Recent</label>
         <div class="opts tilewrap recentrow" id="animalRecent" style="display:none"></div>
         <div class="opts tilewrap" id="animalPick"></div>
       </div>
-      <div class="subpane" data-pane="text">
+      <div class="subpane" data-group="player" data-pane="text">
         <label class="field">Text <small style="color:var(--muted);font-weight:400">(shirt numbers &amp; glyphs)</small></label>
         <label class="field recentlab" id="textRecentLab" style="display:none">Recent</label>
         <div class="opts tilewrap recentrow" id="textRecent" style="display:none"></div>
         <div class="opts tilewrap" id="textPick"></div>
       </div>
-      <div class="subpane" data-pane="photo">
+      <div class="subpane" data-group="player" data-pane="photo">
         <label class="field">Your photo <small style="color:var(--muted);font-weight:400">(stays on this device)</small></label>
         <div id="photoPane"></div>
         <input id="photoFile" type="file" accept="image/*" hidden />
         <div class="hint" style="text-align:left; margin-top:6px">Saved at <b>128×128</b> — the size it's actually drawn at, so it costs a few KB rather than the several megabytes a camera produces. It is never uploaded: the leaderboard only ever sees the word "photo".</div>
       </div>
-      <div class="subpane" data-pane="eyes">
+      <div class="subpane" data-group="player" data-pane="eyes">
         <label class="field">Eyes <small style="color:var(--muted);font-weight:400">(plain face only)</small></label>
         <label class="field recentlab" id="eyesRecentLab" style="display:none">Recent</label>
         <div class="opts tilewrap recentrow" id="eyesRecent" style="display:none"></div>
@@ -2009,8 +2017,32 @@
       </div>
     </div>
 
-    <div class="card collapsible collapsed" data-sec="controls">
-      <h2>Controls</h2>
+        <!-- ⚠️ THERE IS NO "Ball" CARD, and its absence is the point — the same argument that
+         removed the Settings nav tile. It held exactly ONE control, the ball-look picker,
+         and its own help text admitted what it was: "This is the Ball slot of your Theme,
+         so changing it here changes it there." A second door onto one tile costs a card in
+         the accordion, a chip in the jump bar and a row in the search index, and gives a
+         player two places to change one thing and no way to tell which is authoritative.
+         The Theme card's Ball pane is the one place now. -->
+
+    <!-- ===================== OPTIONS =====================
+         ⚠️ **FIVE CARDS BECAME FIVE TABS**, asked for. Controls, Display, Sound, Game Feel
+         and About are all the same kind of thing — how the machine behaves, not what you
+         are about to play — and as five top-level cards they were five of the eleven bars
+         a player scrolled past to reach anything. What is behind KICK OFF is a CHOICE;
+         what is in here is a SETTING.
+         ⚠️ **EACH PANE KEEPS ITS OWN `data-sec`**, which is what stops this being a
+         demotion: the jump bar, `openSection`, `lastSection` and the menu search all still
+         address `feel` or `about` by name and land exactly where they used to. A pane is a
+         section that happens to live inside another one.
+         ⚠️ **Reset sits OUTSIDE the panes**, at the bottom of the card: it resets
+         everything, and filing a set-everything control under one fifth of the things it
+         sets is the argument the Game Feel preset row already won. -->
+    <div class="card collapsible collapsed" data-sec="options">
+      <h2>Options</h2>
+      <div class="subtabs" data-tabs="options"></div>
+      <div class="subpane" data-group="options" data-sec="controls" data-pane="controls">
+
       <label class="field">Handed</label>
       <div class="opts" id="handed"></div>
       <div style="height:14px"></div>
@@ -2030,27 +2062,10 @@
       <div style="height:14px"></div>
       <label class="field">Controller</label>
       <button class="ghost" id="padCfgBtn" style="margin-top:2px">🎮 Configure buttons</button>
-    </div>
-
-    <div class="card collapsible collapsed" data-sec="theme">
-      <h2>Theme</h2>
-      <!-- ⚠️ EVERYTHING in this card is behind the chip row, the bundle grid included. Seven
-           tile grids stacked is most of a phone screen each, so reaching Trail meant scrolling
-           past six of them — and the bundle row is the tallest of the lot at 19 tiles. The
-           chips are generated from SLOT_KEYS (plus this one Bundle entry) and so are the panes,
-           so a new slot cannot arrive with a pane and no chip — which would hide its controls
-           while `audit` and the menu search still found them. -->
-      <div class="subtabs" data-tabs="theme"></div>
-      <div class="subpane" data-pane="bundle">
-        <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
-        <div class="opts tilewrap" id="themePick"></div>
-        <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every other tab in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them. A theme changes how the game <i>looks</i>; the <b>pitch you play on</b> is a separate choice under <b>Match &rarr; Pitch</b>. A few themes are drawn for one particular court and will switch you to it and say so, and you can change it back there afterwards.</div>
       </div>
-      <div id="slotRows"></div>
-    </div>
 
-    <div class="card collapsible collapsed" data-sec="display">
-      <h2>Display</h2>
+      <div class="subpane" data-group="options" data-sec="display" data-pane="display">
+
       <label class="field">Language</label>
       <div class="opts" id="langPick"></div>
       <div class="hint" style="text-align:left">Every control, button and heading, and the words the pitch shouts. The longer help paragraphs stay in English &mdash; a hint that lies about what a setting does is worse than one you have to translate yourself. <b>Automatic</b> follows your device. Nothing you have typed is ever translated: your name, your maps and the scores stay exactly as they are.</div>
@@ -2077,18 +2092,36 @@
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
       <div class="hint" style="text-align:left; margin-top:4px">There's a ⛶ in the top bar mid-match too. <b>F11</b> works as usual.</div>
-    </div>
 
-<!-- ⚠️ THERE IS NO "Ball" CARD, and its absence is the point — the same argument that
-         removed the Settings nav tile. It held exactly ONE control, the ball-look picker,
-         and its own help text admitted what it was: "This is the Ball slot of your Theme,
-         so changing it here changes it there." A second door onto one tile costs a card in
-         the accordion, a chip in the jump bar and a row in the search index, and gives a
-         player two places to change one thing and no way to tell which is authoritative.
-         The Theme card's Ball pane is the one place now. -->
+      <!-- ⚠️ **THEME LIVES INSIDE DISPLAY, and it is a third level of tabs.** A theme is
+           what the game LOOKS like and Display is where how it looks is decided, so a
+           twelfth top-level card for it was a second door onto the same room — the
+           argument that deleted the standalone Ball card, one floor up. It keeps its own
+           chip row (`data-tabs="theme"`) rather than being flattened into Display's
+           controls, because seven tile grids stacked is most of a phone screen each.
+           ⚠️ Its own `data-sec` so the jump bar and the menu search can still land on it
+           directly: nesting a thing must not make it unreachable. -->
+      <div class="subsec" data-sec="theme">
+        <h3 class="subsechead">Theme</h3>
 
-    <div class="card collapsible collapsed" data-sec="sound">
-      <h2>Sound</h2>
+      <!-- ⚠️ EVERYTHING in this card is behind the chip row, the bundle grid included. Seven
+           tile grids stacked is most of a phone screen each, so reaching Trail meant scrolling
+           past six of them — and the bundle row is the tallest of the lot at 19 tiles. The
+           chips are generated from SLOT_KEYS (plus this one Bundle entry) and so are the panes,
+           so a new slot cannot arrive with a pane and no chip — which would hide its controls
+           while `audit` and the menu search still found them. -->
+      <div class="subtabs" data-tabs="theme"></div>
+      <div class="subpane" data-group="theme" data-pane="bundle">
+        <label class="field">Bundle <small id="themeNow" style="color:var(--accent)"></small></label>
+        <div class="opts tilewrap" id="themePick"></div>
+        <div class="hint" style="text-align:left; margin-top:4px">A bundle sets every other tab in one go. Change any one of them and the theme becomes <b>Custom</b> — put them all back and its name comes straight back with them. A theme changes how the game <i>looks</i>; the <b>pitch you play on</b> is a separate choice under <b>Match &rarr; Pitch</b>. A few themes are drawn for one particular court and will switch you to it and say so, and you can change it back there afterwards.</div>
+      </div>
+      <div id="slotRows"></div>
+      </div>
+      </div>
+
+      <div class="subpane" data-group="options" data-sec="sound" data-pane="sound">
+
       <!-- ⚠️ Master, Volume and the Set row sit OUTSIDE the tabs, and for the reason the
            Game Feel presets do: all three act on the WHOLE card. A set fills in every one
            of the six panes at once, so filing it under one of them would hide a
@@ -2108,10 +2141,10 @@
            `SUBTABS.sound` is built from `SFX_CATS` rather than listing them again. -->
       <div class="subtabs" data-tabs="sound"></div>
       <div id="sndCats"></div>
-    </div>
+      </div>
 
-    <div class="card collapsible collapsed" data-sec="feel">
-      <h2>Game Feel</h2>
+      <div class="subpane" data-group="options" data-sec="feel" data-pane="feel">
+
       <!-- ⚠️ The preset row sits OUTSIDE the tabs, and the reset button at the foot does
            too: both act on the WHOLE card, so filing a set-everything control under one
            fifth of the things it sets would be worse than leaving it above the chips. The
@@ -2131,11 +2164,11 @@
            carrying, the wind-up and its ring — is the Kick pane below, because those are
            settings about the player's action rather than about the object. "Ball control"
            and "Trap window" read like ball settings and are not. -->
-      <div class="subpane" data-pane="ball">
+      <div class="subpane" data-group="feel" data-pane="ball">
       <div id="feelSlidersBall"></div>
       </div>
 
-      <div class="subpane" data-pane="kick">
+      <div class="subpane" data-group="feel" data-pane="kick">
       <label class="field">Ball control</label>
       <div class="opts" id="trapPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Trap lets you hold KICK to carry the ball, then release to shoot. One-touch kicks the instant you touch it — faster, much less forgiving. How long you can carry is the Trap window slider below.</div>
@@ -2149,7 +2182,7 @@
       <div id="feelSlidersKick"></div>
       </div>
 
-      <div class="subpane" data-pane="player">
+      <div class="subpane" data-group="feel" data-pane="player">
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
@@ -2160,14 +2193,14 @@
            five of Player's ten controls were Sprint dials, so a mechanic with a toggle and
            four numbers was scattered through a list about movement, input and ring size.
            A reader who wants to tune sprinting had to know which of the ten were the ones. -->
-      <div class="subpane" data-pane="sprint">
+      <div class="subpane" data-group="feel" data-pane="sprint">
       <label class="field">Sprint</label>
       <div class="opts" id="sprintPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px"><b>Hold KICK to sprint.</b> A ring round you drains like a clock while you run; let go and it fires the kick, the way holding KICK always has. Run the ring out and you are locked down to the tired speed until it has filled all the way back up — and it fills slower than it empties, so a sprint is something you spend. The ring is yours — bots do not sprint, because they hold KICK to trap rather than to run, and giving them the boost flattened the difficulty tiers into each other. Turn it <b>off</b> and holding KICK instead drags you down to a deliberate walk, which is how the game worked before this existed.</div>
       <div id="feelSlidersSprint"></div>
       </div>
 
-      <div class="subpane" data-pane="effects">
+      <div class="subpane" data-group="feel" data-pane="effects">
       <label class="field">Screen shake &amp; effects</label>
       <div class="opts" id="juicePick"></div>
       <div style="height:10px"></div>
@@ -2193,7 +2226,7 @@
       <div style="height:10px"></div>
       </div>
 
-      <div class="subpane" data-pane="camera">
+      <div class="subpane" data-group="feel" data-pane="camera">
       <label class="field">Goal zoom <small id="goalZoomVal" style="color:var(--accent)"></small></label>
       <input id="goalZoom" class="slider" type="range" min="100" max="800" step="5" />
       <div style="height:6px"></div>
@@ -2214,7 +2247,7 @@
       <div style="height:10px"></div>
       </div>
 
-      <div class="subpane" data-pane="advanced">
+      <div class="subpane" data-group="feel" data-pane="advanced">
       <label class="field">Match speed <small id="mspeedVal" style="color:var(--accent)"></small></label>
       <input id="mspeed" class="slider" type="range" min="50" max="200" step="5" />
       <div style="height:10px"></div>
@@ -2225,68 +2258,10 @@
       </div>
 
       <button class="ghost" id="feelReset" style="margin-top:14px">Reset to defaults</button>
-    </div>
-
-
-    <!-- Replays. Its own section because loading one is something you do between
-         matches, from the menu, not from a screen that is covering the pitch. -->
-    <div class="card collapsible collapsed" data-sec="replay">
-      <h2>Replays</h2>
-      <!-- ⚠️ TABBED by kind. A goal and a whole match are different things you go looking
-           for at different moments — one to see a moment again, one to watch a game back —
-           and forty rows of both interleaved by time means scrolling past matches to find
-           goals. The chips come from SUBTABS like every other tabbed card. -->
-      <div class="subtabs" data-tabs="replay"></div>
-      <div class="subpane" data-pane="goals">
-        <label class="field">Saved goals <small id="repListSub" style="color:var(--muted);font-weight:400"></small></label>
-        <div id="repList"></div>
       </div>
-      <div class="subpane" data-pane="matches">
-        <label class="field">Saved matches <small id="repMatchSub" style="color:var(--muted);font-weight:400"></small></label>
-        <div id="repMatchList"></div>
-      </div>
-      <button class="ghost" id="repClearAll" type="button" style="display:none;margin-top:8px">Delete all saved replays</button>
-      <div style="height:14px"></div>
-      <label class="field">Record every goal</label>
-      <div class="opts" id="autoRecPick"></div>
-      <div class="hint always" style="text-align:left">Keeps every goal in the list above without you pressing anything &mdash; for showing the game to people, when stopping to save each one is the thing you cannot do. Saved here only, never downloaded; the oldest go when the list is full.</div>
-      <div style="height:14px"></div>
-      <label class="field">Keep whole matches</label>
-      <div class="opts" id="keepMatchesPick"></div>
-      <div class="hint always" style="text-align:left">The last few matches are kept in full, kickoff to whistle, with no need to press anything &mdash; so a match somebody asks about afterwards is still there. They appear under <b>Saved matches</b> above and in your match history, and the oldest goes when the count is full. A whole match is roughly twenty times a single goal (about 0.8MB for a long one), which is why this is a count and not a switch; goals are capped separately, so neither pushes out the other.</div>
-      <div style="height:14px"></div>
-      <label class="field">Watch a replay from a file</label>
-      <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
-      <div class="hint always" style="text-align:left">Holds on the last frame when it ends, so you can watch it again or scrub back. <b id="repSkipHint">Use &#10005; on the bar to come back here.</b></div>
-      <div style="height:14px"></div>
-      <label class="field">Where saved replays go</label>
-      <div id="repPathInfo"></div>
-      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save</b> on the playback bar while you are watching one, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen. They are deliberately not offered in the middle of a match.</div>
-    </div>
-    <div class="card collapsible collapsed" data-sec="vj">
-      <h2>VJ Mode</h2>
-      <!-- ⚠️ THE DECKS DO NOT LIVE HERE ANY MORE. They built into this card on the
-           /settings route and were reported looking exactly like what they were: a DJ
-           rig squeezed into a 460px settings column. The deck surface is the /vj route
-           now — full screen, nothing else on it — and this card is the signpost.
-           #vjPanel stays as the build target; only vjOpenView (the /vj route) fills it. -->
-      <div class="hint always" style="text-align:left">Two video decks, two DJ decks, and a background video — run from their own full-screen page while the game plays on the projector. Everything is off until you turn it on there, and the game looks and sounds exactly as normal until then.</div>
-      <a class="ghost" id="vjOpenBtn" href="vj/" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">🎛 Open the VJ decks</a>
-      <div class="hint" style="text-align:left">Opens in its own tab or window &mdash; put it on the laptop screen and the game on the projector. Bookmark <b>vj/</b> under the game&rsquo;s address to go straight there.</div>
-      <div id="vjPanel"></div>
-    </div>
-    <!-- About. The version and the update check live HERE rather than under the title and
-         above the fold: both are things you go looking for once, and neither is worth the
-         two permanent lines they cost at the top of every visit.
-         ⚠️ WHAT'S NEW LIVES HERE TOO, and the two were separate cards with a button in this
-         one whose whole job was to jump to the other. They answer one question — "what am I
-         running, and what changed in it" — so the version, the update check and the release
-         notes are three parts of one answer and were two chips in the jump bar, two rows in
-         the accordion and a hop between them. The changelog goes LAST because it is the
-         longest thing here by far and the two lines above it are what somebody opening
-         "About" came for. -->
-    <div class="card collapsible collapsed" data-sec="about">
-      <h2>About</h2>
+
+      <div class="subpane" data-group="options" data-sec="about" data-pane="about">
+
       <!-- ⚠️ ONE TAP COPIES IT. The version is the first thing anybody is asked for when
            they report something, and reading a timestamp off a phone screen and retyping it
            is exactly where it gets transcribed wrong — which has already cost one round of
@@ -2345,12 +2320,82 @@
       <div id="qrWrap" data-noi18n></div>
       <div class="hint always" style="text-align:left">Point a phone camera at the code and it opens this game. Everything is on the device it is opened on, so the other phone starts fresh &mdash; it is a quick way to hand somebody the game, not a way to share your save. Use <b>Export save</b> above for that.</div>
       <div style="height:14px"></div>
+      <!-- ⚠️ **THE SIGNPOST OUTLIVED THE CARD IT WAS IN.** VJ Mode is not on this menu any
+           more — the decks are a full-screen page at `/vj` and the card was a door onto a
+           room nobody opens from here. But a feature you cannot find is a feature that does
+           not exist (`sel.controllers` shipping `off` is the standing example), so the one
+           line that says WHERE it went stays, in About, where "what is this build and what
+           else is in it" already lives. -->
+      <label class="field">VJ Mode</label>
+      <a class="ghost" id="vjOpenBtn" href="vj/" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">🎛 Open the VJ decks</a>
+      <div class="hint" style="text-align:left">Opens in its own tab or window &mdash; put it on the laptop screen and the game on the projector. Bookmark <b>vj/</b> under the game&rsquo;s address to go straight there.</div>
+      <div style="height:14px"></div>
       <label class="field">What&rsquo;s new <small id="newsSub" style="color:var(--muted);font-weight:400"></small></label>
       <div id="newsList" data-noi18n></div>
       <div class="hint" style="text-align:left">Only the things worth knowing about: what was added, what changed in a way you will feel, and one line for the bug fixes.</div>
-    </div>
+      </div>
 
-    <button class="ghost" id="settingsReset" style="margin-top:2px">↺ Reset all settings to default</button>
+      <!-- ⚠️ Arms then confirms — the one button you least want a stranger to find,
+           which is also why show mode hides the whole card it now lives in. -->
+      <button class="ghost" id="settingsReset" style="margin-top:2px">↺ Reset all settings to default</button>
+    </div>
+    <!-- Replays. Its own section because loading one is something you do between
+         matches, from the menu, not from a screen that is covering the pitch. -->
+    <div class="card collapsible collapsed" data-sec="replay">
+      <h2>Replays</h2>
+      <!-- ⚠️ TABBED by kind. A goal and a whole match are different things you go looking
+           for at different moments — one to see a moment again, one to watch a game back —
+           and forty rows of both interleaved by time means scrolling past matches to find
+           goals. The chips come from SUBTABS like every other tabbed card. -->
+      <div class="subtabs" data-tabs="replay"></div>
+      <div class="subpane" data-group="replay" data-pane="goals">
+        <label class="field">Saved goals <small id="repListSub" style="color:var(--muted);font-weight:400"></small></label>
+        <div id="repList"></div>
+      </div>
+      <div class="subpane" data-group="replay" data-pane="matches">
+        <label class="field">Saved matches <small id="repMatchSub" style="color:var(--muted);font-weight:400"></small></label>
+        <div id="repMatchList"></div>
+      </div>
+      <button class="ghost" id="repClearAll" type="button" style="display:none;margin-top:8px">Delete all saved replays</button>
+      <div style="height:14px"></div>
+      <label class="field">Record every goal</label>
+      <div class="opts" id="autoRecPick"></div>
+      <div class="hint always" style="text-align:left">Keeps every goal in the list above without you pressing anything &mdash; for showing the game to people, when stopping to save each one is the thing you cannot do. Saved here only, never downloaded; the oldest go when the list is full.</div>
+      <div style="height:14px"></div>
+      <label class="field">Keep whole matches</label>
+      <div class="opts" id="keepMatchesPick"></div>
+      <div class="hint always" style="text-align:left">The last few matches are kept in full, kickoff to whistle, with no need to press anything &mdash; so a match somebody asks about afterwards is still there. They appear under <b>Saved matches</b> above and in your match history, and the oldest goes when the count is full. A whole match is roughly twenty times a single goal (about 0.8MB for a long one), which is why this is a count and not a switch; goals are capped separately, so neither pushes out the other.</div>
+      <div style="height:14px"></div>
+      <label class="field">Watch a replay from a file</label>
+      <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
+      <div class="hint always" style="text-align:left">Holds on the last frame when it ends, so you can watch it again or scrub back. <b id="repSkipHint">Use &#10005; on the bar to come back here.</b></div>
+      <div style="height:14px"></div>
+      <label class="field">Where saved replays go</label>
+      <div id="repPathInfo"></div>
+      <div class="hint" style="text-align:left">A web page is never told where your browser puts downloads, so that is the usual place for this device rather than a path read off your disk — if your browser is set to ask each time, it is wherever you chose. Replays are saved from <b>Save</b> on the playback bar while you are watching one, and from <b>Save goal replay</b> and <b>Save match replay</b> on the result screen. They are deliberately not offered in the middle of a match.</div>
+    </div>
+    <div class="card collapsible collapsed" data-sec="vj">
+      <h2>VJ Mode</h2>
+      <!-- ⚠️ THE DECKS DO NOT LIVE HERE ANY MORE. They built into this card on the
+           /settings route and were reported looking exactly like what they were: a DJ
+           rig squeezed into a 460px settings column. The deck surface is the /vj route
+           now — full screen, nothing else on it — and this card is the signpost.
+           #vjPanel stays as the build target; only vjOpenView (the /vj route) fills it. -->
+      <div class="hint always" style="text-align:left">Two video decks, two DJ decks, and a background video — run from their own full-screen page while the game plays on the projector. Everything is off until you turn it on there, and the game looks and sounds exactly as normal until then.</div>
+      <div id="vjPanel"></div>
+    </div>
+    <!-- About. The version and the update check live HERE rather than under the title and
+         above the fold: both are things you go looking for once, and neither is worth the
+         two permanent lines they cost at the top of every visit.
+         ⚠️ WHAT'S NEW LIVES HERE TOO, and the two were separate cards with a button in this
+         one whose whole job was to jump to the other. They answer one question — "what am I
+         running, and what changed in it" — so the version, the update check and the release
+         notes are three parts of one answer and were two chips in the jump bar, two rows in
+         the accordion and a hop between them. The changelog goes LAST because it is the
+         longest thing here by far and the two lines above it are what somebody opening
+         "About" came for. -->
+    
+
 
     <div class="footlink">A fast physics soccer game — built for touch.</div>
   </div>
@@ -2776,7 +2821,7 @@
    Menu search                 "Menu search ---"
    Progressive help            "Progressive disclosure for help text ---"
    Picker swatch cache         "const swatchCache"
-   Deck UI (controller menu)   "DECK UI — drive the whole menu"
+   Menu by controller          "MENU BY CONTROLLER — the whole menu"
    Tutorial                    "ONBOARDING TUTORIAL"
    Season / cup                "SINGLE-PLAYER SEASON"
    Languages                   "LANGUAGES"
@@ -3695,6 +3740,10 @@ const STRINGS = {
   'Settings': ['Ajustes', 'Réglages', 'Einstellungen', 'Definições', 'Impostazioni'],
   'Record': ['Récord', 'Bilan', 'Bilanz', 'Recorde', 'Record'],
   'Modes & more': ['Modos y más', 'Modes et plus', 'Modi und mehr', 'Modos e mais', 'Modi e altro'],
+  'Options': ['Opciones', 'Options', 'Optionen', 'Opções', 'Opzioni'],
+  'Modes': ['Modos', 'Modes', 'Modi', 'Modos', 'Modi'],
+  'Bots': ['Bots', 'Bots', 'Bots', 'Bots', 'Bot'],
+  'Player': ['Jugador', 'Joueur', 'Spieler', 'Jogador', 'Giocatore'],
   'Play': ['Jugar', 'Jouer', 'Spielen', 'Jogar', 'Gioca'],
   'Progress': ['Progreso', 'Progression', 'Fortschritt', 'Progresso', 'Progressi'],
   'Help': ['Ayuda', 'Aide', 'Hilfe', 'Ajuda', 'Aiuto'],
@@ -4677,6 +4726,54 @@ const POST   = { r:4,  invMass:0.0, bCoef:0.55 };
 // ---------- State
 let padBind = { active:false, slot:null, queue:[], prev:[], _init:false, stick:false, axStep:0, axBase:null, axX:null, axWait:false };   // controller-remap capture state
 let profile = loadProfile();
+// ---------- ONE PROFILE PER SEAT ---------------------------------------------
+// ⚠️ **SEAT ONE IS `profile`, BY OBJECT IDENTITY, and that is the whole compatibility
+// story.** This card only ever edited one player, so on a cabinet with four pads three
+// people could not pick a colour, a face or a name at all. Everything that means "the
+// device owner" — the leaderboard entry, the social feed, `isHero`, the clip filename,
+// the save file's `magnetball.profile` — goes on reading `profile` and did not move.
+// ⚠️ **A GUEST SEAT IS A LOOK AND NOTHING ELSE.** No stats, no unlocks, no leaderboard:
+// "guests have no record" is a deliberate rule with a suite behind it (`yourside.mjs`),
+// and a per-seat *record* would quietly reverse it. What a second player wants is to not
+// be wearing the first player's shirt.
+// ⚠️ **Its own storage key**, not folded into `sel`: `saveSel()` serialises all of `sel`
+// and `syncAdopt()` shallow-merges it between windows — the argument that keeps the
+// arcade takings and the VJ decks out of there too.
+// ⚠️ Declared HERE, immediately under the thing it extends, because `loadProfiles()` is
+// called from this line and a `const` further down the file would be in the temporal dead
+// zone at this moment. That is the trap this file has now been bitten by nineteen times,
+// and one of them was hidden by `loadProfile`'s own try/catch.
+const PROFILES = { max: 8, key: 'magnetball.profiles' };
+let profiles = loadProfiles();
+let editSeat = 0;                     // which seat the Your Player card is dressing
+// ⚠️ **ONE READER**, so a picker cannot write seat one while its preview draws seat two.
+function ep(){ return editSeat > 0 ? (profiles[editSeat] || profile) : profile; }
+function loadProfiles(){
+  const out = [null];                 // slot 0 is `profile` and is never stored here
+  let d = {};
+  try { d = JSON.parse(localStorage.getItem('magnetball.profiles') || '{}') || {}; } catch(e){}
+  const def = defaultProfile();
+  for (let i = 1; i < 8; i++){
+    const r = d[i] || {};
+    out[i] = { name: (r.name||'').slice(0,12) || ('P' + (i+1)), color: r.color || def.color,
+               cap: r.cap || def.cap, flag: r.flag || def.flag, eyes: r.eyes || def.eyes,
+               photo: typeof r.photo === 'string' ? r.photo : def.photo,
+               spin: r.spin !== false };
+  }
+  return out;
+}
+// ⚠️ Only seats somebody has actually CHANGED are written. `loadProfiles` mints all
+// seven up front so `ep()` can never hand back undefined, and storing those untouched
+// copies would put six identical records on disk and in every exported save.
+function saveProfiles(){
+  const d = {}, def = defaultProfile();
+  for (let i = 1; i < profiles.length; i++){
+    const r = profiles[i]; if (!r) continue;
+    const virgin = r.name === ('P' + (i+1)) && Object.keys(def).every(k => k === 'name' || r[k] === def[k]);
+    if (!virgin) d[i] = r;
+  }
+  try { localStorage.setItem(PROFILES.key, JSON.stringify(d)); } catch(e){}
+}
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 // ============================================================
 //  PANEL MODE + CROSS-WINDOW SYNC
@@ -5020,7 +5117,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260823.0745PM';
+const VERSION = '20260823.1140PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5036,6 +5133,20 @@ const VERSION = '20260823.0745PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260823.1140PM', title: 'A shorter menu, and a pad that can drive it',
+    changed: [
+      '<b>Eleven cards of settings are now four.</b> Controls, Display, Sound, Game Feel and About are tabs of one <b>Options</b> card, Theme sits inside Display where the rest of the look lives, and Reset is in there with them. Nothing was removed and nothing moved address — the jump bar and the search still take you straight to any of them.',
+      '<b>Season, Tournament, Gauntlet, Drills and the Tutorial are behind KICK OFF now</b>, on a <b>Modes</b> tab, with Stats, Ranks, Daily, Shop and Watch. They are all a match you are about to play, so they live with the mode and the pitch instead of in a separate card you had to know to open.',
+      '<b>Difficulty and Bot strategy have a tab of their own.</b> They sat in a list with the mode and the match length, which is four different questions at once.',
+      '<b>The VJ decks are only at <code>/vj</code> now.</b> The card has gone from the menu; About says where they went.',
+      '<b>Your Player no longer opens with a wall of everything you own.</b> That row was a summary of the pickers sitting on top of the pickers; every item in it is still one tab below, where you go to choose one.',
+    ],
+    added: [
+      '<b>The whole menu works from a controller, on any machine.</b> The stick or D-pad moves a highlight, A picks, B closes the open card, and the shoulder buttons jump between sections. It only takes over when there is no match running, so A is still KICK when it matters. It was there all along and only a Steam Deck could reach it.',
+      '<b>One player card each.</b> With more than one controller plugged in, a <b>Player</b> row appears at the top of Your Player and each seat keeps its own name, colour and face. Player 1 is still you — your record, your unlocks and your leaderboard entry never move.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260823.0745PM', title: 'Smoother at every size',
     changed: [
       '<b>The game runs a lot lighter, and big teams feel it most.</b> Eight a side used to lose its footing on a slower machine. The heavy parts have been cut back without changing how anything plays \u2014 the bots make exactly the same decisions they always did.',
@@ -8199,25 +8310,76 @@ function loadProfile() {
     spin: d.spin !== false,
   };
 }
+// ⚠️ **ONE SAVE, EITHER STORE.** Every picker in the card calls this and none of them
+// knows which seat it just edited — so the branch lives here rather than at 34 call sites.
 function saveProfile(){
-  try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){}
+  if (editSeat > 0) saveProfiles();
+  else { try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){} }
   syncProfileToWorld();
   syncPush();
 }
-// Push your colour/cap/flag/eyes/name onto the live match, so customising mid-game
-// shows up straight away instead of at the next kickoff. Only your own seat(s) —
-// duo drives several, and the idle demo deliberately wears its own countries.
+// ⚠️ **THE PICKER IS HIDDEN WHEN THERE IS ONE SEAT**, which is the ordinary case — a
+// control offering a single choice is furniture, and it would be the first thing on the
+// card for the people who least need it. The count comes from the live match if there is
+// one, otherwise from the pads that are plugged in, so it is what you can actually see.
+function seatCount(){
+  const w = (typeof world !== 'undefined') ? world : null;
+  let n = 0;
+  if (w && w.players && !w.demo)
+    for (const p of w.players) if (p.ctrl === 'human1' || p.ctrl === 'human2' || p.ctrl === 'gamepad') n++;
+  if (typeof connectedGamepadIndices === 'function')
+    try { n = Math.max(n, connectedGamepadIndices().length + (keyboardDrivesGame() ? 1 : 0)); } catch(e){}
+  return Math.max(1, Math.min(PROFILES.max, n));
+}
+function seatLabel(i){ return i === 0 ? 'Player 1 (you)' : 'Player ' + (i + 1); }
+function setEditSeat(n){
+  editSeat = Math.max(0, Math.min(PROFILES.max - 1, n|0));
+  uiState._seat = editSeat; saveUI(uiState);
+  buildSettings();
+}
+function buildSeatPick(){
+  const host = $('seatPick'), wrap = $('seatPickWrap');
+  if (!host || !wrap) return;
+  const n = seatCount();
+  if (editSeat >= n) editSeat = 0;
+  wrap.style.display = n > 1 ? '' : 'none';
+  host.innerHTML = '';
+  for (let i = 0; i < n; i++){
+    const el = document.createElement('div');
+    el.className = 'opt' + (i === editSeat ? ' sel' : '');
+    const who = i === 0 ? profile : (profiles[i] || defaultProfile());
+    el.innerHTML = `<span>${seatLabel(i)}</span><small></small>`;
+    el.querySelector('small').textContent = who.name || '';
+    el.onclick = () => setEditSeat(i);
+    host.appendChild(el);
+  }
+}
+// Push each seat's colour/cap/flag/eyes/name onto the live match, so customising
+// mid-game shows up straight away instead of at the next kickoff. Human seats only —
+// the idle demo deliberately wears its own countries.
+// ⚠️ **SEATS ARE COUNTED IN ROSTER ORDER, and only the humans count.** A bot sitting
+// between two people must not consume a profile slot, or plugging a third pad in
+// silently re-dresses everybody. `seatNameList()` still indexes by PLAYER index, which
+// is what the Player names box has always meant, so the two are read separately.
+// ⚠️ **The team colour still wins where it applies** — `applyTeamColours` runs after
+// this on every path that can change sides, and one shade a side is a rule this does
+// not get to break. What a seat profile carries onto the pitch is the name, the cap,
+// the face and the eyes; the colour is what you see in the menu and in the lobby's
+// own swatches.
+function seatProfile(i){ return i > 0 ? (profiles[i] || profile) : profile; }
 function syncProfileToWorld(){
   const w = (typeof world !== 'undefined') ? world : null;
   if (!w || !w.players || w.demo) return;
   const custom = seatNameList();
+  let seat = 0;
   w.players.forEach((p, i) => {
-    if (p.ctrl !== 'human1') return;
-    p.color = profile.color; p.cap = profile.cap;
-    p.flag  = profile.flag;  p.eyes = profile.eyes;
+    if (p.ctrl !== 'human1' && p.ctrl !== 'human2' && p.ctrl !== 'gamepad') return;
+    const pr = seatProfile(seat); seat++;
+    p.color = pr.color; p.cap = pr.cap;
+    p.flag  = pr.flag;  p.eyes = pr.eyes;
     // ⚠️ `p.kbTyped` too: a name being spelled out on the lobby keyboard is mid-edit,
     // and a profile sync landing on it would put 'You' back under the player's feet.
-    if (!custom[i] && !p.kbTyped) p.name = profile.name || 'You';   // a typed seat name still wins
+    if (!custom[i] && !p.kbTyped) p.name = pr.name || 'You';   // a typed seat name still wins
   });
 }
 // ============================================================
@@ -8383,7 +8545,7 @@ function syncRefresh(){
     if (sliderDragging){ syncRefresh(); return; }   // never yank a control out from under a thumb
     syncDirty = false;
     buildSettings(); refreshPitchTiles();
-    const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = profile.name;
+    const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = ep().name;
     if (typeof buildSwatches==='function') buildSwatches();
     buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildCaps(); buildSpinPick(); updatePreview();
     buildMatchOpts(); buildPartyMods();
@@ -8447,6 +8609,12 @@ function resetSettings(alsoAppearance){
   saveSel();
   if (alsoAppearance){
     Object.assign(profile, defaultProfile());   // mutate in place — keeps live references valid
+    // ⚠️ The guest seats go too, and back to editing seat one: "reset appearance" that
+    // left three other people's shirts behind would be a reset of one fourth of it.
+    editSeat = 0; uiState._seat = 0;
+    for (let i = 1; i < profiles.length; i++)
+      if (profiles[i]) Object.assign(profiles[i], defaultProfile(), { name: 'P' + (i+1) });
+    saveProfiles();
     saveProfile();
   }
   applyTheme(sel.look.palette); applyDisplayMode(); applyFeel();
@@ -8454,7 +8622,7 @@ function resetSettings(alsoAppearance){
   buildSettings();
   if (alsoAppearance){
     // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
-    const nm=$('pname'); if (nm) nm.value = profile.name;
+    const nm=$('pname'); if (nm) nm.value = ep().name;
     if (typeof buildSwatches==='function') buildSwatches();
     if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
   }
@@ -10001,9 +10169,9 @@ function buildSwatches(){
   const wrap = $('swatches'); wrap.innerHTML = '';
   COLORS.forEach(c => {
     const s = document.createElement('div');
-    s.className = 'swatch' + (c===profile.color?' sel':'');
+    s.className = 'swatch' + (c===ep().color?' sel':'');
     s.style.background = c;
-    s.onclick = () => { profile.color = c; saveProfile(); buildSwatches(); updatePreview(); };
+    s.onclick = () => { ep().color = c; saveProfile(); buildSwatches(); updatePreview(); };
     wrap.appendChild(s);
   });
 }
@@ -10016,7 +10184,7 @@ function buildOpts(containerId, obj, key, extra){
   keys.forEach(k => {
     const o = obj[k];
     const el = document.createElement('div');
-    el.className = 'opt' + (sel[key]===k || (key==='cap'&&profile.cap===k) ? ' sel' : '');
+    el.className = 'opt' + (sel[key]===k || (key==='cap'&&ep().cap===k) ? ' sel' : '');
     let sub = extra ? extra(o) : '';
     if (key==='field' || key==='grass' || key==='pitch'){
       // All three draw a mini pitch: field tiles vary the shape, grass tiles vary
@@ -10039,7 +10207,7 @@ function buildOpts(containerId, obj, key, extra){
       el.innerHTML = `${optGlyph(o)}<span>${o.name}</span>${sub?`<small>${sub}</small>`:''}`;
     }
     el.onclick = () => {
-      if (key==='cap'){ profile.cap = k; saveProfile(); }
+      if (key==='cap'){ ep().cap = k; saveProfile(); }
       else { sel[key] = k; saveSel(); }
       buildOpts(containerId, obj, key, extra);
       // Field and grass tiles each draw the other's choice, so a pick in one
@@ -10093,7 +10261,7 @@ const PHOTOLIB = { store:'photos', max:100 };
 let photoImg = null, photoSrc = null;
 // Decoded lazily and cached, so drawing a disc never re-parses the data URL.
 function photoFace(){
-  const src = profile.photo || '';
+  const src = ep().photo || '';
   if (!src) return (photoImg = null, photoSrc = null);
   if (photoSrc !== src){
     photoSrc = src;
@@ -10119,9 +10287,9 @@ function photoFrom(source, w, h){
 // there, and re-adding it on every pick would fill the hundred with one face.
 function setPhoto(dataUrl, keep){
   if (dataUrl && keep !== false) photoLibAdd(dataUrl).then(buildPhotoGrid).catch(()=>{});
-  profile.photo = dataUrl || '';
-  if (dataUrl) profile.flag = 'photo';
-  else if (profile.flag === 'photo') profile.flag = defaultProfile().flag;
+  ep().photo = dataUrl || '';
+  if (dataUrl) ep().flag = 'photo';
+  else if (ep().flag === 'photo') ep().flag = defaultProfile().flag;
   photoSrc = null; photoImg = null; photoMsgText = ''; photoFace();
   saveProfile(); buildSettings(); updatePreview(); buildPhotoPane();
 }
@@ -10404,17 +10572,16 @@ function drawFieldPreview(c, F, cw, ch, grass, bare, surface){
   goal(-1, blue); goal(1, red);
 }
 function updatePreview(){
-  buildUnlocked();          // keep the top summary in step with what's worn/earned
-  $('pvName').textContent = profile.name || 'Player';
+  $('pvName').textContent = ep().name || 'Player';
   const cvs = $('pvCanvas');
   if (cvs){ const c=cvs.getContext('2d'); c.clearRect(0,0,cvs.width,cvs.height);
-    drawDisc(c, cvs.width/2, cvs.height/2, cvs.width*0.36, profile); }
+    drawDisc(c, cvs.width/2, cvs.height/2, cvs.width*0.36, ep()); }
   const mini = $('pvMini');   // live disc in the sticky "Your Player" header
   if (mini){ const mc=mini.getContext('2d'); mc.clearRect(0,0,mini.width,mini.height);
-    drawDisc(mc, mini.width/2, mini.height/2, mini.width*0.40, profile); }
+    drawDisc(mc, mini.width/2, mini.height/2, mini.width*0.40, ep()); }
   // Your disc colour is yours to pick, including ones that vanish into the panel
   // (a mid green on Paper measured 1.95:1) — keep the hue, clear AA against it.
-  $('pvName').style.color = readableInk(profile.color,
+  $('pvName').style.color = readableInk(ep().color,
     getComputedStyle(document.documentElement).getPropertyValue('--panel-solid').trim() || '#101010');
   const uc = unlockCounts(); const el=$('unlockCount'); if(el) el.textContent = `· ${uc.have}/${uc.total} unlocked`;
 }
@@ -10483,8 +10650,8 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     const cvs=document.createElement('canvas'); cvs.width=cvs.height=64;
     // Faceplate tiles (flag/animal) preview the plate itself (no eyes); the eyes
     // tiles preview each eye style on a plain face.
-    const o = cat==='eyes' ? { color:profile.color, flag:'none', eyes:k }
-                           : { color:profile.color, flag:k };
+    const o = cat==='eyes' ? { color:ep().color, flag:'none', eyes:k }
+                           : { color:ep().color, flag:k };
     drawDisc(cvs.getContext('2d'), 32, 32, 22, o);
     el.appendChild(cvs);
     const nm=document.createElement('span');
@@ -10492,7 +10659,7 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     el.appendChild(nm);
     if(!unlocked){ const s=document.createElement('small'); s.textContent='🔒 '+reqText(itemReq(cat,k)); el.appendChild(s); }
     el.onclick=()=>{ if(!isUnlocked(cat,k)) return;
-      if(cat==='eyes') profile.eyes=k; else profile.flag=k;   // flag & animal share the faceplate slot
+      if(cat==='eyes') ep().eyes=k; else ep().flag=k;   // flag & animal share the faceplate slot
       noteRecent(cat, k);
       saveProfile(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); updatePreview(); };
     wrap.appendChild(el);
@@ -10507,57 +10674,10 @@ const UNL_CATS = [
   { cat:'text',   label:'Text',         keys:()=>TEXT_KEYS },
   { cat:'eyes',   label:'Eyes',         keys:()=>EYE_KEYS },
 ];
-function buildUnlocked(){
-  const chips=$('unlChips'), strip=$('unlStrip'), tot=$('unlTotal'), fill=$('unlFill');
-  if (!chips || !strip) return;
-  chips.innerHTML=''; strip.innerHTML='';
-  let have=0, total=0;
-  for (const c of UNL_CATS){
-    const keys = c.keys();
-    const mine = keys.filter(k => isUnlocked(c.cat, k));
-    have += mine.length; total += keys.length;
-    const chip=document.createElement('span');
-    chip.className='unlChip';
-    chip.innerHTML=`${c.label} <b>${mine.length}</b>/${keys.length}`;
-    chips.appendChild(chip);
-
-    for (const k of mine){
-      // 'none' is the empty default in three of the four categories — it's not a
-      // thing you earned, so it would only pad the strip.
-      if (k === 'none') continue;
-      const worn = (c.cat==='cap') ? profile.cap===k
-                 : (c.cat==='eyes') ? profile.eyes===k
-                 : profile.flag===k;                 // flag & animal share the faceplate slot
-      const el=document.createElement('div');
-      el.className='unlItem'+(worn?' sel':'');
-      el.title = itemName(c.cat, k);
-      if (c.cat==='cap'){
-        const g=document.createElement('span'); g.className='capGlyph';
-        g.textContent = CAPS[k].emoji || '—'; el.appendChild(g);
-      } else {
-        const cvs=document.createElement('canvas'); cvs.width=cvs.height=64;
-        const o = c.cat==='eyes' ? { color:profile.color, flag:'none', eyes:k }
-                                 : { color:profile.color, flag:k };
-        drawDisc(cvs.getContext('2d'), 32, 32, 24, o);
-        el.appendChild(cvs);
-      }
-      el.onclick=()=>{
-        if (c.cat==='cap') profile.cap=k;
-        else if (c.cat==='eyes') profile.eyes=k;
-        else profile.flag=k;
-        saveProfile();
-        buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview();
-      };
-      strip.appendChild(el);
-    }
-  }
-  if (tot) tot.textContent = `${have} / ${total}`;
-  if (fill) fill.style.width = total ? Math.round(have/total*100)+'%' : '0%';
-}
-function buildFlagPicker(){ buildRecentRow('flagRecent','flag',FLAG_KEYS,()=>profile.flag);
-                            buildTilePicker('flagPick','flag',FLAG_KEYS,()=>profile.flag); }
-function buildAnimalPicker(){ buildRecentRow('animalRecent','animal',ANIMAL_KEYS,()=>profile.flag);
-                              buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>profile.flag); }
+function buildFlagPicker(){ buildRecentRow('flagRecent','flag',FLAG_KEYS,()=>ep().flag);
+                            buildTilePicker('flagPick','flag',FLAG_KEYS,()=>ep().flag); }
+function buildAnimalPicker(){ buildRecentRow('animalRecent','animal',ANIMAL_KEYS,()=>ep().flag);
+                              buildTilePicker('animalPick','animal',ANIMAL_KEYS,()=>ep().flag); }
 // Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
 // pattern reads. No emoji, no image — what you see is what rolls.
 // ⚠️ Guarded: the standalone Ball card is gone (see the markup), so this host may not
@@ -10727,20 +10847,20 @@ function buildSlotSwatch(slot, k){
   }
   return null;
 }
-function buildTextPicker(){ buildRecentRow('textRecent','text',TEXT_KEYS,()=>profile.flag);
-                            buildTilePicker('textPick','text',TEXT_KEYS,()=>profile.flag); }
-function buildEyesPicker(){ buildRecentRow('eyesRecent','eyes',EYE_KEYS,()=>profile.eyes);
-                            buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>profile.eyes); }
+function buildTextPicker(){ buildRecentRow('textRecent','text',TEXT_KEYS,()=>ep().flag);
+                            buildTilePicker('textPick','text',TEXT_KEYS,()=>ep().flag); }
+function buildEyesPicker(){ buildRecentRow('eyesRecent','eyes',EYE_KEYS,()=>ep().eyes);
+                            buildTilePicker('eyesPick','eyes',EYE_KEYS,()=>ep().eyes); }
 // The rotation choice, as a two-tile pick like every other boolean in the menu.
 function buildSpinPick(){
   const host = $('spinPick'); if (!host) return;
   host.innerHTML = '';
   [['on','Turn'],['off','Stay upright']].forEach(([k, lab])=>{
-    const on = (k === 'on') === (profile.spin !== false);
+    const on = (k === 'on') === (ep().spin !== false);
     const el = document.createElement('div');
     el.className = 'opt' + (on ? ' sel' : '');
     el.innerHTML = `<span>${lab}</span>`;
-    el.onclick = ()=>{ profile.spin = (k === 'on'); saveProfile(); buildSpinPick(); updatePreview(); };
+    el.onclick = ()=>{ ep().spin = (k === 'on'); saveProfile(); buildSpinPick(); updatePreview(); };
     host.appendChild(el);
   });
 }
@@ -10749,16 +10869,16 @@ function buildCaps(){
   Object.keys(CAPS).forEach(k=>{
     const cp=CAPS[k]; const unlocked=isUnlocked('cap',k);
     const el=document.createElement('div');
-    el.className='opt'+(profile.cap===k?' sel':'')+(unlocked?'':' locked');
+    el.className='opt'+(ep().cap===k?' sel':'')+(unlocked?'':' locked');
     el.innerHTML=`<span class="emoji">${cp.emoji||'—'}</span><span>${cp.name}</span>`+
       (unlocked?'':`<small>🔒 ${reqText(cp.req)}</small>`);
-    el.onclick=()=>{ if(!unlocked) return; profile.cap=k; saveProfile(); buildCaps(); updatePreview(); };
+    el.onclick=()=>{ if(!unlocked) return; ep().cap=k; saveProfile(); buildCaps(); updatePreview(); };
     wrap.appendChild(el);
   });
 }
-$('pname').value = profile.name;
-$('pname').oninput = e => { profile.name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
-$('pname').onblur  = () => { if(!profile.name.trim()){ profile.name='You'; $('pname').value='You'; saveProfile(); updatePreview(); } };
+$('pname').value = ep().name;
+$('pname').oninput = e => { ep().name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
+$('pname').onblur  = () => { if(!ep().name.trim()){ ep().name = editSeat ? 'P'+(editSeat+1) : 'You'; $('pname').value = ep().name; saveProfile(); updatePreview(); } };
 
 buildSwatches();
 buildCaps();
@@ -10891,12 +11011,45 @@ const uiState = loadUI();
 // ⚠️ One entry per `.card.collapsible`, and it had gone stale twice over: it still listed
 // `ball` (a card deleted when its one control moved into the Theme slots) and `online`
 // (folded into About), and had never gained `replay`, `vj` or `about`.
-// ⚠️ **`more` IS DELIBERATELY ABSENT**, which is what makes it the one card open on a first
-// run: `initCollapsibles` takes the FIRST card whose default is open, and Modes & more is
-// the discovery card — Season, Tournament, Gauntlet, Drills, Tutorial. Adding it "for
-// completeness" collapses every card and the menu opens as eleven closed bars.
-const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true,
-  theme:true, display:true, sound:true, feel:true, replay:true, vj:true, about:true };
+// ⚠️ **`match` IS DELIBERATELY ABSENT**, which is what makes it the one card open on a
+// first run: `initCollapsibles` takes the FIRST card whose default is open. It used to be
+// `more`, because that card was the discovery card — Season, Tournament, Gauntlet, Drills,
+// Tutorial. Those are Match's **Modes** tab now, so Match is both the thing you came for
+// and the door to everything that used to be behind "Modes & more". Adding it "for
+// completeness" collapses every card and the menu opens as a stack of closed bars.
+const SECTION_COLLAPSED_DEFAULT = { player:true, options:true, replay:true, vj:true };
+// ---------- A SECTION NEED NOT BE A CARD -------------------------------------
+// ⚠️ **A SECTION IS ANY `[data-sec]` NODE UNDER `#setup`, AT ANY DEPTH.** It used to be
+// exactly a `.card.collapsible`, and that was fine while the menu was a flat accordion of
+// eleven of them. Folding Controls / Display / Sound / Game Feel / About into **Options**,
+// and Theme into Display, makes some sections panes and one of them a pane inside a pane —
+// so every reader had to stop asking "which card" and start asking "where does this live".
+// ⚠️ **The identity survives the move**, which is the whole point: `openSection('feel')`,
+// the jump bar, `lastSection` and the menu search all still name `feel` and land on it. A
+// pane that carries `data-sec` is a section that happens to live inside another one, and
+// nothing downstream had to learn a second concept.
+// ⚠️ **`:not(.jumpchip)` is load-bearing** — the jump bar's own chips carry `data-sec`, so
+// a bare attribute selector finds a CHIP before the thing it points at. That trap is
+// already written up against `.card[data-sec="vj"]` twice in this file.
+const SEC_SEL = '#setup [data-sec]:not(.jumpchip)';
+function sectionNode(sec){
+  return document.querySelector('#setup [data-sec="' + sec + '"]:not(.jumpchip)');
+}
+// Every pane a node sits inside, outermost first — what has to be SHOWN for it to be
+// on screen. Empty for a node sitting directly in a card.
+function revealPath(node){
+  const out = [];
+  for (let el = node; el && el.id !== 'setup'; el = el.parentElement)
+    if (el.classList && el.classList.contains('subpane') && el.dataset.group)
+      out.push([el.dataset.group, el.dataset.pane]);
+  return out.reverse();
+}
+// ⚠️ **OUTERMOST FIRST, and that ordering is not cosmetic.** Showing Theme's pane before
+// Display's would have `showSubTab` write the Theme tab into a pane the Options row is
+// about to hide, and the second call would look like it had done nothing.
+function revealNode(node){
+  for (const [g, pn] of revealPath(node)) showSubTab(g, pn);
+}
 // Accordion: at most one section open. Opening one closes the rest, so the setup
 // screen is never a wall of every control at once and you don't lose your place
 // scrolling past six expanded cards.
@@ -10906,24 +11059,28 @@ function openSection(sec){
   // when this card is open — so doing it there was a database read per tap for a list
   // nobody was looking at.
   if (sec === 'replay') buildReplayList();
-  document.querySelectorAll('.card.collapsible').forEach(card=>{
-    const mine = card.dataset.sec === sec;
-    card.classList.toggle('collapsed', !mine);
-    uiState[card.dataset.sec] = !mine;
+  const node = sectionNode(sec);
+  const card = node && node.closest('.card.collapsible');
+  document.querySelectorAll('.card.collapsible').forEach(c=>{
+    const mine = c === card;
+    c.classList.toggle('collapsed', !mine);
+    uiState[c.dataset.sec] = !mine;
   });
-  // ⚠️ Remember WHICH card, so coming back to settings lands where you left off. The
+  if (node && node !== card) revealNode(node);
+  // ⚠️ Remember WHICH section, so coming back to settings lands where you left off. The
   // collapsed flags alone cannot say this: `collapseAllSections` closes everything, and
   // after that every card reads "closed" and the last one you used is gone.
   uiState._open = sec;
   syncChevrons(); saveUI(uiState);
 }
-// The card to open when nobody names one. ⚠️ Checked against the DOM, because a stored
-// section can outlive the card it names — the standalone Ball card was removed and a save
-// from before that still says 'ball', which would open nothing at all.
+// The section to open when nobody names one. ⚠️ Checked against the DOM, because a stored
+// section can outlive the thing it names — the standalone Ball card was removed and a save
+// from before that still says 'ball', which would open nothing at all. Cards and panes
+// both count now, so a save that says `feel` still works after Game Feel became a pane.
 function lastSection(){
   const want = uiState._open;
-  if (want && document.querySelector('.card.collapsible[data-sec="' + want + '"]')) return want;
-  return 'theme';
+  if (want && sectionNode(want)) return want;
+  return 'options';
 }
 function collapseAllSections(){
   if (VJVIEW) return;      // the /vj route's one card stays open — see initCollapsibles
@@ -11525,8 +11682,13 @@ const SUBTABS = {
   replay: [['goals','Goals','ball'], ['matches','Matches','clipboard']],
   player: [['colour','🎨 Colour'], ['cap','🧢 Cap'], ['flag','🏴 Flags'],
            ['animal','🐻 Animals'], ['text','🔢 Text'], ['photo','📷 Photo'], ['eyes','👀 Eyes']],
-  match:  [['game','Game','ball'], ['pitch','Pitch','stadium'],
-           ['players','Players','gamepad'], ['rules','Rules','clipboard']],
+  // ⚠️ Five cards, five chips. The pane names are the old `data-sec` values on purpose —
+  // one name for one thing, so `openSection('feel')` and `showSubTab('options','feel')`
+  // cannot drift apart.
+  options: [['controls','Controls','gamepad'], ['display','Display','monitor'],
+            ['sound','Sound','sound'], ['feel','Game Feel','sliders'], ['about','About','question']],
+  match:  [['game','Game','ball'], ['modes','Modes','trophy'], ['bots','Bots','skull'],
+           ['pitch','Pitch','stadium'], ['players','Players','gamepad'], ['rules','Rules','clipboard']],
   // ⚠️ Built from SLOT_KEYS, never a hand-written copy of it: the chips and the panes have to
   // come from the same list or a new slot arrives with a pane and no chip, and its controls
   // are then hidden while `audit` and the menu search still find them.
@@ -11581,16 +11743,17 @@ const subTab = Object.assign({}, (uiState && uiState._tab) || {});
 // a card with CSS alone leaves `querySelectorAll` finding its controls, so the search
 // would happily jump a guest straight into the pane you just hid. That is the exact
 // trap `audit` already watches for with orphan panes.
-const SHOW_PANES = ['game', 'pitch'];   // the Match sub-tabs that survive
+const SHOW_PANES = ['game', 'pitch', 'modes'];   // the Match sub-tabs that survive
 // ⚠️ How to play survives, and it is the one thing here that is NOT a setting: a
-// stranger holding your phone needs to know what the buttons do. Everything else in
-// the More card — Season, Gauntlet, Drills, Tutorial, Stats, Ranks, Daily, Shop,
-// Watch, Settings — is either progression or configuration and goes.
+// stranger holding your phone needs to know what the buttons do. Everything else on
+// the Modes tab — Season, Gauntlet, Drills, Tutorial, Stats, Ranks, Daily, Shop,
+// Watch — is either progression or configuration and goes. ⚠️ Which is why `modes`
+// is in SHOW_PANES rather than cut: the tab survives so How to play is reachable,
+// and the CSS empties it of everything else.
 const SHOW_TILES = ['howBtn'];
 function showModeOn(){ return !!sel.showMode; }
 function shownInShowMode(sec, pane){
   if (!showModeOn()) return true;
-  if (sec === 'more') return true;      // kept, but trimmed to How to play — see the CSS
   if (sec !== 'match') return false;
   return !pane || SHOW_PANES.includes(pane);
 }
@@ -11671,6 +11834,17 @@ function toggleMute(){
   if (!sel.snd.muted) playSfx('whistle');      // a confirmation you can hear
 }
 
+// ⚠️ **A PANE SAYS WHICH ROW OWNS IT (`data-group`), AND THAT IS WHAT MAKES NESTING
+// POSSIBLE AT ALL.** This used to toggle `scope.querySelectorAll('.subpane')` over the
+// whole CARD — every pane at every depth — so a tab row inside a pane was blanked by its
+// parent's chips the moment you touched them. That is why the Pitch shape row had to be
+// built out of its own `.shapetabs`/`.shapechip` classes rather than reusing these, and
+// it is written up there as the reason. Folding Sound, Game Feel and Theme underneath
+// Options needs three levels in three places, so the mechanism is generalised once here
+// instead of a second parallel set of class names being invented for each of them.
+// ⚠️ Matching on the group as well as the pane also fixes a collision that was latent:
+// two groups may legitimately use the same pane name (`player` is a Match pane AND a Game
+// Feel pane), and the old unscoped toggle turned both on together.
 function showSubTab(group, pane){
   const card = document.querySelector(`.subtabs[data-tabs="${group}"]`); if (!card) return;
   // ⚠️ Persisted, not just held in memory: "where I was modifying the settings" is the
@@ -11680,9 +11854,9 @@ function showSubTab(group, pane){
   uiState._tab = Object.assign({}, uiState._tab, { [group]: pane });
   saveUI(uiState);
   const scope = card.closest('.card') || document;
-  for (const el of scope.querySelectorAll('.subpane'))
+  for (const el of scope.querySelectorAll(`.subpane[data-group="${group}"]`))
     el.classList.toggle('on', el.dataset.pane === pane);
-  for (const el of card.querySelectorAll('.subchip'))
+  for (const el of card.querySelectorAll(':scope > .subchip'))
     el.classList.toggle('sel', el.dataset.pane === pane);
 }
 function buildSubTabs(){
@@ -11757,17 +11931,29 @@ function buildHintToggles(root){
 function buildJumpBar(){
   const host = $('jumpBar'); if (!host) return;
   host.innerHTML = '';
-  for (const card of document.querySelectorAll('#setup .card.collapsible')){
-    const sec = card.dataset.sec; if (!sec) continue;
+  // ⚠️ **ONE CHIP PER SECTION, and a nested section gets one too.** Folding five cards
+  // into Options would otherwise have turned five chips into one, so Sound would be two
+  // taps and a guess away from a bar whose entire job is being one tap away. A chip
+  // addresses `data-sec`, and `openSection` already knows how to reach a nested one.
+  for (const node of document.querySelectorAll(SEC_SEL)){
+    const sec = node.dataset.sec; if (!sec) continue;
     if (!shownInShowMode(sec)) continue;      // no chip for a section that isn't there
-    const nm = (card.querySelector('.secname') || card.querySelector('h2'));
+    if (sec === 'vj') continue;               // decks live at /vj now — see the signpost
+    // ⚠️ **NO CHIP FOR A SECTION THAT IS ONLY A CONTAINER.** Options holds five sections
+    // and no control of its own, so a chip for it would land exactly where the Controls
+    // chip lands — two chips, one destination, which is the duplication this file spends
+    // its time removing. A section with settings AND a nested one (Display, which owns
+    // Theme) keeps its chip, because it is somewhere you can actually arrive.
+    if (node.querySelector(SEC_SEL) &&
+        ![...node.querySelectorAll('label.field')].some(l => l.closest(SEC_SEL) === node)) continue;
+    const nm = (node.querySelector('.secname') || node.querySelector('h2') || node.querySelector('.subsechead'));
     const bt = document.createElement('button');
     bt.type='button'; bt.className='jumpchip'; bt.dataset.sec = sec;
     bt.textContent = (nm ? nm.textContent : sec).trim().split('\n')[0].slice(0, 14);
     bt.onclick = () => {
       openSection(sec);
       // Opening changes the layout, so scroll on the next frame or you land short.
-      requestAnimationFrame(()=> card.scrollIntoView({ block:'start', behavior:'smooth' }));
+      requestAnimationFrame(()=> node.scrollIntoView({ block:'start', behavior:'smooth' }));
       syncJumpBar(sec);
     };
     host.appendChild(bt);
@@ -11796,29 +11982,38 @@ function menuSearchIndex(){
     seen.add(key);
     rows.push({ t, low: t.toLowerCase(), node, sec, secName, group, pane, kind });
   };
-  for (const card of document.querySelectorAll('#setup .card.collapsible')){
-    const sec = card.dataset.sec; if (!sec) continue;
+  // ⚠️ **WALKED BY SECTION, NOT BY CARD, and `secOf` is what keeps them apart.** With
+  // Game Feel and Theme living inside other cards, iterating cards would file every one
+  // of their controls under `options` — so the search would say "Options" for a slider
+  // whose own chip says Game Feel, and show mode's filter would be asking the wrong
+  // question about it. A control belongs to its NEAREST enclosing `[data-sec]`.
+  const secOf = el => el.closest(SEC_SEL);
+  for (const node of document.querySelectorAll(SEC_SEL)){
+    const sec = node.dataset.sec; if (!sec) continue;
     // ⚠️ Show mode has to be honoured HERE too, not only in CSS. Hiding a card with
     // `display:none` does nothing to `querySelectorAll`, so without this the search
     // still lists every hidden control and jumps a guest into the pane you just hid —
     // the same hole `audit` watches for with orphan panes.
     if (!shownInShowMode(sec)) continue;
-    const nm = card.querySelector('.secname') || card.querySelector('h2');
+    if (sec === 'vj') continue;
+    const nm = node.querySelector('.secname') || node.querySelector('h2') || node.querySelector('.subsechead');
     const secName = ((nm && nm.textContent) || sec).trim().split('\n')[0];
-    const tabs = card.querySelector('.subtabs');
-    const group = tabs ? tabs.dataset.tabs : null;
+    // ⚠️ The group is read off the PANE, never off "the first `.subtabs` in the card" —
+    // that used to be true and stopped being true the moment a tab row could nest.
     const paneOf = el => { const pn = el.closest('.subpane'); return pn ? pn.dataset.pane : null; };
-    const keep = (el) => shownInShowMode(sec, paneOf(el));
-    add(secName, card, sec, secName, null, null, 'Section');
+    const groupOf = el => { const pn = el.closest('.subpane'); return pn ? (pn.dataset.group || null) : null; };
+    const mine = el => secOf(el) === node;
+    const keep = (el) => mine(el) && shownInShowMode(sec, paneOf(el));
+    add(secName, node, sec, secName, null, null, 'Section');
     // A setting is its label; an option is the thing you would actually be looking
     // for ("Killer Lobsters", "Colossus"), so both are indexed and options rank higher.
-    for (const lb of card.querySelectorAll('label.field'))
-      if (keep(lb)) add(lb.textContent, lb, sec, secName, group, paneOf(lb), 'Setting');
-    for (const op of card.querySelectorAll('.opt'))
-      if (keep(op)) add((op.querySelector('span:not(.emoji)') || {}).textContent, op, sec, secName, group, paneOf(op), 'Option');
-    for (const nv of card.querySelectorAll('.navtile'))
+    for (const lb of node.querySelectorAll('label.field'))
+      if (keep(lb)) add(lb.textContent, lb, sec, secName, groupOf(lb), paneOf(lb), 'Setting');
+    for (const op of node.querySelectorAll('.opt'))
+      if (keep(op)) add((op.querySelector('span:not(.emoji)') || {}).textContent, op, sec, secName, groupOf(op), paneOf(op), 'Option');
+    for (const nv of node.querySelectorAll('.navtile'))
       if (keep(nv) && (!showModeOn() || SHOW_TILES.includes(nv.id)))
-        add(nv.textContent, nv, sec, secName, group, paneOf(nv), 'Screen');
+        add(nv.textContent, nv, sec, secName, groupOf(nv), paneOf(nv), 'Screen');
   }
   return rows;
 }
@@ -11843,7 +12038,10 @@ let searchRows = [], searchCur = -1;
 function menuSearchGo(row){
   if (!row) return;
   openSection(row.sec);
-  if (row.group && row.pane) showSubTab(row.group, row.pane);
+  // ⚠️ **EVERY enclosing pane, outermost first** — a Game Feel slider is inside the Feel
+  // pane inside the Options card, and a Theme tile is one deeper again. Showing only the
+  // innermost one writes a tab into a pane nothing is displaying.
+  revealNode(row.node);
   // ⚠️ **A FIELD TILE MAY BE IN A SHAPE GROUP THAT IS NOT SHOWING.** Without this, searching
   // a rounded pitch scrolls to a tile with no height — `tests/menufind.mjs` measures exactly
   // that, and it passes today only because Colossus happens to be square and Classic is the
@@ -11950,7 +12148,7 @@ function buildPhotoPane(){
   const cv = document.createElement('canvas'); cv.width = cv.height = 132; cv.className = 'photoprev';
   cv.id = 'photoPrev';
   drawDisc(cv.getContext('2d'), 66, 66, 52,
-    { color: profile.color, flag: profile.photo ? 'photo' : 'none', eyes: profile.eyes, cap: profile.cap });
+    { color: ep().color, flag: ep().photo ? 'photo' : 'none', eyes: ep().eyes, cap: ep().cap });
   row.appendChild(cv);
   const btns = document.createElement('div'); btns.className = 'photobtns';
   const add = (label, fn, cls) => { const b=document.createElement('button');
@@ -11968,8 +12166,8 @@ function buildPhotoPane(){
     add('📁 Upload', () => document.getElementById('photoFile').click());
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
       add('📷 Take photo', startPhotoCam);
-    if (profile.photo){
-      add('Wear it', () => { profile.flag = 'photo'; saveProfile(); buildSettings(); updatePreview(); buildPhotoPane(); });
+    if (ep().photo){
+      add('Wear it', () => { ep().flag = 'photo'; saveProfile(); buildSettings(); updatePreview(); buildPhotoPane(); });
       add('Remove', () => setPhoto(''));
     }
   }
@@ -11984,7 +12182,7 @@ function buildPhotoPane(){
   const msg = document.createElement('div'); msg.id = 'photoMsg'; msg.className = 'photomsg';
   msg.textContent = photoMsgText;
   host.appendChild(msg);
-  if (profile.photo && profile.flag !== 'photo' && !live) photoNote('Saved — press "Wear it" to put it on.');
+  if (ep().photo && ep().flag !== 'photo' && !live) photoNote('Saved — press "Wear it" to put it on.');
   const grid = document.createElement('div'); grid.id = 'photoGrid'; grid.className = 'photogrid';
   host.appendChild(grid);
   buildPhotoGrid();
@@ -12021,7 +12219,7 @@ function buildPhotoGrid(){
         if (!photoPicked.size) return;
         const ids = [...photoPicked];
         // Wearing one you just deleted would leave a face with nothing behind it.
-        const worn = rows.filter(r => ids.includes(r.id)).some(r => r.url === profile.photo);
+        const worn = rows.filter(r => ids.includes(r.id)).some(r => r.url === ep().photo);
         photoLibDel(ids).then(() => {
           photoDeleteArmed = false; photoPicked.clear();
           if (worn) setPhoto('', false);
@@ -12035,7 +12233,7 @@ function buildPhotoGrid(){
     rows.forEach(r => {
       const t = document.createElement('button');
       t.type = 'button'; t.className = 'phototile';
-      if (r.url === profile.photo) t.classList.add('worn');
+      if (r.url === ep().photo) t.classList.add('worn');
       if (photoDeleteArmed && photoPicked.has(r.id)) t.classList.add('picked');
       const im = document.createElement('img'); im.src = r.url; im.alt = '';
       t.appendChild(im);
@@ -12102,7 +12300,7 @@ $('lookReset').onclick = () => {
   photoSrc = null; photoImg = null;   // the photo is part of your look, so it goes too
   saveProfile();                      // this is also what pushes the look to the pitch live
   buildPhotoPane();
-  const nm = $('pname'); if (nm) nm.value = profile.name;
+  const nm = $('pname'); if (nm) nm.value = ep().name;
   buildSettings(); updatePreview();
 };
 // Keep the section headers pinned right below the sticky KICKOFF bar by feeding
@@ -12492,14 +12690,49 @@ syncMuteUI();
 hudPeekInit();
 
 // ============================================================
-//  DECK UI — drive the whole menu from a controller.
-//  Select toggles the left dock; the stick/d-pad moves a focus ring through the
-//  docked page; A activates, B backs out, LB/RB jump section to section, and
-//  left/right nudges a slider. Runs on its own rAF so it works whether or not a
-//  match is live, and stays completely dormant outside deck view.
+//  MENU BY CONTROLLER — the whole menu, from a joystick, on every machine.
+//  The stick/d-pad moves a focus ring, A activates, B backs out, LB/RB jump
+//  section to section, and left/right nudge a slider. Runs on its own rAF so it
+//  works whether or not a match is live.
+//
+//  ⚠️ **THIS WAS STEAM DECK ONLY, AND THAT WAS THE BUG.** Every line of it existed
+//  and every line of it was fenced behind `isDeck()` — so on a cabinet, a TV with a
+//  pad in your hand, or any desktop, the one input the game is built around could
+//  start a match and then not change a single thing about it. You had to reach for a
+//  mouse. Same shape as `sel.controllers` shipping `off` and Sprint shipping off: the
+//  feature was built, wired, and then defaulted to the half nobody could reach.
+//
+//  ⚠️ **WHO OWNS THE PAD IS THE WHOLE DESIGN, and there are two owners.** A live match
+//  owns it — A is KICK, and a menu that stole that would pop a card on every shot. The
+//  menu owns it only while it is genuinely on screen with no live match behind it, and
+//  `padDrivesMenu()` is the ONE predicate that says so. `runBot`'s input gather reads
+//  the same predicate and parks the seat, so a stick press can never move a focus ring
+//  and a player at once.
+//
+//  ⚠️ **SELECT IS DECK-ONLY, deliberately.** There it toggles the left dock, which is
+//  what "open the menu" means on a machine whose menu is a dock. Everywhere else SELECT
+//  already means *turn my controls a quarter turn*, and with nothing running it opens
+//  warm-up — two meanings that were bought and paid for, and a third would break both.
+//  Off a deck the menu is simply on screen or it is not, so there is nothing to toggle.
 // ============================================================
 const DECK_BTN = { A:0, B:1, LB:4, RB:5, SELECT:8, START:9, UP:12, DOWN:13, LEFT:14, RIGHT:15 };
-let deckUI = { idx:0, prev:{}, repeat:0, on:false };
+let deckUI = { idx:0, prev:{}, repeat:0, on:false, woke:false };
+// ⚠️ **NO RING UNTIL A PAD IS ACTUALLY USED, and it goes again on the first click.** The
+// menu is mouse-driven on most machines, and a permanent 3px outline round the first tile
+// on a screen nobody is navigating with a stick is furniture — the argument that hides the
+// seat picker at one seat. A deck is the exception: there the pad IS the pointer.
+function padMenuWoke(){ return deckUI.woke || isDeck(); }
+window.addEventListener('pointerdown', () => {
+  if (!deckUI.woke) return;
+  deckUI.woke = false; deckPaint(); syncPadHint();
+}, true);
+function syncPadHint(){
+  const on = padDrivesMenu() && padMenuWoke();
+  document.body.classList.toggle('padmenu', on);
+  const h = $('deckHint');
+  if (h && on && !isDeck())
+    h.textContent = '✚ move · Ⓐ select · Ⓑ close card · LB/RB section';
+}
 // True while the open deck menu is holding the controller — the match must ignore
 // pad/keyboard input for that whole time, or navigating also drives your player.
 function deckMenuOwnsPad(){
@@ -12510,12 +12743,28 @@ function deckMenuOwnsPad(){
   const el = $(deskDockId);
   return !!(el && !el.classList.contains('hidden') && el.classList.contains('docked'));
 }
+// ⚠️ The docked page on a deck, the setup screen everywhere else — and `#setup` is what
+// the deck's dock usually IS, so the two are the same list far more often than not.
+function menuRoot(){ return (deskDockId && $(deskDockId)) || $('setup'); }
+// True when a controller should be driving the MENU rather than a player.
+function padDrivesMenu(){
+  if (deckMenuOwnsPad()) return true;               // the deck's docked menu, unchanged
+  if (isDeck()) return false;                       // on a deck, only the dock counts
+  if (PANEL) return false;                          // /settings and /vj are mouse pages
+  const root = menuRoot();
+  if (!root || root.classList.contains('hidden')) return false;
+  if (root.classList.contains('docked') && dockCollapsedNow()) return false;
+  // ⚠️ A LIVE MATCH KEEPS THE PAD. The attract demo is not one — it is what the menu
+  // looks like — and a finished match is a result screen, which has its own cursor.
+  const w = (typeof world !== 'undefined') ? world : null;
+  if (w && !w.demo && w.state !== 'over') return false;
+  return true;
+}
 function deckFocusables(){
-  if (!deskDockId) return [];
-  const root = $(deskDockId); if (!root || root.classList.contains('hidden')) return [];
+  const root = menuRoot(); if (!root || root.classList.contains('hidden')) return [];
   // Collapsed cards hide their contents, so their h2 (the expand toggle) has to be
   // reachable too — otherwise a pad could never open a section.
-  const sel_ = '.card.collapsible > h2, .opt, .unlItem, .navtile, button, input[type=range], .ckrow button, .padrow button';
+  const sel_ = '.card.collapsible > h2, .opt, .navtile, button, input[type=range], .ckrow button, .padrow button';
   return Array.from(root.querySelectorAll(sel_)).filter(el => {
     if (el.disabled) return false;
     if (el.closest('.hidden')) return false;
@@ -12533,7 +12782,7 @@ function deckSetMenuOpen(open){
 }
 function deckPaint(){
   document.querySelectorAll('.deckfocus').forEach(el => el.classList.remove('deckfocus'));
-  if (!isDeck() || dockCollapsedNow()) return;
+  if (!padDrivesMenu() || !padMenuWoke()) return;
   const list = deckFocusables(); if (!list.length) return;
   deckUI.idx = Math.max(0, Math.min(deckUI.idx, list.length-1));
   const el = list[deckUI.idx];
@@ -12582,13 +12831,15 @@ function deckEdge(g, code){                    // true on the frame a button goe
   return now && !was;
 }
 function pollDeckUI(){
-  if (isDeck()){
+  const drives = padDrivesMenu();
+  if (isDeck() || drives){
     const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
     let g = null;
     for (const c of gps) if (c && c.connected){ g = c; break; }   // any pad drives the UI
     if (g){
-      if (deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(dockCollapsedNow());
-      if (!dockCollapsedNow()){
+      // ⚠️ Deck only — see the header. Elsewhere SELECT rotates a seat / opens warm-up.
+      if (isDeck() && deckEdge(g, DECK_BTN.SELECT)) deckSetMenuOpen(dockCollapsedNow());
+      if (drives){
         // ⚠️ Through `padStick`, not axes[0]/[1]: on a pad with a non-standard mapping the
         // menu would be D-pad only for exactly the same reason the player would not move.
         const [ax, ay] = padStick(g);
@@ -12597,6 +12848,13 @@ function pollDeckUI(){
         const left  = btn(g, DECK_BTN.LEFT)  || ax < -0.55;
         const right = btn(g, DECK_BTN.RIGHT) || ax >  0.55;
         const held = up||down||left||right;
+        // ⚠️ Waking on a HELD direction, not on a press edge: a pad resting with a drifty
+        // stick would otherwise never wake, and one that is genuinely being pushed wakes
+        // on the frame it is pushed. The first press then moves as well, which is what a
+        // person pressing up expects — waking without moving loses their input.
+        if (held || btn(g, DECK_BTN.A) || btn(g, DECK_BTN.LB) || btn(g, DECK_BTN.RB)){
+          if (!deckUI.woke){ deckUI.woke = true; syncPadHint(); deckPaint(); }
+        }
         // First press moves at once, then auto-repeats while held.
         deckUI.repeat = held ? deckUI.repeat + 1 : 0;
         const fire = held && (deckUI.repeat === 1 || (deckUI.repeat > 22 && deckUI.repeat % 5 === 0));
@@ -12607,7 +12865,10 @@ function pollDeckUI(){
           else if (right && !deckSlide(1))  deckMove(1);
         }
         if (deckEdge(g, DECK_BTN.A)) deckActivate();
-        if (deckEdge(g, DECK_BTN.B)) deckSetMenuOpen(false);
+        // ⚠️ B closes the DOCK on a deck and CLOSES THE OPEN CARD everywhere else. Off a
+        // deck there is nothing to collapse the menu into, so "back" has to mean one step
+        // up the accordion or the button is a way to hide the only screen there is.
+        if (deckEdge(g, DECK_BTN.B)){ if (isDeck()) deckSetMenuOpen(false); else { collapseAllSections(); deckFocusReset(); } }
         if (deckEdge(g, DECK_BTN.LB)) deckSection(-1);
         if (deckEdge(g, DECK_BTN.RB)) deckSection(1);
       } else {
@@ -12761,10 +13022,12 @@ function openLook(section){
   matchCollapse = false;                                         // ...and drops the match's own collapse
   if (sel.dockCollapsed) sel.dockCollapsed = false, saveSel();   // opening settings expands the dock
   dockOrFull('setup');
-  const card = document.querySelector('.card.collapsible[data-sec="'+target+'"]');
-  if (card){
+  // ⚠️ `sectionNode`, not `.card[data-sec=…]`: Theme and Game Feel are PANES now, so a
+  // card-only lookup would silently no-op on exactly the two deep links this file has.
+  const node = sectionNode(target);
+  if (node){
     openSection(target);                       // accordion: this one, and only this one
-    try{ card.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ card.scrollIntoView(); }catch(__){} }
+    try{ node.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ node.scrollIntoView(); }catch(__){} }
   }
 }
 // Back-compat shims (settings is no longer a separate screen).
@@ -13281,6 +13544,8 @@ function buildCocktailRows(){
 
 function buildSettings(){
   Aud.ensure();
+  if (uiState._seat != null && editSeat !== uiState._seat) editSeat = uiState._seat|0;
+  buildSeatPick();
   // Bundle picker — each tile sets ALL five slots at once. Selected only when every
   // slot still matches; the moment one doesn't, none is marked and the label reads
   // Custom, which is the honest answer.
@@ -13331,7 +13596,7 @@ function buildSettings(){
       const curName = S.keys().includes(cur) ? S.name(cur) : 'Custom';
       // One PANE per slot, so the chip row above switches between them instead of the
       // whole lot being stacked six deep.
-      const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.pane=slot;
+      const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.group='theme'; pane.dataset.pane=slot;
       const lab=document.createElement('label'); lab.className='field';
       lab.innerHTML = `${S.emoji} ${S.label} <small style="color:var(--accent);font-weight:400">· ${curName}</small>`;
       pane.appendChild(lab);
@@ -13499,7 +13764,7 @@ function buildSettings(){
   // reset)" part, which is the bit that says what the sound is actually FOR.
   const cc=$('sndCats'); cc.innerHTML='';
   for(const [cat,label] of SFX_CATS){
-    const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.pane=cat;
+    const pane=document.createElement('div'); pane.className='subpane'; pane.dataset.group='sound'; pane.dataset.pane=cat;
     const lab=document.createElement('label'); lab.className='field'; lab.textContent=label; pane.appendChild(lab);
     const row=document.createElement('div'); row.className='opts';
     SFX_LABELS[cat].forEach((nm,idx)=>{
@@ -16740,7 +17005,7 @@ const SAVEFILE = {
   // ⚠️ `cup` travels for the reason `season` and `rogue` do: a tournament half-played is
   // a run in progress, and a save file that moves the settings but not the thing you were
   // in the middle of is a save of the game's look rather than of your game.
-  keys: ['sel', 'profile', 'stats', 'names', 'matchlog', 'drills', 'season', 'rogue', 'cup', 'maps', 'mapvotes',
+  keys: ['sel', 'profile', 'profiles', 'stats', 'names', 'matchlog', 'drills', 'season', 'rogue', 'cup', 'maps', 'mapvotes',
          'recents', 'feed', 'arcade', 'vjpresets', 'ui'],
   skip: ['upd', 'lastver', 'firstrun', 'sync', 'login', 'html', 'cloud'],
 };
@@ -17770,10 +18035,12 @@ function step(w){
   if (active){
     w.aiTick = (w.aiTick || 0) + 1;   // one tick for the whole pitch, so the AI's
                                       // team-level work runs once per team per step
+    // ⚠️ Hoisted out of the loop: the answer cannot change between two players of the
+    // same step, and it walks the DOM. At 8v8 it was sixteen of those a step.
+    const menu = padDrivesMenu();
     for (const p of w.players){
-      // While the deck menu is open it owns the pad, so the same stick press can't
-      // steer a player and the focus ring at once. Passing null parks the seat.
-      const menu = deckMenuOwnsPad();
+      // While the menu owns the pad the same stick press must not steer a player and a
+      // focus ring at once, so passing null parks the seat.
       if (p.ctrl==='human1') applyHumanInput(p, menu ? null : pads.p1);
       else if (p.ctrl==='human2') applyHumanInput(p, menu ? null : pads.p2);
       // ⚠️ THE KEYBOARD AND THE FIRST CONTROLLER DRIVE THE SAME PLAYER, at the same time.
@@ -29274,7 +29541,9 @@ if (window.__MAGNETDEBUG) {
     get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal, clampBallInside,
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
-    isUnlocked, unlockCounts, buildUnlocked, UNL_CATS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    isUnlocked, unlockCounts, UNL_CATS,
+    get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
+    sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },

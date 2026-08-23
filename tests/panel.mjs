@@ -112,13 +112,17 @@ const cardSig = pg => pg.evaluate(()=>[...document.querySelectorAll('#setup .car
          ':' + c.querySelectorAll('input.slider').length));
 const gs = await cardSig(game), ps = await cardSig(panel);
 o.gameCards = gs.length; o.panelCards = ps.length;
-o.cardsIdentical = gs.length > 5 && JSON.stringify(gs) === JSON.stringify(ps);
+// Eleven collapsible cards folded into five (Match, Your Player, Options, Replays, and
+// the hidden VJ card the /vj route needs). The claim is that both windows render the
+// SAME set, not that there are many of them.
+o.cardsIdentical = gs.length >= 4 && JSON.stringify(gs) === JSON.stringify(ps);
 // ...and they render the same, not just the same markup. Put both on one theme
 // first: they're mid-sync here, and two different palettes SHOULD look different.
 await game.evaluate(()=>{ const M=window.__magnet; M.applyBundle('neon'); M.saveSel(); });
 await until(panel, ()=>window.__magnet.sel.look.palette === 'neon');
 const feelStyle = pg => pg.evaluate(()=>{
-  const c=document.querySelector('#setup .card.collapsible[data-sec="feel"]');
+  // Game Feel is a pane of Options — the CARD whose chrome is being compared is Options.
+  const c=document.querySelector('#setup .card.collapsible[data-sec="options"]');
   c.classList.remove('collapsed');
   const s=getComputedStyle(c), o2=getComputedStyle(c.querySelector('h2'));
   return [s.borderRadius, s.backgroundColor, o2.fontFamily, o2.fontSize].join('|'); });
@@ -175,9 +179,9 @@ o.telemetryState = await until(panel, ()=>document.getElementById('panelState').
 await panel.evaluate(()=>{
   [...document.querySelectorAll('#panelPick .opt')].find(t=>/separate/i.test(t.textContent)).click(); });
 o.gameHidesCards = await until(game, ()=>
-  getComputedStyle(document.querySelector('#setup .card.collapsible[data-sec="feel"]')).display === 'none');
+  getComputedStyle(document.querySelector('#setup .card.collapsible[data-sec="options"]')).display === 'none');
 o.panelKeepsCards = await panel.evaluate(()=>{
-  const c=document.querySelector('#setup .card.collapsible[data-sec="feel"]');
+  const c=document.querySelector('#setup .card.collapsible[data-sec="options"]');
   return getComputedStyle(c).display !== 'none'; });
 o.escapeHatchShown = await until(game, ()=>
   getComputedStyle(document.getElementById('detachedCard')).display !== 'none');
@@ -188,7 +192,7 @@ o.gameStillRuns = await game.evaluate(()=>{ const M=window.__magnet, w=M.world;
 // --- ...and inline mode still works exactly as before
 await game.evaluate(()=>document.getElementById('inlinePanelBtn').click());
 o.inlineRestores = await until(game, ()=>
-  getComputedStyle(document.querySelector('#setup .card.collapsible[data-sec="feel"]')).display !== 'none' &&
+  getComputedStyle(document.querySelector('#setup .card.collapsible[data-sec="options"]')).display !== 'none' &&
   getComputedStyle(document.getElementById('detachedCard')).display === 'none');
 o.inlineReachedPanel = await until(panel, ()=>window.__magnet.sel.settingsPanel === 'inline');
 
@@ -284,7 +288,7 @@ await wait(300);
 const lone = await ctx.newPage();
 await lone.goto(srv.url + '/settings/');
 await lone.waitForTimeout(800);
-o.loneOpens = await lone.evaluate(()=>[...document.querySelectorAll('#setup .card.collapsible')].length > 5);
+o.loneOpens = await lone.evaluate(()=>[...document.querySelectorAll('#setup .card.collapsible')].length >= 4);
 o.loneNotBlank = await lone.evaluate(()=>window.__magnet.sel.grass === 'rings');   // from localStorage
 o.loneSaysWaiting = await lone.evaluate(()=>/waiting/i.test(document.getElementById('panelState').textContent));
 

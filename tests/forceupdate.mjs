@@ -201,9 +201,9 @@ const page = async (seed, w = 900, h = 1000) => {
       // ...and there is no separate card left behind for it.
       noNewsCard: !document.querySelector('#setup .card[data-sec="news"]'),
       // The version and the update check are still in the same place as the notes.
-      versionWithIt: !!document.querySelector('#setup .card[data-sec="about"] #ver') &&
-                     !!document.querySelector('#setup .card[data-sec="about"] #updCheckBtn') &&
-                     !!document.querySelector('#setup .card[data-sec="about"] #newsList'),
+      versionWithIt: !!document.querySelector('#setup [data-sec="about"]:not(.jumpchip) #ver') &&
+                     !!document.querySelector('#setup [data-sec="about"]:not(.jumpchip) #updCheckBtn') &&
+                     !!document.querySelector('#setup [data-sec="about"]:not(.jumpchip) #newsList'),
     };
   });
   ok('the changelog renders every entry', r.rendered === r.entries && r.entries >= 2,
@@ -267,7 +267,7 @@ const page = async (seed, w = 900, h = 1000) => {
   const r = await p.evaluate(() => {
     const M = window.__magnet;
     M.openSection('about');
-    const card = document.querySelector('#setup .card[data-sec="about"]');
+    const card = document.querySelector('#setup [data-sec="about"]:not(.jumpchip)');
     const ver = document.getElementById('ver');
     return {
       card: !!card,

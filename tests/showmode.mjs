@@ -45,7 +45,8 @@ const SNAP = () => {
     bodyClass: document.body.classList.contains('showmode'),
     cards: [...document.querySelectorAll('#setup .card.collapsible')].filter(shown).map(c => c.dataset.sec),
     matchChips: [...document.querySelectorAll('.subtabs[data-tabs="match"] .subchip')].map(c => c.dataset.pane),
-    tiles: [...document.querySelectorAll('[data-sec="more"] .navtile')].filter(shown).map(t => t.id),
+    // ⚠️ The nav tiles live in the Match card's Modes TAB now, not a card of their own.
+    tiles: [...document.querySelectorAll('.subpane[data-pane="modes"] .navtile')].filter(shown).map(t => t.id),
     jumpChips: [...document.querySelectorAll('#jumpBar .jumpchip')].map(c => c.dataset.sec),
     // ⚠️ The index, not the pixels. This is the check that actually matters.
     searchRows: M.menuSearchIndex().length,
@@ -56,8 +57,15 @@ const SNAP = () => {
     warmup: byId('warmupBtn'),
     warmupUseful: M.warmupUseful(),
     search: byId('searchWrap'),
-    reset: byId('settingsReset'),
-    updCheck: byId('updCheckBtn'),
+    // ⚠️ **MEASURED ON THE CARD, NOT THE BUTTON.** Reset and the update check live inside
+    // the Options card now, and a collapsed card is `display:none` for its children — so a
+    // direct test on the button says "hidden" for the ordinary closed accordion and this
+    // check would pass with show mode switched OFF. What show mode does is remove the whole
+    // card, which is the thing to ask about.
+    reset: shown((document.getElementById('settingsReset')||{}).closest &&
+                 document.getElementById('settingsReset').closest('.card')),
+    updCheck: shown((document.getElementById('updCheckBtn')||{}).closest &&
+                    document.getElementById('updCheckBtn').closest('.card')),
     jumpBar: byId('jumpBar'),
   };
 };
@@ -73,8 +81,9 @@ const SNAP = () => {
   const back = await p.evaluate(SNAP);
 
   // ---- the OFF state is the full menu, unchanged ------------------------
-  ok('off: every card is there', off.cards.length >= 10, off.cards.length + ' cards');
-  ok('off: all four Match tabs', off.matchChips.length === 4, off.matchChips.join());
+  // Eleven cards folded into four: Match, Your Player, Options, Replays.
+  ok('off: every card is there', off.cards.length >= 4, off.cards.length + ' cards');
+  ok('off: all six Match tabs', off.matchChips.length === 6, off.matchChips.join());
   ok('off: every nav tile', off.tiles.length >= 10, off.tiles.length + ' tiles');
   ok('off: nothing is hidden', off.search && off.reset && off.jumpBar && !off.bodyClass);
 
@@ -84,11 +93,15 @@ const SNAP = () => {
   ok('on: the Match options are still reachable', on.chevron);
   ok('on: Pitch is one of the tabs', on.matchChips.includes('pitch'), on.matchChips.join());
   ok('on: Game is the other', on.matchChips.includes('game'), on.matchChips.join());
-  ok('on: Players and Rules are gone', !on.matchChips.includes('players') && !on.matchChips.includes('rules'),
-     on.matchChips.join());
+  ok('on: Players, Rules and Bots are gone', !on.matchChips.includes('players') &&
+     !on.matchChips.includes('rules') && !on.matchChips.includes('bots'), on.matchChips.join());
+  // ⚠️ **MODES SURVIVES, and it is the one tab here that is not a setting**: How to play is
+  // what a stranger holding your phone needs, and it lives in that tab now that the Modes &
+  // more card is gone. The CSS empties the tab of everything else.
+  ok('on: Modes survives, for How to play', on.matchChips.includes('modes'), on.matchChips.join());
 
   // ---- ...and hides the rest --------------------------------------------
-  ok('on: only Match and More remain', on.cards.join() === 'match,more', on.cards.join());
+  ok('on: only Match remains', on.cards.join() === 'match', on.cards.join());
   ok('on: How to play is the only tile', on.tiles.join() === 'howBtn', on.tiles.join());
   ok('on: the search box is gone', !on.search);
   ok('on: Reset all settings is gone', !on.reset,
@@ -100,8 +113,9 @@ const SNAP = () => {
   // ---- ⚠️ THE INDEX, which CSS cannot touch ------------------------------
   ok('on: the search index shrinks with the menu', on.searchRows < off.searchRows / 3,
      off.searchRows + ' → ' + on.searchRows + ' rows');
-  ok('on: no hidden SECTION is indexed', on.searchSecs.join() === 'match,more', on.searchSecs.join());
-  ok('on: no hidden PANE is indexed', on.searchPanes.every(x => x === null || x === 'game' || x === 'pitch'),
+  ok('on: no hidden SECTION is indexed', on.searchSecs.join() === 'match', on.searchSecs.join());
+  ok('on: no hidden PANE is indexed',
+     on.searchPanes.every(x => x === null || x === 'game' || x === 'pitch' || x === 'modes'),
      JSON.stringify(on.searchPanes));
   // Spot-check by name: these live in panes/cards that show mode hides.
   const leaked = await p.evaluate(() => {
@@ -178,7 +192,7 @@ const SNAP = () => {
   await p.waitForTimeout(700);
   const boot = await p.evaluate(SNAP);
   ok('reload: comes back locked', boot.on && boot.bodyClass);
-  ok('reload: and the menu is already trimmed', boot.cards.join() === 'match,more' && !boot.search,
+  ok('reload: and the menu is already trimmed', boot.cards.join() === 'match' && !boot.search,
      boot.cards.join());
   await p.close();
 }

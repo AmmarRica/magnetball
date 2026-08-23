@@ -3610,10 +3610,153 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   one tile costs a card, a jump chip and a search row, and leaves a player two places to
   change one thing with no way to tell which is authoritative. `buildBallLookPick` is
   guarded, because `/settings` still calls it.
+- **A SECTION IS ANY `[data-sec]` NODE, AT ANY DEPTH — IT IS NOT "A CARD" ANY MORE**
+  (`SEC_SEL`, `sectionNode`, `revealPath`, `revealNode`, `openSection`, `lastSection`,
+  `buildJumpBar`, `menuSearchIndex`). Eleven top-level cards became **four**: Match, Your
+  Player, **Options** and Replays.
+  ⚠️ **THE IDENTITY SURVIVES THE MOVE, and that is the whole of why this was cheap.**
+  `openSection('feel')`, the jump bar, `lastSection()`, `openLook('theme')` and the menu
+  search all still name `feel` and `theme` and land exactly where they used to — because a
+  pane that carries `data-sec` **is** a section that happens to live inside another one.
+  Nothing downstream had to learn a second concept, and a save that says `_open: 'feel'`
+  from before the move still works.
+  ⚠️ **`showSubTab` SCOPES BY `data-group` ON THE PANE, never by "every `.subpane` in the
+  card".** That was true while nesting was impossible and it is what made nesting
+  impossible: Theme's chips inside Display's pane would have been blanked by Options' own
+  row the moment either was pressed. **Every** `.subpane` carries `data-group` — the 21 in
+  the markup and the two generated sets (`#slotRows`, `#sndCats`) — and a pane without one
+  is invisible to its own tab row, which is the failure mode to look for first.
+  ⚠️ **`revealPath` is OUTERMOST FIRST**, and that ordering is not cosmetic: showing
+  Theme's pane before Display's writes a tab into a pane the Options row is about to hide,
+  and the second call looks like it did nothing. `menuSearchGo` and `openSection` both go
+  through `revealNode`, so a hit three levels down opens all three.
+  ⚠️ **`menuSearchIndex` walks SECTIONS, not cards, and `secOf` is what keeps them apart.**
+  Iterating cards would file every Game Feel slider under `options` — so the search would
+  say "Options" for a control whose own chip says Game Feel, and show mode would be asking
+  the wrong question about it. A control belongs to its **nearest** enclosing `[data-sec]`.
+  Same reason the group comes off the pane rather than off "the first `.subtabs` in the
+  card": that was true, and stopped being true the moment a tab row could nest.
+  ⚠️ **`:not(.jumpchip)` is load-bearing in `SEC_SEL`** — the jump bar's own chips carry
+  `data-sec`, so a bare attribute selector finds a CHIP before the thing it points at.
+  That trap was already written up twice in this file against `.card[data-sec="vj"]`.
+  ⚠️ **NO CHIP FOR A SECTION THAT IS ONLY A CONTAINER.** Options holds five sections and no
+  control of its own, so a chip for it landed exactly where the Controls chip lands — two
+  chips, one destination. Display keeps its chip even though it owns Theme, because it has
+  settings of its own: the test is a `label.field` whose nearest section is this one, not
+  "does it contain another section".
+  ⚠️ **`SECTION_COLLAPSED_DEFAULT` NOW OMITS `match`**, which is what makes Match the one
+  card open on a first run — `initCollapsibles` takes the FIRST card whose default is open.
+  It used to be `more`, the discovery card; those tiles are Match's **Modes** tab now, so
+  Match is both the thing you came for and the door to everything that was behind it.
+- **OPTIONS — five cards became five tabs** (`SUBTABS.options`). Controls, Display, Sound,
+  Game Feel and About are the same kind of thing — how the machine behaves, not what you
+  are about to play — and as five top-level cards they were five of the eleven bars a
+  player scrolled past to reach anything. What is behind KICK OFF is a **choice**; what is
+  in here is a **setting**.
+  ⚠️ **Reset lives at the bottom of the card, OUTSIDE the panes**: it resets everything,
+  and filing a set-everything control under one fifth of the things it sets is the argument
+  the Game Feel preset row already won.
+  ⚠️ **THEME IS INSIDE DISPLAY**, in a `.subsec` with its own chip row — three levels of
+  tabs, asked for. A theme is what the game LOOKS like and Display is where how it looks is
+  decided, so a top-level card for it was a second door onto the same room: the argument
+  that deleted the standalone Ball card, one floor up. It keeps its own tab row rather than
+  being flattened into Display's controls, because seven tile grids stacked is most of a
+  phone screen each. ⚠️ `.subsec` is deliberately **not another card** — a card inside a
+  card is two borders and two lots of padding, and the accordion's "at most one open" rule
+  counts cards.
+- **MODES IS A MATCH TAB, AND BOTS IS ITS OWN** (`SUBTABS.match`). Season, Tournament,
+  Gauntlet, Drills and the Tutorial are all *a match you are about to play*, so they belong
+  behind KICK OFF with the mode, the pitch and the rules — not in a twelfth card called
+  "Modes & more" that you had to know to open. Stats / Ranks / Daily / Shop / Watch and How
+  to play come with them: they are the same kind of thing (a screen you go to), and
+  splitting them across two doors was an accident of history.
+  ⚠️ **Difficulty and Bot strategy moved OUT of Game.** They sat with Mode and Match length,
+  which is four different questions in one list — and the two of them are one question asked
+  twice. `BOT_PLANS` is explicitly a **different axis** from difficulty and the menu now says
+  so by putting them side by side with nothing else.
+  ⚠️ **Show mode keeps the `modes` pane rather than cutting it**, because How to play is the
+  one survivor that is not a setting; the CSS empties the tab of everything else, exactly as
+  it used to empty the card.
+- **ONE PROFILE PER SEAT, AND SEAT ONE IS `profile` BY OBJECT IDENTITY** (`PROFILES`,
+  `profiles`, `editSeat`, `ep()`, `seatProfile`, `seatCount`, `buildSeatPick`,
+  `magnetball.profiles`). The Your Player card only ever edited one player, so on a cabinet
+  with four pads three people could not pick a colour, a face or a name at all.
+  ⚠️ **EVERYTHING THAT MEANS "THE DEVICE OWNER" DID NOT MOVE.** The leaderboard entry, the
+  social feed, `isHero`, the clip filename and the save file's `magnetball.profile` all go
+  on reading `profile`, and `ep()` returns that exact object for seat 0 — so seat one is
+  not a copy of the owner, it *is* the owner.
+  ⚠️ **A GUEST SEAT IS A LOOK AND NOTHING ELSE.** No stats, no unlocks, no leaderboard:
+  *"guests have no record"* is a deliberate rule with `tests/yourside.mjs` behind it, and a
+  per-seat **record** would quietly reverse it. What a second player wants is to not be
+  wearing the first player's shirt.
+  ⚠️ **ONE READER (`ep()`) AND ONE WRITER (`saveProfile`).** 34 picker call sites went from
+  `profile.` to `ep().`, and none of them knows which seat it just edited — so the
+  which-store branch lives in `saveProfile` rather than at 34 places.
+  ⚠️ **Its own storage key**, not folded into `sel`: `saveSel()` serialises all of `sel` and
+  `syncAdopt()` shallow-merges it between windows — the argument that keeps the arcade
+  takings and the VJ decks out of there too. It travels in the game save.
+  ⚠️ **Only seats somebody CHANGED are written.** `loadProfiles` mints all seven up front so
+  `ep()` can never hand back `undefined`; storing those untouched copies would put six
+  identical records on disk and in every exported save.
+  ⚠️ **The picker is HIDDEN at one seat**, which is the ordinary case — a control offering a
+  single choice is furniture, and it would be the first thing on the card for the people who
+  least need it. The count comes from the live match if there is one, otherwise from the
+  pads that are plugged in.
+  ⚠️ **`syncProfileToWorld` counts HUMANS in roster order**, and a bot sitting between two
+  people must not consume a slot or plugging a third pad in re-dresses everybody.
+  `seatNameList()` still indexes by PLAYER index — that is what the Player names box has
+  always meant — so the two are read separately.
+  ⚠️ **The team colour still wins where it applies**: `applyTeamColours` runs after this on
+  every path that can change sides, and one shade a side is a rule this does not get to
+  break.
+  ⚠️ **`PROFILES` and `profiles` are declared immediately under `let profile = loadProfile()`**,
+  because `loadProfiles()` is called from that line — a `const` further down is in the
+  temporal dead zone at that moment. **Twentieth TDZ bite risk in this file**, and one of the
+  previous nineteen was hidden by `loadProfile`'s own try/catch.
+- **THE UNLOCKED STRIP IS GONE, and what it did is not lost.** It was a progress bar, five
+  counters and a row of every cosmetic you own, sitting **above** the controls that change
+  your player — so the first thing on the card was a summary of the pickers rather than a
+  picker, and the *"Tap anything here to wear it"* line existed only to explain that it was
+  a second door onto the same room. Every item in it is in its own tab a few pixels below,
+  next to the locked ones, which is where you go to choose one. ⚠️ `UNL_CATS` and
+  `unlockCounts` **stay** — they are what the per-picker unlock counters read, and what
+  proves every `FLAGS` entry is reachable.
+- **THE WHOLE MENU FROM A JOYSTICK, ON EVERY MACHINE** (`padDrivesMenu`, `menuRoot`,
+  `padMenuWoke`, `syncPadHint`, `pollDeckUI`, `deckFocusables`, `.deckfocus`).
+  ⚠️ **EVERY LINE OF THIS EXISTED AND WAS FENCED BEHIND `isDeck()`.** So on a cabinet, on a
+  TV with a pad in your hand, or on any desktop, the one input the game is built around
+  could start a match and then not change a single thing about it — you had to reach for a
+  mouse. Same shape as `sel.controllers` shipping `off` and Sprint shipping off: built,
+  wired, and defaulted to the half nobody could reach.
+  ⚠️ **WHO OWNS THE PAD IS THE WHOLE DESIGN, and there are two owners.** A live match owns
+  it — A is KICK, and a menu that stole that would pop a card on every shot. `padDrivesMenu()`
+  is the ONE predicate, and `integrate`'s input gather reads the same one and parks the seat,
+  so a stick press can never move a focus ring and a player at once. **The attract demo is
+  not a live match** — it is what the menu looks like.
+  ⚠️ **SELECT STAYS DECK-ONLY.** There it toggles the left dock, which is what "open the
+  menu" means on a machine whose menu is a dock. Everywhere else SELECT already means *turn
+  my controls a quarter turn*, and with nothing running it opens warm-up — two meanings
+  bought and paid for, and a third would break both. Off a deck the menu is simply on screen
+  or it is not, so there is nothing to toggle. **B** closes the dock on a deck and
+  **collapses the open card** everywhere else, for the same reason.
+  ⚠️ **NO RING UNTIL A PAD IS ACTUALLY USED, and it goes again on the first click.** A
+  permanent 3px outline round the first tile on a mouse-driven screen is furniture — the
+  argument that hides the seat picker at one seat. Waking is on a **held** direction rather
+  than a press edge, so the first press moves as well: waking without moving loses the input
+  the person just gave. A deck is exempt, because there the pad IS the pointer.
+  ⚠️ `padDrivesMenu()` is **hoisted out of `integrate`'s player loop** — it walks the DOM and
+  the answer cannot change between two players of one step. At 8v8 it was sixteen of those a
+  step.
+- **THE VJ CARD IS ONLY EVER ON THE `/vj` ROUTE.** Hidden on the game menu and on
+  `/settings` alike — asked for, and consistent: one surface for the decks. ⚠️ **The
+  signpost outlived the card**: `#vjOpenBtn` moved into **About**, because a feature you
+  cannot find is a feature that does not exist. ⚠️ The card stays a **direct child of
+  `#setup`**, because `body.vjview #setup > :not(.card[data-sec="vj"])` isolates it by that
+  relationship.
 - **Menu navigation:** two cards held 78% of all 376 controls (Your Player 7.5 screens, Match
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
-  declares the groups, `showSubTab(group, pane)` switches. Four groups now: `player`, `match`,
-  `theme` and `feel`.
+  declares the groups, `showSubTab(group, pane)` switches. Seven groups now: `match`,
+  `player`, `options`, `theme`, `sound`, `feel` and `replay`.
   ⚠️ **Game Feel is tabbed too** — Ball / Kick / Player / Sprint / Effects / Camera /
   Advanced. Nineteen controls in one list is how the Tilt parallax toggle came to sit
   *sixteenth* in it and get reported as a missing feature; the chip row is the heading now,

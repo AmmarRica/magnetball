@@ -412,7 +412,12 @@ await p.setViewportSize({ width: 390, height: 844 });
 const place = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
   const pick = document.getElementById('tiltPick');
-  const card = pick && pick.closest('.card');
+  // ⚠️ **THE NEAREST `[data-sec]`, NOT THE NEAREST `.card`.** Controls, Display, Sound,
+  // Game Feel and About are PANES of the Options card now, and each carries its own
+  // `data-sec` — so a `.card` lookup answers `options` for all five and this check would
+  // be asking which card rather than which section. `:not(.jumpchip)` because the jump
+  // bar's chips carry `data-sec` too.
+  const card = pick && pick.closest('#setup [data-sec]:not(.jumpchip)');
   o.inGameFeel = !!card && card.dataset.sec === 'feel';
   const fields = card ? [...card.querySelectorAll('label.field')].map(l=>l.textContent.trim()) : [];
   o.fieldCount = fields.length;

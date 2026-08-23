@@ -105,7 +105,6 @@ version, so it refreshes with it).
 | `orient` | Pitch-direction setting drives camera **and** controls together; cocktail stays upright |
 | `fs` | Full screen genuinely enters on click and exits on F, label tracks state |
 | `labels` | Name plates fade to 5% over a disc or the ball and return when clear, both orientations ⚠️ **A HALO MAY NOT OUTLIVE THE TEXT IT IS BEHIND**, reported as "the font background is bad and is visible even when the text is not". The backing is the opposite tone by design, so a dark halo at alpha 0.2 still reads over a green pitch while a pale fill at 0.2 has gone — and the name plate strikes its halo TWICE, so the two passes composite to 0.36 against the single-pass text's 0.2 and it got relatively LOUDER as the name faded. The invariant needs no magic number: **what is on the pitch at alpha `a` is at most `a` of what is there at full strength**. On this page the reported build reads 0.534 at a = 0.5 and 0.196 at a = 0.15, both over their own alpha, against 0.410 and 0.114 now. ⚠️ Checked alongside "still SOLID at full strength", because "the backing fades fast" is also true of a build with no backing at all — sabotage-verified both ways. ⚠️ Measured as a DIFFERENCE against the same frame with no label on it: an absolute ink count in the band reads the halfway line, the centre circle and the mown stripes and flattens at a constant whatever the alpha is, which is what the first run of the probe did — 0.76 of full ink at every alpha including zero. ⚠️ And `drawDiscs` snaps `labelA` to its target the first time it sees a body, so the probe has to render once before writing the alpha it wants to measure ⚠️ **THE PLATE HANGS BELOW THE BODY NOW**, on every theme — it used to be above, where it fought the floating stat labels that RISE off a player. Four probes in this file were pinned to the old position and every one of them failed OPEN rather than closed: a body parked 30px ABOVE a disc sits on bare pitch, so "a disc over the plate dims it" reported no dimming at all; the replay blocker had the same problem; and the team-tint probe sampled grass, which is the same colour for both sides, so "the plates differ by team" went false. All four derive the offset from `NAMEPLATE` and the camera rotation rather than assuming a direction ⚠️ **READABLE OR GONE (`LABEL_MIN`, 0.55).** Reported as "the text player name in game is worthless and can't be read; if it is that blurry then just hide it" — `far` is 190 world units on a pitch 440 across and the fade is `t²`, so a body 90 units from the ball drew its name at **0.22 alpha**: too faint to read, too present to ignore, over most of the pitch. The ramp snaps to zero below the floor and the draw refuses the same number, and the `legible` block measures both halves in rendered ink as a difference against a no-plate frame — nothing at all just under the floor or at 0.22, and a real plate at it. ⚠️ **`drawnAtTheFloor` needs `atFull > 0` and that is not redundant**: as a bare ratio it reads `justOver > 0` and passes on a build that draws no name at any alpha, which is exactly what it exists to catch (measured — a floor of 1.01 sailed through it). ⚠️ **The floor made the HALO probes vacuous, which is the more interesting failure.** They sat at 0.5 / 0.3 / 0.15 / 0.08 and every one now renders as *nothing*, so "the halo never outlives its text" was passing because there was no text and no halo on the pitch at all. They are spaced across `[LABEL_MIN, 1]` now — the range that is actually drawn — and the squaring rule itself is pinned arithmetically (`haloAlpha`), which is what still fails when the exponent is removed |
-| `unlocked` | Unlocked summary: counts match the unlock model, strip shows only earned items, tap equips |
 | `demo` | Idle demo uses two random countries (not your look), and the Demo tag paints only in demo |
 | `debug` | Debug readout gated by its toggle, numbers track the live sim and feel values, build stamp | ⚠️ **THE BUILD STAMP IS DEBUG-ONLY NOW** and this check used to say "shows regardless" — it printed the version over the bottom-left of the pitch on every player's screen. Both states are pinned (absent with debug off, present with it on); what the stamp was for survives in the About card's one-tap version copy, which is the half of this suite that still matters.
 | `demo2` | Demo picks a random court and never replays; the demo is a **showcase** — top-tier bots on both benches (derived from the last `DIFF` key, not spelled), a real 3-minute clock, ignoring the player's own difficulty and length, and a **level demo ends rather than going to overtime** (it would hang on the menu until someone scored) while a real match at the same point still gets sudden death; controller wording; crowd cheers — the three Stadium-family ones longer than the three originals, all distinct, and **every** SFX category's variant count matching its label count (an unlabelled sound is unpickable). Counts are derived, not pinned: themed sets add variants, and a suite that says "exactly six" only measures how recently someone edited it |
@@ -385,3 +384,33 @@ is a legitimate setting someone can pick, so fall back through the palette
 Also: with a gamepad connected a seat's `ctrl` becomes `'gamepad'`, so `pads.p1` no longer
 drives it — feed the fake pad instead. And in a sideways pitch `rotQuarter=1`, so stick-up
 moves the player along world **+x**; measure displacement, not a single axis.
+
+
+### The menu restructure (Aug 2026) — what changed under every suite here
+
+Eleven top-level cards became **four**: Match, Your Player, **Options** and Replays.
+Controls / Display / Sound / Game Feel / About are `.subpane`s of the Options card, Theme
+is a `.subsec` inside the Display pane, and the Modes & more card is Match's **Modes** tab.
+
+Three consequences that broke suites, and the shape of the fix each time — read these
+before writing a probe that looks up a card:
+
+1. **`#setup .card[data-sec="feel"]` finds nothing.** A section is any `[data-sec]` node
+   under `#setup`, at any depth. Use `#setup [data-sec="feel"]:not(.jumpchip)` — the
+   `:not` is load-bearing, because the jump bar's own chips carry `data-sec` and come
+   first in the document. `M.openSection(sec)` reaches a nested one and reveals every pane
+   on the way; `M.sectionNode(sec)` finds it.
+2. **`card.querySelectorAll('.subpane')` no longer means "this tab row's panes".** Options
+   holds five panes *and* the Theme row inside one of them, so a card-scoped walk hands
+   Theme's panes to Options' chips. Every pane carries `data-group`; match on that
+   (`.subpane[data-group="feel"]`). Same for "is this control outside the tabs" — say
+   which tabs.
+3. **Match is the card open on a first run** (it was `more`). A suite that clicks a header
+   to *open* something must `M.collapseAllSections()` first, or its first click closes the
+   card that was already open. `accordion` and `deck2` both failed exactly this way.
+
+Also: `openLook('theme')` opens the **Options** card, so a "deep link opens one card"
+check has to assert the theme controls are *on screen* as well — otherwise it passes on a
+build that opens the card and leaves you on the Controls tab. And a heading-based
+translation check has to read the Options chips too, since Display and Sound are chips now
+rather than card headings.

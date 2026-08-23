@@ -20,19 +20,25 @@ const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   const card = s => document.querySelector(`#setup .card.collapsible[data-sec="${s}"]`);
+  // ⚠️ **A SECTION IS NOT A CARD ANY MORE.** Controls, Display, Sound, Game Feel and About
+  // are panes of the Options card, and Theme is a section inside Display — each carries its
+  // own `data-sec`, so this is what "where does `feel` live" now means. `:not(.jumpchip)`
+  // because the jump bar's chips carry `data-sec` too and come first in the document.
+  const sec = s => document.querySelector(`#setup [data-sec="${s}"]:not(.jumpchip)`);
   const vis = el => { const b=el.getBoundingClientRect(); return b.width>0 && b.height>0; };
 
   // ---- 2) sub-tabs: one pane at a time, and every pane reachable -----------
   o.groups = Object.keys(M.SUBTABS).sort().join(',');
-  // ⚠️ Group name IS the card's data-sec, for every group. This used to read
-  // `g==='player' ? 'player' : 'match'`, so when a third group arrived it looked for its panes
-  // in the MATCH card and reported a mismatch that was entirely the test's own doing.
-  const panesOf = g => [...card(g).querySelectorAll('.subpane')];
+  // ⚠️ **PANES ARE FOUND BY `data-group`, NOT BY "everything inside the card".** That was
+  // fine while one card held one tab row; Options holds five panes AND the Theme row inside
+  // one of them, so a card-scoped walk hands Theme's panes to Options' chips and reports a
+  // mismatch that is entirely the test's own doing. A pane declares which row owns it.
+  const panesOf = g => [...document.querySelectorAll(`#setup .subpane[data-group="${g}"]`)];
   const chipsOf = g => [...document.querySelectorAll(`.subtabs[data-tabs="${g}"] .subchip`)];
   o.chipCounts = {}; o.paneCounts = {}; o.everyPaneHasAChip = true;
   o.oneOpenAtATime = true; o.everyPaneShowable = true;
   for (const g of Object.keys(M.SUBTABS)){
-    card(g).classList.remove('collapsed');
+    M.openSection(g === 'options' ? 'controls' : g);
     const panes = panesOf(g), chips = chipsOf(g);
     o.chipCounts[g] = chips.length; o.paneCounts[g] = panes.length;
     // Chips and panes must match one-for-one — an extra chip shows nothing, an
@@ -57,8 +63,11 @@ const r = await p.evaluate(async ()=>{
   // a scrollHeight of ZERO, so `matchH` has been 0 all along and `cardsAreShort` was really
   // only ever testing the Your Player card. A zero passes a "is it under 1400px" check for
   // free, which is the sort of pass this file exists to catch.
-  const height = s => { const c=card(s); c.classList.remove('collapsed');
-    const box = c.querySelector('#matchBody') || c;
+  // ⚠️ Measured on the SECTION, which for Game Feel and the rest is a pane rather than a
+  // card — and the card it lives in has to be un-collapsed first or every height is zero.
+  const height = s => { const n=sec(s); if (!n) return 0;
+    const c = n.closest('.card.collapsible'); if (c) c.classList.remove('collapsed');
+    const box = n.querySelector('#matchBody') || n;
     return box.scrollHeight; };
   M.showSubTab('player','colour'); M.showSubTab('match','game');
   o.playerH = height('player'); o.matchH = height('match');
@@ -71,8 +80,16 @@ const r = await p.evaluate(async ()=>{
   // comment at the top of this block warns about, still sitting here: every group other than
   // `player` was measured on the MATCH card, so the theme and feel panes were never measured
   // at all and the match card returned zero into the bargain.
-  for (const g of Object.keys(M.SUBTABS))
+  // ⚠️ **THE `options` GROUP IS EXCLUDED, and that is the original scope rather than a
+  // let-off.** Its five panes ARE the old Controls / Display / Sound / Game Feel / About
+  // cards, so measuring them is measuring the very thing 4000px was the comparison
+  // against — and About holds the whole changelog, which is long because a changelog is
+  // long and always was. What this number defends is that splitting a card into panes
+  // made the card short; each of those five is checked by its own tab row below.
+  for (const g of Object.keys(M.SUBTABS)){
+    if (g === 'options') continue;
     for (const [k] of M.SUBTABS[g]){ M.showSubTab(g,k); worst = Math.max(worst, height(g)); }
+  }
   o.worstPane = worst;
   o.worstPaneBeatsFlat = worst < 4000;                      // Your Player was 6777px
   M.showSubTab('player','colour'); M.showSubTab('match','game');
@@ -85,15 +102,18 @@ const r = await p.evaluate(async ()=>{
   // card stay out of the panes — a preset filed under one fifth of what it sets is worse
   // than one above the chips.
   {
-    const c = card('feel'); c.classList.remove('collapsed');
+    const c = sec('feel'); c.closest('.card.collapsible').classList.remove('collapsed');
+    M.showSubTab('options','feel');
     const IDS = ['trapPick','chargePick','feelSlidersBall','feelSlidersKick','oneHandPick',
                  'feelSlidersPlayer','sprintPick','feelSlidersSprint','juicePick',
                  'tiltPick','popupPick','ball3dPick','hitStop','goalZoom','goalZoomSpd',
                  'autoReplayPick','sideViewPick','mspeed','debugPick'];
     o.feelMissing = IDS.filter(id => !document.getElementById(id));
     o.feelOutsideAPane = IDS.filter(id => !document.getElementById(id).closest('.subpane'));
+    // ⚠️ Outside the GAME FEEL panes specifically. Both now sit inside the Options card's
+    // own `feel` pane, one level up — a different tab row, and not what this is about.
     o.feelWholeCard = ['feelPresets','feelReset']
-      .filter(id => { const e = document.getElementById(id); return e && !e.closest('.subpane'); });
+      .filter(id => { const e = document.getElementById(id); return e && !e.closest('.subpane[data-group="feel"]'); });
     // Each control in exactly ONE pane, so nothing is duplicated into two tabs.
     o.feelPaneOf = {};
     for (const id of IDS){
@@ -150,10 +170,16 @@ const r = await p.evaluate(async ()=>{
   o.everyTileInAGroup = tiles.every(t => !!t.closest('.navgroup'));
   // ...and the whole block is ONE section now. It used to sit loose on the menu
   // taking a full screen between KICK OFF and the settings cards.
-  o.tilesLiveInMore = tiles.every(t => (t.closest('.card.collapsible')||{}).dataset?.sec === 'more');
+  // ⚠️ **THE TILES LIVE IN A MATCH TAB NOW, not a card of their own.** Season, Tournament,
+  // Gauntlet, Drills and the Tutorial are a match you are about to play, so they belong
+  // behind KICK OFF; the Modes & more card is gone. The claim is unchanged in substance —
+  // every tile is inside one section, none is loose on the menu — only its address moved.
+  o.tilesLiveInMore = tiles.every(t => (t.closest('.card.collapsible')||{}).dataset?.sec === 'match');
   o.noLooseTiles = tiles.every(t => !!t.closest('.card.collapsible'));
-  o.moreHasAJumpChip = [...document.querySelectorAll('#jumpBar .jumpchip')]
-    .some(c => c.dataset.sec === 'more');
+  o.tilesInModesPane = tiles.every(t => (t.closest('.subpane')||{}).dataset?.pane === 'modes');
+  // ...and it is reachable in one press, which is what the More jump chip used to buy.
+  o.moreHasAJumpChip = [...document.querySelectorAll('#setup .subtabs[data-tabs="match"] .subchip')]
+    .some(c => c.dataset.pane === 'modes');
 
   // ---- 5) jump bar ---------------------------------------------------------
   const bar = document.getElementById('jumpBar');
@@ -161,8 +187,16 @@ const r = await p.evaluate(async ()=>{
   o.jumpChips = chips.length;
   o.jumpVisible = vis(bar) && bar.getBoundingClientRect().height > 12;
   o.jumpIsSticky = getComputedStyle(bar).position === 'sticky';
-  // One chip per collapsible section, no more and no fewer.
-  const secs = [...document.querySelectorAll('#setup .card.collapsible')].map(c=>c.dataset.sec).sort().join(',');
+  // ⚠️ **ONE CHIP PER SECTION — and a section is any `[data-sec]`, at any depth.** Two
+  // deliberate exclusions, and both are rules rather than exceptions: the VJ card, whose
+  // decks live at /vj and which is `display:none` here; and a section that is ONLY a
+  // container (Options holds five sections and no setting of its own, so its chip would
+  // land exactly where the Controls chip lands).
+  const secs = [...document.querySelectorAll('#setup [data-sec]:not(.jumpchip)')]
+    .filter(n => n.dataset.sec !== 'vj')
+    .filter(n => !(n.querySelector('#setup [data-sec]:not(.jumpchip), [data-sec]:not(.jumpchip)') &&
+                   ![...n.querySelectorAll('label.field')].some(l => l.closest('[data-sec]:not(.jumpchip)') === n)))
+    .map(c=>c.dataset.sec).sort().join(',');
   o.jumpSecs = chips.map(c=>c.dataset.sec).sort().join(',');
   o.jumpCoversEverySection = o.jumpSecs === secs;
   o.chipsHaveLabels = chips.every(c => (c.textContent||'').trim().length > 1);
@@ -171,7 +205,11 @@ const r = await p.evaluate(async ()=>{
   target.click(); await wait(120);
   const open = [...document.querySelectorAll('#setup .card.collapsible')]
     .filter(c=>!c.classList.contains('collapsed')).map(c=>c.dataset.sec);
-  o.jumpOpensSection = JSON.stringify(open) === '["sound"]';
+  // ⚠️ Sound is a pane of Options, so the CARD that opens is Options — and "opened that
+  // section" has to mean the sound controls are ON SCREEN, or this passes on a build that
+  // opens the card and leaves you on Controls.
+  o.jumpOpensSection = JSON.stringify(open) === '["options"]' &&
+    sec('sound').getBoundingClientRect().height > 0;
   o.jumpMarksItself = target.classList.contains('sel') &&
                       chips.filter(c=>c.classList.contains('sel')).length === 1;
   // ⚠️ EVERYTHING in the Theme card is behind a chip, the bundle grid included — seven tile
@@ -182,7 +220,7 @@ const r = await p.evaluate(async ()=>{
   o.themeChips = chipsOf('theme').map(x=>x.dataset.pane);
   o.themeTabsFromSlots = JSON.stringify(o.themeChips) === JSON.stringify(['bundle'].concat(o.slotKeys));
   o.bundleIsATab = o.themeChips[0] === 'bundle' &&
-    !!card('theme').querySelector('.subpane[data-pane="bundle"] #themePick');
+    !!sec('theme').querySelector('.subpane[data-pane="bundle"] #themePick');
   // ⚠️ The chip row STAYS PUT while a grid scrolls. A row that scrolls away with the tiles is
   // only half a fix — you still have to scroll back up to change tab, which is the vertical
   // scrolling it exists to remove.
@@ -203,8 +241,10 @@ const r = await p.evaluate(async ()=>{
   o.tabsWrap = getComputedStyle(tabs).flexWrap;
   M.openSection('theme'); M.showSubTab('theme','bundle');
   const su2 = document.getElementById('setup');
-  const hdr2 = card('theme').querySelector('h2');
-  su2.scrollTop = 0; su2.scrollTop += 1150;
+  // ⚠️ The header the chips must NOT park over is the header that actually pins, and Theme
+  // has no card of its own any more — it is a section inside the Display pane of Options.
+  const hdr2 = sec('theme').closest('.card.collapsible').querySelector('h2');
+  su2.scrollTop = 0; su2.scrollTop = su2.scrollHeight;
   // ⚠️ ...and it SCROLLS AWAY, which is the whole of "not sticky". Measured by scrolling
   // the grid far enough that a pinned row would still be on screen: the chips have to
   // have left with the content above them, not parked over it.
@@ -227,7 +267,7 @@ const ok=(c,m)=>{ if(!c) fail.push(m); };
 // ⚠️ `sound` is in this set now: 46 controls in one list was 1.85 screenfuls on a phone,
 // and comparing two net sounds meant scrolling past 38 other tiles. Its chips are BUILT
 // from `SFX_CATS`, so a seventh category cannot arrive with a pane and no chip.
-ok(r.groups === 'feel,match,player,replay,sound,theme', `expected sub-tabs on feel, match, player, replay, sound and theme, got ${r.groups}`);
+ok(r.groups === 'feel,match,options,player,replay,sound,theme', `expected sub-tabs on feel, match, options, player, replay, sound and theme, got ${r.groups}`);
 // ⚠️ The Theme group is DERIVED from SLOT_KEYS, never a hand-written copy: chips and panes have
 // to come from one list, or a new slot arrives with a pane and no chip and its controls are
 // hidden while the audit and the menu search still find them.
@@ -259,9 +299,10 @@ ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);
 ok(r.everyTileWired, 'a nav tile lost its click handler');
 ok(r.everyTileInAGroup, 'a nav tile is outside every group');
-ok(r.tilesLiveInMore, 'a nav tile is not inside the More section');
+ok(r.tilesLiveInMore, 'a nav tile is not inside the Match section');
+ok(r.tilesInModesPane, 'a nav tile is not inside the Modes tab');
 ok(r.noLooseTiles, 'a nav tile is loose on the menu instead of inside a section');
-ok(r.moreHasAJumpChip, 'the More section has no jump chip, so it is only reachable by scrolling');
+ok(r.moreHasAJumpChip, 'there is no Modes chip on the Match card, so Season / Drills / Tutorial are only reachable by scrolling');
 ok(r.jumpVisible, `the jump bar is not visible (height collapsed?): ${JSON.stringify(r.jumpVisible)}`);
 ok(r.jumpIsSticky, 'the jump bar is not sticky, so it scrolls away');
 ok(r.jumpCoversEverySection, `the jump bar does not match the sections:\n  bar  ${r.jumpSecs}\n  card ${r.jumpChips}`);

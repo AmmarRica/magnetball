@@ -60,7 +60,7 @@ const ui = await p.evaluate(() => {
   M.openLook('about');
   const btn = document.getElementById('offlineBtn');
   o.exists = !!btn;
-  o.inAbout = !!document.querySelector('#setup .card[data-sec="about"] #offlineBtn');
+  o.inAbout = !!document.querySelector('#setup [data-sec="about"]:not(.jumpchip) #offlineBtn');
   // ⚠️ Scrolled to and hit-tested, because `.click()` does no hit testing and would pass
   // over a control nothing can reach — the #lobbyStartBtn lesson.
   btn.scrollIntoView({ block: 'center' });
