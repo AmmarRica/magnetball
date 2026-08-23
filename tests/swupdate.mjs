@@ -24,6 +24,13 @@ const root = await mkdtemp(join(tmpdir(), 'mb-sw-'));
 await mkdir(join(root, 'settings'), { recursive: true });
 await copyFile('sw.js', join(root, 'sw.js'));
 await copyFile('settings/index.html', join(root, 'settings', 'index.html'));
+// ⚠️ EVERY route in sw.js's ASSETS list must exist on this temp site. The worker's
+// install is `caches.addAll(ASSETS)`, and addAll REJECTS on any single 404 — so when
+// the /vj route joined the precache list and this fixture did not serve it,
+// `navigator.serviceWorker.ready` never resolved and the suite hung the whole parallel
+// pool, silently, twice. A new precached route lands HERE in the same commit.
+await mkdir(join(root, 'vj'), { recursive: true });
+await copyFile('vj/index.html', join(root, 'vj', 'index.html'));
 await writeFile(join(root, 'manifest.json'), '{}');
 await writeFile(join(root, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
 const page = v => `<!doctype html><html><head><title>t</title></head><body>

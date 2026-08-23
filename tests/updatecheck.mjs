@@ -35,6 +35,12 @@ await copyFile('sw.js', join(root, 'sw.js'));
 await copyFile('settings/index.html', join(root, 'settings', 'index.html'));
 await copyFile('manifest.json', join(root, 'manifest.json'));
 await copyFile('icon.svg', join(root, 'icon.svg'));
+// ⚠️ Every route in sw.js's ASSETS must exist here, or `caches.addAll` rejects, the
+// worker never installs, and the offline-answers-from-the-cache check reads `v:null`
+// against an empty cache — the same fixture gap that hung `swupdate` outright when the
+// /vj route joined the precache list.
+await mkdir(join(root, 'vj'), { recursive: true });
+await copyFile('vj/index.html', join(root, 'vj', 'index.html'));
 
 const VER_RE = /const VERSION = '([^']+)'/;
 const BASE_VER = SRC.match(VER_RE)[1];
