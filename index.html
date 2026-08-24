@@ -5117,7 +5117,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260823.1140PM';
+const VERSION = '20260824.0110AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5133,7 +5133,7 @@ const VERSION = '20260823.1140PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260823.1140PM', title: 'A shorter menu, and a pad that can drive it',
+  { v: '20260824.0110AM', title: 'A shorter menu, and a pad that can drive it',
     changed: [
       '<b>Eleven cards of settings are now four.</b> Controls, Display, Sound, Game Feel and About are tabs of one <b>Options</b> card, Theme sits inside Display where the rest of the look lives, and Reset is in there with them. Nothing was removed and nothing moved address — the jump bar and the search still take you straight to any of them.',
       '<b>Season, Tournament, Gauntlet, Drills and the Tutorial are behind KICK OFF now</b>, on a <b>Modes</b> tab, with Stats, Ranks, Daily, Shop and Watch. They are all a match you are about to play, so they live with the mode and the pitch instead of in a separate card you had to know to open.',
@@ -5145,7 +5145,7 @@ const CHANGELOG = [
       '<b>The whole menu works from a controller, on any machine.</b> The stick or D-pad moves a highlight, A picks, B closes the open card, and the shoulder buttons jump between sections. It only takes over when there is no match running, so A is still KICK when it matters. It was there all along and only a Steam Deck could reach it.',
       '<b>One player card each.</b> With more than one controller plugged in, a <b>Player</b> row appears at the top of Your Player and each seat keeps its own name, colour and face. Player 1 is still you — your record, your unlocks and your leaderboard entry never move.',
     ],
-    fixed: 'Assorted fixes and tidying.',
+    fixed: 'A little more speed in the drawing, and assorted tidying.',
   },
   { v: '20260823.0745PM', title: 'Smoother at every size',
     changed: [
@@ -10336,6 +10336,13 @@ function photoFromFile(file){
 // centring used to be off by a hair. An exact measurement for that exact size cannot
 // drift; a scaled one can. `r` is stable frame to frame (it only moves with `cam.s`), so
 // the integer key hits on every frame anyway.
+// ⚠️ **KEYED ON A NUMBER, PER GLYPH, and it was one string built per body per frame.**
+// `fitGlyph` is called for every faceplate on the pitch and its own self time measured
+// 9.1% of `render()` — most of which was `t + '|' + px0 + '|' + …`: a string built,
+// hashed and thrown away sixteen times a frame at 8v8, for a lookup whose answer never
+// changes. One Map per glyph, keyed on a packed integer, allocates nothing.
+// ⚠️ The **font string is cached in the entry** for the same reason — `f.px+'px '+FONT`
+// was the second allocation on the same line.
 const _glyphMemo = new Map();
 function fitGlyph(c, t, x, y, r, ink){
   c.save();
@@ -10344,7 +10351,18 @@ function fitGlyph(c, t, x, y, r, ink){
   // Fit the glyph to the plate: measure once and scale, so a two-character avatar
   // ("⁇⁇") is as readable as a one-character one and neither spills off the disc.
   const px0 = Math.round(r*1.15), fit = r*1.34;
-  const f = memoGet(_glyphMemo, t + '|' + px0 + '|' + Math.round(fit*4), () => {
+  let per = _glyphMemo.get(t);
+  if (per === undefined){
+    if (_glyphMemo.size >= MEMO_CAP) _glyphMemo.clear();
+    _glyphMemo.set(t, per = new Map());
+  }
+  // ⚠️ Packed, not concatenated. `fit` is `px0 * 1.34/1.15` to within rounding, so the
+  // pair only ever varies with `px0` — quantising it to a quarter unit keeps the key
+  // exactly as discriminating as the string it replaces.
+  const kq = px0 * 4096 + Math.round(fit * 4);
+  let f = per.get(kq);
+  if (f === undefined){
+    if (per.size >= MEMO_CAP) per.clear();
     let px = px0;
     c.font = px+'px '+TEXT_FONT;
     const wid = c.measureText(t).width;
@@ -10353,9 +10371,10 @@ function fitGlyph(c, t, x, y, r, ink){
     const a = m.actualBoundingBoxAscent, d = m.actualBoundingBoxDescent;
     // ⚠️ The `isFinite` guard is not padding — `TEXTS.blank` is a braille blank that
     // produces no ink at all, so its metrics come back unusable. See the header above.
-    return { px, dy: (isFinite(a) && isFinite(d)) ? (a - d)/2 : 0 };
-  });
-  c.font = f.px+'px '+TEXT_FONT;
+    f = { px, dy: (isFinite(a) && isFinite(d)) ? (a - d)/2 : 0, font: px+'px '+TEXT_FONT };
+    per.set(kq, f);
+  }
+  c.font = f.font;
   c.fillText(t, x, y + f.dy);
   c.restore();
 }
@@ -12893,7 +12912,23 @@ let settingsFromGame = false;
 let settingsDocked = false;
 let uiPadLeft = 0;                       // left inset for a docked settings panel
 const DOCK_W = 372;                      // must match #settings.docked width in CSS
-function isDesktop(){ return !!(window.matchMedia && window.matchMedia('(min-width:900px)').matches); }
+// ⚠️ **THE QUERY OBJECT IS BUILT ONCE**, which is the rule `_reduceMQ` records one screen
+// up and for the identical reason: this is on the render path — `computeCam` asks
+// `isTouchLayout` which asks this, twice a frame — and `matchMedia()` parses its argument
+// and mints a new MediaQueryList on every call. An MQL is LIVE, so `.matches` re-reads the
+// viewport; caching the object caches nothing about the answer.
+// ⚠️ **A `var`, AND IT WAS A `let` FOR ONE BUILD — the TWENTIETH TDZ bite in this file,
+// walked into in the same commit as a comment warning about it.** `isDesktop` is a function
+// declaration, so it is hoisted and callable from the bootstrap; the `let` beside it sits two
+// thirds of the way down and is in the temporal dead zone at that moment. The page took the
+// whole of `__magnet` with it. `var` hoists as `undefined`, which is exactly the sentinel the
+// lazy build already tests for.
+var _deskMQ;
+function isDesktop(){
+  if (_deskMQ === undefined)
+    _deskMQ = window.matchMedia ? window.matchMedia('(min-width:900px)') : null;
+  return !!(_deskMQ && _deskMQ.matches);
+}
 // ⚠️ THERE IS NO "Settings" TILE, and its absence is the point. The settings ARE the
 // menu — eleven cards of them, on the screen the tile was sitting on — so a tile that
 // scrolled you from one part of that screen to another part of the same screen was a

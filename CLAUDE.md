@@ -3470,6 +3470,48 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the same rule that stops a cosmetic trail slot switching it off.
   ⚠️ Long hysteresis on purpose: one slow frame is a garbage collection, not a slow
   machine, and flipping on it is a visible flicker of the whole picture.
+- **THE SECOND PROFILE, AND WHAT IT WITHDREW.** Everything below was re-measured on the
+  optimised build (1280×800, software raster, 8v8 reached by setting `MODES['4v4'].per`),
+  and two of the previous round's headline numbers do not survive.
+  ⚠️ **`repCapture` IS 92% OF ALL ALLOCATION AND IS NOT WORTH TOUCHING.** The share went
+  *up* (67% → 92%), and the absolute figure is what matters: **548 bytes a frame, 32 KB/s**.
+  Disabling the match buffer entirely measured **no GC improvement at all** (31.7 ms of GC
+  per 10s with it, 39.0 ms without) and left the minor-GC count unchanged. Pooling those
+  objects buys ~0.008 ms a frame. ⚠️ What the buffer *is* is **8.1 MB of retention by full
+  time, 62% of the live heap** — a memory-footprint question, decided on that basis or not
+  at all. **A large share of a small number is a small number.**
+  ⚠️ **THE SUPPORT GRID'S 42% IS NOW 28–31% OF `step()`.** The pruning that shipped took
+  most of it. Coarsening to 4×3 measures **−31% of step, ≈−0.13 ms, 6–12% of the frame**
+  depending on which frame figure you use — and 1×1 only reaches −33%, so 4×3 already
+  captures 84% of everything a coarser grid could ever buy. It is **not behaviour-neutral**
+  and needs `tests/botplans.mjs` re-measured before it ships.
+  ⚠️ **AT 1× NOTHING DROPS FRAMES, and a single run said otherwise.** One rAF-delta run
+  reported p95 33 ms and 14.75% of frames over 20 ms; re-run five times it is **0.33%**,
+  which is host contention rather than the game. The instrument that is immune to a busy
+  host is the trace's own `FireAnimationFrame` duration, because it measures the game's
+  work rather than the wall clock. **A single timing run in a container is not evidence.**
+  ⚠️ **`render()` RETURNING IS NOT THE FRAME BEING DRAWN.** Forcing a rasterise
+  (`getImageData` of one pixel) takes render from 0.65 ms to **4.66 ms** on a software
+  rasteriser. Always report the rasteriser alongside, or the JS figures read as the whole
+  story.
+  ⚠️ Where the frame goes now at 8v8: **render 56%, step 35%, everything else 7%** — the
+  eleven `advance*` calls, `pollKeys` and `vjTick` together are ~0.2 ms of 2.7. Inside
+  step, the **bots are 85%** and physics is 17%. Inside render, **`drawOneDisc` is 51%**
+  and `paintFace` 23% of it.
+- **`fitGlyph` BUILT A STRING PER BODY PER FRAME, and `isDesktop` MINTED A MEDIA QUERY
+  TWICE A FRAME.** Both are on the render path — `fitGlyph` for every faceplate, and
+  `computeCam` → `isTouchLayout` → `isDesktop` for the camera — and both were allocating
+  for an answer that never changes. The memo is a Map per glyph keyed on a **packed
+  integer** rather than one `t+'|'+px0+'|'+…` per call, the fitted font string is cached in
+  the entry, and the media query is built once. **Measured −6.9% of render** (three runs
+  each side, cleanly separated) with the rendered frame **byte-identical** and the world
+  hash unchanged, which is the only claim worth making about a change like this.
+  ⚠️ **An MQL is LIVE** — caching the object caches nothing about the answer, which is why
+  this is safe and is the same rule `_reduceMQ` already records.
+  ⚠️ **`var _deskMQ`, and it was a `let` for one build — the TWENTIETH TDZ bite in this
+  file, walked into in the same commit as a comment warning about it.** `isDesktop` is a
+  function declaration, so the bootstrap can call it long before a `let` two thirds of the
+  way down has initialised; the page took the whole debug hook with it.
 - **THE FRAME BUDGET IS MEASURED, AND FOUR THINGS WERE PAYING FOR IT.** Profiled at
   1280×800 with a step/render split at 1v1, 4v4 and 8v8. What was actually expensive, in
   order, and all four fixes are behaviour-neutral:
