@@ -3076,13 +3076,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still told
   apart by the shirt, which is what colour is for. Refusing would be a control that
   silently does nothing.
-- **THE FLAGS GO ON THE EDGE THE COLOURS ARE NOT ON, and that is MEASURED.** Stacked beyond
-  the colours on the same edge they cost **21% of pitch scale** turned and 8% flat, because
-  `computeCam` centres the COURT and then frames the worst side — so every unit piled onto
-  one edge is charged twice. Split across opposite edges the same sixteen pads cost almost
-  nothing. Flat the halves are top and bottom, so both blocks are columns (colours left,
-  flags right); turned they are left and right, so the colours are rows above the pitch and
-  each team's flags are a column out on that team's own side.
+- **THE FLAGS SIT DIRECTLY UNDER THAT SIDE'S SHIRTS, and the opposite-edge version was
+  REVERTED.** They shipped for one build on the far edge from the colours — cheaper to
+  frame, and wrong: the two are one question ("what does this side wear"), and putting them
+  at opposite ends of the screen made the second one hard to find at all. Reported as *"I
+  don't see the countries"*.
+  ⚠️ **WHAT MADE THAT AFFORDABLE IS THE BLOCK CHANGING SHAPE WITH THE EDGE IT IS ON.**
+  Stacking a 4×2 flag block beyond a 4×2 colour block cost **21% of pitch scale** turned,
+  because `computeCam` centres the COURT and then frames the worst side, so every unit
+  piled onto one edge is charged twice — and above the pitch, DEPTH is the expensive
+  direction. Turned, each team's block is therefore ONE ROW of eight with the flags as a
+  second row under it: two rows deep instead of four, and the whole thing costs 0.537 →
+  0.517. Flat, the block is a column beside the pitch, so it stays four down and two across
+  with the flags continuing DOWN it, where there is room.
+  ⚠️ **`v` IS THE SCREEN-DOWN AXIS IN BOTH ORIENTATIONS** (that is what the u/v frame is
+  for), so "the flags are under the shirts" is one claim with two implementations: beside
+  the pitch it means further ALONG, and above the pitch it means a SMALLER `out`, because
+  `out` counts away from the court and the court is below.
+  ⚠️ **TURNED, EACH BLOCK IS CENTRED OVER ITS OWN HALF**, not huddled either side of the
+  middle: the halves are left and right there, so a team's dressing controls belong above
+  the half they dress, which puts the two blocks out toward the corners where nothing else
+  is and where "that lot is mine" needs no explaining.
   ⚠️ **THE DIFFICULTY ROW IS ABOVE THE PITCH NOW, not under the keyboard.** It stood off the
   keys by 30 units and was still read as the keyboard's fourth row, because anything under
   QWERTY is part of the board to somebody walking the board. The far end, beyond the net you
