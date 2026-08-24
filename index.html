@@ -2269,6 +2269,30 @@
       <div class="hint" style="text-align:left">Opens in its own tab or window &mdash; put it on the laptop screen and the game on the projector. Bookmark <b>vj/</b> under the game&rsquo;s address to go straight there.</div>
       <div id="vjPanel"></div>
     </div>
+    <!-- ⚠️ ONLINE — lockstep play through a relay server you run yourself. The old
+         `data-sec="online"` card was deleted for holding ZERO controls; this one exists
+         because the controls now exist. The server address lives in its OWN storage key
+         (`magnetball.net`), never in `sel` — the arcade-takings argument: `saveSel()`
+         serialises all of `sel` and `syncAdopt()` shallow-merges it between windows, and
+         tonight's server is not a setting. -->
+    <div class="card collapsible collapsed" data-sec="net">
+      <h2>Online</h2>
+      <label class="field">Relay server</label>
+      <input id="netUrl" type="text" data-noi18n autocomplete="off" spellcheck="false" placeholder="ws://localhost:9977" aria-label="Relay server address">
+      <div class="hint" style="text-align:left">The address of a Magnetball relay server &mdash; a single small file (<b>server/relay.mjs</b>) anyone can run with Node, on a home machine or a free cloud box. It only introduces the two players and passes their inputs along; the match itself runs on both devices. From an https page the address must be <b>wss://</b> (behind TLS) &mdash; plain <b>ws://</b> works for localhost and for a saved offline copy.</div>
+      <div style="height:10px"></div>
+      <button class="ghost" id="netHostBtn" type="button">Host a match</button>
+      <div style="height:10px"></div>
+      <label class="field">Join with a code</label>
+      <input id="netCode" type="text" data-noi18n autocomplete="off" spellcheck="false" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase" aria-label="Room code">
+      <button class="ghost" id="netJoinBtn" type="button">Join</button>
+      <div style="height:10px"></div>
+      <button class="ghost" id="netLeaveBtn" type="button" style="display:none">Leave</button>
+      <!-- ⚠️ A STATUS READOUT borrowing .hint styling, not help — in HINT_SKIP like
+           #recLine, or the fold pass hangs an ⓘ over live session state. -->
+      <div id="netStatus" class="hint" data-noi18n style="text-align:left">Not connected.</div>
+      <div class="hint" style="text-align:left">Hosting gives you a five-letter code; the other player types it in and the match starts by itself &mdash; 1v1, on the host&rsquo;s settings. Both devices should be on the same browser (two phones on Chrome, say): the match is simulated on both and different browsers can drift apart, which ends it with a sync warning. If the other player disconnects, a bot takes their seat.</div>
+    </div>
     <!-- About. The version and the update check live HERE rather than under the title and
          above the fold: both are things you go looking for once, and neither is worth the
          two permanent lines they cost at the top of every visit.
@@ -2312,7 +2336,7 @@
            hundred lines up to justify deleting the old Ball card. "Is there online?" is still a
            real question, so the answer survives verbatim; only the box round it is gone. -->
       <label class="field">Is there online play?</label>
-      <div class="hint always" style="text-align:left">There is no online play. Every mode here is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. If you want to play somebody who is not in the room, the closest thing is a <b>saved replay</b>: they re-render at full quality on any device and are about 25KB, so a match is something you can send.</div>
+      <div class="hint always" style="text-align:left">Yes &mdash; see the <b>Online</b> card above: a 1v1 through a small relay server you run yourself, with a five-letter room code. Everything else is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. A <b>saved replay</b> is still the way to show a match to somebody afterwards: they re-render at full quality on any device and are about 25KB.</div>
       <div style="height:14px"></div>
       <!-- ⚠️ THE WHOLE GAME IS ONE FILE, so "download it" is literally that rather than an
            installer, a package or a runtime. It matters most on Linux, where Firefox has no
@@ -2790,6 +2814,7 @@
    Hold to kick harder         "HOLD TO KICK HARDER"
    Bot types / strategies      "PLAYER TYPES AND TEAM STRATEGIES"
    Fireworks                   "FIREWORKS — only for the goal"
+   Online lockstep             "NET — online 1v1 by DETERMINISTIC"
 
    ── the match ────────────────────────────────────────────────────────────
    Match setup (startMatch)    "MATCH SETUP"
@@ -8376,7 +8401,9 @@ const DIFF_RATING = { rookie:700, easy:900, normal:1100, hard:1300, pro:1500, el
 // Falls back to 0 — the pre-lobby answer — so nothing changes for a match with no
 // human in it at all (the attract demo, a spectated match).
 function youTeam(w){
-  const find = list => (list || []).find(q => q.ctrl === 'human1');
+  // `netLocal` is the online marker for "this body is yours on THIS machine" — the
+  // ctrl is 'net' for both seats there, so ctrl alone cannot say which side you are.
+  const find = list => (list || []).find(q => q.ctrl === 'human1' || q.netLocal);
   const me = find(w && w.players) || find(w && w.bench);
   return me ? (me.team === 1 ? 1 : 0) : 0;
 }
@@ -10764,7 +10791,7 @@ const uiState = loadUI();
 // the discovery card — Season, Tournament, Gauntlet, Drills, Tutorial. Adding it "for
 // completeness" collapses every card and the menu opens as eleven closed bars.
 const SECTION_COLLAPSED_DEFAULT = { match:true, player:true, controls:true,
-  theme:true, display:true, sound:true, feel:true, replay:true, vj:true, about:true };
+  theme:true, display:true, sound:true, feel:true, replay:true, vj:true, net:true, about:true };
 // Accordion: at most one section open. Opening one closes the rest, so the setup
 // screen is never a wall of every control at once and you don't lose your place
 // scrolling past six expanded cards.
@@ -11594,7 +11621,10 @@ function buildSubTabs(){
 // ⚠️ A hint with no label before it is a NOTE, not help for a control (the panel
 // status line, the record readout). Those are left exactly as they are — attaching a
 // toggle to the nearest label above would fold text that belongs to nothing.
-const HINT_SKIP = new Set(['recLine']);      // a data readout that borrows .hint styling
+// Data readouts that borrow .hint styling but are not help: the record line, and the
+// online session's status ("Waiting for an opponent — room code: …"). Folding either
+// behind an ⓘ would hide the thing it exists to show.
+const HINT_SKIP = new Set(['recLine', 'netStatus']);
 function buildHintToggles(root){
   const scope = root || document;
   for (const h of scope.querySelectorAll('.hint')){
@@ -15115,6 +15145,10 @@ function pickNames(n, used){
 //  MATCH SETUP
 // ============================================================
 function startMatch(opts){
+  // ⚠️ Starting any match while an online session is live abandons the session — the
+  // lockstep gate would otherwise wait forever on a world it no longer owns. The one
+  // startMatch netBegin itself makes is exempt (net._begin). See NET.
+  netGuardStart();
   // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
   // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
   // whoever set it to clear it is what stops a cup tie's country colours leaking into
@@ -15151,7 +15185,10 @@ function startMatch(opts){
   // the match GROWS to fit rather than turning people away. Co-op puts every pad on
   // one side, so there it takes the whole count rather than half of it.
   let per = mode.per;
-  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet){
+  // ⚠️ `!net._begin`: an online match is built on BOTH machines and must come out the
+  // same shape, so the roster can never grow to fit whatever pads happen to be plugged
+  // into one of them. The seats are re-dressed to ctrl:'net' right after this returns.
+  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet && !net._begin){
     const np = connectedGamepadIndices().length;
     if (np > 0) per = Math.max(per, Math.min(LOBBY.maxPerSide,
                                              sel.coop === 'on' ? np : Math.ceil(np/2)));
@@ -15836,6 +15873,14 @@ function loop(t){
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < 5){
+    // ⚠️ ONLINE LOCKSTEP GATE — see NET. A frame may only step once both seats' inputs
+    // for it are buffered; blocked, the sim WAITS (capped so a long stall doesn't bank
+    // a burst of catch-up steps) and everything below waits with it, because all of it
+    // is advanced per-step on purpose.
+    if (net.playing){
+      if (!netCanStep(world)){ netStalled(dt); acc = Math.min(acc, 0.25); break; }
+      netBeforeStep(world);
+    }
     step(world);
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
     if (motionOK()) advanceDynField();   // ...and so does an animated theme's field, when
@@ -15845,12 +15890,15 @@ function loop(t){
                                         // (they still PAINT, they just hold still)
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
-    pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
+    // ⚠️ Not while online: drop-in reads LOCAL hardware and rewrites the roster, which
+    // is the one thing two lockstepped machines can never do independently.
+    if (!net.playing) pollDropIn(world);
     advanceFloaters();      // stat labels age with the sim, never with the refresh rate
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
     advanceFx();            // ...and the sparks, for exactly the same reason
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
+    if (net.playing) netAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
   }
   renderAlpha = Math.max(0, Math.min(1, acc / STEP));
@@ -15887,7 +15935,11 @@ function autoReplayReady(w){
   // moving without being asked, which is squarely what a reduced-motion preference is
   // about — and it is unskippable for its first frames. Watching one you CHOSE from the
   // menu is untouched, because you chose it.
+  // ⚠️ ...and never online: playReplay parks loop() for seconds at a wall-clock length
+  // the other machine cannot see, and resetKickoff then fires from a .then() BETWEEN
+  // steps here while it fired INSIDE a step there — two different worlds by kickoff.
   return !!(sel.autoReplay && motionOK() && !vj.on && !w.demo && !ending && !w.overtime
+            && !net.playing
             && !(w.party && w.party.multi) && !w._autoReplayed
             && lastReplay && lastReplay.frames && lastReplay.frames.length
             && lastReplay.players === w.players.length);
@@ -17500,6 +17552,10 @@ function step(w){
       else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null :
         (p === firstHumanSeat(w) ? mergePads(gamepadPad(p.padIndex), pads.p1)
                                  : gamepadPad(p.padIndex)));
+      // ⚠️ ONLINE SEATS — yours included — read the frame-indexed wire buffer, never a
+      // live pad: a local seat applied live would act NET.delay frames earlier here
+      // than on the opponent's machine, and the sims part on the first touch. See NET.
+      else if (p.ctrl==='net') netApplySeat(w, p);
       // Waiting bots don't play — they're stood off the touchline until the whistle.
       // ⚠️ `_subTo` suppresses the AI while a bot walks on through the gate — walkTo sets
       // the position directly, so a thinking bot would fight it and jitter on the touchline.
@@ -27784,6 +27840,349 @@ function drawFx(){
 }
 
 // ============================================================
+//  NET — online 1v1 by DETERMINISTIC LOCKSTEP through a dumb relay
+// ============================================================
+// The relay (server/relay.mjs) introduces two browsers by room code and passes their
+// messages along verbatim; it never simulates. Both machines run the full sim and only
+// INPUTS cross the wire (~3 bytes a frame), which is what the determinism audit's
+// same-engine guarantee buys: seed the same match, feed the same inputs at the same
+// frames, get the same match. Cross-ENGINE (Chrome vs Safari) floats can drift — that
+// is the parked fixed-point work — so a hash of the world is exchanged every second
+// and a mismatch ends the session honestly instead of letting two players watch two
+// different matches.
+//
+// ⚠️ BOTH SEATS ARE `ctrl:'net'`, INCLUDING YOUR OWN, and that is the whole trick.
+// Your input is sampled, quantised to the wire format, delayed NET.delay frames and
+// applied FROM THE BUFFER — exactly the path the opponent's copy of you runs. A local
+// seat applied live would act NET.delay frames earlier here than there, and the sims
+// part on the first touch. Everything device-local (keyboard/pad merge, one-hand kick,
+// touch snapping) resolves on the SAMPLING side, before quantisation, so none of it
+// has to match across machines.
+//
+// ⚠️ THE HOST'S SETTINGS ARE THE MATCH. `step()` reads `sel` live (charge, sprint, the
+// feel sliders), so the sim-relevant keys are copied from the host's `sel` over the
+// joiner's for the duration and RESTORED at netStop — never written through saveSel(),
+// which is also why the server address lives in `magnetball.net` and not in `sel`.
+// ⚠️ `NET_SEL_KEYS` is the list; a sim-read `sel` key missing from it is a desync the
+// hash check will catch in one second flat, which is what the hash check is FOR.
+//
+// ⚠️ Gating lives in loop(): a frame may only step once BOTH seats' inputs for it are
+// buffered (frames 0..delay-1 are prefilled neutral, so there is no starting deadlock).
+// Lockstep therefore stalls at the pace of the worse connection — the accepted cost of
+// this model, and the reason the 11v11 plan is a server, not more peers. Auto-replay,
+// drop-in and subs stand down while playing: each fires off wall-clock or local
+// hardware, which is exactly what a lockstep sim cannot contain.
+const NET = {
+  delay: 3,        // input latency in frames (50ms) — the price of never predicting
+  hashEvery: 60,   // world-hash exchange cadence, in frames
+  stallBanner: 2.5,// seconds blocked before the WAITING banner shows
+  keep: 240,       // input frames kept behind the play head before pruning
+};
+const NET_SEL_KEYS = ['mode','field','length','ball','diff','magnet','pitch','kickoffRule',
+  'boxRule','trapOff','sprint','charge','chargeMs','kickRing','kickPush','matchSpeed',
+  'botPlan','party','feel','spectate'];
+const NETSTORE = 'magnetball.net';
+const net = {
+  ws:null, on:false, hosting:false, playing:false, room:'', slot:0, delay:NET.delay,
+  inbuf:null, myHash:null, theirHash:null, selWas:null, desynced:false,
+  stallT:0, stallShown:false, _begin:false,
+  // The scratch body the local pad is resolved onto — applyHumanInput needs somewhere
+  // to keep one-hand-kick state, and it must not be a real player.
+  scratch:{ rotQuarter:0, inX:0, inY:0, kick:false, faceX:0, faceY:-1 },
+};
+function netStatus(msg){ const el = $('netStatus'); if (el) el.textContent = msg; }
+function syncNetUI(){
+  const host = $('netHostBtn'), join = $('netJoinBtn'), leave = $('netLeaveBtn');
+  if (host) host.disabled = net.on;
+  if (join) join.disabled = net.on;
+  if (leave) leave.style.display = net.on ? '' : 'none';
+}
+function netFlag(){ return profile.flag === 'photo' ? 'none' : (profile.flag || 'none'); }
+function netSend(m){
+  if (net.ws && net.ws.readyState === 1){ try { net.ws.send(JSON.stringify(m)); } catch (e) {} }
+}
+// ws:// unless the address says otherwise; a bare host gets the scheme the page needs.
+function netNormUrl(v){
+  v = String(v || '').trim();
+  if (!v) return '';
+  if (!/^wss?:\/\//i.test(v)) v = (location.protocol === 'https:' ? 'wss://' : 'ws://') + v;
+  return v;
+}
+function loadNet(){ try { return JSON.parse(localStorage.getItem(NETSTORE) || '{}') || {}; } catch (e) { return {}; } }
+function saveNet(o){ try { localStorage.setItem(NETSTORE, JSON.stringify(o)); } catch (e) {} }
+
+function netConnect(url, hello){
+  netStop(null);                       // one session at a time, cleanly
+  let ws;
+  try { ws = new WebSocket(url); } catch (e) { netStatus('Bad server address.'); return; }
+  net.ws = ws; net.on = true; net.desynced = false;
+  netStatus('Connecting…'); syncNetUI();
+  ws.onopen = () => { netSend(hello); };
+  ws.onmessage = netOnMsg;
+  ws.onerror = () => {};               // onclose always follows and carries the story
+  ws.onclose = () => {
+    if (net.ws !== ws) return;         // an old socket closing after netStop replaced it
+    if (net.playing) netPeerGone();
+    else { net.ws = null; net.on = false; net.hosting = false; net.room = '';
+           netStatus('Disconnected.'); syncNetUI(); }
+  };
+}
+function netHostStart(url){
+  if (typeof PANEL !== 'undefined' && PANEL){ netStatus('Open this from the game window.'); return; }
+  net.hosting = true; net.slot = 0;
+  netConnect(url, { t:'hello', v:1 });
+  net.hosting = true;                  // netStop inside netConnect cleared it
+}
+function netJoinStart(url, code){
+  if (typeof PANEL !== 'undefined' && PANEL){ netStatus('Open this from the game window.'); return; }
+  code = String(code || '').toUpperCase().trim();
+  if (!code){ netStatus('Type the room code first.'); return; }
+  net.slot = 1;
+  netConnect(url, { t:'hello', v:1, room: code });
+  net.slot = 1;
+}
+function netOnMsg(ev){
+  let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+  switch (m.t){
+    case 'room':
+      net.room = m.code;
+      netStatus('Waiting for an opponent — room code: ' + m.code);
+      break;
+    case 'joined':
+      net.room = m.room;
+      netStatus('Joined ' + m.room + ' — waiting for the host…');
+      netSend({ t:'meta', name: (profile.name || 'P2').slice(0, 12), flag: netFlag() });
+      break;
+    case 'peer': break;                // the joiner speaks first (meta), so nothing to do yet
+    case 'meta':
+      // Host: the opponent introduced themselves — deal the match. The start message
+      // carries everything the joiner needs to build the identical world: the seed and
+      // the sim-relevant slice of the host's settings.
+      if (net.hosting && !net.playing){
+        const start = { t:'start', seed: nextMatchSeed(), delay: NET.delay, cfg: netCfg(),
+                        names: [(profile.name || 'P1').slice(0, 12), String(m.name || 'P2').slice(0, 12)],
+                        flags: [netFlag(), m.flag || 'none'] };
+        netSend(start);
+        netBegin(start);
+      }
+      break;
+    case 'start': if (!net.hosting && !net.playing){ net.slot = 1; netBegin(m); } break;
+    case 'i': netRecvInput(m); break;
+    case 'h': netRecvHash(m); break;
+    case 'gone': if (net.playing) netPeerGone();
+                 else if (net.hosting) netStatus('Opponent left — room code: ' + net.room);
+                 break;
+    case 'err': netStatus('Server: ' + String(m.why || 'error')); netStop(null); break;
+  }
+}
+// The sim-relevant slice of the host's settings. Deep-copied through JSON because
+// `party` and `feel` are objects and the joiner must not share references into them.
+function netCfg(){
+  const cfg = {};
+  for (const k of NET_SEL_KEYS) cfg[k] = JSON.parse(JSON.stringify(sel[k] ?? null));
+  cfg.mode = '1v1'; cfg.spectate = 'play';   // one body a side, and nobody watches from the bench
+  return cfg;
+}
+function netBegin(m){
+  net._begin = true;
+  try {
+    net.selWas = {};
+    for (const k of NET_SEL_KEYS){
+      net.selWas[k] = JSON.parse(JSON.stringify(sel[k] ?? null));
+      if (m.cfg && k in m.cfg) sel[k] = JSON.parse(JSON.stringify(m.cfg[k]));
+    }
+    net.delay = Math.max(1, Math.min(12, (m.delay | 0) || NET.delay));
+    // ⚠️ Pinned for THIS start only. `_forcedSeed` is sticky until cleared, and left set
+    // it would deal the same bots to every offline match after this one.
+    setMatchSeed(m.seed >>> 0);
+    startMatch({ lobby: false });
+    setMatchSeed(null);
+    netDress(m);
+    world.netFrame = 0;
+    net.inbuf = [new Map(), new Map()];
+    for (let i = 0; i < net.delay; i++){ net.inbuf[0].set(i, [0,0,0]); net.inbuf[1].set(i, [0,0,0]); }
+    net.myHash = new Map(); net.theirHash = new Map();
+    net.playing = true; net.stallT = 0; net.stallShown = false;
+    net.scratch = { rotQuarter:0, inX:0, inY:0, kick:false, faceX:0, faceY:-1 };
+    netStatus('Playing — room ' + net.room);
+    syncNetUI();
+  } finally { net._begin = false; }
+}
+// Both machines built the same 1v1 (host profile differences are cosmetic — mkPlayer's
+// physics fields ignore the profile) and now dress it identically: team 0 is the host,
+// team 1 the joiner, both seats fed from the wire. `netLocal` marks which body is YOURS
+// on this machine — read by youTeam and the touch controls, never by the sim.
+function netDress(m){
+  const w = world; if (!w) return;
+  const seats = [w.players.find(p => p.team === 0), w.players.find(p => p.team === 1)];
+  seats.forEach((p, slot) => {
+    if (!p) return;
+    p.ctrl = 'net'; p.netSlot = slot; p.netLocal = (slot === net.slot); p.padIndex = -1;
+    if (m.names && m.names[slot]) p.name = String(m.names[slot]).slice(0, 12);
+    // 'photo' is a data URL on somebody else's device — it cannot travel, so it never
+    // arrives (netFlag folds it to 'none' on the way out) and is refused on the way in.
+    if (m.flags && m.flags[slot] && m.flags[slot] !== 'photo') p.flag = m.flags[slot];
+  });
+}
+// Resolve the local pad exactly as an offline seat would — keyboard merged with the
+// first controller merged with touch — then quantise. int8 per axis: both machines
+// divide the same integer by 127, so the floats they apply are bit-identical.
+function netSampleLocal(){
+  let pad = null;
+  if (!deckMenuOwnsPad()){
+    const gp = connectedGamepadIndices();
+    pad = mergePads(gp.length ? gamepadPad(gp[0]) : null, pads.p1);
+  }
+  applyHumanInput(net.scratch, pad);
+  const q = v => Math.max(-127, Math.min(127, Math.round((v || 0) * 127)));
+  return [q(net.scratch.inX), q(net.scratch.inY), net.scratch.kick ? 1 : 0];
+}
+// The step loop's input branch for a net seat — the exact shape applyHumanInput
+// produces, computed from the wire integers so both machines cannot disagree.
+function netApplySeat(w, p){
+  const rec = net.inbuf && net.inbuf[p.netSlot] ? net.inbuf[p.netSlot].get(w.netFrame) : null;
+  let qx = rec ? rec[0] / 127 : 0, qy = rec ? rec[1] / 127 : 0;
+  const m = Math.hypot(qx, qy);
+  if (m > 1){ qx /= m; qy /= m; }      // a rounded diagonal can poke a hair over 1
+  if (m > 0.001){ p.inX = qx; p.inY = qy; p.faceX = qx / m; p.faceY = qy / m; }
+  else { p.inX = 0; p.inY = 0; }
+  p.kick = !!(rec && rec[2]);
+}
+const NET_Z = [0, 0, 0];
+function netCanStep(w){
+  if (!net.playing) return true;
+  if (w.state === 'over') return true;   // the whistle has gone — each machine winds down alone
+  const f = w.netFrame | 0;
+  return net.inbuf[0].has(f) && net.inbuf[1].has(f);
+}
+function netBeforeStep(w){
+  const f = w.netFrame | 0, sf = f + net.delay;
+  const mine = net.inbuf[net.slot];
+  if (!mine.has(sf)){
+    mine.set(sf, netSampleLocal());
+    // Three frames per packet: the transport is TCP so nothing is lost, but a packet
+    // that arrives late is covered by the next one arriving with its tail.
+    netSend({ t:'i', f: sf, d: [mine.get(sf - 2) || NET_Z, mine.get(sf - 1) || NET_Z, mine.get(sf)] });
+  }
+  if (net.stallT > 0){ net.stallT = 0; net.stallShown = false; }
+}
+function netAfterStep(w){
+  const f = w.netFrame | 0;
+  w.netFrame = f + 1;
+  if (f % NET.hashEvery === 0){
+    const h = netHashWorld(w);
+    net.myHash.set(f, h);
+    netHashCheck(f);
+    netSend({ t:'h', f, h });
+    for (const buf of net.inbuf) for (const k of buf.keys()) if (k < f - NET.keep) buf.delete(k);
+    for (const map of [net.myHash, net.theirHash]) for (const k of map.keys()) if (k < f - NET.keep * 4) map.delete(k);
+  }
+  if (w.state === 'over' && net.playing) netStop('Match finished — host or join again for a rematch.');
+}
+function netStalled(dt){
+  net.stallT += dt;
+  if (net.stallT > NET.stallBanner && !net.stallShown){
+    net.stallShown = true;
+    showBanner('WAITING FOR OPPONENT…', 'var(--accent)');
+  }
+}
+function netRecvInput(m){
+  if (!net.playing || !net.inbuf) return;
+  const theirs = net.inbuf[net.slot === 0 ? 1 : 0];
+  const base = (m.f | 0) - 2, d = m.d || [];
+  for (let j = 0; j < d.length; j++){
+    const f = base + j, r = d[j];
+    // A frame's inputs never change once sent, so first write wins and a redundant
+    // copy is simply ignored.
+    if (f >= 0 && !theirs.has(f) && Array.isArray(r)) theirs.set(f, [r[0] | 0, r[1] | 0, r[2] ? 1 : 0]);
+  }
+}
+function netRecvHash(m){
+  if (!net.playing || !net.theirHash) return;
+  net.theirHash.set(m.f | 0, m.h >>> 0);
+  netHashCheck(m.f | 0);
+}
+function netHashCheck(f){
+  const a = net.myHash && net.myHash.get(f), b = net.theirHash && net.theirHash.get(f);
+  if (a == null || b == null || a === b) return;
+  net.desynced = true;
+  showBanner('SYNC LOST', 'var(--accent)');
+  netPeerGone('Out of sync — the sims drifted apart (different browsers?). A bot took over.');
+}
+// FNV-1a over the exact float bits of everything the sim owns. Positions and
+// velocities alone would eventually expose any divergence; inputs and timers make it
+// expose within a frame or two of the cause.
+const _nhBuf = new ArrayBuffer(8), _nhF = new Float64Array(_nhBuf), _nhU = new Uint32Array(_nhBuf);
+function netHashWorld(w){
+  let h = 0x811c9dc5 >>> 0;
+  const mixU = u => { h = Math.imul(h ^ (u >>> 0), 16777619) >>> 0; };
+  const mixF = v => { _nhF[0] = v || 0; mixU(_nhU[0]); mixU(_nhU[1]); };
+  mixU(w.score[0]); mixU(w.score[1]);
+  mixU(w.state === 'play' ? 1 : w.state === 'kickoff' ? 2 : w.state === 'goal' ? 3 : 4);
+  mixF(w.stateT); mixF(w.timeLeft);
+  const balls = [w.ball].concat(w.extraBalls || []);
+  for (const b of balls){ mixF(b.x); mixF(b.y); mixF(b.vx); mixF(b.vy); }
+  for (const p of w.players){
+    mixF(p.x); mixF(p.y); mixF(p.vx); mixF(p.vy);
+    mixF(p.chargeT); mixF(p.trapT); mixU(p.kick ? 1 : 0); mixU(p.trap ? 1 : 0);
+  }
+  return h >>> 0;
+}
+// The opponent is gone (socket dropped, or the sims drifted): their body becomes a
+// bot IN PLACE — botInit already ran for every seat, so it thinks from the next step —
+// and your own seat goes back to ordinary local control, so the match stays playable.
+function netPeerGone(msg){
+  const w = world;
+  if (w && w.players){
+    const gp = connectedGamepadIndices();
+    for (const p of w.players){
+      if (p.ctrl !== 'net') continue;
+      if (p.netLocal){
+        if (gp.length){ p.ctrl = 'gamepad'; p.padIndex = gp[0]; }
+        else p.ctrl = 'human1';
+      } else p.ctrl = 'bot';
+    }
+  }
+  if (net.playing) showBanner('OPPONENT LEFT', 'var(--accent)');
+  netStop(msg || 'Opponent left — a bot took their seat.');
+}
+function netStop(msg){
+  if (net.ws){ const ws = net.ws; net.ws = null; ws.onclose = null; try { ws.close(); } catch (e) {} }
+  net.on = false; net.hosting = false; net.playing = false; net.room = '';
+  net.inbuf = null;
+  // ⚠️ The joiner gets their own settings back — and they were NEVER saved, so a
+  // crash mid-match costs nothing: the overrides only ever lived in memory.
+  if (net.selWas){ for (const k in net.selWas) sel[k] = net.selWas[k]; net.selWas = null; }
+  if (msg) netStatus(msg);
+  syncNetUI();
+}
+// Starting any other match while a session is live abandons the session — the
+// alternative is a lockstep gate waiting forever on a world it no longer owns.
+// `_begin` exempts the one startMatch that netBegin itself makes.
+// ⚠️ The attract DEMO is exempt too: it starts itself whenever the menu goes idle, and
+// hosting a room IS sitting on the menu waiting — a demo kicking you out of the room
+// you are waiting in would make hosting impossible on any desktop.
+function netGuardStart(){
+  if (_startQuiet) return;
+  if ((net.playing || net.on) && !net._begin) netStop('Left the online session.');
+}
+function netInit(){
+  const stored = loadNet();
+  const url = $('netUrl'), code = $('netCode');
+  if (url){
+    url.value = stored.url || '';
+    url.addEventListener('change', () => saveNet({ url: url.value.trim() }));
+  }
+  const addr = () => { const v = netNormUrl(url ? url.value : ''); if (url && v){ url.value = v; saveNet({ url: v }); } return v; };
+  const host = $('netHostBtn'), join = $('netJoinBtn'), leave = $('netLeaveBtn');
+  if (host) host.onclick = () => { const v = addr(); if (!v){ netStatus('Type the relay server address first.'); return; } netHostStart(v); };
+  if (join) join.onclick = () => { const v = addr(); if (!v){ netStatus('Type the relay server address first.'); return; } netJoinStart(v, code ? code.value : ''); };
+  if (leave) leave.onclick = () => { if (net.playing) netPeerGone('Left the match.'); else netStop('Left.'); };
+  syncNetUI();
+}
+netInit();
+
+// ============================================================
 //  TOUCH CONTROLS (dual thumb, multi-touch)
 // ============================================================
 // pads.p1 = { active, id, cx, cy, dx, dy, kick, kickId, invert }
@@ -27991,7 +28390,9 @@ function drawControls(){
   if (!running || (world && world.state==='over')) return;
   // Only show touch controls for seats actually driven by touch — a gamepad
   // player (or a fully-controller match) gets no on-screen thumbstick.
-  const hasP1 = world && world.players.some(p=>p.ctrl==='human1');
+  // ...and the online seat you drive from this device wants its thumbstick too — the
+  // pad still feeds the sim, it just goes through the wire buffer first (see NET).
+  const hasP1 = world && world.players.some(p=>p.ctrl==='human1' || p.netLocal);
   const hasP2 = world && world.players.some(p=>p.ctrl==='human2');
   // (the keyboard is polled once per frame in loop() — see the note there)
   // Desktop / cocktail: no touchscreen, so hide the on-screen thumbsticks entirely.
@@ -28198,6 +28599,9 @@ function toMenu(){
     dockOrFull('setup');
     return;
   }
+  // Walking out mid-online-match: tell the opponent (the socket close relays 'gone')
+  // rather than leaving their sim waiting on inputs that are never coming.
+  if (net.playing) netStop('Left the online match.');
   running=false; paused=false; world=null; drillKey=null;
   cancelAnimationFrame(rafId);
   ballTrail=[]; fx=[];
@@ -28844,6 +29248,9 @@ if (window.__MAGNETDEBUG) {
     buildMatchOpts, detectPanel, get bc(){ return bc; }, SYNC_ID,
     saveMatchClip, repMakeRecorder, repBadMux, repBitrate, REPCODECS, repTween, repClipExt, repClipName,
     oneHandKick, ONEHAND, padTouchDown, padStick, padStickAxes, PADAX, buildStickRows, startStickBind, get padBind(){ return padBind; }, replayAbort, repMime, repClipName, recordAndShareClip, saveClip, renderAwards, TRAP, TAP_HOLD, presetMatches, FEEL_PRESETS,
+    NET, NET_SEL_KEYS, get net(){ return net; }, netHostStart, netJoinStart, netStop, netStatus,
+    netHashWorld, netSampleLocal, netApplySeat, netCanStep, netCfg, netBegin, netDress, netPeerGone,
+    netGuardStart, netNormUrl, netInit, syncNetUI,
   };
 }
 })();

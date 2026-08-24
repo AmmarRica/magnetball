@@ -251,7 +251,12 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 
 12. **Phone-as-controller (local WebRTC)** (L) — shared screen + phones as pads via room code/QR.
     *Answers "permanent room links" + mobile multiplayer.* (Design already scoped.)
-13. **Online 1v1/2v2 rooms by code** (XL) — WebRTC peer play with a lightweight signaling broker.
+13. ✅ *(phase 1: 1v1)* **Online 1v1/2v2 rooms by code** (XL) — shipped as **deterministic
+    lockstep through a dumb WebSocket relay** (`server/relay.mjs`, the Online card,
+    `docs/ONLINE.md`) rather than WebRTC: only inputs cross the wire, the relay never
+    simulates, and a world-hash exchange catches drift. WebRTC/TURN pain avoided entirely —
+    the relay is one zero-dependency Node file behind any TLS front. 2v2+ and the
+    authoritative-server path above remain open.
     *Real accounts/rooms are the biggest structural ask; room-code links are the practical version.*
 14. **Room presets / favourites** (S) — save & pin match setups (mode, field, magnet, length).
     *Favourite/pinned rooms request.*

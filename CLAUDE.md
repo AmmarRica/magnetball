@@ -2271,6 +2271,56 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the one place that must never fire. `tests/botstuck.mjs`, whose metric is **time to free
   the ball** and never "the bot stood still" — after the fix a bot stands still plenty,
   because that is football.
+- **ONLINE 1v1 — DETERMINISTIC LOCKSTEP THROUGH A DUMB RELAY** (`NET`, `net`,
+  `NET_SEL_KEYS`, `netBegin`, `netApplySeat`, `netCanStep`, `netHashWorld`,
+  `netGuardStart`; `server/relay.mjs`; the Online card, `data-sec="net"`;
+  `docs/ONLINE.md`). Only INPUTS cross the wire (~3 bytes a frame); both machines run
+  the full sim off one seed, which is exactly what the determinism audit's same-engine
+  guarantee buys. The relay is ONE zero-dependency Node file that hands out room codes
+  and forwards messages verbatim — it never simulates, so the game's protocol lives in
+  one place. TLS goes IN FRONT of it (an https page may only open `wss://`, localhost
+  excepted); the server refuses to do certs badly itself.
+  ⚠️ **BOTH SEATS ARE `ctrl:'net'`, INCLUDING YOUR OWN.** Your input is sampled through
+  the real local path (`applyHumanInput` onto a scratch body — keyboard/pad merge,
+  one-hand kick and cocktail rotation all resolve BEFORE the wire), quantised to int8,
+  delayed `NET.delay` frames and applied FROM THE BUFFER — the identical path the
+  opponent's copy of you runs. A local seat applied live would act three frames earlier
+  here than there and the sims part on the first touch. Both machines divide the same
+  integers by 127, so the floats they apply are bit-identical.
+  ⚠️ **The gate lives in `loop()`**: a frame steps only once both seats' inputs for it
+  are buffered (frames `0..delay-1` prefilled neutral, so no starting deadlock), and
+  `acc` is capped while blocked or a stall would bank a burst of catch-up steps.
+  ⚠️ **THE HOST'S SETTINGS ARE THE MATCH.** `step()` reads `sel` live (charge, sprint,
+  feel), so `NET_SEL_KEYS` is copied from the host over the joiner for the duration and
+  restored at `netStop` — never through `saveSel()`, so a crash costs nothing. A
+  sim-read `sel` key missing from that list is a desync the hash check catches in a
+  second, which is what the hash check is FOR: FNV over the exact float bits every 60
+  frames, exchanged; a mismatch says SYNC LOST and hands the seat to a bot rather than
+  letting two players watch two different matches. Same-engine agrees forever —
+  cross-engine floats can drift, the parked fixed-point work, and the card says "use
+  the same browser" in as many words.
+  ⚠️ **What stands down while playing**: auto-replay (`playReplay` parks `loop()` for a
+  wall-clock length the peer cannot see, and its `resetKickoff` fires from a `.then()`
+  BETWEEN steps here while firing INSIDE a step there), drop-in (local hardware
+  rewriting the roster), the warm-up lobby, and `startMatch`'s grow-to-fit-the-pads
+  rule (`!net._begin` — the roster must come out the same shape on both machines).
+  ⚠️ **`netGuardStart` abandons the session from ANY other `startMatch` — except the
+  attract demo.** `_startQuiet` is exempt because the demo starts itself whenever the
+  menu idles, and hosting a room IS sitting on the menu waiting; ungated, every desktop
+  host was kicked out of their own room by the screensaver.
+  ⚠️ **The server address lives in `magnetball.net`, never in `sel`** — the
+  arcade-takings argument: `saveSel()` serialises all of `sel` and `syncAdopt()`
+  shallow-merges it between windows, and tonight's relay is not a setting.
+  ⚠️ **`netLocal` marks which body is yours on THIS machine** (ctrl says 'net' for
+  both); `youTeam` and the touch-control draw read it, the sim never does.
+  ⚠️ A vanished peer becomes a **bot in place** (`botInit` already ran for every seat)
+  and your seat goes back to local control — the match stays playable, and `toMenu`'s
+  full-bleed branch calls `netStop` so a walked-out match tells the opponent instead of
+  stalling them forever. `tests/netlock.mjs` — two real pages, the real relay, the real
+  rAF loops, a real goal crossing the wire with every hash agreeing; its measurement
+  traps (pollKeys erases a written pad; movement measured mid-play because resetKickoff
+  teleports; hash equality vacuous without hash variance) are written up in
+  `tests/README.md`.
 - **Determinism:** the bar is **same-engine reproducibility** and the audit is CLOSED at it
   (`docs/DETERMINISM-AUDIT.md`) — a pinned seed reproduces a match bit-exactly in one browser;
   cross-engine equality is explicitly not a goal, so the fixed-point work is parked. What still
@@ -4057,7 +4107,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 118 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 119 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
