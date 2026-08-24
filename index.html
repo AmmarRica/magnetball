@@ -4255,7 +4255,24 @@ const LOBBYKB = {
 // a side wears unless somebody chose otherwise, and without it a flag picked by mistake
 // could not be taken off. Same argument as the `none` tile leading the Cap and Eyes
 // pickers: a reset is not a choice.
-const LOBBY_FLAGS = ['none', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england'];
+// ⚠️ **TWELVE, AND THE FOUR THAT WERE ADDED ARE THE HIGHEST-RANKED NATIONS THAT WERE
+// MISSING.** Asked for as "another column of countries, from the FIFA top 20": flat the
+// block is four along and wraps outward, so twelve is exactly one more column than eight.
+// The seven already here (USA, Mexico, Argentina, France, Croatia, Brazil, England) are
+// all top-20 sides; Spain, Portugal, the Netherlands and Belgium are the next four down
+// the ranking that were not on it, and all four have been fixtures of the top ten for
+// years — which matters, because a ranking moves and a hard-coded list does not.
+// ⚠️ **`none` LEADS, and it is not a country** — a reset is not a choice, the rule the Cap
+// and Eyes pickers already follow, and without it a flag picked by mistake could not be
+// taken off again.
+// ⚠️ **EVERY KEY MUST EXIST IN `FLAGS`.** A missing one falls back to a grey square, which
+// looks like a rendering bug and is really a country nobody can identify — the same rule
+// `CUP_TEAMS` carries, and `tests/lobbydress.mjs` checks it for both lists.
+// ⚠️ Growing this list is NOT free: it is beside the pitch, and `computeCam` frames the
+// whole span, so every column costs court. Measured for this one in the commit that added
+// it — check it again before adding a fourth column.
+const LOBBY_FLAGS = ['none', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england',
+                     'spain', 'portugal', 'netherl', 'belgium'];
 // ============================================================
 //  TEAM COLOUR — one shade a side, picked on the pitch
 // ============================================================
@@ -5252,7 +5269,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.1105AM';
+const VERSION = '20260824.1240PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5268,6 +5285,13 @@ const VERSION = '20260824.1105AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.1240PM', title: 'Four more countries in warm-up',
+    added: [
+      '<b>Spain, Portugal, the Netherlands and Belgium</b> join the flags beside each half. They are the highest-ranked sides that were not already on the list.',
+      '<b>Twelve countries now, in one more column.</b> Walk onto one and that whole side wears it, exactly as before \u2014 and <b>None</b> still takes it back off.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.1105AM', title: 'A tidier warm-up room',
     changed: [
       '<b>The keyboard stands further off the pitch.</b> The line explaining it was landing on the touchline and the whole block read as part of the court \u2014 worst when the pitch is turned sideways, which is most desktops.',
@@ -19500,15 +19524,24 @@ function buildLobbyKeys(w){
   // pitch, so four across and two deep with the flags continuing DOWN, where there is room.
   const cols = splitU ? K.swCols * 2 : K.swCols;
   const swSpan = cols*K.sw + (cols-1)*K.gap;
-  const rows = Math.ceil(TEAM_COLS.length / cols);              // deep rows per sub-block
   const alongStep = K.sw + K.gap, deepStep = K.sw + K.gap;
   const subAlong = cols*alongStep - K.gap;                       // one sub-block along
-  const subDeep  = rows*deepStep - K.gap;
+  // ⚠️ **EACH SUB-BLOCK IS AS DEEP AS ITS OWN LIST, and this was `TEAM_COLS.length` for
+  // BOTH of them.** That held only while the two lists were the same length. The moment
+  // the flag list grew past the shirts', the flags wrapped onto a row the arithmetic did
+  // not know about: turned, the second flag row landed at `outV + 36` while the shirts sat
+  // at `outV + 42`, and a 30-unit tile spans 36..66 — so the countries were drawn straight
+  // through the shirts. That is the same collision the difficulty row already records one
+  // block down, and no count or bounds check can see it; `tests/lobbydress.mjs` measures
+  // pad-vs-pad overlap in four layouts for exactly this reason.
+  const deepOf = n => Math.ceil(n / cols)*deepStep - K.gap;
+  const shirtDeep = deepOf(TEAM_COLS.length);
+  const flagDeep  = deepOf(LOBBY_FLAGS.length);
   const dkeys0 = Object.keys(DIFF);
   // The whole dressing block (shirts + a gap + flags), measured on both axes so the
   // difficulty row below can clear it without repeating the arithmetic.
   const blockAlong = subAlong*2 + K.flagGap;
-  const blockDeep  = subDeep*2 + K.flagGap;
+  const blockDeep  = shirtDeep + flagDeep + K.flagGap;
   // ⚠️ **THE FLAGS GO ON THE EDGE THE COLOURS ARE NOT ON, and that is a MEASURED choice
   // rather than a tidy one.** Stacked beyond the colours on the same edge they cost
   // **21% of pitch scale** in the turned view and 8% flat — because `computeCam` centres
@@ -19550,7 +19583,7 @@ function buildLobbyKeys(w){
       strip(team, LOBBY_FLAGS, (fk) => ({ flagTeam: team, flagKey: fk, label: '' }),
             { axis:'u', sign:-1, along, outer: outV });                       // nearer the pitch
       strip(team, TEAM_COLS, (c) => ({ colTeam: team, col: c.col, label: '' }),
-            { axis:'u', sign:-1, along, outer: outV + subDeep + K.flagGap }); // ...so shirts sit above
+            { axis:'u', sign:-1, along, outer: outV + flagDeep + K.flagGap }); // ...so shirts sit above
     } else {
       // Flat the halves are top and bottom, so each block is a column beside its own half
       // and the flags simply continue DOWN it, which is what "under" means here.

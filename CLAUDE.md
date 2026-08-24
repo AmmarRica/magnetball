@@ -3147,6 +3147,27 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   fixed red-vs-blue hue finds the claimed half and misses the quiet one — 126 against 13.
   What has to be true of both is that the edge differs from the grass it is drawn over.
 - **A FLAG BLOCK BESIDE EACH HALF, and walking onto a side wears that side's country**
+  ⚠️ **TWELVE COUNTRIES, and the four that were added are the highest-ranked ones that
+  were MISSING.** Asked for as "another column, from the FIFA top 20": flat the block is
+  four along and wraps outward, so twelve is exactly one column more than eight. The seven
+  already there are all top-20 sides; **Spain, Portugal, the Netherlands and Belgium** are
+  the next four down that were not, and all four have sat in the top ten for years — which
+  matters, because a ranking moves and a hard-coded list does not.
+  ⚠️ **MEASURED: free on a phone, −3.5% of pitch scale turned** (cam.s 0.4637 → 0.4476).
+  Flat the column grows AWAY from the court on an edge that was not the worst side, so
+  `computeCam` charges nothing for it; turned the block sits above the pitch and depth
+  there is the expensive direction. Re-measure before adding a fourth column.
+  ⚠️ **EACH SUB-BLOCK IS NOW AS DEEP AS ITS OWN LIST, and it used to be `TEAM_COLS.length`
+  for BOTH.** That held only while the two lists were the same length: the moment the flags
+  grew past the shirts they wrapped onto a row the arithmetic did not know about, and
+  turned, the second flag row landed at `outV + 36` while the shirts sat at `outV + 42` —
+  a 30-unit tile spanning 36..66, so the countries were drawn straight through the shirts.
+  Sabotage-verified: putting the shared depth back reports **8 overlapping pads** in the
+  turned and deck layouts. Same collision class the difficulty row records below, and no
+  count or bounds check can see it — only a pad-vs-pad overlap check in four layouts.
+  ⚠️ `tests/lobbydress.mjs`' pad counts are **derived from the list lengths**, never
+  literals: they read `count === 16` and went red the moment the list grew, which is a
+  check that has to be edited every time the thing it watches changes.
   (`LOBBY_FLAGS`, `sel.teamFlag`, `teamFlagOf`, `setTeamFlag`, `p._ownFlag`). Eight pads in
   the same 4×2 shape the colours use, drawn from the top of `CUP_TEAMS` — a curated list
   whose keys are all verified to exist in `FLAGS`, because a missing one draws a grey

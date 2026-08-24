@@ -54,6 +54,12 @@ const boot = async (vp, orient) => {
     // `CUP_TEAMS` already follows, and this list is drawn from it.
     o.allReal = o.keys.filter(k => k !== 'none').every(k => !!M.FLAGS[k]);
     o.noneIsFirst = M.LOBBY_FLAGS[0] === 'none';
+    // ⚠️ DERIVED, never a literal. This read `count === 16` and went red the moment the
+    // list grew a column — a check that has to be edited every time the thing it watches
+    // changes is a check nobody trusts. What is actually being claimed is "one pad per
+    // entry per side", and that is what is written now.
+    o.listLen = M.LOBBY_FLAGS.length;
+    o.colsLen = M.TEAM_COLS.length;
 
     const human = w.players.find(x => x.ctrl !== 'bot');
     const pick = (team, key) => M.kbHit(w, human, kb.keys.find(k => k.flagTeam === team && k.flagKey === key));
@@ -87,7 +93,11 @@ const boot = async (vp, orient) => {
     return o;
   });
   console.log('flags', JSON.stringify(r));
-  ok('a flag pad per country per side', r.count === 16 && r.perTeam[0] === 8 && r.perTeam[1] === 8, JSON.stringify(r.perTeam));
+  ok('a flag pad per country per side',
+     r.count === r.listLen * 2 && r.perTeam[0] === r.listLen && r.perTeam[1] === r.listLen,
+     JSON.stringify({ perTeam: r.perTeam, listLen: r.listLen }));
+  // ⚠️ ...and the list is not EMPTY, or "one pad per entry" is satisfied by no pads at all.
+  ok('...and there are countries in the list', r.listLen >= 8, String(r.listLen));
   ok('every flag key is real', r.allReal, r.keys.join());
   ok('NONE leads the block', r.noneIsFirst, 'a reset is not a choice — the same rule the Cap and Eyes pickers follow');
   ok('picking a country dresses that whole side', r.wornBy0.length === 1 && r.wornBy0[0] === 'brazil', r.wornBy0.join());
@@ -235,11 +245,13 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
       }
     const off = kb.keys.filter(k => { const q = M.screenPt(M.wx(k.x + k.w/2), M.wy(k.y + k.h/2));
       return q[0] < 0 || q[1] < 0 || q[0] > innerWidth || q[1] > innerHeight; }).length;
-    return { counts, overlaps, off, camS: +M.cam.s.toFixed(3) };
+    return { counts, overlaps, off, camS: +M.cam.s.toFixed(3),
+             listLen: M.LOBBY_FLAGS.length, colsLen: M.TEAM_COLS.length };
   });
   console.log(name, JSON.stringify(r));
   ok(`${name}: every family of pads is there`,
-     r.counts.col === 16 && r.counts.flag === 16 && r.counts.diff === 7 && r.counts.start === 1 && r.counts.letter >= 28,
+     r.counts.col === r.colsLen * 2 && r.counts.flag === r.listLen * 2 &&
+     r.counts.diff === 7 && r.counts.start === 1 && r.counts.letter >= 28,
      JSON.stringify(r.counts));
   ok(`${name}: no two families overlap`, r.overlaps === 0, String(r.overlaps));
   ok(`${name}: every pad is on screen`, r.off === 0, String(r.off));
