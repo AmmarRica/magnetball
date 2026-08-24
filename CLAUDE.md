@@ -277,6 +277,48 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   by the suite's OWN guard ("if the caption is off in both, the check below passes for the
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
+- **THE GAME SHIPS ON THE PRO FEEL** (`defaultSel().feel` = the `pro` preset, plus
+  `trapOff:true`, `hitStop:2`, `rumble:15`, `kickRing:125` and match speed 1.00). Asked
+  for: it is the setup that was being picked by hand every time, so a fresh install gets
+  it. Every one is still a slider and `resetSettings` gives this set back, not the old one.
+  ⚠️ **IT COLLAPSES THE BOT DIFFICULTY LADDER, and that is a known, measured, SHIPPED
+  defect rather than something nobody noticed.** Measured on `botplans`' own harness
+  (2v2, 60s, both orientations), Insane against Rookie per strategy:
+
+      plan       standard  balanced  attack  bus  counter  press  passing   pooled
+      Casual        +18       +17     +22    +16    +11     +11     +12      +107
+      Pro (shipped)  -4        +6     -11     +1     -9      -4      -4       -25
+
+  Every plan falls by 20 to 33 and the two arms do not overlap anywhere — seven independent
+  measurements agreeing, which is what makes it a finding. `botstuck` fails at the shipped
+  default too, and concretely: **5 own goals** off the escape kick and a sanity minute that
+  finishes **0–0**.
+  ⚠️ **The cause is written down one layer along**: `botArrive` writes in ACCELERATION
+  space against `w.pAccel`, the player's own Game Feel number — the same reason the drill
+  machine "asks for almost no stick" on a low one. Pro's `accel` is 12 against Casual's 40,
+  so every tier is slowed and the higher tiers, which reposition more, lose more; `pdamp`
+  960's float compounds it, because a bot that overshoots has to come back. Isolated:
+  one-touch and `ballcap` are innocent, **both movement numbers hurt**, so there is no
+  single value to back off. **The fix is to retune the steering against the shipped
+  movement, not to change the default.**
+  ⚠️ **So `botai`/`botplans`/`botstuck` are PINNED to the AI's own tuning
+  (`pinCasualFeel`), and `tests/proladder.mjs` is RED ON PURPOSE.** The three guard the AI
+  — that the ladder holds at the movement it was tuned against, so a retune has something
+  to keep. `proladder` runs at whatever `defaultSel()` ships and describes the real game.
+  Delete it and those three pins become exactly the papering-over that this repo's "a
+  threshold raised to make a check pass is a defect report, not a fix" rule forbids.
+  ⚠️ **A GOAL DIFFERENCE IS ONLY AS GOOD AS THE GOALS UNDER IT**, and getting this wrong
+  produced a confidently wrong answer here. The first version of `proladder` ran its own
+  duels at 45 sim-seconds and scored **17 goals across 72 matches** — 0.24 a match, so
+  nearly every match finished 0–0 and the sign came from the handful that did not. Re-run
+  longer it flipped, and re-run on other seeds it flipped again, on **both** feels. Below
+  about **two goals a match** a ladder reading is a coin toss: check the goal count in the
+  same object before believing any of these numbers.
+  ⚠️ **`pinCasualFeel` also pins `sel.kickRing = 195`, and that is the half that actually
+  bit.** The dial is the drawn ring AND the physical reach (`kickRangeUnits`), so 195 → 125
+  is a **27% shorter leg** — four suites place a ball at a distance chosen for the old
+  reach and measured "no kick" rather than the thing they are about. The feel numbers alone
+  did not fix them.
 - **A CONNECTED CONTROLLER TAKES A SEAT, out of the box** (`sel.controllers`, default
   **`on`**). ⚠️ It shipped as `off`, and the failure was reported as *"4 controllers are not
   showing and can't join"*: four pads connected drew four controller icons, listed
@@ -545,6 +587,11 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   the clamp to path length was biting as well. Reported as "did you make the trail
   thinner". At 0.85..1.45 it reads **8 / 10 / 16**: full speed back where it was, the slow
   end lifted, and no blob. The clamp is what holds the invariant, so this number is free.
+  ⚠️ **And it was asked up again, to 1.05..2.75** (`1.05 + 1.70 * drive`)**.** "Make the trail a bit thicker" — so the
+  whole range moved rather than only the top, because lifting the fast end alone would put
+  the slow end further below where it started. The clamp to path length is untouched and
+  is what still makes *wider than it is long* impossible, which is why this pair stays a
+  taste dial: the invariant does not live in these two numbers.
   ⚠️ **AND THE BALL GOES BACK TO BEING A BALL** — asked for in those words. Belt it and
   the silhouette is a long streak; let it stop and what is left is the round shape it
   started as, measured against the same never-kicked frame. **TWO independent guards hold
@@ -4096,6 +4143,18 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   launch asks once more; inside `UPD.warnDays` (7) it re-asks regardless and the prompt says
   how many days are left. A countdown from thirty days is noise; from a week it is what stops
   the hard gate arriving as a surprise.
+  ⚠️ **"Update now" RACES THE SERVICE-WORKER CHECK AGAINST A TIMEOUT** (`UPD.swWait`,
+  2.5s). `updApply` disables the button, writes "Updating…", then `await`s
+  `reg.update()` before `location.reload()` — and that is a NETWORK fetch, so a dead
+  connection, a captive portal or a proxy that never answers left the page sitting on
+  "Updating…" with the reload unreachable. The one button a hard update gate offers, doing
+  nothing: the "a button that silently does nothing reads as a broken game" rule, on the
+  screen where it costs most, because `updEnforce` sets `running = false` and there is no
+  way past it. The reload is what the player asked for and the worker check is a nicety on
+  top, so it may delay the reload and may never prevent it. ⚠️ It was **red on `main`** and
+  read as an environment quirk for several sessions — `tests/updatecheck.mjs` clicks the
+  real button and waits for a real navigation, so the hang shows up there as a bare
+  `waitForNavigation` timeout with nothing naming the cause.
   ⚠️ **`updEnforce()` and `newsMaybeShow()` are wired ABOVE the `updPossible()` guard** in the
   boot block. Neither needs a server, and below it they never fired on a `file://` page —
   which is where every suite runs, so it was invisible until one was written.
@@ -4621,8 +4680,12 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 118 suites IN PARALLEL (320s, against ~1,000s serial; `MB_JOBS=1`
-forces serial for reproducing a flake, and the two timing-sensitive suites run alone); `tests/README.md` lists what each covers and the measurement
+`tests/run.mjs` runs all 126 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
+forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
+⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
+at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
+green run is therefore **125 green + proladder red**, and `proladder` going green means the
+steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

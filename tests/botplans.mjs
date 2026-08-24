@@ -23,7 +23,7 @@
 //   - Mixed never deals both sides the same plan, and never deals `standard`;
 //   - the default is `standard`, which carries no types at all;
 //   - the picker's tiles are built from the table rather than listed a second time.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
@@ -35,6 +35,16 @@ p.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifest|s
 await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(900);
+// ⚠️ **PINNED TO THE FEEL THE AI IS TUNED AT, and that is not the same as the feel
+// the game SHIPS with.** `defaultSel()` is the Pro preset, whose movement pair (accel 12,
+// pdamp 960) collapses the difficulty ladder: measured on `botplans`' own harness, Insane
+// against Rookie reads +18 +17 +22 +16 +11 +11 +12 across the seven strategies at the AI's
+// tuning and -4 +6 -11 +1 -9 -4 -4 at the shipped default — every plan down by 20 to 33,
+// with no overlap between the two arms. What THIS file is for is the AI itself: that the
+// ladder, the steering and the plans hold at the movement they were tuned against, so a
+// future retune has something to keep. Pinning here would be papering over the defect only
+// if nothing else measured it — `tests/proladder.mjs` does, and it is red on purpose.
+await pinCasualFeel(p);
 
 // ======================================================== the table itself ==
 const t = await p.evaluate(() => {

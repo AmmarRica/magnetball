@@ -67,3 +67,46 @@ export async function stubLeaderboard(page, rows = []){
     route.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8',
                     headers: { 'access-control-allow-origin': '*' }, body }));
 }
+
+// ⚠️ **THE FEEL A SUITE WAS WRITTEN AGAINST, pinned on purpose.**
+// `defaultSel()` ships the **Pro** preset — one-touch, floatier players, a faster ball —
+// which is a deliberate product choice and a real change to how the game plays. Any suite
+// that measures a PHYSICS MECHANISM (a trap window, a kick reach, a shove, a gait) had its
+// thresholds tuned against the older Casual feel, so inheriting the default silently
+// re-points every one of those numbers at a different game.
+//
+// This is the same trap the repo already records for the match-length default: "~94 suites
+// start matches without pinning a length, and every long bot measurement was taken under
+// timed play". A suite that measures anything the Game Feel sliders can move must say which
+// feel it is measuring at.
+//
+// ⚠️ **THE THREE BOT SUITES USE IT, AND THAT NEEDED AN ARGUMENT RATHER THAN A HABIT.** The
+// first draft of this comment said the opposite — "it is NOT for the bot suites, because
+// the difficulty ladder is a property of the shipped game" — and that reasoning is right on
+// its own terms: pinning a feel to make a ladder check pass is the "a threshold raised to
+// make a check pass is a defect report, not a fix" rule, verbatim.
+//
+// What makes it legitimate here is that the defect is **measured and kept red somewhere
+// else**. `botai`, `botplans` and `botstuck` guard the AI — that the ladder, the steering
+// and the plans hold at the movement they were tuned against, so a future retune has
+// something to keep. `tests/proladder.mjs` guards the shipped game, runs at whatever
+// `defaultSel()` ships, carries a live control arm, and fails today. Take that file away
+// and these three pins become exactly the papering-over the paragraph above describes.
+//
+// ⚠️ So: **never add this pin to a suite without checking what happens without it.** Two of
+// the three genuinely fail at the shipped default and the failures are real behaviour, not
+// a re-pointed threshold — `botstuck` scores 5 own goals on the escape kick and its sanity
+// minute finishes 0–0, and `botplans` inverts 5 of its 7 strategies.
+// ⚠️ **THE KICK REACH IS PART OF IT, and it is the half that actually bit.** `sel.kickRing`
+// is the dial the ring is drawn at AND the reach the physics uses (`kickRangeUnits`), and
+// the default moved 195 → 125 — a 27% shorter leg. Four suites place a ball at a distance
+// chosen for the old reach and then expect a kick to connect, so they measured "no kick"
+// rather than the thing they are about. The feel numbers alone did not fix them.
+export async function pinCasualFeel(page){
+  await page.evaluate(() => {
+    const M = window.__magnet;
+    M.sel.magnet = 0; M.sel.trapOff = false; M.sel.sens = 1.0; M.sel.kickRing = 195;
+    Object.assign(M.sel.feel, { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 });
+    M.applyFeel();
+  });
+}

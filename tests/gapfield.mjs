@@ -32,7 +32,7 @@
 //     share of bot-time pinned              0.34%  vs   4.25%
 //     goals over the sweep                     6   vs      7
 //
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
@@ -44,6 +44,7 @@ p.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifest|s
 await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(800);
+await pinCasualFeel(p);   // see _browser.mjs — the default ships the Pro preset
 
 // ===================================================== the spec, and its reach ==
 const t = await p.evaluate(() => {

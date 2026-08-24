@@ -5209,7 +5209,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0325AM';
+const VERSION = '20260824.0510AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5225,6 +5225,13 @@ const VERSION = '20260824.0325AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0510AM', title: 'A quicker default, and a fatter ball trail',
+    changed: [
+      '<b>The game now starts on the Pro feel.</b> Match speed 1.00, hit stop 2 frames, controller rumble at 15%, and a kick reach of 1.25 \u2014 the setup that was being picked by hand every time is what a fresh install gets. Every one of them is still a slider, and <b>Reset all settings</b> brings this same set back rather than the old one.',
+      '<b>The ball\u2019s streak is thicker.</b> It still cannot be wider than it is long \u2014 a slow ball gets a thin tell rather than a blob stuck to the back of it \u2014 but at pace there is noticeably more of it.',
+    ],
+    fixed: '<b>\u201cUpdate now\u201d could hang.</b> If the connection dropped at exactly the wrong moment the button sat on \u201cUpdating\u2026\u201d and never reloaded. It now reloads regardless. Plus assorted fixes and tidying.',
+  },
   { v: '20260824.0325AM', title: 'The warm-up room, tidied',
     changed: [
       '<b>Half the pitch is no longer dimmed.</b> One side of the field was being painted over in the surround colour every warm-up frame, which is what made it hard to look at. Each half is <b>outlined</b> in its team colour now instead of washed over with it, which also gives the court the frame it was missing.',
@@ -6176,7 +6183,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'g3', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:195, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:2, rumble:15, kickRing:125, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], teamFlag:['none','none'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -6214,8 +6221,18 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // rest. Binding one in Controls stores a real index and is honoured exactly.
             pad: { up:12, down:13, left:14, right:15, kick:null },
             snd: { muted:false, vol:40, whistle:0, crowd:0, kick:0, wall:0, net:0 },
-            // "Game feel" — adjustable physics (defaults mirror the current tuning).
-            feel: { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50,
+            // ⚠️ **THE DEFAULTS ARE THE *PRO* PRESET, asked for**, so these five numbers are
+            // not free: they must stay equal to `FEEL_PRESETS.pro` or the Game Feel card
+            // comes up with NEITHER preset tile selected on a fresh install, which reads as
+            // "somebody has been in here" on a game nobody has touched. `presetMatches`
+            // compares them field by field.
+            // ⚠️ It goes with `trapOff:true` above — Pro is one-touch, no trapping — and
+            // that is a real change to how the game plays out of the box, not a tuning
+            // tweak: a first touch fires immediately instead of settling the ball.
+            // ⚠️ The sprint four are NOT part of the preset and are unchanged; `applyPreset`
+            // rewrites `sel.feel` wholesale and deliberately leaves them out, so they fall
+            // back through `SPRINT` rather than living here twice.
+            feel: { accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, trap:50,
                     sprintSecs:300, sprintRefill:500, sprintSlow:75, sprintBoost:135 } }; }
 let sel = defaultSel();
 
@@ -28522,9 +28539,12 @@ function drawBallTrail(w){
   // ⚠️ The RANGE was 0.55..1.70 ball radii, which put the top of it exactly where the
   // old flat width was — so at full pelt nothing changed and everything slower got
   // thinner, which is what "did you make the trail thinner?" was about. Lifted at both
-  // ends. The clamp below is what keeps the invariant, not this number, so the width
-  // is free to be a taste dial.
-  const wantW = b.r * s * (0.85 + 1.45 * drive);
+  // ends, then lifted again (0.85..2.30 → 1.05..2.75) when a thicker streak was asked
+  // for. The clamp below is what keeps the invariant, not this number, so the width is
+  // free to be a taste dial — but only the TOP of the range is: raise the bottom too far
+  // and a barely-moving ball is back to wearing a stub, which is the blob this whole
+  // block exists to stop.
+  const wantW = b.r * s * (1.05 + 1.70 * drive);
   ctx.lineWidth = Math.max(1, Math.min(wantW, lenPx));
   ctx.strokeStyle = col ? rgba(col, 0.34 + 0.30*drive) : `rgba(${TH.trailRGB},${0.20 + 0.22*drive})`;
   ctx.stroke();
@@ -29585,6 +29605,10 @@ if (PANEL){
 const UPD = {
   bootDelay: 4,     // seconds after load before the first check — starting up comes first
   minGap: 60,       // seconds between automatic checks, however often you switch back
+  // ⚠️ How long `updApply` will wait for the service worker's own re-check before reloading
+  // anyway. It is a NETWORK fetch, so it can hang indefinitely on a dead connection or a
+  // captive portal, and the reload must not be behind it — see the note at `updApply`.
+  swWait: 2500,
   // ⚠️ After this many days with a newer build available, the game STOPS and will not play
   // until it is updated. Deliberately blunt: an old client posts scores to the same
   // leaderboard and reports bugs that were fixed weeks ago.
@@ -29842,10 +29866,17 @@ async function updApply(){
   // already refreshed its cache entry — but if THIS deploy also changed sw.js, `update()` is
   // what picks that up, and `skipWaiting` in the worker means it takes over without waiting
   // for every tab to close.
+  // ⚠️ **THE WORKER CHECK IS RACED AGAINST A TIMEOUT, AND WITHOUT THAT THE BUTTON CAN
+  // HANG FOR EVER.** `reg.update()` is a network fetch, and a bare `await` on it means a
+  // dead connection, a captive portal or a proxy that never answers leaves the page sitting
+  // on "Updating…" with the reload below unreachable — the one button an update gate offers,
+  // doing nothing, which is the "a button that silently does nothing reads as a broken game"
+  // rule. The reload is the thing the player asked for; the worker check is a nicety on top
+  // of it, so it may delay the reload a little and must never prevent it.
   try {
     if (navigator.serviceWorker){
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) await reg.update();
+      if (reg) await Promise.race([reg.update(), new Promise(r => setTimeout(r, UPD.swWait))]);
     }
   } catch (_) {}
   location.reload();

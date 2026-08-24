@@ -2,7 +2,7 @@
 // Driven through applyHumanInput + handleBallControl rather than step(), so the
 // only thing that can move the ball is a kick — a full step lets the player body-
 // check it and every reading turns into a pass.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1280,height:800} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
@@ -10,6 +10,7 @@ p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
+await pinCasualFeel(p);   // see _browser.mjs — the default ships the Pro preset
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -115,6 +116,7 @@ p2.on('pageerror', e => errors.push(e.message));
 await p2.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p2.goto('file://' + process.cwd() + '/index.html');
 await p2.waitForTimeout(700);
+await pinCasualFeel(p2);   // the phone page needs it too — see _browser.mjs
 const t = await p2.evaluate(() => {
   const M = window.__magnet, o = {};
   // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to

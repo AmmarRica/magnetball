@@ -24,7 +24,7 @@
 // rather than as an error anybody can read), and that playback puts the live world back
 // exactly as it found it — the loader swaps the global `world`, which is only safe
 // because `loop()` yields while a replay is active.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
@@ -744,7 +744,14 @@ await p.close();
     return { active: M.replay.active, controls: was, chosen, interrupted };
   });
 
-  await q.waitForTimeout(6000);
+  // ⚠️ **WAIT FOR THE CONDITION, NEVER FOR A DURATION.** This was `waitForTimeout(6000)`,
+  // and a replay's length is not a constant: it is however many frames were in the ring
+  // when the goal froze it, which moves with the physics. Measured, the same seeded goal
+  // built **306 frames (5.5s)** under the old defaults and **456 frames (8.1s)** under the
+  // shipped ones — so the fixed sleep had 457ms of headroom, and a tuning change nowhere
+  // near the replay code turned "it holds at the end" red by ending the wait mid-playback.
+  // A generous cap that resolves the moment it is true costs nothing and cannot rot.
+  await q.waitForFunction(() => window.__magnet.replay.ended, null, { timeout: 30000 });
   const end = await q.evaluate(() => ({
     ended: window.__magnet.replay.ended,
     stillActive: window.__magnet.replay.active,
@@ -787,6 +794,14 @@ await p.close();
   await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
   await q.goto('file://' + process.cwd() + '/index.html');
   await q.waitForTimeout(700);
+  // ⚠️ **THIS BLOCK NEEDS A GOAL TO EXIST, and at the shipped default one does not
+  // happen here.** It plays 15 seconds of 1v1 and then reads the row auto-record saved;
+  // `defaultSel()` ships the Pro preset, under which the same seeded 15 seconds finishes
+  // **0–0** (against 1 goal at the AI's own tuning), so `rows[0].id` threw and the whole
+  // suite died on an undefined. What is being tested is auto-record, not how often bots
+  // score — so the feel is pinned, the same as the other suites that place a body or a
+  // ball at a distance the old defaults chose. See `pinCasualFeel` in `_browser.mjs`.
+  await pinCasualFeel(q);
 
   const o = await q.evaluate(async () => {
     const M = window.__magnet, o = {};
@@ -832,7 +847,11 @@ await p.close();
     o.named = rows.every(r => r.name && /\d+-\d+/.test(r.name));
     o.sampleName = rows[0] && rows[0].name;
 
-    // ---- renaming sticks, and leads the row ----
+    // ⚠️ Everything below reads `rows[0]`. With no goal there is nothing to rename, and an
+    // unguarded index throws a TypeError that kills the suite rather than reporting which
+    // claim failed — which is exactly what happened when the shipped default stopped
+    // scoring here. Report it and skip instead.
+    if (!rows.length){ o.noGoalToRename = true; return o; }
     const id = rows[0].id;
     await M.repLibRename(id, 'The good one');
     const after = (await M.repLibAll()).find(r => r.id === id);
@@ -893,6 +912,11 @@ await p.close();
      o.onSaved + ' saved from ' + o.onScored + ' goals');
   ok('...all of them goals', o.allGoals);
   ok('...each with a findable name', o.named, 'e.g. ' + JSON.stringify(o.sampleName));
+  // ⚠️ The skip guard, reported rather than silent: with no goal there is nothing to rename
+  // and every check below it would pass on `undefined`. This is what the shipped default
+  // turned into an uncaught TypeError before the feel was pinned above.
+  ok('there was a goal to rename at all', !o.noGoalToRename,
+     'the seeded 15 seconds finished 0-0, so the rename and pane checks below never ran');
   ok('renaming sticks', o.renamed);
   ok('...and leads the row', o.renameLeadsTheRow,
      'the point of naming one is to find it, so the name has to be the title rather than a suffix');

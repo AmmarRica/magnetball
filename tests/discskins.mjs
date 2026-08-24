@@ -15,7 +15,7 @@
 // background sample" is not a ring test — sample the SAME angle before and after and
 // compare like with like. And sample the MIDDLE of the ring stroke: it is centred on
 // r and only a couple of pixels wide, so 0.95r lands on its antialiased inner edge.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:900,height:900} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
@@ -23,6 +23,7 @@ p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(900);
+await pinCasualFeel(p);   // see _browser.mjs — the default ships the Pro preset
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};

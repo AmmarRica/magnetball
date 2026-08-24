@@ -217,7 +217,7 @@ ok('turning the count to 0 trims immediately', r.zeroTrimsAll,
 ok('a history row outlives its replay', r.rowsOutliveReplays,
    JSON.stringify({ rows:r.rowsAfterTrim, watch:r.watchBtnsAfterTrim }) +
    ' — the row keeps the id for ever, so a Watch button has to be offered only when the replay is still there');
-ok('rumble defaults on, with a slider', r.rumbleDefault === 70 && r.rumbleHasASlider, String(r.rumbleDefault));
+ok('rumble defaults on, with a slider', r.rumbleDefault === 15 && r.rumbleHasASlider, String(r.rumbleDefault));
 ok('...and is NOT under Screen shake', r.liveWithShakeOff && r.motionOKisFalseWithJuiceOff,
    'a buzz in your hands is not motion on the screen — the same argument hit stop already won; the second half proves the check is not vacuous');
 ok('...with 0 as the off switch', r.zeroIsOff && r.dialReads);

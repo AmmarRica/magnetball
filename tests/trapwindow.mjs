@@ -1,6 +1,6 @@
 // The Trap window slider must change how long the ball actually sticks — measured
 // by holding KICK and counting steps until the trap releases, not by reading sel.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1280,height:800} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
@@ -8,6 +8,7 @@ p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
+await pinCasualFeel(p);   // see _browser.mjs — the default ships the Pro preset
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));

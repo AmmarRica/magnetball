@@ -18,7 +18,7 @@
 // breaks the match carries on, and a bot legitimately stands still plenty in ordinary
 // play — measuring stillness after the fix measures football, and the first version of
 // this suite reported 474 still frames on a perfectly good build.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
@@ -29,6 +29,16 @@ p.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifest|s
 await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(800);
+// ⚠️ **PINNED TO THE FEEL THE AI IS TUNED AT, and that is not the same as the feel
+// the game SHIPS with.** `defaultSel()` is the Pro preset, whose movement pair (accel 12,
+// pdamp 960) collapses the difficulty ladder: measured on `botplans`' own harness, Insane
+// against Rookie reads +18 +17 +22 +16 +11 +11 +12 across the seven strategies at the AI's
+// tuning and -4 +6 -11 +1 -9 -4 -4 at the shipped default — every plan down by 20 to 33,
+// with no overlap between the two arms. What THIS file is for is the AI itself: that the
+// ladder, the steering and the plans hold at the movement they were tuned against, so a
+// future retune has something to keep. Pinning here would be papering over the defect only
+// if nothing else measured it — `tests/proladder.mjs` does, and it is red on purpose.
+await pinCasualFeel(p);
 
 // ================================ every resting place round the boundary ==
 const sweep = await p.evaluate(() => {

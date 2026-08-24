@@ -1,7 +1,7 @@
 // Killer Lobsters mode: two balls at once, a very heavy snail that never resets its
 // position, a regular ball that keeps playing through goals, and an instant win for
 // whoever pushes the snail home.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1280,height:800} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
@@ -9,6 +9,7 @@ p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
+await pinCasualFeel(p);   // see _browser.mjs — the default ships the Pro preset
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
