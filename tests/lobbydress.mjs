@@ -321,6 +321,153 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
      JSON.stringify(sb) + ' — "hidden in warm-up" is also true of a build that hid it for good');
 }
 
+// ============================================================================
+//  THE FRAME ROUND A HALF IS THE COLOUR THAT HALF PICKED
+//
+//  ⚠️ It read `team === 0 ? T.teamRed : T.teamBlue` — the THEME's red and blue — so a side
+//  that had chosen GREEN off the swatches was outlined in red, and its "1 PLAYER" head
+//  count printed in red, while its shirts were green. Two answers to "whose half is this".
+//  `drawGoal` already reads `teamColOf` for exactly this reason; the lobby's own outline
+//  was the one place left that did not.
+//
+//  ⚠️ **MEASURED AS A DIFFERENCE AGAINST THE SAME FRAME WITH THE BLOCK OFF, and the
+//  obvious probe is VACUOUS — verified by a sabotage that PASSED.** Scanning the edge band
+//  for "the pixel furthest from grass" finds the pitch's own WHITE TOUCHLINE, which is far
+//  further from grass than a tinted stroke, so it returns the same white pixel whichever
+//  colour the outline is drawn in and the comparison below is a constant. The team-sides
+//  block stands down at one human (`hs.length > 1`), so rendering the identical frame with
+//  one human is the control: the pixels that CHANGE between the two are the outline, by
+//  construction. That is the same instrument the dimming check above uses, for the same
+//  reason.
+//  ⚠️ And then "nearer to which", not an absolute hue: the stroke is laid over grass at
+//  partial width, so its rendered pixels are never the palette hex.
+// ============================================================================
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => {
+    window.__MAGNETDEBUG = true;
+    const mk = i => ({ axes:[0,0,0,0], buttons: Array.from({length:17},()=>({pressed:false,value:0})),
+                       connected:true, index:i, id:'Stub Pad (STANDARD GAMEPAD)', mapping:'standard' });
+    window.__pads = [mk(0), mk(1)]; navigator.getGamepads = () => window.__pads;
+  });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const fr = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    M.sel.controllers='on'; M.sel.lobby='on'; M.sel.length='5'; M.sel.look.palette='grass';
+    M.sel.teamFlag = ['none','none'];
+    // GREEN for side 0 — deliberately neither of the theme's team inks, so "it followed"
+    // and "it did nothing" cannot look the same.
+    const green = M.TEAM_COLS.find(c=>c.key==='green').col;
+    M.sel.teamCol = [green, M.TEAM_COLS.find(c=>c.key==='blue').col];
+    M.setMatchSeed(7); M.startMatch({ lobby:true });
+    const w = M.world;
+    const hs = w.players.filter(x=>x.ctrl!=='bot');
+    hs[0].x=0; hs[0].y=-w.field.L*0.25; hs[0]._px=hs[0].x; hs[0]._py=hs[0].y;
+    hs[1].x=0; hs[1].y= w.field.L*0.25; hs[1]._px=hs[1].x; hs[1]._py=hs[1].y;
+    for (let i=0;i<40;i++) M.step(w);
+
+    const cv = document.getElementById('game'), g = cv.getContext('2d');
+    const dpr = cv.width / cv.getBoundingClientRect().width;
+    const grab = () => g.getImageData(0,0,cv.width,cv.height).data;
+    M.render(); const on = grab();
+    // THE CONTROL: one human, so `drawLobby`'s team-sides block stands down and nothing
+    // else about the frame changes.
+    const keep = hs[1].ctrl; hs[1].ctrl = 'bot';
+    M.render(); const off = grab();
+    hs[1].ctrl = keep; M.render();
+
+    const at = (d,x,y) => { const i=((y*cv.width)+x)*4; return [d[i],d[i+1],d[i+2]]; };
+    const hexRgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+    const dist = (a,c) => Math.hypot(a[0]-c[0],a[1]-c[1],a[2]-c[2]);
+    // ⚠️ **TEAM 0 IS THE BOTTOM HALF, and sampling the top one made this vacuous** —
+    // verified by a sabotage that PASSED. `drawLobby` gives team 0 `sign = +1`, so it owns
+    // world +y, which upright is screen-DOWN. Probing the top edge measures TEAM 1, whose
+    // colour is blue in both builds (the theme's teamBlue and the palette's blue are both
+    // blue), so the green-versus-red comparison never engaged at all. Sample the edge of
+    // the half whose colour was actually changed.
+    const bb = w.bounds;
+    const yBot = M.screenPt(M.wx(0), M.wy(bb.halfL))[1] * dpr;
+    const xa = M.screenPt(M.wx(-bb.halfW), M.wy(0))[0] * dpr;
+    const xb = M.screenPt(M.wx( bb.halfW), M.wy(0))[0] * dpr;
+    let best = null, far = -1, changed = 0;
+    for (let x = Math.round(xa)+6; x < Math.round(xb)-6; x++)
+      for (let dy = -14; dy <= 0; dy++){
+        const y = Math.round(yBot) + dy;
+        const a = at(on,x,y), c = at(off,x,y);
+        const d = dist(a,c);
+        if (d > 12) changed++;
+        if (d > far){ far = d; best = a; }
+      }
+    o.changedPx = changed; o.edge = best;
+    o.picked = M.teamColOf(0); o.themeRed = M.TH.teamRed;
+    o.toPicked = +dist(best, hexRgb(o.picked)).toFixed(1);
+    o.toThemeRed = +dist(best, hexRgb(o.themeRed)).toFixed(1);
+    return o;
+  });
+  await q.close();
+
+  // ⚠️ The block has to have DRAWN something, or "it is the picked colour" is decided by
+  // whichever hex happens to be nearer to a patch of unchanged grass.
+  ok('the team-sides outline is drawn at all', fr.changedPx > 100,
+     fr.changedPx + ' pixels differ from the same frame with the block off');
+  ok('the half is framed in the colour that half PICKED', fr.toPicked < fr.toThemeRed,
+     JSON.stringify(fr) + ' — the edge pixel is nearer the theme\'s red than the green this side chose, ' +
+     'so the frame and the shirts are telling you different things');
+  ok('...and the two candidates really are different colours', fr.picked !== fr.themeRed,
+     'the check above says nothing if the picked colour happens to BE the theme red');
+}
+
+// ============================================================================
+//  A COUNTRY CARRIES A COLOUR
+//
+//  ⚠️ Picking a flag used to change only the FACES, so a side could wear Brazil's flag in
+//  purple shirts. ⚠️ The fallback only gives way to another COUNTRY, never to a default —
+//  the first version avoided whatever the other side wore, and since side 1 starts on the
+//  default blue it never chose, FRANCE CAME OUT IN RED on the very first pick.
+// ============================================================================
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(600);
+  const nc = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const nameOf = h => (M.TEAM_COLS.find(c=>c.col===h)||{}).key || h;
+    const fresh = () => { M.sel.teamCol = null; M.sel.teamFlag = ['none','none']; };
+    o.each = {};
+    for (const k of M.LOBBY_FLAGS){ fresh(); M.setTeamFlag(0, k); o.each[k] = nameOf(M.teamColOf(0)); }
+    fresh(); M.setTeamFlag(0,'spain'); M.setTeamFlag(1,'portugal');
+    o.twoReds = [nameOf(M.teamColOf(0)), nameOf(M.teamColOf(1))];
+    fresh(); M.setTeamFlag(0,'france'); M.setTeamFlag(1,'argentina');
+    o.twoBlues = [nameOf(M.teamColOf(0)), nameOf(M.teamColOf(1))];
+    fresh(); M.setTeamFlag(0,'brazil'); const was = nameOf(M.teamColOf(0));
+    M.setTeamFlag(0,'none');
+    o.noneKeeps = [was, nameOf(M.teamColOf(0))];
+    o.everyCountryHasOne = M.LOBBY_FLAGS.filter(k => k !== 'none' && !M.NATION_COLS[k]);
+    return o;
+  });
+  await q.close();
+
+  ok('every country carries a colour', nc.everyCountryHasOne.length === 0,
+     'no colour for: ' + nc.everyCountryHasOne.join(', ') + ' — a flag that does not dress the side is half the feature');
+  // The three that the "give way to a default" bug got wrong, named individually.
+  ok('France, the USA and Argentina play in BLUE',
+     nc.each.france === 'blue' && nc.each.usa === 'blue' && nc.each.argentina === 'blue',
+     JSON.stringify({ france: nc.each.france, usa: nc.each.usa, argentina: nc.each.argentina }) +
+     ' — a default nobody chose has no claim on a colour, and Les Bleus in red is the one thing this must not do');
+  ok('...Mexico in GREEN, Brazil in YELLOW, the Netherlands in ORANGE',
+     nc.each.mexico === 'green' && nc.each.brazil === 'yellow' && nc.each.netherl === 'orange',
+     JSON.stringify(nc.each) + ' — Mexico is the one that snapping to the nearest colour numerically gets wrong ' +
+     '(its dark green measures closer to TEAL)');
+  ok('two red nations end up in different shirts', nc.twoReds[0] !== nc.twoReds[1], JSON.stringify(nc.twoReds));
+  ok('...and so do two blue ones', nc.twoBlues[0] !== nc.twoBlues[1], JSON.stringify(nc.twoBlues));
+  ok('taking the flag off leaves the colour alone', nc.noneKeeps[0] === nc.noneKeeps[1],
+     JSON.stringify(nc.noneKeeps) + ' — None removes a country, it is not a request to be recoloured');
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 console.log(bad ? 'FAIL lobbydress' : 'PASS lobbydress');
 await b.close();

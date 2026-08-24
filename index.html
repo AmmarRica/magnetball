@@ -4273,6 +4273,45 @@ const LOBBYKB = {
 // it — check it again before adding a fourth column.
 const LOBBY_FLAGS = ['none', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england',
                      'spain', 'portugal', 'netherl', 'belgium'];
+// ⚠️ **A COUNTRY CARRIES A COLOUR, so picking one dresses the side in it.** Walking onto a
+// flag used to change only the FACES, which left a side wearing Brazil's flag in purple
+// shirts inside a purple frame — the country and the kit disagreeing about who you are.
+// ⚠️ **PALETTE KEYS, never hexes.** `TEAM_COLS` owns the eight colours; a second copy of
+// those strings here is a second place for them to drift, and the picker's own highlight
+// is drawn from `TEAM_COLS`, so a near-miss would light no swatch at all.
+// ⚠️ **THE PRIMARY IS WHAT THE NATION IS KNOWN BY, NOT THE NEAREST COLOUR NUMERICALLY, and
+// that distinction is load-bearing.** Snapping each kit to its nearest palette entry in
+// CIELAB puts **Mexico on TEAL** — its #006847 is a dark green that measures closer to
+// teal than to green — which is plainly wrong for a side everyone knows plays in green.
+// The numbers are the tie-break, not the answer.
+// ⚠️ **THE SECOND ENTRY IS THE FALLBACK when the other side already has the first**, and
+// it is chosen for COLOUR-BLIND SEPARATION rather than for looking national. Picking the
+// numerically-nearest spare would hand out exactly the pairs that collapse: red → orange
+// measures **ΔE 6.2 under tritanopia** and blue → purple **6.5 under deuteranopia**, which
+// is two teams in the same shirt for the people that affects. Every fallback below clears
+// ΔE 23 in the worst of the three types, and most clear 73 — the same margin the shipped
+// red-vs-blue default has. Several are honest as well: Brazil's other colour really is
+// green and the Netherlands' change kit really is blue.
+// ⚠️ **`none` is absent on purpose** — taking the flag off is not a request to be
+// recoloured, and the colour you are left in is the one the country gave you, still
+// changeable by walking onto any shirt.
+const NATION_COLS = {
+  usa:       ['blue',   'red'],      mexico:   ['green',  'yellow'],
+  argentina: ['blue',   'red'],      france:   ['blue',   'red'],
+  croatia:   ['red',    'blue'],     brazil:   ['yellow', 'green'],
+  england:   ['red',    'blue'],     spain:    ['red',    'blue'],
+  portugal:  ['red',    'blue'],     netherl:  ['orange', 'blue'],
+  belgium:   ['red',    'blue'],
+};
+// The colour a country should wear, given what the OTHER side is already in. Resolved
+// through `TEAM_COLS` at call time so the hexes live in exactly one place.
+function nationCol(key, avoid){
+  const pref = NATION_COLS[key];
+  if (!pref) return null;
+  const hexOf = k => { const e = TEAM_COLS.find(c => c.key === k); return e && e.col; };
+  for (const k of pref){ const h = hexOf(k); if (h && h !== avoid) return h; }
+  return hexOf(pref[0]) || null;
+}
 // ============================================================
 //  TEAM COLOUR — one shade a side, picked on the pitch
 // ============================================================
@@ -4354,6 +4393,20 @@ function setTeamFlag(team, key){
   if (cur[t] === key) return false;
   cur[t] = key;
   sel.teamFlag = cur;
+  // ⚠️ ...and the SHIRT follows the country — see NATION_COLS.
+  // ⚠️ **IT ONLY GIVES WAY TO A COUNTRY, NEVER TO A DEFAULT, and getting this wrong made
+  // FRANCE PLAY IN RED.** The first version avoided whatever the other side was wearing
+  // full stop — but side 1 starts on the default BLUE it never chose, so France, the USA
+  // and Argentina all found blue "taken" and fell back to red on the very first pick.
+  // Les Bleus in red is the one thing this feature must not do. A colour nobody selected
+  // has no claim on it, so the fallback is only consulted when the other side has a
+  // country of its own; otherwise the nation takes its true colour and `setTeamCol`'s
+  // existing swap moves the default side out of the way — which lands the pair on
+  // red-and-blue either way round, so it costs nothing.
+  const otherKey = cur[t ? 0 : 1];
+  const avoid = (otherKey && otherKey !== 'none') ? teamColOf(t ? 0 : 1) : null;
+  const nc = nationCol(key, avoid);
+  if (nc) setTeamCol(t, nc);
   return true;
 }
 function teamColOf(team){
@@ -5269,7 +5322,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.1240PM';
+const VERSION = '20260824.0210PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5285,6 +5338,13 @@ const VERSION = '20260824.1240PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0210PM', title: 'Your colour, everywhere it should be',
+    changed: [
+      '<b>The frame round each half is now that side\u2019s own colour.</b> Pick green and the half you are standing in is outlined in green \u2014 it used to stay red or blue whatever you chose, so your shirts and your half disagreed.',
+      '<b>Countries come with a kit.</b> Walk onto Brazil and the side turns yellow, Mexico green, the Netherlands orange, France blue. If both sides want the same colour the second one takes its change kit, so you can always tell each other apart.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.1240PM', title: 'Four more countries in warm-up',
     added: [
       '<b>Spain, Portugal, the Netherlands and Belgium</b> join the flags beside each half. They are the highest-ranked sides that were not already on the list.',
@@ -25373,7 +25433,16 @@ function drawLobby(w){
     const plan = lobbyPlan(w);
     [0, 1].forEach(team => {
       const sign = team === 0 ? 1 : -1;
-      const col = team === 0 ? T.teamRed : T.teamBlue;
+      // ⚠️ **THE COLOUR THE SIDE PICKED, not the theme's red and blue.** This read
+      // `team === 0 ? T.teamRed : T.teamBlue`, so a half that had chosen GREEN off the
+      // swatches was outlined in red and its head count printed in red — the shirts said
+      // one thing and the frame round the half said another, which is two answers to
+      // "whose half is this". `drawGoal` already reads `teamColOf` for exactly this
+      // reason ("a side that picked green and still defends a red frame is two answers to
+      // whose end is this"); the lobby's own outline was the one place left that did not.
+      // ⚠️ ONE `col` drives BOTH the outline and the "1 PLAYER" head count below, so they
+      // cannot disagree with each other either.
+      const col = teamColOf(team);
       const n = (team === 0 ? plan.a : plan.b).length;
       const fillN = team === 0 ? plan.need0 : plan.need1;
       const pts = [[-halfW, 0], [halfW, 0], [halfW, sign*halfL], [-halfW, sign*halfL]]
@@ -30564,7 +30633,7 @@ if (window.__MAGNETDEBUG) {
     get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
     sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection,
     startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans,
-    kbHit, teamFlagOf, setTeamFlag, LOBBY_FLAGS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    kbHit, teamFlagOf, setTeamFlag, LOBBY_FLAGS, NATION_COLS, nationCol, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },

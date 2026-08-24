@@ -3082,6 +3082,21 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **The two sides may never be the same colour** — `setTeamCol` hands the other side
   the one you just gave up, which is a swap rather than a refusal, and a refusal on a
   walk-on pad is indistinguishable from a broken pad.
+- **EACH HALF IS FRAMED IN THE COLOUR THAT HALF PICKED**, and it read
+  `team === 0 ? T.teamRed : T.teamBlue` — the THEME's inks. A side that chose GREEN off the
+  swatches was outlined in red with its head count printed in red while its shirts were
+  green: two answers to "whose half is this". `drawGoal` already reads `teamColOf` for
+  exactly this reason; the lobby's own outline was the one place left that did not. ONE
+  `col` drives both the outline and the "1 PLAYER" count, so they cannot disagree either.
+  ⚠️ **CHECKING IT IS VACUOUS TWO DIFFERENT WAYS, and both sabotages PASSED before the
+  probe was right.** (a) Scanning the edge band for "the pixel furthest from grass" finds
+  the pitch's own WHITE TOUCHLINE, which is further from grass than any tinted stroke, so
+  it returns the same white pixel whatever colour the outline is — measure it as a
+  DIFFERENCE against the same frame with the block stood down (one human), where the
+  pixels that change ARE the outline by construction. (b) **Team 0 is the BOTTOM half**
+  (`sign = +1` owns world +y, which upright is screen-down), so probing the top edge
+  measures team 1 — whose colour is blue in both builds, since the theme's `teamBlue` and
+  the palette's blue are both blue, and the comparison never engages.
 - **THE WARM-UP LOBBY IS THE SETTINGS SCREEN, WALKED ON.** Beside each half, the colour
   swatches for that side; under the keyboard, seven numbered pads for bot difficulty;
   in the corner, the team-size stepper. All of it is `w.kb.keys` — one list of walk-on
@@ -3147,6 +3162,29 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   fixed red-vs-blue hue finds the claimed half and misses the quiet one — 126 against 13.
   What has to be true of both is that the edge differs from the grass it is drawn over.
 - **A FLAG BLOCK BESIDE EACH HALF, and walking onto a side wears that side's country**
+  ⚠️ **A COUNTRY CARRIES A COLOUR** (`NATION_COLS`, `nationCol`), so picking one dresses
+  the side in it. A flag used to change only the FACES, which left a side wearing Brazil's
+  flag in purple shirts inside a purple frame — the country and the kit disagreeing about
+  who you are. Stored as **palette KEYS**, never hexes: `TEAM_COLS` owns the eight colours,
+  and a second copy here is a second place for them to drift.
+  ⚠️ **THE PRIMARY IS WHAT THE NATION IS KNOWN BY, not the nearest colour numerically.**
+  Snapping each kit to its nearest `TEAM_COLS` entry in CIELAB puts **Mexico on TEAL** —
+  its #006847 measures closer to teal than to green — which is plainly wrong for a side
+  everyone knows plays in green. The numbers are the tie-break, not the answer.
+  ⚠️ **THE SECOND ENTRY IS A FALLBACK CHOSEN FOR COLOUR-BLIND SEPARATION**, not for looking
+  national. The numerically-nearest spare hands out exactly the pairs that collapse: red →
+  orange is **ΔE 6.2 under tritanopia** and blue → purple **6.5 under deuteranopia**. Every
+  fallback clears ΔE 23 in the worst of the three types and most clear 73, the margin the
+  shipped red-vs-blue pair has; several are honest too (Brazil's other colour is green, the
+  Netherlands' change kit is blue).
+  ⚠️ **IT GIVES WAY TO A COUNTRY, NEVER TO A DEFAULT, and getting that wrong made FRANCE
+  PLAY IN RED.** The first version avoided whatever the other side wore — but side 1 starts
+  on the default blue it never chose, so France, the USA and Argentina all found blue
+  "taken" and fell back to red on the very first pick. A colour nobody selected has no
+  claim, so the fallback is consulted only when the other side has a country of its own;
+  otherwise `setTeamCol`'s existing swap moves the default side, which lands the pair on
+  red-and-blue either way round and costs nothing. ⚠️ `none` is absent from the table:
+  taking a flag off is not a request to be recoloured.
   ⚠️ **TWELVE COUNTRIES, and the four that were added are the highest-ranked ones that
   were MISSING.** Asked for as "another column, from the FIFA top 20": flat the block is
   four along and wraps outward, so twelve is exactly one column more than eight. The seven
