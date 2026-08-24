@@ -3549,6 +3549,15 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `vjView` and the command clamps against the deck's own — the panel is a peer.
   ⚠️ A test clicking a canvas in the COLLAPSED card reads a zero-width rect and every
   click lands at position 0 — open the card first or the check is vacuous.
+  ⚠️ **A PANEL BUTTON MAY NEVER WRITE STATE IN ITS OWN WINDOW, and two did.** The
+  panel's local `vj`/`VJ` are factory defaults forever — it draws from snapshots — so
+  the TAKE-quantisation buttons set a `VJ.takeQuant` nothing reads (three dead buttons),
+  and Save preset captured the panel's untouched defaults and called them the live
+  board. Both are COMMANDS now (`takeQuant`, `presetSave`); the full snapshot carries
+  the preset NAME list so the panel knows when to redraw its shelf (localStorage is
+  shared, so it reads the bodies itself). ⚠️ `vjExec` follows every executed command
+  with a throttled meter-sized push — a backgrounded game tab throttles rAF, which
+  starves `vjTick`, and a knob that echoes back a second late reads as broken.
   ⚠️ **DROP A FILE ON A DECK AND IT LOADS THERE** (`vjDropZone`, on every strip; the
   library list takes drops too). The literal reading of "drop into Deck A or B", and
   the third door in beside the deck's LOAD and the library's → A / → B. **Strict about

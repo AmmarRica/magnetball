@@ -285,6 +285,35 @@ ok('...for the audio decks too', /CROSSFADER/.test(ui.aFaded) && /VOLUME is at z
 ok('THE YT LAYER SAYS IT IS SILENT, AND WHY', /silent/.test(ui.ytStat) && /own frame/.test(ui.ytStat),
    ui.ytStat + ' — "audio from the youtube video not working" is answered in the UI, not the docs');
 
+// ===================================================== panel-window state bugs =====
+// Two controls wrote state in the PANEL's window and called it the board. The board
+// lives in the game tab; the panel draws from snapshots and its local `vj` is factory
+// defaults forever — so both must be COMMANDS, executed here (PANEL false = game side).
+const pw = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  // TAKE quantisation: the buttons set the panel window's VJ.takeQuant and vjTake read
+  // the game window's — three dead buttons. Now a validated command.
+  M.vjExec('takeQuant', 'bar');   o.quant = M.VJ.takeQuant;
+  M.vjExec('takeQuant', 'junk');  o.quantRefusesJunk = M.VJ.takeQuant === 'bar';
+  M.vjExec('takeQuant', 'beat');
+  // Preset save: run panel-side it captured the panel's untouched defaults. As a
+  // command it captures the LIVE board, and the full snapshot names the shelf.
+  M.vj.xf = 0.33; M.vj.master = 0.44;
+  M.vjExec('presetSave', '__deckstest');
+  const saved = M.vjPresets()['__deckstest'];
+  o.presetIsLiveBoard = !!saved && Math.abs(saved.xf - 0.33) < 1e-9 && Math.abs(saved.master - 0.44) < 1e-9;
+  o.snapNamesShelf = (M.vjSnap(true).presets || []).includes('__deckstest');
+  o.snapMeterOmitsShelf = M.vjSnap(false).presets === undefined;
+  M.vjPresetDelete('__deckstest');
+  return o;
+});
+ok('TAKE quantisation is a real command that reaches the GAME window',
+   pw.quant === 'bar' && pw.quantRefusesJunk, JSON.stringify(pw) +
+   ' — the buttons wrote the panel window\'s own VJ.takeQuant and vjTake read the game\'s: three dead buttons');
+ok('PRESET SAVE captures the live board, not the panel\'s defaults', pw.presetIsLiveBoard, JSON.stringify(pw));
+ok('...and the full snapshot names the shelf (meter ticks stay small)',
+   pw.snapNamesShelf && pw.snapMeterOmitsShelf, JSON.stringify(pw));
+
 // ===================================================== the timeline is a seek bar ==
 // "Allow me to skip songs by clicking on that timeline" — the waveform and the video
 // timeline are clickable, through the REAL pointer handlers. On this page PANEL is

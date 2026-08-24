@@ -9464,7 +9464,16 @@ const VJ_CMDS = {
   vskip:   a => { const v=a.d==='b'?vj.vb:vj.va;
                   if(v.el) try{ v.el.currentTime=Math.max(0, Math.min(v.dur||0, v.el.currentTime + (+a.v||0))); v.pos=v.el.currentTime; }catch(_){} },
   eject:   a => vjEject(a.kind, a.d),
+  // ⚠️ A real command, because the panel's first version wrote VJ.takeQuant in its OWN
+  // window and sent a no-op — vjTake reads the GAME window's copy, so the three quant
+  // buttons were dead from /vj. A panel is a peer: state changes travel as commands.
+  takeQuant: a => { if (a === 'off' || a === 'beat' || a === 'bar') VJ.takeQuant = a; vjPush(true); },
   preset:  a => vjPresetApply(a),
+  // ⚠️ Saving is a COMMAND for the same reason the quant buttons are: the panel's local
+  // `vj` object is never mutated (it draws from snapshots), so a vjPresetSave run in the
+  // panel window captured factory defaults and called them the live board. The board
+  // lives here; the snapshot's preset-name list tells the panel to redraw its shelf.
+  presetSave: a => { const n = String(a || '').trim().slice(0, 40); if (n) vjPresetSave(n); vjPush(true); },
   // The ticker message: typed by the operator, scrolls over the game, repeats until
   // cleared. Shown only while VJ Mode is on — off must stay the untouched game.
   ticker:  a => { vj.ticker = String(a && a.text != null ? a.text : '').slice(0, 200);
@@ -9481,7 +9490,13 @@ const VJ_CMDS = {
                   if (setId && !setOp && vj.yt.id && vj.yt.op === 0) vj.yt.op = VJ.ytDefault;
                   vjYtSync(); vjPush(true); },
 };
-function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (f) try { f(arg); } catch(e){ console.warn('vj', cmd, e); } }
+// Every executed command is followed by a (throttled, meter-sized) push, so the panel
+// reflects a knob within one meter tick even when the game tab is backgrounded and its
+// rAF-driven vjTick is throttled to ~1Hz. Commands that need the full snapshot (a
+// waveform, a preset list) still push full themselves.
+function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (!f) return;
+  try { f(arg); } catch(e){ console.warn('vj', cmd, e); }
+  if (!PANEL) vjPush(false); }
 
 // The snapshot /settings draws from. Throttled to VJ.meterHz — pushing this per
 // frame floods the channel and starves the very thing it is reporting on.
@@ -9501,9 +9516,13 @@ function vjSnap(full){
     yt:{ id:vj.yt.id, op:vj.yt.op }, ticker:vj.ticker,
     a:deck(vj.a), b:deck(vj.b), va:vid(vj.va), vb:vid(vj.vb),
     xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
+    takeQuant:VJ.takeQuant,
     master:vj.master, masterL:vj.masterL, masterR:vj.masterR,
     sfxLevel:vj.sfxLevel, duck:vj.duck,
     bpm:vj.clock.bpm, cue:{ level:vj.cue.level, ok:vj.cue.ok, why:vj.cue.why, deviceId:vj.cue.deviceId },
+    // Preset NAMES ride full snapshots only (localStorage is shared, so the panel can
+    // read the bodies itself — it just needs to know when the shelf changed under it).
+    presets: full ? Object.keys(vjPresets()) : undefined,
     full:!!full };
 }
 function vjPush(full){
@@ -9619,6 +9638,7 @@ function vjPanelRender(){
   vjDrawWave('a', V.a); vjDrawWave('b', V.b);
   vjDrawVTime('a', V.va); vjDrawVTime('b', V.vb);
   vjDrawMeters(V);
+  if (V.full && V.presets) vjBuildPresets();   // the game saved one — redraw the shelf
 }
 // Push values into controls the operator is not currently holding. Rebuilding the
 // DOM at 20Hz would fight every drag; this only writes what changed.
@@ -9630,6 +9650,8 @@ function vjSyncControls(V){
   set('vjXf', Math.round(V.xf*100)); set('vjVxf', Math.round(V.vxf*100));
   set('vjMaster', Math.round(V.master*100)); set('vjSfx', Math.round(V.sfxLevel*100));
   on('vjDuck', V.duck); on('vjOn', V.on);
+  for (const c of ['smooth','sharp']) on('vjXfC'+c, V.xfCurve === c);
+  for (const q of ['off','beat','bar']) on('vjQ'+q, V.takeQuant === q);
   txt('vjCueWhy', V.cue.why || '');
   for (const id of ['a','b']){
     const d = V[id]; if (!d) continue;
@@ -9870,7 +9892,7 @@ function vjBuildPanel(){
   host.append(el('div','vjlab','VIDEO CROSSFADER — independent of audio'), vxrow);
   const qrow = row();
   qrow.append(lab('TAKE lands on'));
-  for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>{ VJ.takeQuant=q; vjCmd('vset',{d:'a',set:{}}); }));
+  for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>vjCmd('takeQuant', q)));
   host.append(qrow);
 
   // ---- background video ---------------------------------------------------
@@ -9981,7 +10003,9 @@ function vjBuildPanel(){
   const prow = row();
   const pn = document.createElement('input'); pn.type='text'; pn.id='vjPresetName';
   pn.placeholder='name'; pn.className='vjtext';
-  prow.append(pn, btn('vjPresetSave','Save', ()=>{ if(pn.value.trim()){ vjPresetSave(pn.value.trim()); vjBuildPresets(); } }));
+  // Save is a COMMAND — the live board is in the game tab, and a save run here would
+  // capture this window's untouched defaults (see VJ_CMDS.presetSave).
+  prow.append(pn, btn('vjPresetSave','Save', ()=>{ if(pn.value.trim()){ vjCmd('presetSave', pn.value.trim()); vjBuildPresets(); } }));
   host.append(prow);
   const ph = el('div','vjpresets'); ph.id='vjPresetList'; host.append(ph);
 
