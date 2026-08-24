@@ -265,11 +265,28 @@ await land.close();
 // — that would make the toggle useless on exactly the devices whose owners might want it
 // back. The preference decides the DEFAULT, once, on a first run; the toggle still wins.
 const rm = await mk({ ...phone, reducedMotion: 'reduce' });
+// ⚠️ **STAMP THE MIGRATION KEY FIRST, or this block cannot see what it claims to.** The
+// one-shot fold that moves an existing effects-off install's zoom to "off" fires on exactly
+// the same state a reduced-motion first run produces, so with it live BOTH mechanisms drive
+// `goalZoom` to 100 and the reduced-motion default can be deleted outright with every check
+// below still green — verified by sabotage, which passed. Stamping the key retires the fold
+// and leaves the first-run default as the only thing that can move the dial.
+await rm.evaluate(() => { localStorage.setItem('magnetball.zoomfold', '1');
+                          localStorage.removeItem('magnetball.sel'); });
+await rm.reload(); await rm.waitForTimeout(700);
 const reduce = await rm.evaluate(() => {
   const M = window.__magnet, o = {};
   o.prefers = M.prefersReducedMotion();
   o.juiceDefaultedOff = M.sel.juice === false;
   o.motionOff = M.motionOK() === false;
+  // ⚠️ **AND THE GOAL ZOOM, which `motionOK()` no longer speaks for.** The goal camera used
+  // to ride `sel.juice`, which made the Goal zoom slider a dead control whenever effects
+  // were off; it is its own dial now. A push-in is still on-screen motion, so the
+  // accessibility half did not disappear — it MOVED to this same first-run default, and if
+  // it had not, uncoupling the two would have quietly handed a reduced-motion device a
+  // camera push it never used to get.
+  o.zoomDefaultedOff = M.sel.goalZoom === Math.round(M.GOALCAM.zoomMin * 100);
+  o.zoomLabelSaysOff = M.goalZoomLabel() === 'off';
   // Nothing that moves for effect runs.
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
@@ -279,6 +296,11 @@ const reduce = await rm.evaluate(() => {
   M.sel.juice = true;
   o.toggleWins = M.motionOK() === true;
   M.addShake(9); o.shakeBack = M.shake > 0;
+  // ⚠️ ...and the ZOOM's own dial still wins too, which is the same "default, never an
+  // override" claim for the control that now owns it.
+  M.sel.goalZoom = 250;
+  M.goalCamReset(); M.goalCamStart(w, w.players[0]);
+  o.zoomDialWins = M.goalCam.live === true;
   return o;
 });
 await rm.close();
@@ -354,8 +376,13 @@ ok('a reduced-motion device starts quiet', reduce.prefers && reduce.juiceDefault
    JSON.stringify(reduce));
 ok('...with the effects really off', reduce.shakeStaysZero && reduce.autoReplaySuppressed,
    JSON.stringify(reduce));
+ok('...including the goal zoom, which is its own dial now', reduce.zoomDefaultedOff && reduce.zoomLabelSaysOff,
+   JSON.stringify(reduce) + ' — the goal camera no longer reads motionOK(), so if this default had not moved with ' +
+   'it, uncoupling the two would have quietly handed a reduced-motion device a camera push it never used to get');
 ok('...AND THE TOGGLE STILL WINS', reduce.toggleWins && reduce.shakeBack,
    'motionOK() is deliberately not `juice && !reduced` — that makes the toggle useless on exactly the devices whose owners might want it back, so the preference decides the default and your answer is honoured after that');
+ok('...and so does the zoom dial', reduce.zoomDialWins,
+   'the same "a default, never an override" claim, for the control that owns the push now');
 ok('an ordinary device is untouched', !normal.prefers && normal.juice && normal.motionOK,
    JSON.stringify(normal));
 

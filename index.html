@@ -2266,7 +2266,7 @@
       <div style="height:6px"></div>
       <label class="field">Goal zoom speed <small id="goalZoomSpdVal" style="color:var(--accent)"></small></label>
       <input id="goalZoomSpd" class="slider" type="range" min="5" max="300" step="5" />
-      <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. <b>1.0×</b> is no push at all. Speed is how long the push takes, so a <i>smaller</i> number is a faster push. It always drifts back out slowly, whatever you set here. Both ride the Screen shake &amp; effects toggle.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">On a goal the camera pushes in on whoever put it there. Drag it all the way down to <b>off</b> for no push at all. Speed is how long the push takes, so a <i>smaller</i> number is a faster push. It always drifts back out slowly, whatever you set here. This is the only thing that controls the push — it is <b>separate from Screen shake &amp; effects</b>, so you can have one without the other.</div>
       <div style="height:10px"></div>
       <label class="field">Auto-replay goals</label>
       <div class="opts" id="autoReplayPick"></div>
@@ -5243,7 +5243,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0740AM';
+const VERSION = '20260824.0925AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5259,6 +5259,13 @@ const VERSION = '20260824.0740AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0925AM', title: 'Goal zoom is its own switch',
+    changed: [
+      '<b>The goal zoom no longer needs Screen shake turned on.</b> With effects off the Goal zoom slider did nothing at all \u2014 you could drag it the whole way and the camera never moved. It is its own control now, so you can have the push-in without the shake, or the shake without the push-in.',
+      '<b>Drag Goal zoom all the way down for no push at all</b>, and the readout says <b>off</b> so you can see that is what you have.',
+    ],
+    fixed: 'If you already play with effects off, your goal zoom starts off too, so nothing changes under you until you say so.',
+  },
   { v: '20260824.0740AM', title: 'A clean export, and a menu that fits your phone',
     changed: [
       '<b>The word REPLAY is no longer burned into saved videos.</b> It was drawn onto the same picture the recording is taken from, so every clip you exported carried \u201cTAP TO SKIP\u201d across the middle of it. It still shows while you watch a goal back \u2014 it just stays out of the file.',
@@ -12078,7 +12085,45 @@ function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(a
 // the toggle keeps working on exactly the devices whose owners might want it back. The
 // same "no saved settings yet" test `isFirstRun` uses, and it must run BEFORE anything
 // calls `saveSel()`, or the key exists and this never fires again.
-try { if (prefersReducedMotion() && !localStorage.getItem('magnetball.sel')) sel.juice = false; } catch(e){}
+// ⚠️ **THE GOAL ZOOM IS TURNED OFF BY THE SAME FIRST RUN**, and that is what keeps the
+// accessibility promise after the goal camera stopped reading `motionOK()`. A push-in is
+// on-screen motion, so a system asking for less of it should not get one out of the box.
+// Still a DEFAULT and never an override, for the reason above: the slider has to keep
+// working on exactly the devices whose owners want it back. `GOALCAM.zoomMin * 100` rather
+// than a literal 100, or the "off" position and the slider's floor could drift apart.
+try { if (prefersReducedMotion() && !localStorage.getItem('magnetball.sel')){
+        sel.juice = false; sel.goalZoom = Math.round(GOALCAM.zoomMin * 100); } } catch(e){}
+// ⚠️ **AND AN EXISTING SHAKE-OFF INSTALL KEEPS WHAT IT ALREADY SEES, ONCE.** Until now the
+// shake toggle silently suppressed the push, so somebody playing with effects off has never
+// had a goal camera. Uncoupling the two would hand them a 1.8× push at every goal, unasked,
+// which is the opposite of what turning effects off meant — so their dial is moved to the
+// value that reproduces today's game, where it is now visible and reversible instead of
+// being overridden behind their back.
+// ⚠️ **Only an UNTOUCHED zoom dial**, the `defaultSel()` value: somebody who deliberately
+// set a zoom was being denied it, and that is the bug being fixed rather than a preference
+// to preserve.
+// ⚠️ **ONE-SHOT**, guarded by its own key, the same reason `magnetball.lookfold` is: unlike
+// a pure key rename this is reversible by hand, so an unguarded fold would silently switch
+// the zoom back off the next morning for anybody who turned it on.
+// ⚠️ **`saveSel()` IS SAFE HERE, and ONLY inside the branch that actually changed
+// something.** The bootstrap must not write `magnetball.sel` in general — the ABSENCE of
+// that key is how `isFirstRun` detects a fresh install, so an unconditional save makes the
+// first-run lineup dead code on the very first frame. But this branch requires
+// `sel.juice === false`, and the default is `true`, so reaching it PROVES a save already
+// exists and first-run is already over. Without the write the fold would live in memory
+// only and the next launch — its key now set — would hand the push over anyway.
+// ⚠️ The key is stamped whether or not anything moved. Otherwise somebody who turns the
+// shake off LATER, in the new world where it no longer touches the zoom, would be folded
+// then, which is the opposite of what they just asked for.
+try {
+  if (!localStorage.getItem('magnetball.zoomfold')){
+    if (sel.juice === false && sel.goalZoom === defaultSel().goalZoom){
+      sel.goalZoom = Math.round(GOALCAM.zoomMin * 100);
+      saveSel();
+    }
+    localStorage.setItem('magnetball.zoomfold', '1');
+  }
+} catch(e){}
 loadArcade();
 // ⚠️ Here and not with `loadSel()`: `applyMaps` reads `sel.field` (so the save must
 // already be in) and `mapClean` clamps against `POST`, which is declared below the map
@@ -23610,8 +23655,21 @@ let goalCam = { t:0, x:0, y:0, p:null, live:false };
 function goalCamReset(){ goalCam = { t:0, x:0, y:0, p:null, live:false }; }
 // `p` is the player to follow — the last toucher, whichever side they were on, since
 // that is who the moment belongs to. Falls back to the ball.
+// ⚠️ **THE ZOOM SLIDER IS THE ONLY THING THAT DECIDES THIS, and it used to ride the Screen
+// shake & effects toggle as well.** That made the Goal zoom slider a DEAD CONTROL whenever
+// the shake was off — you could drag it from 1.0× to 8.0×, watch the readout change, and
+// nothing on the pitch would ever move. Reported as wanting the zoom without the shake, and
+// it is the "NO DEAD CONTROLS" rule: a control that silently does nothing is worse than one
+// that is not there, because it is a promise the page cannot keep.
+// ⚠️ The two are different KINDS of motion, which is the same argument hit stop and rumble
+// already won. A shake is the whole picture thrown about at random — a vestibular problem —
+// and a push-in is a slow, intentional, predictable move toward the thing you are already
+// looking at. Somebody who wants the second without the first is asking for something
+// coherent, and now has one dial per answer.
+// ⚠️ The accessibility half is NOT lost, it MOVED: `prefersReducedMotion()` turns this dial
+// off on a first run, exactly as it already does for `sel.juice` — a DEFAULT, never an
+// override, so the dial keeps working on the devices whose owners want it back.
 function goalCamStart(w, p){
-  if (!motionOK()) return;                     // rides the Screen shake & effects dial
   if (goalZoom() <= 1.0001) return;            // the dial at 1.0x means no push at all
   goalCam.live = true; goalCam.p = p || null;
   goalCam.x = p ? p.x : w.ball.x;
@@ -30515,7 +30573,7 @@ if (window.__MAGNETDEBUG) {
     isDeck, dockCapable, applyDisplayMode, computeCam, get cam(){ return cam; }, wx, wy, uprightAt, screenUpright, rgba,
     screenPt, circleHitsRect, KICK_R, drawKickMarker, ix, iy, LABEL_DIM, LABEL_MIN, labelBallFade, LABEL_BALL, padOnly, skipWord, SFX, SFX_LABELS, get labelA(){ return labelA; }, advanceLabels, drawDemoTag, FLAG_KEYS, drawDiscTrails, drawBallTrail, advanceTrails, decayJuice, juiceReset, resetTrails, GOALHOLD, autoReplayReady, drawPitch,
     hitStopFrames, predictsGoal, maybeHitStop, HITSTOP, releaseTrap, oneShotKick,
-    GOALCAM, goalZoom, goalZoomSecs, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
+    GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
     DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,

@@ -118,14 +118,36 @@ const r = await p.evaluate(async ()=>{
   // `outSecs` of 0.5s; the release is 1.1s now, `t` was still 0.09 at the end, and the
   // assertion fired on a build with nothing wrong with it. A test that depends on one
   // constant's value to isolate the next case is not isolating anything.
+  // ⚠️ **THIS ASSERTION IS DELIBERATELY THE OTHER WAY UP NOW, and the old one is the
+  // defect it was pinning.** The goal camera used to bail on `motionOK()`, which made the
+  // Goal zoom slider a DEAD CONTROL whenever Screen shake & effects was off: you could
+  // drag it 1.0× → 8.0×, watch the readout change, and nothing on the pitch would move.
+  // Reported as wanting the zoom without the shake. The two are different kinds of motion
+  // — a shake is the picture thrown about at random, a push-in is a slow move toward what
+  // you are already looking at — which is the same split hit stop and rumble already have.
   M.goalCamReset();
   M.sel.juice = false;
   w = start();          // start() leaves sel.juice alone, so this stays off
   w.ball.lastKicker = w.players[0];
   M.scoreGoal(w, 0);
-  for (let i=0;i<90;i++){ M.step(w); M.advanceGoalCam(w); }
+  for (let i=0;i<20;i++){ M.step(w); M.advanceGoalCam(w); }
   M.computeCam();
-  o.juiceOffFlat = M.goalCam.t === 0 && Math.abs(M.cam.s - base) < 1e-9;
+  o.zoomWithoutShake = M.goalCam.t > 0.5 && M.cam.s > base * 1.05;
+  o.zoomWithoutShakeAt = { t: +M.goalCam.t.toFixed(3), s: +(M.cam.s / base).toFixed(3) };
+
+  // ...and the SLIDER is what turns it off, with the shake toggle left OFF throughout so
+  // this cannot pass by the old coupling coming back.
+  M.goalCamReset();
+  const zoomWas = M.sel.goalZoom;
+  M.sel.goalZoom = Math.round(M.GOALCAM.zoomMin * 100);   // the "off" end of the dial
+  w = start();
+  w.ball.lastKicker = w.players[0];
+  M.scoreGoal(w, 0);
+  for (let i=0;i<20;i++){ M.step(w); M.advanceGoalCam(w); }
+  M.computeCam();
+  o.sliderOffFlat = M.goalCam.t === 0 && Math.abs(M.cam.s - base) < 1e-9;
+  o.sliderSaysOff = M.goalZoomLabel() === 'off';
+  M.sel.goalZoom = zoomWas;
   M.sel.juice = true;
 
   // ---- ZERO SIM IMPACT ------------------------------------------------------
@@ -397,7 +419,13 @@ ok(r.centredOnScorer, `the scorer is not centred: off by ${JSON.stringify(r.scor
 ok(r.letsGo, `the camera stayed pushed in after the celebration: scale ${r.releasedScale}x`);
 ok(r.releasedOx, 'the camera let go of the zoom but not of the pan');
 ok(r.standsDownForReplay, `the push stayed up through the instant replay (t ${r.midPush})`);
-ok(r.juiceOffFlat, 'the camera still moved with Screen shake & effects off');
+ok(r.zoomWithoutShake,
+   'the camera did NOT push in with Screen shake & effects off — ' + JSON.stringify(r.zoomWithoutShakeAt) +
+   '. The zoom is its own dial; riding the shake toggle made the Goal zoom slider a dead control');
+ok(r.sliderOffFlat,
+   'the zoom slider at its "off" end still moved the camera — that end of the dial is the only off switch there is now');
+ok(r.sliderSaysOff,
+   'the slider does not READ "off" at its floor, so the one way to turn the push off is unlabelled');
 ok(r.simBitIdentical, 'the sim diverged with the goal camera running — it is reachable from step()');
 ok(r.slidersExist, 'there are no goal-zoom sliders');
 ok(r.dialReads, `the sliders did not reach the camera: ${JSON.stringify(r.dialValues)}`);
@@ -411,6 +439,67 @@ ok(r.defaultIsVisible, `the DEFAULT push is ${r.defaultZoom}x — a setting nobo
 ok(r.followsWhilePushed, 'the camera did not latch onto the scorer while pushed in');
 ok(r.dropsTheSubject, 'the camera kept following its subject into the ease-out');
 ok(r.noSnapOnRelease, `the view jumped ${r.panJump}px when the scorer was moved to their kickoff spot — the release is dragging the camera across the pitch`);
+
+// ============================================================================
+//  THE MIGRATION FOR AN EXISTING SHAKE-OFF INSTALL
+//
+//  ⚠️ Uncoupling the zoom from the shake toggle changes what a player ALREADY PLAYING
+//  sees: somebody with effects off has never had a goal camera, and would suddenly get a
+//  1.8× push at every goal, unasked — the opposite of what turning effects off meant. So
+//  their dial is moved once to the value that reproduces today's game, where it is now
+//  visible and reversible rather than being overridden behind their back.
+//
+//  ⚠️ THREE CASES, and each is a different answer:
+//    · effects off + an UNTOUCHED zoom  → folded to off (what they see today, preserved)
+//    · effects off + a zoom they SET    → left alone (they were being denied it; that is
+//                                          the bug being fixed, not a preference to keep)
+//    · effects ON                       → left alone, obviously
+//
+//  ⚠️ And it is ONE-SHOT. Unlike a pure key rename this is reversible by hand, so an
+//  unguarded fold would silently switch the zoom back off the next morning for anybody who
+//  turned it on. Measured by turning it back on and reloading again.
+// ============================================================================
+const foldCase = async (seed) => {
+  const q = await b.newPage({ viewport:{ width:900, height:900 } });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(()=>{ window.__MAGNETDEBUG = true; });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(500);
+  // Write the "old install" storage, with no fold key, then reload into the new build.
+  await q.evaluate(seed);
+  await q.reload(); await q.waitForTimeout(700);
+  const first = await q.evaluate(() => ({ zoom: window.__magnet.sel.goalZoom,
+                                          label: window.__magnet.goalZoomLabel(),
+                                          key: localStorage.getItem('magnetball.zoomfold') }));
+  // ⚠️ A SECOND reload is the whole one-shot claim. Turn the zoom back on by hand first —
+  // if the fold re-ran it would take it away again, which is the failure mode.
+  await q.evaluate(() => { window.__magnet.sel.goalZoom = 180; window.__magnet.saveSel(); });
+  await q.reload(); await q.waitForTimeout(700);
+  const second = await q.evaluate(() => window.__magnet.sel.goalZoom);
+  await q.close();
+  return { first, second };
+};
+
+const foldOff  = await foldCase(() => { localStorage.removeItem('magnetball.zoomfold');
+  localStorage.setItem('magnetball.sel', JSON.stringify({ juice:false, goalZoom:180 })); });
+const foldKept = await foldCase(() => { localStorage.removeItem('magnetball.zoomfold');
+  localStorage.setItem('magnetball.sel', JSON.stringify({ juice:false, goalZoom:400 })); });
+const foldOn   = await foldCase(() => { localStorage.removeItem('magnetball.zoomfold');
+  localStorage.setItem('magnetball.sel', JSON.stringify({ juice:true, goalZoom:180 })); });
+
+ok(foldOff.first.zoom === 100 && foldOff.first.label === 'off',
+   'effects-off with an untouched zoom was not folded to off — ' + JSON.stringify(foldOff.first) +
+   ', so a player who turned effects off gets a 1.8x push they never asked for');
+ok(foldOff.first.key === '1', 'the fold key was not stamped, so the fold would run again every launch');
+ok(foldOff.second === 180,
+   'the fold ran a SECOND time and took the zoom back off (' + foldOff.second + ') — it is reversible by ' +
+   'hand, so an unguarded fold silently undoes the player every morning');
+ok(foldKept.first.zoom === 400,
+   'a zoom the player deliberately SET was folded away (' + foldKept.first.zoom + ') — they were being denied ' +
+   'it, which is the bug being fixed rather than a preference to preserve');
+ok(foldOn.first.zoom === 180,
+   'an effects-ON install had its zoom changed (' + foldOn.first.zoom + ') — nothing about it was ever broken');
+
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify({ ...r, live: L }, null, 1));

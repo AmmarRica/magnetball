@@ -4535,6 +4535,37 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ `tests/goalcam.mjs` passed the broken build because every assertion in it called
   `computeCam()` by hand before sampling — it measured the maths and never the wiring.
   It now has a block that drives the REAL rAF loop and touches `computeCam` nowhere.
+  ⚠️ **THE ZOOM SLIDER IS THE ONLY THING THAT DECIDES THE PUSH, and it used to ride the
+  Screen shake & effects toggle as well** — which made Goal zoom a **DEAD CONTROL** whenever
+  the shake was off: you could drag it 1.0× → 8.0×, watch the readout change, and nothing on
+  the pitch would ever move. Reported as wanting the zoom without the shake, and it is the
+  NO DEAD CONTROLS rule — a control that silently does nothing is a promise the page cannot
+  keep. `goalCamStart` reads nothing but `goalZoom()` now, and **1.0× still means off**
+  (`goalZoomLabel()` reads `off` at that end, so the one way to switch it off is labelled).
+  ⚠️ **They are different KINDS of motion**, which is the argument hit stop and rumble
+  already won: a shake is the whole picture thrown about at random — a vestibular problem —
+  and a push-in is a slow, predictable move toward the thing you are already looking at.
+  ⚠️ **The accessibility half is NOT lost, it MOVED**: `prefersReducedMotion()` turns the
+  zoom dial off on a first run exactly as it does `sel.juice` — a DEFAULT, never an
+  override, so the dial keeps working on the devices whose owners want it back.
+  ⚠️ **AN EXISTING EFFECTS-OFF INSTALL IS MOVED ON, ONCE** (`magnetball.zoomfold`). Those
+  players have never had a goal camera, so uncoupling would hand them a 1.8× push at every
+  goal unasked — the opposite of what turning effects off meant. Only an **untouched** zoom
+  dial is folded (`sel.goalZoom === defaultSel().goalZoom`): somebody who deliberately set a
+  zoom was being *denied* it, which is the bug being fixed rather than a preference to keep.
+  ⚠️ **One-shot**, the `magnetball.lookfold` rule: unlike a pure key rename this is
+  reversible by hand, so an unguarded fold would switch the zoom back off every morning.
+  The key is stamped whether or not anything moved, or somebody who turns the shake off
+  LATER — in the new world where it no longer touches the zoom — would be folded then.
+  ⚠️ **`saveSel()` inside the fold is safe and is ONLY in the branch that changed
+  something.** The bootstrap must not write `magnetball.sel` in general — its absence is how
+  `isFirstRun` works — but that branch requires `sel.juice === false` against a default of
+  `true`, so reaching it proves a save already exists.
+  ⚠️ **The reduced-motion check in `tests/taptargets.mjs` STAMPS THE FOLD KEY FIRST, and
+  without that it is vacuous** — verified by a sabotage that passed. The fold fires on
+  exactly the state a reduced-motion first run produces, so with it live both mechanisms
+  drive the dial to 100 and the first-run default can be deleted with every check still
+  green. `tests/goalcam.mjs` holds the uncoupling from both ends and all three fold cases.
   Amount and speed are **sliders** —
   `goalZoom()`/`goalZoomSecs()` clamp and default in one place, and **1.0× means off**
   (the camera never even latches). ⚠️ `const GOALCAM` lives with the feel constants, not
