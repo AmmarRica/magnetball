@@ -324,6 +324,14 @@ const sk = await p.evaluate(() => {
   const M = window.__magnet, o = {};
   M.vjArm();
   M.vjBuildPanel();
+  // ⚠️ **THE VJ CARD IS ONLY EVER SHOWN ON THE `/vj` ROUTE**, so un-collapsing it is no
+  // longer enough to give its canvases a width. The card is `display:none` on the game
+  // menu and revealed by `body.vjview`, which the route sets — without that class the two
+  // timelines measure **0px wide**, every click reads as position 0, and both seek checks
+  // fail for a reason that has nothing to do with seeking. The class goes on for this
+  // block and comes off after it, because it hides the rest of `#setup` and later blocks
+  // read the ordinary menu.
+  document.body.classList.add('vjview');
   const card = document.querySelector('.card[data-sec="vj"]');
   if (card) card.classList.remove('collapsed');
   // the panel draws from vjView; the command lands on vj.* — both need the duration
@@ -347,6 +355,7 @@ const sk = await p.evaluate(() => {
   M.vj.a.el = null; M.vj.a.ready = false; M.vj.a.dur = 0;
   M.vj.va.el = null; M.vj.va.ready = false; M.vj.va.dur = 0;
   M.vjView = null;
+  document.body.classList.remove('vjview');
   return o;
 });
 ok('the canvases render at a real width, or the clicks below prove nothing', sk.wide, JSON.stringify(sk));
