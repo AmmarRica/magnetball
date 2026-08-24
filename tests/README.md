@@ -386,6 +386,8 @@ drives it — feed the fake pad instead. And in a sideways pitch `rotQuarter=1`,
 moves the player along world **+x**; measure displacement, not a single axis.
 
 
+| `lobbyhold` | **Hold START for five seconds and anybody in warm-up can force the kickoff.** Checks the clock (a tap still only toggles ready; the fraction tracks 0.25 and 0.50; releasing zeroes it rather than decaying; a full five seconds really reaches `kickoff`) and both rings in **rendered pixels** — the arc round the body and the arc round the controller icon in the corner. ⚠️ Three measurement traps, all three hit while writing it: **diff the SAME frame drawn twice** (comparing against a frame seventy steps earlier measures the whole lobby moving — balls, bots walking on, the idle countdown — and reports a ring around everybody); **pull the bodies apart first** (everyone spawns within a couple of body-lengths of halfway, so one player's annulus runs straight through another's ring); and **set `_px`/`_py` when you teleport one**, or `ix()` interpolates it across the pitch and the probe samples empty grass. ⚠️ It also asserts the **null** — two renders of one frame must be identical — because without that every pixel number is measuring the renderer wobbling. ⚠️ **The arc has no background track and the check is what says so**: sabotaged by putting one back, the probe reads **175 then 180** of 180 angles at 25% and 70% against **47 then 137** without it, which is `tests/sprint.mjs`' lesson arriving a second time |
+
 ### The menu restructure (Aug 2026) — what changed under every suite here
 
 Eleven top-level cards became **four**: Match, Your Player, **Options** and Replays.

@@ -4084,6 +4084,16 @@ const LOBBY = {
   // Everybody in a goal starts the match — held for this long, so running through the
   // mouth on the way round the back of the net is not a request to kick off.
   goalStart: 0.9,
+  // ⚠️ **ANYBODY CAN FORCE THE KICKOFF BY HOLDING START, and five seconds is the whole
+  // safeguard.** Only the host's press started a match, so a room where player one had
+  // wandered off, put their pad down or was still picking a shirt had no way out but the
+  // 30-second idle clock or somebody reaching for the mouse. A tap still means "I am
+  // ready"; a HOLD means "we are going", and one button can carry both because five
+  // seconds is far longer than anybody presses a button by accident.
+  // ⚠️ Long enough to be a decision, short enough to be a way out — and it is COUNTED in
+  // the step loop, never in a draw (the trails rule), so it is five seconds on a 60Hz
+  // screen and on a 144Hz one.
+  holdStart: 5.0,
   arrowR: 92,          // radius of the drawn calibration arrow
   // ---- Warm-up balls -------------------------------------------------------
   // One at each half's centre before anybody arrives, and one more per person in
@@ -18658,6 +18668,27 @@ function lobbyWanted(w){
 }
 // Everyone a human is driving, in seat order. The FIRST one is the host.
 function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
+// ---------- HOW FAR THROUGH THE HOLD SOMEBODY IS -----------------------------
+// ⚠️ **ONE READER, TWO RINGS.** The ring round the body and the ring round the pad icon
+// in the corner are the same number drawn twice — and they must be, because the corner
+// row is the only readout a player who is *looking at their own hands* has. Two copies of
+// `hold / LOBBY.holdStart` is two places for one of them to keep filling after the other
+// has stopped.
+// ⚠️ It only ever answers during warm-up. `drawPadFlairs` runs on every screen the game
+// has, and a progress ring round a controller icon in the middle of a match would be
+// claiming something is happening that is not.
+function startHoldFrac(p){
+  if (!p || !p.startArm || !(p.startHold > 0)) return 0;
+  return Math.max(0, Math.min(1, p.startHold / LOBBY.holdStart));
+}
+// By PAD INDEX, for the corner row — which knows about pads and nothing about bodies.
+function padHoldFrac(idx){
+  const w = (typeof world !== 'undefined') ? world : null;
+  if (!w || w.state !== 'warmup' || !w.players) return 0;
+  for (const p of w.players)
+    if (p.ctrl === 'gamepad' && p.padIndex === idx) return startHoldFrac(p);
+  return 0;
+}
 // ⚠️ **THE HOST IS PLAYER ONE, not whoever happens to be first in the roster.** The
 // host's START kicks the match off and everybody else's only toggles their ready flag —
 // so with the host read off roster order, the person standing at the panel marked 1 could
@@ -19842,6 +19873,24 @@ function pollLobbyStart(w){
     }
     const was = _startPrev[key];
     _startPrev[key] = pressed;
+    // ⚠️ **HELD, and counted here rather than in a draw.** `pollLobbyStart` is called from
+    // `step()`'s warm-up branch, so `STEP` is a real fixed sixtieth and the five seconds
+    // mean five seconds at any refresh rate. Anything time-based that lives in a draw runs
+    // 2.4× fast on a 144Hz screen — the standing rule this file opens with.
+    // ⚠️ **THE COUNT ONLY EVER RUNS BECAUSE OF A PRESS THIS POLL SAW** (`startArm`), so it
+    // cannot resume from a stale timer after calibration takes the button, and it is zeroed
+    // the instant the button comes up rather than decaying.
+    // ⚠️ It does NOT mean a button already down when you arrive is ignored: `enterWarmup`
+    // clears `_startPrev` deliberately — see the note there — so START held on the way in
+    // reads as a fresh press, which is what makes the one button the lobby exists to get
+    // you past work at all. Coming in holding START and keeping it down for five more
+    // seconds therefore does start the match, and that is the feature rather than a hole.
+    if (!pressed || w.lobby.calib){ p.startHold = 0; p.startArm = false; }
+    else if (!was) { p.startHold = 0; p.startArm = true; }
+    else if (p.startArm){
+      p.startHold = (p.startHold || 0) + STEP;
+      if (p.startHold >= LOBBY.holdStart){ p.startHold = 0; lobbyStart(w); return; }
+    }
     if (!pressed || was) continue;           // edge only
     if (w.lobby.calib) continue;             // mid-calibration: ignore
     if (needsCalibration(p)){ beginCalibration(w, p); continue; }
@@ -24538,6 +24587,34 @@ function drawLobby(w){
       });
     });
   }
+  // --- HOLDING START. A ring that fills round whoever is doing it, so a room of four
+  // can see which of them is about to kick the match off and how long is left to say so.
+  // ⚠️ **OUTSIDE THE KICK RING, and that is not a spacing preference.** The ring at
+  // `p.r * kickRingMul()` is a PROMISE about the physics — a ball touching it is within
+  // reach, by construction — and the stamina gauge is that same ring recoloured. A third
+  // arc at that radius would be a third meaning for one circle. This one sits beyond the
+  // dial's own maximum (2.0), so it can never be mistaken for either.
+  // ⚠️ Drawn from the pose through `ix`/`iy` like anything else anchored to a moving body:
+  // mid-step the raw position is up to a whole step of travel away.
+  // ⚠️ It only DRAWS — `pollLobbyStart` owns the clock, in the step loop.
+  for (const p of lobbyHumans(w)){
+    const f = startHoldFrac(p); if (!f) continue;
+    const c0 = screenPt(wx(ix(p)), wy(iy(p)));
+    const rr = p.r * cam.s * 2.9;
+    // ⚠️ **NO BACKGROUND TRACK, and that is the sprint gauge's lesson applied before it
+    // could bite twice.** A full-circle track behind the arc is a complete ring at every
+    // value, so what carries the progress is the arc's colour against it — which at this
+    // size swamped the reading last time and made half and empty look the same. Here the
+    // radius promises nothing (unlike the kick ring, which IS the reach), so arc LENGTH is
+    // free to be the signal and it is the unambiguous one. It also means a check can
+    // measure the thing: a full ring at 25% would be indistinguishable from one at 90%.
+    ctx.save();
+    ctx.lineWidth = Math.max(2, p.r * cam.s * 0.22);
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = kickRingInk();
+    ctx.beginPath(); ctx.arc(c0[0], c0[1], rr, -Math.PI/2, -Math.PI/2 + f*Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
   // ⚠️ THERE IS NO PER-PLAYER PROMPT ROW ANY MORE. It was a line of plates under the
   // touchline reading "P1 START = KICK OFF · P2 START = READY · …", one per person —
   // a row that grows with the room, sitting between the pitch and the keyboard, saying
@@ -24676,7 +24753,10 @@ function drawPadFlairs(){
   const size = 26, gap = 7, pad = 12;
   // On touch the joystick owns the bottom-right corner, so sit above it rather
   // than printing over a control (same rule the debug readout follows on the left).
-  const y = ch - debugFloor() - size;
+  // ⚠️ Four pixels of bottom margin so the hold ring below has somewhere to be. It is
+  // drawn at 0.62 of the tile, which reaches 3px past the tile's own bottom edge — and a
+  // row that only moved up while somebody was holding START would be a jumping HUD.
+  const y = ch - debugFloor() - size - 4;
   let x = cw - pad - size;
   for (let i = pads2.length - 1; i >= 0; i--){
     const idx = pads2[i];
@@ -24706,6 +24786,22 @@ function drawPadFlairs(){
         ctx.drawImage(art, x, y, size, size);
       }
       ctx.globalAlpha = 1;
+    }
+    // ⚠️ **THE SAME NUMBER AS THE RING ON THE PITCH** (`padHoldFrac` → `startHoldFrac`),
+    // because this row is the readout for somebody looking down at their own hands. It is
+    // drawn round the TILE rather than the art, and deliberately does NOT turn with
+    // `seatRotOf` — a progress arc that starts at twelve o'clock for one player and at
+    // three for the next is not a progress arc. The icon turns because it is a picture of
+    // which way the pad is pointing; this is a clock.
+    const hf = padHoldFrac(idx);
+    if (hf > 0){
+      const cx = x + size/2, cy = y + size/2, rr = size*0.62;
+      // ⚠️ No track here either, for the reason above — one arc, growing from twelve.
+      ctx.save();
+      ctx.lineWidth = 3; ctx.lineCap = 'butt';
+      ctx.strokeStyle = TH.hudText || '#ffffff';
+      ctx.beginPath(); ctx.arc(cx, cy, rr, -Math.PI/2, -Math.PI/2 + hf*Math.PI*2); ctx.stroke();
+      ctx.restore();
     }
     x -= size + gap;
   }
@@ -29578,7 +29674,8 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, UNL_CATS,
     get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
-    sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection,
+    startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },

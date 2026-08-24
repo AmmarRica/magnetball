@@ -3026,6 +3026,47 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
+- **ANYBODY CAN FORCE THE KICKOFF BY HOLDING START FOR FIVE SECONDS** (`LOBBY.holdStart`,
+  `p.startHold`/`p.startArm`, `startHoldFrac`, `padHoldFrac`). Only the host's press started
+  a match, so a room where player one had wandered off, put their pad down or was still
+  picking a shirt had no way out but the 30-second idle clock or somebody reaching for a
+  mouse.
+  ⚠️ **ONE BUTTON, TWO MEANINGS, and the tap is the one that must not change.** A TAP still
+  toggles ready exactly as it did; a HOLD is "we are going". Five seconds is far longer than
+  anybody presses a button by accident, which is the whole safeguard — and it is what makes
+  the two meanings safe to put on one button.
+  ⚠️ **COUNTED IN THE STEP LOOP.** `pollLobbyStart` is called from `step()`'s warm-up
+  branch, so `STEP` is a real fixed sixtieth and five seconds is five seconds on a 144Hz
+  screen. Anything time-based advanced in a draw runs 2.4× fast — the standing rule.
+  ⚠️ **It ZEROES on release rather than decaying**, or somebody could tap their way to a
+  kickoff, which is the opposite of what the five seconds is for.
+  ⚠️ **`startArm` means the count only ever runs because of a press this poll SAW**, so a
+  stale timer cannot resume after calibration takes the button. It does *not* mean a button
+  already down on arrival is ignored: `enterWarmup` clears `_startPrev` deliberately, so
+  START held on the way in reads as a fresh press — which is what makes the one button the
+  lobby exists to get you past work at all.
+  ⚠️ **TWO RINGS, ONE NUMBER** (`startHoldFrac`, and `padHoldFrac` for the corner row).
+  The ring round the body says *who*; the ring round the controller icon says *you* to
+  somebody looking down at their own hands. Two copies of `hold / holdStart` is two places
+  for one of them to keep filling after the other stopped.
+  ⚠️ **OUTSIDE THE KICK RING, at 2.9 body radii.** That circle at `p.r * kickRingMul()` IS
+  the reach — a promise about the physics — and the stamina gauge is the same ring
+  recoloured. A third arc at that radius would be a third meaning for one circle; the dial's
+  own maximum is 2.0, so this can never be mistaken for either.
+  ⚠️ **NO BACKGROUND TRACK, and that is the sprint gauge's lesson applied before it could
+  bite twice.** A full-circle track is a complete ring at every value, so progress would have
+  to be carried by the arc's colour against it — which at this size swamped the reading last
+  time. Here the radius promises nothing, so arc LENGTH is free to be the signal, and it is
+  the one a check can measure: the track sabotage reads **175 then 180** of 180 probe angles
+  at 25% and 70%, against **47 then 137** without it.
+  ⚠️ The corner arc deliberately does **not** turn with `seatRotOf` — the icon turns because
+  it is a picture of which way the pad points; this is a clock, and one starting at three
+  o'clock for the next player is not a progress arc.
+  ⚠️ Three measurement traps are recorded in `tests/lobbyhold.mjs`: diff the SAME frame
+  drawn twice (a frame seventy steps earlier measures the whole lobby moving and reports a
+  ring on everybody), pull the bodies apart first (everyone spawns within a couple of
+  body-lengths of halfway, so one player's annulus runs through another's ring), and set
+  `_px`/`_py` when you teleport one or `ix()` interpolates it across the pitch.
 - **THE LOBBY HOST IS PLAYER ONE, not whoever is first in the roster** (`lobbyHost`,
   `seatOrdinal`). The host's START kicks the match off and everybody else's only toggles
   their ready flag — so with the host read off roster order, the person standing at the
