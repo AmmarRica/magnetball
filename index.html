@@ -4146,8 +4146,16 @@ const LOBBYKB = {
   // They were 48 x 44 — a body and a half — which made the board wider than the pitch
   // and turned walking to a letter into a trek. At body size the whole thing reads as
   // something you step onto rather than a wall of furniture.
-  keyW: 30, keyH: 28, gap: 5,
-  clear: 0.8,         // world units between the back of the net and the top row
+  // ⚠️ **A QUARTER BIGGER THAN A BODY, asked for.** They were exactly body-sized (30×28
+  // against a 30-across player), which is walkable but reads as small print at the zoom
+  // the whole warm-up span forces. A quarter up is still something you step onto rather
+  // than a wall of furniture, and the cost is paid back by everything else here moving
+  // OUT of the keyboard's way.
+  keyW: 38, keyH: 35, gap: 6,
+  // ⚠️ **THIS WAS 0.8 WORLD UNITS**, which is no gap at all — the top row began within a
+  // pixel of the back of the net, so the board and the pitch read as one cluttered
+  // object. Asked for directly as "more space between pitch and keyboard".
+  clear: 34,          // world units between the back of the net and the top row
   maxLen: 12,        // the same cap the name box uses
   wideW: 3.2,        // DEL and SPACE, in key widths
   // ⚠️ NOTHING PRESSES ITSELF. There used to be a dwell — stand on a key for 0.4s
@@ -4177,9 +4185,34 @@ const LOBBYKB = {
   // turned/deck view, because `computeCam` frames the whole block. 30 buys a 23px gap for
   // −2.6% of the pitch; at +60 the keys are still all on screen and still clear of
   // `#lobbyStartBtn` in all three viewports, so this is taste inside a measured budget.
-  diffGap: 30,       // world units between the bottom of the keyboard and the difficulty row
-  side: 20,          // world units between a touchline and the strips beside it
+  diffGap: 30,       // kept: the floor under `blockBot`, so the stepper always has room
+  // ⚠️ **DIFFICULTY IS ABOVE THE PITCH NOW, NOT UNDER THE KEYBOARD.** It stood off the
+  // keys by 30 units and was still read as the keyboard's fourth row — the gap fixed how
+  // it looked and not what it was, because anything directly under QWERTY is part of the
+  // board to a player walking the board. The far end, beyond the net you are not walking
+  // through, is the one large empty area in the whole layout.
+  diffClear: 30,     // world units between the far net and the difficulty row
+  // ⚠️ **20 WAS TOO TIGHT and it was reported as clutter.** The strips sat within a
+  // pixel or two of the touchline at most zooms, so the shirts read as part of the pitch
+  // markings rather than as a control beside them.
+  side: 34,          // world units between a touchline and the strips beside it
+  // ⚠️ **THE FLAGS ARE A SECOND BLOCK ON THE SAME EDGE, with a real gap.** Beside your
+  // half is where "this dresses this side" already lives, so a flag picker anywhere else
+  // would be a second idiom for one idea. Butted against the colours it would read as
+  // one block of sixteen — the exact complaint that split the colours into two blocks of
+  // four in the first place.
+  flagGap: 20,       // world units between a side's colour block and its flag block
 };
+// ⚠️ **EIGHT, IN THE SAME 4×2 SHAPE THE COLOURS USE**, and the first is NONE. `FLAGS` has
+// eighty-odd entries and a walk-on picker cannot be eighty pads — you would cross the
+// whole board to reach one. These are the top of `CUP_TEAMS`, which is already a curated
+// list whose keys are all verified to exist in `FLAGS` (a missing one draws a grey square,
+// which looks like a rendering bug and is really a team nobody can identify).
+// ⚠️ **`none` IS FIRST and it is not a country** — it means "nobody's flag", which is what
+// a side wears unless somebody chose otherwise, and without it a flag picked by mistake
+// could not be taken off. Same argument as the `none` tile leading the Cap and Eyes
+// pickers: a reset is not a choice.
+const LOBBY_FLAGS = ['none', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england'];
 // ============================================================
 //  TEAM COLOUR — one shade a side, picked on the pitch
 // ============================================================
@@ -4234,6 +4267,35 @@ function cupRestoreMode(){
   if (cupModeWas == null) return;
   sel.mode = cupModeWas; cupModeWas = null;
 }
+// ⚠️ **A SIDE CAN WEAR A COUNTRY, and it works exactly like the side's colour.** Picked
+// on the pitch from a block of flags beside that half, applied to whoever is standing in
+// it — so "walk over there and you are Brazil" is the literal thing you do, which is what
+// was asked for. `none` is the default and means "nobody's flag", leaving each player
+// wearing their own faceplate.
+// ⚠️ **THIS IS THE ONE PLACE THE STANDING RULE "a person's faceplate is their own" BENDS,
+// and it bends because somebody DELIBERATELY chose a flag for that half.** It is a lobby
+// choice about a SIDE, not the game overriding you: pick `none` and your own face is back.
+// `numberTheSides` still never touches a human's plate.
+// ⚠️ Falls back through `FLAGS`, the standing rule for every registry lookup off `sel`:
+// the value can arrive from a hand-edited localStorage, an imported save (`applySaveDoc`
+// validates nothing) or one typo in a shared settings sheet.
+function teamFlagOf(team){
+  const a = sel.teamFlag;
+  const k = Array.isArray(a) ? a[team ? 1 : 0] : null;
+  return (k && k !== 'none' && FLAGS[k]) ? k : null;
+}
+// ⚠️ **BOTH SIDES MAY WEAR THE SAME COUNTRY, unlike the colours.** Two teams in one shade
+// is unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still
+// told apart by the shirt, which is the thing colour is for. Refusing here would be a
+// control that silently does nothing.
+function setTeamFlag(team, key){
+  const cur = [ (sel.teamFlag && sel.teamFlag[0]) || 'none', (sel.teamFlag && sel.teamFlag[1]) || 'none' ];
+  const t = team ? 1 : 0;
+  if (cur[t] === key) return false;
+  cur[t] = key;
+  sel.teamFlag = cur;
+  return true;
+}
 function teamColOf(team){
   const i = team ? 1 : 0;
   if (matchTeamCol && matchTeamCol[i]) return matchTeamCol[i];
@@ -4241,12 +4303,32 @@ function teamColOf(team){
   const c = Array.isArray(a) ? a[i] : null;
   return c || TEAMCOL_DEF[i];
 }
-// ⚠️ The one place a body's colour is decided. Called wherever the roster or the
-// sides can change — the warm-up step, `lobbyStart`, `startMatch`, `evenUpSides` and
-// the drop-in walk-on — so a player who switches halves is simply the other colour.
+// ⚠️ The one place a body's TEAM LOOK is decided — its colour and, if the side has been
+// given one, its flag. Called wherever the roster or the sides can change — the warm-up
+// step, `lobbyStart`, `startMatch`, `evenUpSides` and the drop-in walk-on — so a player
+// who switches halves is simply the other colour and the other country.
+// ⚠️ **The name is kept** even though it now does two things: six call sites and three
+// suites address it, and a rename buys nothing a comment cannot say.
+// ⚠️ **A STAMPED BODY REMEMBERS THE FACE IT CAME WITH (`p._ownFlag`), and without that
+// the feature is one-way.** "A side with no flag leaves every plate alone" was the first
+// rule here and it is not enough: a player who walks out of Brazil's half into the
+// flagless one keeps wearing Brazil for ever, because nothing tells the plate to go back.
+// Measured exactly that way — team 1 read `brazil` with `teamFlagOf(1)` null.
+// ⚠️ **It is also what makes `none` work**, so there is no second mechanism for taking a
+// flag off: picking it clears the side's flag and this line puts every face back. A
+// first attempt had a separate `restoreOwnFaces` walking the roster, which is a second
+// place to keep in step with the rule right here.
+// ⚠️ `undefined` is the "not stamped" sentinel, so a body that genuinely wears nothing is
+// still distinguishable from one this has never touched.
 function applyTeamColours(list){
   if (!list) return;
-  for (const p of list) if (p) p.color = teamColOf(p.team);
+  for (const p of list){
+    if (!p) continue;
+    p.color = teamColOf(p.team);
+    const f = teamFlagOf(p.team);
+    if (f){ if (p._ownFlag === undefined) p._ownFlag = p.flag; p.flag = f; }
+    else if (p._ownFlag !== undefined){ p.flag = p._ownFlag; p._ownFlag = undefined; }
+  }
 }
 // ⚠️ The two sides may never end up the SAME colour. Picking a colour the other
 // side is already wearing hands them the one you just gave up, which is a swap rather
@@ -5127,7 +5209,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0110AM';
+const VERSION = '20260824.0210AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5143,6 +5225,19 @@ const VERSION = '20260824.0110AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0210AM', title: 'The warm-up room, tidied',
+    changed: [
+      '<b>Half the pitch is no longer dimmed.</b> One side of the field was being painted over in the surround colour every warm-up frame, which is what made it hard to look at. Each half is <b>outlined</b> in its team colour now instead of washed over with it, which also gives the court the frame it was missing.',
+      '<b>The keyboard is a quarter bigger</b>, with real gaps between it and the pitch, and between the shirts and the touchline. The bot difficulty row has moved off the bottom of the keyboard to the far end of the pitch, where it stops reading as a fourth row of keys.',
+      '<b>The pitch is a little smaller in warm-up</b> — everything beside the court is framed with it, so more room for the controls means less room for the grass. That is the trade for the bigger keyboard and the new flags.',
+    ],
+    added: [
+      '<b>Pick a country for a side.</b> A block of flags sits beside each half, next to the shirts. Whoever walks onto that half wears it, and walking off gives you your own face back. <b>None</b> takes it off again.',
+      '<b>You can stand on START and press it.</b> Everything else in that room is something you walk onto; the one button you need to leave was a controller button, a key or a mouse click. Now it is a pad in the keyboard block.',
+      '<b>Anybody can hold START for five seconds to kick off.</b> A tap still just says you are ready. A ring fills around whoever is holding it, and around their controller icon in the corner — so a room where player one has wandered off is not stuck waiting.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.0110AM', title: 'A shorter menu, and a pad that can drive it',
     changed: [
       '<b>Eleven cards of settings are now four.</b> Controls, Display, Sound, Game Feel and About are tabs of one <b>Options</b> card, Theme sits inside Display where the rest of the look lives, and Reset is in there with them. Nothing was removed and nothing moved address — the jump bar and the search still take you straight to any of them.',
@@ -6082,7 +6177,7 @@ function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'g3', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:false, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:5, rumble:70, kickRing:195, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
+            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], teamFlag:['none','none'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
             // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
@@ -18801,13 +18896,32 @@ function buildLobbyKeys(w){
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
   if (!lite) ctrl.forEach(([ch, label], i) =>
     raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
-  const kbBot = lite ? top : top + K.rows.length*rowH + K.keyH;
+  // ⚠️ **YOU CAN STAND ON START AND PRESS IT, like everything else in this room.** Every
+  // other control here is a pad you walk onto — the letters, the shirts, the flags, the
+  // difficulty, the team size — and the one button the lobby exists to get you past was
+  // the exception: a gamepad button, an Enter key, or a DOM button you needed a finger or
+  // a mouse for. On a cabinet with a stick and no keyboard that is a room you can decorate
+  // and not leave.
+  // ⚠️ **BELOW DEL AND SPACE, with a row's gap, and as wide as both of them together.**
+  // It is not a letter, so it does not belong in the letter block; it is the thing you do
+  // LAST, so it goes at the bottom, where the on-screen START button already is. Wide
+  // enough to walk onto without aiming, which is the same reason DEL and SPACE are.
+  // ⚠️ KICK is still the press. Brushing it on the way past the keyboard does nothing,
+  // which is what makes putting it in the walking area safe at all.
+  const startV = top + K.rows.length*rowH + K.keyH + K.gap*2;
+  if (!lite)
+    raw.push({ k: { start: true, label: 'START' }, u: -tot/2, v: startV, du: tot, dv: K.keyH });
+  const kbBot = lite ? top : startV + K.keyH;
   // ⚠️ Floored at two pads, so the stepper's `+` and `−` can never land ON TOP of each
   // other. That is what happened the moment a lobby had no letters above them: the size
   // could be raised and never lowered. The stepper is gone from a lite lobby now for a
   // different reason (see below), which leaves this as the guard that stops the same
   // collapse arriving with the next short layout.
-  const blockBot = Math.max(kbBot + K.diffGap + K.diff, top + K.pad*2 + K.gap*3);
+  // ⚠️ The difficulty row left this line behind when it moved above the pitch: the block
+  // now ends at the keyboard. `diffGap` stays as the FLOOR under it, because the stepper
+  // spans `top..blockBot` and a lobby short enough to put `+` and `−` on top of each other
+  // is the collapse the `pad*2` term already guards against.
+  const blockBot = Math.max(kbBot + K.diffGap, top + K.pad*2 + K.gap*3);
   // ⚠️ THE TEAM-SIZE STEPPER IS IN THE CORNER, not tucked against the letters. It is
   // not part of typing your name, and standing beside the board to change the match
   // size means never brushing a letter on the way. Bottom-right of the whole layout,
@@ -18840,17 +18954,44 @@ function buildLobbyKeys(w){
   // to pick a side.
   const cols = Math.max(1, K.swCols), swSpan = cols*K.sw + (cols-1)*K.gap;
   const splitU = turned;                       // do the halves divide left/right?
-  if (!lite) [1, 0].forEach(team => {
+  const dkeys0 = Object.keys(DIFF);
+  // ⚠️ **THE FLAGS GO ON THE EDGE THE COLOURS ARE NOT ON, and that is a MEASURED choice
+  // rather than a tidy one.** Stacked beyond the colours on the same edge they cost
+  // **21% of pitch scale** in the turned view and 8% flat — because `computeCam` centres
+  // the COURT and then has to frame the worst side, so every unit piled onto one edge is
+  // charged twice. Split across opposite edges the same sixteen pads cost almost nothing:
+  // 0.717 → 0.708 turned and 0.489 → 0.470 flat, against 0.566 and 0.451 stacked.
+  // ⚠️ Which edges those are depends on the split, exactly as the colours' own note says.
+  // Flat the halves are top and bottom, so both blocks are COLUMNS — colours left, flags
+  // right, teams stacked along the column. Turned the halves are left and right, so the
+  // colours are rows above the pitch and each team's flags are a column out on THAT
+  // team's own side, which is the same sentence ("what is beside your half dresses your
+  // half") arriving at a different edge.
+  const strip = (team, items, make, opt) => {
     const sign = team === 0 ? 1 : -1;          // team 0 is the +ve side of the split
-    const base = sign > 0 ? K.swSplit/2 : -(K.swSplit/2 + swSpan);
-    TEAM_COLS.forEach((c, i) => {
+    // `perTeam` blocks sit on their own team's edge and are centred there; shared ones
+    // put the two teams either side of `swSplit` on one edge.
+    const base = opt.perTeam ? -swSpan/2
+               : sign > 0 ? K.swSplit/2 : -(K.swSplit/2 + swSpan);
+    items.forEach((it, i) => {
       const along = base + (i % cols)*(K.sw + K.gap);
       const deep  = Math.floor(i / cols)*(K.sw + K.gap);
-      raw.push({ k: { colTeam: team, col: c.col, label: '' },
-                 u: splitU ? along : -(across + K.side + K.sw + deep),
-                 v: splitU ? -(down + K.side + K.sw + deep) : along,
+      const out   = opt.outer + deep;
+      raw.push({ k: make(it, team),
+                 u: opt.axis === 'u' ? along : opt.sign * out,
+                 v: opt.axis === 'u' ? opt.sign * out : along,
                  du: K.sw, dv: K.sw });
     });
+  };
+  const outU = across + K.side + K.sw, outV = down + K.side + K.sw;
+  if (!lite) [1, 0].forEach(team => {
+    const sign = team === 0 ? 1 : -1;
+    strip(team, TEAM_COLS, (c) => ({ colTeam: team, col: c.col, label: '' }),
+          splitU ? { axis:'u', sign:-1, outer: outV }        // a row above the pitch
+                 : { axis:'v', sign:-1, outer: outU });      // a column to the left
+    strip(team, LOBBY_FLAGS, (fk) => ({ flagTeam: team, flagKey: fk, label: '' }),
+          splitU ? { axis:'v', sign, outer: outU, perTeam: true }   // out on that team's side
+                 : { axis:'v', sign: 1, outer: outU });             // a column to the right
   });
   // ⚠️ DIFFICULTY IS A ROW UNDER THE KEYBOARD, not a column beside the pitch. "How
   // hard are the bots" is a match-wide question, so it belongs with the other
@@ -18858,26 +18999,42 @@ function buildLobbyKeys(w){
   // a column out to one side lands exactly where the head count behind that goal is
   // drawn, which is how the first build had ROOKIE printed through "1 PLAYER +1 BOT".
   // Left to right is also how the menu's own difficulty tiles read, as a ramp.
-  const dkeys = Object.keys(DIFF);
+  const dkeys = dkeys0;
   const dRow = dkeys.length*K.diff + (dkeys.length-1)*K.gap;
   // ⚠️ NUMBERED 1..7, not named. A pad is about a body wide, and ROOKIE / INSANE are
   // six letters shrunk to fit that — which is a smudge, not a label. A rising number
   // is legible at any size and says the one thing a difficulty tile has to say, which
   // is "steeper"; the tier's NAME is printed once under the row, for whichever is
   // picked. Same argument the menu's own difficulty ramp is built on.
+  // ⚠️ **ABOVE THE PITCH, at the end nobody walks through.** It was a row directly under
+  // the keyboard and standing off it by 30 units, and it still read as the keyboard's
+  // fourth row — because anything under QWERTY is part of the board to somebody walking
+  // the board, however wide the gap. The far end is the one large empty area here.
+  // ⚠️ Still left-to-right as a RAMP, which is the one thing a difficulty control has to
+  // say, and still numbered rather than named for the reason below.
+  // ⚠️ **TURNED, THE COLOURS ARE ALREADY ABOVE THE PITCH, so the row has to clear them.**
+  // Both were placed off `down` and both landed at −284: the numbers were drawn straight
+  // through the shirts. The colours stay NEAREST the pitch because they are per-half and
+  // the half they are beside is the thing they dress; the difficulty row is match-wide, so
+  // it is the one that moves out.
+  const colDeep = splitU ? (K.side + 2*K.sw + K.gap) : 0;
   dkeys.forEach((dk, i) =>
     raw.push({ k: { diff: dk, label: String(i+1) },
-               u: -dRow/2 + i*(K.diff + K.gap), v: kbBot + K.diffGap, du: K.diff, dv: K.diff }));
+               u: -dRow/2 + i*(K.diff + K.gap),
+               v: -(down + colDeep + K.diffClear + K.diff), du: K.diff, dv: K.diff }));
   // ⚠️ THE LETTERS ARE RECENTRED ACROSS THE SCREEN (`u`), and only the letters. That is
   // the axis the pitch is centred on, and the strips beside the pitch are deliberately
   // NOT part of the sum — they are pinned to the touchlines, so folding them into the
   // centring would drag the board sideways every time a colour list changed length.
   let uL = Infinity, uR = -Infinity;
-  for (const q of raw){ if (q.k.colTeam !== undefined || q.k.diff || q.k.act) continue;
+  // ⚠️ Anything PINNED to an edge is out of the sum and out of the shift — the strips
+  // hang off the touchlines and the difficulty row off the far net, so folding them in
+  // would drag the board sideways every time one of those lists changed length.
+  const pinned = k => k.colTeam !== undefined || k.flagTeam !== undefined || k.diff || k.act;
+  for (const q of raw){ if (pinned(q.k)) continue;
                         uL = Math.min(uL, q.u); uR = Math.max(uR, q.u + q.du); }
   const shift = isFinite(uL) ? -(uL + uR)/2 : 0;   // lite: no letters to centre on
-  for (const q of raw) keys.push(place(q.k, q.u + (q.k.colTeam !== undefined || q.k.diff || q.k.act ? 0 : shift),
-                                       q.v, q.du, q.dv));
+  for (const q of raw) keys.push(place(q.k, q.u + (pinned(q.k) ? 0 : shift), q.v, q.du, q.dv));
   let L = Infinity, R = -Infinity, T = Infinity, B = -Infinity;
   for (const k of keys){ L = Math.min(L, k.x); T = Math.min(T, k.y);
                          R = Math.max(R, k.x + k.w); B = Math.max(B, k.y + k.h); }
@@ -18946,7 +19103,17 @@ function kbHit(w, p, k){
   // Persisted through `sel`, because "our team is green" is something you told the
   // game about the ROOM rather than about this match.
   else if (k.colTeam !== undefined){ if (setTeamCol(k.colTeam, k.col)){ applyTeamColours(w.players); applyTeamColours(w.bench); saveSel(); } }
+  // ⚠️ A COUNTRY IS TEAM-WIDE TOO, and takes effect the same instant for the same reason:
+  // the whole side changes under you, which is what makes a walk-on pad legible as a
+  // control at all. Picking `none` puts everybody's own faceplate back — which is why
+  // `applyTeamColours` must not write a null over a plate (see its header).
+  else if (k.flagTeam !== undefined){
+    if (setTeamFlag(k.flagTeam, k.flagKey)){ applyTeamColours(w.players); applyTeamColours(w.bench); saveSel(); }
+  }
   else if (k.diff){ if (sel.diff !== k.diff){ sel.diff = k.diff; saveSel(); } }
+  // ⚠️ Straight to `lobbyStart`, the same path the pad button, the on-screen button and
+  // the idle clock all take — never a second copy of what starting a match means.
+  else if (k.start) lobbyStart(w);
   else kbPress(p, k.ch);
 }
 // ⚠️ Clamped to the CURRENT floor, not just to 1. `lobbyPlan` will not field fewer
@@ -24371,7 +24538,7 @@ function lobbyKeyGeo(kb){
     const bw = hi0 - lo0, bh = hi1 - lo1;
     const c = screenPt(wx(k.x + k.w/2), wy(k.y + k.h/2));
     const g = { pts, bw, bh, cx: c[0], cy: c[1], fs: 0 };
-    if (k.colTeam === undefined){
+    if (k.colTeam === undefined && k.flagTeam === undefined){
       // The label's fitted size — the only part that needs the canvas, and the reason
       // this used to cost a `measureText` per key per frame.
       let fs = k.act ? 26 : (k.ch && k.ch.length === 1 && k.ch !== ' ' ? 18 : 11);
@@ -24423,6 +24590,7 @@ function drawLobbyKeys(w, ox, oy){
     // ⚠️ A SWATCH IS PAINTED IN THE COLOUR IT GIVES YOU, and the one currently worn is
     // the one that is lit — otherwise eight identical plates are eight guesses.
     const picked = k.colTeam !== undefined ? teamColOf(k.colTeam) === k.col
+                 : k.flagTeam !== undefined ? (teamFlagOf(k.flagTeam) || 'none') === k.flagKey
                  : k.diff ? sel.diff === k.diff : false;
     const on = picked ? 1 : 0;
     ctx.fillStyle = rgba(ink, 0.08 + 0.30*Math.max(f, on*0.6));
@@ -24446,6 +24614,33 @@ function drawLobbyKeys(w, ox, oy){
         ctx.stroke();
       });
       continue;                                  // a shirt is its colour; no label
+    }
+    // ⚠️ **A FLAG PAD IS THE FLAG, drawn UPRIGHT inside its plate** — the same split the
+    // shirts and the letters are drawn under: the plate is a place you walk to so its
+    // corners follow the ground, and a picture of a country on its side reads worse.
+    // ⚠️ `none` has no drawing, so it gets a WORD. A blank plate among seven flags reads
+    // as one that failed to load rather than as "take it off".
+    if (k.flagTeam !== undefined){
+      const fs2 = Math.min(g.bw, g.bh) * 0.80;
+      screenUpright(g.cx + ox, g.cy + oy, (cx2, cy2) => {
+        if (k.flagKey === 'none'){
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.font = `${Math.max(6, fs2*0.34)}px ${LOBBY_FONT}`;
+          ctx.fillStyle = rgba(ink, 0.30 + 0.60*Math.max(f, on));
+          ctx.fillText('NONE', cx2, cy2);
+        } else {
+          ctx.save();
+          ctx.beginPath(); ctx.arc(cx2, cy2, fs2/2, 0, 7); ctx.clip();
+          drawDisc(ctx, cx2, cy2, fs2/2, { color: teamColOf(k.flagTeam), flag: k.flagKey, eyes: 'none' });
+          ctx.restore();
+        }
+        // The one this side is WEARING is outlined, the same as its shirt.
+        ctx.beginPath(); ctx.arc(cx2, cy2, fs2/2, 0, 7);
+        ctx.lineWidth = Math.max(1, on ? 2.2 : 1);
+        ctx.strokeStyle = on ? rgba(ink, 0.95) : rgba(ink, 0.30);
+        ctx.stroke();
+      });
+      continue;
     }
     // ⚠️ THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES. A key is a place you
     // walk to, so its four corners have to follow the ground exactly; the letter on it is
@@ -24500,9 +24695,14 @@ function drawLobbyKeys(w, ox, oy){
         ds.push(screenPt(wx(px), wy(py)));
     const dx0 = Math.min.apply(null, ds.map(c => c[0])) + ox;
     const dx1 = Math.max.apply(null, ds.map(c => c[0])) + ox;
-    const dy1 = Math.max.apply(null, ds.map(c => c[1])) + oy;
+    // ⚠️ **ABOVE THE ROW, NOT BELOW IT — the row moved and the caption did not.** It used
+    // to sit under a difficulty row that was under the keyboard, where below was empty.
+    // Above the pitch, "below the row" is the gap between it and the net, which is exactly
+    // where `drawLobby` prints that end's head count: on a phone the caption came out
+    // through the middle of "1 PLAYER". Further OUT is the empty direction now.
+    const dy0 = Math.min.apply(null, ds.map(c => c[1])) + oy;
     const dn = (DIFF[sel.diff] || DIFF.normal).name.toUpperCase();
-    screenUpright((dx0 + dx1)/2, dy1 + 11, (x, y) => {
+    screenUpright((dx0 + dx1)/2, Math.max(8, dy0 - 11), (x, y) => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `9px ${LOBBY_FONT}`;
       ctx.fillStyle = T.hudSub || T.hudText;
@@ -24557,10 +24757,28 @@ function drawLobby(w){
       const fillN = team === 0 ? plan.need0 : plan.need1;
       const pts = [[-halfW, 0], [halfW, 0], [halfW, sign*halfL], [-halfW, sign*halfL]]
         .map(([x, y]) => screenPt(wx(x), wy(y)));
+      // ⚠️ **A BORDER ROUND EACH HALF, NOT A WASH OVER IT — and that reverses what this
+      // did.** It filled each half with `rgba(col, 0.10 + 0.06*n)`, which is a translucent
+      // sheet over the part of the screen everybody is looking at: reported as one side
+      // being dimmed and hard to look at, and it is worse than it sounds because the two
+      // halves get different amounts (the alpha rises with how many people are on that
+      // side), so the pitch is unevenly lit as well as dimmed.
+      // ⚠️ **An outline says the same thing and covers nothing.** Which colour a half is,
+      // and how firmly it has been claimed, both survive — the line gets thicker and more
+      // opaque with `n` where the wash got darker — and it doubles as the frame round the
+      // court that was asked for in the same breath.
+      // ⚠️ Drawn INSET by half its own width so the stroke lands inside the half rather
+      // than straddling the touchline: a line drawn on the boundary is half in the
+      // surround, where it fights the keyboard and the strips for attention.
       ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i=1;i<4;i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
-      ctx.fillStyle = rgba(col, 0.10 + 0.06*Math.min(1, n)); ctx.fill();
+      const lw = 2.5 + 2.5*Math.min(1, n);
+      ctx.save();
+      ctx.clip();                                   // ...which is what makes the inset exact
+      ctx.lineWidth = lw*2; ctx.strokeStyle = rgba(col, 0.45 + 0.35*Math.min(1, n));
+      ctx.stroke();
+      ctx.restore();
       // ⚠️ BEHIND THE GOAL POSTS, INSIDE THE NET. Two lines of type out on the half is
       // text printed across the part of the pitch people are walking on and reading —
       // the same argument that took the per-player prompts off the grass. The net
@@ -24600,7 +24818,12 @@ function drawLobby(w){
   for (const p of lobbyHumans(w)){
     const f = startHoldFrac(p); if (!f) continue;
     const c0 = screenPt(wx(ix(p)), wy(iy(p)));
-    const rr = p.r * cam.s * 2.9;
+    // ⚠️ **3.4 BODY RADII, and 2.9 WAS TOO CLOSE — measured, not eyeballed.** The kick
+    // ring's dial tops out at 1.95, and at 2.9 the hold ring's ink ran from 2.0 outward
+    // (a 2px minimum stroke is 0.35 of a body radius once `cam.s` falls to 0.38, which is
+    // where the warm-up span puts it). Nought point nought five of a radius is not
+    // clearance from a circle that is a promise about the physics.
+    const rr = p.r * cam.s * 3.4;
     // ⚠️ **NO BACKGROUND TRACK, and that is the sprint gauge's lesson applied before it
     // could bite twice.** A full-circle track behind the arc is a complete ring at every
     // value, so what carries the progress is the arc's colour against it — which at this
@@ -24639,6 +24862,18 @@ function drawLobby(w){
     ctx.font = `13px ${LOBBY_FONT}`;
     const wd = ctx.measureText(txt).width + 26;
     ctx.fillStyle = rgba(TH.fieldBg, 0.86);
+    // ⚠️ **`beginPath()` FIRST, AND ITS ABSENCE WAS THE REPORTED BUG.** `roundRectPath`
+    // only APPENDS — the rule this file already records against `drawLobby`'s prompt
+    // plates — so this `fill()` was painting the plate AND whatever path was left over
+    // from earlier in the function. What was left over is the last half-rectangle the
+    // team-sides block strokes, so **half the pitch was filled with `fieldBg` at 0.86**
+    // on every warm-up frame. Reported as one side of the field being dimmed and hard to
+    // look at, and it is: it is the surround colour laid over the grass at 86%.
+    // ⚠️ It survived a rewrite of that block from a fill to an outline, because the leak
+    // is the leftover PATH and not what the block did with it — which is why the fix is
+    // here and not there. Measured: the median mirrored-pair difference between the two
+    // halves falls from 147 of 765 to a few units, against 29 for the bare pitch.
+    ctx.beginPath();
     roundRectPath(mid - wd/2, y0 - 15, wd, 30, 8); ctx.fill();
     ctx.strokeStyle = rgba(TH.accent, 0.55); ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = TH.hudText; ctx.fillText(txt, mid, y0);
@@ -29675,7 +29910,8 @@ if (window.__MAGNETDEBUG) {
     isUnlocked, unlockCounts, UNL_CATS,
     get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
     sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection,
-    startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans,
+    kbHit, teamFlagOf, setTeamFlag, LOBBY_FLAGS, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },

@@ -3026,6 +3026,88 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   behind that goal is drawn; and six letters shrunk to a body-wide pad is a smudge.
   ⚠️ **The head count is INSIDE THE NET**, one line — beyond it is where the keyboard
   starts when the pitch is flat.
+- **HALF THE PITCH WAS FILLED WITH THE SURROUND COLOUR AT 0.86, EVERY WARM-UP FRAME, AND
+  IT WAS ONE MISSING `beginPath()`.** Reported as *"one side of the field is dimmed and
+  makes it hard to look at"*. `roundRectPath` only **appends** — the rule already written
+  against `drawLobby`'s prompt plates, three entries up — so the headline plate's `fill()`
+  was filling the plate AND whatever path was left over earlier in the function, which is
+  the last half-rectangle the team-sides block draws.
+  ⚠️ **It survived a rewrite of that block from a fill to an outline**, because the leak is
+  the leftover PATH and not what the block did with it. That is why the fix is at the
+  headline and not at the thing that looked guilty.
+  ⚠️ **Measured as MIRRORED SAMPLES against the bare pitch, and the control is what makes
+  it a measurement.** A bare pitch does not mirror perfectly — the goal boxes and the mown
+  stripes put it at 29 of 765 — so a fixed threshold is either vacuous or impossible. The
+  same probe with the team-sides block standing down is the control, taken in the same run
+  at the same camera: **147 against 29** with the bug, 29 against 29 without it.
+- **EACH HALF IS OUTLINED IN ITS COLOUR, NOT WASHED OVER WITH IT** — and this is a separate
+  change from the leak above, made in the same pass. The block filled each half with
+  `rgba(col, 0.10 + 0.06*n)`, a translucent sheet over the part of the screen everybody is
+  looking at, and the two halves got **different amounts** because the alpha rose with how
+  many people were on that side. An outline says the same two things — which colour a half
+  is, and how firmly it has been claimed (the line thickens and firms up with `n`) — and
+  covers nothing. It also doubles as the frame round the court that was asked for in the
+  same breath.
+  ⚠️ Drawn INSET, by clipping to the half and stroking at double width, so the line lands
+  inside the half rather than straddling the touchline where it would fight the keyboard
+  and the strips.
+  ⚠️ **The two borders are deliberately NOT equally loud**, so a check that looks for a
+  fixed red-vs-blue hue finds the claimed half and misses the quiet one — 126 against 13.
+  What has to be true of both is that the edge differs from the grass it is drawn over.
+- **A FLAG BLOCK BESIDE EACH HALF, and walking onto a side wears that side's country**
+  (`LOBBY_FLAGS`, `sel.teamFlag`, `teamFlagOf`, `setTeamFlag`, `p._ownFlag`). Eight pads in
+  the same 4×2 shape the colours use, drawn from the top of `CUP_TEAMS` — a curated list
+  whose keys are all verified to exist in `FLAGS`, because a missing one draws a grey
+  square that looks like a rendering bug and is really a country nobody can identify.
+  ⚠️ **`none` LEADS THE BLOCK and is not a country** — a reset is not a choice, the rule the
+  Cap and Eyes pickers already follow, and without it a flag picked by mistake could not be
+  taken off.
+  ⚠️ **THIS IS THE ONE PLACE "a person's faceplate is their own" BENDS**, and it bends
+  because somebody deliberately chose a flag for that half. It is a lobby choice about a
+  SIDE, not the game overriding you. `numberTheSides` still never touches a human's plate.
+  ⚠️ **A STAMPED BODY REMEMBERS THE FACE IT CAME WITH (`p._ownFlag`), and without that the
+  feature is one-way.** "A side with no flag leaves every plate alone" was the first rule
+  here and it is not enough: a player who walks out of Brazil's half into the flagless one
+  keeps wearing Brazil for ever. Measured exactly that way — team 1 read `brazil` with
+  `teamFlagOf(1)` null. It is also what makes `none` work, so there is no second mechanism
+  for taking a flag off; a first attempt had a separate `restoreOwnFaces` walking the
+  roster, which is a second place to keep in step with the rule right beside it.
+  ⚠️ **BOTH SIDES MAY WEAR THE SAME COUNTRY, unlike the colours.** Two teams in one shade is
+  unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still told
+  apart by the shirt, which is what colour is for. Refusing would be a control that
+  silently does nothing.
+- **THE FLAGS GO ON THE EDGE THE COLOURS ARE NOT ON, and that is MEASURED.** Stacked beyond
+  the colours on the same edge they cost **21% of pitch scale** turned and 8% flat, because
+  `computeCam` centres the COURT and then frames the worst side — so every unit piled onto
+  one edge is charged twice. Split across opposite edges the same sixteen pads cost almost
+  nothing. Flat the halves are top and bottom, so both blocks are columns (colours left,
+  flags right); turned they are left and right, so the colours are rows above the pitch and
+  each team's flags are a column out on that team's own side.
+  ⚠️ **THE DIFFICULTY ROW IS ABOVE THE PITCH NOW, not under the keyboard.** It stood off the
+  keys by 30 units and was still read as the keyboard's fourth row, because anything under
+  QWERTY is part of the board to somebody walking the board. The far end, beyond the net you
+  are not walking through, is the one large empty area in the layout.
+  ⚠️ **Turned, it has to clear the colour rows** — both were placed off `down` and both
+  landed at −284, so the numbers were drawn straight through the shirts. The colours stay
+  nearest the pitch because they are per-half; the difficulty row is match-wide, so it is
+  the one that moves out.
+  ⚠️ **And its caption moved with it.** "BOT SKILL · NORMAL" was drawn BELOW its row, which
+  above the pitch is the gap between the row and the net — exactly where the head count is
+  printed. On a phone the caption came out through the middle of "1 PLAYER".
+  ⚠️ **What all of this costs is real and was measured**: pitch scale 0.489 → 0.470 flat and
+  0.717 → 0.708 turned for the edge split alone, and 0.435 / 0.597 once the keyboard is a
+  quarter bigger (`keyW` 30 → 38) with a real gap to the pitch (`clear` **0.8 → 34** — it
+  was within a pixel of the net) and to the shirts (`side` 20 → 34). Every unit of furniture
+  beside the pitch is taken off the pitch; that is the trade this batch bought deliberately.
+- **YOU CAN STAND ON START AND PRESS IT** (`k.start`). Every other control in this room is a
+  pad you walk onto — the letters, the shirts, the flags, the difficulty, the team size —
+  and the one button the lobby exists to get you past was the exception: a gamepad button,
+  an Enter key, or a DOM button needing a finger or a mouse. On a cabinet with a stick and
+  no keyboard that is a room you can decorate and not leave. Below DEL and SPACE with a
+  row's gap, as wide as both together, and KICK is still the press — so brushing it on the
+  way past does nothing, which is what makes putting it in the walking area safe.
+  ⚠️ Straight to `lobbyStart`, the same path the pad button, the on-screen button and the
+  idle clock all take — never a second copy of what starting a match means.
 - **ANYBODY CAN FORCE THE KICKOFF BY HOLDING START FOR FIVE SECONDS** (`LOBBY.holdStart`,
   `p.startHold`/`p.startArm`, `startHoldFrac`, `padHoldFrac`). Only the host's press started
   a match, so a room where player one had wandered off, put their pad down or was still
