@@ -250,10 +250,39 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   is easy to miss**: it is a button as far as the Gamepad API is concerned, so an
   unqualified "any button kicks" fires a shot on every step you take. Start begins the
   match and Select turns your controls. A hand binding still wins outright.
+- **NO SCOREBUG OVER THE WARM-UP ROOM** (`syncScorebug`). Nothing used to decide this:
+  `startMatch` showed it unconditionally and nothing ever took it down, so the lobby carried
+  a score that **cannot change** (`checkGoal` is gated on `state === 'play'`) beside a clock
+  that is not running — it prints the match LENGTH. At 30px it was also the loudest text on
+  that screen while the lines explaining the room are 9px, so the biggest thing on the page
+  was the one thing with nothing to say.
+  ⚠️ **ONE FUNCTION, THREE CALL SITES, because of an ORDERING TRAP.** `startMatch` calls
+  `enterWarmup` and only THEN shows the bug, so a hide inside `enterWarmup` is clobbered a
+  few lines later — while the three other ways in (`restartToWarmup`, the cup's lite lobby,
+  the menu's warm-up button) reach `enterWarmup` LAST, where a hide would stick. A function
+  reading `world.state` is right on every path whatever order they run in.
+  ⚠️ In `lobbyStart` it is called **LAST**: it reads `w.state`, and `resetKickoff` is what
+  moves that off `warmup`, so at the top it would ask the question before the answer changed.
+  `lobbyStart` is the one way out of warm-up, so it is the only place that restores it.
+  ⚠️ The countdown the lobby DOES want is its own live "STARTING IN 29S". Two clocks side by
+  side, one ticking and one frozen, is worse than one. `tests/lobbydress.mjs` drives both
+  orderings and pins that an ordinary match still HAS a scorebug — "hidden in warm-up" is
+  also true of a build that hid it for good.
 - **The warm-up prompts are OFF THE PITCH**, in one row under the touchline (`drawLobby`,
   `L._promptY`). They floated over each player's head, which in deck/side view meant a line
   of text running down the middle of the field — `uprightAt` keeps words upright while the
-  pitch is turned. ⚠️ Measured to the back of the NET, not the goal line, or the row sits on
+  pitch is turned.
+  ⚠️ **`LOBBYKB.clear` is 70, and 34 was tuned against the wrong orientation.** Turned, the
+  block clears a TOUCHLINE rather than the back of the net, so that is the tight case:
+  pitch-edge to first key row measured **31.8px upright but only 24.8px turned**, and the
+  caption sits 13px above the keys, so turned it landed **11.8px** below the line and
+  straddled the pitch border. At 70 it reads 44.8 / 40.6px with the caption 27.6px clear,
+  costing 2.7% of pitch scale on a phone and 3.6% turned — the trade everything beside the
+  court pays. `tests/lobbykb.mjs` measures it in rendered CSS px off the pitch's REAL screen
+  box (all four corners) and in BOTH orientations: turned, the world axes swap, so a probe
+  assuming world +y is screen-down measures the wrong edge and reported a comfortable 139px
+  on the build whose caption was touching the line.
+  ⚠️ Measured to the back of the NET, not the goal line, or the row sits on
   the pocket; and **clamped downward, never flipped to the top**, because the top is where
   the "PRESS START" headline lives. ⚠️ `beginPath()` before each plate: `roundRectPath` only
   appends, so without it every `fill()` repaints the earlier plates over their own text —

@@ -4189,7 +4189,16 @@ const LOBBYKB = {
   // ⚠️ **THIS WAS 0.8 WORLD UNITS**, which is no gap at all — the top row began within a
   // pixel of the back of the net, so the board and the pitch read as one cluttered
   // object. Asked for directly as "more space between pitch and keyboard".
-  clear: 34,          // world units between the back of the net and the top row
+  // ⚠️ **AND 34 WAS STILL NOT ENOUGH, because the TURNED case is the tight one and the
+  // number was chosen against the upright one.** Measured pitch-edge to first key row:
+  // upright 31.8px, turned only **24.8px** — and the caption that introduces the board
+  // sits 13px above the keys, so turned it landed **11.8px** below the touchline and
+  // visibly straddled the pitch border. At 70 that reads 44.8px upright and 40.6px
+  // turned, with the caption 27.6px clear.
+  // ⚠️ It costs pitch scale, as everything beside the court does: cam.s 0.395 → 0.384 on
+  // a phone (−2.7%) and 0.481 → 0.464 turned (−3.6%). That is the trade being made
+  // deliberately, and it is the same one the keyboard's own size already paid for.
+  clear: 70,          // world units between the back of the net and the top row
   maxLen: 12,        // the same cap the name box uses
   wideW: 3.2,        // DEL and SPACE, in key widths
   // ⚠️ NOTHING PRESSES ITSELF. There used to be a dwell — stand on a key for 0.4s
@@ -5243,7 +5252,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0925AM';
+const VERSION = '20260824.1105AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5259,6 +5268,13 @@ const VERSION = '20260824.0925AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.1105AM', title: 'A tidier warm-up room',
+    changed: [
+      '<b>The keyboard stands further off the pitch.</b> The line explaining it was landing on the touchline and the whole block read as part of the court \u2014 worst when the pitch is turned sideways, which is most desktops.',
+      '<b>No scoreline over warm-up any more.</b> It was showing 0\u20130 and a clock that was not running, which is two numbers that could not tell you anything. The countdown to kick-off is still there, and it is the one that moves.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.0925AM', title: 'Goal zoom is its own switch',
     changed: [
       '<b>The goal zoom no longer needs Screen shake turned on.</b> With effects off the Goal zoom slider did nothing at all \u2014 you could drag it the whole way and the camera never moved. It is its own control now, so you can have the push-in without the shake, or the shake without the push-in.',
@@ -16467,7 +16483,7 @@ function startMatch(opts){
     hideScreens();
     closeDailyModal();     // no full-screen modal (z-index 40) may linger over the pitch — it eats touches
     $('hud').classList.remove('hidden');
-    $('scorebug').style.display='';
+    syncScorebug();          // hidden while the warm-up room is up — see syncScorebug
     $('resetBtn').style.display='none';
     hideOverlay();
     $('ovRematch').style.display='none';
@@ -19343,6 +19359,10 @@ function enterWarmup(w, lite){
     labelA = w.players.map(()=>1); labelT = [];
   }
   w.state = 'warmup'; w.stateT = 0; w.endRamp = null;
+  // The room is up, so the scorebug goes down. Called here as well as in `startMatch`
+  // because three of the four ways into the lobby reach THIS function last — see
+  // syncScorebug for why one function beats a hide at each site.
+  syncScorebug();
   w.ball.vx = 0; w.ball.vy = 0;
   // Own PRNG: where a bot walks on must not consume draws from w.rng, or how long
   // somebody spent in the lobby would change every bot decision in the match.
@@ -20301,6 +20321,13 @@ function lobbyStart(w){
   if (w.cup){ cupDress(w); cupTickerStart(); }
   resetKickoff(w, true);
   stageEntry(w);
+  // ...and the scorebug comes back the moment the room closes. LAST, because it reads
+  // `w.state` and `resetKickoff` is what moves it off 'warmup' — called at the top it
+  // would ask the question before the answer had changed. `lobbyStart` is the ONE way
+  // out of warm-up (the pad button, the walk-on START pad, the on-screen button, the
+  // idle clock and everybody standing in a goal all route through it), so this is the
+  // only place that needs it.
+  syncScorebug();
 }
 // ⚠️ **THE BOTS WALK ON WHEN THE MATCH STARTS.** The complement of keeping them off the
 // grass during warm-up: `resetKickoff` has just put every body on its mark, so the marks
@@ -29878,6 +29905,24 @@ function dot(x,y,r,c){ ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.fillStyl
 // ============================================================
 //  HUD / OVERLAY
 // ============================================================
+// ⚠️ **NOTHING USED TO DECIDE THIS, AND THAT IS WHY 0-0 SAT OVER THE WARM-UP ROOM.**
+// `startMatch` showed the scorebug unconditionally and nothing took it back down, so the
+// lobby carried a score that cannot change (`checkGoal` is gated on `state === 'play'`)
+// beside a clock that is not running (it prints the match LENGTH). At 30px it was also the
+// LOUDEST text on that screen, while the lines telling you how the room works are 9px —
+// the biggest thing on the page was the one thing with nothing to say.
+// ⚠️ ONE READER, THREE CALL SITES, and the reason it is not just a hide inside
+// `enterWarmup` is an ORDERING TRAP: `startMatch` calls `enterWarmup` and only THEN shows
+// the bug, so a hide in there is clobbered a few lines later — while the three other ways
+// into the lobby (`restartToWarmup`, the cup's lite lobby, and the menu's warm-up button)
+// call `enterWarmup` LAST, so for them a hide would stick. One function answering off
+// `world.state` is right on every path regardless of which order they run in.
+// ⚠️ The countdown the lobby DOES want is its own "STARTING IN 29S", which is live. Two
+// clocks side by side, one ticking and one frozen, is worse than one.
+function syncScorebug(){
+  const el = $('scorebug'); if (!el) return;
+  el.style.display = (world && world.state === 'warmup') ? 'none' : '';
+}
 function updateScoreUI(){
   if (!world) return;
   if (world.train){
@@ -30530,7 +30575,7 @@ if (window.__MAGNETDEBUG) {
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
-    toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    syncScorebug, toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
     pollLobbyPads, stepWarmup, stepLobbyKeys,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,

@@ -635,9 +635,76 @@ for (const [tag, m] of [['flat', read.flat], ['deck view', read.deck]]){
      `lobbySideOf says ${m.sideOnKey} — standing on the keys must stay "undecided", which is what makes walking into a half the side pick`);
 }
 
+// ============================================================================
+//  THE KEYBOARD STANDS OFF THE PITCH — IN BOTH ORIENTATIONS
+//
+//  ⚠️ `LOBBYKB.clear` was tuned against the UPRIGHT layout and the TURNED one is the tight
+//  case, because turned the block clears a TOUCHLINE rather than the back of the net.
+//  Measured pitch-edge to first key row at the old 34: upright 31.8px, turned only 24.8px
+//  — and the caption that introduces the board sits 13px above the keys, so turned it
+//  landed 11.8px below the touchline and visibly straddled the pitch border.
+//
+//  ⚠️ MEASURED IN RENDERED CSS PIXELS off the pitch's REAL screen box (all four corners),
+//  never off `bounds.halfL`. Turned, the world axes swap — a probe that assumes world +y
+//  is screen-down measures the wrong edge entirely and reported a comfortable 139px on the
+//  build whose caption was touching the line.
+//
+//  ⚠️ BOTH ORIENTATIONS OR IT IS HALF A CHECK: the value that is comfortable upright is
+//  the one that was too tight turned, which is the whole reason this exists.
+// ============================================================================
+const clearOf = async (vp) => {
+  const q = await b.newPage(vp);
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => {
+    window.__MAGNETDEBUG = true;
+    const mk = i => ({ axes:[0,0,0,0], buttons: Array.from({length:17},()=>({pressed:false,value:0})),
+                       connected:true, index:i, id:'Stub Pad (STANDARD GAMEPAD)', mapping:'standard' });
+    window.__pads = [mk(0), mk(1)]; navigator.getGamepads = () => window.__pads;
+  });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const out = await q.evaluate(() => {
+    const M = window.__magnet;
+    M.sel.controllers='on'; M.sel.lobby='on'; M.sel.length='5'; M.sel.look.palette='grass';
+    M.setMatchSeed(7); M.startMatch({ lobby:true });
+    const w = M.world;
+    for (let i=0;i<20;i++) M.step(w);
+    M.render();
+    const P = (x,y) => M.screenPt(M.wx(x), M.wy(y));
+    const bb = w.bounds;
+    const pitchBot = Math.max(...[[-bb.halfW,-bb.halfL],[bb.halfW,-bb.halfL],
+                                  [-bb.halfW,bb.halfL],[bb.halfW,bb.halfL]].map(c=>P(c[0],c[1])[1]));
+    const cor = [];
+    for (const k of w.kb.keys) if (k.ch)
+      for (const [dx,dy] of [[-1,-1],[1,-1],[-1,1],[1,1]]) cor.push(P(k.x+dx*k.w/2, k.y+dy*k.h/2));
+    const topKey = Math.min(...cor.map(c=>c[1]));
+    return { turned: M.pitchHorizontal(), gap:+(topKey-pitchBot).toFixed(1),
+             captionGap:+(topKey-13-pitchBot).toFixed(1), keys: cor.length/4 };
+  });
+  await q.close();
+  return out;
+};
+const upright = await clearOf({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true, deviceScaleFactor:2 });
+const turned  = await clearOf({ viewport:{width:1280,height:800} });
+
+ok('the pitch is upright on a phone and turned on a desktop',
+   upright.turned === false && turned.turned === true,
+   JSON.stringify({ upright: upright.turned, turned: turned.turned }) +
+   ' — without this the two rows below could be measuring the same layout twice');
+for (const [name, m] of [['upright', upright], ['turned', turned]]){
+  ok(`${name}: the keyboard stands clear of the pitch`, m.gap >= 35,
+     `${m.gap}px between the pitch edge and the first key row — the board and the court read as ` +
+     'one cluttered object below about 35px');
+  ok(`${name}: ...and so does the caption above it`, m.captionGap >= 20,
+     `${m.captionGap}px — the caption is 10px text drawn 13px above the keys, so it straddles ` +
+     'the touchline when the block sits too close');
+  ok(`${name}: the keys are actually there`, m.keys === 28,
+     `${m.keys} letter keys — "it clears the pitch" is also true of a keyboard that drew nothing`);
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ r, step, det, view, phone, read }, null, 1));
+console.log(JSON.stringify({ r, step, det, view, phone, read, upright, turned }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL lobbykb\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS lobbykb');

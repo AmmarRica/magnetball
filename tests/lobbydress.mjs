@@ -246,6 +246,69 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
   await p.close();
 }
 
+// ============================================================================
+//  NO SCOREBUG OVER THE WARM-UP ROOM
+//
+//  ⚠️ NOTHING USED TO DECIDE THIS. `startMatch` showed the scorebug unconditionally and
+//  nothing ever took it back down, so the lobby carried a score that CANNOT change
+//  (`checkGoal` is gated on `state === 'play'`) beside a clock that is not running (it
+//  prints the match LENGTH). At 30px it was also the loudest text on the screen, while the
+//  lines that tell you how the room works are 9px — the biggest thing on the page was the
+//  one thing with nothing to say.
+//
+//  ⚠️ THE ORDERING TRAP, which is why `syncScorebug` is a function and not a hide inside
+//  `enterWarmup`: `startMatch` calls `enterWarmup` and only THEN shows the bug, so a hide
+//  in there is clobbered a few lines later. The three OTHER ways into the lobby
+//  (`restartToWarmup`, the cup's lite lobby, the menu's warm-up button) reach `enterWarmup`
+//  LAST, where a hide would stick. One function reading `world.state` is right on every
+//  path whatever order they run in — so both orders are exercised below.
+// ============================================================================
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => {
+    window.__MAGNETDEBUG = true;
+    const mk = i => ({ axes:[0,0,0,0], buttons: Array.from({length:17},()=>({pressed:false,value:0})),
+                       connected:true, index:i, id:'Stub Pad (STANDARD GAMEPAD)', mapping:'standard' });
+    window.__pads = [mk(0), mk(1)]; navigator.getGamepads = () => window.__pads;
+  });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const sb = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    // ⚠️ COMPUTED style, not the inline property: a suite that reads `style.display`
+    // passes on a build where a CSS rule shows it anyway.
+    const vis = () => getComputedStyle(document.getElementById('scorebug')).display !== 'none';
+    M.sel.controllers='on'; M.sel.lobby='on'; M.sel.length='5';
+    // (1) startMatch straight into warm-up — the order where enterWarmup runs FIRST
+    M.setMatchSeed(7); M.startMatch({ lobby:true });
+    o.state1 = M.world.state; o.warmupHidden = !vis();
+    // (2) ...and it comes back the moment the room closes
+    M.lobbyStart(M.world);
+    o.state2 = M.world.state; o.afterStartShown = vis();
+    // (3) restartToWarmup — the order where enterWarmup runs LAST
+    M.restartToWarmup(M.world);
+    o.state3 = M.world.state; o.restartHidden = !vis();
+    M.lobbyStart(M.world); o.restartBackShown = vis();
+    // (4) an ordinary match never hides it, or this is a feature that broke the HUD
+    M.sel.lobby='off'; M.setMatchSeed(9); M.startMatch();
+    o.state4 = M.world.state; o.plainMatchShown = vis();
+    return o;
+  });
+  await q.close();
+
+  ok('warm-up came up and the scorebug did not', sb.state1 === 'warmup' && sb.warmupHidden,
+     JSON.stringify(sb) + ' — a score that cannot change and a clock that is not running');
+  ok('...and it is back once the room closes', sb.state2 !== 'warmup' && sb.afterStartShown,
+     JSON.stringify(sb));
+  ok('...on the path that reaches enterWarmup LAST too', sb.state3 === 'warmup' && sb.restartHidden,
+     JSON.stringify(sb) + ' — restartToWarmup starts the match and only then enters the room, which is ' +
+     'the opposite order from startMatch; a hide at one site alone gets exactly one of them right');
+  ok('...and that one restores it as well', sb.restartBackShown, JSON.stringify(sb));
+  ok('an ordinary match still HAS a scorebug', sb.state4 !== 'warmup' && sb.plainMatchShown,
+     JSON.stringify(sb) + ' — "hidden in warm-up" is also true of a build that hid it for good');
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 console.log(bad ? 'FAIL lobbydress' : 'PASS lobbydress');
 await b.close();
