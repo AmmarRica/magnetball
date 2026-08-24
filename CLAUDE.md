@@ -4091,6 +4091,90 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   nothing else. Goal ducking dips the MUSIC bus only, hooked in `playSfx('crowd')` so a fifth
   goal path can't forget it. Auto-replay is suppressed while VJ Mode is on — it would hijack
   the projector for six seconds.
+  ⚠️ **EVERY DARK OR SILENT STATE NAMES ITS OWN CAUSE** (`vjVStatText`, `vjAStatText`,
+  `vjYtStatText`, the `.vjstat` lines). *"Both video decks don't do anything"* was a clip
+  loaded perfectly and sitting behind an opacity of zero, with nothing on either screen
+  saying which of four dials (arm, VJ on, opacity, crossfader) held it dark. A rig is a
+  stack of gain stages, so "working" and "dark" look identical without a readout — the
+  status line is the fix, and the states are ordered by which dial to reach for first.
+  ⚠️ **A FRESH LOAD OPENS THE DECK** (`vjLoadVideo` lifts opacity 0 → 1 and clears the
+  transport). What is LIVE is still the crossfader's call, so this surprises nobody — a
+  deck faded out stays dark until TAKE — and pulling opacity back to zero still buys the
+  not-decoded saving. Shipping the deck born dark was the same shape as `sel.controllers`
+  shipping `off`: a feature nobody can reach is a feature that does not exist.
+  ⚠️ **VIDEO TRANSPORT: PAUSE IS A FLAG, NEVER AN OPACITY** (`v.paused`, `vplay`, `vskip`,
+  `vseek`, `vjVideoWants`). Pause used to be spelled "drag opacity to zero", which also
+  blanks the picture — a pause that hides the frame is a stop. `vjVideoPlay` plays only
+  when the deck has a reason to run AND is not paused, so raising opacity does not restart
+  a paused deck. `vskip` is computed off the ELEMENT's clock, never the panel's copy of the
+  position — that is a 20Hz snapshot, and a skip against a stale position lands twice.
+  ⚠️ **EXPLICIT LOAD/EJECT PER DECK, and the library offers → A / → B on every row.** The
+  single "→ offline deck" button loaded whichever deck the crossfader said was faded out —
+  a sensible house rule and a terrible secret, reported as *"can't change the song"*. The
+  rule survives as ADVICE (the library note, and each deck's status line says which is
+  dark), never as the only door. `vjEject` empties the channel but keeps the board
+  position (opacity, rot, EQ) — ejecting a clip is not resetting a channel strip.
+  ⚠️ **THE YT DEFAULT OPACITY APPLIES ONLY TO A FRESH ID ARRIVING WITH NONE SET.** It
+  fired on every `yt` command, so the SHOW-THROUGH slider dragged to zero snapped straight
+  back to 0.55 — reported as *"the background video at 0 still shows a video"*, and it was
+  exactly that. An explicit zero is the operator's zero. ⚠️ **At zero the layer is
+  COMPLETELY gone**: `#ytbg.dark` (visibility:hidden) as well as the skipped punch, so
+  nothing depends on the canvas happening to be opaque over every pixel of the iframe —
+  and the iframe is HIDDEN, not removed, because removing reloads the embed and restarts
+  the video mid-set. ⚠️ The layer's status line says **🔇 always silent** and why —
+  *"audio from the YouTube video not working"* is a platform fact (the media is
+  cross-origin, playable only inside its own frame), and a layer that states that in the
+  UI stops looking broken. Its panel row also carries a thumbnail (`i.ytimg.com`, network
+  like the embed itself, `onerror` hides it offline).
+  ⚠️ **ROTATION IS THE CLIP'S OWN QUARTER-TURN** (`v.rot` 0..3, drawn in `vjDrawFit`),
+  deliberately independent of `pitchXform`/`cam.rot`: the pitch's turn is a property of
+  the ROOM and this one is a property of the CLIP. The fit is computed against the clip
+  AS PRESENTED — dimensions swapped for an odd turn — so cover still covers and contain
+  still fits after the turn; `tests/vjdecks.mjs` measures all four turns in pixels,
+  because "rot is stored" passes on a build that never reads it. The rotation happens
+  inside the fit pass, so the filtered path's half-scale intermediate needs no change.
+  ⚠️ **THE PANEL PREVIEWS FROM ITS OWN COPY OF THE BLOB** (`vjSendFile` →
+  `vjPreviewLoad`): the panel already holds the file it sent, so a muted `<video>` per
+  deck monitors the clip with nothing streamed back from the game page. It follows the
+  deck's transport loosely (re-seeks only past 0.75s of drift) — it is a monitor, not a
+  frame-lock. The audio decks' meters were already in the snapshot.
+  ⚠️ **THE TICKER MESSAGE RIDES THE CUP TICKER'S BAR** (`vj.ticker`, the `ticker`
+  command, `vjTickerSync`, `tickerFill`). Type a line on the panel and it scrolls over
+  the game, repeating until STOP. `#cupTicker`'s marquee, `pointer-events:none` and the
+  reduced-motion `.still` rule are exactly what a message bar needs, so `tickerFill` is
+  extracted as the one place the bar is filled and both callers go through it. The
+  ownership rule: while a VJ message is up (`vjTickerOn`), `cupTickerStart` leaves the
+  bar alone and `cupTickerStop` still clears the cup's timeout but does not hide it.
+  Shown only while VJ Mode is on (off must stay the untouched game), spans built as
+  NODES because the message is typed by a person, in `vj` never `sel` (tonight's words,
+  the video-id argument), and PANIC clears it. `tests/vjdecks.mjs` holds all of this.
+  ⚠️ **THE TIMELINES ARE SEEK BARS, NOT PICTURES** (`vjSeekBar`, `vjDrawVTime`; the
+  audio WAVEFORM canvas and the video deck's TIMELINE canvas). Reported as *"allow me
+  to skip songs by clicking on that timeline"* — the waveform drew a playhead and
+  ignored every click. Click to jump, drag to scrub (moves throttled to ~45ms so a
+  drag does not flood the channel). ⚠️ **Canvas pointer events, deliberately NOT a
+  range input**, twice over: the waveform already IS the timeline, so a slider under
+  it says the same thing twice; and `SLIDER_GRAB` refuses track taps on touch sliders —
+  right for a settings column you scroll with a thumb, exactly wrong for a seek bar
+  whose whole job is jump-to-here. ⚠️ The panel handler reads the DURATION off
+  `vjView` and the command clamps against the deck's own — the panel is a peer.
+  ⚠️ A test clicking a canvas in the COLLAPSED card reads a zero-width rect and every
+  click lands at position 0 — open the card first or the check is vacuous.
+  ⚠️ **A PANEL BUTTON MAY NEVER WRITE STATE IN ITS OWN WINDOW, and two did.** The
+  panel's local `vj`/`VJ` are factory defaults forever — it draws from snapshots — so
+  the TAKE-quantisation buttons set a `VJ.takeQuant` nothing reads (three dead buttons),
+  and Save preset captured the panel's untouched defaults and called them the live
+  board. Both are COMMANDS now (`takeQuant`, `presetSave`); the full snapshot carries
+  the preset NAME list so the panel knows when to redraw its shelf (localStorage is
+  shared, so it reads the bodies itself). ⚠️ `vjExec` follows every executed command
+  with a throttled meter-sized push — a backgrounded game tab throttles rAF, which
+  starves `vjTick`, and a knob that echoes back a second late reads as broken.
+  ⚠️ **DROP A FILE ON A DECK AND IT LOADS THERE** (`vjDropZone`, on every strip; the
+  library list takes drops too). The literal reading of "drop into Deck A or B", and
+  the third door in beside the deck's LOAD and the library's → A / → B. **Strict about
+  kind**: a video dropped on an audio deck flashes a refusal (`.badfile`) rather than
+  landing somewhere a rule picked — a drop that guesses is the "→ offline deck" secret
+  coming back through a window.
 - **About card (`data-sec="about"`, `buildAbout`, `buildNews`)** — the version (`#ver`),
   **Check for updates** (`#updCheckBtn`) and the **changelog** (`#newsList`), in that order.
   Not under the title and above the fold: the version and the check are things you go

@@ -74,6 +74,10 @@
     #ytbg { position: fixed; inset: 0; overflow: hidden; pointer-events: none;
             background: #000; display: none; }
     #ytbg.live { display: block; }
+    /* SHOW-THROUGH at zero means GONE. The punch already skips at zero, but the iframe
+       kept compositing behind the canvas; hidden (not removed) so sliding back up does
+       not reload and restart the video mid-set. */
+    #ytbg.dark { visibility: hidden; }
     /* ---------- The /vj route: the deck surface, full screen ---------- */
     /* ⚠️ Everything else HIDDEN rather than removed — same document, same DOM shape.
        The card sheds its accordion dress: no collapse chevron, no card border, the
@@ -708,6 +712,24 @@
     .vjiname { flex:1 1 auto; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .vjimeta { font-family:var(--pix); font-size:10px; color:var(--muted); }
     .vjpresets { display:flex; gap:6px; flex-wrap:wrap; }
+    /* Deck status: WHY a deck is dark/silent, or that it is on air. The strips were
+       reported as "don't do anything" while working perfectly — the state was invisible. */
+    .vjstat { font-family:var(--pix); font-size:10px; letter-spacing:.05em; color:var(--muted);
+              line-height:1.5; }
+    .vjstat.live { color:var(--go, #35ff87); }
+    .vjstat.warn { color:var(--yellow, #ffd23d); }
+    /* Panel-side previews: the panel already holds the blob it sent, so a deck can show
+       itself muted without streaming anything back from the game page. */
+    .vjthumb { width:100%; max-height:120px; aspect-ratio:16/9; object-fit:contain;
+               background:#000; border-radius:6px; border:1px solid var(--edge); display:block; }
+    .vjthumb.empty { display:none; }
+    /* Drop targets: a deck lights up while a file is over it, and flashes a refusal
+       for the wrong kind — a drop that guesses is the "→ offline deck" secret back. */
+    .vjstrip.drop { border-color:var(--accent); background:rgba(33,230,255,.06); }
+    .vjstrip.badfile { border-color:var(--red, #ff3b6b); }
+    #vjYtThumb { width:128px; aspect-ratio:16/9; object-fit:cover; background:#000;
+                 border-radius:6px; border:1px solid var(--edge); }
+    #vjYtThumb.empty { display:none; }
     /* The projector output has NO chrome: VJ Mode hides the build tag and the dock. */
     body.vjlive #buildTag, body.vjlive #dock, body.vjlive .replaybar { display:none !important; }
 
@@ -9097,8 +9119,8 @@ function vjDeckAudio(id){
 }
 function vjDeckVideo(id){
   return { id, kind:'video', name:'', file:null, url:'',
-    el:null, ready:false, playing:false, dur:0, pos:0,
-    opacity:0, fitMode:'cover', rate:1, loop:true,
+    el:null, ready:false, playing:false, paused:false, dur:0, pos:0,
+    opacity:0, fitMode:'cover', rate:1, loop:true, rot:0,
     tint:'', tintAmt:0, filter:'', audioOn:false, audioGain:0,
     srcNode:null, gainNode:null, fxCv:null, fxCtx:null };
 }
@@ -9116,6 +9138,9 @@ const vj = {
   // The YouTube background layer. In `vj`, never `sel` — the id is a thing you loaded
   // for tonight, not a setting, and `saveSel`/`syncAdopt` must not carry it.
   yt:{ id:'', op:0 },
+  // The ticker message — tonight's words, same argument as the video id. Shown only
+  // while VJ Mode is on, and it repeats until it is cleared.
+  ticker:'',
   pendingTake:null,
   // Everything the panel needs to draw itself, refreshed at VJ.meterHz.
   _lastPush:0,
@@ -9441,8 +9466,16 @@ async function vjLoadVideo(deckId, file){
                            v.el.addEventListener('loadeddata', go); v.el.load(); setTimeout(res, 6000); });
   v.dur = isFinite(v.el.duration) ? v.el.duration : 0;
   v.ready = true;
+  v.el.loop = v.loop; v.el.playbackRate = v.rate;
+  // ⚠️ A fresh load OPENS the deck. Opacity shipped starting at 0, and "both video
+  // decks don't do anything" was the report: the clip loaded perfectly and nothing on
+  // any screen said a second, invisible dial stood between it and the projector. What
+  // is live is still the CROSSFADER's call, so raising the loaded deck's own opacity
+  // surprises nobody — a deck faded out stays dark until TAKE.
+  if (v.opacity === 0) v.opacity = 1;
+  v.paused = false;
   if (v.audioOn) vjVideoAudio(v, true);
-  vjVideoPlay(v, v.opacity > 0);
+  vjVideoPlay(v, vjVideoWants(v));
   vjPush(true);
   return true;
 }
@@ -9462,14 +9495,43 @@ function vjVideoAudio(v, on){
 }
 // A deck sitting at zero opacity is not decoded at all — that is the single
 // biggest saving available, and it costs nothing to take.
+// ⚠️ `paused` is the TRANSPORT and `on` is whether the deck has any reason to run;
+// both must agree before the element plays. Pause used to be spelled "drag opacity
+// to zero", which also blanked the deck — a pause that hides the picture is a stop.
+function vjVideoWants(v){ return v.opacity > 0.001 || v.audioOn; }
 function vjVideoPlay(v, on){
   if (!v || !v.el || !v.ready) return;
-  if (on && !v.playing){ v.el.play().then(()=>{v.playing=true;}).catch(()=>{}); }
-  else if (!on && v.playing){ v.el.pause(); v.playing = false; }
+  const want = on && !v.paused;
+  if (want && !v.playing){ v.el.play().then(()=>{v.playing=true;}).catch(()=>{}); }
+  else if (!want && v.playing){ v.el.pause(); v.playing = false; }
 }
 function vjVideoOpacity(v, o){
   v.opacity = Math.max(0, Math.min(1, o));
-  vjVideoPlay(v, v.opacity > 0.001 || v.audioOn);
+  vjVideoPlay(v, vjVideoWants(v));
+}
+// Eject: the deck back to an empty channel, board position untouched. The panel's
+// explicit per-deck load/eject exists so nobody has to guess which deck the library
+// rule would have picked.
+function vjEject(kind, deckId){
+  if (kind === 'video'){
+    const v = deckId === 'b' ? vj.vb : vj.va;
+    if (!v) return;
+    vjVideoPlay(v, false);
+    if (v.el){ try { v.el.removeAttribute('src'); v.el.load(); } catch(_){} }
+    if (v.url) try { URL.revokeObjectURL(v.url); } catch(_){}
+    v.url=''; v.file=null; v.name=''; v.ready=false; v.playing=false; v.paused=false;
+    v.dur=0; v.pos=0;
+  } else {
+    const d = deckId === 'b' ? vj.b : vj.a;
+    if (!d) return;
+    vjPlay(d, false);
+    if (d.el){ try { d.el.removeAttribute('src'); d.el.load(); } catch(_){} }
+    if (d.url) try { URL.revokeObjectURL(d.url); } catch(_){}
+    d.url=''; d.file=null; d.name=''; d.ready=false; d.playing=false; d.dur=0; d.pos=0;
+    d.wave=null; d.bpm=null; d.bpmAuto=null; d.grid=0;
+    d.cues=new Array(VJ.hotCues).fill(null); d.loop=null; d.loopBeats=0;
+  }
+  vjPush(true);
 }
 // TAKE: hard-cut the video crossfader to the other side, quantised to the master
 // clock so it lands on the beat rather than whenever a finger moved.
@@ -9540,6 +9602,11 @@ function vjYtSync(){
     vj.yt.el = f;
   }
   host.classList.add('live');
+  // ⚠️ At zero SHOW-THROUGH the video must be COMPLETELY gone. The punch already skips
+  // at zero, but "still shows a video" was reported — hidden here as well, so nothing
+  // depends on the canvas happening to be opaque over every pixel of the iframe. Hidden
+  // rather than removed: removing reloads the embed, which restarts the video mid-set.
+  host.classList.toggle('dark', !(vj.yt.op > 0.004));
 }
 function vjPaintVideo(L, T, W, H){
   // ⚠️ The background punch runs even with no DECK loaded — `vj.va` gates the decks
@@ -9571,11 +9638,13 @@ function vjPaintVideo(L, T, W, H){
       if (!v.fxCv){ v.fxCv = document.createElement('canvas'); v.fxCtx = v.fxCv.getContext('2d'); }
       if (v.fxCv.width !== fw || v.fxCv.height !== fh){ v.fxCv.width = fw; v.fxCv.height = fh; }
       v.fxCtx.filter = v.filter;
-      vjDrawFit(v.fxCtx, v.el, 0, 0, fw, fh, v.fitMode);
+      // The rotation happens INSIDE the fit pass (the intermediate keeps the dest
+      // rect's aspect), so the upscale below stays a plain drawImage either way.
+      vjDrawFit(v.fxCtx, v.el, 0, 0, fw, fh, v.fitMode, v.rot);
       v.fxCtx.filter = 'none';
       ctx.drawImage(v.fxCv, L, T, W, H);
     } else {
-      vjDrawFit(ctx, v.el, L, T, W, H, v.fitMode);
+      vjDrawFit(ctx, v.el, L, T, W, H, v.fitMode, v.rot);
     }
     // Tint is a composite op, not a filter — free where ctx.filter is not.
     if (v.tint && v.tintAmt > 0.004){
@@ -9586,12 +9655,27 @@ function vjPaintVideo(L, T, W, H){
     ctx.restore();
   }
 }
-function vjDrawFit(c, el, L, T, W, H, mode){
-  const vw = el.videoWidth || W, vh = el.videoHeight || H;
-  if (mode === 'stretch'){ c.drawImage(el, L, T, W, H); return; }
+// `rot` is quarter-turns clockwise (0..3), the deck's OWN turn — a phone clip on a
+// landscape projector, or content that reads better sideways. Deliberately independent
+// of `pitchXform`/`cam.rot`: the pitch's turn is a property of the ROOM and this one is
+// a property of the CLIP, so neither may reach through the other. The fit is computed
+// against the clip AS PRESENTED (dimensions swapped for an odd turn), so cover still
+// covers and contain still fits after the turn.
+function vjDrawFit(c, el, L, T, W, H, mode, rot){
+  rot = ((Math.round(rot) || 0) % 4 + 4) % 4;
+  const vw0 = el.videoWidth || W, vh0 = el.videoHeight || H;
+  const vw = rot % 2 ? vh0 : vw0, vh = rot % 2 ? vw0 : vh0;   // presented dimensions
+  if (!rot && mode === 'stretch'){ c.drawImage(el, L, T, W, H); return; }
+  c.save();
+  c.translate(L + W/2, T + H/2);
+  if (rot) c.rotate(rot * Math.PI/2);
+  // In the rotated frame the dest box has its sides swapped for an odd turn.
+  const bw = rot % 2 ? H : W, bh = rot % 2 ? W : H;
+  if (mode === 'stretch'){ c.drawImage(el, -bw/2, -bh/2, bw, bh); c.restore(); return; }
   const sc = mode === 'contain' ? Math.min(W/vw, H/vh) : Math.max(W/vw, H/vh);
-  const dw = vw*sc, dh = vh*sc;
-  c.drawImage(el, L + (W-dw)/2, T + (H-dh)/2, dw, dh);
+  const dw = vw0*sc, dh = vh0*sc;
+  c.drawImage(el, -dw/2, -dh/2, dw, dh);
+  c.restore();
 }
 // Pitch markings alpha. Exactly 1 with VJ Mode off, and floored so that no deck,
 // no crossfader and no preset can make the pitch unreadable.
@@ -9642,6 +9726,22 @@ async function vjCueDevice(deviceId){
 }
 function vjCueStop(){ if (vj.cue.el){ try{ vj.cue.el.pause(); vj.cue.el.srcObject=null; }catch(_){} } vj.cue.ok=false; }
 
+// ---------- Ticker message ---------------------------------------------------
+// The operator types a line and it scrolls over the game, repeating until cleared.
+// It REUSES the tournament ticker's element and CSS (`#cupTicker` — the marquee, the
+// reduced-motion `.still` rule and the pointer-events:none are all exactly what a
+// message bar needs), with one ownership rule: while a VJ message is up, the cup's
+// own start/stop leaves the bar alone. `vjTickerOn` is that flag — the cup ticker
+// must not be hidden by a VJ message that was never shown.
+let vjTickerOn = false;
+function vjTickerSync(){
+  if (PANEL) return;
+  const el = $('cupTicker'); if (!el) return;
+  const want = !!(vj.on && vj.ticker);
+  if (want){ clearTimeout(cupTickerT); tickerFill([vj.ticker]); vjTickerOn = true; }
+  else if (vjTickerOn){ vjTickerOn = false; el.classList.add('hidden'); }
+}
+
 // ---------- PANIC ------------------------------------------------------------
 // Must work with /settings disconnected, dead, or never opened. It is a keydown
 // listener on the game page and touches nothing but the render and audio layer.
@@ -9659,6 +9759,7 @@ function vjPanic(){
   }
   if (sel.vj) sel.vj.on = false;
   vj.yt.id = ''; vjYtSync();   // the background video is a deck for PANIC purposes
+  vj.ticker = ''; vjTickerSync();   // ...and so is the message
   toast('VJ PANIC — decks killed, theme restored', 'warn', '🛑');
   vjPush(true);
 }
@@ -9674,6 +9775,7 @@ function vjSetOn(on){
     vjDisarmChain();
   }
   vjYtSync();                  // the background layer follows vj.on, both directions
+  vjTickerSync();              // ...and the message with it
   vjApplyMix();
   vjPush(true);
 }
@@ -9691,7 +9793,31 @@ function vjCmd(cmd, arg){
   if (PANEL){ syncPost({ t:'vjc', cmd, arg }); return; }
   vjExec(cmd, arg);
 }
-function vjSendFile(kind, deck, file){ syncPost({ t:'vjf', kind, deck, file }); }
+function vjSendFile(kind, deck, file){
+  // Same shape as vjCmd: from the panel it crosses the channel, on the game page it
+  // loads directly — the deck surface can be driven from either document.
+  if (PANEL) syncPost({ t:'vjf', kind, deck, file });
+  else (kind === 'video' ? vjLoadVideo : vjLoadAudio)(deck, file);
+  // The panel keeps the blob it just sent, so a video deck can PREVIEW itself here —
+  // muted, from its own copy, with nothing streamed back from the game page.
+  vjPreviewLoad(kind, deck, file);
+}
+const vjPrevUrl = {};
+function vjPreviewLoad(kind, deck, file){
+  if (kind !== 'video') return;
+  const pv = $('vjVPrev' + deck); if (!pv) return;
+  if (vjPrevUrl[deck]) try { URL.revokeObjectURL(vjPrevUrl[deck]); } catch(_){}
+  vjPrevUrl[deck] = URL.createObjectURL(file);
+  pv.src = vjPrevUrl[deck];
+  pv.classList.remove('empty');
+}
+function vjPreviewClear(deck){
+  const pv = $('vjVPrev' + deck); if (!pv) return;
+  if (vjPrevUrl[deck]) try { URL.revokeObjectURL(vjPrevUrl[deck]); } catch(_){}
+  vjPrevUrl[deck] = null;
+  pv.removeAttribute('src'); try { pv.load(); } catch(_){}
+  pv.classList.add('empty');
+}
 const VJ_CMDS = {
   on:      a => vjSetOn(a),
   arm:     () => { vjArm(); vjPush(true); },
@@ -9721,20 +9847,59 @@ const VJ_CMDS = {
   deck:    a => { const d=a.d==='b'?vj.b:vj.a; Object.assign(d, a.set||{}); vjApplyDeck(d); },
   eq:      a => { const d=a.d==='b'?vj.b:vj.a; d.eq[a.band]=+a.v; vjApplyDeck(d); },
   // Video deck commands carry {d:'a'|'b', ...}
-  vop:     a => vjVideoOpacity(a.d==='b'?vj.vb:vj.va, a.v),
+  vop:     a => { vjVideoOpacity(a.d==='b'?vj.vb:vj.va, a.v); vjPush(true); },
   vset:    a => { const v=a.d==='b'?vj.vb:vj.va; Object.assign(v, a.set||{});
-                  if (v.el && a.set && a.set.rate!=null) v.el.playbackRate=v.rate; vjApplyMix(); },
+                  v.rot = ((Math.round(+v.rot) || 0) % 4 + 4) % 4;
+                  if (v.el && a.set){
+                    if (a.set.rate!=null) v.el.playbackRate=v.rate;
+                    if (a.set.loop!=null) v.el.loop = !!v.loop;
+                  }
+                  vjApplyMix(); vjPush(true); },
+  // Transport: pause is a flag of its own, never opacity — a pause that blanks the
+  // picture is a stop, and the deck must come back at the frame it held.
+  vplay:   a => { const v=a.d==='b'?vj.vb:vj.va; v.paused = !a.v;
+                  vjVideoPlay(v, vjVideoWants(v)); vjPush(true); },
   vaudio:  a => vjVideoAudio(a.d==='b'?vj.vb:vj.va, a.v),
-  vseek:   a => { const v=a.d==='b'?vj.vb:vj.va; if(v.el) try{ v.el.currentTime=+a.v; }catch(_){} },
+  vseek:   a => { const v=a.d==='b'?vj.vb:vj.va;
+                  if(v.el) try{ v.el.currentTime=Math.max(0, Math.min(v.dur||0, +a.v)); v.pos=v.el.currentTime; }catch(_){} },
+  // Relative, computed HERE off the element's live clock — the panel's copy of the
+  // position is a 20Hz snapshot, and a skip against a stale position lands twice.
+  vskip:   a => { const v=a.d==='b'?vj.vb:vj.va;
+                  if(v.el) try{ v.el.currentTime=Math.max(0, Math.min(v.dur||0, v.el.currentTime + (+a.v||0))); v.pos=v.el.currentTime; }catch(_){} },
+  eject:   a => vjEject(a.kind, a.d),
+  // ⚠️ A real command, because the panel's first version wrote VJ.takeQuant in its OWN
+  // window and sent a no-op — vjTake reads the GAME window's copy, so the three quant
+  // buttons were dead from /vj. A panel is a peer: state changes travel as commands.
+  takeQuant: a => { if (a === 'off' || a === 'beat' || a === 'bar') VJ.takeQuant = a; vjPush(true); },
   preset:  a => vjPresetApply(a),
+  // ⚠️ Saving is a COMMAND for the same reason the quant buttons are: the panel's local
+  // `vj` object is never mutated (it draws from snapshots), so a vjPresetSave run in the
+  // panel window captured factory defaults and called them the live board. The board
+  // lives here; the snapshot's preset-name list tells the panel to redraw its shelf.
+  presetSave: a => { const n = String(a || '').trim().slice(0, 40); if (n) vjPresetSave(n); vjPush(true); },
+  // The ticker message: typed by the operator, scrolls over the game, repeats until
+  // cleared. Shown only while VJ Mode is on — off must stay the untouched game.
+  ticker:  a => { vj.ticker = String(a && a.text != null ? a.text : '').slice(0, 200);
+                  vjTickerSync(); vjPush(true); },
   // Background video: {id} sets/clears the layer (already validated panel-side, and
   // validated AGAIN here — the panel is a peer, not a trust boundary), {op} moves it.
-  yt:      a => { if (a && 'id' in a) vj.yt.id = ytIdFrom(a.id);
-                  if (a && 'op' in a) vj.yt.op = Math.max(0, Math.min(1, +a.op || 0));
-                  if (vj.yt.id && vj.yt.op === 0) vj.yt.op = VJ.ytDefault;
+  // ⚠️ The default opacity applies ONLY to a fresh id arriving with none set. It used
+  // to fire on every command, so the SHOW-THROUGH slider dragged to zero snapped
+  // straight back to 0.55 — which was reported as "the background video at 0 still
+  // shows a video". An explicit zero is the operator's zero.
+  yt:      a => { const setId = a && 'id' in a, setOp = a && 'op' in a;
+                  if (setId) vj.yt.id = ytIdFrom(a.id);
+                  if (setOp) vj.yt.op = Math.max(0, Math.min(1, +a.op || 0));
+                  if (setId && !setOp && vj.yt.id && vj.yt.op === 0) vj.yt.op = VJ.ytDefault;
                   vjYtSync(); vjPush(true); },
 };
-function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (f) try { f(arg); } catch(e){ console.warn('vj', cmd, e); } }
+// Every executed command is followed by a (throttled, meter-sized) push, so the panel
+// reflects a knob within one meter tick even when the game tab is backgrounded and its
+// rAF-driven vjTick is throttled to ~1Hz. Commands that need the full snapshot (a
+// waveform, a preset list) still push full themselves.
+function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (!f) return;
+  try { f(arg); } catch(e){ console.warn('vj', cmd, e); }
+  if (!PANEL) vjPush(false); }
 
 // The snapshot /settings draws from. Throttled to VJ.meterHz — pushing this per
 // frame floods the channel and starves the very thing it is reporting on.
@@ -9747,15 +9912,20 @@ function vjSnap(full){
     cues:d.cues, loop:d.loop, loopBeats:d.loopBeats, sync:d.sync,
     wave: full && d.wave ? Array.from(d.wave) : undefined });
   const vid = v => v && ({ id:v.id, name:v.name, ready:v.ready, playing:v.playing,
-    dur:v.dur, pos:v.pos, opacity:v.opacity, fitMode:v.fitMode, rate:v.rate,
+    paused:v.paused, dur:v.dur, pos:v.pos, opacity:v.opacity, fitMode:v.fitMode,
+    rate:v.rate, loop:v.loop, rot:v.rot,
     tint:v.tint, tintAmt:v.tintAmt, filter:v.filter, audioOn:v.audioOn, audioGain:v.audioGain });
   return { on:vj.on, armed:vj.armed, armError:vj.armError,
-    yt:{ id:vj.yt.id, op:vj.yt.op },
+    yt:{ id:vj.yt.id, op:vj.yt.op }, ticker:vj.ticker,
     a:deck(vj.a), b:deck(vj.b), va:vid(vj.va), vb:vid(vj.vb),
     xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
+    takeQuant:VJ.takeQuant,
     master:vj.master, masterL:vj.masterL, masterR:vj.masterR,
     sfxLevel:vj.sfxLevel, duck:vj.duck,
     bpm:vj.clock.bpm, cue:{ level:vj.cue.level, ok:vj.cue.ok, why:vj.cue.why, deviceId:vj.cue.deviceId },
+    // Preset NAMES ride full snapshots only (localStorage is shared, so the panel can
+    // read the bodies itself — it just needs to know when the shelf changed under it).
+    presets: full ? Object.keys(vjPresets()) : undefined,
     full:!!full };
 }
 function vjPush(full){
@@ -9794,8 +9964,8 @@ function vjPresets(){ try { return JSON.parse(localStorage.getItem(VJ_PRESET_KEY
 function vjPresetSave(name){
   const d = x => x && ({ gainTrim:x.gainTrim, fader01:x.fader01, assign:x.assign,
     eq:{...x.eq}, sweep:x.sweep, pitch:x.pitch, pitchRange:x.pitchRange, keyLock:x.keyLock, bpm:x.bpm });
-  const v = x => x && ({ opacity:x.opacity, fitMode:x.fitMode, rate:x.rate, tint:x.tint,
-    tintAmt:x.tintAmt, filter:x.filter, audioOn:x.audioOn, audioGain:x.audioGain });
+  const v = x => x && ({ opacity:x.opacity, fitMode:x.fitMode, rate:x.rate, loop:x.loop,
+    rot:x.rot, tint:x.tint, tintAmt:x.tintAmt, filter:x.filter, audioOn:x.audioOn, audioGain:x.audioGain });
   const all = vjPresets();
   all[name] = { a:d(vj.a), b:d(vj.b), va:v(vj.va), vb:v(vj.vb),
     xf:vj.xf, xfCurve:vj.xfCurve, vxf:vj.vxf, vxfCurve:vj.vxfCurve,
@@ -9814,7 +9984,11 @@ function vjPresetApply(name){
   vj.master=p.master; vj.sfxLevel=p.sfxLevel; vj.duck=p.duck;
   if (p.bpm) { vj.clock.bpm = p.bpm; vj.clock.phase0 = performance.now()/1000; }
   if (p.takeQuant) VJ.takeQuant = p.takeQuant;
-  for (const v of [vj.va, vj.vb]) if (v) vjVideoPlay(v, v.opacity > 0.001 || v.audioOn);
+  for (const v of [vj.va, vj.vb]) if (v){
+    v.rot = ((Math.round(+v.rot) || 0) % 4 + 4) % 4;
+    if (v.el){ v.el.playbackRate = v.rate; v.el.loop = !!v.loop; }
+    vjVideoPlay(v, vjVideoWants(v));
+  }
   vjApplyMix(); vjPush(true);
 }
 function vjPresetDelete(name){ const all=vjPresets(); delete all[name];
@@ -9865,7 +10039,9 @@ function vjPanelRender(){
   if (!V){ return; }
   vjSyncControls(V);
   vjDrawWave('a', V.a); vjDrawWave('b', V.b);
+  vjDrawVTime('a', V.va); vjDrawVTime('b', V.vb);
   vjDrawMeters(V);
+  if (V.full && V.presets) vjBuildPresets();   // the game saved one — redraw the shelf
 }
 // Push values into controls the operator is not currently holding. Rebuilding the
 // DOM at 20Hz would fight every drag; this only writes what changed.
@@ -9877,6 +10053,8 @@ function vjSyncControls(V){
   set('vjXf', Math.round(V.xf*100)); set('vjVxf', Math.round(V.vxf*100));
   set('vjMaster', Math.round(V.master*100)); set('vjSfx', Math.round(V.sfxLevel*100));
   on('vjDuck', V.duck); on('vjOn', V.on);
+  for (const c of ['smooth','sharp']) on('vjXfC'+c, V.xfCurve === c);
+  for (const q of ['off','beat','bar']) on('vjQ'+q, V.takeQuant === q);
   txt('vjCueWhy', V.cue.why || '');
   for (const id of ['a','b']){
     const d = V[id]; if (!d) continue;
@@ -9903,14 +10081,99 @@ function vjSyncControls(V){
     if (d.wave) vjWaveCache[id] = d.wave;
   }
   for (const id of ['a','b']){
+    const d = V[id]; if (!d) continue;
+    const st = $('vjAStat'+id);
+    if (st){ const t = vjAStatText(V, id);
+      if (st.textContent !== t) st.textContent = t;
+      st.classList.toggle('live', t.startsWith('●'));
+      st.classList.toggle('warn', !t.startsWith('●') && d.ready); }
+  }
+  for (const id of ['a','b']){
     const v = V['v'+id]; if (!v) continue;
     txt('vjVName'+id, v.name || '—');
+    txt('vjVPos'+id, vjTime(v.pos) + ' / ' + vjTime(v.dur));
+    on('vjVPlay'+id, v.playing);
+    on('vjVLoop'+id, !!v.loop);
+    for (const rt of [0,1,2,3]) on('vjVRot'+id+rt, (v.rot||0) === rt);
     set('vjVOp'+id, Math.round(v.opacity*100));
     set('vjVTintAmt'+id, Math.round(v.tintAmt*100));
     set('vjVRate'+id, Math.round(v.rate*100));
     on('vjVAudio'+id, v.audioOn);
     set('vjVAudioGain'+id, Math.round(v.audioGain*100));
+    // The status line is the fix for "both video decks don't do anything": the deck was
+    // usually working perfectly and DARK, with nothing anywhere saying which dial held
+    // it there. Every dark state names its own cause.
+    const st = $('vjVStat'+id);
+    if (st){ const t = vjVStatText(V, id);
+      if (st.textContent !== t) st.textContent = t;
+      st.classList.toggle('live', t.startsWith('●'));
+      st.classList.toggle('warn', !t.startsWith('●') && v.ready); }
+    // The muted self-preview follows the deck's transport, loosely — it is a monitor,
+    // not a frame-lock, so it only re-seeks once it has drifted a real amount.
+    const pv = $('vjVPrev'+id);
+    if (pv){
+      if (!v.ready && !v.name && pv.src) vjPreviewClear(id);
+      else if (pv.src){
+        pv.muted = true;
+        if (pv.playbackRate !== v.rate) try { pv.playbackRate = v.rate; } catch(_){}
+        if (v.playing && pv.paused) pv.play().catch(()=>{});
+        else if (!v.playing && !pv.paused) pv.pause();
+        if (v.dur && Math.abs(pv.currentTime - v.pos) > 0.75) try { pv.currentTime = v.pos; } catch(_){}
+      }
+    }
   }
+  if (V.yt){
+    set('vjYtOp', Math.round(V.yt.op*100));
+    const th = $('vjYtThumb');
+    if (th){
+      if (V.yt.id){
+        if (th.dataset.vid !== V.yt.id){ th.dataset.vid = V.yt.id;
+          th.classList.remove('empty');
+          th.src = 'https://i.ytimg.com/vi/' + V.yt.id + '/hqdefault.jpg'; }
+      } else if (th.dataset.vid){ th.dataset.vid = ''; th.classList.add('empty'); th.removeAttribute('src'); }
+    }
+    txt('vjYtStat', vjYtStatText(V));
+  }
+  const tk = $('vjTickStat');
+  if (tk){ const t = V.ticker
+      ? (V.on ? '● scrolling: “' + V.ticker + '” — repeats until STOP' : 'held — shows while VJ MODE is on')
+      : 'nothing scrolling';
+    if (tk.textContent !== t) tk.textContent = t;
+    tk.classList.toggle('live', !!(V.ticker && V.on)); }
+}
+// Every dark or silent state names its own cause — the whole of the "decks don't do
+// anything" report was a rig with no state readout.
+function vjVStatText(V, id){
+  const v = V['v'+id]; if (!v) return '';
+  if (!V.armed) return 'NOT ARMED — press Arm audio on the game page';
+  if (!v.ready) return 'empty — drop a video file on this deck, LOAD one, or send it from the Library';
+  if (!V.on) return 'loaded, dark — VJ MODE is OFF';
+  if (v.opacity <= 0.004) return 'loaded, dark — OPACITY is at zero';
+  const xg = vjXGain(V.vxf, id, V.vxfCurve);
+  const amt = Math.round(v.opacity * xg * 100);
+  if (xg <= 0.004) return 'loaded, faded out by the CROSSFADER — TAKE cuts over';
+  if (v.paused) return '❚❚ PAUSED on screen at ' + amt + '%';
+  return '● ON AIR at ' + amt + '%';
+}
+function vjAStatText(V, id){
+  const d = V[id]; if (!d) return '';
+  if (!V.armed) return 'NOT ARMED — press Arm audio on the game page';
+  if (!d.ready) return 'empty — drop an audio file on this deck, LOAD one, or send it from the Library';
+  if (!d.playing) return 'loaded, stopped — ▶ to play';
+  if (d.assign === 'off') return 'playing, silent — ASSIGN is off';
+  if (d.assign === 'cue') return 'playing in the HEADPHONES only — ASSIGN is cue';
+  if (vjXGain(V.xf, id, V.xfCurve) <= 0.004) return 'playing, faded out by the CROSSFADER';
+  if (d.fader01 <= 0.004) return 'playing, silent — VOLUME is at zero';
+  return '● ON AIR';
+}
+// The YouTube layer's status answers "audio not working" IN the UI: it is silent by
+// design, and the reason is a platform fact rather than a broken control.
+function vjYtStatText(V){
+  const silent = '🔇 always silent — YouTube plays only inside its own frame, so its audio can never join the mix';
+  if (!V.yt || !V.yt.id) return 'no video set';
+  if (!V.on) return 'parked — VJ MODE is off. ' + silent;
+  if (!(V.yt.op > 0.004)) return 'hidden — SHOW-THROUGH is at zero. ' + silent;
+  return 'showing through at ' + Math.round(V.yt.op*100) + '%. ' + silent;
 }
 function vjTime(s){ s = Math.max(0, s||0); const m=Math.floor(s/60); return m+':'+String(Math.floor(s%60)).padStart(2,'0'); }
 
@@ -10032,7 +10295,7 @@ function vjBuildPanel(){
   host.append(el('div','vjlab','VIDEO CROSSFADER — independent of audio'), vxrow);
   const qrow = row();
   qrow.append(lab('TAKE lands on'));
-  for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>{ VJ.takeQuant=q; vjCmd('vset',{d:'a',set:{}}); }));
+  for (const q of ['off','beat','bar']) qrow.append(btn('vjQ'+q, q, ()=>vjCmd('takeQuant', q)));
   host.append(qrow);
 
   // ---- background video ---------------------------------------------------
@@ -10067,7 +10330,33 @@ function vjBuildPanel(){
       if (txt) ySet(txt.split('\n')[0]);
     });
   }
-  host.append(el('div','vjnote','Plays muted behind the whole game — the pitch fades by the SHOW-THROUGH amount, the lines and the players never do. It needs the network, it cannot be beat-synced or filtered (YouTube only plays in its own frame), and its sound cannot join the mix: audio stays with the decks.'));
+  // The layer's readout: a thumbnail so the operator can see WHAT is set, and a status
+  // line that answers "YouTube audio not working" in the UI — it is silent by design,
+  // and a layer that says so stops looking broken.
+  const yst = row();
+  const yImg = document.createElement('img');
+  yImg.id = 'vjYtThumb'; yImg.className = 'empty'; yImg.alt = '';
+  yImg.onerror = () => yImg.classList.add('empty');   // offline: no thumbnail, no broken-image glyph
+  yst.append(yImg, (()=>{ const t = el('div','vjstat',''); t.id = 'vjYtStat'; t.style.flex = '1'; return t; })());
+  host.append(yst);
+  host.append(el('div','vjnote','Plays muted behind the whole game — the pitch fades by the SHOW-THROUGH amount, the lines and the players never do. At zero it is completely gone. It needs the network, it cannot be beat-synced or filtered (YouTube only plays in its own frame), and its sound cannot join the mix: audio stays with the decks.'));
+
+  // ---- ticker -------------------------------------------------------------
+  // A typed line that scrolls over the game and repeats until STOP — it rides the
+  // tournament ticker's bar, so the marquee and the Reduce Motion rule are shared.
+  host.append(el('h3','vjh','📰 Ticker'));
+  const trow = row();
+  const tIn = document.createElement('input');
+  tIn.type = 'text'; tIn.id = 'vjTickText'; tIn.className = 'vjtext';
+  tIn.placeholder = 'Type a message to scroll over the game…';
+  tIn.maxLength = 200; tIn.autocomplete = 'off'; tIn.style.flex = '1'; tIn.style.minWidth = '200px';
+  const tSend = () => { if (tIn.value.trim()) vjCmd('ticker', { text: tIn.value.trim() }); };
+  tIn.addEventListener('keydown', e => { if (e.key === 'Enter') tSend(); });
+  trow.append(tIn, btn('vjTickSend','SEND', tSend),
+                   btn('vjTickStop','STOP', ()=>vjCmd('ticker', { text:'' })));
+  host.append(trow);
+  host.append((()=>{ const t = el('div','vjstat',''); t.id = 'vjTickStat'; return t; })());
+  host.append(el('div','vjnote','Scrolls across the bottom of the game and repeats until you press STOP. Shows only while VJ MODE is on; Reduce Motion holds it still instead of losing the words.'));
 
   // ---- game SFX + cue -----------------------------------------------------
   host.append(el('h3','vjh','⚽ Game sound'));
@@ -10104,15 +10393,22 @@ function vjBuildPanel(){
   fi.accept='audio/*,video/*'; fi.className='vjfile';
   fi.onchange = ()=>{ vjAddFiles([...fi.files]); fi.value=''; };
   host.append(fi);
-  host.append(el('div','vjnote','Clicking a track loads it into the deck that is currently faded OUT — never the one you can hear.'));
+  host.append(el('div','vjnote','Each row loads into the deck YOU pick — → A or → B — or drop a file straight onto a deck above. House rule worth keeping: load the deck that is faded out (its status line says which), so the room never hears or sees a track arrive.'));
   const libHost = el('div','vjlib'); libHost.id='vjLib'; host.append(libHost);
+  // Dropped files land in the library too — the file input is the door, not the only one.
+  libHost.addEventListener('dragover', e => e.preventDefault());
+  libHost.addEventListener('drop', e => { e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)
+      vjAddFiles([...e.dataTransfer.files]); });
 
   // ---- presets ------------------------------------------------------------
   host.append(el('h3','vjh','💾 Presets'));
   const prow = row();
   const pn = document.createElement('input'); pn.type='text'; pn.id='vjPresetName';
   pn.placeholder='name'; pn.className='vjtext';
-  prow.append(pn, btn('vjPresetSave','Save', ()=>{ if(pn.value.trim()){ vjPresetSave(pn.value.trim()); vjBuildPresets(); } }));
+  // Save is a COMMAND — the live board is in the game tab, and a save run here would
+  // capture this window's untouched defaults (see VJ_CMDS.presetSave).
+  prow.append(pn, btn('vjPresetSave','Save', ()=>{ if(pn.value.trim()){ vjCmd('presetSave', pn.value.trim()); vjBuildPresets(); } }));
   host.append(prow);
   const ph = el('div','vjpresets'); ph.id='vjPresetList'; host.append(ph);
 
@@ -10122,13 +10418,81 @@ function vjBuildPanel(){
 function vjCanvas(id, w, h){ const c=document.createElement('canvas'); c.id=id; c.width=w; c.height=h;
   c.className='vjcv'; return c; }
 
+// ---- CLICK THE TIMELINE TO JUMP --------------------------------------------
+// The waveform and the video timeline are SEEK BARS, not pictures — "skip songs by
+// clicking on that timeline" is the ask, in those words. Pointer events on the canvas
+// rather than a range input, for two reasons: the waveform already IS the timeline
+// (a second slider under it would be the same information twice), and SLIDER_GRAB
+// deliberately refuses track taps on touch sliders — right for a settings column you
+// scroll with a thumb, exactly wrong for a seek bar whose whole job is jump-to-here.
+// Dragging scrubs; moves are throttled so a drag does not flood the channel.
+function vjSeekBar(cvEl, getDeck, seek){
+  cvEl.style.cursor = 'pointer';
+  cvEl.style.touchAction = 'none';
+  let lastT = 0;
+  const at = ev => {
+    const d = getDeck(); if (!d || !d.dur) return;
+    const now = performance.now();
+    if (ev.type === 'pointermove' && now - lastT < 45) return;
+    lastT = now;
+    const r = cvEl.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width)));
+    seek(frac * d.dur);
+  };
+  cvEl.addEventListener('pointerdown', ev => { ev.preventDefault();
+    try { cvEl.setPointerCapture(ev.pointerId); } catch(_){}
+    at(ev); });
+  cvEl.addEventListener('pointermove', ev => { if (ev.buttons & 1) at(ev); });
+}
+// The video deck's timeline: progress fill + playhead, drawn each panel tick beside
+// the waveforms. It shares the seek wiring above.
+function vjDrawVTime(id, v){
+  const cvT = $('vjVSeek'+id); if (!cvT || !v) return;
+  const c = cvT.getContext('2d'), w = cvT.width, h = cvT.height;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(0, 0, w, h);
+  if (v.dur){
+    const x = v.pos / v.dur * w;
+    c.fillStyle = 'rgba(255,255,255,0.22)'; c.fillRect(0, 0, x, h);
+    c.fillStyle = '#fff'; c.fillRect(Math.max(0, Math.round(x) - 1), 0, 2, h);
+  }
+}
+
+// ---- DROP A FILE ON A DECK -------------------------------------------------
+// The literal reading of "drop into Deck A or B", and the third door in after the
+// deck's LOAD and the library's → A / → B. Strict about kind — a video dropped on an
+// audio deck flashes a refusal rather than silently landing somewhere else: a drop
+// that guesses is the "→ offline deck" secret coming back through a window.
+function vjDropZone(strip, kind, id){
+  strip.addEventListener('dragover', e => { e.preventDefault(); strip.classList.add('drop'); });
+  strip.addEventListener('dragleave', () => strip.classList.remove('drop'));
+  strip.addEventListener('drop', e => {
+    e.preventDefault(); strip.classList.remove('drop');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const isVid = /^video\//.test(f.type) || /\.(mp4|webm|mov|mkv)$/i.test(f.name);
+    if ((kind === 'video') !== isVid){
+      strip.classList.add('badfile');
+      setTimeout(() => strip.classList.remove('badfile'), 900);
+      return;
+    }
+    vjSendFile(kind, id, f);
+  });
+}
+
 function vjAudioStrip(id, el, row, btn, slider, lab){
   const s = el('div','vjstrip');
   const head = row('vjhead');
   head.append((()=>{const t=el('div','vjdeckid','DECK '+id.toUpperCase()); return t;})(),
-              (()=>{const t=el('div','vjtrack','—'); t.id='vjName'+id; return t;})());
+              (()=>{const t=el('div','vjtrack','—'); t.id='vjName'+id; return t;})(),
+              vjLoadBtn('audio', id, btn),
+              btn('vjAEject'+id,'⏏', ()=>vjCmd('eject',{kind:'audio', d:id})));
   s.append(head);
-  s.append(vjCanvas('vjWave'+id, 420, VJUI.waveH));
+  // The waveform is the track's TIMELINE: click it to jump, drag it to scrub.
+  const wv = vjCanvas('vjWave'+id, 420, VJUI.waveH);
+  vjSeekBar(wv, ()=>vjView && vjView[id], t=>vjCmd('seek',{d:id, v:t}));
+  s.append(wv);
+  s.append((()=>{const t=el('div','vjstat',''); t.id='vjAStat'+id; return t;})());
   const t1 = row();
   t1.append(btn('vjPlay'+id,'▶︎/❚❚', ()=>vjCmd('play',{d:id, v: !(vjView&&vjView[id]&&vjView[id].playing)})),
             btn('vjHome'+id,'⏮', ()=>vjCmd('seek',{d:id, v:0})),
@@ -10177,8 +10541,10 @@ function vjAudioStrip(id, el, row, btn, slider, lab){
             btn('vjLoopOut'+id,'OUT', ()=>vjCmd('loopOut',{d:id})));
   s.append(lp);
   const lv = row();
-  lv.append(lab('TRIM'),  slider('vjTrim'+id,0,200,1, v=>vjCmd('deck',{d:id,set:{gainTrim:v/100}}), 100),
-            lab('FADER'), slider('vjFader'+id,0,100,1, v=>vjCmd('deck',{d:id,set:{fader01:v/100}}), 100),
+  // "VOLUME", not "fader" — the per-deck level was reported missing while sitting
+  // right here under a word only a DJ reads as volume.
+  lv.append(lab('TRIM'),   slider('vjTrim'+id,0,200,1, v=>vjCmd('deck',{d:id,set:{gainTrim:v/100}}), 100),
+            lab('VOLUME'), slider('vjFader'+id,0,100,1, v=>vjCmd('deck',{d:id,set:{fader01:v/100}}), 100),
             vjCanvas('vjMeter'+id, 120, VJUI.meterH));
   s.append(lv);
   const asg = row();
@@ -10187,19 +10553,61 @@ function vjAudioStrip(id, el, row, btn, slider, lab){
     asg.append(btn('vjAsg'+id+a, a, ()=>vjCmd('deck',{d:id,set:{assign:a}})));
   asg.append(btn('vjCue'+id,'🎧 CUE', ()=>vjCmd('deck',{d:id,set:{cue: !(vjView&&vjView[id]&&vjView[id].cue)}})));
   s.append(asg);
+  vjDropZone(s, 'audio', id);
   return s;
 }
 
+// Every deck head carries its own LOAD and EJECT — the library's faded-out rule is a
+// good default and was a terrible secret, so nobody should ever have to guess which
+// deck a click will land in.
+function vjLoadBtn(kind, id, btn){
+  const fi = document.createElement('input');
+  fi.type = 'file'; fi.accept = kind === 'video' ? 'video/*' : 'audio/*';
+  fi.style.display = 'none';
+  fi.onchange = () => { const f = fi.files && fi.files[0]; if (f) vjSendFile(kind, id, f); fi.value=''; };
+  const b = btn('vj' + (kind === 'video' ? 'V' : 'A') + 'Load' + id, 'LOAD', () => fi.click());
+  const wrap = document.createElement('span');
+  wrap.append(b, fi);
+  return wrap;
+}
 function vjVideoStrip(id, el, row, btn, slider, lab){
   const s = el('div','vjstrip');
   const head = row('vjhead');
   head.append(el('div','vjdeckid','VIDEO '+id.toUpperCase()),
-              (()=>{const t=el('div','vjtrack','—'); t.id='vjVName'+id; return t;})());
+              (()=>{const t=el('div','vjtrack','—'); t.id='vjVName'+id; return t;})(),
+              vjLoadBtn('video', id, btn),
+              btn('vjVEject'+id,'⏏', ()=>{ vjPreviewClear(id); vjCmd('eject',{kind:'video', d:id}); }));
   s.append(head);
+  // The muted self-preview: the panel's own copy of the blob it sent, so the operator
+  // sees the clip without a video stream ever crossing the channel.
+  const pv = document.createElement('video');
+  pv.id = 'vjVPrev'+id; pv.className = 'vjthumb empty';
+  pv.muted = true; pv.loop = true; pv.playsInline = true; pv.preload = 'auto';
+  s.append(pv);
+  s.append((()=>{const t=el('div','vjstat',''); t.id='vjVStat'+id; return t;})());
+  const tp = row();
+  tp.append(btn('vjVPlay'+id,'▶︎/❚❚', ()=>vjCmd('vplay',{d:id, v: !(vjView&&vjView['v'+id]&&vjView['v'+id].playing)})),
+            btn('vjVHome'+id,'⏮', ()=>vjCmd('vseek',{d:id, v:0})),
+            btn('vjVBack'+id,'−5s', ()=>vjCmd('vskip',{d:id, v:-5})),
+            btn('vjVFwd'+id,'+5s', ()=>vjCmd('vskip',{d:id, v:5})),
+            btn('vjVLoop'+id,'LOOP', ()=>vjCmd('vset',{d:id,set:{loop: !(vjView&&vjView['v'+id]&&vjView['v'+id].loop)}})),
+            (()=>{const t=el('div','vjpos','0:00 / 0:00'); t.id='vjVPos'+id; return t;})());
+  s.append(tp);
+  // The timeline: click to jump, drag to scrub — a canvas seek bar, not a range input,
+  // for the reason written on vjSeekBar.
+  const sc = row();
+  const tl = vjCanvas('vjVSeek'+id, 420, 12);
+  vjSeekBar(tl, ()=>vjView && vjView['v'+id], t=>vjCmd('vseek',{d:id, v:t}));
+  sc.append(lab('TIMELINE'), tl);
+  s.append(sc);
   const o = row();
   o.append(lab('OPACITY'), slider('vjVOp'+id,0,100,1, v=>vjCmd('vop',{d:id, v:v/100}), 0));
   s.append(o);
-  s.append(el('div','vjnote','A deck at zero opacity is not decoded at all — that is the cheapest saving there is.'));
+  s.append(el('div','vjnote','Loading a clip opens the deck; what is LIVE is still the crossfader’s call. A deck pulled back to zero opacity is not decoded at all.'));
+  const ro = row();
+  ro.append(lab('ROTATE'));
+  for (const rt of [0,1,2,3]) ro.append(btn('vjVRot'+id+rt, (rt*90)+'°', ()=>vjCmd('vset',{d:id,set:{rot:rt}})));
+  s.append(ro);
   const fit = row();
   fit.append(lab('FIT'));
   for (const f of ['cover','contain','stretch']) fit.append(btn('vjFit'+id+f, f, ()=>vjCmd('vset',{d:id,set:{fitMode:f}})));
@@ -10221,9 +10629,11 @@ function vjVideoStrip(id, el, row, btn, slider, lab){
   s.append(rt);
   const au = row();
   au.append(btn('vjVAudio'+id,'Clip audio', ()=>vjCmd('vaudio',{d:id, v: !(vjView&&vjView['v'+id]&&vjView['v'+id].audioOn)})),
+            lab('VOLUME'),
             slider('vjVAudioGain'+id,0,100,1, v=>vjCmd('vset',{d:id,set:{audioGain:v/100}}), 0));
   s.append(au);
   s.append(el('div','vjnote','Off by default. Video and music are decoupled — any clip plays under any unrelated track.'));
+  vjDropZone(s, 'video', id);
   return s;
 }
 
@@ -10250,15 +10660,16 @@ function vjBuildLib(){
     meta.textContent = [it.bpm ? it.bpm.toFixed(1)+' BPM' : null,
                         it.dur ? vjTime(it.dur) : null,
                         Math.round(it.size/1048576)+' MB'].filter(Boolean).join(' · ');
-    // Load into the deck that is faded OUT, never the one you can hear.
-    const target = () => {
-      const V = vjView; if (!V) return 'a';
-      return (vjLibTab==='video' ? V.vxf : V.xf) < 0.5 ? 'b' : 'a';
-    };
-    const go = document.createElement('button'); go.className='vjbtn'; go.type='button';
-    go.textContent = '→ offline deck';
-    go.onclick = ()=>{ const d = target(); vjSendFile(vjLibTab==='video'?'video':'audio', d, it.file); };
-    r.append(nm, meta, go);
+    // ⚠️ EXPLICIT per-deck buttons. The old single button loaded "the deck that is
+    // faded OUT" — a sensible house rule and a terrible secret, reported as "can't
+    // change the song": which deck a click would hit was decided by a crossfader the
+    // reader had no reason to connect to it. The rule survives as ADVICE (the note
+    // above the list, and each deck's status line), never as the only door.
+    const mkGo = d => { const g = document.createElement('button');
+      g.className='vjbtn'; g.type='button'; g.textContent = '→ ' + d.toUpperCase();
+      g.onclick = ()=>vjSendFile(vjLibTab==='video'?'video':'audio', d, it.file);
+      return g; };
+    r.append(nm, meta, mkGo('a'), mkGo('b'));
     host.append(r);
   });
 }
@@ -14844,12 +15255,15 @@ function cupTickerText(){
   return bits;
 }
 let cupTickerT = 0;
-function cupTickerStart(){
+// The one place the ticker bar is filled \u2014 the cup's fixtures and the VJ message
+// (`vjTickerSync`) both go through it, so the marquee, the doubling and the
+// reduced-motion `.still` rule cannot drift between the two.
+function tickerFill(bits){
   const el = $('cupTicker'), tr = $('cupTickerTrack');
   if (!el || !tr) return;
   tr.innerHTML = '';
-  const bits = cupTickerText();
-  // Doubled, so the loop has something to run into rather than a gap.
+  // Doubled, so the loop has something to run into rather than a gap. Spans built as
+  // NODES \u2014 a VJ message is typed by a person (the reason `mapClean` exists).
   for (const pass of [0, 1]) for (const b of bits){
     const s1 = document.createElement('span'); s1.className = 'tkk'; s1.textContent = '\u25c6';
     const s2 = document.createElement('span'); s2.textContent = b;
@@ -14857,10 +15271,16 @@ function cupTickerStart(){
   }
   el.classList.toggle('still', !motionOK());
   el.classList.remove('hidden');
+}
+function cupTickerStart(){
+  if (vjTickerOn) return;                  // a VJ message owns the bar outright
+  if (!$('cupTicker')) return;
+  tickerFill(cupTickerText());
   clearTimeout(cupTickerT);
   cupTickerT = setTimeout(cupTickerStop, CUP.ticker * 1000);
 }
-function cupTickerStop(){ clearTimeout(cupTickerT); const el = $('cupTicker'); if (el) el.classList.add('hidden'); }
+function cupTickerStop(){ clearTimeout(cupTickerT); if (vjTickerOn) return;
+  const el = $('cupTicker'); if (el) el.classList.add('hidden'); }
 // A cup match is over: write which SIDE went through and show the bracket's own overlay.
 function cupEnd(w){
   cupTickerStop();
@@ -30065,6 +30485,9 @@ if (window.__MAGNETDEBUG) {
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,
+    vjDrawFit, vjEject, vjSendFile, vjVideoWants, vjVideoPlay, vjTickerSync,
+    get vjTickerOn(){ return vjTickerOn; }, vjVStatText, vjAStatText, vjYtStatText,
+    vjSyncControls, tickerFill, vjAddFiles, vjBuildLib, vjSeekBar, vjDropZone, vjDrawVTime,
     vjSetCue, vjJumpCue, vjAutoLoop, vjLoopTick, vjSync, vjAnalyse, vjApplyDeck, vjApplyMix,
     vjEqDb, vjDuckGoal, vjTake, vjVideoOpacity, vjVideoAudio, vjExec, vjCmd, vjSnap, vjTick,
     vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,
