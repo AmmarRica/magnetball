@@ -122,9 +122,84 @@ const jp = phone.find(r => r.name === 'jumpBar');
 ok('phone: the jump bar still scrolls sideways rather than wrapping', jp && jp.overflowsX && !jp.wrapped,
    JSON.stringify(jp) + ' — a thumb swipes it, which is the gesture a mouse does not have');
 
+// ============================================================================
+//  THE CARD BODY MUST FIT THE PHONE IT IS ON
+//
+//  ⚠️ THE BUG: `#matchCard` is `display: contents`, so `#matchBody` is a flex ITEM of the
+//  scroll column rather than a block inside a card — and `.screen` centres its items, so
+//  with no width of its own it shrink-to-fits to MAX-CONTENT. Measured at **531px inside a
+//  449px viewport**, centred, hanging off BOTH edges: four pitch tiles off the left and
+//  three off the right, with no way to reach any of them. The hero bar above it carries
+//  `align-self:center; width:100%; max-width:460px` for exactly this reason; the body never
+//  got the same rule, and every other section is a plain `.card`, which has it built in.
+//
+//  ⚠️ SAME CLASS AS THE CHIP ROWS ABOVE — a control drawn on screen that no input can
+//  reach — but a DIFFERENT mechanism, and the chip probes are blind to it: they measure
+//  rows, and this is the container the rows sit in. It is worse than an unreachable chip,
+//  because the overflow lands on `#setup`, which nobody would think to swipe sideways, and
+//  the tiles are cut on BOTH sides at once.
+//
+//  ⚠️ TWO MEASUREMENTS, because neither is sufficient alone. `scrollWidth - clientWidth`
+//  on `#setup` misses a build where an ancestor clips with `overflow:hidden`; tiles-past-
+//  the-edge passes on a build where the pane is empty. The tile COUNT is asserted too, so
+//  "nothing is off screen" cannot be satisfied by there being nothing.
+//
+//  ⚠️ The `.subtabs` chips are EXCLUDED from the tile scan on purpose — that row scrolls
+//  sideways on a phone by design, which is what the whole first half of this file is about.
+//  Including them would make this check contradict the one above it.
+// ============================================================================
+const fitRows = [];
+for (const vw of [320, 360, 390, 412, 449]){
+  const p = await b.newPage({ viewport: { width: vw, height: 900 }, isMobile: true, hasTouch: true });
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(800);
+  fitRows.push(await p.evaluate(() => {
+    const M = window.__magnet, o = { vw: innerWidth, panes: {} };
+    M.openSection('match');
+    const su = document.getElementById('setup'), mb = document.getElementById('matchBody');
+    for (const pane of ['game', 'modes', 'bots', 'pitch', 'players', 'rules']){
+      M.showSubTab('match', pane);
+      // ⚠️ `.opt` AND `.navtile`: the Modes pane is nav tiles rather than option tiles, and a
+      // scan for `.opt` alone reported zero controls there — which the count guard caught,
+      // and which is exactly what that guard is for.
+      const tiles = [...mb.querySelectorAll('.opt, .navtile')]
+        .filter(t => t.offsetParent !== null && !t.closest('.subtabs'));
+      const off = tiles.filter(t => { const q = t.getBoundingClientRect();
+        return q.width > 0 && (q.left < -0.5 || q.right > innerWidth + 0.5); });
+      o.panes[pane] = { tiles: tiles.length, off: off.length,
+                        sample: off.slice(0, 3).map(t => (t.textContent || '').trim().slice(0, 10)) };
+    }
+    M.showSubTab('match', 'pitch');
+    o.setupOverflow = su.scrollWidth - su.clientWidth;
+    const q = mb.getBoundingClientRect();
+    o.bodyLeft = Math.round(q.left); o.bodyRight = Math.round(q.right);
+    o.bodyFits = q.left >= -0.5 && q.right <= innerWidth + 0.5;
+    return o;
+  }));
+  await p.close();
+}
+
+for (const r of fitRows){
+  ok(`phone ${r.vw}: the menu does not overflow sideways`, r.setupOverflow <= 0,
+     `#setup scrollWidth exceeds clientWidth by ${r.setupOverflow}px — the column itself is the scroller here, ` +
+     'so anything past its edge is reachable by no gesture anybody would try');
+  ok(`phone ${r.vw}: the match card body fits the screen`, r.bodyFits,
+     `#matchBody spans ${r.bodyLeft}..${r.bodyRight} in a ${r.vw}px viewport — centred and wider than the ` +
+     'screen means it is cut on BOTH sides at once');
+  for (const [pane, v] of Object.entries(r.panes)){
+    // The count guard: "nothing is off screen" is also true of an empty pane.
+    ok(`phone ${r.vw}: the ${pane} pane has tiles at all`, v.tiles > 0,
+       'without this, the off-screen check below passes on a pane that renders nothing');
+    ok(`phone ${r.vw}: no ${pane} tile is off the edge`, v.off === 0,
+       `${v.off} of ${v.tiles} off screen, e.g. ${JSON.stringify(v.sample)}`);
+  }
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ desk, narrow, phone }, null, 1));
+console.log(JSON.stringify({ desk, narrow, phone, fitRows }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL chipreach\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS chipreach');

@@ -571,6 +571,18 @@
     #matchCard.collapsed > h2 .secchev .chevglyph { transform: rotate(-90deg); }
     .secchev:active { transform: translateY(1px); }
     #matchBody {
+      /* ⚠️ **THE SAME RULE THE HERO BAR ABOVE NEEDS, AND FOR THE SAME REASON — IT WAS
+         MISSED HERE, AND ON A PHONE THAT MADE THE PITCH PICKER UNUSABLE.** `#matchCard`
+         is `display: contents`, so this is a flex ITEM of the scroll column rather than a
+         block inside a card. `.screen` centres its items, so with no width of its own it
+         shrink-to-fits to MAX-CONTENT — measured at **531px inside a 449px viewport**,
+         centred, so it hung off BOTH edges: four pitch tiles off the left, three off the
+         right, and no way to reach any of them, because the overflow is on `#setup` and
+         not on a row anybody would think to swipe. Every other section is a `.card` at
+         `width:100%; max-width:460px` and simply never had the problem.
+         ⚠️ It is the CARD's 460px, not the column's, exactly as the hero bar's note says:
+         a body wider than every card either side of it reads as misaligned. */
+      align-self: center; width: 100%; max-width: 460px;
       background: var(--panel); border: 1px solid var(--edge);
       border-radius: 14px; padding: 16px; margin-top: 10px;
     }
@@ -5231,7 +5243,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0510AM';
+const VERSION = '20260824.0740AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5247,6 +5259,13 @@ const VERSION = '20260824.0510AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0740AM', title: 'A clean export, and a menu that fits your phone',
+    changed: [
+      '<b>The word REPLAY is no longer burned into saved videos.</b> It was drawn onto the same picture the recording is taken from, so every clip you exported carried \u201cTAP TO SKIP\u201d across the middle of it. It still shows while you watch a goal back \u2014 it just stays out of the file.',
+      '<b>The Match card fits a narrow screen again.</b> It was laid out wider than a phone and centred, so it was cut off on both sides at once: several pitches, modes and bot settings sat past the edge with no way to reach them.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.0510AM', title: 'A quicker default, and a fatter ball trail',
     changed: [
       '<b>The game now starts on the Pro feel.</b> Match speed 1.00, hit stop 2 frames, controller rumble at 15%, and a kick reach of 1.25 \u2014 the setup that was being picked by hand every time is what a fresh install gets. Every one of them is still a slider, and <b>Reset all settings</b> brings this same set back rather than the old one.',
@@ -17033,7 +17052,12 @@ let repBuf = [];         // rolling ring buffer of recent frames
 let lastReplay = null;   // frozen buffer captured at the last goal
 let repPend = -1;        // frames still to capture before the freeze; -1 = not pending
 let repGoalIdx = -1;     // where in repBuf the ball actually crossed
-const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60, ended:false, restart:false, finish:null, doc:null };
+// ⚠️ `filming` is set ONLY by `recordAndShareClip`, for the length of a recording, and it
+// exists so the "▶ REPLAY / TAP TO SKIP" caption stays out of the exported video. It is
+// deliberately NOT folded into `controls`: that one answers "did you choose to watch this",
+// and a goal clip filmed from the result screen is a replay nobody chose to watch that must
+// still come out clean. See the caption in `drawReplayFrame`.
+const replay = { active:false, raf:0, paused:false, speed:0.55, controls:false, fps:60, ended:false, restart:false, finish:null, doc:null, filming:false };
 
 // ============================================================
 //  THE WHOLE MATCH — a second, un-ringed buffer
@@ -17209,7 +17233,11 @@ function drawReplayFrame(f){
   // get out. A replay opened from the menu is the thing you came for, it already has a
   // transport bar naming it, and a word across the middle of the pitch is then just
   // something sitting on top of what you are trying to watch.
-  if (!replay.controls){
+  // ⚠️ **NOR OVER A RECORDING.** `captureStream` films this canvas, so anything drawn here
+  // is baked into the exported file for ever — and "TAP TO SKIP" in the middle of a video
+  // you are about to send someone is an instruction to press a screen that is not there.
+  // The caption explains a live interruption; a file has no interruption to explain.
+  if (!replay.controls && !replay.filming){
     const [cx, cy] = screenPt(wx(0), wy(0));
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.save();
@@ -18495,7 +18523,16 @@ async function recordAndShareClip(btn, play, stem){
     const stopped = new Promise(r => rec.onstop = r);
     if (btn) btn.textContent = '● REC';
     rec.start(250);                       // emit chunks periodically
-    await play();
+    // ⚠️ **THE ONE PLACE THE CAPTION IS SUPPRESSED, because it is the one place all three
+    // exports go through** — Save clip, Save match clip and the transport's Video button.
+    // Setting it at the three call sites instead would be three copies of the same thought,
+    // and the one that got missed would ship a video with "TAP TO SKIP" written across it.
+    // ⚠️ In a `finally`: `play()` can throw or be aborted, and a flag left set turns the
+    // caption off for every live goal replay afterwards, which is a different bug entirely.
+    // ⚠️ It wraps ONLY the recorded playback. The no-recorder path above also calls `play()`
+    // and is an ordinary on-screen replay, so it keeps its caption.
+    replay.filming = true;
+    try { await play(); } finally { replay.filming = false; }
     try { rec.requestData(); } catch(e){}
     rec.stop(); await stopped;
     const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });

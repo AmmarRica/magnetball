@@ -2585,6 +2585,22 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   cancels the pending frame, so the tick that would have called `finish()` never runs, and
   the awaiter — and the `finally` that puts the menu back — was orphaned. Lowering the flag
   was enough only while the tick was left alive to notice.
+  ⚠️ **AND NEVER INTO AN EXPORTED VIDEO** (`replay.filming`). `captureStream` films the
+  canvas, so anything drawn there is baked into the file for ever — "▶ REPLAY / TAP TO
+  SKIP" across a clip you are about to send someone, telling them to press a screen that
+  is not there. ⚠️ **It is deliberately NOT folded into `controls`**, which answers a
+  different question ("did you choose to watch this"): a goal clip filmed from the result
+  screen is a replay nobody chose to watch and must still come out clean, so one flag
+  cannot carry both. ⚠️ Set in **`recordAndShareClip` only**, which is the one place all
+  three exports go through — Save clip, Save match clip and the transport's Video button —
+  because three call sites is three copies of one thought and the one that got missed
+  would ship a video with the caption written across it. ⚠️ In a **`finally`**: `play()`
+  can throw or be aborted, and a flag left set silently strips the caption from every live
+  goal replay for the rest of the session, which is a quieter bug than the one being
+  fixed. ⚠️ It wraps only the RECORDED playback — the no-recorder path plays on screen and
+  keeps its caption. `tests/replayfile.mjs` holds all three: the painter obeys the flag,
+  something actually raises it, and it comes down on a throw. Sabotage any one and only
+  that one's check goes red.
   ⚠️ **No "▶ REPLAY" caption over it.** The label exists to explain a replay that cut in by
   itself; on one you opened it is a word sitting on top of what you came to watch.
   ⚠️ `tests/replayfile.mjs` measures the caption as a **DIFFERENCE** between the same frame
@@ -4709,6 +4725,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 - **HUD:** a 3-column grid — pause left, scorebug in the **middle column** (so it is centred
   on the screen, not among whatever buttons happen to show), fullscreen right. Settings is a
   **pause-menu** option (`ovSettings`), not a HUD gear one mis-tap from the live ball.
+- **`#matchBody` NEEDS THE CARD'S WIDTH, and without it the menu was unusable on a phone**
+  (`align-self: center; width: 100%; max-width: 460px`). `#matchCard` is `display: contents`
+  — see the entry below, which is why — so `#matchBody` is a flex ITEM of the scroll column
+  rather than a block inside a card, and `.screen` centres its items. With no width of its
+  own it shrink-to-fits to **max-content**: measured at **531px inside a 449px viewport**
+  and **−72..462 inside a 390px one**, centred, so it hung off BOTH edges at once. Six or
+  seven tiles per pane were off screen — the pitch picker, the modes, the bots — and
+  unreachable, because the overflow lands on `#setup`, which nobody thinks to swipe
+  sideways.
+  ⚠️ **The hero bar directly above it already carries this exact rule for this exact
+  reason**; the body simply never got it, and every other section is a plain `.card`, which
+  has `width:100%; max-width:460px` built in and so never had the problem. That is why one
+  card was broken and ten were fine.
+  ⚠️ **It is the CARD's 460px, not the column's** — the same note the hero bar makes: a body
+  wider than the cards either side of it reads as misaligned.
+  ⚠️ `tests/chipreach.mjs` holds it, which is the right home rather than a new suite: that
+  file is about *a control drawn on screen that no input can reach*, and this is the same
+  class by a different mechanism. Its chip probes could not see it — they measure rows, and
+  this is the container the rows sit in. ⚠️ Measured **two ways**, because neither is
+  sufficient: `scrollWidth - clientWidth` on `#setup` misses a build that clips with
+  `overflow:hidden`, and tiles-past-the-edge passes on a pane that renders nothing — so the
+  tile COUNT is asserted too. ⚠️ The scan is `.opt` **and `.navtile`**: Modes is nav tiles,
+  and a scan for `.opt` alone reported zero controls there, which the count guard caught.
+  ⚠️ The `.subtabs` chips are **excluded** — that row scrolls sideways on a phone by design,
+  and including them would make this check contradict the one above it in the same file.
 - **KICK OFF really floats:** `#matchCard` is `display: contents`, so the sticky hero
   header's containing block is the SCROLL COLUMN and not the card. ⚠️ A sticky element
   only sticks while its own parent is on screen, and with the Match section collapsed that

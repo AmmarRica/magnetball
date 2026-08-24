@@ -658,6 +658,25 @@ await p.close();
     const ix = m => M.REPCODECS.indexOf(m);
     o.prefersMp4 = ix('video/mp4;codecs=avc1.4d002a') === 0 &&
                    ix('video/mp4;codecs=avc1.4d002a') < ix('video/webm;codecs=vp9');
+
+    // ---- THE CAPTION FLAG IS WIRED, not merely honoured by the painter ----
+    // ⚠️ The pixel probe elsewhere in this file proves `drawReplayFrame` obeys
+    // `replay.filming`. It says nothing about whether anything ever SETS it, and a flag no
+    // code raises is a feature that does not exist. So the REAL `recordAndShareClip` is
+    // driven with a playback stub that samples the flag from inside the recording.
+    o.filmOffAtRest = M.replay.filming === false;
+    let sawDuring = null;
+    await M.recordAndShareClip(null, async () => { sawDuring = M.replay.filming; });
+    o.setDuringPlayback = sawDuring === true;
+    o.clearedAfter = M.replay.filming === false;
+    // ⚠️ ...and cleared on a THROW. `play()` can reject or be aborted, and a flag left set
+    // silently strips the caption from every live goal replay for the rest of the session —
+    // a different bug, and a quieter one. This is what the `finally` is for.
+    let threw = false;
+    try { await M.recordAndShareClip(null, async () => { throw new Error('boom'); }); }
+    catch (e) { threw = true; }
+    o.survivesThrow = M.replay.filming === false;
+    o.throwHandled = !threw;
     // A clip is named per-goal, not one fixed name that overwrites itself.
     o.namesAreUnique = M.repClipName('mp4') !== 'magnetball-goal.mp4' &&
                        /magnetball-clip-.*\.mp4$/.test(M.repClipName('mp4'));
@@ -677,6 +696,14 @@ await p.close();
      'a bare video/mp4 is not an mp4 preference — Chrome answers it with VP9 in an MP4 container');
   ok('clips are named per goal', o.namesAreUnique,
      'one fixed filename means each clip overwrites the last in the downloads folder');
+  ok('the filming flag is off at rest', o.filmOffAtRest,
+     'a flag that starts set would strip the caption from every live goal replay');
+  ok('...set for the length of a real recording', o.setDuringPlayback,
+     'the painter obeying the flag proves nothing if nothing ever raises it');
+  ok('...and cleared afterwards', o.clearedAfter);
+  ok('...and cleared even when the playback throws', o.survivesThrow && o.throwHandled,
+     JSON.stringify({ cleared: o.survivesThrow, swallowed: o.throwHandled }) +
+     ' — a flag left set is a caption silently gone from every live replay after it');
   if (qerr.length) fails.push('save-clip page errors: ' + qerr.slice(0,3).join(' | '));
   await q.close();
 }
@@ -740,8 +767,16 @@ await p.close();
     const was = M.replay.controls;
     M.replay.controls = true;  M.drawReplayFrame(f); const chosen = band();
     M.replay.controls = false; M.drawReplayFrame(f); const interrupted = band();
+    // ⚠️ AND NOT INTO A VIDEO. `captureStream` films this canvas, so the caption would be
+    // baked into an exported clip for ever — "TAP TO SKIP" written across a file you are
+    // about to send someone, telling them to press a screen that is not there. Measured the
+    // same way and against the same frame, with `controls` left FALSE: a goal clip filmed
+    // from the result screen is a replay nobody chose to watch, so `controls` cannot be the
+    // flag that cleans it up and `filming` is a separate answer to a separate question.
+    M.replay.filming = true;   M.drawReplayFrame(f); const filmed = band();
+    M.replay.filming = false;
     M.replay.controls = was;
-    return { active: M.replay.active, controls: was, chosen, interrupted };
+    return { active: M.replay.active, controls: was, chosen, interrupted, filmed };
   });
 
   // ⚠️ **WAIT FOR THE CONDITION, NEVER FOR A DURATION.** This was `waitForTimeout(6000)`,
@@ -773,6 +808,9 @@ await p.close();
      'the goal replay drew ' + mid.interrupted + ' lit pixels against ' + mid.chosen + ' for a chosen one — if the caption is off in both, the check below passes for the wrong reason');
   ok('...and NOT over one you chose to watch', mid.chosen < mid.interrupted * 0.75,
      mid.chosen + ' lit pixels against ' + mid.interrupted + ' — the caption explains an interruption, and a replay you opened deliberately is not one');
+  ok('...and NOT into an exported video', mid.filmed < mid.interrupted * 0.75,
+     mid.filmed + ' lit pixels against ' + mid.interrupted + ' with controls still FALSE — a caption on the canvas ' +
+     'is a caption in the file, and it cannot be taken out again');
   ok('it HOLDS at the end', end.ended && end.stillActive && !end.menuCameBack,
      JSON.stringify(end) + ' — reaching the last frame is not a request to leave, and closing itself takes away watching it again or scrubbing back');
   ok('...with the transport still up', end.transportUp, JSON.stringify(end));
