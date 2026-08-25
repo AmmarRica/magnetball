@@ -67,7 +67,12 @@
     .opt.sel, .swatch.sel { box-shadow: 0 0 0 2px var(--accent) !important; }
     button.primary { box-shadow: 0 4px 14px rgba(0,0,0,.30) !important; }
 
-    #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+    /* ⚠️ NO `image-rendering` here — see resize(). The backing store is sized to the
+       screen's own pixels, so backing → box is exactly 1:1 and this rule could only ever
+       matter if that broke; `pixelated` is the WORSE failure mode when it does (uneven
+       glyph stems rather than even softness). The chunky look comes from
+       `ctx.imageSmoothingEnabled = false`, which is a different setting entirely. */
+    #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
     /* The VJ background video. `pointer-events:none` twice over — a layer that eats a tap
        is the #lobbyStartBtn bug from the other direction — and sized to COVER: a 16:9
        frame centred and scaled up until both axes are filled, whatever the window is. */
@@ -5337,7 +5342,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0455PM';
+const VERSION = '20260825.1120AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5353,6 +5358,13 @@ const VERSION = '20260824.0455PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260825.1120AM', title: 'Sharper text everywhere',
+    changed: [
+      '<b>Everything the game draws is now rendered at your screen\u2019s full resolution.</b> On a modern phone the pitch was being drawn smaller than the screen and then stretched to fit, which made the player names, the shirt numbers and the warm-up keyboard look soft and slightly uneven. They are crisp now.',
+      '<b>The menu\u2019s previews are sharper too</b> \u2014 the cosmetic tiles, your player preview, the pitch previews and the theme tiles were all being stretched on a high-resolution screen.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.0455PM', title: 'Eleven a side, and a much faster menu',
     added: [
       '<b>You can now field eleven a side.</b> Step the team size up in warm-up as far as 11 v 11 \u2014 a real team. Shirt numbers go up to 11 to match.',
@@ -7126,6 +7138,62 @@ function cachedSwatch(key, make, fixed){
   const m = fixed ? swatchFixed : swatchCache;
   let cv = m.get(key);
   if (cv === undefined){ cv = make() || null; m.set(key, cv); }
+  return cv;
+}
+// ⚠️ **A UI CANVAS IS AUTHORED AT THE SCREEN'S PIXELS, NOT AT ITS COORDINATE BOX — and
+// every one of them in the menu was authored at neither.** They are minted at a fixed
+// backing size and displayed at whatever the stylesheet says, with no reference to
+// `devicePixelRatio` anywhere, so on a HiDPI screen the browser stretches them. Measured
+// at DPR 3: the player preview **×1.45**, its header disc **×1.50**, a cosmetic tile
+// **×1.875**. The cosmetic tiles are where the shirt NUMBERS and the faceplate glyphs are,
+// so this is the menu's half of the defect `resize()` records for the pitch — the DOM text
+// beside them was always crisp, which is what made the canvases look wrong rather than the
+// page look soft.
+// ⚠️ **`k` is clamped at 1, so this can only ever ADD resolution.** Most of these are
+// already authored LARGER than they are shown (a 64px tile in a 40px box), and that
+// over-provision is what keeps them sharp on a 1× screen; scaling to the display size
+// unconditionally would throw it away and make a desktop worse to fix a phone. At DPR 1
+// every call below is a no-op and the bytes are exactly what they were.
+// ⚠️ **NOTHING HERE WRITES A STYLE.** The display size stays the stylesheet's business, so
+// the backing store is the only thing that moves and no layout can shift — which is what
+// makes this safe to apply across a menu whose rendered boxes four suites measure.
+function uiScale(cssPx, drawPx){
+  return Math.max(1, (window.devicePixelRatio || 1) * cssPx / drawPx);
+}
+// The rendered widths the stylesheet gives these canvases. Named here because the backing
+// store has to be derived from them, and a wrong number is only ever an over- or
+// under-provision — the stylesheet still owns the layout, so none of these can move a box.
+const TILE_CSS = 40;      // `.tilewrap .opt canvas`
+const PREVIEW_CSS = 66;   // `#grass .opt canvas`, `#pitches .opt canvas`, `.photoprev`
+const BUNDLE_CSS = 84;    // `#themePick .opt canvas`
+// A canvas drawn in a `drawW × drawH` coordinate box and shown `cssW` CSS pixels wide.
+// The drawing code is untouched — the scale rides on the context transform.
+function uiCanvas(drawW, drawH, cssW){
+  const k = uiScale(cssW, drawW);
+  const c = document.createElement('canvas');
+  c.width = Math.round(drawW * k); c.height = Math.round(drawH * k);
+  c.getContext('2d').setTransform(k, 0, 0, k, 0, 0);
+  return c;
+}
+// For a canvas already IN the document whose display size the stylesheet owns: ask the
+// element how big it is drawn rather than repeating the number here. Idempotent — once the
+// backing matches, `k` is 1 and nothing happens — so it is safe on a redraw path.
+// ⚠️ Callers must draw relative to `cv.width`, not to a literal, or growing the backing
+// leaves the drawing in the corner of it.
+// ⚠️ **A HIDDEN ELEMENT MEASURES ZERO, and that is not a rare path — it is the ordinary
+// one.** These previews live inside `.subpane`s, so on any build where the pane happens to
+// be the one that is not showing, `clientWidth` is 0 and the fit silently does nothing;
+// `#pvCanvas` stayed at its authored 120 for exactly that reason while `#pvMini`, which
+// sits in the always-visible card header, was fixed. `cssFallback` is the stylesheet's
+// number for the case where the element cannot answer for itself — a fallback, never the
+// first source, so the measurement stays authoritative wherever it is available.
+function uiFit(cv, cssFallback){
+  const w = (cv && cv.clientWidth) || cssFallback; if (!cv || !w) return cv;
+  const k = uiScale(w, cv.width);
+  if (k > 1.001){
+    const h = Math.round(cv.height * k);
+    cv.width = Math.round(cv.width * k); cv.height = h;
+  }
   return cv;
 }
 // A hex, or '' for anything else. The stored value comes from a colour input, an
@@ -10873,7 +10941,12 @@ function buildOpts(containerId, obj, key, extra){
       // All three draw a mini pitch: field tiles vary the shape, grass tiles vary
       // the mow, surface tiles vary what you're playing ON. Ice and mud used to be
       // emoji next to a pitch that looked identical on all three.
-      const N=128;                                  // drawn at 2× the display size so the bands stay crisp
+      // ⚠️ **128 WAS A GUESS AT "2× the display size" AND IT WAS NEVER RIGHT.** These are
+      // shown 66 CSS px wide, so a 2× screen already needs 132 and a 3× screen 198 — the
+      // tile was being stretched on every HiDPI display it has ever been shown on. 128
+      // stays the COORDINATE BOX the preview is composed in; how many real pixels that
+      // becomes is `uiCanvas`' business now.
+      const N=128;
       // ⚠️ The shape rides on the TILE as a data attribute and the container hides the
       // groups it is not showing. `#fields` stays exactly one `.opts.tilewrap` holding
       // every field, which is what keeps `#fields .opt` meaning what it always did.
@@ -10904,13 +10977,14 @@ function buildOpts(containerId, obj, key, extra){
       // its own row" true, which is what lets the node be appended rather than copied.
       const fpKey = ['fp', key, key==='field' ? k : sel.field, N,
                      key==='grass' ? k : sel.grass, key!=='field',
-                     key==='pitch' ? k : sel.pitch].join('|');
+                     key==='pitch' ? k : sel.pitch,
+                     window.devicePixelRatio || 1].join('|');
       // ⚠️ The canvas is minted INSIDE the maker, so a cache HIT allocates nothing at all.
       // Creating it up front and only then asking the cache still paid for one canvas per
       // tile per rebuild — measured as the tap getting FASTER while the allocation count
       // went UP, which is what caught it.
       const cached = cachedSwatch(fpKey, () => {
-        const c2 = document.createElement('canvas'); c2.width = c2.height = N;
+        const c2 = uiCanvas(N, N, key==='field' ? TILE_CSS : PREVIEW_CSS);
         drawFieldPreview(c2.getContext('2d'), F, N, N,
                          key==='grass' ? k : sel.grass, key!=='field',
                          key==='pitch' ? k : sel.pitch);
@@ -11308,10 +11382,15 @@ function drawFieldPreview(c, F, cw, ch, grass, bare, surface){
 }
 function updatePreview(){
   $('pvName').textContent = ep().name || 'Player';
-  const cvs = $('pvCanvas');
+  // ⚠️ `uiFit` before each draw, and both of these already draw relative to `cv.width`,
+  // which is what makes growing the backing store free here. Authored at 120 and 52 and
+  // shown at 58 and 26, they were being stretched ×1.45 and ×1.50 on a 3× screen — and the
+  // faceplate is a shirt NUMBER by default, so the blur landed on the one glyph on the
+  // card. Idempotent, so calling it on this redraw path costs a layout read and nothing else.
+  const cvs = uiFit($('pvCanvas'), 58);   // 58 = `.pvBall` in the stylesheet
   if (cvs){ const c=cvs.getContext('2d'); c.clearRect(0,0,cvs.width,cvs.height);
     drawDisc(c, cvs.width/2, cvs.height/2, cvs.width*0.36, ep()); }
-  const mini = $('pvMini');   // live disc in the sticky "Your Player" header
+  const mini = uiFit($('pvMini'), 26);   // live disc in the sticky "Your Player" header
   if (mini){ const mc=mini.getContext('2d'); mc.clearRect(0,0,mini.width,mini.height);
     drawDisc(mc, mini.width/2, mini.height/2, mini.width*0.40, ep()); }
   // Your disc colour is yours to pick, including ones that vanish into the panel
@@ -11398,9 +11477,19 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     // again and the node can be appended rather than copied.
     // ⚠️ The LIVE cache, so `applyTheme` drops it: a disc is drawn in the player's colour
     // over the palette's inks.
-    const tileKey = ['tile', containerId, cat, k, o.color, o.eyes || ''].join('|');
+    // ⚠️ **`DPR` IS IN THE KEY.** The bake is now resolution-dependent, and nothing else in
+    // the signature moves when a window is dragged to a monitor with a different ratio —
+    // so without it every tile would keep the old screen's resolution for the session.
+    const tileKey = ['tile', containerId, cat, k, o.color, o.eyes || '',
+                     window.devicePixelRatio || 1].join('|');
     const cvs = cachedSwatch(tileKey, () => {
-      const c2 = document.createElement('canvas'); c2.width = c2.height = 64;
+      // ⚠️ **64 IS THE COORDINATE BOX AND `TILE_CSS` IS THE BOX ON SCREEN** — they are
+      // different numbers and conflating them is the bug. `TILE_CSS` must match
+      // `.tilewrap .opt canvas` in the stylesheet, which is what sizes every container
+      // this builder writes into (flags, animals, texts, eyes and their recents rows).
+      // If the two ever drift the tile is merely over- or under-provisioned, never
+      // mislaid — the stylesheet still owns the layout.
+      const c2 = uiCanvas(64, 64, TILE_CSS);
       drawDisc(c2.getContext('2d'), 32, 32, 22, o);
       return c2;
     });
@@ -12934,7 +13023,7 @@ function buildPhotoPane(){
   host.innerHTML = '';
   const row = document.createElement('div'); row.className = 'photorow';
   // What you'd actually wear, drawn by the same painter the pitch uses.
-  const cv = document.createElement('canvas'); cv.width = cv.height = 132; cv.className = 'photoprev';
+  const cv = uiCanvas(132, 132, PREVIEW_CSS); cv.className = 'photoprev';
   cv.id = 'photoPrev';
   drawDisc(cv.getContext('2d'), 66, 66, 52,
     { color: ep().color, flag: ep().photo ? 'photo' : 'none', eyes: ep().eyes, cap: ep().cap });
@@ -14361,7 +14450,7 @@ function buildSettings(){
     const t=THEMES[key];
     const el=document.createElement('div'); el.className='opt'+(live===key?' sel':'');
     el.dataset.bundle = key;
-    const cvs=document.createElement('canvas'); cvs.width=128; cvs.height=88;
+    const cvs=uiCanvas(128, 88, BUNDLE_CSS);
     drawBundleSwatch(cvs.getContext('2d'), key, 128, 88);
     el.appendChild(cvs);
     const nm=document.createElement('span'); nm.textContent=(t.emoji?t.emoji+' ':'')+t.name; el.appendChild(nm);
@@ -14378,7 +14467,7 @@ function buildSettings(){
     el.className='opt'+(live===null?' sel':'');
     el.dataset.bundle = 'custom';
     const mix = live===null ? liveSlots() : (sel.customLook || null);
-    const cvs=document.createElement('canvas'); cvs.width=128; cvs.height=88;
+    const cvs=uiCanvas(128, 88, BUNDLE_CSS);
     if (mix) drawSlotsSwatch(cvs.getContext('2d'), mix, 128, 88);
     else { const c2=cvs.getContext('2d');
       c2.fillStyle=(THEMES[sel.look.palette]||THEMES.neon).pitch.fieldBg||'#111';
@@ -23939,11 +24028,45 @@ function resize(){
     document.body.classList.remove('panel-open');
     settingsDocked=false; settingsFromGame=false; uiPadLeft=0; deskDockId=null;
   }
-  DPR = Math.min(window.devicePixelRatio||1, 2.5);
+  // ⚠️ **THE BACKING STORE IS THE SCREEN'S OWN PIXELS, EXACTLY — NO CLAMP, NO FLOOR.**
+  // This was `Math.min(dpr, 2.5)` with a `Math.floor` on the product, and both halves
+  // put the canvas at a resolution the box it fills is not: on a **3× phone** — which is
+  // every current iPhone and most Android flagships — a 390px-wide canvas was rasterised
+  // 975 device pixels across and then stretched by the compositor over 1170. A **1.200×
+  // rescale of everything the game draws**, and with `image-rendering: pixelated` on the
+  // element it was NEAREST-NEIGHBOUR, so glyph stems came out at uneven widths: some
+  // columns of the letter duplicated and some not. Measured on a 24px string at DPR 3,
+  // soft (neither ink nor ground) pixels: **2,812 shipped against 680 at 1:1** — 3.75× the
+  // fuzz. Reported as the font looking blurry, and it is exactly that. The menu was always
+  // crisp, because DOM text is rendered by the browser at native resolution and never went
+  // through this.
+  // ⚠️ **THE CLAMP WAS PROTECTING AGAINST NOTHING, and that is the argument for removing
+  // it rather than raising it.** `cw × devicePixelRatio` IS the number of physical pixels
+  // the canvas occupies, by construction — a bigger ratio always comes with a
+  // proportionally smaller CSS viewport (a 4K panel at 3× reports a 1280-wide window), and
+  // browser zoom moves both together too. So the backing store can never exceed the
+  // physical display however high the ratio goes; there is no runaway for a cap to catch.
+  // All the cap ever did was render BELOW native and hand the difference to the
+  // compositor. Measured cost of 2.5 → 3.0 on a phone at 2v2 and 4v4: render 0.2 → 0.3ms
+  // and 0.3 → 0.3ms, rasterised +11% / −8% — inside the noise, because the frame is
+  // per-object work rather than fill rate.
+  // ⚠️ **The CSS box is sized FROM the backing, not the other way round.** `devicePixelRatio`
+  // is often fractional (1.5 and 1.75 are ordinary Windows scalings), so `cw * DPR` is not
+  // an integer and something has to give; rounding the backing and leaving the box at `cw`
+  // leaves a sub-pixel rescale, which is the same defect a thousandth of the size. Deriving
+  // the box back from the rounded backing makes the mapping exactly 1:1 at every ratio and
+  // costs at most half a CSS pixel of sliver at the right and bottom edges.
+  DPR = Math.max(1, window.devicePixelRatio || 1);
   cw = window.innerWidth; ch = window.innerHeight;
-  cv.width = Math.floor(cw*DPR); cv.height = Math.floor(ch*DPR);
-  cv.style.width = cw+'px'; cv.style.height = ch+'px';
+  cv.width = Math.round(cw*DPR); cv.height = Math.round(ch*DPR);
+  cv.style.width = (cv.width/DPR)+'px'; cv.style.height = (cv.height/DPR)+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  // ⚠️ This is the IN-CONTEXT setting, which governs how `drawImage` scales the textures
+  // the game bakes (the dither ramp, the ball's sphere strips, the warm-up board). It is
+  // what gives the chunky look, and it is NOT the same thing as the element's CSS
+  // `image-rendering` — that one only ever governed backing-store → CSS-box scaling, which
+  // is now 1:1 by construction, so it has been dropped from `#game` rather than left as a
+  // trap that turns any future mismatch into uneven letters instead of even softness.
   ctx.imageSmoothingEnabled = false;   // crisp, chunky pixels (Amiga look)
   if (world) syncPitchTurn();
   if (world) computeCam();
@@ -25432,10 +25555,24 @@ function drawLobbyPad(k, g, ox, oy, f, ink){
 // restores it in a `finally` so a throw mid-bake cannot strand the game drawing into an
 // offscreen buffer. `screenUpright` is a documented no-op, so nothing inside reaches for a
 // context of its own.
+// ⚠️ **BAKED AT DEVICE PIXELS, NEVER AT CSS PIXELS — the bake is a resolution decision
+// and the first version got it wrong.** `geo` comes from `screenPt`, and the context it
+// was measured in already carries the `setTransform(DPR,…)`, so those coordinates are CSS
+// pixels. Sizing the offscreen canvas to that bounding box rasterised the whole board —
+// every letter, every shirt, every flag — at **1×** and then let the DPR transform stretch
+// it on the way back in, so on any HiDPI screen the warm-up keyboard was the one soft
+// thing on a crisp pitch. That is the same defect `resize()` records one layer up,
+// arriving from the other direction: there the compositor did the stretching, here the
+// game does it to itself. The fix is the same shape — rasterise at the pixels it will
+// actually occupy, and blit back at an explicit CSS destination size so the mapping is 1:1.
+// ⚠️ **`DPR` therefore belongs in the signature.** Dragging the window to a monitor with a
+// different ratio changes nothing else the signature watches — the camera can be identical
+// — so without it the board would keep a stale low-resolution bake for the rest of the
+// session, which is precisely the bug being fixed wearing a hat.
 let lobbyBoardCv = null, lobbyBoardSig = '';
 function lobbyBoard(kb, geo, ink){
   const sig = [kb._sig, ink, teamColOf(0), teamColOf(1),
-               teamFlagOf(0) || '', teamFlagOf(1) || '', sel.diff].join('|');
+               teamFlagOf(0) || '', teamFlagOf(1) || '', sel.diff, DPR].join('|');
   if (lobbyBoardCv && lobbyBoardSig === sig) return lobbyBoardCv;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const g of geo) for (const q of g.pts){
@@ -25448,8 +25585,11 @@ function lobbyBoard(kb, geo, ink){
   const bw = Math.ceil(x1 + pad) - x0, bh = Math.ceil(y1 + pad) - y0;
   if (bw <= 0 || bh <= 0 || bw > 8000 || bh > 8000) return null;
   const off = document.createElement('canvas');
-  off.width = bw; off.height = bh;
+  off.width = Math.ceil(bw*DPR); off.height = Math.ceil(bh*DPR);
   const octx = off.getContext('2d');
+  // The pads are drawn in CSS units, exactly as they are on the live context; the scale is
+  // the only difference between the bake and painting them straight onto the pitch.
+  octx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const was = ctx;
   try {
     ctx = octx;
@@ -25459,7 +25599,7 @@ function lobbyBoard(kb, geo, ink){
     for (let i = 0; i < kb.keys.length; i++) drawLobbyPad(kb.keys[i], geo[i], -x0, -y0, 0, ink);
     ctx.restore();
   } finally { ctx = was; }
-  off._bx = x0; off._by = y0;
+  off._bx = x0; off._by = y0; off._bw = bw; off._bh = bh;
   lobbyBoardCv = off; lobbyBoardSig = sig;
   return off;
 }
@@ -25492,7 +25632,10 @@ function drawLobbyKeys(w, ox, oy){
   // standing on is drawn for real. Falls back to painting every pad if the bake
   // could not be made, so a refusal costs speed and never the picture.
   const board = lobbyBoard(kb, geo, ink);
-  if (board) ctx.drawImage(board, board._bx + ox, board._by + oy);
+  // ⚠️ The DESTINATION SIZE is given explicitly. The bake is `DPR` times bigger than the
+  // box it goes back into, and a three-argument `drawImage` would paint it at one CSS
+  // pixel per source pixel — a board `DPR` times too large, laid over the pitch.
+  if (board) ctx.drawImage(board, board._bx + ox, board._by + oy, board._bw, board._bh);
   for (let gi = 0; gi < kb.keys.length; gi++){
     const k = kb.keys[gi], f = fill.get(k) || 0;
     if (board && !f) continue;
@@ -30800,6 +30943,8 @@ if (window.__MAGNETDEBUG) {
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
     ANIMALS, TEXTS, TEXT_KEYS, buildTextPicker, itemName, shirtNo, TEXT_SETS, defaultProfile, saveProfile,
     unlockCounts, UNL_CATS, isUnlocked, drawDisc, updatePreview,
+    get DPR(){ return DPR; }, uiScale, uiCanvas, uiFit, TILE_CSS,
+    get lobbyBoardCv(){ return lobbyBoardCv; },
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,
     computeAwards, renderAwards, renderMatchStats, STAT_COLS, STAT_MORE, statLine,

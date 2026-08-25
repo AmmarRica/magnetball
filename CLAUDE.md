@@ -712,6 +712,85 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   sounds call it most — the Ovation cheer is 27 calls, costing 2.2ms median on the main thread at
   exactly the moment a goal goes in (0.2ms now). It is filled from a seeded PRNG, not
   `Math.random`, because `noise` is reachable from inside `step()`.
+- **EVERY RASTER IS AUTHORED AT THE PIXELS IT WILL OCCUPY** (`resize`, `uiScale`,
+  `uiCanvas`, `uiFit`, `TILE_CSS`/`PREVIEW_CSS`/`BUNDLE_CSS`, `lobbyBoard`). Reported as
+  the font looking blurry — *"a bit of blur to it that is common with AI generated
+  content"*, which is a fair description of what a non-integer rescale of text looks like.
+  It was **three separate instances of one mistake**, and the DOM text beside all three was
+  always perfectly crisp, which is what made it read as the *font* being soft rather than
+  the page.
+  ⚠️ **THE GAME CANVAS WAS CLAMPED AT 2.5×.** `DPR = Math.min(devicePixelRatio, 2.5)` with
+  a `Math.floor` on the product, so on a **3× phone** — every current iPhone and most
+  Android flagships — a 390px-wide canvas was rasterised **975** device pixels across and
+  stretched by the compositor over **1170**. A 1.200× rescale of everything the game draws,
+  and `#game` carried `image-rendering: pixelated`, so it was NEAREST-NEIGHBOUR: some
+  columns of a letter duplicated and some not, which is uneven stems rather than even
+  softness. Measured on a 24px string at DPR 3, soft (neither ink nor ground) pixels:
+  **2,812 against 680** at 1:1, and after the fix **0**.
+  ⚠️ **THE CLAMP WAS PROTECTING AGAINST NOTHING, which is the argument for deleting it
+  rather than raising it.** `cw × devicePixelRatio` IS the number of physical pixels the
+  canvas occupies, by construction — a higher ratio always comes with a proportionally
+  smaller CSS viewport (a 4K panel at 3× reports a 1280-wide window) and browser zoom moves
+  both together — so the backing store can never exceed the physical display however high
+  the ratio goes. There is no runaway for a cap to catch; all it ever did was render below
+  native and hand the difference to the compositor. Cost of 2.5 → 3.0 measured on a phone
+  at 2v2 and 4v4: render 0.2 → 0.3ms and 0.3 → 0.3ms, rasterised +11% / −8% — inside the
+  noise, because the frame is per-object work rather than fill rate.
+  ⚠️ **The CSS box is derived FROM the backing, not the other way round.**
+  `devicePixelRatio` is often fractional (1.5 and 1.75 are ordinary Windows scalings), so
+  `cw * DPR` is not an integer and something has to give; rounding the backing and leaving
+  the box at `cw` is the same defect a thousandth of the size. It costs at most half a CSS
+  pixel of sliver at the right and bottom edges.
+  ⚠️ **`image-rendering` is GONE from `#game`, and it is not the same setting as
+  `ctx.imageSmoothingEnabled`.** The in-context one governs how `drawImage` scales the
+  textures the game bakes and is what gives the chunky look; the CSS one only ever governed
+  backing-store → CSS-box scaling, which is now 1:1 by construction. Left in place it would
+  be a trap that turns any future mismatch into the *worse* of the two failure modes.
+  ⚠️ **THE WARM-UP BOARD WAS BAKED AT CSS PIXELS**, and that one arrived with the bake
+  itself. `lobbyBoard` sizes its offscreen canvas from `screenPt` coordinates — which are
+  CSS pixels, because the context they were measured in already carries the DPR transform —
+  so the whole keyboard, every shirt and every flag was rasterised at 1× and stretched by
+  DPR on the way back in. Same defect from the other direction: there the compositor
+  stretched it, here the game does it to itself. `DPR` is in the signature, or dragging a
+  window to a monitor with a different ratio keeps a stale low-resolution board for the
+  session; and the blit passes an explicit CSS **destination size**, or a three-argument
+  `drawImage` paints the bake `DPR` times too large over the pitch.
+  ⚠️ **AND EVERY CANVAS IN THE MENU** was minted at a fixed backing size and displayed at
+  whatever the stylesheet said, with no reference to `devicePixelRatio` anywhere. Measured
+  at DPR 3: the player preview **×1.45**, its header disc **×1.50**, a cosmetic tile
+  **×1.875**, a pitch preview **×1.55**, a bundle tile **×1.97**. The cosmetic tiles are
+  where the shirt NUMBERS live. `const N=128; // drawn at 2× the display size` was the
+  closest anything came to getting it right and it was still 4px short at DPR 2.
+  ⚠️ **`uiScale` IS CLAMPED AT 1, so this can only ever ADD resolution.** Most of these are
+  authored LARGER than they are shown — a 64px tile in a 40px box — and that over-provision
+  is what keeps a desktop sharp; scaling to the display size unconditionally throws it away,
+  which is making one machine worse to fix another. At DPR 1 every call is a no-op and the
+  bytes are exactly what they were (11.9MB of canvas, against 22.7 at DPR 2 and 43.7 at 3 —
+  the honest cost of drawing at the screen's resolution).
+  ⚠️ **NOTHING WRITES A STYLE**: the display size stays the stylesheet's business, so the
+  backing store is the only thing that moves and no layout can shift — which is what makes
+  this safe across a menu whose rendered boxes four suites measure. The `*_CSS` constants
+  must match the stylesheet, and if they ever drift the canvas is merely over- or
+  under-provisioned, never mislaid.
+  ⚠️ **`uiFit` MEASURES, and a hidden element measures ZERO** — the ordinary case, not a
+  rare one, because these previews live inside `.subpane`s. `#pvCanvas` stayed at its
+  authored 120 for exactly that reason while `#pvMini`, in the always-visible card header,
+  was fixed; hence the `cssFallback` argument. It is idempotent because it runs on a redraw
+  path, and callers must draw relative to `cv.width` rather than a literal.
+  ⚠️ **THE MEASUREMENT MUST BE A SCREENSHOT, NEVER `getImageData`** — the backing store is
+  always crisp, and the blur happens in the COMPOSITOR. A probe that reads the canvas back
+  sees a perfect image on the broken build. ⚠️ **And the menu has to be hidden first**: on a
+  phone-shaped viewport `#setup` is a full-bleed fixed screen OVER the canvas, so the first
+  run of that probe measured the MENU and reported every pixel as a soft edge.
+  ⚠️ **A NEAREST-NEIGHBOUR UPSCALE IS BLOCKY, NOT SOFT, so a softness metric cannot see it
+  — and the first warm-up check was vacuous for exactly that reason.** The board is blitted
+  with smoothing off, so a CSS-pixel bake is not blurred, it is quantised: every feature
+  becomes a multiple of `DPR` device pixels. Sabotaged, it scored **0.9301** against the
+  fixed build's 0.9578 — *better*, because coarser features leave more pixels in the flat
+  bands, so it passed the check it existed to fail. What a 3× nearest upscale cannot fake is
+  a run of one or two pixels, so the discriminator is the fraction of pixel runs whose
+  length is not divisible by the ratio: **0.905 fixed against 0.477 broken**, with the DPR-1
+  board (1:1 on every build) as the control at 0.908. `tests/crisp.mjs`.
 - **Render:** `render()` → `drawPitch`, `drawBallTrail`, `drawDiscs`, `drawBall` (+ extras), controls.
   Camera in `cam` / `computeCam()` (reserves top headroom for the HUD).
 - **Themes:** `THEMES` → `applyTheme(key)` sets CSS custom properties AND the live `TH` canvas palette.
@@ -4987,11 +5066,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 126 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 127 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **125 green + proladder red**, and `proladder` going green means the
+green run is therefore **126 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
