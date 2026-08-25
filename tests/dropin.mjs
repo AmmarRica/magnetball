@@ -333,7 +333,13 @@ const bal = await p.evaluate(new Function(FIX + `
     goal(w);
   }
   o.cappedSides = sides(w);
-  o.capHolds = o.cappedSides[0] <= 8 && o.cappedSides[1] <= 8 &&
+  // WARNING: this block is inside a new Function(...) TEMPLATE LITERAL, so a backtick in
+  // a comment here ends the template and the whole file stops parsing. Plain words only.
+  // Read from LOBBY.maxPerSide rather than a literal 8: the cap is a number the owner
+  // moves (it went to 11 for a full-size team), and a check that has to be edited every
+  // time it changes is one nobody trusts. The RULE is that it holds and the sides stay even.
+  o.capValue = M.LOBBY.maxPerSide;
+  o.capHolds = o.cappedSides[0] <= o.capValue && o.cappedSides[1] <= o.capValue &&
                o.cappedSides[0] === o.cappedSides[1];
 
   // ⚠️ The FLOOR is the size the match KICKED OFF at, not mode.per. The lobby can put six

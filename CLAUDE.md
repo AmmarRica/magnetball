@@ -775,6 +775,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   bundle, painted from the mix you actually built (`drawSlotsSwatch`), and pressing it
   restores `sel.customLook` so Custom is somewhere you can go *back* to.
   `tests/themeslots.mjs`.
+- **ELEVEN A SIDE IS THE CAP** (`LOBBY.maxPerSide`, 11), asked for. It went 4 → 8 → 11;
+  the cap is about what fits on the PITCH, not what fits in the frame budget.
+  ⚠️ **IT SETS A FLOOR UNDER TWO TABLES, AND ONE OF THEM HUNG THE GAME.** `shirtNo` was
+  `'num' + (n % 10)` and `TEXT_SETS.num` held ten glyphs, so ten distinct shirts existed —
+  fine at 8 a side and impossible at 11. `numberTheSides`' `free()` walks upward until it
+  finds an unused plate, so once all ten were taken it cycled the same ten **for ever**:
+  warm-up was fine and `lobbyStart` never returned. Fixed at both ends — the table runs to
+  `１１` (two-digit entries, which is what a shirt actually says, and `fitGlyph` shrinks
+  them to the plate), `shirtNo` takes its modulus from the table's own LENGTH, and `free()`
+  stops after one full lap so the worst case is two bodies in one shirt rather than a
+  lock-up. ⚠️ Written as an explicit ARRAY, not `.split('')` — splitting cuts '１０' into
+  two plates.
+  ⚠️ **The other floor is `BOT_NAMES`, and the margin is now ONE.** Eleven a side is 22
+  bots if nobody human turns up, against a list of **23** (`CLAUDE.md` claimed 33; it was
+  wrong). Past that, `pickNames`' `(i*7+3) % 0` is NaN and every overflow bot comes out
+  called `Bot1`, because `spawnLobbyBot`'s own fallback never fires on a truthy string. So
+  **a name removed from that list breaks a full-size match**; `tests/lobbykb.mjs` fields a
+  whole 11v11 and checks 22 distinct names.
+  ⚠️ **Three suites pinned the old cap as a literal** (`textplates`' `shirtNo(10)==='num0'`,
+  `lobby`'s eight-character `'PPPPPPPP'`, `dropin`'s `<= 8`) and all three are derived from
+  `LOBBY.maxPerSide` / `TEXT_SETS.num.chars.length` now — a check that must be edited every
+  time the thing it watches changes is one nobody trusts.
 - **EVERY skin gets a guide ring, and that is STRUCTURAL.** `drawOneDisc` strokes
   `strokeDiscGuide` after the skin paints, so a new skin cannot forget one — a player is a
   circle of radius `r` and that circle is what collides, however un-circular the art inside it
@@ -3832,6 +3854,47 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   of `(kb, cam)`. Cached on a `cam` signature; **a rebuild mints a new `kb` object**, so
   `_sig` is `undefined` on it and the cache cannot go stale in either direction, which is
   worth more than an invalidation call somebody has to remember. Now 0.58ms.
+- **THE WARM-UP BOARD IS BAKED ONCE AND BLITTED** (`lobbyBoard`, `drawLobbyPad`). Measured:
+  the lobby rendered at **0.99ms a frame against a live 4v4 match's 0.18ms** — five and a
+  half times a running game, on a screen where nothing is happening. Roughly seventy pads
+  (28 letters, 16 shirts, 24 flags, two steppers, START) were fully repainted every frame,
+  each with its own `save`/`clip`/`drawImage`/`restore`: `drawImage` was 17.9% of the
+  profile, `save` 10.6% and `clip` 5.0%. Baked, it is **0.26ms**.
+  ⚠️ **`lobbyKeyGeo` already cached the GEOMETRY; this caches the PAINTING**, which is the
+  expensive half. Nothing on the board moves — the only per-frame variation is the
+  highlight under a body, which is at most one pad per player and is drawn live on top.
+  ⚠️ **The signature carries everything the RESTING picture depends on**, not just the
+  camera: the worn shirt and flag per side, the difficulty and the ink all change what is
+  drawn at rest, and a stale board shows the old selection until the camera moves.
+  ⚠️ It swaps the module-level `ctx`, the idiom `playReplayFile` uses for `world`, and
+  restores it in a `finally`. `screenUpright` is a documented no-op, so nothing inside
+  reaches for a context of its own.
+  ⚠️ **It is NOT bit-identical to painting each pad, and cannot be**: the pads are
+  TRANSLUCENT, so compositing them onto a transparent layer and blitting that once differs
+  from compositing each onto the pitch in turn. Measured over a whole frame, 99.9% of the
+  pixels that differ do so by **≤2 levels of 255** and only **126 of 810,000** exceed 8.
+  ⚠️ **`tests/lobbydress.mjs` measures EACH PAD FAMILY'S OWN BOX, and the obvious probe is
+  VACUOUS — two sabotages PASSED before it was right.** A whole-frame diff is satisfied by
+  the body moving or by the shirts on the pitch recolouring, with the board fully stale;
+  and a box round ALL the pads encloses the PITCH, because the swatches sit beside the
+  court and the keyboard below it.
+- **PICKER PREVIEWS ARE CACHED, ALL OF THEM** (`cachedSwatch` in `buildOpts` and
+  `buildTilePicker`). Measured: tapping a pitch tile cost **15.6ms and 79 fresh canvases**
+  against 0.3ms and zero for every other picker, because each tile baked a full-resolution
+  pitch texture and `refreshPitchTiles` then did the grass and surface rows too. And
+  `finishMatch` allocated **186 canvases for 21–38ms** — 177 of them in `buildTilePicker`,
+  because an unlock may have landed so the cosmetic pickers are rebuilt. Now **6.8ms / 11**
+  and **7.1ms / 11**.
+  ⚠️ **THE CONTAINER OR PICKER NAME MUST BE IN THE KEY, and leaving it out EMPTIES A TILE.**
+  Two rows can describe the same picture — the selected GRASS tile and the selected SURFACE
+  tile both draw (current field, current mow, current surface), and a cosmetic appears in
+  the Recents row AND the picker below it. One shared node is MOVED by `appendChild` out of
+  the first tile, which then has no canvas at all. That is the hazard `slotSwatch` returns a
+  copy to avoid, arriving through a shared cache key instead of a shared call site; keyed
+  per row it is unique again and the node can be appended rather than copied.
+  ⚠️ **The canvas is minted INSIDE the maker**, so a hit allocates nothing. Creating it up
+  front and then asking the cache still paid for one per tile — caught by the tap getting
+  faster while the allocation count went UP.
 - **A BODY NOBODY CAN SEE IS NOT PAINTED** (`bodyOffScreen`), and until now every one was.
   `drawOneDisc` is the most expensive thing in the renderer and there was no culling
   anywhere. ⚠️ **It does not fire in the lobby**, and that is worth knowing before anybody

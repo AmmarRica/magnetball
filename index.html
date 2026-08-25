@@ -3459,8 +3459,16 @@ const ANIMAL_KEYS = Object.keys(ANIMALS);
 // Two complete 0-9 runs are usable as shirt numbers; the Indic and Braille rows are
 // as posted and stop short of 9, so they're offered as glyphs rather than pretending
 // to be a full set. Everything below is exactly the characters from the list.
+// ⚠️ **THE NUMBER SET RUNS TO ELEVEN, and it used to stop at nine.** `shirtNo` is
+// `'num' + (n % chars.length)`, so ten glyphs meant ten distinct shirts — fine while
+// `LOBBY.maxPerSide` was 8 and impossible at 11, where a side has more bodies than the
+// table has numbers. Two-digit entries rather than more single glyphs, because that is
+// what a shirt actually says; `fitGlyph` measures the ink and shrinks it to the plate, so
+// a wider label is simply drawn smaller.
+// ⚠️ Written as an explicit ARRAY, not a `.split('')` — splitting a string cuts '１０'
+// into two separate plates, which is the silent way to get eleven tiles that read 0-9-1-0.
 const TEXT_SETS = {
-  num:  { label:'Number',  chars:'０１２３４５６７８９'.split('') },
+  num:  { label:'Number',  chars:['０','１','２','３','４','５','６','７','８','９','１０','１１'] },
   circ: { label:'Circled', chars:'⓪①②③④⑤⑥⑦⑧⑨'.split('') },
 };
 const TEXTS = {};
@@ -4151,9 +4159,16 @@ const LOBBY = {
   wallB: 0.9,
   // Six people who all want to be on the same team should get to be. This used to
   // be 4 (a 4v4's worth) which, combined with splitting a one-sided lineup down the
-  // middle, made that impossible. 8 costs ~2ms a frame at 8v8 — a measured eighth
-  // of the budget — so the cap is about what fits on the pitch, not what fits in it.
-  maxPerSide: 8,
+  // middle, made that impossible, and then 8.
+  // ⚠️ **ELEVEN, asked for: a real team.** The cap is about what fits on the PITCH rather
+  // than what fits in the frame budget.
+  // ⚠️ **IT SETS THE FLOOR UNDER `BOT_NAMES`, and the margin is now ONE.** Eleven a side
+  // is **22 bots** if nobody human turns up, against a list of 23. When `pickNames` runs
+  // the pool dry, `(i*7+3) % 0` is NaN, the splice yields undefined, and every overflow
+  // bot comes out called `Bot1` — `spawnLobbyBot`'s own `|| 'Bot'+(seat+1)` fallback never
+  // fires, because that string is already truthy. So a name REMOVED from that list breaks
+  // a full-size match, and `tests/lobbykb.mjs` fields a whole 11v11 to prove it does not.
+  maxPerSide: 11,
   // How far outside the touchline you may stand. Bigger than the in-play step-out
   // margin so "step outside to sit this one out" is a real, visible place to be —
   // but still bounded, so nobody wanders off the screen.
@@ -5322,7 +5337,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260824.0210PM';
+const VERSION = '20260824.0455PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5338,6 +5353,15 @@ const VERSION = '20260824.0210PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260824.0455PM', title: 'Eleven a side, and a much faster menu',
+    added: [
+      '<b>You can now field eleven a side.</b> Step the team size up in warm-up as far as 11 v 11 \u2014 a real team. Shirt numbers go up to 11 to match.',
+    ],
+    changed: [
+      '<b>The warm-up room draws about four times faster</b>, and picking a pitch or finishing a match no longer stutters. Nothing looks different \u2014 the game was redrawing things every frame that never change.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260824.0210PM', title: 'Your colour, everywhere it should be',
     changed: [
       '<b>The frame round each half is now that side\u2019s own colour.</b> Pick green and the half you are standing in is outlined in green \u2014 it used to stay red or blue whatever you chose, so your shirts and your half disagreed.',
@@ -10850,16 +10874,49 @@ function buildOpts(containerId, obj, key, extra){
       // the mow, surface tiles vary what you're playing ON. Ice and mud used to be
       // emoji next to a pitch that looked identical on all three.
       const N=128;                                  // drawn at 2× the display size so the bands stay crisp
-      const cv=document.createElement('canvas'); cv.width=cv.height=N;
       // ⚠️ The shape rides on the TILE as a data attribute and the container hides the
       // groups it is not showing. `#fields` stays exactly one `.opts.tilewrap` holding
       // every field, which is what keeps `#fields .opt` meaning what it always did.
       if (key==='field') el.dataset.shape = fieldShape(o);
       const F = key==='field' ? o : (FIELDS[sel.field]||FIELDS.classic);
-      drawFieldPreview(cv.getContext('2d'), F, N, N,
-                       key==='grass' ? k : sel.grass, key!=='field',
-                       key==='pitch' ? k : sel.pitch);
-      el.appendChild(cv);
+      // ⚠️ **CACHED, because a pitch tap was costing 15.6ms and 79 fresh canvases.**
+      // Every other picker in the menu measures 0.3ms and allocates nothing; this one
+      // baked a full-resolution pitch texture per tile, and `refreshPitchTiles` then did
+      // the grass and surface rows as well — so picking a pitch redrew 79 previews to
+      // change one `.sel` class. `cachedSwatch` is the machinery the slot pickers already
+      // use; the field picker simply never went through it.
+      // ⚠️ The key is everything the picture depends on: WHICH field is being drawn, the
+      // mow, the surface, the size, and whether the markings are on (a grass or surface
+      // tile draws the CURRENT field, a field tile draws its own).
+      // ⚠️ The cached canvas is appended DIRECTLY rather than copied, unlike `slotSwatch`
+      // — the copy exists there because one swatch appears in two cards at once, and
+      // these keys are unique within their own row, so re-appending simply moves the node
+      // out of the wrapper that is being thrown away.
+      // ⚠️ The LIVE cache (not `fixed`), because the preview is drawn in the palette's
+      // colours and `applyTheme` clears that one.
+      // ⚠️ **THE PICKER'S OWN NAME IS IN THE KEY, and leaving it out EMPTIED A TILE.**
+      // The three rows can describe the same picture: the selected GRASS tile draws
+      // (current field, current mow, current surface) and so does the selected SURFACE
+      // tile, so their keys collided, both rows asked for one node, and `appendChild`
+      // MOVED it out of the first — leaving a tile with no canvas in it at all. That is
+      // the hazard `slotSwatch` documents, arriving through a shared cache key instead of
+      // a shared call site. Keying per row costs one extra entry and makes "unique within
+      // its own row" true, which is what lets the node be appended rather than copied.
+      const fpKey = ['fp', key, key==='field' ? k : sel.field, N,
+                     key==='grass' ? k : sel.grass, key!=='field',
+                     key==='pitch' ? k : sel.pitch].join('|');
+      // ⚠️ The canvas is minted INSIDE the maker, so a cache HIT allocates nothing at all.
+      // Creating it up front and only then asking the cache still paid for one canvas per
+      // tile per rebuild — measured as the tap getting FASTER while the allocation count
+      // went UP, which is what caught it.
+      const cached = cachedSwatch(fpKey, () => {
+        const c2 = document.createElement('canvas'); c2.width = c2.height = N;
+        drawFieldPreview(c2.getContext('2d'), F, N, N,
+                         key==='grass' ? k : sel.grass, key!=='field',
+                         key==='pitch' ? k : sel.pitch);
+        return c2;
+      });
+      if (cached) el.appendChild(cached);
       const nm=document.createElement('span'); nm.textContent=o.name; el.appendChild(nm);
       if(sub){ const sm=document.createElement('small'); sm.innerHTML=sub; el.appendChild(sm); }
     } else {
@@ -11325,13 +11382,29 @@ function buildTilePicker(containerId, cat, keys, curGet, onPick){
     const unlocked = isUnlocked(cat,k);
     const el=document.createElement('div');
     el.className='opt'+(curGet()===k?' sel':'')+(unlocked?'':' locked');
-    const cvs=document.createElement('canvas'); cvs.width=cvs.height=64;
     // Faceplate tiles (flag/animal) preview the plate itself (no eyes); the eyes
     // tiles preview each eye style on a plain face.
     const o = cat==='eyes' ? { color:ep().color, flag:'none', eyes:k }
                            : { color:ep().color, flag:k };
-    drawDisc(cvs.getContext('2d'), 32, 32, 22, o);
-    el.appendChild(cvs);
+    // ⚠️ **CACHED, because the RESULT SCREEN was rebuilding all of these.** Profiled at
+    // full time, `finishMatch` allocated **186 canvases and cost 21-38ms** — and 177 of
+    // them were here, not in the scoresheet: an unlock may have landed, so the cosmetic
+    // pickers are rebuilt, and every tile redrew a disc it had already drawn.
+    // ⚠️ **THE CONTAINER IS IN THE KEY, and leaving it out empties a tile.** The same item
+    // appears in the Recents row AND in the picker below it, so one shared node would be
+    // MOVED out of the first by `appendChild` — which is exactly what happened to the
+    // field previews when their key collided across two rows, and what `slotSwatch`
+    // returns a copy to avoid. Keyed per container, "unique within its own row" is true
+    // again and the node can be appended rather than copied.
+    // ⚠️ The LIVE cache, so `applyTheme` drops it: a disc is drawn in the player's colour
+    // over the palette's inks.
+    const tileKey = ['tile', containerId, cat, k, o.color, o.eyes || ''].join('|');
+    const cvs = cachedSwatch(tileKey, () => {
+      const c2 = document.createElement('canvas'); c2.width = c2.height = 64;
+      drawDisc(c2.getContext('2d'), 32, 32, 22, o);
+      return c2;
+    });
+    if (cvs) el.appendChild(cvs);
     const nm=document.createElement('span');
     nm.textContent = itemName(cat, k);
     el.appendChild(nm);
@@ -16631,7 +16704,12 @@ function applySeatNames(players){
 // Bots wear shirt numbers too, so a pitch reads like a team sheet rather than a UN
 // summit. Numbering runs per TEAM, the way it does in a real match: you are 1 and
 // your bots take 2 upward, while the opposition starts again at 1.
-function shirtNo(n){ return 'num' + (((n % 10) + 10) % 10); }
+// ⚠️ **THE MODULUS IS THE TABLE'S OWN LENGTH, and it was a hard-coded 10.** With
+// eleven a side there are more bodies than there were glyphs, and `numberTheSides`' `free()`
+// walks upward until it finds an unused plate — so once every plate was taken it cycled the
+// same ten for ever and `lobbyStart` HUNG. Reading the length means adding a number to
+// `TEXT_SETS.num` is all it takes to field a bigger side.
+function shirtNo(n){ const c = TEXT_SETS.num.chars.length; return 'num' + (((n % c) + c) % c); }
 function randFlag(i){ return shirtNo(i + 1); }
 function randEyes(i){ const k=EYE_KEYS.filter(e=>e!=='none'); return k[(i*3+1) % k.length]; }
 
@@ -20355,7 +20433,18 @@ function numberTheSides(w){
   for (const team of [0, 1]){
     const side = w.players.filter(p => p.team === team);
     const taken = new Set();
-    const free = () => { let n = 1; while (taken.has(shirtNo(n))) n++; return shirtNo(n); };
+    // ⚠️ **BOUNDED, because an unbounded walk HUNG THE GAME.** `shirtNo` wraps at the
+    // number table's length, so once every plate on this side is taken this loop cycles the
+    // same handful for ever — which is exactly what happened the first time
+    // `LOBBY.maxPerSide` went past the number of plates: warm-up was fine and `lobbyStart`
+    // never returned. Stopping after one full lap means the worst case is two bodies in the
+    // same shirt, which is a blemish rather than a lock-up.
+    const free = () => {
+      const c = TEXT_SETS.num.chars.length;
+      let n = 1;
+      while (n <= c && taken.has(shirtNo(n))) n++;
+      return shirtNo(n);
+    };
     // People first, in the order they are on the pitch: keep the number you are wearing
     // unless somebody on this side already has it.
     for (const p of side){
@@ -20412,6 +20501,9 @@ function lobbyStart(w){
   // are not the bodies that take the field — `fill` mints fresh bots and
   // `numberTheSides` runs after them. Same beat as `applyTeamColours` two lines up.
   if (w.cup){ cupDress(w); cupTickerStart(); }
+  // The warm-up board is a canvas the size of its own bounding box; nothing outside
+  // the lobby reads it, so it is dropped on the way out rather than held all session.
+  lobbyBoardCv = null; lobbyBoardSig = '';
   resetKickoff(w, true);
   stageEntry(w);
   // ...and the scorebug comes back the moment the room closes. LAST, because it reads
@@ -25236,38 +25328,17 @@ function lobbyKeyGeo(kb){
   kb._sig = sig; kb._geo = geo;
   return geo;
 }
-function drawLobbyKeys(w, ox, oy){
-  const kb = w.kb; if (!kb) return;
-  const T = TH;
-  const geo = lobbyKeyGeo(kb);
-  // One pass over the bodies rather than a search per key.
-  // ⚠️ **THE KEY YOU ARE STANDING ON LIGHTS UP, and for one build NOTHING DID.** This
-  // read `Math.min(1, (p.kbT||0) / LOBBYKB.dwell)` — and the dwell was DELETED when
-  // nothing-presses-itself replaced it (see `LOBBYKB`), so the divisor was `undefined`,
-  // `f` was `NaN`, `NaN > 0` is false and the map was **never written**. Every key drew
-  // at its resting alpha, so the board gave no feedback at all about which letter KICK
-  // was about to press — the one thing a highlight is for.
-  // ⚠️ **Binary, not a ramp, and that follows from the dwell being gone**: there is no
-  // progress to show any more, only "this is the one". Ramping it off `kbT` instead
-  // would strobe a held +/− square five times a second at `LOBBYKB.repeat` — the pulse
-  // the wind-up ring was reported for.
-  // ⚠️ Brighter than the `picked` state below on purpose: standing on a key is a thing
-  // you are doing right now, and the swatch highlight is a thing that is already true.
-  const fill = new Map();
-  for (const p of w.players){
-    if (!p.kbKey || p.ctrl === 'bot') continue;
-    fill.set(p.kbKey, 1);
-  }
-  const ink = T.line || '#ffffff';
-  ctx.save();
-  ctx.lineJoin = 'round';
-  for (let gi = 0; gi < kb.keys.length; gi++){
-    const k = kb.keys[gi], g = geo[gi], pts = g.pts;
+// ONE pad, drawn wherever the context currently points. Split out of `drawLobbyKeys`
+// so the board can be BAKED once (see `lobbyBoard`) and only the pad somebody is
+// standing on redrawn per frame. `f` is the highlight: 0 at rest, 1 under a body.
+// ⚠️ `return`, not `continue` — this was the inside of a loop, and a shirt and a flag
+// each finish early rather than falling through to the letter branch.
+function drawLobbyPad(k, g, ox, oy, f, ink){
+    const pts = g.pts;
     ctx.beginPath();
     ctx.moveTo(pts[0][0] + ox, pts[0][1] + oy);
     for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0] + ox, pts[i][1] + oy);
     ctx.closePath();
-    const f = fill.get(k) || 0;
     // ⚠️ A SWATCH IS PAINTED IN THE COLOUR IT GIVES YOU, and the one currently worn is
     // the one that is lit — otherwise eight identical plates are eight guesses.
     const picked = k.colTeam !== undefined ? teamColOf(k.colTeam) === k.col
@@ -25294,7 +25365,7 @@ function drawLobbyKeys(w, ox, oy){
         ctx.strokeStyle = on ? rgba(ink, 0.95) : rgba(ink, 0.30);
         ctx.stroke();
       });
-      continue;                                  // a shirt is its colour; no label
+      return;                                    // a shirt is its colour; no label
     }
     // ⚠️ **A FLAG PAD IS THE FLAG, drawn UPRIGHT inside its plate** — the same split the
     // shirts and the letters are drawn under: the plate is a place you walk to so its
@@ -25321,7 +25392,7 @@ function drawLobbyKeys(w, ox, oy){
         ctx.strokeStyle = on ? rgba(ink, 0.95) : rgba(ink, 0.30);
         ctx.stroke();
       });
-      continue;
+      return;
     }
     // ⚠️ THE PLATE TURNS WITH THE PITCH AND THE LETTER NEVER DOES. A key is a place you
     // walk to, so its four corners have to follow the ground exactly; the letter on it is
@@ -25341,6 +25412,91 @@ function drawLobbyKeys(w, ox, oy){
       ctx.fillStyle = rgba(ink, 0.55 + 0.45*f);
       ctx.fillText(k.label, x, y);
     });
+}
+// ⚠️ **THE BOARD IS BAKED ONCE AND BLITTED, because it was costing more than the match.**
+// Measured: the warm-up lobby rendered at **0.99ms a frame against a live 4v4's 0.18ms** —
+// five and a half times a running game, on a screen where nothing is happening. Roughly
+// seventy pads (28 letters, 16 shirts, 24 flags, two steppers and START) were fully
+// repainted every frame, each with its own `save`/`clip`/`drawImage`/`restore`: `drawImage`
+// alone was 17.9% of the profile, `save` 10.6% and `clip` 5.0%.
+// ⚠️ **`lobbyKeyGeo` already cached the GEOMETRY; this caches the PAINTING**, which is the
+// expensive half. Everything on the board is static — the only thing that changes between
+// frames is the highlight under somebody's feet, and that is at most one pad per player.
+// ⚠️ **The signature has to carry everything the RESTING picture depends on**, not just the
+// camera: the worn shirt and flag per side, the chosen difficulty and the ink all change
+// what is drawn at rest, and a stale board would show the old selection until the camera
+// moved. `kb._sig` covers a rebuild, because a rebuild mints a new `kb`.
+// ⚠️ Baked at the pads' BOUNDING BOX rather than the whole canvas — a full-screen buffer is
+// 33MB on a 4K display for a strip that occupies a fraction of it.
+// ⚠️ It swaps the module-level `ctx`, the same idiom `playReplayFile` uses for `world`, and
+// restores it in a `finally` so a throw mid-bake cannot strand the game drawing into an
+// offscreen buffer. `screenUpright` is a documented no-op, so nothing inside reaches for a
+// context of its own.
+let lobbyBoardCv = null, lobbyBoardSig = '';
+function lobbyBoard(kb, geo, ink){
+  const sig = [kb._sig, ink, teamColOf(0), teamColOf(1),
+               teamFlagOf(0) || '', teamFlagOf(1) || '', sel.diff].join('|');
+  if (lobbyBoardCv && lobbyBoardSig === sig) return lobbyBoardCv;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const g of geo) for (const q of g.pts){
+    if (q[0] < x0) x0 = q[0];  if (q[0] > x1) x1 = q[0];
+    if (q[1] < y0) y0 = q[1];  if (q[1] > y1) y1 = q[1];
+  }
+  if (!isFinite(x0)) return null;
+  const pad = 6;                                   // strokes and the worn outline overhang
+  x0 = Math.floor(x0 - pad); y0 = Math.floor(y0 - pad);
+  const bw = Math.ceil(x1 + pad) - x0, bh = Math.ceil(y1 + pad) - y0;
+  if (bw <= 0 || bh <= 0 || bw > 8000 || bh > 8000) return null;
+  const off = document.createElement('canvas');
+  off.width = bw; off.height = bh;
+  const octx = off.getContext('2d');
+  const was = ctx;
+  try {
+    ctx = octx;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    // Every pad at REST: the highlight is the one thing drawn live.
+    for (let i = 0; i < kb.keys.length; i++) drawLobbyPad(kb.keys[i], geo[i], -x0, -y0, 0, ink);
+    ctx.restore();
+  } finally { ctx = was; }
+  off._bx = x0; off._by = y0;
+  lobbyBoardCv = off; lobbyBoardSig = sig;
+  return off;
+}
+function drawLobbyKeys(w, ox, oy){
+  const kb = w.kb; if (!kb) return;
+  const T = TH;
+  const geo = lobbyKeyGeo(kb);
+  // One pass over the bodies rather than a search per key.
+  // ⚠️ **THE KEY YOU ARE STANDING ON LIGHTS UP, and for one build NOTHING DID.** This
+  // read `Math.min(1, (p.kbT||0) / LOBBYKB.dwell)` — and the dwell was DELETED when
+  // nothing-presses-itself replaced it (see `LOBBYKB`), so the divisor was `undefined`,
+  // `f` was `NaN`, `NaN > 0` is false and the map was **never written**. Every key drew
+  // at its resting alpha, so the board gave no feedback at all about which letter KICK
+  // was about to press — the one thing a highlight is for.
+  // ⚠️ **Binary, not a ramp, and that follows from the dwell being gone**: there is no
+  // progress to show any more, only "this is the one". Ramping it off `kbT` instead
+  // would strobe a held +/− square five times a second at `LOBBYKB.repeat` — the pulse
+  // the wind-up ring was reported for.
+  // ⚠️ Brighter than the `picked` state below on purpose: standing on a key is a thing
+  // you are doing right now, and the swatch highlight is a thing that is already true.
+  const fill = new Map();
+  for (const p of w.players){
+    if (!p.kbKey || p.ctrl === 'bot') continue;
+    fill.set(p.kbKey, 1);
+  }
+  const ink = T.line || '#ffffff';
+  ctx.save();
+  ctx.lineJoin = 'round';
+  // The resting board comes off the bake in one blit; only the pad somebody is
+  // standing on is drawn for real. Falls back to painting every pad if the bake
+  // could not be made, so a refusal costs speed and never the picture.
+  const board = lobbyBoard(kb, geo, ink);
+  if (board) ctx.drawImage(board, board._bx + ox, board._by + oy);
+  for (let gi = 0; gi < kb.keys.length; gi++){
+    const k = kb.keys[gi], f = fill.get(k) || 0;
+    if (board && !f) continue;
+    drawLobbyPad(k, geo[gi], ox, oy, f, ink);
   }
   // The size the stepper is actually going to produce, between the two squares.
   // ⚠️ Read from `lobbyPlan`, never from `w.lobby.per` — the plan floors the size at the
@@ -30642,7 +30798,7 @@ if (window.__MAGNETDEBUG) {
     gamepadPad, openPadConfig, startBind, startRebindAll, get padBind(){ return padBind; },
     buildPadRows, padResetMap, normalizePad,
     get login(){ return login; }, checkDailyLogin, openDailyView, DAILY, dailyReward, grantedHas,
-    ANIMALS, TEXTS, TEXT_KEYS, buildTextPicker, itemName, shirtNo, defaultProfile, saveProfile,
+    ANIMALS, TEXTS, TEXT_KEYS, buildTextPicker, itemName, shirtNo, TEXT_SETS, defaultProfile, saveProfile,
     unlockCounts, UNL_CATS, isUnlocked, drawDisc, updatePreview,
     LB, LB_FAKE, lbLoad, lbSubmit, lbParseGviz, lbNormalize, openLeaderboard, buildLeaderboard, toast,
     get lbCache(){ return lbCache; }, recordResult,

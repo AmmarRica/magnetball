@@ -468,6 +468,112 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
      JSON.stringify(nc.noneKeeps) + ' — None removes a country, it is not a request to be recoloured');
 }
 
+// ============================================================================
+//  THE BAKED BOARD IS NOT A STALE ONE
+//
+//  ⚠️ The warm-up board is drawn ONCE into an offscreen canvas and blitted — it was
+//  costing 0.99ms a frame against a live 4v4 match's 0.18ms, because ~70 pads were fully
+//  repainted every frame with a save/clip/drawImage/restore each. Baked, that is 0.32ms.
+//  ⚠️ **WHAT A CACHE CAN GET WRONG IS BEING STALE**, so the three things checked here are
+//  the three ways this one could be: the live highlight must not be baked into it, a
+//  change of selection must invalidate it, and it must not wobble between two draws of
+//  one frame. Measured as picture differences, because "the signature contains X" is a
+//  restatement of the code rather than a test of it.
+//  ⚠️ The bake is not bit-identical to painting each pad directly and cannot be: the pads
+//  are TRANSLUCENT, so compositing them onto a transparent layer and blitting that once
+//  differs from compositing each onto the pitch in turn. Measured over a whole frame,
+//  99.9% of the pixels that differ do so by <= 2 levels of 255 and only 126 of 810,000
+//  exceed 8 — edge antialiasing, not a structural change.
+// ============================================================================
+{
+  const q = await b.newPage({ viewport:{ width:900, height:900 } });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => {
+    window.__MAGNETDEBUG = true;
+    const mk = i => ({ axes:[0,0,0,0], buttons: Array.from({length:17},()=>({pressed:false,value:0})),
+                       connected:true, index:i, id:'Stub Pad (STANDARD GAMEPAD)', mapping:'standard' });
+    window.__pads = [mk(0), mk(1)]; navigator.getGamepads = () => window.__pads;
+  });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const bk = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    M.sel.controllers='on'; M.sel.lobby='on'; M.sel.length='5'; M.sel.look.palette='grass';
+    M.sel.teamFlag = ['none','none']; M.sel.teamCol = null;
+    M.setMatchSeed(7); M.startMatch({ lobby:true });
+    const w = M.world;
+    for (let i=0;i<40;i++) M.step(w);
+    const cv = document.getElementById('game'), g = cv.getContext('2d');
+
+    // ⚠️ **THE DIFF IS RESTRICTED TO THE BOARD, and without that BOTH checks below are
+    // VACUOUS — verified by sabotages that PASSED.** Moving a body onto a key also moves
+    // the body, and recolouring a side also recolours the shirts on the pitch: a
+    // whole-frame diff is satisfied by either of those with the board completely stale.
+    // So the bodies are parked in the middle of the COURT (the pads are all outside the
+    // touchlines) and only the pads' own bounding box is compared.
+    // ⚠️ **EACH CHECK MEASURES ITS OWN PADS' BOX, and the obvious "box round all the
+    // pads" is VACUOUS — verified by a sabotage that PASSED.** In the upright layout the
+    // swatches are beside the court and the keyboard below it, so a rectangle enclosing
+    // every pad also encloses THE PITCH: the parked bodies sit inside it, and recolouring
+    // a side changes their shirts, which satisfies the diff with the board fully stale.
+    const dpr = cv.width / cv.getBoundingClientRect().width;
+    const boxOf = (keys) => {
+      const cor = [];
+      for (const k of keys) for (const [dx,dy] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+        cor.push(M.screenPt(M.wx(k.x+dx*k.w/2), M.wy(k.y+dy*k.h/2)));
+      const x0 = Math.max(0, Math.floor(Math.min(...cor.map(c=>c[0]))*dpr) - 3);
+      const x1 = Math.min(cv.width,  Math.ceil(Math.max(...cor.map(c=>c[0]))*dpr) + 3);
+      const y0 = Math.max(0, Math.floor(Math.min(...cor.map(c=>c[1]))*dpr) - 3);
+      const y1 = Math.min(cv.height, Math.ceil(Math.max(...cor.map(c=>c[1]))*dpr) + 3);
+      return [x0, y0, x1-x0, y1-y0];
+    };
+    const grabIn = bx => g.getImageData(bx[0], bx[1], bx[2], bx[3]).data;
+    const diff = (a,c) => { let n=0; for (let i=0;i<a.length;i+=4)
+      if (Math.abs(a[i]-c[i])+Math.abs(a[i+1]-c[i+1])+Math.abs(a[i+2]-c[i+2]) > 24) n++; return n; };
+
+    const gKey    = w.kb.keys.find(k => k.ch === 'G');
+    const boxG    = boxOf([gKey]);
+    const boxSw   = boxOf(w.kb.keys.filter(k => k.colTeam === 0));
+    const boxFlag = boxOf(w.kb.keys.filter(k => k.flagTeam === 0));
+    o.boxes = { g: boxG.slice(2), sw: boxSw.slice(2), flag: boxFlag.slice(2) };
+
+    // Park every human on the court, far from the pads. Bots are not drawn in warm-up.
+    const hs = w.players.filter(x => x.ctrl !== 'bot');
+    hs.forEach((q2, i2) => { q2.x = (i2 ? 40 : -40); q2.y = 0; q2._px = q2.x; q2._py = q2.y;
+                             q2.vx = q2.vy = 0; q2.kbKey = null; });
+
+    M.render(); const baseG = grabIn(boxG);
+    M.render(); o.stable = diff(baseG, grabIn(boxG)) === 0;
+
+    // ⚠️ THE HIGHLIGHT IS LIVE. `kbKey` is set WITHOUT stepping and WITHOUT moving the
+    // body — stepping would recompute it from the position and walk the body into shot.
+    hs[0].kbKey = gKey;
+    M.render(); o.highlightShows = diff(baseG, grabIn(boxG)) > 8;
+    hs[0].kbKey = null;
+
+    // ⚠️ A CHANGE OF SELECTION INVALIDATES THE BAKE. The worn swatch is drawn at rest, so
+    // it lives in the baked image; a signature that missed it would keep showing the old
+    // one until the camera moved, which no geometry check can see.
+    M.render(); const beforeSw = grabIn(boxSw);
+    M.setTeamCol(0, M.TEAM_COLS.find(c => c.key === 'purple').col);
+    M.render(); o.shirtPickShows = diff(beforeSw, grabIn(boxSw)) > 8;
+
+    const beforeFl = grabIn(boxFlag);
+    M.setTeamFlag(0, 'brazil');
+    M.render(); o.flagPickShows = diff(beforeFl, grabIn(boxFlag)) > 8;
+    return o;
+  });
+  await q.close();
+
+  ok('the warm-up board does not wobble between draws', bk.stable,
+     'two draws of one frame differ — every check below would be measuring that instead');
+  ok('...the highlight under a body is LIVE, not baked in', bk.highlightShows,
+     'standing on a key changed nothing, so the board would never light up');
+  ok('...picking a shirt invalidates the board', bk.shirtPickShows,
+     'the worn swatch is drawn at rest, so it is in the bake — a signature that misses it shows the old colour');
+  ok('...and so does picking a flag', bk.flagPickShows, JSON.stringify(bk));
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 console.log(bad ? 'FAIL lobbydress' : 'PASS lobbydress');
 await b.close();

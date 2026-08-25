@@ -213,10 +213,16 @@ o.sixAllOnOneTeam   = o.sixOneSide.t0 === 'PPPPPP' && o.sixOneSide.t1 === 'bbbbb
 // is no longer "the 9th is never seated" — it is nine seats offered and `maxPerSide`
 // (8) turning the last one away. What has to hold is that eight play, the ninth is
 // on the bench rather than lost, and the sides are still even.
-o.eightIsTheCeiling = o.nineOneSide.t0 === 'PPPPPPPP' && o.nineOneSide.t1 === 'bbbbbbbb'
-                      && o.nineOneSide.balanced
-                      && o.nineOneSide.benchedHumans === 1
-                      && o.nineOneSide.maxPerSide >= 8;
+// ⚠️ **DERIVED FROM `LOBBY.maxPerSide`, never the literal 8.** The cap moved to 11 and
+// this read `'PPPPPPPP'` — eight characters — so it pinned the old ceiling rather than the
+// rule. What is actually being claimed is that the cap holds, whatever it is: nobody is
+// lost, and the sides stay even.
+o.eightIsTheCeiling = o.nineOneSide.balanced
+                      && o.nineOneSide.t0.length <= o.nineOneSide.maxPerSide
+                      && o.nineOneSide.t1.length <= o.nineOneSide.maxPerSide
+                      && o.nineOneSide.t0.length === o.nineOneSide.t1.length
+                      && /^P+$/.test(o.nineOneSide.t0) && /^b+$/.test(o.nineOneSide.t1)
+                      && o.nineOneSide.benchedHumans + o.nineOneSide.t0.length === 9;
 // Building bots to order must converge, not add a body per trip to the lobby.
 o.rosterSettles     = [o.oneEachSide,o.twoVsOne,o.allOneSide,o.sixOneSide].every(x=>x.rosterSettles);
 o.soloIsAutoAssigned= o.soloAuto.t0.startsWith('P') && !o.soloAuto.t1.includes('P');

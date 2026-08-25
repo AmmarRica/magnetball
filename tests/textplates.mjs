@@ -63,7 +63,15 @@ const r = await p.evaluate(async ()=>{
   o.youAreNumberOne = nums(t0)[0] === 1 && w.players[0].ctrl !== 'bot';
   o.eachTeamUnique = new Set(nums(t0)).size === t0.length && new Set(nums(t1)).size === t1.length;
   o.teamsNumberFromOne = Math.min(...nums(t0)) === 1 && Math.min(...nums(t1)) === 1;
-  o.shirtNoWraps = M.shirtNo(10) === 'num0' && M.shirtNo(3) === 'num3';
+  // ⚠️ DERIVED from the number table, never a literal 10. `shirtNo` wraps at
+  // `TEXT_SETS.num.chars.length`, and that length is what makes eleven-a-side possible:
+  // with ten glyphs a side had more bodies than shirts and `numberTheSides`' search for a
+  // free one spun for ever. A hard-coded `shirtNo(10) === 'num0'` pins the OLD table.
+  o.numPlates = M.TEXT_SETS.num.chars.length;
+  o.shirtNoWraps = M.shirtNo(o.numPlates) === 'num0' && M.shirtNo(3) === 'num3'
+                   && M.shirtNo(o.numPlates + 3) === 'num3';
+  // ...and there have to be at least as many plates as a full side has bodies.
+  o.enoughPlates = o.numPlates >= M.LOBBY.maxPerSide;
 
   // ---- TWO PEOPLE MAY NOT KICK OFF IN THE SAME SHIRT ----------------------
   // ⚠️ `numberTheSides` used to count human HEADS to reserve the low numbers and never
@@ -264,7 +272,7 @@ r.fold = fold;
 console.log(JSON.stringify(r,null,1));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const must = ['defaultIsANumber','freshProfileIsANumber','allNumbers','noCountryballsByDefault',
-  'youAreNumberOne','eachTeamUnique','teamsNumberFromOne','shirtNoWraps',
+  'youAreNumberOne','eachTeamUnique','teamsNumberFromOne','shirtNoWraps','enoughPlates',
   'everyGlyphFromTheList','noDuplicateGlyphs','allTextUnlocked','textKeysDontClash',
   'textIsACategory','countsIncludeText','oneTilePerGlyph','everyTilePaints',
   'plateChangesTheDisc','differentDigitsDiffer','differentStylesDiffer','blankDraws',
