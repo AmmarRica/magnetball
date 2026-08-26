@@ -651,8 +651,11 @@
     body.panel #setup { position: static; min-height: 100vh; overflow: visible; }
     /* Deck/cocktail dock the menu beside the pitch. There is no pitch here. */
     body.panel #setup.docked { position: static; width: auto; max-width: none; left: auto; }
+    /* ⚠️ `#playBtn` is NOT hidden here any more. It was, because a settings tab cannot
+       run a match — but that made KICK OFF unreachable from the one screen you set the
+       match up on. It is a COMMAND now (see `syncAct`), so it belongs on the page. */
     body.panel #setup .navgrid, body.panel #setup #recordCard,
-    body.panel #setup #playBtn, body.panel #setup .footlink { display: none; }
+    body.panel #setup .footlink { display: none; }
     body.panel #matchCard > h2 .secname { display: block; }
     body.panel #matchCard > h2 { background: linear-gradient(var(--panel), var(--panel)), var(--bg); }
     /* Detached: the game page keeps the game and hands the settings to the other tab. */
@@ -5349,7 +5352,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260826.0330PM';
+const VERSION = '20260827.1145AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5365,6 +5368,13 @@ const VERSION = '20260826.0330PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260827.1145AM', title: 'Kick off from the settings tab',
+    changed: [
+      '<b>The settings tab can start the match again.</b> KICK OFF and Warm-up there now act on the game window, with the settings you just picked \u2014 KICK OFF used to be missing from that page entirely, and Warm-up quietly started a match inside the settings tab where nothing is drawn.',
+      '<b>Warm-up after a match keeps everyone on the side they were playing</b>, so you can go in, change something and hold START for the same match back. It used to put everybody on the halfway line, which swapped the teams.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260826.0330PM', title: 'A tidier pitch, and START into warm-up',
     changed: [
       '<b>The Replay button no longer sits under the score during a match.</b> It appeared at the first goal and stayed there for the rest of the game; goals still replay themselves, and watching or saving one lives on the result screen and in Replays.',
@@ -8962,6 +8972,24 @@ const SYNC_SKIP = ['dockCollapsed', 'deskDock'];
 function syncState(){ const o = {}; for (const k in sel) if (!SYNC_SKIP.includes(k)) o[k] = sel[k]; return o; }
 function syncPush(){ if (syncing) return; syncPost({ t:'state', sel: syncState(), profile }); }
 function syncPeerLive(){ return syncPeer && (Date.now() - syncPeer) < 4000; }
+// ⚠️ **A SETTINGS TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW, NOT ON ITSELF.** /settings is
+// the same document with the game switched off, so KICK OFF there used to be hidden
+// outright — and Warm-up, which was NOT hidden, started a match inside the settings window
+// that nothing draws: `panelState` came back `kickoff` with `#game` display:none. Both are
+// commands now, on the same channel the VJ decks already use (`vjc`) — one way, panel to
+// game, because only the game runs a match.
+// ⚠️ **IT REPORTS WHEN THERE IS NOBODY LISTENING.** A tab on its own with no game window
+// open cannot start anything, and a button that silently does nothing reads as broken —
+// the rule `downloadOffline` and Save clip already follow. `syncPeerLive()` is what the
+// panel already uses to know whether a game page is there.
+const SYNC_ACTS = { kickoff: () => tryKickOff(), warmup: () => openWarmup() };
+function syncAct(name){
+  if (!PANEL) return false;
+  if (!syncPeerLive()){ toast('Open the game window first', 'bad'); return false; }
+  syncPost({ t:'act', do:name });
+  toast(name === 'warmup' ? 'Warm-up \u2192 game window' : 'Kick off \u2192 game window', 'good');
+  return true;
+}
 // Applying is synchronous — a background tab gets its rAF throttled to about 1Hz,
 // so anything deferred to a frame is NOT instant over there. Only the expensive DOM
 // rebuild is coalesced, and it catches up the moment the tab is looked at again.
@@ -9014,6 +9042,9 @@ if (bc){
     if (m.t === 'pong') return;                   // liveness only
     if (m.t === 'state'){ syncAdopt(m); return; }
     if (m.t === 'tel'){ if (PANEL) renderTelemetry(m); return; }
+    // ⚠️ The game acts; a panel never does. Guarded on `!PANEL` for the same reason the VJ
+    // commands are — two panels open must not bounce an action between themselves.
+    if (m.t === 'act'){ if (!PANEL && SYNC_ACTS[m.do]) SYNC_ACTS[m.do](); return; }
     // ---- VJ Mode. Commands travel one way, state the other. ----
     if (m.t === 'vjc'){ if (!PANEL) vjExec(m.cmd, m.arg); return; }
     if (m.t === 'vjf'){ if (!PANEL){                 // a File/Blob, never an object URL
@@ -12530,6 +12561,9 @@ function arcadeKeyDown(e){
 // started the match underneath, left it frozen until the replay ran itself out, and
 // then landed in the lobby anyway. Pressing play must never mean "watch this first".
 function tryKickOff(){
+  // ⚠️ On /settings this is a COMMAND, not a match — see `syncAct`. It has to come first:
+  // `arcadeSpend` would take a credit for a game this window is never going to run.
+  if (PANEL) return void syncAct('kickoff');
   if (typeof replayAbort === 'function') replayAbort();
   if (arcadeSpend()) startMatch({ lobby: false });
 }
@@ -13242,6 +13276,7 @@ $('playBtn').onclick = tryKickOff;
 // pads in play (lobbyWanted); this is the deliberate way in, so it forces it —
 // useful for trying controls, or for picking sides with no controller connected.
 function openWarmup(){
+  if (PANEL) return void syncAct('warmup');   // a settings tab drives the game, see syncAct
   if (typeof replayAbort === 'function') replayAbort();   // same reason as tryKickOff
   startMatch(); if (world && world.state !== 'warmup') enterWarmup(world);
 }
@@ -16572,6 +16607,13 @@ function pickNames(n, used){
 //  MATCH SETUP
 // ============================================================
 function startMatch(opts){
+  // ⚠️ **A PANEL NEVER RUNS A MATCH.** /settings and /vj are the same document with the
+  // game switched off — `#game` is `display:none` there — so a match started here is one
+  // nobody can see, driving nobody, burning a frame loop behind a settings screen.
+  // Measured before this: pressing Warm-up on /settings left that window in `kickoff`.
+  // The two buttons that mean "play" forward to the game window instead (see `syncAct`);
+  // this is the backstop for every other route in (a drill tile, a season round).
+  if (PANEL) return;
   // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
   // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
   // whoever set it to clear it is what stops a cup tie's country colours leaking into
@@ -19669,8 +19711,17 @@ function lobbyHost(w){
 // What is left is what warm-up is actually for: walk onto a side, test your stick, press
 // START. The team-size stepper and the bot-skill row stay, because those are about the
 // MATCH rather than about how a body looks.
-function enterWarmup(w, lite){
+// `keepSides` puts everybody back on the half they were just playing, so an immediate
+// START reproduces the match you came from — see the placement block at the bottom.
+function enterWarmup(w, lite, keepSides){
   w.lobbyLite = !!lite;
+  // ⚠️ Counted BEFORE anything moves, and off the bodies rather than the mode: the lobby
+  // stepper and a mid-match drop-in can both have taken the match away from `mode.per`,
+  // and "the same match again" means the size it actually finished at.
+  const keepPer = keepSides
+    ? Math.max(1, w.players.filter(p => p.team === 0).length,
+                  w.players.filter(p => p.team === 1).length)
+    : 0;
   // ⚠️ The START edge is latched per key in `_startPrev`, and a player who came in here
   // by holding START on the menu is still holding it — so the edge never fires and the
   // one button the lobby exists to get you past does nothing until they let go and press
@@ -19695,14 +19746,36 @@ function enterWarmup(w, lite){
   // somebody spent in the lobby would change every bot decision in the match.
   w.lobby = { ready: new Set(), calib: null, sides: new Map(),
               rng: mulberry32(((w.seed|0) ^ 0x9E3779B9) >>> 0) };
+  // ⚠️ The stepper's own value, so the size comes back too. `lobbyPlan` reads this live and
+  // floors it at the humans on a side, so it can only ever field the same match or bigger.
+  if (keepPer) w.lobby.per = Math.min(LOBBY.maxPerSide, keepPer);
   w.players.forEach(p => { p._lobT = undefined; p._lobTo = null; });
   benchBots(w);
   addLobbyWall(w);
   buildLobbyKeys(w);
   syncLobbyBalls(w);
   // Humans start spread along the halfway line so nobody is pre-committed to a side.
+  // ⚠️ **UNLESS THEY CAME FROM A MATCH, in which case they stand on the half they were
+  // just playing.** Warm-up from the result screen is "same again, but let me change
+  // something first" — dropping everybody back on the halfway line undecided means
+  // pressing START immediately gives a DIFFERENT match from the one that just finished,
+  // and on a solo game `lobbyPlan`'s undecided rule puts you on team 0 whichever half you
+  // had. Placed past `LOBBY.neutral` so `lobbySideOf` reads it as a real pick, and well
+  // inside the touchline so `lobbyOutside` does not read it as sitting out.
   const hs = lobbyHumans(w), n = hs.length;
-  hs.forEach((p, i) => {
+  if (keepSides){
+    [0, 1].forEach(t => {
+      const list = hs.filter(p => p.team === t), m = list.length, sgn = t === 0 ? 1 : -1;
+      list.forEach((p, i) => {
+        p.x = m === 1 ? 0 : (i/(m-1) - 0.5) * Math.min(w.field.W*0.6, 300);
+        p.y = sgn * Math.min(w.bounds.halfL * 0.45, 200);
+        p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
+        // ⚠️ `_px`/`_py` too, or `ix`/`iy` interpolate the body across the pitch for a
+        // frame — the trap `tests/lobbyhold.mjs` records against teleporting a player.
+        p._px = p.x; p._py = p.y;
+      });
+    });
+  } else hs.forEach((p, i) => {
     p.x = n === 1 ? 0 : (i/(n-1) - 0.5) * Math.min(w.field.W*0.6, 300);
     p.y = (i % 2 ? 1 : -1) * 34;             // alternate sides of the line, clear of the ball
     p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
@@ -22217,7 +22290,9 @@ function restartMatch(w){
   updateScoreUI(); updateClock(w);
   if (!running){ running = true; lastT = 0; acc = 0; cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }
 }
-function restartToWarmup(w){ restartMatch(w); enterWarmup(w); }
+// ⚠️ `keepSides` — this is the result screen's Warm-up, so it is "same again, but let me
+// change something first". See `enterWarmup`.
+function restartToWarmup(w){ restartMatch(w); enterWarmup(w, false, true); }
 
 // The result screen's two choices, driven by PLAYER 1 only — with four people round
 // a table you don't want whoever mashes first deciding what happens next.

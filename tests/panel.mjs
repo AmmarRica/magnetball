@@ -48,7 +48,13 @@ o.gameNotPanel    = await game.evaluate(()=>window.__magnet.PANEL === false);
 o.panelHidesCanvas = await panel.evaluate(()=>{
   const c=document.getElementById('game'); return !c || getComputedStyle(c).display === 'none'; });
 o.panelRunsNoGame = await panel.evaluate(()=>window.__magnet.world === null);
-o.panelHidesPlay  = await panel.evaluate(()=>getComputedStyle(document.getElementById('playBtn')).display === 'none');
+// ⚠️ **KICK OFF IS ON THE PANEL AGAIN, and this check is the REVERSE of what it was.**
+// It used to assert the button was hidden, because a settings tab cannot run a match —
+// which left KICK OFF unreachable from the one screen you set the match up on. It is a
+// COMMAND now: the panel posts it and the GAME window plays it. See `syncAct`.
+o.panelShowsPlay = await panel.evaluate(()=>{
+  const el = document.getElementById('playBtn');
+  return !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0; });
 
 // --- Nothing covers the panel. The daily-reward modal (z-index 40) used to open
 // here and eat every click: the game clears it when a match starts, and the panel
@@ -281,6 +287,29 @@ await panel.evaluate(()=>{
   [...document.querySelectorAll('#displayPick .opt')].find(t=>/auto/i.test(t.textContent)).click(); });
 await wait(400);
 
+// --- THE PANEL'S MATCH BUTTONS ACT ON THE GAME WINDOW ------------------------------
+// ⚠️ Before this, KICK OFF was hidden outright and Warm-up — which was NOT hidden — started
+// a match inside the settings window that nothing draws: the panel came back in state
+// `kickoff` with `#game` at display:none. Both are commands now.
+// ⚠️ **BOTH HALVES, every time.** "The game started a match" passes on a build where the
+// panel ALSO started one invisibly, which is the bug being fixed; and "the panel started
+// nothing" passes on a build where the button is simply dead, which is where this began.
+await game.evaluate(()=>{ const M=window.__magnet; M.sel.lobby='off'; M.sel.mode='2v2'; M.saveSel(); });
+await wait(300);
+await panel.evaluate(()=>{ document.getElementById('playBtn').click(); });
+o.kickoffReachedGame = await until(game, ()=>{
+  const w = window.__magnet.world; return !!(w && w.players && !w.demo); });
+o.kickoffRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === null);
+// ...and the match it started is the one the SETTINGS say — "same settings" is the whole
+// point of pressing kick off from the settings tab.
+o.kickoffUsedTheSettings = await game.evaluate(()=>{
+  const M = window.__magnet, w = M.world;
+  return !!w && w.modeKey === M.sel.mode && w.fieldKey === M.sel.field; });
+
+await panel.evaluate(()=>{ document.getElementById('warmupBtn').click(); });
+o.warmupReachedGame = await until(game, ()=>(window.__magnet.world||{}).state === 'warmup');
+o.warmupRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === null);
+
 // --- With no game tab at all the panel still opens on the saved settings, and
 // says so rather than pretending it's connected.
 await game.close();
@@ -295,7 +324,7 @@ o.loneSaysWaiting = await lone.evaluate(()=>/waiting/i.test(document.getElementB
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCanvas &&
-  o.panelRunsNoGame && o.panelHidesPlay && o.snapshotAdopted && o.snapshotNotFromStorage &&
+  o.panelRunsNoGame && o.panelShowsPlay && o.snapshotAdopted && o.snapshotNotFromStorage &&
   o.cardsIdentical && o.stylesIdentical &&
   o.panelToGame && o.panelToGameApplied && o.gameToPanel && o.gameToPanelApplied &&
   o.sliderCrosses && o.sliderApplied && o.telemetryShows && o.telemetryState &&
@@ -308,6 +337,8 @@ const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCan
   o.dailyModalClosed && o.panelIsClickable && o.subPageHasWayBack &&
   o.dockStateStaysLocal && o.panelNotDockedOnDeck &&
   o.panelScrolls && o.panelScrollsOnPhone && o.touchNotBlocked && o.gameStillLocked &&
+  o.kickoffReachedGame && o.kickoffRanNothingLocally && o.kickoffUsedTheSettings &&
+  o.warmupReachedGame && o.warmupRanNothingLocally &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

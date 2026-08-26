@@ -4736,6 +4736,43 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   off — which is the setting whose whole point is not being interrupted.
   `tests/gamesave.mjs` and `tests/replayfile.mjs` both used to assert what was ON the bar;
   they assert it does not exist now, which is the stronger claim.
+- **THE SETTINGS TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW** (`syncAct`, `SYNC_ACTS`,
+  the `act` message). `/settings` is the same document with the game switched off, and its
+  two "play" buttons were broken in opposite directions: **KICK OFF was hidden outright**
+  (`body.panel #setup #playBtn { display:none }`), so the one screen you set a match up on
+  had no way to start it; and **Warm-up was NOT hidden**, so pressing it started a match
+  *inside the settings window* — measured as that tab sitting in state `kickoff` with
+  `#game` at `display:none`, a frame loop running behind a settings screen that nobody can
+  see and nobody is driving.
+  ⚠️ **They are COMMANDS now**, on the channel the VJ decks already use, and one-way for
+  the same reason: only the game runs a match. `SYNC_ACTS` is the one table of what a panel
+  may ask for.
+  ⚠️ **It says so when nothing is listening.** A settings tab on its own cannot start
+  anything, and a button that silently does nothing reads as broken — `syncPeerLive()` is
+  the same predicate the panel already uses to know a game page is there.
+  ⚠️ **`startMatch` REFUSES OUTRIGHT in a panel**, which is the backstop for every other
+  route in (a drill tile, a season round) rather than a second copy of the forwarding.
+  ⚠️ `tests/panel.mjs` asserted `panelHidesPlay` — that check is REVERSED now, and both
+  halves are checked every time: "the game started a match" passes on a build where the
+  panel also started one invisibly, and "the panel started nothing" passes on a build where
+  the button is dead, which is where this began.
+- **WARM-UP FROM THE RESULT SCREEN KEEPS YOUR SIDE** (`enterWarmup`'s `keepSides`,
+  `restartToWarmup`). `enterWarmup` spreads everybody along the halfway line so nobody is
+  pre-committed — right when you open the room from the menu, and wrong coming out of a
+  match: warm-up there means *"same again, but let me change something first"*, and
+  pressing START immediately gave a **different** match. Measured on a 3v3: `You` came back
+  on team 1 and `P2` on team 0 — **the sides swapped**. On a solo game it is worse than a
+  shuffle, because `lobbyPlan`'s undecided rule puts a lone player on team 0 whichever half
+  they had.
+  ⚠️ **The SIZE comes back too** (`w.lobby.per`), counted off the BODIES rather than the
+  mode: the lobby stepper and a mid-match drop-in can both have taken the match away from
+  `mode.per`, and "the same match again" means the size it actually finished at.
+  ⚠️ Placed past `LOBBY.neutral` so `lobbySideOf` reads it as a real pick, and well inside
+  the touchline so `lobbyOutside` does not read it as sitting out. `_px`/`_py` are set with
+  it, or `ix`/`iy` interpolate the body across the pitch for a frame.
+  ⚠️ **The CONTROL is that a room opened from the MENU still starts everybody undecided** —
+  without it, "sides are kept" is satisfied by a build that pins everybody to their team's
+  half always, which would take away the one thing the lobby is for. `tests/warmuproom.mjs`.
 - **START ON THE RESULT SCREEN GOES STRAIGHT TO WARM-UP** (`pollOverOptions`). It used to
   be folded in with A and KICK as a second CONFIRM button, so the only way into the room
   from a result screen was to walk the cursor onto the Warm-up option first.

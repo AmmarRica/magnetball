@@ -512,6 +512,79 @@ const PRESS = `(w, M, who, padIdx, k, steps) => {
   await p.close();
 }
 
+// ---------------------------------------------------------------------------------
+// 10. WARM-UP FROM THE RESULT SCREEN IS "SAME AGAIN, BUT LET ME CHANGE SOMETHING FIRST".
+// ---------------------------------------------------------------------------------
+// ⚠️ `enterWarmup` spreads everybody along the halfway line so nobody is pre-committed to
+// a side — right when you open the room from the menu, and wrong coming out of a match:
+// pressing START immediately then gives a DIFFERENT match from the one that just finished.
+// On a solo game it is worse than a shuffle, because `lobbyPlan`'s undecided rule puts a
+// lone player on team 0 whichever half they had.
+{
+  const p = await page(2);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet, o = {};
+    M.sel.controllers = 'on'; M.sel.lobby = 'off'; M.sel.mode = '3v3';
+    M.startMatch(); const w = M.world;
+    const humans = () => M.matchRoster(w).filter(q => q.ctrl !== 'bot');
+    const shot = () => humans().map(q => q.name + ':' + q.team).sort().join(',');
+    o.before = shot();
+    o.beforeSides = [w.players.filter(q => q.team === 0).length,
+                     w.players.filter(q => q.team === 1).length];
+    o.twoHumansApart = new Set(humans().map(q => q.team)).size === 2;
+
+    M.endMatch(w); M.finishMatch(w);
+    // ⚠️ Through the pad, on the real path: START on the result screen is the way in.
+    window.__pads[0].buttons[9] = true;  M.pollOverOptions();
+    window.__pads[0].buttons[9] = false; M.pollOverOptions();
+    o.inWarmup = w.state === 'warmup';
+    o.per = w.lobby && w.lobby.per;
+    o.sidesKept = M.lobbyHumans(w).every(q => M.lobbySideOf(q, w) === q.team);
+    o.where = M.lobbyHumans(w).map(q => q.name + ':' + M.lobbySideOf(q, w)).sort().join(',');
+    // ⚠️ ...and nobody is standing OUTSIDE, which `lobbySideOf` would also report as a
+    // side of -1 and which means "sitting this one out".
+    o.nobodyOut = M.lobbyPlan(w).out.length === 0;
+
+    M.lobbyStart(w);
+    o.after = shot();
+    o.afterSides = [w.players.filter(q => q.team === 0).length,
+                    w.players.filter(q => q.team === 1).length];
+    return o;
+  });
+  ok('the match really had people on both sides', r.twoHumansApart, r.before);
+  ok('START on the result screen opens warm-up', r.inWarmup);
+  ok('EVERYBODY IS STANDING ON THE HALF THEY WERE JUST PLAYING', r.sidesKept,
+     `${r.where} — dropped on the halfway line, an immediate START fields a different match`);
+  ok('...nobody is left outside the touchline', r.nobodyOut);
+  ok('...and the size comes back too', r.per === r.beforeSides[0],
+     `lobby.per ${r.per} against a ${r.beforeSides.join('v')} match — the stepper and a ` +
+     'mid-match drop-in can both take the match away from mode.per');
+  ok('...so an immediate START fields the SAME match', r.after === r.before &&
+     r.afterSides[0] === r.beforeSides[0] && r.afterSides[1] === r.beforeSides[1],
+     `${r.before} (${r.beforeSides.join('v')}) → ${r.after} (${r.afterSides.join('v')})`);
+  await p.close();
+}
+// ⚠️ **THE CONTROL, and without it "sides are kept" is satisfied by a build that pins
+// everybody to their team's half ALWAYS.** Opening the room from the menu has to keep
+// putting people on the halfway line undecided — that is what makes walking into a half a
+// choice, and it is the whole mechanism the lobby is built on.
+{
+  const p = await page(2);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet;
+    M.sel.controllers = 'on'; M.sel.lobby = 'on'; M.sel.mode = '2v2';
+    M.startMatch(); const w = M.world;
+    const hs = M.lobbyHumans(w);
+    return { neutral: hs.every(q => Math.abs(q.y) < M.LOBBY.neutral),
+             ys: hs.map(q => Math.round(q.y)).join(','),
+             lim: M.LOBBY.neutral };
+  });
+  ok('a room opened fresh still starts everybody undecided', r.neutral,
+     `y = ${r.ys} against a neutral band of ±${r.lim} — pre-committing everybody would ` +
+     'take away the one thing the lobby is for');
+  await p.close();
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(bad ? 'FAIL warmuproom' : 'PASS warmuproom');
 await b.close();
