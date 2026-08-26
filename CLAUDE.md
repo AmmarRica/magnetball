@@ -268,6 +268,45 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   side, one ticking and one frozen, is worse than one. `tests/lobbydress.mjs` drives both
   orderings and pins that an ordinary match still HAS a scorebug — "hidden in warm-up" is
   also true of a build that hid it for good.
+- **THE ROOM IS LAID OUT ON THE AXIS THE SCREEN HAS** (`buildLobbyKeys`' `splitU` branch,
+  `LOBBYBTN`, `colDeep`). Reported as the lobby being far too small with the sides of the
+  screen empty, and measured as exactly that: with the shirts, the flags and the difficulty
+  row all STACKED ABOVE the court, the content box came out **1048 × 980 world units —
+  square — on a 1.87 screen**, so `computeCam` was bound by the vertical every time. At
+  1678 × 895 the whole room occupied **x 637..1116 of 1678: 71% of the width was empty**,
+  and the pitch was **a third** of the size the same court is in a match on the same window.
+  ⚠️ **THE FIX IS A SHAPE, NOT A SIZE — nothing was made smaller.** Turned, the halves are
+  LEFT and RIGHT, so the dressing blocks go in the MARGINS beside the half they dress, which
+  is where "the things beside your half dress your half" lands more literally than it ever
+  did above the court. The difficulty row follows into the bottom corner, pairing with the
+  size stepper: the two match-wide controls in the two bottom corners.
+  ⚠️ **`colDeep` IS ZERO NOW**, in both orientations — it existed only because the colours
+  were a row over the court and the numbers were drawn through them.
+  ⚠️ **A MOUSE-DRIVEN MACHINE WAS PAYING A THUMBSTICK ALLOWANCE.** `#lobbyStartBtn` sits at
+  `calc(70px + 78px)` to clear the on-screen joystick, and `computeCam` reserves the band
+  under the pitch so the keyboard's bottom rows do not render beneath it — so on a desktop
+  148px of nothing was charged to the court every frame. With a fine pointer the button
+  drops to `LOBBYBTN.deskBottom` and the reservation goes **210 → 96**.
+  ⚠️ **FLAT, THE COLOURS GO DOWN ONE EDGE AND THE FLAGS DOWN THE OTHER** — which the note
+  in that branch had always CLAIMED and the code did not do. All four sub-blocks were on
+  the left, so a phone showed two stacks down one edge and an empty right margin — and that
+  margin was *reserved anyway*, because the across span is symmetric about the court
+  (`2*max(...)`). Split, it costs less rather than more: 768 → 708 world units.
+  ⚠️ **THE STEPPER CLEARS WHICHEVER IS WIDER, THE PITCH OR THE KEYBOARD.** `pu` was
+  `across + K.side` — a clearance from the TOUCHLINE, which is the outer edge of the layout
+  only while the letters are narrower than the court. Widening the keys broke that: flat,
+  `across` is 220 against a top row spanning 257, and the `+` square landed **on top of P**.
+  Only `tests/lobbydress.mjs`' pad-vs-pad overlap check can see that — no count, bounds or
+  camera reading changes when two pads occupy one square.
+  ⚠️ **Measured, on a 1678 × 895 window**: pitch **404 → 607px** and a key **20 → 37px**,
+  with the warm-up court going from **0.33 to 0.50** of the same court in a match. Every
+  size of court gained (Leviathan 999 → 1020, Futsal 434 → 472), and the phone is within
+  2% of where it was — the flat layout was never the problem.
+  ⚠️ **The check is a RATIO against a control measured in the same run**, never an absolute
+  pixel count: what the furniture costs is a proportion, and a live match on the same window
+  is what it is a proportion of. Paired with "the box uses BOTH axes", which is not implied
+  by it — a build could grow the pitch by pushing the furniture off the screen.
+  `tests/warmuproom.mjs`.
 - **THE WARM-UP CONTROLS ACT ON THE MATCH YOU ARE STANDING IN, AND THE BOT SKILL ROW DID
   NOT** (`kbHit`'s `diff` branch). `w.diff` is written **once**, in `startMatch`, and
   nothing else in the file ever touched it — so walking onto INSANE in warm-up set

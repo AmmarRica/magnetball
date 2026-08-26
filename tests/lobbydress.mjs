@@ -172,12 +172,21 @@ const boot = async (vp, orient) => {
     // how many people are on that side — so a fixed red-vs-blue test finds the claimed
     // half and misses the quiet one (126 against 13 on a build where both were there).
     // What has to be true of both is that the edge differs from the interior.
+    // ⚠️ **WALKED IN SCREEN PIXELS, NEVER IN WORLD STEPS — the quiet half's outline is ONE
+    // anti-aliased pixel wide.** It thickens and firms up with how many people are standing
+    // on that side, so with nobody there it is the thinnest mark on the pitch; a scan that
+    // steps in world units lands between screen pixels and walks straight over it. Measured
+    // on ONE build at two camera scales 2% apart: **99 and 24**, with the line plainly on
+    // screen in both — so the reading was about where the samples fell, not about what was
+    // drawn. Walking every pixel between the two endpoints cannot step over anything.
     const scan = (sy) => {
       const ref = at.apply(null, M.screenPt(M.wx(0), M.wy(sy*halfL*0.55)));
+      const a = M.screenPt(M.wx(0), M.wy(sy*(halfL - 0.005*halfL)));
+      const z = M.screenPt(M.wx(0), M.wy(sy*(halfL - 0.14*halfL)));
+      const n = Math.max(2, Math.ceil(Math.hypot(z[0]-a[0], z[1]-a[1])));
       let best = 0;
-      for (let fy = 0.01; fy <= 0.12; fy += 0.005){
-        const q = M.screenPt(M.wx(0), M.wy(sy*(halfL - fy*halfL)));
-        const c = at(q[0], q[1]);
+      for (let i = 0; i <= n; i++){
+        const c = at(a[0] + (z[0]-a[0])*i/n, a[1] + (z[1]-a[1])*i/n);
         best = Math.max(best, Math.abs(c[0]-ref[0]) + Math.abs(c[1]-ref[1]) + Math.abs(c[2]-ref[2]));
       }
       return best;

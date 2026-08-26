@@ -450,6 +450,68 @@ const PRESS = `(w, M, who, padIdx, k, steps) => {
   await p.close();
 }
 
+// ---------------------------------------------------------------------------------
+// 9. THE ROOM USES THE SCREEN IT IS ON.
+// ---------------------------------------------------------------------------------
+// Reported as the lobby being far too small with the sides empty, and measured as a
+// content box that came out nearly SQUARE — 1048 × 980 world units — on a 1.87 screen,
+// because the shirts, the flags and the difficulty row were all stacked on the vertical
+// while the horizontal went unused. At 1678×895 the whole room occupied x 637..1116 of
+// 1678: **71% of the width was empty.**
+//
+// ⚠️ **THE CONTROL IS THE SAME COURT IN A LIVE MATCH, measured in the same run on the same
+// window.** An absolute "the pitch must be N px" is a number tuned to one viewport and one
+// field; what the furniture costs is a RATIO, and the match is what it is a ratio of. The
+// lobby will always be smaller — it has a keyboard round it — but a third was too much.
+// Measured: **0.333 before, 0.500 after.**
+{
+  const p = await page(1, 1678, 895);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet;
+    const wide = () => {
+      const f = M.world.field;
+      const c = [[-f.W/2, -f.L/2], [f.W/2, f.L/2]].map(([x, y]) => M.screenPt(M.wx(x), M.wy(y)));
+      return Math.abs(c[1][0] - c[0][0]);
+    };
+    const box = () => {
+      const w = M.world, pts = [];
+      w.kb.keys.forEach(k => [[k.x,k.y],[k.x+k.w,k.y],[k.x,k.y+k.h],[k.x+k.w,k.y+k.h]]
+        .forEach(([x, y]) => pts.push(M.screenPt(M.wx(x), M.wy(y)))));
+      const f = w.field;
+      [[-f.W/2,-f.L/2],[f.W/2,f.L/2],[-f.W/2,f.L/2],[f.W/2,-f.L/2]]
+        .forEach(([x, y]) => pts.push(M.screenPt(M.wx(x), M.wy(y))));
+      const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+      return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    };
+    M.sel.lobby = 'on'; M.sel.controllers = 'on'; M.sel.mode = '1v1';
+    M.startMatch(); for (let i = 0; i < 30; i++) M.step(M.world); M.render();
+    const lobbyPitch = wide(), b = box(), turned = M.pitchHorizontal();
+    M.sel.lobby = 'off';
+    M.startMatch(); for (let i = 0; i < 10; i++) M.step(M.world); M.render();
+    return { lobbyPitch, matchPitch: wide(), box: b, turned,
+             usedW: b.w / window.innerWidth, usedH: b.h / window.innerHeight };
+  });
+  const ratio = r.lobbyPitch / r.matchPitch;
+  console.log(`  wide desktop: warm-up pitch ${Math.round(r.lobbyPitch)}px against the same ` +
+              `court in a match at ${Math.round(r.matchPitch)}px (${ratio.toFixed(3)}), ` +
+              `box ${Math.round(r.box.w)}x${Math.round(r.box.h)}`);
+  ok('the wide window really turns the pitch', r.turned,
+     'this block is about the turned layout — untuned, everything below means nothing');
+  ok('THE WARM-UP ROOM USES THE SCREEN IT IS ON',
+     ratio >= 0.42,
+     `the warm-up pitch is ${(ratio*100).toFixed(0)}% of the same court in a match on the ` +
+     'same window — it was 33% when the dressing was stacked above the court instead of ' +
+     'out in the margins, and the sides of the screen were empty');
+  // ⚠️ The second half of the same claim, and it is NOT implied by the first: a build could
+  // grow the pitch by cropping the furniture off the screen entirely. What has to be true
+  // is that the box uses BOTH axes — the whole complaint was one axis carrying everything.
+  ok('...on both axes', r.usedW >= r.usedH * 0.5,
+     `the content box fills ${(r.usedW*100).toFixed(0)}% of the width against ` +
+     `${(r.usedH*100).toFixed(0)}% of the height — it read 29% against 78%, which is a ` +
+     'square room on a widescreen');
+  await p.close();
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(bad ? 'FAIL warmuproom' : 'PASS warmuproom');
 await b.close();

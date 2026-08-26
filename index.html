@@ -305,6 +305,16 @@
       cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
     #lobbyStartBtn:active { transform: translateX(-50%) translateY(1px); }
     #lobbyStartBtn.hidden { display: none; }
+    /* ⚠️ **THE 70px ABOVE IS A THUMBSTICK ALLOWANCE, AND A DESKTOP WAS PAYING IT.** That
+       `calc(70px + 78px)` lifts the button clear of the on-screen joystick, which only
+       exists on a touch layout — but `computeCam` reserves the whole band under the pitch
+       so the keyboard's bottom rows do not render beneath the button, so on a mouse-driven
+       machine 148px of nothing was being charged to the court. Measured at 1678×895:
+       210px of reserved band against a button that ends 67px off the bottom edge.
+       Sits with `LOBBYBTN` in the script, which is what `computeCam` reserves from. */
+    @media (hover: hover) and (pointer: fine) {
+      #lobbyStartBtn { bottom: 22px; }
+    }
     #searchWrap { position: relative; width: 100%; max-width: 460px; margin: 0 0 6px; }
     #menuSearch { width: 100%; box-sizing: border-box; font-family: var(--pix); font-size: 12px;
       color: var(--text); background: rgba(127,127,127,.10); border: 1px solid var(--edge);
@@ -4194,6 +4204,16 @@ const LOBBY = {
 // name, not adding to "You".
 // ⚠️ Bots never type. They walk on and off in the lobby, and the bench sits outside
 // the touchline, so the exclusion is by `ctrl`, never by where a body happens to be.
+// The on-screen START button's footprint, which `computeCam` reserves under the pitch so
+// the keyboard's bottom rows never render beneath it. ⚠️ These must stay in step with
+// `#lobbyStartBtn` in the stylesheet — `tests/lobbyfit.mjs` measures the RENDERED button
+// against the reserved band rather than trusting either number, which is what makes the
+// pair safe to keep in two places.
+const LOBBYBTN = {
+  touchPad: 210,     // phone: the button rides above the thumbstick, so the band is deep
+  deskPad: 96,       // fine pointer: `deskBottom` + the button's own height + breathing
+  deskBottom: 22,    // matches the media query in the stylesheet
+};
 const LOBBYKB = {
   rows: ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'],
   // ⚠️ A KEY IS ABOUT THE SIZE OF A PLAYER (PLAYER.r is 15, so a body is 30 across).
@@ -4205,7 +4225,7 @@ const LOBBYKB = {
   // the whole warm-up span forces. A quarter up is still something you step onto rather
   // than a wall of furniture, and the cost is paid back by everything else here moving
   // OUT of the keyboard's way.
-  keyW: 38, keyH: 35, gap: 6,
+  keyW: 46, keyH: 41, gap: 6,
   // ⚠️ **THIS WAS 0.8 WORLD UNITS**, which is no gap at all — the top row began within a
   // pixel of the back of the net, so the board and the pitch read as one cluttered
   // object. Asked for directly as "more space between pitch and keyboard".
@@ -5342,7 +5362,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260825.0240PM';
+const VERSION = '20260825.0705PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5358,6 +5378,13 @@ const VERSION = '20260825.0240PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260825.0705PM', title: 'The warm-up room fills the screen',
+    changed: [
+      '<b>Warm-up is far bigger on a wide screen.</b> The shirts, the flags and the bot-skill row now sit in the space either side of the pitch instead of stacked above it, so the court and the keyboard get the room. On a typical desktop the pitch is half again as large and the keys are nearly twice the size.',
+      '<b>On a phone the flags moved to the right-hand edge</b>, opposite the shirts \u2014 that side of the screen was being held empty for them anyway.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260825.0240PM', title: 'Warm-up bot skill applies to that match',
     changed: [
       '<b>The bot skill you pick in warm-up now applies to that match.</b> Walking onto a number changed the setting and said so on screen, but the bots you actually faced stayed on the old level until the next match.',
@@ -19728,7 +19755,16 @@ function buildLobbyKeys(w){
   // that the tie exists to keep off the pitch. It was also unusable in a lite lobby: with
   // no letters and no swatches above it the block was shorter than two pads, so `+` and
   // `−` landed on top of each other and the size could be raised and never lowered.
-  const pu = across + K.side;
+  // ⚠️ **CLEAR OF WHICHEVER IS WIDER — THE PITCH OR THE KEYBOARD — and it used to assume
+  // the pitch.** `across + K.side` is a clearance from the TOUCHLINE, which is only the
+  // outer edge of the layout while the letter block is narrower than the court. Widen the
+  // keys and it stops being: flat, `across` is a half-WIDTH (220 on Classic) against a top
+  // row of ten keys spanning 257 either side, so the `+` square landed **on top of P**.
+  // Measured as `letter(211,514)/act(254,514)` by `tests/lobbydress.mjs`' pad-vs-pad
+  // overlap check, which is the one instrument that can see it — nothing about the count,
+  // the bounds or the camera changes when two pads occupy the same square.
+  const rowHalf = (K.rows[0].length*K.keyW + (K.rows[0].length - 1)*K.gap) / 2;
+  const pu = Math.max(across + K.side, lite ? 0 : rowHalf + K.side);
   if (!lite){
     raw.push({ k: { act:  1, label: '+',      rep: true }, u: pu, v: top,                 du: K.pad, dv: K.pad });
     raw.push({ k: { act: -1, label: '−', rep: true }, u: pu, v: blockBot - K.pad, du: K.pad, dv: K.pad });
@@ -19756,7 +19792,11 @@ function buildLobbyKeys(w){
   // two rows deep, and depth above the pitch is the expensive direction (`computeCam`
   // centres the court and frames the worst side). Flat, the block is a column beside the
   // pitch, so four across and two deep with the flags continuing DOWN, where there is room.
-  const cols = splitU ? K.swCols * 2 : K.swCols;
+  // ⚠️ **FOUR PER RUN IN BOTH ORIENTATIONS, because the block is a COLUMN in both now.**
+  // Turned, it used to be `swCols * 2` — one wide row of eight sitting above the pitch —
+  // and that is what made the content box nearly SQUARE on a widescreen. See the block
+  // below.
+  const cols = K.swCols;
   const swSpan = cols*K.sw + (cols-1)*K.gap;
   const alongStep = K.sw + K.gap, deepStep = K.sw + K.gap;
   const subAlong = cols*alongStep - K.gap;                       // one sub-block along
@@ -19809,23 +19849,45 @@ function buildLobbyKeys(w){
   if (!lite) [1, 0].forEach(team => {
     const sign = team === 0 ? 1 : -1;          // team 0 is the +ve side of the split
     if (splitU){
-      // ⚠️ **CENTRED OVER ITS OWN HALF, not huddled either side of the middle.** Turned,
-      // the halves are left and right, so a team's dressing block belongs above the half
-      // it dresses — which puts the two blocks out toward the corners, where there is
-      // nothing else and where "that lot is mine" needs no explaining.
-      const along = sign*(across/2) - subAlong/2;
-      strip(team, LOBBY_FLAGS, (fk) => ({ flagTeam: team, flagKey: fk, label: '' }),
-            { axis:'u', sign:-1, along, outer: outV });                       // nearer the pitch
+      // ⚠️ **IN THE MARGIN BESIDE ITS OWN HALF — NOT STACKED ABOVE THE PITCH.** Reported
+      // as the room being far too small with the screen empty either side, and measured as
+      // exactly that: with the two dressing blocks ABOVE the court the content box came out
+      // **1048 × 980 world units — square** — on a 1.87 screen, so `computeCam` was bound
+      // by the vertical every time and the sides went unused. At 1678 × 895 the whole room
+      // occupied **x 637..1116 of 1678: 71% of the width was empty**, and the pitch was
+      // 24% of it.
+      // ⚠️ **THE FIX IS A SHAPE, NOT A SIZE.** Nothing here got smaller; the five rows of
+      // furniture that were stacked on the expensive axis moved to the cheap one. Turned,
+      // the halves are LEFT and RIGHT, so "the things beside your half dress your half"
+      // lands more literally out here than it ever did above the court — team 0 defends
+      // +u, so its block is the right-hand margin.
+      // ⚠️ **It clears the NET, not the goal line** (`across` already includes the net), so
+      // the head count `drawLobby` prints inside the pocket is still on bare grass — which
+      // is the collision the difficulty row records against a column out to one side.
+      // ⚠️ `u` is the pad's LEFT edge, so the two sides need different origins: on the +u
+      // side the edge IS the clearance, and on the −u side the pad hangs back by its own
+      // width. That is the same `+ K.sw` the flat layout's `outU` carries, applied per side.
+      const outer = across + K.side + (sign > 0 ? 0 : K.sw);
+      const along = -blockAlong / 2;            // the block centres on the halfway line
       strip(team, TEAM_COLS, (c) => ({ colTeam: team, col: c.col, label: '' }),
-            { axis:'u', sign:-1, along, outer: outV + flagDeep + K.flagGap }); // ...so shirts sit above
+            { axis:'v', sign, along, outer });
+      strip(team, LOBBY_FLAGS, (fk) => ({ flagTeam: team, flagKey: fk, label: '' }),
+            { axis:'v', sign, along: along + subAlong + K.flagGap, outer });
     } else {
-      // Flat the halves are top and bottom, so each block is a column beside its own half
-      // and the flags simply continue DOWN it, which is what "under" means here.
-      const base = sign > 0 ? K.swSplit/2 : -(K.swSplit/2 + blockAlong);
+      // Flat the halves are top and bottom, so each block is a column beside its own half.
+      // ⚠️ **COLOURS DOWN ONE EDGE AND FLAGS DOWN THE OTHER — which is what the note above
+      // has always claimed and what the code did NOT do.** All four sub-blocks were on the
+      // left (`sign:-1` twice, separated only along v), so a phone showed two stacks down
+      // the left edge and an empty right margin — and that margin was *reserved anyway*,
+      // because `computeCam`'s across span is symmetric about the court (`2*max(...)`).
+      // So the right-hand space was being paid for and left blank. Split, it costs less
+      // rather than more: the deepest stack falls from three sub-blocks to one, and the
+      // across span goes 768 → 708 world units.
+      const base = sign > 0 ? K.swSplit/2 : -(K.swSplit/2 + subAlong);
       strip(team, TEAM_COLS, (c) => ({ colTeam: team, col: c.col, label: '' }),
             { axis:'v', sign:-1, along: base, outer: outU });
       strip(team, LOBBY_FLAGS, (fk) => ({ flagTeam: team, flagKey: fk, label: '' }),
-            { axis:'v', sign:-1, along: base + subAlong + K.flagGap, outer: outU });
+            { axis:'v', sign: 1, along: base, outer: across + K.side });
     }
   });
   // ⚠️ DIFFICULTY IS A ROW UNDER THE KEYBOARD, not a column beside the pitch. "How
@@ -19852,11 +19914,32 @@ function buildLobbyKeys(w){
   // through the shirts. The colours stay NEAREST the pitch because they are per-half and
   // the half they are beside is the thing they dress; the difficulty row is match-wide, so
   // it is the one that moves out.
-  const colDeep = splitU ? (K.side + K.sw + blockDeep) : 0;
+  // ⚠️ **NOTHING IS ABOVE THE PITCH ANY MORE, so this clearance is ZERO in both
+  // orientations.** It existed because the colours were a row over the court and the
+  // numbers were drawn straight through them; with the dressing out in the margins the
+  // difficulty row is the only thing up there, and every unit it does not spend on the
+  // vertical is a unit `computeCam` gives back to the court.
+  // ⚠️ **TURNED, IT IS A CORNER CONTROL BESIDE THE KEYBOARD; FLAT IT STAYS ABOVE THE
+  // PITCH** — and that is a partial reversal of the note above, made on a measurement.
+  // With the dressing out in the margins the row was the ONLY thing left over the court,
+  // and it was costing `diffClear + diff` of the axis `computeCam` is bound by on a wide
+  // screen while the sides sat empty. Out at the touchline it costs the vertical nothing
+  // and pairs with the size stepper: the two match-wide controls in the two bottom
+  // corners, which is where the reference layout had them.
+  // ⚠️ **The objection it was moved above the pitch for does not apply out here.** That
+  // was "anything directly under QWERTY is part of the board to somebody walking the
+  // board" — this is beside the keyboard and a full `across + side` out from the middle,
+  // which is exactly where the stepper already lives without being mistaken for a key.
+  // ⚠️ Still a ROW, still left-to-right, still numbered: it is a ramp, and that is the one
+  // thing a difficulty control has to say.
+  // ⚠️ Flat, the halves are top and bottom and the court is narrow, so there is no margin
+  // to put it in — above the far net is still the one large empty area there.
+  const diffU = splitU ? -(across + K.side + dRow) : -dRow/2;
+  const diffV = splitU ? top : -(down + K.diffClear + K.diff);
   dkeys.forEach((dk, i) =>
     raw.push({ k: { diff: dk, label: String(i+1) },
-               u: -dRow/2 + i*(K.diff + K.gap),
-               v: -(down + colDeep + K.diffClear + K.diff), du: K.diff, dv: K.diff }));
+               u: diffU + i*(K.diff + K.gap),
+               v: diffV, du: K.diff, dv: K.diff }));
   // ⚠️ THE LETTERS ARE RECENTRED ACROSS THE SCREEN (`u`), and only the letters. That is
   // the axis the pitch is centred on, and the strips beside the pitch are deliberately
   // NOT part of the sum — they are pinned to the touchlines, so folding them into the
@@ -24131,7 +24214,15 @@ function computeCam(){
   // below the pitch — so without this the bottom rows of letters render underneath the
   // one button the lobby exists to get you past. Capped as a fraction of the window, or
   // a landscape phone reserves most of its own height.
-  if (world.state === 'warmup' && world.kb) padBot = Math.max(padBot, Math.min(210, Math.round(ch*0.28)));
+  // ⚠️ **A MOUSE-DRIVEN MACHINE RESERVES A THIRD OF WHAT A PHONE DOES**, because the
+  // button sits in a different place on each. On touch it is lifted clear of the
+  // thumbstick (`calc(70px + 78px)` in the stylesheet); with a fine pointer there is no
+  // thumbstick to clear, so it drops to `LOBBYBTN.deskBottom` off the edge and the band
+  // under the pitch comes back to the court. Measured at 1678×895: 210 → 96, which is
+  // 13% of the window handed back on the axis that binds.
+  if (world.state === 'warmup' && world.kb)
+    padBot = Math.max(padBot, isTouchLayout() ? Math.min(LOBBYBTN.touchPad, Math.round(ch*0.28))
+                                              : LOBBYBTN.deskPad);
   const availW = Math.max(80, cw - padL);
   const availH = Math.max(80, ch - padTop - padBot);
   // ⚠️ The warm-up keyboard sits outside the pitch, so the frame has to grow to hold it —
