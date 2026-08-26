@@ -1312,6 +1312,111 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('grass');
   }
 
+  // ---- Attribute Clash: a character grid inside, the rainbow round the edge ----
+  // ⚠️ Two marks the machine could not help making: colour stored per 8x8 CHARACTER CELL
+  // (so a sprite crossing a boundary dragged the whole cell with it — the "clash"), and a
+  // BORDER set separately from the screen. The rainbow hugs the boundary rather than
+  // sitting in a corner, which is the `faceoff` planet trap avoided: bars placed off the
+  // pitch box are off SCREEN whenever the court fills the window.
+  {
+    M.applyBundle('clash');
+    o.clashName = M.bundleName();
+    o.clashSlots = JSON.stringify(M.sel.look);
+    const N = 700;
+    const cvC = document.createElement('canvas'); cvC.width = cvC.height = N;
+    const ccC = cvC.getContext('2d');
+    const L = 180, T = 90, W = 340, H = 520;
+    const f = M.DYN_FIELDS.attribs, stC = {};
+    f.step(stC);
+    const paint = () => { ccC.fillStyle = '#000000'; ccC.fillRect(0,0,N,N);
+      f.paint(ccC, stC, L, T, W, H, { field: M.FIELDS.classic }); };
+    paint();
+    const img = ccC.getImageData(0,0,N,N).data;
+    const at = (x,y) => { const i = ((y|0)*N + (x|0))*4; return [img[i],img[i+1],img[i+2]]; };
+    // Which of the four bands a pixel is, or '' for none. ⚠️ Nearest-of-the-four rather
+    // than an exact match: the bands are stroked, so their boundaries are antialiased and
+    // a probe one pixel off a seam is a blend of two of them.
+    const K = M.CLASH;
+    const bandAt = (x, y) => {
+      const q = at(x,y);
+      if (q[0] + q[1] + q[2] < 200) return '';        // black: not a band at all
+      let best = '', bd = 1e9;
+      for (const hexS of K.bands){
+        const r2 = parseInt(hexS.slice(1,3),16), g2 = parseInt(hexS.slice(3,5),16), b2 = parseInt(hexS.slice(5,7),16);
+        const d = Math.abs(q[0]-r2) + Math.abs(q[1]-g2) + Math.abs(q[2]-b2);
+        if (d < bd){ bd = d; best = hexS; }
+      }
+      return bd < 200 ? best : '';
+    };
+    // ⚠️ **THE ORDER IS THE CLAIM, and it is exact — no threshold anywhere.** The rail is
+    // four concentric strokes of the field's own path, widest FIRST, each covering the
+    // inside of the last; get the order backwards and this reads cyan-green-yellow-red.
+    // ⚠️ **THE PROBE RADII COME FROM THE STROKE CONSTRUCTION, and the obvious ones are
+    // WRONG.** A stroke is CENTRED on the boundary, so band `i` is drawn `rw*2*(i+1)`
+    // wide and only its outer half survives the clip — it therefore occupies
+    // `rw*i` to `rw*(i+1)` outward, and the middle of it is `rw*(i+0.5)`. Sampling at
+    // `rw*(2i+1)` (the first attempt) walks straight past two of the four bands and off
+    // the end of the rail: it read yellow, cyan, nothing, nothing on a perfect build.
+    const rw = Math.max(1.2, Math.min(W, H) * K.rail);
+    const outAt = (d) => bandAt(L - d, T + H/2);
+    o.clashRailOut = [0,1,2,3].map(i => outAt(rw * (i + 0.5)));
+    o.clashBandsInOrder = JSON.stringify(o.clashRailOut) === JSON.stringify(K.bands);
+    // ⚠️ **BOTH GOAL MOUTHS ARE OPEN.** A rail across the mouth reads as a barrier in the
+    // one place the ball has to go through — the fence's rule. Paired with the SIDE at the
+    // same distances being fully banded, or "no rail at the mouth" is equally true of a
+    // painter that drew no rail at all.
+    const mid = L + W/2;
+    const mouth = (sign) => [0,1,2,3].map(i => {
+      const d = rw * (i + 0.5);
+      return bandAt(mid, sign < 0 ? T - d : T + H + d);
+    });
+    o.clashMouthTop = mouth(-1); o.clashMouthBot = mouth(1);
+    o.clashMouthsOpen = o.clashMouthTop.every(v => v === '') && o.clashMouthBot.every(v => v === '');
+    o.clashSideBanded = o.clashRailOut.every(v => v !== '');
+    // ⚠️ ...and none of it is INSIDE. The rail is decoration, and decoration on the court
+    // is a decoy — the Bootleg dot field's lesson.
+    o.clashInside = [0.2,0.4,0.6,0.8].map(fr => bandAt(L + W*fr, T + H*0.5));
+    o.clashRailStaysOut = o.clashInside.every(v => v === '');
+
+    // ⚠️ **THE CLASHED CELLS ARE HELD BACK.** A cell is about two thirds of a body across,
+    // so a bright one is a decoy — the Apologies! lane squares. Measured on the RENDERED
+    // peak inside the court against the two things a player is actually tracking: the
+    // BRIGHT YELLOW ball (sum 510) and a BRIGHT team ink (255 at minimum). The cells use
+    // the NORMAL brightness level at `cellA`, never BRIGHT.
+    let peak = 0;
+    for (let y = T+3; y < T+H-3; y += 2) for (let x = L+3; x < L+W-3; x += 2){
+      const q = at(x,y); const sum = q[0]+q[1]+q[2];
+      if (sum > peak) peak = sum;
+    }
+    o.clashCellPeak = peak;
+    o.clashCellsAreQuiet = peak > 0 && peak < 255;
+    // ...and they are REALLY THERE: "quiet" is trivially true of a painter that drew none.
+    o.clashCellsExist = peak > 40;
+
+    // ⚠️ **ONE CELL TURNS OVER PER `flip` STEPS, NOT ALL OF THEM.** The generations are
+    // staggered on purpose: the whole set changing at once is a disco floor, not clash.
+    // Measured as changed AREA over a cell's area — one slot moving clears one cell and
+    // lights another, so about two, plus antialiasing.
+    const cellPx = (W / K.cols) * (W / K.cols);
+    const snap = () => { paint(); return ccC.getImageData(L, T, W, H).data; };
+    const s0 = snap();
+    o.clashPaintIsPure = snap().join(',') === s0.join(',');
+    const moved = (a1, a2) => { let d = 0;
+      for (let i = 0; i < a1.length; i += 4)
+        if (a1[i]!==a2[i] || a1[i+1]!==a2[i+1] || a1[i+2]!==a2[i+2]) d++;
+      return d; };
+    for (let i = 0; i < K.flip; i++) f.step(stC);
+    o.clashOneFlip = +(moved(s0, snap()) / cellPx).toFixed(2);
+    o.clashTurnsOverSlowly = o.clashOneFlip > 0.5 && o.clashOneFlip < 5;
+    // ⚠️ ...and over a whole period the set really has moved on, or "slow" is satisfied by
+    // a grid that never changes at all.
+    const s1 = snap();
+    for (let i = 0; i < K.flip * K.cells; i++) f.step(stC);
+    o.clashFullPeriod = +(moved(s1, snap()) / cellPx).toFixed(2);
+    o.clashSetTurnsOver = o.clashFullPeriod > 8;
+    M.applyBundle('grass');
+  }
+
   // ================= FACEOFF ORBIT: the sky TUMBLES =======================
   // ⚠️ Reported as "the theme doesn't work as intended — I want the illusion of the field
   // rotating in 3D". It did not move at all: `step(st, dt)` against a caller that passes no
@@ -1605,6 +1710,33 @@ ok(r.ledgeControlClear,
    'a point on NEITHER chevron reads as inked, so the mirror check above passes on a painter that filled the whole roof');
 ok(r.ledgePaintIsPure, 'two paints of one step differ — a paused screen would crawl at the refresh rate');
 ok(r.ledgeDriftMovesWithStep, 'the city does not move with a step — the clock is frozen, which is the faceoff/bambamzone bug');
+
+// ---- Attribute Clash -------------------------------------------------------------
+ok(r.clashName === 'Attribute Clash', `the bundle is called "${r.clashName}"`);
+ok(r.clashSlots === JSON.stringify({palette:'clash',field:'attribs',discs:'none',ball:'plain',trail:'dots',court:'',surround:''}),
+   `Attribute Clash's slots are ${r.clashSlots}`);
+ok(r.clashBandsInOrder,
+   `the rainbow does not read red-yellow-green-cyan outward: ${JSON.stringify(r.clashRailOut)}. It is four ` +
+   'concentric strokes of the field path, widest FIRST so each covers the inside of the last — get that ' +
+   'backwards and the order reverses');
+ok(r.clashMouthsOpen,
+   `the rail runs across a goal mouth (top ${JSON.stringify(r.clashMouthTop)}, bottom ${JSON.stringify(r.clashMouthBot)}) — ` +
+   'a band across the mouth reads as a barrier in the one place the ball has to go through');
+ok(r.clashSideBanded,
+   'the SIDE of the pitch is not banded either, so "the mouths are open" is passing on a painter that drew no rail at all');
+ok(r.clashRailStaysOut,
+   `the rainbow is painted INSIDE the court (${JSON.stringify(r.clashInside)}) — decoration on the play area is a decoy`);
+ok(r.clashCellsAreQuiet,
+   `a clashed cell renders at ${r.clashCellPeak} of 765, which is as loud as the things a player is tracking — the ball ` +
+   'is bright yellow at 510 and a bright team ink is at least 255. Cells use the NORMAL brightness level, never BRIGHT');
+ok(r.clashCellsExist, `no cell was painted at all (peak ${r.clashCellPeak}) — "held back" is trivially true of nothing`);
+ok(r.clashPaintIsPure, 'two paints of one step differ — a paused screen would crawl at the refresh rate');
+ok(r.clashTurnsOverSlowly,
+   `${r.clashOneFlip} cells changed over one flip, wanted about 2 (one clears, one lights). The generations are ` +
+   'staggered so exactly one slot turns over; the whole set changing at once is a disco floor, not clash');
+ok(r.clashSetTurnsOver,
+   `over a whole period only ${r.clashFullPeriod} cells moved — "it turns over slowly" is satisfied by a grid that ` +
+   'never changes at all');
 ok(r.outsideRing, 'a Bambamzone mark crosses the guide ring, which is the thing that actually collides');
 ok(r.paintsOutside, `the void paints nothing outside the pitch (${r.voidPainted} px) — the void is the whole theme, and painting it into the pitch box means the court covers it`);
 ok(r.skyHasStars, `the void is a flat wash with no stars in it — emptying the star list changed only ${r.starPixels} px`);

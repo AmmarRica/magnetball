@@ -1402,6 +1402,55 @@ three lines a second time, name it.
   ⚠️ `tests/dyntheme.mjs` **could not catch any of this** because it stepped these two fields
   as `f.step(stB, 1.0)` — **passing a `dt` the real caller never passes**. It tested the
   painter's arithmetic against a call the game does not make.
+  `clash` (shown as **Attribute Clash**) = a black screen, a blue BORDER, and the rainbow
+  hugging the touchline. Asked for as a specific 8-bit British home computer.
+  ⚠️ **THE NAME IS OURS; THE MACHINE IS NOT.** That is a real company's trademark and is
+  not named here or anywhere in the file. `gameman` is the precedent — a machine's LOOK
+  taken as an idea with a name of our own. What is taken is public technical fact: a
+  fifteen-colour palette, an 8×8 attribute grid, and a border you set separately from the
+  screen. ⚠️ **The key is `clash`, deliberately generic**, and the shown name describes a
+  graphics ARTEFACT rather than a product — so it can be renamed for free, where a key
+  cannot (`sel.look`, `THEME_BUNDLES`, the map votes and every saved replay point at it).
+  **Do not re-key this to match the name.**
+  ⚠️ **THE FIFTEEN COLOURS ARE THE REAL ONES.** Eight hues at two brightnesses with black
+  shared: `#d7` is the normal level and `#ff` is BRIGHT. Nothing is a colour somebody
+  picked — the machine had these and no others, which is the whole reason it is worth
+  building a theme from. ONE JOB EACH (the `tennis` rule): border normal blue, screen black
+  PAPER, markings BRIGHT WHITE, teams BRIGHT RED and BRIGHT CYAN — a lightness pair as well
+  as a hue one, so protanopia does not flatten them — and the ball BRIGHT YELLOW because
+  nothing else claims it. Magenta is the goal pocket; the NORMAL levels are the grid.
+  ⚠️ **CELLS ARE SQUARE AND THE COUNT IS NOT.** The machine's screen was 32×24 cells;
+  these courts run from Futsal to Leviathan and are nothing like 4:3, so what is held is
+  the CELL (`W / 32`) and the rows fall out of the court's height. A fixed 32×24 would
+  stretch every cell into a letterbox, which is the one thing an 8×8 grid must not be.
+  ⚠️ **WHICH CELLS ARE LIT IS HASHED FROM (slot, generation), never rolled** — a paint must
+  give the same picture twice for one step or a paused screen flickers at the refresh rate,
+  and `Math.random` is out anyway. The generations are **STAGGERED** so exactly one cell
+  turns over every `flip` steps: the whole set changing at once is a disco floor, not
+  clash. ⚠️ Held right back (`cellA` 0.20, NORMAL brightness only) — a cell is two thirds
+  of a body across, so a bright one is a decoy, which is the Bootleg dot field and the
+  Apologies! lane squares written up again. Measured: peak 159 of 765 against the ball's
+  510 and a bright team ink's 255+.
+  ⚠️ **THE RAINBOW IS FOUR CONCENTRIC STROKES OF THE FIELD'S OWN PATH, WIDEST FIRST.**
+  Each is centred on the boundary so only its outer half survives the clip, and the next
+  covers the inside of the last — which is what makes the bands come out red-yellow-green-
+  cyan reading OUTWARD, and reversing the loop reverses the order. It borrows
+  `pooltable.path` rather than copying it, so it follows a rounded or chamfered court for
+  free, and it lives entirely outside the play area where it can never be a decoy.
+  ⚠️ **IT WAS GOING TO BE THE DIAGONAL FLASH IN A CORNER, AND THAT IS THE `faceoff` PLANET
+  TRAP.** Bars placed off the pitch box at one corner are off SCREEN whenever the court
+  fills the window, which on a desktop it very nearly does — the same way that planet
+  landed at y = 1280 on a 1000px canvas. A rail hugging the boundary is always exactly
+  where the boundary is. ⚠️ **Both goal mouths are punched out**, the fence's trick: a band
+  across the mouth reads as a barrier in the one place the ball has to go through.
+  ⚠️ **The picker tile shows no rainbow, and that is `ammari`'s call, not a bug.** A tile
+  paints with `w` null and is clipped to its own box, so the outer half of every stroke —
+  the half that survives — falls outside it. Insetting the rail for tiles only would mean
+  drawing something the game does not.
+  ⚠️ `discs: 'none'`, `ball: 'plain'` and `sfx: 'space'` are all REUSED. A body on this
+  machine was a flat two-colour sprite, which is what the standard disc already is once the
+  palette has made it bright red or bright cyan on black; and `space` is the closest set in
+  the file to one square wave and no mixer. `tests/dyntheme.mjs`.
   `ledge` (shown as **Mirror Ledge**) = a TEAL rooftop hung over a BLUE drop, with the way
   on painted in red: panel seams, red pipe runs down the touchlines, a red chevron aimed
   into each goal, and a night city with its lights a long way down.

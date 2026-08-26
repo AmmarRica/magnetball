@@ -5361,7 +5361,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0135AM';
+const VERSION = '20260828.0520AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5377,6 +5377,13 @@ const VERSION = '20260828.0135AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0520AM', title: 'A new theme: Attribute Clash',
+    changed: [
+      '<b>Attribute Clash.</b> A black screen in a blue border with the rainbow hugging the touchline, after the 8-bit home computers that painted colour eight pixels at a time. Bright red against bright cyan, a bright yellow ball, and the beeper for sound.',
+      '<b>The pitch clashes as you play.</b> Those machines stored one colour per block of the screen, so two things sharing a block had to share a colour. Here a scatter of blocks over the court takes a colour of its own and turns over as the match runs \u2014 a few at a time, never the whole grid at once.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0135AM', title: 'A new theme: Mirror Ledge',
     changed: [
       '<b>Mirror Ledge.</b> A teal rooftop hung over a blue drop, with the way on painted in red \u2014 panel seams, pipe runs down the touchlines, a chevron aimed into each goal, and a night city with its lights a long way below. White markings, and the ball is the one yellow thing on the pitch so it never gets lost.',
@@ -7016,6 +7023,56 @@ const THEMES = {
       hudText:'#f3f7f2', hudSub:'#f2c31d', accent:'#f2c31d', padRing:'rgba(255,255,255,0.7)',
       dynRail:'#7a4a1e', dynRailEdge:'rgba(0,0,0,0.4)', dynPocket:'#080808' },
   },
+  // ATTRIBUTE CLASH — a black screen, a coloured border, and the rainbow round the edge.
+  // ⚠️ **THE NAME IS OURS; THE MACHINE IS NOT.** Asked for as a specific 8-bit British
+  // home computer, which is a real company's trademark and is not named here or anywhere
+  // in the file. `gameman` is the precedent, one entry down: the machine's LOOK is the
+  // idea and the name is ours. What is taken is public technical fact — a fifteen-colour
+  // palette, an 8x8 attribute grid, and a border you set separately from the screen.
+  // ⚠️ **THE KEY IS `clash`, DELIBERATELY GENERIC**, and the displayed name is a
+  // description of a graphics artefact rather than a product. Filing the risk under the
+  // DISPLAY name means it can be changed for free; a key is what `sel.look`,
+  // `THEME_BUNDLES`, the map votes and every saved replay refer to, and re-keying one
+  // strands a save. Same call `ledge` records. **Do not re-key this to match the name.**
+  // ⚠️ **THE FIFTEEN COLOURS ARE THE REAL ONES, and that is the whole palette.** Eight
+  // hues at two brightnesses with black shared, so `#d7` is the normal level and `#ff` is
+  // BRIGHT. Nothing here is a colour somebody picked: the machine had these and no others,
+  // which is exactly why it is worth building a theme out of.
+  // ⚠️ **ONE JOB EACH** — the `tennis` rule. The BORDER is normal blue, the screen is
+  // black PAPER, the markings are BRIGHT WHITE ink, the teams are BRIGHT RED and BRIGHT
+  // CYAN (a lightness pair as well as a hue one, so protanopia does not flatten them),
+  // and the ball is BRIGHT YELLOW because it is the one colour nothing else claims.
+  // Magenta is the goal pocket and the obstacle ink; the normal-brightness levels are the
+  // attribute grid.
+  clash: {
+    name: 'Attribute Clash', emoji: '🌈',
+    ui: { scan:false,
+      grad:'linear-gradient(180deg, #0000d7 0%, #00007a 58%, #000000 100%)',
+      bg:'#000000', panel:'rgba(0,0,215,0.30)', edge:'#0000d7', text:'#ffffff', muted:'#d7d7d7',
+      red:'#ff0000', blue:'#0000ff', cyan:'#00ffff', magenta:'#ff00ff', green:'#00ff00',
+      yellow:'#ffff00', accent:'#ffff00', go:'#00ff00', field:'#000000', onAccent:'#000000' },
+    // ⚠️ FLAT (`stripeA === stripeB`). A character screen has no mown stripes; the texture
+    // it does have is the attribute grid, which is the painter's job.
+    pitch: { glow:false, fieldBg:'#0000d7', court:'#000000', stripeA:'#000000', stripeB:'#000000',
+      netPocket:'rgba(255,0,255,0.26)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.50)', post:'#ffffff', teamRed:'#ff0000', teamBlue:'#00ffff',
+      discRim:'#000000', kickRing:'#ffffff', kickText:'#000000', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#000000', nameBg:'#000000', nameText:'#ffffff',
+      shadow:'rgba(0,0,0,0.35)', ballRim:'#000000', ball:'#ffff00', ballSpot:'#000000',
+      trailRGB:'255,255,0',
+      obstacle:'#ff00ff', good:'#00ff00', warn:'#ffff00', dim:'#d7d7d7', cone:'#ff00ff',
+      // The HUD sits on the BORDER, which is a saturated blue, so it goes light — the same
+      // exception Bambamzone, Warp and Tennis make.
+      hudText:'#ffffff', hudSub:'#d7d7d7', accent:'#ffff00', padRing:'rgba(255,255,255,0.6)',
+      // ⚠️ A BLACK court gives the two-tone guide ring nothing to work with on its dark
+      // half, so the light one has to carry it — the same call Highlighter makes from the
+      // opposite end with a near-white court.
+      discGuide:'rgba(255,255,255,0.75)', discGuideDark:'rgba(0,0,0,0.6)',
+      dynMark:'#00d7d7',        // the attribute grid: normal cyan, held right back
+      dynAlt:'#d7d7d7',         // ...and the clashed cells' brightest level
+      dynEdge:'#ffffff',
+      dynGlow:'#0000d7' },
+  },
   gameman: {
     name: 'GameMan', emoji: '🎮',
     ui: { scan:false,
@@ -7986,6 +8043,14 @@ const THEME_BUNDLES = {
   // is how every unskinned palette (Grass, Neon, Flat, Paper, Tennis) tells the sides
   // apart. The silhouette rule binds a skin that EXISTS; it does not require one.
   ledge:     { field:'rooftop',   discs:'none',        ball:'plain',   sfx:'classic', trail:'comet' },
+  // ⚠️ **`discs: 'none'` and `ball: 'plain'` — both REUSED, nothing invented.** A body on
+  // this machine was a flat two-colour sprite, which is what the standard disc already is
+  // once the palette has made it BRIGHT RED or BRIGHT CYAN on black; and the ball is the
+  // palette's yellow with a black rim. A skin would be a third thing to keep in step for
+  // no gain, and a quantised circle cannot honour the guide ring cleanly anyway.
+  // ⚠️ `sfx: 'space'` is the beeper — the closest set in the file to one square wave and
+  // no mixer. ⚠️ **No `pitch`**: an attribute screen is a treatment for any rectangle.
+  clash:     { field:'attribs',   discs:'none',        ball:'plain',   sfx:'space' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -28342,6 +28407,125 @@ function discFace(p){
   return { ux: fx/m, uy: fy/m };
 }
 // ============================================================
+//  ATTRIBUTE CLASH — the character grid inside, the rainbow round the edge
+// ============================================================
+// Two marks, and both are things the machine could not help doing.
+// ⚠️ **THE 8x8 ATTRIBUTE GRID.** Colour was stored per CHARACTER CELL, not per pixel: two
+// colours to a cell, INK and PAPER, and a sprite crossing a boundary dragged the whole
+// cell with it. That is the "clash" the theme is named for. Here it is a faint grid over
+// the black screen with a scatter of cells carrying a dim INK — the ghost of a sprite
+// that was there a moment ago.
+// ⚠️ **CELLS ARE SQUARE, AND THE COUNT IS NOT.** The machine's screen was 32 cells across
+// by 24 down; these courts run from Futsal to Leviathan and are nothing like 4:3, so what
+// is held is the CELL — `W / 32` — and the rows fall out of the court's own height. A
+// fixed 32x24 on a long court would stretch every cell into a letterbox, which is the one
+// thing an 8x8 grid must not be.
+// ⚠️ **WHICH CELLS ARE LIT IS HASHED FROM (slot, generation), never rolled.** A paint has
+// to give the same picture twice for one step or a paused screen flickers at the refresh
+// rate, and `Math.random` is out anyway — the field is advanced from inside the step loop.
+// The generations are STAGGERED so one cell changes every `flip` steps rather than all of
+// them at once, which is what makes it read as clash rather than as a disco floor.
+// ⚠️ **HELD RIGHT BACK.** A cell is about two thirds of a body across, so a bright one is
+// a decoy — the Bootleg dot field and the Apologies! lane squares are both written up for
+// exactly that. `cellA` is 0.20 over black and the inks are the NORMAL brightness level,
+// never BRIGHT: the bright set belongs to the players, the ball and the lines.
+// ⚠️ **THE RAINBOW HUGS THE BOUNDARY, and it is drawn as FOUR CONCENTRIC STROKES of the
+// field's own path** (`pooltable.path`, borrowed not copied), widest first, each covering
+// the inside of the last. So the bands come out red-yellow-green-cyan reading outward, it
+// follows a rounded or chamfered court for free, and the whole thing lives OUTSIDE the
+// play area where it can never be a decoy.
+// ⚠️ **IT WAS GOING TO BE THE DIAGONAL FLASH IN A CORNER AND THAT IS THE `faceoff` PLANET
+// TRAP.** Bars placed off the pitch box at one corner are off SCREEN whenever the court
+// fills the window, which on a desktop it very nearly does — the same way that planet
+// landed at y = 1280 on a 1000px canvas. A rail hugging the boundary is always exactly
+// where the boundary is.
+// ⚠️ **BOTH GOAL MOUTHS ARE PUNCHED OUT**, the fence's trick: a rail across the mouth
+// reads as a barrier in the one place the ball has to go through.
+const CLASH = {
+  cols: 32,        // character cells across the court — the machine's own screen width
+  gridA: 0.13,     // how faint the cell boundaries are: a surface, never a grid to read
+  cells: 26,       // how many cells carry a clashed INK at once
+  cellA: 0.20,     // ...and how far back they are held — see the decoy note above
+  flip: 42,        // steps between ONE cell changing colour
+  rail: 0.010,     // each rainbow band, as a fraction of the court's short side
+  // The normal-brightness level. BRIGHT is for the players, the ball and the lines.
+  inks: ['#0000d7', '#d70000', '#d700d7', '#00d700', '#00d7d7', '#d7d700', '#d7d7d7'],
+  // Reading OUTWARD from the boundary, which is the order the case's flash runs in.
+  bands: ['#ff0000', '#ffff00', '#00ff00', '#00ffff'],
+};
+// A pure integer hash. ⚠️ Not `mulberry32`: that is a STATEFUL generator, and what is
+// wanted here is the same answer for the same (slot, generation) every time it is asked,
+// from a paint that may run twice for one step.
+function clashHash(n){
+  n = (n ^ 61) ^ (n >>> 16);
+  n = (n + (n << 3)) | 0;
+  n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d);
+  return (n ^ (n >>> 15)) >>> 0;
+}
+DYN_FIELDS.attribs = {
+  name: 'Attribute grid',
+  bleed: true,
+  reset(st){ st.t = 0; },
+  // ⚠️ `step(st)` and an INTEGER counter — the form that cannot be handed a `dt` the
+  // caller does not pass. `step(st, dt)` put NaN into two fields for a whole release.
+  step(st){ st.t = (st.t | 0) + 1; },
+  paint(c, st, L, T, W, H, w){
+    const grid = TH.dynMark || TH.line || '#00d7d7';
+    const path = () => { if (w && w.field) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
+                         else c.rect(L, T, W, H); };
+    const cell = W / CLASH.cols;
+    const rows = Math.max(1, Math.round(H / cell));
+
+    // ---- 1. THE SCREEN: the attribute grid, and the cells that clashed ---------------
+    c.save();
+    c.beginPath(); path(); c.clip();
+    const t = st.t | 0;
+    // ⚠️ Staggered generations: slot i turns over `i * flip` steps out of phase with slot
+    // 0, so exactly one cell changes every `flip` steps and the whole set never blinks.
+    const period = CLASH.flip * CLASH.cells;
+    for (let i = 0; i < CLASH.cells; i++){
+      const gen = Math.floor((t + i * CLASH.flip) / period);
+      const h = clashHash(gen * 2654435761 + i * 40503);
+      const cx = h % CLASH.cols;
+      const cy = (h >>> 6) % rows;
+      const ink = CLASH.inks[(h >>> 13) % CLASH.inks.length];
+      c.fillStyle = rgba(ink, CLASH.cellA);
+      c.fillRect(L + cx*cell, T + cy*cell, cell, cell);
+    }
+    c.strokeStyle = rgba(grid, CLASH.gridA);
+    c.lineWidth = Math.max(1, cell * 0.05);
+    c.beginPath();
+    for (let i = 1; i < CLASH.cols; i++){ const x = L + i*cell; c.moveTo(x, T); c.lineTo(x, T + H); }
+    for (let j = 1; j < rows; j++){ const y = T + j*cell; c.moveTo(L, y); c.lineTo(L + W, y); }
+    c.stroke();
+    c.restore();
+
+    // ---- 2. THE RAINBOW, hugging the boundary --------------------------------------
+    const rw = Math.max(1.2, Math.min(W, H) * CLASH.rail);
+    const M = rw * CLASH.bands.length * 2.5;
+    c.save();
+    c.beginPath();
+    c.rect(L - M, T - M, W + M*2, H + M*2);        // everything nearby...
+    path();                                        // ...minus the play area...
+    if (w && w.field){                             // ...and minus both goal mouths
+      const gh = (w.field.goal/2) / w.field.W * W, mid = L + W/2;
+      c.rect(mid - gh, T - M, gh*2, M);
+      c.rect(mid - gh, T + H, gh*2, M);
+    }
+    c.clip('evenodd');
+    // ⚠️ Widest FIRST. Each stroke is centred on the boundary, so only its outer half
+    // survives the clip, and the next one paints over the inner part of it. Four passes,
+    // four bands, and the order they end up in reading outward is the order of `bands`.
+    for (let i = CLASH.bands.length - 1; i >= 0; i--){
+      c.strokeStyle = CLASH.bands[i];
+      c.lineWidth = rw * 2 * (i + 1);
+      c.beginPath(); path(); c.stroke();
+    }
+    c.restore();
+  },
+};
+// ============================================================
 //  MIRROR LEDGE'S ROOFTOP — the drop outside, the way on inside.
 // ============================================================
 // ⚠️ **IT PAINTS ON BOTH SIDES OF THE TOUCHLINE, which is why it `bleed`s.** A `bleed`
@@ -31666,7 +31850,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, haloAlpha, NAMEPLATE, RING, LEDGE, kickRingInk, ringLayout, BOT_NAMES, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, RING, LEDGE, CLASH, kickRingInk, ringLayout, BOT_NAMES, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,
