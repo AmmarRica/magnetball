@@ -201,6 +201,30 @@ const DESKTOP = { w:1280, h:900, mobile:false };
     }
     o.aStillConfirms = clicked === 'ovMenu';
 
+    // ⚠️ **THE OPTIONS ARE A COLUMN, SO THE CURSOR HAS TO WALK UP AND DOWN.** `#overlay`
+    // is `flex-direction: column` — measured on a 1280×900 desktop the three options share
+    // one x (498) and sit at y 567 / 640 / 713 — and `pollOverOptions` only ever read
+    // `pad.dx`. So a D-pad pushed the way the list actually runs did nothing at all, which
+    // is how the result screen came to be reported as not being controller-driven.
+    // ⚠️ THE LAYOUT IS MEASURED IN THE SAME RUN, never assumed. "Up and down walk the
+    // cursor" is the right claim only while the buttons really are stacked; if they ever
+    // become a row this should fail rather than quietly test the wrong axis.
+    // ⚠️ Left/right are asserted too. They are the axis that already worked, and adding an
+    // axis must not cost one — a build that simply swapped dx for dy would sail through a
+    // down-only check while taking the control away from whoever has it in their fingers.
+    toResult();
+    const geo = M.overButtons().map(x => { const q = x.getBoundingClientRect();
+                                           return [Math.round(q.left), Math.round(q.top)]; });
+    o.optionCount = geo.length;
+    o.oneColumn = geo.length >= 3 &&
+                  new Set(geo.map(v => v[0])).size === 1 &&
+                  new Set(geo.map(v => v[1])).size === geo.length;
+    const walk = codes => { const seen = []; for (const c of codes){ press(c); seen.push(M.overNav); } return seen; };
+    o.navDown  = walk([13, 13]);            // D-pad DOWN, twice
+    o.navUp    = walk([12]);                // D-pad UP, back one
+    o.navRight = walk([15]);                // ...and right still means next
+    o.navLeft  = walk([14]);
+
     // ⚠️ ...and where warm-up is NOT on offer, START falls back to confirming the cursor,
     // or it is dead on exactly the screens that borrow that button for Menu / Cup.
     toResult();
@@ -222,6 +246,15 @@ const DESKTOP = { w:1280, h:900, mobile:false };
     fails.push('A no longer confirms the selected option (buttons: ' + JSON.stringify(r.buttons) + ')');
   if (!r.startFallsBack)
     fails.push('START is dead where warm-up is not offered — it must fall back to confirming the cursor');
+  if (!r.oneColumn)
+    fails.push('the result options are not one stacked column, so the up/down check below is ' +
+               'measuring the wrong axis — ' + r.optionCount + ' buttons');
+  if (!(r.navDown[0] === 1 && r.navDown[1] === 2 && r.navUp[0] === 1))
+    fails.push('the result cursor does not walk with UP/DOWN, which is the way the buttons are ' +
+               'laid out — down ' + JSON.stringify(r.navDown) + ', up ' + JSON.stringify(r.navUp));
+  if (!(r.navRight[0] === 2 && r.navLeft[0] === 1))
+    fails.push('LEFT/RIGHT stopped walking the cursor — adding an axis must not cost one: right ' +
+               JSON.stringify(r.navRight) + ', left ' + JSON.stringify(r.navLeft));
   await p.close();
 }
 

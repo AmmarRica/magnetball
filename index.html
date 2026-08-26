@@ -1049,9 +1049,23 @@
       padding: max(10px, env(safe-area-inset-top)) 12px 8px;
       pointer-events: none;
     }
+    /* ⚠️ **THE COLUMNS ARE NAMED, and leaving them to auto-placement put the full-screen
+       button in the MIDDLE OF THE SCREEN.** `syncScorebug` sets `#scorebug` to
+       `display:none` for the whole of warm-up (there is no score to show in there), which
+       takes it out of grid flow — so `#hudRight`, which is mute and full screen,
+       auto-placed into column 2. That column is the `auto` one, i.e. the screen centre.
+       Measured: full screen at cx 1246 in a live match and **661** in warm-up on a 1280
+       window (centre 640), and 356 → **222** on a 390px phone (centre 195). Reported as
+       the button "showing at center of screen randomly" — not random, every warm-up.
+       ⚠️ The grid was chosen over a flex row precisely so the middle column is the screen
+       centre "whatever sits either side of it" (the note above), and then did not pin the
+       sides, so a HIDDEN middle broke the guarantee from the inside.
+       ⚠️ `#lobbyStartBtn` is a fourth child of #hud and is `position: fixed`, so it is out
+       of flow and never took a cell — which is why only the warm-up case showed this. */
     .hudside { display: flex; align-items: center; gap: 10px; }
-    #hudLeft { justify-self: start; }
-    #hudRight { justify-self: end; }
+    #hudLeft  { grid-column: 1; justify-self: start; }
+    #scorebug { grid-column: 2; }
+    #hudRight { grid-column: 3; justify-self: end; }
     #hud.hidden { display: none; }
     /* The floating pills sit over the PITCH, not the page, so they carry their own
        surface (--overlay) and their own inks (--overlay-*), both derived per theme
@@ -5361,7 +5375,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0520AM';
+const VERSION = '20260828.0940AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5377,6 +5391,14 @@ const VERSION = '20260828.0520AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0940AM', title: 'Controller fixes',
+    changed: [
+      '<b>Any button gets you into a match.</b> Holding any button for five seconds in warm-up now kicks off, instead of Start alone \u2014 plenty of controllers do not have a Start button, and on those the room could be decorated and not left. A tap of a button still kicks the ball, which is what warm-up is for. The prompt for joining a match in progress says "any button" too, which is what it always accepted.',
+      '<b>The result screen works with a controller properly.</b> The options are a stack, and the cursor only moved left and right \u2014 so pushing up or down, the way the list actually runs, did nothing. Both directions work now.',
+      '<b>The full-screen button no longer jumps to the middle of the screen.</b> It happened in the warm-up room every time, because the score it sits beside is hidden in there.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0520AM', title: 'A new theme: Attribute Clash',
     changed: [
       '<b>Attribute Clash.</b> A black screen in a blue border with the rainbow hugging the touchline, after the 8-bit home computers that painted colour eight pixels at a time. Bright red against bright cyan, a bright yellow ball, and the beeper for sound.',
@@ -19758,6 +19780,27 @@ function padKickHeld(g){
   }
   return false;
 }
+// ⚠️ **ANY BUTTON AT ALL, and deliberately NOT `padKickHeld`.** This is the "a person is
+// asking for something" test, used where the game needs a button and does not care which:
+// forcing the warm-up kickoff on a pad with no Start. Two differences from the kick, and
+// both matter.
+//   • It ignores `sel.pad.kick`. Binding a kick button is a statement about SHOOTING; it
+//     must not narrow what can start a match, or binding one takes the kickoff away.
+//   • Start and Select ARE included. `KICK_NEVER` holds them back because they are spoken
+//     for elsewhere — begin the match, turn your controls — and here that IS the meaning.
+// The D-pad stays out for the reason it is out of the kick: it is a button as far as the
+// Gamepad API is concerned, so counting it makes every step you take a request. That is
+// the one exclusion, and it is what "any button" honestly means on a pad you walk with.
+const ANY_NEVER = new Set([12, 13, 14, 15]);
+function padAnyHeld(g){
+  if (!g) return false;
+  const bs = g.buttons || [];
+  for (let i = 0; i < bs.length; i++){
+    if (ANY_NEVER.has(i)) continue;
+    if (btn(g, i)) return true;
+  }
+  return false;
+}
 function btn(g,i){ const b=g.buttons[i]; return !!(b && (b.pressed || b.value>0.4)); }
 
 // ============================================================
@@ -21430,11 +21473,13 @@ function pollLobbyStart(w){
   if (!w || w.state !== 'warmup' || !w.lobby) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   for (const p of lobbyHumans(w)){
-    let pressed = false, key = p.ctrl;
+    let pressed = false, anyHeld = false, key = p.ctrl;
     if (p.ctrl === 'gamepad'){
       const g = gps[p.padIndex];
-      // ⚠️ START AND SELECT ONLY — and KICK is deliberately NOT in this list any more,
-      // which reverses an earlier decision on purpose. A was added here because Start
+      // ⚠️ THE TAP IS START ONLY — and KICK is deliberately NOT in this list any more,
+      // which reverses an earlier decision on purpose. (The five-second HOLD below takes
+      // any button; the two are separated for the reason written there.)
+      // A was added here because Start
       // is a button plenty of pads put somewhere awkward and the Steam Deck buries
       // under a menu, and A is what every other screen takes as "yes". That was right
       // while the lobby's ball was frozen and A did nothing else in here.
@@ -21450,12 +21495,36 @@ function pollLobbyStart(w){
       // "I am standing the other way round".
       pressed = arcadeMode() ? arcadeStartHeld(p.padIndex)
                              : !!(g && btn(g, START_BTN));
+      // ⚠️ **THE HOLD TAKES ANY BUTTON; THE TAP DOES NOT.** Reported as "some of my
+      // controllers don't have start button", and measured: of seventeen button indices,
+      // exactly ONE (9) did anything in this room. So a pad without Start could not ready
+      // up, could not kick off, and could not force the kickoff either.
+      // ⚠️ The tap CANNOT be widened, and that is the collision rather than an oversight.
+      // In warm-up the ball is live and KICK is *every* button (`padKickHeld`) — that is
+      // the whole point of the room — so "any button starts the match" is the exact bug
+      // recorded a few lines up, where A was bound to both jobs and did the wrong one.
+      // ⚠️ The HOLD has no such conflict: nothing else in the game is a five-second hold,
+      // and it is already SEEN — `startHoldFrac` draws a filling ring round the body and
+      // round that pad's corner icon, so somebody who leans on a button watches it fill
+      // and lets go. That readout is what makes leaning on KICK to sprint recoverable
+      // rather than a surprise kickoff.
+      anyHeld = arcadeMode() ? (pressed || arcadeFireHeld(p.padIndex))
+                             : !!(g && padAnyHeld(g));
       key = 'pad' + p.padIndex;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
+      // ⚠️ A keyboard seat is NOT widened: every keyboard has an Enter, so there is no
+      // hardware to rescue — and the movement keys are held for seconds at a time while
+      // you walk the length of a Leviathan lobby, which is exactly the accident the
+      // gamepad D-pad is excluded to avoid.
+      anyHeld = pressed;
     }
     const was = _startPrev[key];
     _startPrev[key] = pressed;
+    // The hold runs off its own edge, or a tap of START would be seen as the first frame
+    // of a hold that some OTHER button had already begun.
+    const wasAny = _startPrev[key + ':any'];
+    _startPrev[key + ':any'] = anyHeld;
     // ⚠️ **HELD, and counted here rather than in a draw.** `pollLobbyStart` is called from
     // `step()`'s warm-up branch, so `STEP` is a real fixed sixtieth and the five seconds
     // mean five seconds at any refresh rate. Anything time-based that lives in a draw runs
@@ -21468,8 +21537,8 @@ function pollLobbyStart(w){
     // reads as a fresh press, which is what makes the one button the lobby exists to get
     // you past work at all. Coming in holding START and keeping it down for five more
     // seconds therefore does start the match, and that is the feature rather than a hole.
-    if (!pressed || w.lobby.calib){ p.startHold = 0; p.startArm = false; }
-    else if (!was) { p.startHold = 0; p.startArm = true; }
+    if (!anyHeld || w.lobby.calib){ p.startHold = 0; p.startArm = false; }
+    else if (!wasAny) { p.startHold = 0; p.startArm = true; }
     else if (p.startArm){
       p.startHold = (p.startHold || 0) + STEP;
       if (p.startHold >= LOBBY.holdStart){ p.startHold = 0; lobbyStart(w); return; }
@@ -21657,7 +21726,7 @@ function subWaitFor(w, padIndex){
     mine.ctrl = 'gamepad'; mine.padIndex = padIndex; mine._padWas = null;
     mine._padId = padId;
     mine.sittingOut = true; mine._subIn = false; mine._subBack = true;
-    toast(mine.name + ' back — press START to take over', 'ok', 'gamepad');
+    toast(mine.name + ' back — press any button to take over', 'ok', 'gamepad');
     return mine;
   }
   if (benchHumans(w).length + w.players.length >= LOBBY.maxPerSide * 2) return null;
@@ -21670,7 +21739,7 @@ function subWaitFor(w, padIndex){
   const g = subGate(w);
   p.x = g.x; p.y = g.y;
   (w.bench = w.bench || []).push(p);
-  toast(p.name + ' — walk to a side, then START', 'ok', 'gamepad');
+  toast(p.name + ' — walk to a side, then any button', 'ok', 'gamepad');
   return p;
 }
 // START while waiting, edge-triggered per pad, arms you for the next goal. Pressing it
@@ -22690,7 +22759,20 @@ function pollOverOptions(){
   const pad = padFor(host); if (!pad) return;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = host.ctrl === 'gamepad' ? gps[host.padIndex] : null;
+  // ⚠️ **UP AND DOWN, because the buttons are a COLUMN.** `#overlay` is
+  // `flex-direction: column`, so the options stack: measured on a 1280×900 desktop the
+  // three of them share one x (498) and sit at y 567 / 640 / 713. The cursor only ever
+  // read `pad.dx`, so a D-pad pushed the way the list actually runs did nothing at all
+  // and the result screen was reported as not being controller-driven.
+  // ⚠️ Left/right are KEPT rather than swapped out. They were the only thing that worked
+  // for the whole life of the screen, somebody has them in their fingers, and a stick
+  // pushed sideways is a perfectly reasonable "next" — this adds an axis, it does not
+  // move one. Both map the same way: forward is right/down.
+  // ⚠️ `pad.dy` is positive DOWNWARD (`pollKeys` writes +1 for ArrowDown), so down is
+  // `overNav++`, which walks the list the way it reads on screen — the same rule
+  // `overButtons()` follows by being in DOM order.
   const left  = pad.dx < -0.55, right = pad.dx > 0.55;
+  const up    = pad.dy < -0.55, down  = pad.dy > 0.55;
   // ⚠️ **START IS NOT A SECOND CONFIRM BUTTON ANY MORE — it goes straight to warm-up.**
   // It used to be folded in with A and KICK, so the only way to the room was to walk the
   // cursor onto it first. START already means "get me playing" everywhere else in the
@@ -22704,6 +22786,8 @@ function pollOverOptions(){
   const step = (k, v, fn) => { if (v && !_overPrev[k]) fn(); _overPrev[k] = v; };
   step('l', left,  () => { overNav--; syncOverNav(); playSfx('kick'); });
   step('r', right, () => { overNav++; syncOverNav(); playSfx('kick'); });
+  step('u', up,    () => { overNav--; syncOverNav(); playSfx('kick'); });
+  step('d', down,  () => { overNav++; syncOverNav(); playSfx('kick'); });
   step('a', go,    () => { const b = overButtons()[overNav]; if (b) b.click(); });
   // ⚠️ Through the BUTTON's own click, never a second copy of what warm-up means — the
   // result screen's Warm-up option is `restartToWarmup`, and `syncWarmupOffer` is what
@@ -25956,8 +26040,13 @@ function drawSubPrompts(w){
     // own half-match back. The name comes from `subSwapOut`, the same function
     // `evenUpSides` acts on.
     const out = p._subBack ? subSwapOut(w, team) : null;
-    const txt = p._subBack ? ('START = TAKE OVER' + (out ? ' · ' + out.name.toUpperCase() : ' · ' + where))
-              : p._subIn ? 'ON AT NEXT GOAL · ' + where : 'START = JOIN ' + where;
+    // ⚠️ **THE LABEL SAYS WHAT THE GATE TAKES, and for a long time it did not.**
+    // `pollSubReady` has accepted START, SELECT or any kick button since it was written;
+    // measured, that is thirteen of seventeen button indices. The prompt said START, so a
+    // pad without one read as a pad that could not join — the label was the whole of the
+    // bug, and it is the one the player actually reads.
+    const txt = p._subBack ? ('ANY BUTTON = TAKE OVER' + (out ? ' · ' + out.name.toUpperCase() : ' · ' + where))
+              : p._subIn ? 'ON AT NEXT GOAL · ' + where : 'ANY BUTTON = JOIN ' + where;
     // ⚠️ Held inside the canvas. The body is OUTSIDE the touchline by definition, so a
     // label centred on it hangs off the edge of the screen and loses its last few words —
     // which on this label are the side you are about to be given.
@@ -31906,7 +31995,7 @@ if (window.__MAGNETDEBUG) {
     advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, padKickHeld, KICK_FALLBACK, KICK_NEVER, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,

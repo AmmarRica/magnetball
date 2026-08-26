@@ -143,6 +143,66 @@ const pix = await p.evaluate(() => {
   return o;
 });
 
+// ============================================================================
+// ANY BUTTON HOLDS — "some of my controllers don't have start button".
+//
+// ⚠️ MEASURED FIRST: of seventeen button indices, exactly ONE (9) did anything at all in
+// this room. So a pad without Start could not ready up, could not kick off as host, and
+// could not force the kickoff either — the whole feature was behind one switch that plenty
+// of pads simply do not have.
+//
+// ⚠️ THE TAP CANNOT BE WIDENED, and that is a collision rather than an oversight: in
+// warm-up the ball is LIVE and KICK is *every* button, which is the whole point of the
+// room. "Any button starts the match" is the exact bug `pollLobbyStart`'s own comment
+// records — A was bound to both jobs and did the wrong one. The five-second HOLD has no
+// such conflict, and it is already SEEN (a filling ring on the body and on the pad's
+// corner icon), which is what makes leaning on a button recoverable.
+//
+// ⚠️ MEASURED ON `startHold`, NEVER ON THE STATE. Holding a D-PAD direction walks the body,
+// and walking into a goal is a different, legitimate way to start the match — so a probe
+// that watches `w.state` scores D-pad RIGHT as "the hold works" on a build where the D-pad
+// is correctly excluded. That false positive was seen: button 15 read HOLD-STARTS on both
+// the fixed build AND the one with the hold back on START only.
+const any = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const clear = () => { for (const g of window.__pads)
+    g.buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })); };
+  // One warm-up per button, because a hold leaves state on the body.
+  const probe = i => {
+    M.setMatchSeed(7); M.startMatch({ lobby: true });
+    const w = M.world;
+    if (w.state !== 'warmup') return null;
+    const humans = w.players.filter(x => x.ctrl !== 'bot');
+    const host = M.lobbyHost(w);
+    const me = humans.find(x => x !== host) || host;
+    clear(); M.step(w); M.step(w);                 // settle, and clear the edge
+    window.__pads[me.padIndex].buttons[i] = { pressed: true, value: 1 };
+    for (let k = 0; k < 60; k++) M.step(w);        // one second of holding
+    const held = +(me.startHold || 0).toFixed(2);
+    clear();
+    return held;
+  };
+  o.held = {};
+  for (let i = 0; i < 17; i++) o.held[i] = probe(i);
+  // ⚠️ And the TAP must still be START-only, or the kick has been taken away — which is
+  // the thing the room exists to let you test.
+  const tap = i => {
+    M.setMatchSeed(7); M.startMatch({ lobby: true });
+    const w = M.world;
+    const humans = w.players.filter(x => x.ctrl !== 'bot');
+    const me = M.lobbyHost(w) || humans[0];
+    clear(); M.step(w); M.step(w);
+    window.__pads[me.padIndex].buttons[i] = { pressed: true, value: 1 };
+    M.step(w); M.step(w);
+    clear();
+    for (let k = 0; k < 20; k++) M.step(w);
+    return w.state !== 'warmup';
+  };
+  o.tapKickStarts  = tap(0);
+  o.tapStartStarts = tap(9);
+  return o;
+});
+
 let bad = 0;
 const ok = (name, cond, note='') => { if (!cond){ bad++; console.log('  FAIL ' + name + (note ? ' — ' + note : '')); } };
 
@@ -169,7 +229,27 @@ ok('...and it stays clear of the kick ring', pix.clearOfKickRing <= 4,
 ok('the controller icon carries the same fill', pix.corner25 > 20 && pix.corner70 > pix.corner25 + 40,
    `${pix.corner25} then ${pix.corner70} pixels — the corner row is the only readout for somebody looking at their own hands`);
 
+// ---- any button holds ------------------------------------------------------
+const DPAD = [12, 13, 14, 15];
+const face = Object.keys(any.held).map(Number).filter(i => !DPAD.includes(i));
+const heldFace = face.filter(i => any.held[i] > 0.5);
+const heldDpad = DPAD.filter(i => any.held[i] > 0.5);
+ok('EVERY button counts toward the hold, not just START',
+   heldFace.length === face.length,
+   'dead after a second of holding: ' + face.filter(i => !(any.held[i] > 0.5)).join(', ') +
+   ' — of seventeen indices exactly ONE used to do anything in this room, which is what ' +
+   '"some of my controllers don\'t have start button" costs');
+ok('...and the D-PAD does not', heldDpad.length === 0,
+   'held on ' + heldDpad.join(', ') + ' — a direction is a button as far as the Gamepad API ' +
+   'is concerned, so counting it makes every step you take a request to kick off');
+ok('...while a TAP of a kick button still does nothing', !any.tapKickStarts,
+   'the ball is live in warm-up and KICK is every button — widening the tap is the exact ' +
+   'bug where A was bound to both jobs and did the wrong one');
+ok('...and a tap of START still starts it', any.tapStartStarts,
+   'taking a meaning away without leaving the old one is not a fix');
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
+console.log(JSON.stringify({ any }, null, 1));
 console.log(bad ? 'FAIL lobbyhold' : 'PASS lobbyhold');
 await b.close();
 process.exit(bad ? 1 : 0);

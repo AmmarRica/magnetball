@@ -3700,6 +3700,39 @@ three lines a second time, name it.
   way past does nothing, which is what makes putting it in the walking area safe.
   ⚠️ Straight to `lobbyStart`, the same path the pad button, the on-screen button and the
   idle clock all take — never a second copy of what starting a match means.
+- **THE FIVE-SECOND HOLD TAKES ANY BUTTON, AND THE TAP CANNOT** (`padAnyHeld`,
+  `ANY_NEVER`, `pollLobbyStart`). Reported as *"some of my controllers don't have start
+  button"*, and measured on the shipped build: of **seventeen button indices, exactly ONE
+  (9) did anything at all in this room.** A pad with no Start could not ready up, could
+  not kick off as host, and could not force the kickoff either.
+  ⚠️ **THE TAP IS THE COLLISION, and it is not fixable.** In warm-up the ball is LIVE and
+  KICK is *every* button (`padKickHeld`) — that is the whole point of the room — so "any
+  button starts the match" is the exact defect recorded two entries down, where A was
+  bound to both jobs and did the wrong one. The tap stays START-only, and
+  `tests/lobbyhold.mjs` pins that a tap of button 0 does **not** start.
+  ⚠️ **THE HOLD HAS NO SUCH CONFLICT**: nothing else in the game is a five-second hold, and
+  it is already SEEN — `startHoldFrac` fills a ring on the body and on that pad's corner
+  icon — so somebody leaning on KICK to sprint watches it fill and lets go. That readout is
+  what makes widening it safe, and it is why the answer is a hold rather than a second
+  button nobody's pad has either.
+  ⚠️ **`padAnyHeld` IS DELIBERATELY NOT `padKickHeld`**, on two counts. It ignores
+  `sel.pad.kick` — binding a kick button is a statement about SHOOTING and must not take
+  the kickoff away — and Start and Select ARE in its set, because `KICK_NEVER` holds those
+  back for meanings that here are the point.
+  ⚠️ **The D-pad is the one exclusion, and it is what "any button" honestly means on a pad
+  you walk with**: a direction is a button as far as the Gamepad API is concerned, so
+  counting it makes every step you take a request to kick off.
+  ⚠️ **The keyboard seat is NOT widened**: every keyboard has an Enter, so there is no
+  hardware to rescue, and WASD is held for seconds at a time while you walk a Leviathan
+  lobby — the same accident the D-pad is excluded for.
+  ⚠️ **THE CHECK READS `startHold`, NEVER `w.state`, and the state version scored a FALSE
+  POSITIVE that was seen.** Holding D-pad RIGHT walks the body, and everybody walking into
+  a goal is a *different, legitimate* way to start the match — so button 15 read
+  "HOLD-STARTS" on the fixed build **and** on the sabotaged one with the hold back on START
+  only. A probe watching the state cannot tell the two mechanisms apart.
+  ⚠️ **`w.lobby.ready` IS WRITTEN AND READ BY NOTHING** — found while measuring this, not
+  fixed here. So a non-host's tap toggles a Set nobody consults and nothing draws: the
+  `kickTeam` shape, still open.
 - **ANYBODY CAN FORCE THE KICKOFF BY HOLDING START FOR FIVE SECONDS** (`LOBBY.holdStart`,
   `p.startHold`/`p.startArm`, `startHoldFrac`, `padHoldFrac`). Only the host's press started
   a match, so a room where player one had wandered off, put their pad down or was still
@@ -5520,6 +5553,51 @@ three lines a second time, name it.
   absent**, which is what makes it the one card open on a first run: `initCollapsibles` takes
   the FIRST card whose default is open, and Modes & more is the discovery card. Adding it
   "for completeness" collapses every card and the menu opens as eleven closed bars.
+- **THE HUD'S GRID COLUMNS ARE NAMED, and auto-placement put the FULL-SCREEN BUTTON IN THE
+  MIDDLE OF THE SCREEN.** Reported as it "showing at center of screen randomly" — not
+  random, **every warm-up**. `syncScorebug` sets `#scorebug` to `display:none` in there
+  (there is no score to show in the lobby), which takes it out of grid flow; `#hud` is
+  `grid-template-columns: 1fr auto 1fr` with nothing placed by hand, so `#hudRight` — mute
+  and full screen — auto-placed into **column 2, which is the screen centre**. Measured:
+  full screen at cx **1246** in a live match and **661** in warm-up on a 1280 window
+  (centre 640), and **356 → 222** on a 390px phone (centre 195).
+  ⚠️ **The grid was chosen over a flex row precisely for this guarantee** — its own comment
+  says the middle column is the screen centre "whatever sits either side of it" — and then
+  did not pin the sides, so a HIDDEN middle broke it from the inside. One line each:
+  `#hudLeft{grid-column:1}`, `#scorebug{grid-column:2}`, `#hudRight{grid-column:3}`.
+  ⚠️ `#lobbyStartBtn` is a fourth child of `#hud` and is `position:fixed`, so it is out of
+  flow and never took a cell — which is why only the warm-up case ever showed this.
+  ⚠️ **The check is a DIFFERENCE against the same buttons in a live match, in the same
+  run**, never an absolute x: what "the right-hand corner" is depends on the viewport, the
+  safe-area inset and whether a dock is open. Paired with "they are in a corner at all"
+  (an outer QUARTER of the viewport, since that block runs on a 390px phone where a fixed
+  200px margin is impossible), or "warm-up matches play" is equally true of a build that
+  centres them in both. `tests/taptargets.mjs`.
+- **THE RESULT SCREEN'S CURSOR WALKS UP AND DOWN, and it only ever read LEFT/RIGHT**
+  (`pollOverOptions`). `#overlay` is `flex-direction: column`, so the options stack:
+  measured on a 1280×900 desktop the three share one x (498) and sit at y 567 / 640 / 713.
+  The poll read `pad.dx` alone, so a D-pad pushed the way the list actually runs did
+  nothing — which is how the screen came to be reported as not controller-driven at all.
+  ⚠️ **Left/right are KEPT rather than swapped out.** They are the axis that already
+  worked; adding an axis must not cost one. `tests/warmupoffer.mjs` asserts both, because a
+  build that simply renamed `dx` to `dy` passes a down-only check while taking the control
+  away from whoever has it in their fingers.
+  ⚠️ **`pad.dy` is positive DOWNWARD** (`pollKeys` writes +1 for ArrowDown), so down is
+  `overNav++` — the list walks the way it reads, the same rule `overButtons()` follows by
+  being in DOM order.
+  ⚠️ **The LAYOUT is measured in the same run, never assumed**: "up and down" is the right
+  claim only while the buttons really are stacked, so if they ever become a row the check
+  fails rather than quietly testing the wrong axis.
+  ⚠️ A probe must drive the real pad — `padFor(host)` returns `gamepadPad(...)` for a
+  gamepad seat, so writing `pads.p1.dx` moves nothing and reads as the fix not working.
+- **A JOIN PROMPT SAYS WHAT THE GATE TAKES** (`drawSubPrompts`, `subWaitFor`).
+  `pollSubReady` has accepted START, SELECT **or any kick button** since it was written —
+  measured, thirteen of seventeen indices — and the prompt said `START = JOIN HOME`. So a
+  pad without one read as a pad that could not join: the label was the whole of the bug,
+  and the label is the part the player actually reads. It says ANY BUTTON now.
+  ⚠️ The D-pad stays out here too, and for a sharper reason than in warm-up: a benched body
+  **walks** with it along the touchline to pick a side, so counting it would arm and
+  disarm them on every step.
 - **HUD:** a 3-column grid — pause left, scorebug in the **middle column** (so it is centred
   on the screen, not among whatever buttons happen to show), fullscreen right. Settings is a
   **pause-menu** option (`ovSettings`), not a HUD gear one mis-tap from the live ball.

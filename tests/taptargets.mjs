@@ -117,6 +117,30 @@ const taps = await p.evaluate(() => {
   // are what say so.
   o.hudDrawn = ['pauseBtn','muteBtn','fsHudBtn']
     .filter(id => !document.getElementById(id).querySelector('svg.ic'));
+
+  // ⚠️ **THE HUD SIDES STAY IN THEIR CORNERS WHEN THE SCOREBUG IS HIDDEN.** Reported as
+  // the full-screen button "showing at center of screen randomly" — not random, every
+  // warm-up. `syncScorebug` sets `#scorebug` to `display:none` in there (a score that
+  // cannot change beside a clock that is not running), which takes it out of grid flow;
+  // `#hud` is `grid-template-columns: 1fr auto 1fr` and auto-placement then dropped
+  // `#hudRight` — mute and full screen — into column 2, which is the screen centre.
+  // Measured before the fix: full screen at cx 1246 in a live match and 661 in warm-up on
+  // this 1280 window (centre 640).
+  // ⚠️ MEASURED AS A DIFFERENCE against the same buttons in a live match, in the same run,
+  // never against a hard-coded x. What "the right-hand corner" is depends on the viewport,
+  // the safe-area inset and whether a dock is open, so an absolute number is either vacuous
+  // or wrong on the next layout change. The claim is that warm-up does not MOVE them.
+  // ⚠️ Paired with the buttons being nowhere near the centre, or "warm-up matches play" is
+  // equally true of a build that centres them in BOTH states.
+  const cx = id => { const q = document.getElementById(id).getBoundingClientRect();
+                     return Math.round(q.left + q.width / 2); };
+  const w2 = M.world; w2.state = 'play'; w2.stateT = 1; M.step(w2);
+  o.hudPlay = { fs: cx('fsHudBtn'), mute: cx('muteBtn'), pause: cx('pauseBtn') };
+  M.enterWarmup(w2); M.step(w2);
+  o.hudWarmState = w2.state;
+  o.scorebugHidden = getComputedStyle(document.getElementById('scorebug')).display === 'none';
+  o.hudWarm = { fs: cx('fsHudBtn'), mute: cx('muteBtn'), pause: cx('pauseBtn') };
+  o.hudCentre = Math.round(innerWidth / 2);
   M.toMenu();
 
   // ⚠️ The range SLIDERS were checked and deliberately left alone: the element box
@@ -385,6 +409,25 @@ ok('...and so does the zoom dial', reduce.zoomDialWins,
    'the same "a default, never an override" claim, for the control that owns the push now');
 ok('an ordinary device is untouched', !normal.prefers && normal.juice && normal.motionOK,
    JSON.stringify(normal));
+
+// ⚠️ The state and the hidden scorebug are asserted FIRST: without them the two readings
+// below are taken in the same layout twice and agree on every build, broken included.
+ok('warm-up really is the case being measured', taps.hudWarmState === 'warmup' && taps.scorebugHidden,
+   JSON.stringify({ state: taps.hudWarmState, hidden: taps.scorebugHidden }));
+ok('THE HUD CORNERS DO NOT MOVE WHEN THE SCOREBUG GOES',
+   taps.hudWarm.fs === taps.hudPlay.fs && taps.hudWarm.mute === taps.hudPlay.mute &&
+   taps.hudWarm.pause === taps.hudPlay.pause,
+   JSON.stringify({ play: taps.hudPlay, warm: taps.hudWarm }) +
+   ' — auto-placement dropped #hudRight into the grid\'s middle (centre) column the moment ' +
+   'the scorebug was display:none, which is the full-screen button "showing at center of screen"');
+// ⚠️ A PROPORTION of the viewport, never a pixel count: this block runs on a 390px phone
+// (centre 195), so a fixed 200px margin is impossible there and would have been tuned to
+// whatever width the suite happened to use. Outer quarter each side — the broken build put
+// full screen at 222 of 390, comfortably inside the middle half.
+ok('...and they are in the corners in the first place',
+   taps.hudWarm.fs > taps.hudCentre * 1.5 && taps.hudWarm.pause < taps.hudCentre * 0.5,
+   JSON.stringify({ warm: taps.hudWarm, centre: taps.hudCentre }) +
+   ' — "warm-up matches play" is also true of a build that centres them in both');
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
