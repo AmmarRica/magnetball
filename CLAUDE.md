@@ -268,6 +268,28 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   side, one ticking and one frozen, is worse than one. `tests/lobbydress.mjs` drives both
   orderings and pins that an ordinary match still HAS a scorebug — "hidden in warm-up" is
   also true of a build that hid it for good.
+- **THE WARM-UP CONTROLS ACT ON THE MATCH YOU ARE STANDING IN, AND THE BOT SKILL ROW DID
+  NOT** (`kbHit`'s `diff` branch). `w.diff` is written **once**, in `startMatch`, and
+  nothing else in the file ever touched it — so walking onto INSANE in warm-up set
+  `sel.diff`, saved it, relabelled the caption to *"BOT SKILL · INSANE"*, and left the bots
+  you then played on whatever tier the match was built with. Measured: caption **Insane**,
+  storage **insane**, and the bots reacting at **0.85** (normal) rather than 1.1. The tier
+  only arrived on the **NEXT** match, which is the one place nobody looks.
+  ⚠️ **It is the NO DEAD CONTROLS rule with an extra turn of the screw**: the row did not
+  merely do nothing, it printed a claim about the match that was false — in the one room
+  whose whole promise is that *the preview cannot disagree with what Start does*.
+  ⚠️ **The KEY moves with the object.** `w.diffKey` is what the match history, the map vote
+  and a saved replay record, so leaving it behind files the match under a tier it was not
+  played at — the same disagreement, written down permanently.
+  ⚠️ Applied in **`kbHit`, not `lobbyStart`**, so the world and the readout agree at every
+  instant rather than only at the whistle — and every way out of the room (the pad button,
+  the START pad, everybody into a goal, the idle clock) then needs no copy of it.
+  ⚠️ `w.diff` is read live by `botSkill` and the aim scoring and is never cached at init,
+  so swapping the object is the whole change.
+  ⚠️ **The other three walk-on controls were already right and are now pinned**: a colour
+  swatch and a flag both call `applyTeamColours` on the spot, and the stepper writes
+  `w.lobby.per`, which `lobbyPlan` reads live. Difficulty was the only one that wrote a
+  setting and nothing else. `tests/warmuproom.mjs`.
 - **The warm-up prompts are OFF THE PITCH**, in one row under the touchline (`drawLobby`,
   `L._promptY`). They floated over each player's head, which in deck/side view meant a line
   of text running down the middle of the field — `uprightAt` keeps words upright while the
@@ -5066,11 +5088,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 127 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 128 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **126 green + proladder red**, and `proladder` going green means the
+green run is therefore **127 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

@@ -5342,7 +5342,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260825.1120AM';
+const VERSION = '20260825.0240PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5358,6 +5358,13 @@ const VERSION = '20260825.1120AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260825.0240PM', title: 'Warm-up bot skill applies to that match',
+    changed: [
+      '<b>The bot skill you pick in warm-up now applies to that match.</b> Walking onto a number changed the setting and said so on screen, but the bots you actually faced stayed on the old level until the next match.',
+      '<b>Your match record files it under the level you really played</b>, which follows from the same fix \u2014 it used to save the level the match started on.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260825.1120AM', title: 'Sharper text everywhere',
     changed: [
       '<b>Everything the game draws is now rendered at your screen\u2019s full resolution.</b> On a modern phone the pitch was being drawn smaller than the screen and then stretched to fit, which made the player names, the shirt numbers and the warm-up keyboard look soft and slightly uneven. They are crisp now.',
@@ -19938,7 +19945,28 @@ function kbHit(w, p, k){
   else if (k.flagTeam !== undefined){
     if (setTeamFlag(k.flagTeam, k.flagKey)){ applyTeamColours(w.players); applyTeamColours(w.bench); saveSel(); }
   }
-  else if (k.diff){ if (sel.diff !== k.diff){ sel.diff = k.diff; saveSel(); } }
+  // ⚠️ **THE ROW HAS TO REACH THE MATCH IT IS STANDING IN, AND FOR A LONG TIME IT DID
+  // NOT.** `w.diff` is written ONCE, in `startMatch`, and nothing else in the file ever
+  // touched it — so walking onto INSANE in warm-up set `sel.diff`, saved it, relabelled
+  // the caption to "BOT SKILL · INSANE"... and left the bots you then played on whatever
+  // tier the match was built with. Measured: caption **Insane**, storage **insane**, and
+  // the bots reacting at **0.85** (normal) instead of 1.1. The tier only arrived on the
+  // NEXT match, which is the one place nobody was looking.
+  // ⚠️ That is the NO DEAD CONTROLS rule with an extra turn of the screw — the control
+  // did not merely do nothing, it printed a claim about the match that was false, in the
+  // one room whose whole promise is that the preview cannot disagree with what Start does.
+  // ⚠️ **The KEY moves with the object.** `w.diffKey` is what the match history, the map
+  // vote and a saved replay record, so leaving it behind would file the match under a tier
+  // it was not played at — the same disagreement, written down permanently.
+  // ⚠️ Applied HERE rather than in `lobbyStart`, so the world and the readout agree at
+  // every instant rather than only at the whistle; every way out of the lobby (the pad
+  // button, the START pad, a goal, the idle clock) then needs no copy of this.
+  // ⚠️ `w.diff` is read live by `botSkill` and the aim scoring, never cached at init, so
+  // swapping the object is the whole change. `tests/warmuproom.mjs`.
+  else if (k.diff){
+    if (sel.diff !== k.diff){ sel.diff = k.diff; saveSel(); }
+    if (w && DIFF[k.diff]){ w.diff = DIFF[k.diff]; w.diffKey = k.diff; }
+  }
   // ⚠️ Straight to `lobbyStart`, the same path the pad button, the on-screen button and
   // the idle clock all take — never a second copy of what starting a match means.
   else if (k.start) lobbyStart(w);
