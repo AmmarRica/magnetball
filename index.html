@@ -5361,7 +5361,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260827.0420PM';
+const VERSION = '20260827.0910PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5377,6 +5377,14 @@ const VERSION = '20260827.0420PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260827.0910PM', title: 'A new theme: Mirror Ledge',
+    changed: [
+      '<b>Mirror Ledge.</b> A white rooftop hung over a drop, with the way on painted in red \u2014 concrete slabs, red pipe runs down the touchlines, a chevron aimed into each goal, and a night city with its lights a long way below.',
+      '<b>The two sides are a solid block against a hollow pipe</b>, so you can tell them apart by shape as well as colour \u2014 which matters most for anyone who finds red and blue hard to separate.',
+      '<b>The ball is the one yellow thing on the pitch</b>, so it never gets lost against either team or the concrete.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260827.0420PM', title: 'The settings tab is /menu now',
     changed: [
       '<b>The separate settings tab has moved to <code>/menu</code>.</b> The old <code>/settings</code> link still takes you there, so a bookmark keeps working.',
@@ -6642,6 +6650,60 @@ const THEMES = {
       // `TH.dynMark || TH.line`. Without these a starfield over Tennis paints blind.
       dynMark:'#fefff3', dynAlt:'#993300' },
   },
+  // MIRROR LEDGE — a white rooftop hung over a drop, with the way on painted in red.
+  // ⚠️ **THE NAME IS OURS TO CHANGE; THE LOOK IT TAKES AFTER IS NOT OURS AT ALL.** The
+  // palette arrived as a swatch and it is the signature of a first-person parkour game:
+  // a white city, a blue sky, and one hot red that means "this is the way". The IDEA is
+  // taken and nothing else is — no art, no wordmark, and the game is not named here or
+  // anywhere in the file. The standing rule in CLAUDE.md, applied when it was proposed
+  // rather than after it shipped, which is the call `faceoff` records.
+  // ⚠️ **THE KEY IS `ledge`, DELIBERATELY GENERIC, AND THAT IS THE WHOLE MITIGATION.**
+  // A key is what `sel.look`, `THEME_BUNDLES`, the map votes and every saved replay refer
+  // to, so re-keying one strands a save and reads to a player as *"my theme was reset"* —
+  // `normalizeLook()` exists to fold exactly that. A DISPLAY NAME is a string in one
+  // table. Filing the trademark-adjacent half under the cheap one means the shown name
+  // can be changed for free, for ever, with no fold and no migration.
+  // ⚠️ **GREEN WAS ASKED TO BE IGNORED**, so the swatch's two greens are gone and the UI's
+  // `green` slot borrows the cyan — the same thing Warp does with white, because a
+  // palette must still answer for every UI ink it is asked for.
+  // ⚠️ **TEN COLOURS, TEN JOBS, ONE EACH — the `tennis` argument.** Court is the
+  // concrete, surround is the drop, markings are the indigo, the two teams are the hot
+  // red and the sky blue, and the BALL is the yellow because it is the one colour nothing
+  // else claims. The DARK red is a second red on purpose: it is the painter's marks and
+  // the goal pocket, held far enough back that a rooftop covered in red guidance is never
+  // a field of decoys for the red TEAM (the Bootleg dots and the Apologies! lane squares
+  // are both written up for that exact mistake). Black is the outline, white is the type.
+  ledge: {
+    name: 'Mirror Ledge', emoji: '🏙️',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #16225a 0%, #0a1130 55%, #060c1c 100%)',
+      bg:'#060c1c', panel:'rgba(46,174,247,0.09)', edge:'#1a1f7b', text:'#ededeb', muted:'#8fa6c6',
+      red:'#ff1701', blue:'#2eaef7', cyan:'#1ddcf6', magenta:'#940306', green:'#1ddcf6',
+      yellow:'#ffd800', accent:'#1ddcf6', go:'#2eaef7', field:'#ededeb', onAccent:'#060c1c' },
+    // ⚠️ FLAT (`stripeA === stripeB`). Mown stripes are a grass thing and this is a
+    // concrete roof; the panel seams the surface does have are the painter's job, drawn
+    // in `dynAlt` at a fraction of a marking's strength.
+    pitch: { glow:false, fieldBg:'#060c1c', court:'#ededeb', stripeA:'#ededeb', stripeB:'#ededeb',
+      netPocket:'rgba(148,3,6,0.26)', line:'#1a1f7b', centerDot:'#1a1f7b',
+      netMesh:'rgba(26,31,123,0.42)', post:'#1a1f7b', teamRed:'#ff1701', teamBlue:'#2eaef7',
+      discRim:'#000000', kickRing:'#000000', kickText:'#ededeb', cbRing:'#000000',
+      eyeWhite:'#ffffff', eyePupil:'#060c1c', nameBg:'#060c1c', nameText:'#ededeb',
+      // ⚠️ HELD BACK to 0.12. `drawOneDisc` lays this straight down under every body, and
+      // on a court this light a 0.20 navy renders as a grey disc a body wide sitting
+      // behind each player — measured as the loudest thing on the roof after the discs
+      // themselves. A shadow on white concrete is a hint, not a second body.
+      shadow:'rgba(6,12,28,0.12)', ballRim:'#000000', ball:'#ffd800', ballSpot:'#060c1c',
+      trailRGB:'255,216,0',
+      obstacle:'#940306', good:'#2eaef7', warn:'#ffd800', dim:'#5d6b8c', cone:'#ff1701',
+      // The HUD sits on the DROP, which is nearly black, so it goes light — the same
+      // exception Bambamzone, Warp and Tennis make for the same reason. The scorebug over
+      // the white court is not this: `--overlay-*` is derived from `TH.court`.
+      hudText:'#ededeb', hudSub:'#9db3d0', accent:'#1ddcf6', padRing:'rgba(29,220,246,0.55)',
+      dynMark:'#940306',        // the red way on, painted on the roof
+      dynAlt:'#1a1f7b',         // the panel seams under it
+      dynEdge:'#1ddcf6',        // the city, a long way down
+      dynGlow:'#16225a' },      // ...and the haze it throws up
+  },
   // Limoncello (#f3e65a) field, black lines, WHITE everywhere else, dithered — and
   // Klein Wave (#315dce) as the second team, both taken from a supplied swatch.
   // ⚠️ The page background being white is the whole reason the pitch colours are
@@ -7892,6 +7954,16 @@ const THEME_BUNDLES = {
   // already exists, and a second one that looked the same would be two places to keep
   // in step for no gain.
   bambam:    { field:'bambamzone', discs:'bambam',       ball:'orb',     sfx:'space',   trail:'comet' },
+  // ⚠️ `ball: 'plain'` and `trail: 'comet'` — both REUSED rather than invented. The ball
+  // is the palette's yellow with a black rim, which is the most legible thing that can
+  // sit on a white roof and is already what seven bundles do; and the speed streak this
+  // look wants is `comet`, which exists. Check the registry before adding to it — the
+  // withdrawn `seam` ball look was a duplicate of `tennis` that nobody noticed for a
+  // whole build.
+  // ⚠️ **NO `pitch`.** A rooftop is a TREATMENT that works on any rectangle, so it does
+  // not reach into the Match card and pick your court. Faceoff Orbit is the one bundle
+  // that does, because it is a picture OF a particular court.
+  ledge:     { field:'rooftop',   discs:'ledge',       ball:'plain',   sfx:'classic', trail:'comet' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -28272,6 +28344,158 @@ function discFace(p){
   const m = Math.hypot(fx, fy) || 1;
   return { ux: fx/m, uy: fy/m };
 }
+// ============================================================
+//  MIRROR LEDGE'S ROOFTOP — the drop outside, the way on inside.
+// ============================================================
+// ⚠️ **IT PAINTS ON BOTH SIDES OF THE TOUCHLINE, which is why it `bleed`s.** A `bleed`
+// field opts out of the grass clip and is called with the whole canvas to play with,
+// which is what lets the DROP cover the surround; the roof half then clips itself back
+// to the play area with the field's own path (borrowed from `pooltable.path`, never
+// copied), so it follows a rounded or chamfered court for free. Both halves run before
+// `drawPitch` lays the markings down, so nothing here can cover a line.
+// ⚠️ **THE RED MARKS ARE THE *DARK* RED AND THEY ARE HELD BACK.** Team 0 is `#ff1701`;
+// a roof covered in that is a field of decoys, which is the mistake Bootleg's dot field
+// and Apologies!'s lane squares are both written up for. `dynMark` is `#940306` at
+// `markA`, and `tests/dyntheme.mjs` measures the RENDERED peak against the team's, not
+// the alpha it was asked to draw at — a hex says nothing about what alpha did to it.
+// ⚠️ **THE TWO ENDS ARE MIRRORS, drawn from one `half()` called twice with the sign
+// flipped**, the same construction Faceoff Orbit uses: the way on has to look the same
+// whichever end you are attacking, and two hand-written copies drift.
+// ⚠️ **NOTHING DECORATIVE REACHES THE MIDDLE.** The wedges sit at the ends where the goal
+// boxes already are and the pipe runs hug the touchlines — the Pontions and Prixels rule,
+// for the same reason: the middle of the pitch is where the play is.
+// ⚠️ Its own seeded PRNG in `reset`, never `w.rng`, and the drift advances in `step`,
+// never in `paint` — how long the field has been on screen must not perturb a single bot
+// decision, and a paint must give the same picture twice for one step or a paused screen
+// flickers at the refresh rate.
+// ⚠️ **RATES ARE FRACTIONS PER STEP.** `drift` is 0.00004 of the void per step, which is
+// about a seventh of it over a minute — a crawl, and resolution-independent. The form
+// `voidgrid` and `bambamzone` use, and the one `ORBIT.drift` had to be retuned into after
+// its clock turned out to have been frozen the whole time.
+const LEDGE = {
+  lights: 340,     // city lights, a long way down
+  lightA: 0.75,    // ...and how bright the brightest gets
+  drift: 0.00004,  // fraction of the void per step
+  // ⚠️ 1.0, down from 1.6, and the count is up with it. The region is scattered
+  // UNIFORMLY, so widening it thins the part anybody can see: on a desktop the court
+  // fills most of the canvas and the visible surround is a narrow band, which at 1.6
+  // held about a dozen lights and read as an empty sky rather than a city.
+  span: 1.0,       // how far past the pitch box the drop is painted, each way
+  hazeH: 0.55,     // the sky glow, as a fraction of the region above the roof
+  seams: 5,        // concrete panel seams across the roof, and down it
+  seamA: 0.08,     // ...and how faint they are: a surface, never a grid to read
+  runIn: 0.085,    // the red pipe run, inset from each touchline (fraction of the WIDTH)
+  markL: 0.085,    // the guidance chevron at each end, as a fraction of the LENGTH
+  markW: 0.20,     // ...and of the width
+  markA: 0.55,     // how hard the red linework is drawn — see the decoy note above
+  sq: 0.64,        // the block's half-side. See DISC_SKINS.ledge: a square drawn to r
+                   // puts its CORNERS at 1.41r, which is the VideoSoccer arrowhead again.
+  pipeIn: 0.55,    // the pipe's inner radius...
+  pipeOut: 0.92,   // ...and its outer, both as fractions of r
+};
+DYN_FIELDS.rooftop = {
+  name: 'Rooftop',
+  bleed: true,
+  reset(st){
+    const rnd = mulberry32(0x1EDBE1);        // fixed: the same city every match
+    st.c = [];
+    for (let i = 0; i < LEDGE.lights; i++)
+      st.c.push([rnd(), rnd(), 0.30 + rnd()*0.70, 0.8 + rnd()*2.4]);
+    st.t = 0;
+  },
+  // ⚠️ `step(st)` and an INTEGER counter — the form that cannot be handed a `dt` the
+  // caller does not pass. `advanceDynField()` passes one argument; `step(st, dt)` put
+  // `NaN` into two fields for a whole release and `paint`'s `|| 0` hid it.
+  step(st){ if (!st.c) this.reset(st); st.t = (st.t | 0) + 1; },
+  paint(c, st, L, T, W, H, w){
+    if (!st.c) this.reset(st);
+    // Falls back through whatever palette it is handed: slots mix, so this can be asked
+    // for over Grass, where none of the `dyn*` inks exist.
+    const haze = TH.dynGlow || '#16225a';
+    const lit  = TH.dynEdge || TH.line     || '#1ddcf6';
+    const seam = TH.dynAlt  || TH.line     || '#1a1f7b';
+    const mark = TH.dynMark || TH.teamRed  || '#940306';
+    const path = () => { if (w && w.field) DYN_FIELDS.pooltable.path(c, w.field, L, T, W, H);
+                         else c.rect(L, T, W, H); };
+    const M = LEDGE.span;
+
+    // ---- 1. THE DROP. Everything the roof is not. -----------------------------------
+    c.save();
+    c.beginPath();
+    c.rect(L - W*M, T - H*M, W*(1 + 2*M), H*(1 + 2*M));   // the region...
+    path();                                               // ...minus the play area
+    c.clip('evenodd');
+    // ⚠️ The glow is tied to the TOP OF THE ROOF, not to the top of the region: run over
+    // the whole span it is spread so thin it reads as nothing, which is what the first
+    // build did. A sky is up the SCREEN, which is why this is a plain vertical gradient
+    // and not something derived from the pitch's own axes — deck view turns the court and
+    // does not turn the horizon.
+    const g = c.createLinearGradient(0, T - H*M*LEDGE.hazeH, 0, T);
+    g.addColorStop(0, rgba(haze, 0));
+    g.addColorStop(1, rgba(haze, 0.9));
+    c.fillStyle = g;
+    c.fillRect(L - W*M, T - H*M, W*(1 + 2*M), H*(1 + 2*M));
+    const dx = ((st.t | 0) * LEDGE.drift) % 1;
+    const RW = W*(1 + 2*M), RH = H*(1 + 2*M), RL = L - W*M, RT = T - H*M;
+    for (const [fx, fy, br, sz] of st.c){
+      const px = RL + (((fx + dx) % 1) * RW);
+      const py = RT + fy * RH;
+      c.fillStyle = rgba(lit, 0.14 + br * LEDGE.lightA);
+      c.fillRect(px, py, sz, sz);
+    }
+    c.restore();
+
+    // ---- 2. THE ROOF. Panel seams, the pipe runs, and the way on. --------------------
+    c.save();
+    c.beginPath(); path(); c.clip();
+    // Concrete panels. Quiet enough to be a surface rather than a second set of lines.
+    c.strokeStyle = rgba(seam, LEDGE.seamA);
+    c.lineWidth = Math.max(1, Math.min(W, H) * 0.0035);
+    c.beginPath();
+    for (let i = 1; i < LEDGE.seams; i++){
+      const fy = T + H * (i / LEDGE.seams);
+      c.moveTo(L, fy); c.lineTo(L + W, fy);
+    }
+    for (let i = 1; i < LEDGE.seams; i++){
+      const fx = L + W * (i / LEDGE.seams);
+      c.moveTo(fx, T); c.lineTo(fx, T + H);
+    }
+    c.stroke();
+    // ⚠️ **THE RED IS ALL LINEWORK, AND THE FILLED VERSION WAS BUILT FIRST AND CUT.** A
+    // solid wedge into each end came out as a pale pink triangle a third of the half
+    // deep: too weak to read as the way on (a dark red at 0.30 over white concrete
+    // composites to a pink, not to a red) and too BLOB-like to be safe, because a filled
+    // red shape on a roof where team 0 IS a filled red shape is exactly the decoy this
+    // theme has to avoid. Turning the alpha up would have made it a better decoy. Thin
+    // strokes cannot be mistaken for a body at any strength, so the red gets to be a real
+    // red: a chevron is 2px of ink and a player is thirty across.
+    c.strokeStyle = rgba(mark, LEDGE.markA);
+    const rw = Math.max(1.5, W * 0.012);
+    c.lineWidth = rw; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(L + W*LEDGE.runIn, T);       c.lineTo(L + W*LEDGE.runIn, T + H);
+    c.moveTo(L + W*(1 - LEDGE.runIn), T); c.lineTo(L + W*(1 - LEDGE.runIn), T + H);
+    c.stroke();
+    // ⚠️ ONE `half`, called twice — the two ends are mirrors and may not drift apart.
+    const cx = L + W/2, cy = T + H/2;
+    // ⚠️ **THE TIP IS THE END NEARER THE GOAL, and the first build had it backwards.**
+    // A way-on mark points at where you are going; drawn with the tip inboard, both
+    // chevrons pointed into the middle of the pitch, which is the one direction the mark
+    // is not about. Nothing but a screenshot can catch this — the shape, the size, the
+    // colour and the mirror all measure identically either way round.
+    const half = (sign) => {
+      const tip  = cy + sign * (H/2 - H*LEDGE.markL*0.5);
+      const base = cy + sign * (H/2 - H*LEDGE.markL*2);
+      c.beginPath();
+      c.moveTo(cx - W*LEDGE.markW/2, base);
+      c.lineTo(cx, tip);
+      c.lineTo(cx + W*LEDGE.markW/2, base);
+      c.stroke();
+    };
+    half(1); half(-1);
+    c.restore();
+  },
+};
 const DISC_SKINS = {
   // ============================================================
   //  MAGNET COUNTERS — the tactics board's pieces, lit from the top left
@@ -29149,6 +29373,54 @@ DISC_SKINS.sleeve = {
     c.drawImage(chalkMask('#000000'), x - r, y - r, 2*r, 2*r);
     c.globalAlpha = a;
     c.restore();
+  },
+};
+// ⚠️ **A SOLID BLOCK AGAINST A HOLLOW PIPE — and the difference is what is in the
+// MIDDLE, which is an axis no other skin in this file uses.** The two teams here are hot
+// red and sky blue, and red-against-blue is what protanopia flattens toward the same
+// dark — the same trap Retrowave records — so hue cannot be allowed to carry the sides on
+// its own. Both are round-ish, so the silhouette has to be something a scan can find:
+// a rooftop unit is filled to its centre and a pipe seen end-on is a ring with the
+// concrete showing through it.
+// ⚠️ **TWO PROBES IN OPPOSITE DIRECTIONS, which is what makes the pair honest.** At 0.25r
+// the block is inked and the pipe is court; at 0.80r along the axes the PIPE is inked and
+// the block is court, because a square of half-side 0.64r does not reach that far except
+// on its diagonals. Neither reading can be satisfied by one shape pretending to be both,
+// and `tests/dyntheme.mjs` measures both.
+// ⚠️ **THE SQUARE IS INSCRIBED, INCLUDING ITS OWN STROKE.** A square drawn to `r` puts
+// its corners at 1.41r — the VideoSoccer arrowhead mistake, where the shape on screen was
+// a third bigger than the shape in the physics. At `sq` 0.64 a corner sits at 0.905r and
+// the outline's half-width adds 0.07r, landing at 0.975r: inside the guide ring, which is
+// the one thing a skin may not cross.
+// ⚠️ **NO ROTATION.** Neither shape has a front — a pipe end-on is the same from every
+// angle and a roof unit that spun would read as a loose object rather than part of the
+// building — so this deliberately does not go through `discFace`, exactly as the Ammari
+// mirror pair and Spaceships' level-flying saucer do not.
+// ⚠️ The heavy black outline is the look, and it is `TH.discRim` rather than a literal
+// black: slots mix, and this skin can be worn over a palette whose rim is not black.
+DISC_SKINS.ledge = {
+  name: 'Block vs pipe',
+  paint(c, p, x, y, r, w){
+    const block = p.team === 0;
+    const col = block ? (TH.teamRed || '#ff1701') : (TH.teamBlue || '#2eaef7');
+    const ink = TH.discRim || '#000000';
+    if (block){
+      const h = r * LEDGE.sq;
+      c.fillStyle = col;
+      c.fillRect(x - h, y - h, h*2, h*2);
+      c.lineJoin = 'miter';
+      c.lineWidth = Math.max(1, r * 0.14);
+      c.strokeStyle = ink;
+      c.strokeRect(x - h, y - h, h*2, h*2);
+    } else {
+      const ri = r * LEDGE.pipeIn, ro = r * LEDGE.pipeOut;
+      c.beginPath(); c.arc(x, y, (ri + ro)/2, 0, 2*Math.PI);
+      c.lineWidth = ro - ri; c.strokeStyle = col; c.stroke();
+      // The two black rims, drawn INSIDE the wall so neither can reach the guide ring.
+      c.lineWidth = Math.max(1, r * 0.09); c.strokeStyle = ink;
+      c.beginPath(); c.arc(x, y, ri, 0, 2*Math.PI); c.stroke();
+      c.beginPath(); c.arc(x, y, ro - r*0.045, 0, 2*Math.PI); c.stroke();
+    }
   },
 };
 function seaPair(name, t0, t1){
@@ -31440,7 +31712,7 @@ if (window.__MAGNETDEBUG) {
     drillAutoPad, drillObjective, DRILLS, DRILL_KEYS,
     drillAddRun, drillBetter, drawGhosts, get drillBest(){ return drillBest; },
     buildDrillBoard, drillScoreText, showDrillResult, DRILLTIME, drillLimit,
-    sprintsFor, haloAlpha, NAMEPLATE, RING, kickRingInk, ringLayout, BOT_NAMES, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
+    sprintsFor, haloAlpha, NAMEPLATE, RING, LEDGE, kickRingInk, ringLayout, BOT_NAMES, SPRINT, kickRingMul, chargeFrac, COACH, buildCoach, coachAtDist, coachDistAt, coachTop, coachPose, coachPhase, drillReadout,
     RUMBLE, rumbleAmt, rumbleOn, padRumble, rumbleAll, rumbleGoal,
     LANGS, LANG_CODES, STRINGS, L, langKey, langIsEnglish, translateDom,
     MATCHLOG, get matchLog(){ return matchLog; }, noteMatch, matchLogForm, matchLogWhen,

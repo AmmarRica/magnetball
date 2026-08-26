@@ -36,10 +36,15 @@ shipped before anybody checked it could finish more than 8 of 25 drills. Write t
 first, run it on the CURRENT build, and put both numbers in the comment. "It looks wrong"
 is a report; "it draws 3.11× its true reach on Leviathan" is a finding.
 
-**2. SABOTAGE EVERY NEW CHECK.** Break the fix, run the check, watch it go red, put the
-fix back. A check that has never failed is decoration. This is not optional and it is
-not slow — it is ten seconds per assertion and it is the only thing that distinguishes a
-test from a comment. Sabotage-verified claims say so in the write-up.
+**2. SABOTAGE EVERY NEW CHECK — AND VERIFY THE SABOTAGE ACTUALLY APPLIED.** Break the
+fix, run the check, watch it go red, put the fix back. A check that has never failed is
+decoration; it is ten seconds per assertion and it is the only thing separating a test
+from a comment. ⚠️ **A sabotage that silently no-ops looks exactly like a check that is
+too weak**, and it has already caused a wrong conclusion here: a search-and-replace whose
+target string had drifted left the code untouched, the suite went green, and the honest
+reading of that is "my check cannot see this defect". Assert the edit landed (`count == 1`
+before replacing) — the same check that turned out to be fine caught the real sabotage
+immediately. Sabotage-verified claims say so in the write-up.
 
 **3. THE CONTROL IS MEASURED IN THE SAME RUN, NEVER AS A CONSTANT.** A bare pitch does
 not mirror perfectly (29 of 765); a body already has a rim within a few pixels of its
@@ -1387,6 +1392,71 @@ three lines a second time, name it.
   ⚠️ `tests/dyntheme.mjs` **could not catch any of this** because it stepped these two fields
   as `f.step(stB, 1.0)` — **passing a `dt` the real caller never passes**. It tested the
   painter's arithmetic against a call the game does not make.
+  `ledge` (shown as **Mirror Ledge**) = a white rooftop hung over a drop, with the way on
+  painted in red: concrete slabs, red pipe runs down the touchlines, a red chevron aimed
+  into each goal, and a night city with its lights a long way down.
+  ⚠️ **THE NAME IS OURS TO CHANGE; THE LOOK IT TAKES AFTER IS NOT OURS AT ALL.** The
+  palette arrived as a swatch and it is the signature of a real first-person parkour game
+  — white city, blue sky, one hot red meaning *this is the way*. The IDEA was taken and
+  nothing else: no art, no wordmark, and that game is not named in this file. The standing
+  trademark rule, applied when the theme was PROPOSED rather than after it shipped, which
+  is the call `faceoff` records.
+  ⚠️ **THE KEY IS `ledge`, DELIBERATELY GENERIC, AND THAT IS THE WHOLE MITIGATION.** A key
+  is what `sel.look`, `THEME_BUNDLES`, the map votes and every saved replay refer to, so
+  re-keying one strands a save and reads to a player as *"my theme was reset"* —
+  `normalizeLook()` exists to fold exactly that. A DISPLAY NAME is one string in one table.
+  Filing the trademark-adjacent half under the cheap one means the shown name can change
+  for free, for ever, with no fold and no migration. **Do not re-key this to match the
+  name.**
+  ⚠️ **GREEN WAS ASKED TO BE IGNORED**, so the swatch's two greens are gone and the UI's
+  `green` slot borrows the cyan — a palette still has to answer for every ink it is asked
+  for, which is what Warp does with white.
+  ⚠️ **TEN COLOURS, TEN JOBS, ONE EACH** — the `tennis` argument. Court is the concrete
+  (`#ededeb`), surround the drop (`#060c1c`), markings indigo (`#1a1f7b`), the teams the
+  hot red (`#ff1701`) and the sky blue (`#2eaef7`), and the BALL the yellow (`#ffd800`)
+  because it is the one colour nothing else claims. The DARK red (`#940306`) is a second
+  red on purpose: the painter's marks and the goal pocket.
+  ⚠️ **THE RED ON THE ROOF IS ALL LINEWORK, AND THE FILLED VERSION WAS BUILT FIRST AND
+  CUT.** A solid wedge into each end came out as a pale pink triangle a third of the half
+  deep — too weak to read (a dark red at 0.30 over white concrete composites to a pink,
+  not to a red) and too BLOB-like to be safe, because a filled red shape on a roof where
+  team 0 IS a filled red shape is the decoy this theme has to avoid; turning the alpha up
+  would only have made it a better decoy. Thin strokes cannot be mistaken for a body at
+  any strength, so the red gets to be a real red: a chevron is 2px of ink and a player is
+  thirty across. Measured on the RENDERED peak — roof 79 against the team's 232.
+  ⚠️ **THE CHEVRON'S TIP IS THE END NEARER THE GOAL, and the first build had it
+  backwards** — both pointed into the middle of the pitch, which is the one direction a
+  way-on mark is not about. Nothing but a screenshot catches that: the shape, the size,
+  the colour and the mirror all measure identically either way round.
+  ⚠️ **THE TWO ENDS ARE MIRRORS**, one `half()` called twice with the sign flipped, the
+  same construction Faceoff Orbit uses. ⚠️ Nothing decorative reaches the middle — the
+  chevrons sit where the goal boxes already are and the pipe runs hug the touchlines (the
+  Pontions and Prixels rule).
+  ⚠️ **THE SIDES ARE A SOLID BLOCK AGAINST A HOLLOW PIPE, and the difference is what is
+  in the MIDDLE** — an axis no other skin in this file uses. Hot red against sky blue is
+  what protanopia flattens toward the same dark (the Retrowave trap), and both shapes are
+  round-ish, so hue cannot carry the sides: a rooftop unit is filled to its centre and a
+  pipe end-on is a ring with the concrete showing through. `tests/dyntheme.mjs` measures
+  **two probes in opposite directions** — at 0.25r the block is inked and the pipe is
+  court (358 against 0), and at 0.80r along the AXES the pipe is inked and the block is
+  court (248 against 0), because a square of half-side 0.64r does not reach that far
+  except on its diagonals. Neither reading alone can be satisfied by one shape pretending
+  to be both. ⚠️ The square is INSCRIBED including its own stroke — a corner sits at
+  0.905r and the outline adds 0.07r, landing at 0.975r — because a square drawn to `r`
+  puts its corners at 1.41r, which is the VideoSoccer arrowhead. ⚠️ No rotation: neither
+  shape has a front, so it deliberately does not go through `discFace`.
+  ⚠️ **The drop `bleed`s and the roof is punched out of its clip** with the field's own
+  path (`pooltable.path`, borrowed not copied), so it follows a rounded or chamfered court
+  for free. Both halves run before `drawPitch` lays the markings down, so nothing here can
+  cover a line. The suite measures it as a RATIO rather than two pixel counts — the drop
+  covers 0.99 of its area and the roof 0.05 of its own, which is "one is a fill and the
+  other is linework" in a form that survives any canvas size or line weight.
+  ⚠️ `ball: 'plain'` and `trail: 'comet'` are both REUSED. Check the registry before
+  adding to it — the withdrawn `seam` ball look was a duplicate of `tennis` nobody noticed
+  for a whole build. ⚠️ **No `pitch`**: a rooftop is a treatment that works on any
+  rectangle.
+  ⚠️ `TH.shadow` is held to 0.12. On a court this light the usual 0.20 renders as a grey
+  disc a body wide behind every player — the loudest thing on the roof after the discs.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It

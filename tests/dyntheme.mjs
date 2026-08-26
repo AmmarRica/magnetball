@@ -1195,6 +1195,131 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
+  // ---- Mirror Ledge: a block against a pipe, and red that is not a decoy -----
+  // ⚠️ **THE SIDES ARE HOT RED AND SKY BLUE, which protanopia flattens toward the same
+  // dark** — the trap Retrowave records — so the silhouette has to carry them. Both
+  // shapes are round-ish, so the difference is WHAT IS IN THE MIDDLE: a rooftop unit is
+  // filled to its centre and a pipe seen end-on is a ring with the concrete showing
+  // through. Two probes in OPPOSITE directions, which is what makes the pair honest:
+  // neither reading can be satisfied by one shape pretending to be both.
+  {
+    M.applyBundle('ledge');
+    o.ledgeName = M.bundleName();
+    o.ledgeSlots = JSON.stringify(M.sel.look);
+    const R = 60, CX = 150, CY = 150;
+    const cvL = document.createElement('canvas'); cvL.width = cvL.height = 300;
+    const ccL = cvL.getContext('2d');
+    const drawBody = (team) => {
+      ccL.fillStyle = '#7f7f7f'; ccL.fillRect(0,0,300,300);
+      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
+      M.DISC_SKINS.ledge.paint(ccL, q, CX, CY, R, { players:[q] });
+    };
+    const inkAt = (team, fr, ang) => {
+      drawBody(team);
+      const px = Math.round(CX + Math.cos(ang)*R*fr), py = Math.round(CY + Math.sin(ang)*R*fr);
+      const d = ccL.getImageData(px, py, 1, 1).data;
+      return Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127);
+    };
+    // Averaged over four angles so a single probe cannot land on a black rim by luck.
+    const band = (team, fr) => [0, Math.PI/2, Math.PI, -Math.PI/2]
+      .reduce((t, a) => t + inkAt(team, fr, a), 0) / 4;
+    o.ledgeBlockMid = Math.round(band(0, 0.25));
+    o.ledgePipeMid  = Math.round(band(1, 0.25));
+    // ⚠️ 1. The MIDDLE. The block is filled through it; the pipe's is the roof.
+    o.ledgeMiddleSplits = o.ledgeBlockMid > 60 && o.ledgePipeMid < 25;
+    o.ledgeBlockOut = Math.round(band(0, 0.80));
+    o.ledgePipeOut  = Math.round(band(1, 0.80));
+    // ⚠️ 2. ...and 0.80r ALONG THE AXES, which reads the other way round: the pipe's wall
+    // is there and the block's half-side is 0.64r, so the square does not reach that far
+    // except on its diagonals. A shape that scored "inked" on both probes would be one
+    // that has quietly stopped being either of these two.
+    o.ledgeRingSplits = o.ledgePipeOut > 60 && o.ledgeBlockOut < 25;
+    // ⚠️ Nothing crosses the guide ring, INCLUDING its own stroke. A square drawn to `r`
+    // puts its corners at 1.41r — the VideoSoccer arrowhead — so this is measured on the
+    // DIAGONAL, where a square reaches furthest, not on the axes where it never could.
+    o.ledgeCorner = Math.round(Math.max(inkAt(0, 1.06, Math.PI/4), inkAt(1, 1.06, Math.PI/4)));
+    o.ledgeInsideTheRing = o.ledgeCorner < 30;
+
+    // ---- the roof, and the red on it ---------------------------------------
+    {
+      const N = 400;
+      const cvR = document.createElement('canvas'); cvR.width = cvR.height = N;
+      const ccR = cvR.getContext('2d');
+      const L = 120, T = 60, W = 160, H = 280;
+      const f = M.DYN_FIELDS.rooftop, stR = {};
+      f.step(stR);
+      const court = '#ededeb';
+      const paint = () => { ccR.fillStyle = court; ccR.fillRect(0,0,N,N);
+        f.paint(ccR, stR, L, T, W, H, { field: M.FIELDS.classic }); };
+      paint();
+      const img = ccR.getImageData(0,0,N,N).data;
+      const at = (x,y) => { const i = ((y|0)*N + (x|0))*4; return [img[i],img[i+1],img[i+2]]; };
+      const changed = (x,y) => { const c2 = at(x,y);
+        return Math.abs(c2[0]-237)+Math.abs(c2[1]-237)+Math.abs(c2[2]-235) > 24; };
+      // ⚠️ **A RATIO, not two pixel counts.** The drop covers its whole area and the roof
+      // carries LINEWORK, so what is claimed is that one is a fill and the other is not —
+      // and that survives any canvas size, any court and any tuning of the line weights.
+      let inAll = 0, inHit = 0, outAll = 0, outHit = 0;
+      for (let y = 4; y < N-4; y += 2) for (let x = 4; x < N-4; x += 2){
+        const inside = x > L && x < L+W && y > T && y < T+H;
+        if (inside){ inAll++; if (changed(x,y)) inHit++; }
+        else { outAll++; if (changed(x,y)) outHit++; }
+      }
+      o.ledgeRoofFrac = +(inHit/inAll).toFixed(3);
+      o.ledgeDropFrac = +(outHit/outAll).toFixed(3);
+      o.ledgeDropIsAFill = o.ledgeDropFrac > 0.9;
+      // ⚠️ The roof is punched out of the drop's clip, so the play area keeps its own
+      // surface and only the linework lands on it. Paired with the fill check above,
+      // because "the roof is mostly clear" is equally true of a painter that drew nothing.
+      o.ledgeRoofIsLinework = o.ledgeRoofFrac < 0.25 && o.ledgeRoofFrac > 0.01;
+
+      // ⚠️ **THE RED ON THE ROOF MAY NOT BE A DECOY FOR THE RED TEAM.** Team 0 is a
+      // filled `#ff1701` block; a roof painted in that is a field of decoys, which is
+      // what the Bootleg dot field and the Apologies! lane squares are both written up
+      // for. Measured on the RENDERED peak, never the hex it was asked to draw at — an
+      // alpha over white concrete composites to something else entirely, and the filled
+      // wedge this replaced came out a pale pink at the same nominal colour.
+      let markRed = 0;
+      for (let y = T+2; y < T+H-2; y++) for (let x = L+2; x < L+W-2; x++){
+        const c2 = at(x,y); const red = c2[0] - Math.max(c2[1], c2[2]);
+        if (red > markRed) markRed = red;
+      }
+      drawBody(0);
+      const dimg = ccL.getImageData(0,0,300,300).data;
+      let teamRed = 0;
+      for (let i = 0; i < dimg.length; i += 4){
+        const red = dimg[i] - Math.max(dimg[i+1], dimg[i+2]);
+        if (red > teamRed) teamRed = red;
+      }
+      o.ledgeMarkRed = markRed; o.ledgeTeamRed = teamRed;
+      o.ledgeRedIsNotADecoy = teamRed > markRed * 1.8;
+      // ...and the marks are REALLY THERE: "held back" is trivially true of no red at all.
+      o.ledgeRoofHasRed = markRed > 25;
+
+      // ⚠️ **THE TWO ENDS ARE MIRRORS**, drawn from one `half()` called twice — measured
+      // by probing a point on one chevron and its reflection about the halfway line.
+      // Paired with a control point that is on NEITHER, or "both are inked" passes on a
+      // painter that filled the whole roof.
+      const cx = L + W/2, cy = T + H/2, K = M.LEDGE;
+      const armY = (sign) => cy + sign * (H/2 - H*K.markL*1.25);
+      const armX = cx - W*K.markW*0.25;
+      const near = (x,y) => changed(x,y) || changed(x+1,y) || changed(x-1,y)
+                         || changed(x,y+1) || changed(x,y-1);
+      o.ledgeTopArm = near(armX, armY(-1));
+      o.ledgeBotArm = near(armX, armY(1));
+      o.ledgeEndsMirror = o.ledgeTopArm && o.ledgeBotArm;
+      o.ledgeControlClear = !near(cx, cy - H*0.22);
+
+      // Paint is PURE for a given step, and the drift really does move with one.
+      const snap = () => { paint(); return ccR.getImageData(0,0,N,N).data.join(','); };
+      const s1 = snap();
+      o.ledgePaintIsPure = s1 === snap();
+      f.step(stR);
+      o.ledgeDriftMovesWithStep = snap() !== s1;
+    }
+    M.applyBundle('grass');
+  }
+
   // ================= FACEOFF ORBIT: the sky TUMBLES =======================
   // ⚠️ Reported as "the theme doesn't work as intended — I want the illusion of the field
   // rotating in 3D". It did not move at all: `step(st, dt)` against a caller that passes no
@@ -1461,6 +1586,36 @@ ok(r.boardMarksIt,
 ok(r.bambamName === 'Bambamzone', `the Bambamzone bundle does not resolve: ${r.bambamName}`);
 ok(r.bambamSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
 ok(r.indicatorNotAPlate, `the player indicator is a filled plate behind the mark (star reads ${r.starInk}/32) — it covers every probe angle and defeats the silhouette it was added alongside`);
+
+// ---- Mirror Ledge ---------------------------------------------------------------
+ok(r.ledgeName === 'Mirror Ledge', `the bundle is called "${r.ledgeName}"`);
+ok(r.ledgeSlots === JSON.stringify({palette:'ledge',field:'rooftop',discs:'ledge',ball:'plain',trail:'comet',court:'',surround:''}),
+   `Mirror Ledge's slots are ${r.ledgeSlots}`);
+ok(r.ledgeMiddleSplits,
+   `the block and the pipe do not differ in the MIDDLE (block ${r.ledgeBlockMid}, pipe ${r.ledgePipeMid} at 0.25r) — ` +
+   'hot red against sky blue is what protanopia flattens toward the same dark, so the sides are carried by the silhouette');
+ok(r.ledgeRingSplits,
+   `...and they do not differ the other way round at 0.80r on the axes (pipe ${r.ledgePipeOut}, block ${r.ledgeBlockOut}) — ` +
+   'one probe alone is satisfied by a shape that has quietly stopped being either of these two');
+ok(r.ledgeInsideTheRing,
+   `the block's CORNER crosses the guide ring (${r.ledgeCorner} of ink at 1.06r on the diagonal) — a square drawn to r ` +
+   'puts its corners at 1.41r, which is the VideoSoccer arrowhead: the shape on screen bigger than the shape in the physics');
+ok(r.ledgeDropIsAFill,
+   `the drop does not cover the surround (${r.ledgeDropFrac} of it painted) — the point of the look is a roof hanging in nothing`);
+ok(r.ledgeRoofIsLinework,
+   `the roof is not linework: ${r.ledgeRoofFrac} of the play area is painted on. Over ~0.25 the field is filling the court ` +
+   'the game already drew; under 0.01 it is drawing nothing at all and every check above is vacuous');
+ok(r.ledgeRedIsNotADecoy,
+   `the red on the ROOF is as loud as the red TEAM (roof ${r.ledgeMarkRed}, team ${r.ledgeTeamRed}) — a rooftop covered in ` +
+   'the colour team 0 is drawn in is a field of decoys, the mistake the Bootleg dots and the Apologies! lane squares record');
+ok(r.ledgeRoofHasRed, `there is no red on the roof at all (peak ${r.ledgeMarkRed}) — "held back" is trivially true of nothing`);
+ok(r.ledgeEndsMirror,
+   `the two ends are not mirrors (top arm ${r.ledgeTopArm}, bottom ${r.ledgeBotArm}) — the way on has to look the same ` +
+   'whichever end you are attacking, which is why one half() is called twice with the sign flipped');
+ok(r.ledgeControlClear,
+   'a point on NEITHER chevron reads as inked, so the mirror check above passes on a painter that filled the whole roof');
+ok(r.ledgePaintIsPure, 'two paints of one step differ — a paused screen would crawl at the refresh rate');
+ok(r.ledgeDriftMovesWithStep, 'the city does not move with a step — the clock is frozen, which is the faceoff/bambamzone bug');
 ok(r.outsideRing, 'a Bambamzone mark crosses the guide ring, which is the thing that actually collides');
 ok(r.paintsOutside, `the void paints nothing outside the pitch (${r.voidPainted} px) — the void is the whole theme, and painting it into the pitch box means the court covers it`);
 ok(r.skyHasStars, `the void is a flat wash with no stars in it — emptying the star list changed only ${r.starPixels} px`);
