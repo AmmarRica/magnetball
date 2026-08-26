@@ -23,6 +23,104 @@ the same thing, which is what a `file://` copy has instead of folders.
 - Everything is served over relative paths (`./`, `sw.js`, `assets/…`) so it works at any root.
 - Prefer editing `index.html` in place; match the surrounding terse, comment-light-but-present style.
 
+## How to work here — the rules that keep being re-learned
+These are general and they are earned: every one of them has cost a red merge, a wrong
+answer confidently given, or a check that passed on a broken build. The per-feature
+entries below carry the evidence; this is the short list.
+
+**1. MEASURE THE BROKEN THING BEFORE YOU FIX IT, AND QUOTE THE NUMBER.** Every entry in
+this file that has held up has a measurement in it. The ones that had to be withdrawn
+were written from reasoning: `proladder`'s first version scored 17 goals across 72
+matches and its sign flipped on every re-run, and the AI-as-a-drill-yardstick claim was
+shipped before anybody checked it could finish more than 8 of 25 drills. Write the probe
+first, run it on the CURRENT build, and put both numbers in the comment. "It looks wrong"
+is a report; "it draws 3.11× its true reach on Leviathan" is a finding.
+
+**2. SABOTAGE EVERY NEW CHECK.** Break the fix, run the check, watch it go red, put the
+fix back. A check that has never failed is decoration. This is not optional and it is
+not slow — it is ten seconds per assertion and it is the only thing that distinguishes a
+test from a comment. Sabotage-verified claims say so in the write-up.
+
+**3. THE CONTROL IS MEASURED IN THE SAME RUN, NEVER AS A CONSTANT.** A bare pitch does
+not mirror perfectly (29 of 765); a body already has a rim within a few pixels of its
+kick ring; a strip of surround is not one flat colour on every theme. So measure the
+thing as a DIFFERENCE against the same frame with the feature stood down, taken at the
+same camera, in the same run. An absolute threshold is either vacuous or impossible, and
+you cannot tell which without the control.
+
+**4. WATCH FOR THE CHECK THAT READS BACKWARDS — it is worse than a vacuous one.** A
+vacuous check passes on everything; an inverted one *rewards the defect*. Counting clear
+columns across a name plate scored the build with the merged letters **11** and the
+fixed one **5**, because the two render at different sizes and the probe's band sliced
+them differently. It would have been committed as proof of the opposite. If a metric
+moves in the direction you did not expect, do not adjust the threshold — work out what
+it is really measuring.
+
+**5. A THRESHOLD RAISED TO MAKE A CHECK PASS IS A DEFECT REPORT, NOT A FIX.** Recorded
+here because it happened: `tests/sprint.mjs` moved its diff threshold 30 → 90 with a
+comment calling the thing it was seeing an artefact, which made a check whose own message
+reads *"a progress bar that is always a full ring shows no progress"* stop seeing exactly
+that. The number is the evidence. Change the code or write the finding down.
+
+**6. DRIVE THE REAL PATH, NOT THE MODEL.** Setting `ep().name` directly passed where the
+`#pname` input failed, because the bug was in the wiring around the field. `.click()`
+does no hit testing, so nineteen assertions once passed over a button no finger could
+press. `pads.p1` is overwritten every step, so writing `p.kick` tests nothing. If the
+claim is "a person can do X", the probe has to do X the way a person does.
+
+**7. WHEN THE ASK COLLIDES WITH A STANDING INSTRUCTION, ASK.** "The player names look AI
+generated" had three readings — the bot list (which this file records as the owner's,
+supplied verbatim), the `P2`/`P3` placeholders, or the typography. Guessing the first
+would have rewritten the owner's own list against a rule they set. One question cost a
+minute; the wrong guess would have cost the batch.
+
+**8. FIX WHAT WAS ASKED. If a fix touches behaviour outside the ask, revert it and
+report it.** Making `syncProfileToWorld` stop writing `p.color` was defensible and was
+not requested — it broke a documented, tested behaviour, `tests/livelook.mjs` caught it,
+and it went back with the incoherence written down for the owner to settle. A drive-by
+improvement that nobody asked for is a regression with good intentions.
+
+**9. A RENAME ONLY EVER *ADDS* A SPELLING.** Routes, storage keys, registry keys, cache
+lists: something out there is already using the old one. `/settings` is a redirect and
+`detectPanel` still answers to it; `normalizeLook()` folds the old theme keys; a device
+on the old default pair is moved on ONCE with a guard key. Deleting the old name strands
+somebody, and it surfaces to them as "my settings were reset", not as an error.
+
+**10. DELETE A FEATURE'S CHECK WITH THE FEATURE.** The lobby caption's clearance probe
+derived a position from a constant belonging to a thing that no longer existed — it would
+have gone on passing for ever while measuring nothing. Same for a constant nothing reads:
+`SPRINT.show` was deleted rather than left behind, because three probes were derived from
+it.
+
+**11. WRITE DOWN WHAT WAS TRIED AND REVERTED, WITH THE NUMBER.** This is the single
+highest-value habit in the repo and it is what stops the next session rebuilding a dead
+end. The waypoint version of the bots' gap avoidance was measured **worse than nothing**
+(51s pinned against 19s with no handling at all); the 1-2-1 kickoff diamond INVERTED the
+difficulty ladder; the tennis theme shipped as a whole tennis court and was cut back to a
+palette. Every one of those is a plausible idea somebody will have again.
+
+**12. WITHDRAW A CLAIM OUT LOUD WHEN IT TURNS OUT FALSE.** Several entries here begin
+"this REVERSES the rule that used to be written above" or "a withdrawn claim". A file
+that only ever accretes confident statements becomes untrustworthy in a way nobody can
+audit. Say what changed and why the old reasoning was wrong.
+
+**13. BEWARE THE ATOMIC BATCH.** `cache.addAll` rejects the WHOLE install if any single
+request 404s, so one optional file took the game's entire offline support with it. The
+same shape turns up in `Promise.all`, in a multi-store IndexedDB transaction, and in any
+"do all of these or none" API: ask what happens when the least important item fails.
+
+**14. ORDERING IS THE FIRST THING TO SUSPECT IN THIS FILE.** Twenty temporal-dead-zone
+bites are recorded below, one of them swallowed by a `try/catch` so nothing said a word.
+A `const` or `let` read by a hoisted function that the bootstrap calls is a landmine;
+`var` is the documented safe form. When a page goes blank, look at declaration order
+before anything else.
+
+**15. DUPLICATED KNOWLEDGE ROTS — the second copy is the one that gets missed.** The
+seven-call look-refresh list was written out four times; the wrapper map for the Game
+Feel sliders was copied into four test suites and every one of them silently stopped
+covering half the card. One owner, many readers. If you find yourself writing the same
+three lines a second time, name it.
+
 ## Architecture (all in `index.html`)
 - **Loop:** `loop(t)` → fixed-timestep accumulator calling `step(w)` at `STEP = 1/60`, then
   `render()` with `renderAlpha = acc/STEP` so `ix(e)`/`iy(e)` interpolate between steps.

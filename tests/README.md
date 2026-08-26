@@ -17,8 +17,8 @@ node tests/deck.mjs          # a single suite
 ```
 
 The runner is **parallel** — each suite drives its own headless browser and then spends
-most of its life waiting on it, so a serial run leaves the machine idle. 117 suites take
-about **315s** six-up against ~1,000s one at a time. Output is printed in list order however
+most of its life waiting on it, so a serial run leaves the machine idle. 129 suites take
+about **366s** six-up against ~1,000s one at a time. Output is printed in list order however
 the results arrive, so two runs diff cleanly.
 
 ```bash
@@ -40,6 +40,28 @@ to the newest chromium actually present under `PLAYWRIGHT_BROWSERS_PATH`; `CHROM
 still overrides it.
 
 If you have a browser already on disk, point at it instead of downloading one:
+
+## Before you write a suite
+
+The general practice is in **`CLAUDE.md` → "How to work here"**; it is not repeated here.
+The four rules that decide whether a suite in THIS repo is worth having:
+
+1. **Sabotage it.** Break the fix, watch the check go red, put the fix back. Say so in the
+   write-up. A check that has never failed is a comment with a runtime cost.
+2. **Take the control in the same run.** Measure as a DIFFERENCE against the same frame
+   with the feature stood down, at the same camera. Absolutes are either vacuous or
+   impossible and you cannot tell which.
+3. **Pair every claim with the thing that makes it non-trivial.** "The halo fades fast" is
+   true of a build with no halo; "nothing is drawn in the mush" is true of a build that
+   draws no names. Almost every entry below carries such a pair, and the ones that did not
+   are the ones that passed on a broken build.
+4. **Drive the real path.** `.click()` does no hit testing; `pads.p1` is overwritten every
+   step; setting a model field skips the wiring that was actually broken.
+
+⚠️ And when a metric moves the way you did not expect, do **not** adjust the threshold —
+work out what it is really measuring. A clear-column count once scored a build with merged
+letters **better** than the fixed one, and would have been committed as proof of the
+opposite. An inverted check is worse than a vacuous one: it rewards the defect.
 
 ## Four traps that bite every new suite
 
