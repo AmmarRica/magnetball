@@ -433,8 +433,17 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     const M=window.__magnet; const r={}; const wait=ms=>new Promise(z=>setTimeout(z,ms));
     const d=document.getElementById('dmCollect'); if(d) d.click();
     M.sel.controllers='on'; M.sel.mode='2v2'; M.applyDisplayMode();
-    const press = (i)=>{ window.__pads[i].buttons[8]=true; M.pollSeatRotate();
-                         window.__pads[i].buttons[8]=false; M.pollSeatRotate(); };
+    // ⚠️ **THE QUARTER TURN FIRES ON THE RELEASE NOW, THROUGH THE STEP LOOP.** With a match
+    // running SELECT carries two meanings — a TAP turns your controls, a three-second HOLD
+    // takes the room to warm-up — so firing on the press edge turned your stick on the way
+    // into every hold. `pollWarmupHold` owns both, inside `step()`. The IDLE branch (no
+    // world) is still `pollSeatRotate`'s, so this drives whichever applies.
+    const press = (i)=>{
+      window.__pads[i].buttons[8]=true;  M.pollSeatRotate();
+      if (M.world){ M.step(M.world); M.step(M.world); }
+      window.__pads[i].buttons[8]=false; M.pollSeatRotate();
+      if (M.world){ M.step(M.world); M.step(M.world); }
+    };
     M.toMenu(); await wait(80);
     r.idleFirst = !M.world || !!M.world.demo;
     press(0); await wait(120);

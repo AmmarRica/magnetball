@@ -332,6 +332,43 @@ three lines a second time, name it.
   Steam Input's arrow keys driving a DIFFERENT body from the stick, and there is only one
   body now. Cocktail still stands it down — a table people sit around has no
   in-front-of-the-keyboard seat.
+- **HOLD SELECT FOR THREE SECONDS AND THE ROOM GOES TO WARM-UP** (`LOBBY.holdWarm`,
+  `pollWarmupHold`, `seatTurnOn`, `warmupHoldOn`, `selHoldFrac`, `drawHoldRing`). Asked for
+  in those words, with a circle that fills round the player while you hold it.
+  ⚠️ **EVERY PLAYER, not the first pad.** SELECT already opened warm-up from a MENU — and
+  only from a menu, and only for pad zero, because four people leaning on SELECT must not
+  open four lobbies. That reasoning does not transfer to a running match: there is one
+  world, and the person who wants to change sides is whoever is holding a pad.
+  ⚠️ **THE TAP AND THE HOLD ARE ONE BUTTON, so the TURN MOVED TO THE RELEASE.** Fired on
+  the press edge — where it had always been — the quarter turn happened on the way into
+  every hold, so you arrived in warm-up with your stick a quarter wrong, which is the one
+  thing this button exists to get right. It now fires on release, and only under the
+  threshold. Same shape as the `pollLobbyStart` tap/hold split one entry along.
+  ⚠️ **THE TURN IS LIVE IN MORE PLACES THAN THE HOLD, AND CONFLATING THEM WAS A REAL
+  REGRESSION.** The first build gated both on `warmupHoldOn` — which stands down in warm-up
+  and in drills — so SELECT stopped turning your controls **in the one room built for
+  standing somewhere**, and in every drill. `tests/lobby.mjs` and `tests/deckstick.mjs`
+  caught it. Two predicates now, because they answer two questions: `seatTurnOn` (a world
+  that is not the demo and not a result screen) and `warmupHoldOn` (a live match only).
+  ⚠️ **COUNTED IN THE STEP LOOP.** `pollSeatRotate` is a per-FRAME poll, so three seconds
+  there is 1.25s on a 144Hz screen — the standing rule this file opens with. It sits **above
+  the drill early-return** in `step()`, because it owns the turn as well as the hold.
+  ⚠️ **`step()` RETURNS on the frame it fires.** `restartToWarmup` rebuilds the world in
+  place, so carrying on down `step` integrates a match that has just been replaced.
+  ⚠️ **THREE SECONDS, not `holdStart`'s five, and they are different kinds of decision**:
+  forcing the kickoff commits four other people to a match, where going to warm-up is a way
+  OUT and is undone by one press of START.
+  ⚠️ **ONE PAINTER FOR BOTH RINGS** (`drawHoldRing`), because they are the same gesture
+  wearing two clocks and never appear together. `padHoldFrac` takes whichever is running, so
+  the corner icon carries this one too — that row is the only readout for somebody looking
+  down at their own hands.
+  ⚠️ The idle branch in `pollSeatRotate` stays a PRESS: no world, no body to draw a ring on,
+  and no quarter turn to disambiguate from, so there is nothing to wait for.
+  ⚠️ **Three suites had to stop calling `pollSeatRotate()` BY HAND** (`seatcontrols`,
+  `lobby`, `deckstick`) and drive `step` instead — which is what the game does, and the
+  stronger check either way. `tests/seatcontrols.mjs` measures the ring in rendered pixels
+  as a difference against the same frame with the hold stood down, and drives **pad 1**: a
+  probe on pad 0 passes on a build that kept the first-pad-only rule.
 - **SELECT TURNS YOUR CONTROLS A QUARTER TURN** (`seatRotOf`, `bumpSeatRot`,
   `pollSeatRotate`, `sel.seatRot`). Four people round one screen do not face the same way,
   and the only previous answer was cocktail's calibration wizard — a mode you had to be in,

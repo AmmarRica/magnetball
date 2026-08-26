@@ -149,8 +149,11 @@ const runShape = async (shape) => {
     // rotation has to COMPOSE with that rather than replace it.
     M.sel.seatRot = {};
     const before = push(1, 0, false).head;
-    window.__pad.buttons[8].pressed = true; M.pollSeatRotate();
-    window.__pad.buttons[8].pressed = false; M.pollSeatRotate();
+    // ⚠️ Through the STEP LOOP: with a match running the turn fires on the RELEASE, inside
+    // `pollWarmupHold`, so that SELECT's other meaning (hold three seconds for warm-up)
+    // cannot turn your stick on the way into it.
+    window.__pad.buttons[8].pressed = true;  M.step(M.world); M.step(M.world);
+    window.__pad.buttons[8].pressed = false; M.step(M.world); M.step(M.world);
     const after = push(1, 0, false).head;
     o.rotBefore = before; o.rotAfter = after;
     o.selectTurns = before !== null && after !== null && before !== after;

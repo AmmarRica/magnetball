@@ -4155,6 +4155,17 @@ const LOBBY = {
   // the step loop, never in a draw (the trails rule), so it is five seconds on a 60Hz
   // screen and on a 144Hz one.
   holdStart: 5.0,
+  // ⚠️ **HOLD SELECT MID-MATCH AND YOU GO TO WARM-UP — three seconds, with a ring.**
+  // SELECT already opened warm-up from a MENU, and only from a menu, and only for the
+  // first pad: mid-match it was a quarter-turn and nothing else, so a room that wanted to
+  // change sides, sizes or shirts had to finish the match or reach for a mouse.
+  // ⚠️ **SHORTER THAN `holdStart` (5.0) ON PURPOSE, and the two are not the same kind of
+  // decision.** Forcing the kickoff commits four other people to a match; going to warm-up
+  // is reversible in one press of START and is a way OUT. Three seconds is still far
+  // longer than anybody presses a button by accident, which is the whole safeguard.
+  // ⚠️ Counted in the step loop (`pollWarmupHold`), never in `pollSeatRotate` — that one
+  // runs once per FRAME, so three seconds there is 1.25s on a 144Hz screen.
+  holdWarm: 3.0,
   arrowR: 92,          // radius of the drawn calibration arrow
   // ---- Warm-up balls -------------------------------------------------------
   // One at each half's centre before anybody arrives, and one more per person in
@@ -5375,7 +5386,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0940AM';
+const VERSION = '20260828.1150AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5391,6 +5402,13 @@ const VERSION = '20260828.0940AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.1150AM', title: 'Hold Select to go to warm-up',
+    changed: [
+      '<b>Hold Select for three seconds and everyone goes to the warm-up room.</b> A circle fills round your player while you hold it, so you can see it coming and let go. Any player can do it, not just the first controller \u2014 it used to work only from the menu, and only for one pad, so a match that wanted different sides or a different team size had to be played out first.',
+      '<b>A tap of Select still turns your controls a quarter turn.</b> It happens when you let go now rather than when you press, so going to warm-up no longer leaves your stick pointing the wrong way.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0940AM', title: 'Controller fixes',
     changed: [
       '<b>Any button gets you into a match.</b> Holding any button for five seconds in warm-up now kicks off, instead of Start alone \u2014 plenty of controllers do not have a Start button, and on those the room could be decorated and not left. A tap of a button still kicks the ball, which is what warm-up is for. The prompt for joining a match in progress says "any button" too, which is what it always accepted.',
@@ -14543,8 +14561,80 @@ function pollSeatRotate(){
     _selPrev[i] = now;
     if (!now || was) continue;
     if (idle){ if (i === idx[0]) openWarmup(); continue; }
-    if (!arcadeMode()) bumpSeatRot(i);
+    // ⚠️ **THE QUARTER TURN IS NOT FIRED HERE ANY MORE — see `pollWarmupHold`.** In a live
+    // match SELECT now carries two meanings: a TAP turns your controls and a three-second
+    // HOLD takes the room to warm-up. Fired on the PRESS edge, the turn happened on the way
+    // into every hold, so you arrived in warm-up with your stick a quarter turn wrong —
+    // which is the one thing this button exists to get right. It goes on the RELEASE
+    // instead, and only if you let go before the threshold.
+    // ⚠️ The idle branch above stays a press: there is no hold up there (no world, no body
+    // to draw a ring on, and no quarter turn to disambiguate from), so nothing to wait for.
   }
+}
+// ---------- HOLD SELECT FOR THREE SECONDS: THE ROOM GOES TO WARM-UP ------------------
+// ⚠️ **EVERY PLAYER, not the first pad.** The idle branch above is deliberately first-pad
+// only — four people leaning on SELECT must not open four lobbies — and that reasoning does
+// not transfer here: there is one world, `restartToWarmup` is idempotent in effect, and the
+// person who wants to change sides is whoever is holding the pad, not whoever plugged in
+// first.
+// ⚠️ **PER PAD, like `bumpSeatRot`**, never per seat: a pad is a person standing somewhere,
+// and seats are handed out in an order that changes with the mode and with who joined when.
+// The body is only looked up to draw the ring.
+// ⚠️ **COUNTED IN THE STEP LOOP**, so three seconds is three seconds at any refresh rate.
+// `pollSeatRotate` is a per-FRAME poll and a count there runs 2.4× fast at 144Hz — the
+// standing rule this file opens with.
+// ⚠️ **NOT IN WARM-UP**: you are already there, and the ring would sit on top of the
+// five-second START ring saying something else. SELECT keeps its plain quarter-turn tap in
+// the lobby. Not in a drill or the attract demo either — neither is a match to leave.
+var _selHold = {}, _selWasHeld = {};
+function selHoldFrac(idx){
+  const h = _selHold[idx];
+  return h > 0 ? Math.max(0, Math.min(1, h / LOBBY.holdWarm)) : 0;
+}
+// Where the HOLD is live. ⚠️ **NOT IN WARM-UP** — you are already there, and the ring
+// would sit on top of the five-second START ring saying something else. Not in a drill or
+// the attract demo either: neither is a match to leave, and the demo already answers SELECT
+// with `pollSeatRotate`'s idle branch.
+function warmupHoldOn(w){
+  return !!w && !w.demo && !w.drillMode &&
+         (w.state === 'kickoff' || w.state === 'play' || w.state === 'goal');
+}
+// Where the quarter TURN is live — the inverse of `pollSeatRotate`'s `idle`, which is what
+// this took the turn away from. ⚠️ **DELIBERATELY WIDER THAN THE HOLD, and getting that
+// wrong was a real regression caught by `tests/lobby.mjs` and `tests/deckstick.mjs`**: the
+// first version gated both on `warmupHoldOn`, which stands down in warm-up and in drills —
+// so SELECT stopped turning your controls in the one room built for standing somewhere,
+// and in every drill. Two conditions, because they answer two questions.
+function seatTurnOn(w){
+  return !!w && !w.demo && w.state !== 'over';
+}
+function pollWarmupHold(w){
+  if (!padsTakeSeats()) return false;
+  if (!seatTurnOn(w)){ _selHold = {}; _selWasHeld = {}; return false; }
+  const canHold = warmupHoldOn(w);
+  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+  for (const i of connectedGamepadIndices()){
+    const g = gps[i];
+    const now = arcadeMode() ? false : !!(g && btn(g, 8));
+    const was = !!_selWasHeld[i];
+    _selWasHeld[i] = now;
+    if (now){
+      if (!canHold){ _selHold[i] = 0; continue; }
+      _selHold[i] = (_selHold[i] || 0) + STEP;
+      if (_selHold[i] >= LOBBY.holdWarm){
+        _selHold = {}; _selWasHeld = {};
+        restartToWarmup(w);
+        return true;
+      }
+    } else {
+      // ⚠️ A TAP IS A RELEASE UNDER THE THRESHOLD, and this is where the quarter turn
+      // fires. Zeroed rather than decayed, or somebody could tap their way to warm-up —
+      // the same rule `pollLobbyStart`'s hold follows, for the same reason.
+      if (was && !arcadeMode()) bumpSeatRot(i);
+      _selHold[i] = 0;
+    }
+  }
+  return false;
 }
 // Rotate an input vector by q quarter-turns (screen coords, y-down).
 function rotVec(x,y,q){ q=((q%4)+4)%4; if(q===0)return [x,y]; if(q===1)return [-y,x]; if(q===2)return [-x,-y]; return [y,-x]; }
@@ -19350,6 +19440,15 @@ function repClipName(ext, stem){
 
 function step(w){
   markPrev(w);                     // renderer interpolates between this and the result
+  // ⚠️ **HOLD SELECT FOR THREE SECONDS AND THE ROOM GOES TO WARM-UP.** Counted here rather
+  // than in `pollSeatRotate` (a per-FRAME poll) so three seconds is three seconds at any
+  // refresh rate. It returns true on the frame it fires, and `step` gets out of the way
+  // immediately: `restartToWarmup` rebuilds this world in place, so carrying on down this
+  // function would integrate a match that has just been replaced.
+  // ⚠️ **ABOVE the drill early-return**, because this owns SELECT's quarter TURN as well as
+  // the hold — and a drill still has seats that want turning. Only the hold stands down
+  // there (`warmupHoldOn`); the turn does not (`seatTurnOn`).
+  if (pollWarmupHold(w)) return;
   if (w.drillMode){ stepDrill(w); return; }
   w.stateT += STEP;
 
@@ -20043,6 +20142,37 @@ function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
 // ⚠️ It only ever answers during warm-up. `drawPadFlairs` runs on every screen the game
 // has, and a progress ring round a controller icon in the middle of a match would be
 // claiming something is happening that is not.
+// ⚠️ **ONE PAINTER FOR BOTH HOLDS.** Warm-up's five-second START ring and a match's
+// three-second SELECT ring are the same gesture wearing two clocks, and they are never on
+// screen together (one is warm-up only, the other stands down there) — so two copies would
+// be two places for one look to rot, which is this file's standing complaint.
+// ⚠️ **3.4 BODY RADII, and 2.9 WAS TOO CLOSE — measured, not eyeballed.** The kick ring's
+// dial tops out at 1.95, and at 2.9 the hold ring's ink ran from 2.0 outward (a 2px minimum
+// stroke is 0.35 of a body radius once `cam.s` falls to 0.38, which is where the warm-up
+// span puts it). Nought point nought five of a radius is not clearance from a circle that
+// is a PROMISE about the physics.
+// ⚠️ **NO BACKGROUND TRACK, and that is the sprint gauge's lesson applied before it could
+// bite twice.** A full-circle track behind the arc is a complete ring at every value, so
+// what carries the progress is the arc's colour against it — which at this size swamped the
+// reading last time and made half and empty look the same. Here the radius promises nothing
+// (unlike the kick ring, which IS the reach), so arc LENGTH is free to be the signal. It
+// also means a check can measure the thing: a full ring at 25% would be indistinguishable
+// from one at 90%.
+// ⚠️ Drawn from the pose through `ix`/`iy` like anything else anchored to a moving body:
+// mid-step the raw position is up to a whole step of travel away. It only DRAWS — the
+// clocks live in the step loop (`pollLobbyStart`, `pollWarmupHold`).
+function drawHoldRing(p, f){
+  if (!p || !(f > 0)) return;
+  const c0 = screenPt(wx(ix(p)), wy(iy(p)));
+  ctx.save();
+  ctx.lineWidth = Math.max(2, p.r * cam.s * 0.22);
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = kickRingInk();
+  ctx.beginPath();
+  ctx.arc(c0[0], c0[1], p.r * cam.s * 3.4, -Math.PI/2, -Math.PI/2 + f * Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
 function startHoldFrac(p){
   if (!p || !p.startArm || !(p.startHold > 0)) return 0;
   return Math.max(0, Math.min(1, p.startHold / LOBBY.holdStart));
@@ -20050,7 +20180,13 @@ function startHoldFrac(p){
 // By PAD INDEX, for the corner row — which knows about pads and nothing about bodies.
 function padHoldFrac(idx){
   const w = (typeof world !== 'undefined') ? world : null;
-  if (!w || w.state !== 'warmup' || !w.players) return 0;
+  if (!w || !w.players) return 0;
+  // ⚠️ **EITHER HOLD FILLS IT.** The corner row is the only readout for somebody looking
+  // down at their own hands, and the two holds happen in states that exclude each other —
+  // START's is warm-up only, SELECT's stands down there — so there is nothing to
+  // reconcile and taking whichever is running keeps one meaning per arc.
+  if (warmupHoldOn(w)) return selHoldFrac(idx);
+  if (w.state !== 'warmup') return 0;
   for (const p of w.players)
     if (p.ctrl === 'gamepad' && p.padIndex === idx) return startHoldFrac(p);
   return 0;
@@ -26019,6 +26155,19 @@ function render(){
   if (flash > 0.01){ ctx.fillStyle = rgba(flashCol, flash*0.35); ctx.fillRect(0,0,cw,ch); }
   if (world.state === 'warmup') drawLobby(world);
   else drawSubPrompts(world);   // ...and the touchline, for anybody waiting to come on
+  // ⚠️ **THE SELECT HOLD'S RING, drawn in a MATCH.** Warm-up's own ring is inside
+  // `drawLobby`, which never runs here — so this is the second call site rather than a
+  // second painter, and both go through `drawHoldRing`.
+  // ⚠️ After the pitch transform is restored and placed through `screenPt`, exactly like
+  // the floaters above: deck view turns the pitch a quarter turn and a ring anchored in
+  // world space would be fine, but the two rings have to agree about where a body is and
+  // one of them is already out here.
+  // ⚠️ Keyed by PAD, because the hold is (`bumpSeatRot`'s rule — a pad is a person standing
+  // somewhere). The body is only how it gets drawn.
+  if (warmupHoldOn(world)) for (const p of world.players){
+    if (p.ctrl !== 'gamepad') continue;
+    drawHoldRing(p, selHoldFrac(p.padIndex));
+  }
   syncLobbyStartBtn();     // idempotent: only touches the DOM when the state changes
   drawControls();
   syncTiltUI();               // the HUD is DOM: it moves by transform — see syncTiltUI
@@ -26490,29 +26639,7 @@ function drawLobby(w){
   // ⚠️ Drawn from the pose through `ix`/`iy` like anything else anchored to a moving body:
   // mid-step the raw position is up to a whole step of travel away.
   // ⚠️ It only DRAWS — `pollLobbyStart` owns the clock, in the step loop.
-  for (const p of lobbyHumans(w)){
-    const f = startHoldFrac(p); if (!f) continue;
-    const c0 = screenPt(wx(ix(p)), wy(iy(p)));
-    // ⚠️ **3.4 BODY RADII, and 2.9 WAS TOO CLOSE — measured, not eyeballed.** The kick
-    // ring's dial tops out at 1.95, and at 2.9 the hold ring's ink ran from 2.0 outward
-    // (a 2px minimum stroke is 0.35 of a body radius once `cam.s` falls to 0.38, which is
-    // where the warm-up span puts it). Nought point nought five of a radius is not
-    // clearance from a circle that is a promise about the physics.
-    const rr = p.r * cam.s * 3.4;
-    // ⚠️ **NO BACKGROUND TRACK, and that is the sprint gauge's lesson applied before it
-    // could bite twice.** A full-circle track behind the arc is a complete ring at every
-    // value, so what carries the progress is the arc's colour against it — which at this
-    // size swamped the reading last time and made half and empty look the same. Here the
-    // radius promises nothing (unlike the kick ring, which IS the reach), so arc LENGTH is
-    // free to be the signal and it is the unambiguous one. It also means a check can
-    // measure the thing: a full ring at 25% would be indistinguishable from one at 90%.
-    ctx.save();
-    ctx.lineWidth = Math.max(2, p.r * cam.s * 0.22);
-    ctx.lineCap = 'butt';
-    ctx.strokeStyle = kickRingInk();
-    ctx.beginPath(); ctx.arc(c0[0], c0[1], rr, -Math.PI/2, -Math.PI/2 + f*Math.PI*2); ctx.stroke();
-    ctx.restore();
-  }
+  for (const p of lobbyHumans(w)) drawHoldRing(p, startHoldFrac(p));
   // ⚠️ THERE IS NO PER-PLAYER PROMPT ROW ANY MORE. It was a line of plates under the
   // touchline reading "P1 START = KICK OFF · P2 START = READY · …", one per person —
   // a row that grows with the room, sitting between the pitch and the keyboard, saying
@@ -32007,7 +32134,8 @@ if (window.__MAGNETDEBUG) {
     advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER,
+    pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,

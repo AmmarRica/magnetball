@@ -120,9 +120,17 @@ const rot = await p.evaluate(() => {
     window.__pads[0].axes[0] = 0;
     return Math.round(me.x) + ',' + Math.round(me.y);
   };
+  // ⚠️ **THE TURN FIRES ON THE RELEASE NOW, THROUGH THE STEP LOOP.** In a live match SELECT
+  // carries two meanings — a TAP turns your controls, a three-second HOLD takes the room to
+  // warm-up — so firing on the PRESS edge turned your stick a quarter on the way into every
+  // hold, and you arrived in warm-up pointing the wrong way. `pollWarmupHold` owns both,
+  // inside `step()`, because three seconds counted in a per-frame poll is 1.25s at 144Hz.
+  // ⚠️ So this drives `M.step` rather than calling the poll by hand — which is what the game
+  // does, and is the stronger check either way. Reads `M.world`, not the captured `w`: the
+  // last block below restarts the match under it.
   const tapSelect = () => {
-    window.__pads[0].buttons[8].pressed = true; M.pollSeatRotate();
-    window.__pads[0].buttons[8].pressed = false; M.pollSeatRotate();
+    window.__pads[0].buttons[8].pressed = true;  M.step(M.world); M.step(M.world);
+    window.__pads[0].buttons[8].pressed = false; M.step(M.world); M.step(M.world);
   };
   o.headings = []; o.quarters = [];
   for (let k = 0; k < 5; k++){ o.quarters.push(M.seatRotOf(0)); o.headings.push(push()); tapSelect(); }
@@ -201,6 +209,161 @@ const kick = await p.evaluate(() => {
   M.sel.pad = Object.assign({}, M.sel.pad, { kick: null });
   return o;
 });
+// ============================================================================
+// 6. HOLD SELECT FOR THREE SECONDS AND THE ROOM GOES TO WARM-UP, with a ring.
+//
+// SELECT already opened warm-up from a MENU — and only from a menu, and only for the FIRST
+// pad. Mid-match it was a quarter turn and nothing else, so a room that wanted to change
+// sides, sizes or shirts had to finish the match or reach for a mouse.
+//
+// ⚠️ MEASUREMENT TRAPS, all of them hit here or in `tests/lobbyhold.mjs` first:
+//  1. **Diff the SAME frame drawn twice.** A frame grabbed before the hold started measures
+//     the whole match moving and reports a ring around everybody.
+//  2. **Pull the bodies apart, and set `_px`/`_py` with the position** — the ring is drawn
+//     through `ix`/`iy`, so a teleport without them interpolates across the pitch.
+//  3. **Drive `step`, never the poll.** The clock lives in the step loop precisely so three
+//     seconds is three seconds at 144Hz; a probe calling the poll by hand measures a
+//     function rather than the feature.
+const hold = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.orient = 'v'; M.sel.seatRot = {};
+  M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.length = '5';
+  M.setMatchSeed(4); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  o.secs = M.LOBBY.holdWarm;
+  const seats = w.players.filter(q => q.ctrl === 'gamepad').map(q => q.padIndex);
+  o.padSeats = seats;
+  const sel = (i, v) => { window.__pads[i].buttons[8].pressed = !!v; };
+  const run = n => { for (let k = 0; k < n; k++) M.step(M.world); };
+
+  // ⚠️ **PAD ONE, NOT PAD ZERO.** "All players can hold select" is the ask, and the idle
+  // branch this grew out of is deliberately first-pad-only — so driving pad 0 would pass on
+  // a build that kept that restriction.
+  const rotWas = M.seatRotOf(1);
+  sel(1, true); run(2);
+  o.armed = M.selHoldFrac(1) > 0;
+  run(88);                                   // ~1.5s in
+  o.fracHalf = +M.selHoldFrac(1).toFixed(2);
+  o.stillPlayingHalfway = M.world.state === 'play';
+  run(120);                                  // past three seconds
+  o.wentToWarmup = M.world.state === 'warmup';
+  // ⚠️ ...and it must NOT have turned your controls on the way in. That was the whole
+  // reason the quarter turn moved to the release: you arrived in warm-up pointing the
+  // wrong way, which is the one thing this button exists to get right.
+  o.holdDidNotTurn = M.seatRotOf(1) === rotWas;
+  sel(1, false);
+
+  // ⚠️ The TAP still turns, and still does NOT go to warm-up — taking a meaning away
+  // without leaving the old one is not a fix.
+  M.setMatchSeed(4); M.startMatch();
+  const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
+  const was = M.seatRotOf(0);
+  sel(0, true); run(6); sel(0, false); run(6);
+  o.tapTurns = M.seatRotOf(0) !== was;
+  o.tapStaysInMatch = M.world.state === 'play';
+
+  // ⚠️ **THE TURN IS LIVE IN MORE PLACES THAN THE HOLD, AND CONFLATING THEM WAS A REAL
+  // REGRESSION.** The first build gated both on `warmupHoldOn`, which stands down in
+  // warm-up and in drills — so SELECT stopped turning your controls in the ONE room built
+  // for standing somewhere, and in every drill. `tests/lobby.mjs` and `tests/deckstick.mjs`
+  // both caught the warm-up half; nothing covered the drill, so it is covered here.
+  // ⚠️ `lobby` was set to 'off' at the top of this block, so asking for the room without
+  // putting it back lands in `kickoff` and the branch below never runs — which reads as a
+  // silent pass, since an undefined result is falsy in one direction and absent in the other.
+  M.sel.lobby = 'on';
+  M.setMatchSeed(4); M.startMatch({ lobby: true });
+  o.reachedWarmup = M.world.state === 'warmup';
+  if (o.reachedWarmup){
+    const wr = M.seatRotOf(0);
+    sel(0, true); run(4); sel(0, false); run(4);
+    o.warmupTapTurns = M.seatRotOf(0) !== wr;
+    // ...and the HOLD stands down there: you are already in the room, and the ring would
+    // sit on top of the five-second START ring saying something else.
+    sel(0, true); run(220); sel(0, false); run(2);
+    o.warmupHoldInert = M.world.state === 'warmup' && M.selHoldFrac(0) === 0;
+  }
+  M.startDrill(Object.keys(M.DRILLS)[0]);
+  const dr = M.seatRotOf(0);
+  sel(0, true); run(4); sel(0, false); run(4);
+  o.drillTapTurns = M.seatRotOf(0) !== dr;
+  o.drillStillADrill = !!M.world.drillMode;
+  sel(0, true); run(220); sel(0, false); run(2);
+  o.drillHoldInert = !!M.world.drillMode;
+  M.sel.seatRot = {};
+  return o;
+});
+
+// ---- the ring, in rendered pixels ------------------------------------------
+const ring = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.orient = 'v'; M.sel.seatRot = {}; M.sel.look.palette = 'grass';
+  M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.length = '5';
+  M.setMatchSeed(4); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const me = w.players.find(q => q.ctrl === 'gamepad' && q.padIndex === 0);
+  if (!me) return { noSeat: true };
+  const cv = document.getElementById('game');
+  const put = (q, x, y) => { q.x = x; q.y = y; q.vx = 0; q.vy = 0; q._px = x; q._py = y; };
+  const apart = () => {
+    put(me, 0, 0);
+    w.players.filter(q => q !== me).forEach((q, i) => put(q, (i % 2 ? 1 : -1) * 9e3, 9e3));
+    put(w.ball, 9e3, -9e3);
+  };
+  const shot = () => { apart(); M.render();
+    const c = cv.getContext('2d');
+    return c.getImageData(0, 0, cv.width, cv.height); };
+  // ⚠️ THE CONTROL IS THE SAME FRAME WITH THE HOLD ZEROED, taken in the same run at the
+  // same camera. A body already carries a guide ring, a rim and (at rest) nothing else,
+  // so an absolute ink count out at 3.4 radii reads the pitch, not the arc.
+  const annulus = (A, B, cx, cy, r0, r1) => {
+    let hit = 0;
+    for (let k = 0; k < 180; k++){
+      const a = k / 180 * Math.PI * 2;
+      for (let r = r0; r <= r1; r += 1){
+        const x = Math.round(cx + Math.cos(a) * r), y = Math.round(cy + Math.sin(a) * r);
+        if (x < 0 || y < 0 || x >= A.width || y >= A.height) continue;
+        const i = (y * A.width + x) * 4;
+        if (Math.abs(A.data[i] - B.data[i]) + Math.abs(A.data[i+1] - B.data[i+1]) +
+            Math.abs(A.data[i+2] - B.data[i+2]) > 40){ hit++; break; }
+      }
+    }
+    return hit;
+  };
+  const sel = (i, v) => { window.__pads[i].buttons[8].pressed = !!v; };
+  const run = n => { for (let k = 0; k < n; k++) M.step(M.world); };
+
+  sel(0, true); run(46);                    // ~25% of three seconds
+  o.frac25 = +M.selHoldFrac(0).toFixed(2);
+  const A = shot();
+  // ⚠️ Two renders of ONE frame must be identical, or every number below is measuring the
+  // renderer wobbling rather than the ring.
+  const A2 = shot();
+  o.renderStable = annulus(A, A2, 0, 0, 0, 0) === 0 &&
+                   A.data.length === A2.data.length &&
+                   (() => { for (let i = 0; i < A.data.length; i += 997)
+                              if (A.data[i] !== A2.data[i]) return false; return true; })();
+  const keep = M.selHoldFrac(0);
+  const c0 = M.screenPt(M.wx(me.x), M.wy(me.y));
+  const rB = me.r * M.cam.s;
+  // the control: same frame, hold stood down
+  sel(0, false); M.pollWarmupHold(M.world);
+  const Z = shot();
+  o.ring25 = annulus(A, Z, c0[0], c0[1], rB * 3.0, rB * 3.8);
+  o.keep25 = +keep.toFixed(2);
+
+  sel(0, true); run(2); run(130);           // ~72%
+  o.frac70 = +M.selHoldFrac(0).toFixed(2);
+  const C = shot();
+  sel(0, false); M.pollWarmupHold(M.world);
+  const Z2 = shot();
+  o.ring70 = annulus(C, Z2, c0[0], c0[1], rB * 3.0, rB * 3.8);
+  // ⚠️ And it must stay clear of the KICK RING, which is a promise about the physics.
+  o.clearOfKickRing = annulus(C, Z2, c0[0], c0[1], rB * M.kickRingMul() * 0.96,
+                                                   rB * M.kickRingMul() * 1.04);
+  M.sel.seatRot = {};
+  return o;
+});
+
 await p.close();
 
 // ============================================ 5. lobby prompts off the pitch ==
@@ -331,9 +494,39 @@ ok('...and you are numbered', /^num\d$/.test(def.profileFlag), def.profileFlag);
 ok('...and so is every bot', def.botFlags.length > 0 && def.botFlags.every(f => /^num\d$/.test(f)),
    `${JSON.stringify(def.botFlags)} — the first-run continent lineup dressed a fresh install in country flags, which is the opposite of "players are numbered"`);
 
+ok('holding SELECT for three seconds goes to warm-up', hold.wentToWarmup && hold.secs === 3,
+   JSON.stringify(hold));
+ok('...and ANY pad can do it, not just the first', hold.padSeats.includes(1) && hold.armed,
+   JSON.stringify({ seats: hold.padSeats, armed: hold.armed }) +
+   ' — the idle branch this grew out of is deliberately first-pad-only, so a probe driving pad 0 would pass on a build that kept that');
+ok('...the clock is real, and halfway is still a match', Math.abs(hold.fracHalf - 0.5) < 0.05 && hold.stillPlayingHalfway,
+   JSON.stringify({ frac: hold.fracHalf, playing: hold.stillPlayingHalfway }) +
+   ' — counted in the step loop, so three seconds is three seconds at any refresh rate');
+ok('...and the hold does NOT turn your controls on the way in', hold.holdDidNotTurn,
+   'firing the quarter turn on the press edge meant arriving in warm-up with the stick a quarter wrong, which is the one thing this button exists to get right');
+ok('a TAP still turns them, and stays in the match', hold.tapTurns && hold.tapStaysInMatch,
+   JSON.stringify({ turns: hold.tapTurns, stayed: hold.tapStaysInMatch }));
+ok('the warm-up branch actually reached warm-up', hold.reachedWarmup,
+   'otherwise the two checks below are absent rather than false, which reads as a pass');
+ok('...and the turn is still live in WARM-UP and in a DRILL', hold.warmupTapTurns && hold.drillTapTurns,
+   JSON.stringify({ warmup: hold.warmupTapTurns, drill: hold.drillTapTurns }) +
+   ' — gating the turn on the same condition as the hold took SELECT away in the one room built for standing somewhere, and in every drill');
+ok('...while the HOLD stands down in both', hold.warmupHoldInert && hold.drillHoldInert && hold.drillStillADrill,
+   JSON.stringify({ warmup: hold.warmupHoldInert, drill: hold.drillHoldInert }) +
+   ' — you are already in the room, and a drill is not a match to leave');
+
+ok('two renders of one frame are identical', ring.renderStable,
+   'without this every pixel number below is measuring the renderer, not the ring');
+ok('a ring fills round the player while SELECT is held',
+   ring.ring25 > 20 && ring.ring25 < 80 && ring.ring70 > ring.ring25 + 40,
+   JSON.stringify({ at: ring.frac25, ring25: ring.ring25, at2: ring.frac70, ring70: ring.ring70 }) +
+   ' of 180 angles — measured as a DIFFERENCE against the same frame with the hold stood down, because a body already carries a guide ring and a rim; and an arc whose length does not grow is a progress bar that shows no progress');
+ok('...and it stays clear of the kick ring', ring.clearOfKickRing <= 4,
+   ring.clearOfKickRing + ' angles inked at the reach radius — that circle is a promise about the physics');
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ share, rot, icon, kick, lob, def }, null, 1));
+console.log(JSON.stringify({ share, rot, icon, kick, lob, def, hold, ring }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL seatcontrols\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS seatcontrols');
