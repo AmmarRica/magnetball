@@ -21,8 +21,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const root = await mkdtemp(join(tmpdir(), 'mb-sw-'));
+await mkdir(join(root, 'menu'), { recursive: true });
+// The legacy /settings redirect is in the worker's precache list, so the temp site
+// needs it too — it is part of what a real deploy serves.
 await mkdir(join(root, 'settings'), { recursive: true });
 await copyFile('sw.js', join(root, 'sw.js'));
+await copyFile('menu/index.html', join(root, 'menu', 'index.html'));
 await copyFile('settings/index.html', join(root, 'settings', 'index.html'));
 // ⚠️ EVERY route in sw.js's ASSETS list must exist on this temp site. The worker's
 // install is `caches.addAll(ASSETS)`, and addAll REJECTS on any single 404 — so when
@@ -83,7 +87,7 @@ o.stubFetchSees = await p.evaluate(async ()=>{
 // The real settings route, end to end: it fetches ../index.html and writes it out.
 const sp = await ctx.newPage();
 const sperr=[]; sp.on('pageerror',e=>sperr.push(e.message));
-await sp.goto(srv.url + '/settings/');
+await sp.goto(srv.url + '/menu/');
 await sp.waitForTimeout(600);
 o.settingsSees = await sp.evaluate(()=>window.__BUILD ||
   (document.getElementById('marker')||{}).textContent || 'none');

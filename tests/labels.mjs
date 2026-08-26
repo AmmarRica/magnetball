@@ -305,7 +305,200 @@ const legible = await p.evaluate(() => {
 });
 
 console.log('LEGIBLE:', JSON.stringify({ ...legible, rampValues: undefined }));
+
+// ============================================================================
+//  THE TYPE ITSELF — reported as the names "looking a bit AI generated".
+//
+//  Magnified, a 13px name plate came out as a black bar with coloured holes in it. Kenney
+//  Mini Square's stems and counters at that size are about 2px, and the halo was struck
+//  twice at `lineWidth: 3.6` with a round join — 1.8px of ink added either side of every
+//  stroke — so the counter of a P closed up, the A and the P of VAPE merged into one
+//  shape and the two O's of BOOTS shared a wall. On top of that the baseline came from
+//  `screenPt`, which is fractional by construction, so a PIXEL font was resampled across
+//  two device columns per stem and the same letter came out 2px wide in one place and 3px
+//  in another. That is the same "blur common with AI generated content" the owner named
+//  about the canvas DPR, one layer further in.
+//
+//  Two claims, and neither uses a tuned threshold.
+// ============================================================================
+const type = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.look.palette = 'grass'; M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+  M.setMatchSeed(11); M.startMatch({ lobby:false });
+  const w = M.world; w.state = 'play'; w.stateT = 1;
+  const me = w.players[0];
+  // Everyone else and the ball miles away: `labelBallFade` hides a plate near the ball and
+  // `LABEL_DIM` fades one under a disc, so a crowded pitch measures the FADE, not the type.
+  w.players.forEach((q, i) => { if (q !== me){ q.x = 9e3 + i; q.y = 9e3; q._px = q.x; q._py = q.y; } });
+  w.ball.x = 9e3; w.ball.y = -9e3; w.ball.vx = w.ball.vy = 0;
+  w.ball._px = w.ball.x; w.ball._py = w.ball.y;
+  if (w.extraBalls) w.extraBalls.length = 0;
+  me.name = 'BOOTS';
+  const put = (x, y) => { me.x = x; me.y = y; me._px = x; me._py = y; me.vx = me.vy = 0; };
+  put(0, 0);
+  M.computeCam();
+  // Settle the plate to full alpha — the draw records a target and advanceLabels eases it.
+  M.drawDiscs(w); for (let i = 0; i < 90; i++){ M.advanceLabels(); M.drawDiscs(w); }
+
+  const cv = document.getElementById('game'), c2 = cv.getContext('2d');
+  const DPR = cv.width / cv.clientWidth;
+  // The strip the plate is drawn in: `NAMEPLATE.gap` below the body's centre, one line tall.
+  const NP = M.NAMEPLATE;
+  // ⚠️ **THE BAND MUST START BELOW THE DISC, and the first version did not.** It began
+  // `gap - size` above the baseline, which at DPR 1 is two pixels ABOVE the body's own
+  // edge — so the snap check was measuring the disc's anti-aliased rim, which really does
+  // change when the body moves a third of a pixel, and reported a perfectly snapped plate
+  // as unsnapped. The plate's cap tops sit `gap - capHeight` below the disc; starting at
+  // `gap - size + 2` clears the body and still contains every letter.
+  const band = () => {
+    const [sx, sy] = M.screenPt(M.wx(me.x), M.wy(me.y));
+    const discBot = sy + me.r * M.cam.s;
+    const top = discBot + (NP.gap - NP.size) + 2;
+    return { x: Math.round((sx - 90) * DPR), y: Math.round(top * DPR),
+             w: Math.round(180 * DPR), h: Math.round((NP.size + 4) * DPR) };
+  };
+  const grab = () => { const q = band(); M.render();
+    return c2.getImageData(q.x, q.y, q.w, q.h).data; };
+
+  // ---- 1. THE BASELINE IS ON THE DEVICE-PIXEL GRID --------------------------------
+  // ⚠️ **AN EXACT, WIRING-LEVEL CHECK WITH NO THRESHOLD.** If the anchor is snapped, two
+  // body positions a THIRD of a device pixel apart land the letters on identical pixels;
+  // if it is not, the resampling differs and so does the picture. Testing `snapTextPt`
+  // directly would prove only that a helper exists — this proves `drawOneDisc` calls it.
+  const perDev = 1 / (M.cam.s * DPR);          // world units in one device pixel
+  const a0 = grab();
+  put(0.3 * perDev, 0); const a1 = grab();
+  put(3 * perDev, 0);   const a2 = grab();
+  const same = (u, v) => { if (u.length !== v.length) return false;
+    for (let i = 0; i < u.length; i++) if (u[i] !== v[i]) return false; return true; };
+  o.snappedToTheGrid = same(a0, a1);
+  // ⚠️ ...and the control: THREE whole device pixels must move it. Without this, "the
+  // picture did not change" is equally true of a build that draws no plate at all, or of
+  // a probe pointed at a patch of empty grass.
+  o.aWholePixelMovesIt = !same(a0, a2);
+
+  // ---- 2. THE HALO DOES NOT CLOSE THE LETTERFORMS ---------------------------------
+  // ⚠️ **MEASURED OFF THE CONSTANTS, IN THEIR OWN UNITS — a scan of the pitch cannot do
+  // this, and the first version that tried READ BACKWARDS.** Counting fully-clear columns
+  // across the plate on the pitch scored the reported build ELEVEN and the fixed one
+  // FIVE — i.e. "better" for the build with the merged letters — because the two are
+  // rendered at different sizes and the band slices them differently. Whether letters
+  // merge is a property of the halo against the FONT at `NAMEPLATE.size`, so it is
+  // measured there: same font, same tracking, flat ground, nothing else in the picture.
+  // ⚠️ **RENDERED AT 8× AND MEASURED BACK DOWN.** Sub-pixel geometry cannot be measured
+  // at one device pixel per CSS pixel: the true gap between two glyphs at 14px is a
+  // fraction, and a 1:1 scan reports whichever whole columns happen to fall clear — which
+  // read "2px" for a gap the 2.4 halo demonstrably does not close on screen. At 8× the
+  // measurement resolves an eighth of a pixel and the answer stops depending on where the
+  // grid happens to land.
+  const Z = 8;
+  const off = document.createElement('canvas');
+  off.width = 220 * Z; off.height = 40 * Z;
+  const g = off.getContext('2d');
+  const word = 'BOOTS';
+  const paint = (halo) => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#000000'; g.fillRect(0, 0, off.width, off.height);
+    g.setTransform(Z, 0, 0, Z, 0, 0);
+    if ('letterSpacing' in g) g.letterSpacing = NP.track + 'px';
+    g.font = `${NP.size}px 'Kenney', system-ui, -apple-system, sans-serif`;
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.lineJoin = 'round'; g.miterLimit = 2;
+    if (halo > 0){ g.lineWidth = halo; g.strokeStyle = '#ffffff';
+                   g.strokeText(word, 12, 27); g.strokeText(word, 12, 27); }
+    g.fillStyle = '#ffffff'; g.fillText(word, 12, 27);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    return g.getImageData(0, 0, off.width, off.height).data;
+  };
+  // Background components not reachable from the border = the holes inside letterforms.
+  // B has two, each O has one, T and S have none: five letters, four counters.
+  const holes = (d) => {
+    const W2 = off.width, H2 = off.height;
+    const ink = new Uint8Array(W2 * H2);
+    for (let i = 0, k = 0; i < d.length; i += 4, k++) ink[k] = d[i] > 96 ? 1 : 0;
+    const seen = new Uint8Array(W2 * H2);
+    const stack = [];
+    for (let x = 0; x < W2; x++){ stack.push(x, x + (H2-1)*W2); }
+    for (let y = 0; y < H2; y++){ stack.push(y*W2, y*W2 + W2-1); }
+    while (stack.length){
+      const k = stack.pop();
+      if (seen[k] || ink[k]) continue;
+      seen[k] = 1;
+      const x = k % W2, y = (k / W2) | 0;
+      if (x > 0) stack.push(k-1);
+      if (x < W2-1) stack.push(k+1);
+      if (y > 0) stack.push(k-W2);
+      if (y < H2-1) stack.push(k+W2);
+    }
+    let n = 0;
+    for (let k = 0; k < ink.length; k++){
+      if (ink[k] || seen[k]) continue;
+      n++; const st = [k];
+      while (st.length){
+        const j = st.pop();
+        if (seen[j] || ink[j]) continue;
+        seen[j] = 1;
+        const x = j % W2, y = (j / W2) | 0;
+        if (x > 0) st.push(j-1);
+        if (x < W2-1) st.push(j+1);
+        if (y > 0) st.push(j-W2);
+        if (y < H2-1) st.push(j+W2);
+      }
+    }
+    return n;
+  };
+  // Narrowest fully-clear column run between the first and last ink, drawn with NO halo:
+  // that is the gap the halo has to fit inside, and it grows by `halo` (half from each
+  // side) when the stroke is added.
+  const narrowestGap = (d) => {
+    const W2 = off.width, H2 = off.height;
+    const inked = new Array(W2).fill(false);
+    for (let x = 0; x < W2; x++)
+      for (let y = 0; y < H2; y++) if (d[(y*W2 + x)*4] > 96){ inked[x] = true; break; }
+    const first = inked.indexOf(true), last = inked.lastIndexOf(true);
+    let best = Infinity, run = 0;
+    for (let x = first + 1; x < last; x++){
+      if (!inked[x]) run++;
+      else { if (run){ best = Math.min(best, run); run = 0; } }
+    }
+    return best === Infinity ? 0 : best;
+  };
+  const bare = paint(0);
+  o.countersBare = holes(bare);
+  o.gapBare = +(narrowestGap(bare) / Z).toFixed(2);       // back into CSS pixels
+  o.countersDrawn = holes(paint(NP.halo));
+  // ⚠️ The claim: the halo may thicken the letters but may not CLOSE any of them. At the
+  // reported 3.6 on 13px type it closed the P and welded VAPE's A and P together; the
+  // bare count is the control, so this needs no constant of its own.
+  // ⚠️ **NOT "all four survive" — that would be a bar this design never meets and never
+  // needs to.** A halo wide enough to lay a solid backing over a starfield will close the
+  // tightest counters at 14px, and that is the trade the backing is for. What must not
+  // happen is the word becoming a SLAB: at the reported 3.6 on 13px type, ZERO of BOOTS'
+  // four counters survived and VAPE rendered as a black bar with red bits in it. Two of
+  // four survive now. `countersBare` is the control, so there is no constant here either
+  // — a build that draws nothing scores 0 on both and fails.
+  o.notASlab = o.countersBare > 0 && o.countersDrawn > 0;
+  // ⚠️ The three measurements above are about the CONSTANTS. This is the one that says
+  // the pitch is really drawing a plate with them, so "the type is well set" cannot be
+  // satisfied by a game that draws no names at all. `snappedToTheGrid` covers the other
+  // half of the wiring — that `drawOneDisc` goes through `snapTextPt`.
+  const bandNow = band();
+  const dd = c2.getImageData(bandNow.x, bandNow.y, bandNow.w, bandNow.h).data;
+  let plateInk = 0;
+  for (let i = 0; i < dd.length; i += 4)
+    if (dd[i] + dd[i+1] + dd[i+2] > 460) plateInk++;   // the pale letter face over grass
+  o.plateInk = plateInk;
+  o.plateIsDrawn = plateInk > 40;
+  // ⚠️ ...and the same rule between letters: two adjacent glyphs each grow by half the
+  // halo, so they touch the moment the gap is no wider than the halo itself.
+  o.lettersStandApart = o.gapBare > NP.halo;
+  o.tracking = NP.track; o.halo = NP.halo; o.size = NP.size;
+  return o;
+});
+
 console.log(JSON.stringify(r,null,2));
+console.log('TYPE:', JSON.stringify(type));
 console.log('HALO:', JSON.stringify(halo));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const near = (v,t)=>Math.abs(v-t) < 0.02;
@@ -316,7 +509,24 @@ const ok = okOrient(r.upright) && okOrient(r.sideways) && r.gradual && r.replayF
   r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed &&
   halo.fadesNoSlowerThanItSays && halo.solidAtFullStrength &&
   legible.nothingInTheMush && legible.drawnAtTheFloor && legible.rampMatchesTheDraw &&
-  halo.oneStrokeSquares && halo.twoStrokesComposite && errors.length===0;
+  halo.oneStrokeSquares && halo.twoStrokesComposite &&
+  type.snappedToTheGrid && type.aWholePixelMovesIt && type.lettersStandApart &&
+  type.notASlab && type.plateIsDrawn && errors.length===0;
+if (!type.snappedToTheGrid)
+  console.log('  the name plate is NOT snapped to the device pixel grid — a third of a pixel of body ' +
+              'movement redrew the letters differently, which is a pixel font resampled across two columns');
+if (!type.aWholePixelMovesIt)
+  console.log('  ...and three whole device pixels did not move it either, so the probe is measuring ' +
+              'a patch of grass or a plate that is never drawn — the check above passes for the wrong reason');
+if (!type.lettersStandApart)
+  console.log(`  adjacent letters merge: the narrowest gap in "BOOTS" at ${type.size}px with ` +
+              `${type.tracking}px of tracking is ${type.gapBare}px, and a halo of ${type.halo} eats all of it`);
+if (!type.notASlab)
+  console.log(`  the halo closes the word into a slab: ${type.countersDrawn} counters survive of ` +
+              `${type.countersBare} at halo ${type.halo} on ${type.size}px type`);
+if (!type.plateIsDrawn)
+  console.log(`  no name plate was found on the pitch at all (${type.plateInk} pale pixels in the band), ` +
+              'so every measurement above is about a build that draws no names');
 if (!halo.fadesNoSlowerThanItSays)
   console.log('  the plate outlives its own text:', JSON.stringify(halo.at),
               '— each must be at or under its own alpha; the reported build reads 0.534 at 0.5 and 0.196 at 0.15');

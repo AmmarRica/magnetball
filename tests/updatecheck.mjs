@@ -28,10 +28,14 @@ import { join } from 'node:path';
 
 // A throwaway copy of the real site, so the version can be edited under the running page.
 const root = await mkdtemp(join(tmpdir(), 'mb-upd-'));
+await mkdir(join(root, 'menu'), { recursive: true });
+// The legacy /settings redirect is in the worker's precache list, so the temp site
+// needs it too — it is part of what a real deploy serves.
 await mkdir(join(root, 'settings'), { recursive: true });
 const SRC = await readFile('index.html', 'utf8');
 await writeFile(join(root, 'index.html'), SRC);
 await copyFile('sw.js', join(root, 'sw.js'));
+await copyFile('menu/index.html', join(root, 'menu', 'index.html'));
 await copyFile('settings/index.html', join(root, 'settings', 'index.html'));
 await copyFile('manifest.json', join(root, 'manifest.json'));
 await copyFile('icon.svg', join(root, 'icon.svg'));

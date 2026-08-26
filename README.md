@@ -67,7 +67,8 @@ sw.js                 Service worker (offline / PWA, network-first for HTML)
 manifest.json         PWA manifest
 icon.svg              App icon
 assets/               Optional art (flags, animal faces, controller icons) — see assets/README.md
-settings/             The /settings route (the same document with the game switched off)
+menu/                 The /menu route (the same document with the game switched off)
+settings/             The old name of that route — a redirect to ../menu/
 tests/                Headless Playwright suites — see tests/README.md
 docs/                 TODO, terminology, and the audit reports
 leaderboard.gs        Google Apps Script for the live leaderboard (paste into the Sheet)

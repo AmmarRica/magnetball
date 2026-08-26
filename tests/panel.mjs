@@ -38,7 +38,7 @@ await game.evaluate(()=>{
 });
 
 const panel = await ctx.newPage();
-await panel.goto(srv.url + '/settings/');
+await panel.goto(srv.url + '/menu/');
 await panel.waitForTimeout(900);
 
 // --- The route really is the panel, and really is the same document
@@ -96,7 +96,7 @@ const scrollCheck = async (pg) => pg.evaluate(async ()=>{
 o.scrollDesktop = await scrollCheck(panel);
 const phone = await ctx.newPage();
 await phone.setViewportSize({ width: 390, height: 844 });
-await phone.goto(srv.url + '/settings/');
+await phone.goto(srv.url + '/menu/');
 await phone.waitForTimeout(900);
 o.scrollPhone = await scrollCheck(phone);
 await phone.close();
@@ -310,12 +310,87 @@ await panel.evaluate(()=>{ document.getElementById('warmupBtn').click(); });
 o.warmupReachedGame = await until(game, ()=>(window.__magnet.world||{}).state === 'warmup');
 o.warmupRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === null);
 
+// =====================================================================================
+//  THE ROUTE IS /menu — AND THE OLD /settings LINK STILL LANDS.
+// =====================================================================================
+// ⚠️ The accordion behind KICK OFF *is* the menu, so a route called "settings" named one
+// card's worth of what is on the page. It is /menu now.
+// ⚠️ **A PAGE CANNOT FIX SOMEBODY'S BOOKMARK**, which is the whole reason the old
+// directory is still there as a redirect rather than deleted: /settings has been the
+// panel route for the entire life of the feature, and the service worker precached it,
+// so removing it outright turns every saved link and every already-installed copy into a
+// 404. Checked by NAVIGATING it, not by reading the file — a redirect that does not fire
+// is a file with the right words in it.
+{
+  const legacy = await ctx.newPage();
+  await legacy.goto(srv.url + '/settings/');
+  await legacy.waitForTimeout(900);
+  o.legacyLands = /\/menu\/?$/.test(new URL(legacy.url()).pathname);
+  o.legacyIsThePanel = await legacy.evaluate(() => !!(window.__magnet && window.__magnet.PANEL === true));
+  // ⚠️ `location.replace`, so the dead URL is not left in the history — "back" from the
+  // menu has to return to the game, not bounce through the redirect again.
+  o.legacyNotInHistory = !(await legacy.evaluate(() => history.length > 2));
+  await legacy.close();
+}
+// ...and the query-string alias, which is what a `file://` copy has instead of a folder.
+{
+  const alias = await ctx.newPage();
+  await alias.goto(srv.url + '/?panel=menu');
+  await alias.waitForTimeout(800);
+  o.aliasIsPanel = await alias.evaluate(() => window.__magnet.PANEL === true);
+  await alias.close();
+}
+
+// =====================================================================================
+//  A GUEST SEAT DRESSED IN THE MENU TAB REACHES THE GAME.
+// =====================================================================================
+// ⚠️ **`syncPush` SENT `sel` AND `profile` — SEAT ONE — AND NOTHING ELSE.** So the Your
+// Player card offered seven seats on this route and synced exactly one of them: measured
+// as seat two set to `cat`/`FROMMENU` in the panel and still reading `num1`/`P2` on the
+// pitch a second later, while seat one's own change landed every time. A card that offers
+// seven seats and syncs one is worse than a card that offers one, because nothing on
+// screen says which of the two you are getting.
+{
+  await game.evaluate(() => { const M = window.__magnet;
+    M.sel.mode = 'local'; M.sel.lobby = 'off'; M.startMatch({ lobby:false }); });
+  // ⚠️ **WAIT FOR THE COUNT TO CROSS BEFORE PICKING A SEAT.** The panel learns how many
+  // people are playing from the telemetry heartbeat, and `buildSeatPick` refuses to leave
+  // the card on a seat that is not there (`if (editSeat >= n) editSeat = 0`) — so calling
+  // `setEditSeat(1)` in the same breath as `startMatch` silently edits seat ONE and the
+  // check reads as a sync failure when it is really a race in the probe.
+  o.panelSeesTheSeats = await until(panel, () => window.__magnet.seatCount() >= 2);
+  await panel.evaluate(() => { const M = window.__magnet;
+    M.setEditSeat(1); M.ep().flag = 'cat'; M.ep().name = 'FROMMENU'; M.saveProfile(); });
+  o.panelHeldTheSeat = await panel.evaluate(() => window.__magnet.editSeat === 1);
+  const seats = () => game.evaluate(() => {
+    const w = window.__magnet.world;
+    const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
+    return hs.map(q => q.flag + '/' + q.name); });
+  o.guestSeatCrosses = await until(game, () => {
+    const w = window.__magnet.world;
+    const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
+    return !!hs[1] && hs[1].flag === 'cat' && hs[1].name === 'FROMMENU'; });
+  o.guestSeatState = await seats();
+  // ⚠️ The control: seat ONE is the case that always worked, so without it "the guest
+  // crossed" is passing on a build that simply re-dresses everybody.
+  await panel.evaluate(() => { const M = window.__magnet;
+    M.setEditSeat(0); M.ep().flag = 'dog'; M.saveProfile(); });
+  o.ownerSeatCrosses = await until(game, () => {
+    const w = window.__magnet.world;
+    const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
+    return hs[0].flag === 'dog'; });
+  o.seatsDidNotMerge = await game.evaluate(() => {
+    const w = window.__magnet.world;
+    const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
+    return hs[0].flag === 'dog' && hs[1].flag === 'cat'; });
+}
+
 // --- With no game tab at all the panel still opens on the saved settings, and
 // says so rather than pretending it's connected.
 await game.close();
 await wait(300);
 const lone = await ctx.newPage();
-await lone.goto(srv.url + '/settings/');
+await lone.goto(srv.url + '/menu/');
 await lone.waitForTimeout(800);
 o.loneOpens = await lone.evaluate(()=>[...document.querySelectorAll('#setup .card.collapsible')].length >= 4);
 o.loneNotBlank = await lone.evaluate(()=>window.__magnet.sel.grass === 'rings');   // from localStorage
@@ -323,6 +398,7 @@ o.loneSaysWaiting = await lone.evaluate(()=>/waiting/i.test(document.getElementB
 
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
+
 const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCanvas &&
   o.panelRunsNoGame && o.panelShowsPlay && o.snapshotAdopted && o.snapshotNotFromStorage &&
   o.cardsIdentical && o.stylesIdentical &&
@@ -339,6 +415,9 @@ const ok = o.panelFlag && o.panelHasBodyCls && o.gameNotPanel && o.panelHidesCan
   o.panelScrolls && o.panelScrollsOnPhone && o.touchNotBlocked && o.gameStillLocked &&
   o.kickoffReachedGame && o.kickoffRanNothingLocally && o.kickoffUsedTheSettings &&
   o.warmupReachedGame && o.warmupRanNothingLocally &&
+  o.legacyLands && o.legacyIsThePanel && o.aliasIsPanel &&
+  o.panelSeesTheSeats && o.panelHeldTheSeat &&
+  o.guestSeatCrosses && o.ownerSeatCrosses && o.seatsDidNotMerge &&
   errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

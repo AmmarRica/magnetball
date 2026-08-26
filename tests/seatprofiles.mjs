@@ -178,6 +178,124 @@ for (const [pads, setup, want, what] of cases){
   await p.close();
 }
 
+// ---------------------------------------------------------------------------------
+// 4. THE MENU IS THE LAST WORD — including over a name typed in warm-up.
+// ---------------------------------------------------------------------------------
+// ⚠️ **THREE THINGS OUTRANKED IT AND ALL THREE WERE MEASURED.** A player can spell their
+// own name out on the lobby keyboard, and the owner has to be able to change it after.
+// Before this:
+//   • `p.kbTyped` — the MID-EDIT guard, meant to stop a profile sync putting 'You' back
+//     under somebody's feet while they are still typing — stayed raised for the rest of
+//     the match. A seat typed `ABC` still read `ABC` with the Your Player card set to
+//     `HOST`, with nothing on screen to say why.
+//   • a guest's typed name was filed into `sel.names`, the Player NAMES BOX, which
+//     `syncProfileToWorld` deliberately lets outrank a profile (that box is how you name
+//     a BOT). So the card could not shift it either.
+//   • and picking the seat did not even refresh the Name field: with seat two's profile
+//     reading `XYZ`, the box showed `You`, the value it was given at page load.
+// ⚠️ Driven through the REAL `#pname` input, never `ep().name = …`: the claim on the
+// field is that typing in it overrides, and a probe that writes the model directly tests
+// none of the wiring that was broken.
+{
+  const p = await page(2);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet, o = {};
+    M.sel.controllers = 'on'; M.sel.lobby = 'on'; M.sel.mode = '2v2';
+    M.startMatch();
+    const w = M.world;
+    const hs = w.players.filter(q => q.ctrl !== 'bot');
+    o.twoSeats = hs.length === 2;
+    // spell a name out on the lobby keyboard, the way a person does: stand on the key,
+    // hold KICK. ⚠️ Two steps per press — one to register, one for the latch.
+    const key = ch => w.kb.keys.find(q => q.ch === ch);
+    const type = (who, pad, word) => {
+      for (const ch of word){
+        const k = key(ch);
+        for (let i = 0; i < 2; i++){
+          who.x = k.x + k.w/2; who.y = k.y + k.h/2; who.vx = who.vy = 0;
+          window.__pads[pad].buttons[0] = true; M.step(w);
+        }
+        window.__pads[pad].buttons[0] = false; M.step(w);
+      }
+    };
+    type(hs[0], 0, 'ABC');
+    type(hs[1], 1, 'XYZ');
+    M.lobbyKbCommit(w);
+    o.typedOnThePitch = hs.map(q => q.name);
+    // ⚠️ A typed name is filed under that SEAT, which is what puts it in front of the
+    // owner in the very field they would reach for — and keeps it out of the names box.
+    o.filedUnderTheSeat = [M.seatProfile(0).name, M.seatProfile(1).name];
+    o.namesBoxLeftAlone = M.sel.names === '' || !M.seatNameList().some(Boolean);
+    // ⚠️ ...and the mid-edit guard is DOWN once the name is committed.
+    o.guardLowered = hs.every(q => !q.kbTyped);
+
+    // Now the owner renames both seats from the card.
+    const fld = document.getElementById('pname');
+    const rename = (seat, txt) => {
+      M.setEditSeat(seat);
+      o['fieldShowedSeat' + seat] = fld.value;
+      fld.value = txt; fld.dispatchEvent(new Event('input', { bubbles:true }));
+    };
+    rename(0, 'HOST');
+    rename(1, 'GUEST');
+    o.menuWins = hs[0].name === 'HOST' && hs[1].name === 'GUEST';
+    o.onThePitch = hs.map(q => q.name);
+    // ⚠️ Picking a seat has to bring the whole card with it — the field included.
+    o.fieldFollowsTheSeat = o.fieldShowedSeat0 === 'ABC' && o.fieldShowedSeat1 === 'XYZ';
+    return o;
+  });
+  ok('a 2v2 with two pads seats two people', r.twoSeats);
+  ok('a name spelled out in warm-up lands on the body',
+     JSON.stringify(r.typedOnThePitch) === '["ABC","XYZ"]', JSON.stringify(r.typedOnThePitch));
+  ok('...and is filed under that SEAT, not in the Player names box',
+     JSON.stringify(r.filedUnderTheSeat) === '["ABC","XYZ"]' && r.namesBoxLeftAlone,
+     `seats ${JSON.stringify(r.filedUnderTheSeat)}, names box ${JSON.stringify(r.namesBoxLeftAlone)} — ` +
+     'filed in the box it would outrank the profile for the rest of the match');
+  ok('...and the mid-edit guard comes down at the whistle', r.guardLowered,
+     'kbTyped is a guard against a sync landing MID-KEYSTROKE; left raised it makes a ' +
+     'warm-up name unchangeable for the whole match');
+  ok('PICKING A SEAT SHOWS THAT SEAT\'S NAME', r.fieldFollowsTheSeat,
+     `the Name field read "${r.fieldShowedSeat0}" for seat one and "${r.fieldShowedSeat1}" for ` +
+     'seat two — a card that says it is dressing player two and shows you player one');
+  ok('AND TYPING A NEW NAME OVERRIDES THE ONE THEY SPELLED', r.menuWins,
+     `the pitch reads ${JSON.stringify(r.onThePitch)}, wanted ["HOST","GUEST"]`);
+  await p.close();
+}
+
+// ---------------------------------------------------------------------------------
+// 5. A LOOK PICKED IN THE MENU SURVIVES THE SIDE PUTTING A COUNTRY ON.
+// ---------------------------------------------------------------------------------
+// ⚠️ With a team flag set, `p.flag` is the COUNTRY and `p._ownFlag` is the player's own
+// face. `syncProfileToWorld` used to write `p.flag` — which ripped the country off the
+// pitch AND left the stash holding the face from before the edit. Measured: with the side
+// on Brazil, picking `cat` showed `cat` at once (country gone) and then handed back
+// `num1`, the OLD face, the moment the country was switched off. The avatar somebody has
+// just chosen has to be the one that comes back.
+{
+  const p = await page(0);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet, o = {};
+    M.sel.mode = 'local'; M.sel.lobby = 'off'; M.startMatch({ lobby:false });
+    const w = M.world;
+    const me = w.players.find(q => q.ctrl === 'human1');
+    M.setTeamFlag(me.team, 'brazil'); M.applyTeamColours(w.players);
+    o.wearsTheCountry = me.flag === 'brazil';
+    M.setEditSeat(0); M.ep().flag = 'cat'; M.saveProfile();
+    o.countryStays = me.flag === 'brazil';
+    M.setTeamFlag(me.team, 'none'); M.applyTeamColours(w.players);
+    o.newFaceComesBack = me.flag === 'cat';
+    o.faceAfter = me.flag;
+    return o;
+  });
+  ok('a side wearing a country stamps it on the faces', r.wearsTheCountry);
+  ok('...and picking an avatar in the menu does not tear it off', r.countryStays,
+     'the country is a choice about the SIDE and outranks a face while it is set');
+  ok('...but the NEW avatar is what comes back when the country goes', r.newFaceComesBack,
+     `the face came back as ${r.faceAfter}, wanted cat — the stash has to follow the edit or ` +
+     'the menu hands back the look from before it');
+  await p.close();
+}
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(bad ? 'FAIL seatprofiles' : 'PASS seatprofiles');
 await b.close();

@@ -6,7 +6,15 @@ Guidance for Claude Code (or any contributor) working in this repo.
 A **single-file** HTML5 canvas game. **Everything lives in `index.html`** — HTML, CSS, and all game
 JS (wrapped in one `(function(){ "use strict"; … })()` IIFE). There is **no build step, no bundler,
 no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `icon.svg`,
-`assets/` and `settings/index.html` are the only other runtime files.
+`assets/`, `menu/index.html` and `vj/index.html` are the only other runtime files —
+plus `settings/index.html`, which is a three-line redirect to `../menu/`.
+
+**The routes are `/`, `/menu/` and `/vj/`, and there are only three.** `/` is the game
+AND the menu (the accordion behind KICK OFF), which is why there is no separate menu
+route to add. `/menu/` and `/vj/` are stubs that fetch this one `index.html`, inject
+`<base href="../">` plus `window.__MAGNETPANEL`, and `document.write` it — so all three
+run identical code and cannot drift. `?panel=menu` and `?panel=vj` are query aliases for
+the same thing, which is what a `file://` copy has instead of folders.
 
 **Hard rules**
 - Keep it dependency-free and self-contained. No npm packages shipped to the page, no CDN scripts,
@@ -329,6 +337,30 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   swatch and a flag both call `applyTeamColours` on the spot, and the stepper writes
   `w.lobby.per`, which `lobbyPlan` reads live. Difficulty was the only one that wrote a
   setting and nothing else. `tests/warmuproom.mjs`.
+- **NO CAPTION OVER THE WARM-UP KEYBOARD** (`drawLobbyKeys`). It read "STAND ON A LETTER
+  TO SPELL YOUR NAME · KICK = PRESS IT" — a line of help text over a QWERTY keyboard laid
+  out on the grass with a person stood on it. Asked to go in those words, and the
+  **standing preference is now to MINIMISE help text** rather than add a line wherever
+  something could be explained. What it carried that is not obvious (that KICK is the
+  press, so a double letter is reachable) is said by the room: a key lights up under you
+  and pressing the button types it.
+  ⚠️ `LOBBYKB.clear` (70) is unchanged — it was tuned so the CAPTION cleared a turned
+  pitch's touchline, so with the caption gone the board has more room than it needs, which
+  is the safe direction.
+  ⚠️ **THE OLD CHECK WENT WITH IT RATHER THAN BEING LEFT TO PASS.** `tests/lobbykb.mjs`
+  read `topKey - 13 - pitchBot` — a clearance derived from a constant belonging to a thing
+  that no longer exists, so it would have gone on passing while measuring nothing.
+  ⚠️ **AND ITS REPLACEMENT IS NOT A PIXEL BAND, because a pixel band CANNOT SEE IT.** That
+  was tried: sample the strip the caption occupied and require it flat. Upright it works
+  (one colour). Turned it is meaningless — the keyboard clears a TOUCHLINE there, so the
+  same strip is over the GRASS and reads 36-39 colours of mown stripe on a build with no
+  caption at all. A threshold loose enough for the turned layout is loose enough for a
+  line of type in the upright one. What is measured instead is WHAT THE LOBBY DRAWS:
+  `fillText` is recorded for one frame and the caption must not be among the strings.
+  ⚠️ **The control is the `BOT SKILL` readout, not the key letters** — `lobbyBoard` caches
+  its bake on a camera signature, so a settled lobby redraws no pads at all on a second
+  render and a letter count reads 0 on a good build. `BOT SKILL · NORMAL` comes out of
+  `drawLobbyKeys` itself, the same function the caption was removed from.
 - **The warm-up prompts are OFF THE PITCH**, in one row under the touchline (`drawLobby`,
   `L._promptY`). They floated over each player's head, which in deck/side view meant a line
   of text running down the middle of the field — `uprightAt` keeps words upright while the
@@ -3610,6 +3642,52 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ink count in the band reads the halfway line, the centre circle and the mown stripes and
   flattens at a constant whatever the alpha is — the first run of that probe reported 0.76
   of full ink at every alpha **including zero**.
+- **THE NAME PLATE'S TYPE: the halo was eating the letters** (`NAMEPLATE`,
+  `HAS_TRACKING`, `snapTextPt`). Reported as the names looking *"a bit AI generated"*,
+  which is a fair description of type whose letterforms have been thickened until they
+  stop being letterforms. Magnified, a 13px name came out as a black bar with coloured
+  holes in it: at `halo: 3.6`, struck twice with a round join, the stroke adds 1.8px
+  either side of every stem, and Kenney Mini Square's stems and counters at 13px are about
+  2px — so the P's counter closed, VAPE's A and P merged into one shape and BOOTS' two O's
+  shared a wall. Three changes, all measured against magnified renders:
+  **halo 3.6 → 2.4** (under the font's own internal gap, so counters stay open),
+  **`track: 1`** (a pixel between the letters, the single biggest readability win), and
+  **size 13 → 14** (wider counters for the halo to fit around).
+  ⚠️ **AND THE BASELINE IS SNAPPED TO WHOLE DEVICE PIXELS** (`snapTextPt`). A pixel font
+  drawn at a fractional device offset is resampled across two columns per stem, so the
+  same letter comes out 2px wide in one place and 3px in another — the same "blur common
+  with AI generated content" the owner named about the canvas DPR, one layer in.
+  `screenPt` is fractional by construction (a body's position is continuous), so this can
+  never be right by luck. ONE `getTransform()` per plate, not one per axis: it mints a
+  DOMMatrix each call and this is on the render path once per body per frame.
+  ⚠️ **`ctx.letterSpacing` IS A PROGRESSIVE ENHANCEMENT.** Chromium, Firefox 127+ and
+  Safari 17.4+ have it; anything older ignores the assignment and still gets the smaller
+  halo and the snap. Nothing is imported — the alternative is drawing glyph by glyph,
+  which gives every letter its own double-struck halo and puts the merging back.
+  ⚠️ Set **before** `measureText` (or the hit rectangle is narrower than the letters) and
+  put back **outside** the `LABEL_MIN` branch (it is canvas STATE, and the quiet case —
+  most of the pitch — returns without drawing, so a reset inside would leak a pixel of
+  tracking into the floaters, the shirt numbers and the whole lobby board every frame).
+  ⚠️ **CENTRED TEXT DRIFTS LEFT BY HALF THE TRACKING**: `letterSpacing` follows the CSS
+  rule and adds its space after EVERY character, the last one included, so the measured
+  width carries one trailing gap with no letter in it. `kern` is half of it back.
+  ⚠️ **THE OBVIOUS CHECK READS BACKWARDS, and it was written first.** Counting
+  fully-clear columns across the plate ON THE PITCH scored the reported build **11** and
+  the fixed one **5** — better for the build with the merged letters — because the two
+  render at different sizes and the band slices them differently. Whether letters merge is
+  a property of the halo against the FONT at `NAMEPLATE.size`, so `tests/labels.mjs`
+  measures it there, **at 8× and scaled back down**: at 1:1 the true 2.75px gap reports as
+  2 whole columns and the 2.4 halo looks fatal. Old 1.63px gap vs 3.6 halo, new 2.75 vs
+  2.4 — no tuned constant either side. Counters are a second, derived claim with
+  `countersBare` as its own control: the word must not become a SLAB (0 of 4 survived
+  before, 2 of 4 now); "all four" is a bar this design never meets and never needs to.
+  ⚠️ **THE SNAP IS CHECKED ON THE WIRING, NOT THE HELPER.** Two body positions a THIRD of
+  a device pixel apart must render the plate to identical pixels; three whole pixels must
+  move it. Testing `snapTextPt` directly proves only that a helper exists.
+  ⚠️ **The band must start BELOW the disc**, and the first probe did not — it began
+  `gap - size` above the baseline, which at DPR 1 is two pixels above the body's own edge,
+  so the snap check was measuring the disc's anti-aliased rim (which really does move on a
+  third of a pixel) and reported a perfectly snapped plate as unsnapped.
 - **THE NAME PLATE HANGS BELOW THE BODY**, and one number decides it (`by` in
   `drawOneDisc`). It used to sit above, where it fought the floating stat labels — GOAL,
   ASSIST, SAVE — which RISE off a player: two lots of text in the same place over the same
@@ -4210,6 +4288,64 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   ⚠️ **Show mode keeps the `modes` pane rather than cutting it**, because How to play is the
   one survivor that is not a setting; the CSS empties the tab of everything else, exactly as
   it used to empty the card.
+- **THE MENU IS THE LAST WORD ON A PLAYER, AND FOUR THINGS STOPPED IT BEING**
+  (`syncPush`, `adoptProfiles`, `claimSeatName`, `seatBodyIndex`, `refreshLookUI`,
+  `seatCount`'s `syncSeats`). Asked for as *"ensure I can overrule the customization of
+  players using the setting screen"*, and every one of the four was measured on the
+  shipped build.
+  ⚠️ **1. `syncPush` SENT SEAT ONE AND NOTHING ELSE.** It posted `{sel, profile}`, so
+  dressing player two, three or four in the /menu tab reached the game window **not at
+  all**: seat two set to `cat`/`FROMMENU` in the panel still read `num1`/`P2` on the pitch
+  a second later, while seat one's own change landed every time. `profiles` travels now,
+  and `adoptProfiles` **mutates in place** — `seatProfile(i)` hands the object out and the
+  debug hook exposes the array, so swapping an entry leaves anything holding a reference
+  reading a record that has stopped being the one on screen.
+  ⚠️ **2. A PANEL HAS NO WORLD, so `seatCount()` returned 1 there — on every visit.**
+  `buildSeatPick` refuses to leave the card on a seat that is not there
+  (`if (editSeat >= n) editSeat = 0`), so the picker was **never shown on /menu at all**
+  and `setEditSeat(1)` silently edited seat one. The count rides the **telemetry
+  heartbeat** (`{t:'tel', seats}`) rather than a new handshake — that message was being
+  sent anyway — and only counts while `syncPeerLive()`, or a number from a game window
+  that closed an hour ago leaves four seats on offer driving nobody.
+  ⚠️ **3. `p.kbTyped` WAS A MID-EDIT GUARD THAT NEVER CAME DOWN.** It exists so a profile
+  sync landing mid-keystroke cannot put 'You' back under somebody's feet — over the moment
+  the name is committed. Left raised it made a warm-up name **unchangeable from the menu
+  for the rest of the match**: a seat typed `ABC` still read `ABC` with the card set to
+  `HOST`. `lobbyKbCommit` lowers it now.
+  ⚠️ **4. A GUEST'S TYPED NAME WENT INTO THE PLAYER NAMES BOX**, which predates there
+  being a profile per seat. `syncProfileToWorld` lets `sel.names` outrank a profile *on
+  purpose* — that box is how you name a BOT — so a guest who spelled `XYZ` on the lobby
+  keyboard had `XYZ` pinned there and the card could not shift it. It is filed under that
+  SEAT now, which also puts it in the very field the owner would reach for.
+  ⚠️ **`claimSeatName` is the one place "the menu is the last word" is written down**, and
+  both the lobby and the `#pname` field go through it. ⚠️ **A seat is a person and
+  `sel.names` is indexed by BODY**, so it can only run where there is a world to map one
+  to the other — which is why the panel sends a `claim` seat number on the state message
+  rather than clearing the box itself. Honoured **before** the save, or it takes effect
+  one message late and the menu appears to need two edits.
+  ⚠️ **AND PICKING A SEAT DID NOT REFRESH THE CARD.** `setEditSeat` called `buildSettings()`,
+  which rebuilds the seat TILES and touches neither the Name field nor the cap/face/eyes
+  pickers — so with seat two's profile reading `XYZ`, picking seat two left the box
+  showing `You`, the value it was given at page load. The card said it was dressing player
+  two and showed you player one. `refreshLookUI(force)` is now the ONE refresher and
+  `syncRefresh`, `resetSettings`, the ↺ Reset look button and `setEditSeat` all call it —
+  the same seven-call list had been written out four times.
+  ⚠️ **A FACE SURVIVES THE SIDE PUTTING A COUNTRY ON.** With a team flag set, `p.flag` is
+  the country and `p._ownFlag` is the player's own face — so `syncProfileToWorld` writing
+  `p.flag` ripped the country off the pitch AND left the stash holding the face from
+  *before* the edit. Measured: on Brazil, picking `cat` showed `cat` at once (country
+  gone) and then handed back `num1` — the old face — when the country was switched off.
+  It writes into the stash when stamped, so the country stays on top and the new avatar is
+  what comes back.
+  ⚠️ **`p.color` IS A KNOWN INCOHERENCE AND IS LEFT ALONE DELIBERATELY.** Writing it makes
+  the Your Player swatch recolour exactly one body mid-match, a different shade from its
+  side, and the next roster change quietly puts it back (measured: a seat at `#ff00ff` on
+  a pitch whose team colour is `#e05a5a`). Removing it makes that swatch a DEAD CONTROL
+  during a match instead, which this file forbids at least as loudly. Neither is right and
+  the fix is a decision about what that swatch MEANS now that team colour is one shade a
+  side — a bigger change than the one it sits inside. `tests/livelook.mjs` pins today's
+  behaviour so whichever way it is settled is settled on purpose.
+  `tests/seatprofiles.mjs`, `tests/panel.mjs`.
 - **ONE PROFILE PER SEAT, AND SEAT ONE IS `profile` BY OBJECT IDENTITY** (`PROFILES`,
   `profiles`, `editSeat`, `ep()`, `seatProfile`, `seatCount`, `buildSeatPick`,
   `magnetball.profiles`). The Your Player card only ever edited one player, so on a cabinet
@@ -4736,7 +4872,23 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   off — which is the setting whose whole point is not being interrupted.
   `tests/gamesave.mjs` and `tests/replayfile.mjs` both used to assert what was ON the bar;
   they assert it does not exist now, which is the stronger claim.
-- **THE SETTINGS TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW** (`syncAct`, `SYNC_ACTS`,
+- **THE PANEL ROUTE IS `/menu`, AND `/settings` IS A REDIRECT** (`detectPanel`,
+  `settingsUrl`, `menu/index.html`, `settings/index.html`, `sw.js`' `ASSETS`). Renamed on
+  request: the accordion behind KICK OFF **is** the menu — eleven cards of it, of which
+  Options is one — so a route called "settings" named a fraction of what is on the page.
+  ⚠️ **THE RENAME ONLY EVER ADDS A SPELLING.** `detectPanel` accepts `menu`, `settings`
+  and `vj` in all three forms (the `__MAGNETPANEL` flag, `?panel=`, and the pathname),
+  because a page cannot fix somebody's bookmark: `/settings` has been the panel route for
+  the whole life of the feature and the service worker **precached it**, so an
+  already-installed copy can reach this file under the old name for as long as that cache
+  lives. `settings/index.html` is now a `<meta refresh>` **and** a `location.replace` —
+  the meta for scripting-off and crawlers, the replace so the dead URL stays out of the
+  back button — and it is still in `ASSETS`, so the redirect works offline too.
+  ⚠️ **`settingsUrl()` KEPT ITS NAME.** It is on the debug hook and four suites plus two
+  call sites ask for it; only what it returns had to move. `tests/panel.mjs` navigates the
+  legacy route rather than reading the file — a redirect that does not fire is a file with
+  the right words in it.
+- **THE MENU TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW** (`syncAct`, `SYNC_ACTS`,
   the `act` message). `/settings` is the same document with the game switched off, and its
   two "play" buttons were broken in opposite directions: **KICK OFF was hidden outright**
   (`body.panel #setup #playBtn { display:none }`), so the one screen you set a match up on

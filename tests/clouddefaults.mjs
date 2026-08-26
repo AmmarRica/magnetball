@@ -283,7 +283,7 @@ const seed = (rows, managed) => ['magnetball.cloud',
   const p = await b.newPage({ viewport: { width: 700, height: 900 } });
   p.on('pageerror', e => errors.push(e.message));
   await p.addInitScript(() => {
-    window.__MAGNETDEBUG = true; window.__MAGNETPANEL = 'settings';
+    window.__MAGNETDEBUG = true; window.__MAGNETPANEL = 'menu';
     const real = window.fetch.bind(window);
     window.__hits = 0;
     window.fetch = (u, init) => { if (/gviz/.test(String(u))) { window.__hits++; return new Promise(() => {}); } return real(u, init); };

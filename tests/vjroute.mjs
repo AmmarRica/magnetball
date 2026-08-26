@@ -27,7 +27,7 @@ const ok = (n, c, x) => { if (!c) fails.push(n + (x ? ' — ' + x : '')); };
 const files = {
   '/index.html': readFileSync(process.cwd() + '/index.html'),
   '/vj/index.html': readFileSync(process.cwd() + '/vj/index.html'),
-  '/settings/index.html': readFileSync(process.cwd() + '/settings/index.html'),
+  '/menu/index.html': readFileSync(process.cwd() + '/menu/index.html'),
 };
 const srv = createServer((q, s) => {
   let path = q.url.split('?')[0];
@@ -85,7 +85,7 @@ ok('...with no game running behind it', v.noWorld, 'a panel that runs a match is
 const ps = await b.newPage({ viewport: { width: 900, height: 900 } });
 ps.on('pageerror', e => errors.push(e.message));
 await ps.addInitScript(() => { window.__MAGNETDEBUG = true; });
-await ps.goto('http://127.0.0.1:' + port + '/settings/');
+await ps.goto('http://127.0.0.1:' + port + '/menu/');
 await ps.waitForTimeout(1200);
 const s = await ps.evaluate(() => {
   const o = {};

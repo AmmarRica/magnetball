@@ -641,8 +641,26 @@ for (const [tag, m] of [['flat', read.flat], ['deck view', read.deck]]){
 //  ⚠️ `LOBBYKB.clear` was tuned against the UPRIGHT layout and the TURNED one is the tight
 //  case, because turned the block clears a TOUCHLINE rather than the back of the net.
 //  Measured pitch-edge to first key row at the old 34: upright 31.8px, turned only 24.8px
-//  — and the caption that introduces the board sits 13px above the keys, so turned it
+//  — and the caption that introduced the board sat 13px above the keys, so turned it
 //  landed 11.8px below the touchline and visibly straddled the pitch border.
+//
+//  ⚠️ **THAT CAPTION IS GONE, AND ITS CHECK WENT WITH IT RATHER THAN BEING LEFT TO PASS.**
+//  "STAND ON A LETTER TO SPELL YOUR NAME · KICK = PRESS IT" was removed as help text
+//  nobody needs over a drawn keyboard. The old probe read `topKey - 13 - pitchBot` — a
+//  clearance DERIVED from a constant belonging to a thing that no longer exists, so it
+//  would have gone on passing for ever while measuring nothing at all.
+//
+//  ⚠️ **AND ITS REPLACEMENT IS NOT A PIXEL BAND, because a pixel band CANNOT SEE IT.**
+//  That was tried first: sample the strip the caption used to occupy and require it to be
+//  flat. Upright it works (median luminance 31.9, one colour). Turned it is meaningless —
+//  the keyboard clears a TOUCHLINE there, so the same strip is over the GRASS and reads
+//  36-39 colours of mown stripe on a build with no caption at all. A threshold loose
+//  enough to pass the turned layout is loose enough to pass a line of type in the upright
+//  one, which is a check that has been tuned until it cannot fail.
+//  What is measured instead is WHAT THE LOBBY ACTUALLY DRAWS: `fillText` is recorded for
+//  one frame and the caption must not be among the strings. Layout-independent, exact,
+//  and paired with "the key letters were drawn" so it cannot pass on a lobby that drew
+//  nothing at all.
 //
 //  ⚠️ MEASURED IN RENDERED CSS PIXELS off the pitch's REAL screen box (all four corners),
 //  never off `bounds.halfL`. Turned, the world axes swap — a probe that assumes world +y
@@ -678,8 +696,24 @@ const clearOf = async (vp) => {
     for (const k of w.kb.keys) if (k.ch)
       for (const [dx,dy] of [[-1,-1],[1,-1],[-1,1],[1,1]]) cor.push(P(k.x+dx*k.w/2, k.y+dy*k.h/2));
     const topKey = Math.min(...cor.map(c=>c[1]));
+    // ⚠️ Every `fillText` for one frame, patched on the PROTOTYPE so the board's own
+    // offscreen context is covered too — the key letters are baked there, not onto `#game`.
+    // ⚠️ **THE CONTROL IS THE `BOT SKILL` READOUT, not the key letters**, and that is not a
+    // weaker control — it is the RIGHT one. `lobbyBoard` caches its bake on a camera
+    // signature, so a settled lobby redraws no pads at all on a second render and a
+    // letter count reads 0 on a perfectly good build (measured). `BOT SKILL · NORMAL` is
+    // drawn by `drawLobbyKeys` itself, the same function the caption was removed from, so
+    // seeing it proves the recorder is watching the right code on the right frame.
+    const drawn = [];
+    const proto = CanvasRenderingContext2D.prototype;
+    const realFill = proto.fillText;
+    proto.fillText = function(t){ drawn.push(String(t)); return realFill.apply(this, arguments); };
+    try { M.render(); } finally { proto.fillText = realFill; }
     return { turned: M.pitchHorizontal(), gap:+(topKey-pitchBot).toFixed(1),
-             captionGap:+(topKey-13-pitchBot).toFixed(1), keys: cor.length/4 };
+             keys: cor.length/4,
+             sawLobbyText: drawn.some(t => /BOT SKILL/.test(t)),
+             caption: drawn.filter(t => /SPELL|PRESS IT|STAND ON A LETTER/i.test(t)),
+             drawnCount: drawn.length };
   });
   await q.close();
   return out;
@@ -695,9 +729,13 @@ for (const [name, m] of [['upright', upright], ['turned', turned]]){
   ok(`${name}: the keyboard stands clear of the pitch`, m.gap >= 35,
      `${m.gap}px between the pitch edge and the first key row — the board and the court read as ` +
      'one cluttered object below about 35px');
-  ok(`${name}: ...and so does the caption above it`, m.captionGap >= 20,
-     `${m.captionGap}px — the caption is 10px text drawn 13px above the keys, so it straddles ` +
-     'the touchline when the block sits too close');
+  ok(`${name}: the lobby draws NO caption over the keyboard`, m.caption.length === 0,
+     JSON.stringify(m.caption) + ' — "STAND ON A LETTER TO SPELL YOUR NAME · KICK = PRESS IT" ' +
+     'was removed as help text nobody needs over a keyboard drawn on the grass');
+  ok(`${name}: ...and the recorder really was watching drawLobbyKeys`, m.sawLobbyText,
+     `${m.drawnCount} strings recorded and none of them was the BOT SKILL readout — that line ` +
+     'comes out of the same function the caption was removed from, so without it "no caption" ' +
+     'is equally true of a probe that recorded the wrong frame');
   ok(`${name}: the keys are actually there`, m.keys === 28,
      `${m.keys} letter keys — "it clears the pitch" is also true of a keyboard that drew nothing`);
 }

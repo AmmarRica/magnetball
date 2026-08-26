@@ -89,7 +89,7 @@
        full window width. The decks were reported looking terrible for exactly one
        reason: a DJ rig laid out into a 460px settings column. */
     /* ⚠️ **THE VJ CARD IS ONLY EVER ON THE /vj ROUTE.** It is hidden on the game menu and
-       on /settings alike — asked for, and consistent: one surface for the decks, with a
+       on /menu alike — asked for, and consistent: one surface for the decks, with a
        signpost to it in About. It stays a DIRECT CHILD of #setup, because the rule below
        isolates it by that relationship. */
     #setup > .card[data-sec="vj"] { display: none; }
@@ -628,13 +628,13 @@
     .tilewrap .opt small { font-size: 12px; line-height: 1.3; color: var(--muted); }
     /* Text plates are named by their own glyph, which can be wider than a word. */
     #textPick .opt span { font-size: 11px; word-break: break-all; }
-    /* /settings is the SAME document with the game switched off, so the settings
+    /* /menu is the SAME document with the game switched off, so the settings
        cards can't drift from the inline ones — they ARE the inline ones. All this
        does is hide the game around them. */
     body.panel #game, body.panel #hud, body.panel #scorebug, body.panel #overlay,
     body.panel #dockToggle, body.panel #deckHint, body.panel #tutTip,
     body.panel #resetBtn { display: none !important; }
-    /* ⚠️ /settings could not be scrolled AT ALL below the first viewport.
+    /* ⚠️ /menu could not be scrolled AT ALL below the first viewport.
        html/body lock the page down so the game canvas can never be scrolled off
        screen — `overflow:hidden`, `height:100%`, `touch-action:none`. On the panel
        route there is no canvas to protect, and that lockdown leaves nothing able to
@@ -1778,7 +1778,7 @@
     <div class="card" id="detachedCard">
       <h2>Settings</h2>
       <div class="hint" style="text-align:left">Settings live in their own tab. This page keeps the game.</div>
-      <button class="ghost" id="openPanelBtn" style="margin-top:10px">⚙ Open settings tab</button>
+      <button class="ghost" id="openPanelBtn" style="margin-top:10px">⚙ Open menu tab</button>
       <button class="ghost" id="inlinePanelBtn" style="margin-top:8px">↩ Bring settings back inline</button>
     </div>
 
@@ -2126,7 +2126,7 @@
       <div style="height:14px"></div>
       <label class="field">Settings location</label>
       <div class="opts" id="panelPick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px">Separate tab puts these cards on <code>/settings</code> and leaves this page all game. Both stay in sync live.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Separate tab puts these cards on <code>/menu</code> and leaves this page all game. Both stay in sync live.</div>
       <div style="height:14px"></div>
       <label class="field">Screen</label>
       <button class="ghost" id="fsBtn">⛶ Enter full screen</button>
@@ -2416,7 +2416,7 @@
     <div class="card collapsible collapsed" data-sec="vj">
       <h2>VJ Mode</h2>
       <!-- ⚠️ THE DECKS DO NOT LIVE HERE ANY MORE. They built into this card on the
-           /settings route and were reported looking exactly like what they were: a DJ
+           /menu route and were reported looking exactly like what they were: a DJ
            rig squeezed into a 460px settings column. The deck surface is the /vj route
            now — full screen, nothing else on it — and this card is the signpost.
            #vjPanel stays as the build target; only vjOpenView (the /vj route) fills it. -->
@@ -2740,7 +2740,7 @@
       <p style="margin-top:12px"><b>👥 2-Player.</b> Lay the phone flat between you. Player 1 uses the bottom controls, Player 2 the top (rotated) ones.</p>
       <p style="margin-top:12px"><b>🎮 Controllers.</b> Set <b>Input</b> to Controllers and connect gamepads (press a button to wake them). Each pad takes a seat — you first, then an opponent, then a teammate — so 2 pads is 1v1, 8 pads a full 4v4. Left stick moves, <b>A / RT</b> kicks. Empty seats stay bots. <b>Extra controllers → Co-op</b> fills your side first instead.</p>
       <p style="margin-top:12px"><b>🤚 One hand.</b> Game Feel → <b>One-handed</b>. Letting go of the movement stick shoots where you were heading, so you can play with one thumb. The KICK button still works.</p>
-      <p style="margin-top:12px"><b>⚙ Settings elsewhere.</b> Display → <b>Settings location</b> → Separate tab moves every setting to <code>/settings</code> and leaves this page all game. Both stay in sync live, and that tab shows a running readout of ball and player speed.</p>
+      <p style="margin-top:12px"><b>⚙ Settings elsewhere.</b> Display → <b>Settings location</b> → Separate tab moves every setting to <code>/menu</code> and leaves this page all game. Both stay in sync live, and that tab shows a running readout of ball and player speed.</p>
     </div>
     <button class="ghost backbtn" id="howBack">← Back</button>
   </div>
@@ -5012,18 +5012,27 @@ function saveProfiles(){
 // Factory so "Settings reset" can restore a pristine copy (fresh nested objects each call).
 // ============================================================
 //  PANEL MODE + CROSS-WINDOW SYNC
-//  /settings loads THIS file with __MAGNETPANEL set (see settings/index.html), so
-//  the settings screen on that route is the same DOM, CSS and code as the inline
-//  one — there is no second copy that could drift. Panel mode only switches the
-//  game off around it. Both windows then mirror sel/profile over a
-//  BroadcastChannel, and the panel asks for a snapshot on open so it never starts
-//  from a stale localStorage read while a game page is live.
+//  /menu loads THIS file with __MAGNETPANEL set (see menu/index.html), so the menu
+//  on that route is the same DOM, CSS and code as the inline one — there is no
+//  second copy that could drift. Panel mode only switches the game off around it.
+//  ⚠️ **THE ROUTE WAS /settings AND IS /menu.** The accordion behind KICK OFF *is*
+//  the menu — eleven cards of it, of which Options is one — so "settings" named a
+//  fraction of what the page holds. ⚠️ **BOTH SPELLINGS ARE STILL ACCEPTED HERE**,
+//  and that is not tidiness: `settings/index.html` is now a redirect to `../menu/`,
+//  but `?panel=settings` is a documented alias somebody may have bookmarked, and an
+//  already-installed service worker still holds `./settings/` in its precache — so a
+//  copy of this file can be reached under the old name for as long as that cache
+//  lives. A rename that only ever ADDS a spelling cannot strand anybody.
+//  Both windows then mirror sel/profile/profiles over a BroadcastChannel, and the
+//  panel asks for a snapshot on open so it never starts from a stale localStorage
+//  read while a game page is live.
 // ============================================================
 function detectPanel(){
-  if (window.__MAGNETPANEL === 'settings' || window.__MAGNETPANEL === 'vj') return true;
+  if (window.__MAGNETPANEL === 'menu' || window.__MAGNETPANEL === 'settings' ||
+      window.__MAGNETPANEL === 'vj') return true;
   try {
-    if (/[?&]panel=(settings|vj)(&|$)/.test(location.search)) return true;
-    if (/\/(settings|vj)\/?$/.test(location.pathname)) return true;
+    if (/[?&]panel=(menu|settings|vj)(&|$)/.test(location.search)) return true;
+    if (/\/(menu|settings|vj)\/?$/.test(location.pathname)) return true;
   } catch(_){}
   return false;
 }
@@ -5352,7 +5361,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260827.1145AM';
+const VERSION = '20260827.0420PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5368,6 +5377,17 @@ const VERSION = '20260827.1145AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260827.0420PM', title: 'The settings tab is /menu now',
+    changed: [
+      '<b>The separate settings tab has moved to <code>/menu</code>.</b> The old <code>/settings</code> link still takes you there, so a bookmark keeps working.',
+      '<b>You can dress the other players from that tab.</b> It never offered the player picker at all, so the one screen built for setting everybody up could only set up you — and a face or a name you gave player two never reached the game window.',
+      '<b>A name somebody spells out in warm-up can be changed from the menu afterwards.</b> It used to be stuck for the rest of the match. Picking a player also shows you that player\u2019s name now, instead of the last one you looked at.',
+      '<b>A face you pick stays yours when the side puts a country on.</b> The country shows while it is chosen, and your own face comes back — the one you picked, not the one from before.',
+      '<b>Player names read properly on the pitch.</b> The outline behind them was nearly as thick as the letters, so words ran together into a dark smudge; they are now spaced, thinner-edged and drawn on whole pixels.',
+      '<b>No more caption over the warm-up keyboard.</b>',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260827.1145AM', title: 'Kick off from the settings tab',
     changed: [
       '<b>The settings tab can start the match again.</b> KICK OFF and Warm-up there now act on the game window, with the settings you just picked \u2014 KICK OFF used to be missing from that page entirely, and Warm-up quietly started a match inside the settings tab where nothing is drawn.',
@@ -8743,7 +8763,27 @@ function saveProfile(){
 // Two thumbs on one phone is `mode.twoP` — two seats and not a controller in sight — and
 // before the first kickoff there is no world to count. That was the reported bug: you can
 // play as them, and the card offered no way to dress them.
+// ⚠️ **A PANEL HAS NO WORLD, SO IT HAS TO BE TOLD.** /menu is the same document with the
+// game switched off, so `world` is null there and this returned 1 on every visit — which
+// means `buildSeatPick`'s "a seat that is not there cannot be edited" clamp
+// (`if (editSeat >= n) editSeat = 0`) snapped the card straight back to seat one and the
+// picker was NEVER shown on that route at all. So the one screen built for sitting down
+// and dressing everybody was the one screen that could only dress you. Measured: seat two
+// set to `cat`/`FROMMENU` in the panel arrived on the pitch as seat ONE's look.
+// ⚠️ The count rides the TELEMETRY heartbeat, not a new handshake — `tel` already goes
+// out on every `hello` and on the throttled push, so this is a field on a message that
+// was being sent anyway rather than a second thing to keep alive.
+// ⚠️ Only while the peer is LIVE. A panel on its own must fall back to what its own
+// settings would field, or a stale number from a game window that closed an hour ago
+// leaves four seats on offer and three of them driving nobody.
+// ⚠️ **`var`, not `let`.** `seatCount` is a function declaration and is therefore callable
+// from anywhere the moment the file parses, while a `let` beside it is in the temporal
+// dead zone until this line runs — and this file has been bitten by exactly that twenty
+// times, once with the ReferenceError swallowed by a `try/catch` so nothing said a word.
+var syncSeats = 0;
 function seatCount(){
+  if (PANEL && syncSeats > 0 && syncPeerLive())
+    return Math.max(1, Math.min(PROFILES.max, syncSeats));
   const w = (typeof world !== 'undefined') ? world : null;
   let live = 0;
   if (w && w.players && !w.demo){
@@ -8768,10 +8808,35 @@ function seatCount(){
   return Math.max(1, Math.min(PROFILES.max, Math.max(live, want)));
 }
 function seatLabel(i){ return i === 0 ? 'Player 1 (you)' : 'Player ' + (i + 1); }
+// ⚠️ **THE WHOLE CARD IS ABOUT ONE SEAT, SO ALL OF IT HAS TO FOLLOW THE SEAT.** This
+// called `buildSettings()` and nothing else — and `buildSettings` rebuilds the seat
+// TILES but never touches the Name field or the cap/face/eyes pickers. Measured: with
+// seat two's profile reading `XYZ`, picking seat two left the Name box showing `You`,
+// the value it was given at page load. So the card said it was dressing player two and
+// showed you player one, which is the reported "no options to customise the rest of the
+// players" arriving from the other side — the control was there and it was lying.
+// ⚠️ **ONE refresher, four callers.** The same seven-call list was written out in
+// `syncRefresh`, in `resetSettings` and on the ↺ Reset look button; a fourth copy here
+// is the fourth place for a new picker to be forgotten.
+function refreshLookUI(force){
+  const nm = $('pname');
+  // ⚠️ Never yank the field out from under somebody typing in it — that is a sync
+  // landing mid-keystroke. `force` is for a deliberate seat change, where the whole
+  // point is that the field now belongs to somebody else.
+  if (nm && (force || document.activeElement !== nm)) nm.value = ep().name;
+  if (typeof buildSwatches === 'function') buildSwatches();
+  if (typeof buildFlagPicker === 'function'){
+    buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker();
+    buildCaps(); buildSpinPick();
+  }
+  if (typeof buildPhotoPane === 'function') buildPhotoPane();
+  if (typeof updatePreview === 'function') updatePreview();
+}
 function setEditSeat(n){
   editSeat = Math.max(0, Math.min(PROFILES.max - 1, n|0));
   uiState._seat = editSeat; saveUI(uiState);
   buildSettings();
+  refreshLookUI(true);
 }
 // ⚠️ **RE-ASKED WHEREVER THE COUNT CAN MOVE, and for a long time it was built ONCE.**
 // `buildSettings` runs it at boot and on an option tap, and `seatCount()` reads the LIVE
@@ -8805,10 +8870,25 @@ function buildSeatPick(){
 // silently re-dresses everybody. `seatNameList()` still indexes by PLAYER index, which
 // is what the Player names box has always meant, so the two are read separately.
 // ⚠️ **The team colour still wins where it applies** — `applyTeamColours` runs after
-// this on every path that can change sides, and one shade a side is a rule this does
-// not get to break. What a seat profile carries onto the pitch is the name, the cap,
-// the face and the eyes; the colour is what you see in the menu and in the lobby's
-// own swatches.
+// this on every path that can change sides, and one shade a side is a rule this does not
+// get to break. What a seat profile carries onto the pitch is the name, the cap, the
+// face, the eyes and — until the next kickoff — the colour.
+// ⚠️ **`p.color` IS A KNOWN INCOHERENCE AND IS LEFT ALONE DELIBERATELY.** Writing it here
+// makes the Your Player swatch recolour exactly one body mid-match, a different shade
+// from the side it is playing for, and the next roster change quietly puts it back —
+// measured as a seat going `#ff00ff` on a pitch whose team colour is `#e05a5a`. Removing
+// the line makes the swatch a DEAD CONTROL during a match instead, which this file
+// forbids at least as loudly. Neither is right; the fix is a decision about what that
+// swatch MEANS now that team colour is one shade a side, and that is a bigger change
+// than the one this comment sits in. `tests/livelook.mjs` pins today's behaviour so
+// whichever way it is settled is settled on purpose.
+// ⚠️ **AND THE FACE GOES INTO THE STASH WHEN THE SIDE IS WEARING A COUNTRY.** With a
+// team flag set, `p.flag` is the country and `p._ownFlag` is the player's own face —
+// so writing `p.flag` here rips the country off the pitch AND leaves the stash holding
+// the face from before the edit. Measured: with the side on Brazil, picking `cat` in
+// the menu showed `cat` immediately (country gone) and then handed back `num1` — the
+// OLD face — the moment the country was switched off. The avatar somebody just chose
+// has to be the one that comes back, which is the whole of "it stays theirs".
 function seatProfile(i){ return i > 0 ? (profiles[i] || profile) : profile; }
 function syncProfileToWorld(){
   const w = (typeof world !== 'undefined') ? world : null;
@@ -8818,12 +8898,47 @@ function syncProfileToWorld(){
   w.players.forEach((p, i) => {
     if (p.ctrl !== 'human1' && p.ctrl !== 'human2' && p.ctrl !== 'gamepad') return;
     const pr = seatProfile(seat); seat++;
-    p.color = pr.color; p.cap = pr.cap;
-    p.flag  = pr.flag;  p.eyes = pr.eyes;
-    // ⚠️ `p.kbTyped` too: a name being spelled out on the lobby keyboard is mid-edit,
-    // and a profile sync landing on it would put 'You' back under the player's feet.
+    p.color = pr.color; p.cap = pr.cap; p.eyes = pr.eyes;
+    if (p._ownFlag !== undefined) p._ownFlag = pr.flag;   // stamped: the country stays on top
+    else p.flag = pr.flag;
+    // ⚠️ `p.kbTyped` is a MID-EDIT guard and nothing more: a name being spelled out on
+    // the lobby keyboard must not have 'You' put back under the player's feet by a
+    // profile sync. `lobbyKbCommit` lowers it at the whistle — it used to stay raised
+    // for the rest of the match, which made a name typed in warm-up unchangeable from
+    // the menu for as long as that match lasted.
     if (!custom[i] && !p.kbTyped) p.name = pr.name || 'You';   // a typed seat name still wins
   });
+}
+// ⚠️ **THE MENU IS THE LAST WORD ON A NAME, and two things outranked it.** A player can
+// spell their own name out on the lobby keyboard, and the owner has to be able to change
+// it afterwards — so an edit in the Your Player card CLAIMS that seat's name back off
+// both of the things that were beating it: the mid-edit `kbTyped` guard, and the Player
+// names box entry `lobbyKbCommit` files a guest's typed name into.
+// ⚠️ **A SEAT IS A PERSON AND `sel.names` IS INDEXED BY BODY**, so this can only run
+// where there is a world to map one to the other — which is why the panel sends a
+// `claim` rather than clearing the box itself: on /menu there is no match to ask.
+// ⚠️ It clears ONE entry, never the box: somebody may have typed names for other seats.
+function seatBodyIndex(w, seat){
+  if (!w || !w.players) return -1;
+  let s = 0;
+  for (let i = 0; i < w.players.length; i++){
+    const p = w.players[i];
+    if (p.ctrl !== 'human1' && p.ctrl !== 'human2' && p.ctrl !== 'gamepad') continue;
+    if (s === seat) return i;
+    s++;
+  }
+  return -1;
+}
+function claimSeatName(seat, wIn){
+  const w = wIn || ((typeof world !== 'undefined') ? world : null);
+  const i = seatBodyIndex(w, seat);
+  if (i < 0) return;
+  w.players[i].kbTyped = false;
+  const list = seatNameList();
+  if (!list[i]) return;
+  list[i] = '';
+  sel.names = list.join('\n').replace(/\n+$/, '');
+  saveSel();
 }
 // ============================================================
 //  DEFAULT SETTINGS FROM A GOOGLE SHEET
@@ -8970,9 +9085,22 @@ function syncPost(msg){ if (!bc) return; try { msg.id = SYNC_ID; msg.panel = PAN
 // whenever the panel loaded with a different value.
 const SYNC_SKIP = ['dockCollapsed', 'deskDock'];
 function syncState(){ const o = {}; for (const k in sel) if (!SYNC_SKIP.includes(k)) o[k] = sel[k]; return o; }
-function syncPush(){ if (syncing) return; syncPost({ t:'state', sel: syncState(), profile }); }
+// ⚠️ **`profiles` TRAVELS TOO, AND FOR A LONG TIME IT DID NOT.** This sent `sel` and
+// `profile` — seat ONE — so dressing player two, three or four in the /menu tab reached
+// the game window not at all: measured as a guest seat set to `cat`/`FROMMENU` in the
+// panel and still reading `num1`/`P2` on the pitch a second later, while seat one's own
+// change landed every time. A card that offers seven seats and syncs one is worse than a
+// card that offers one, because nothing on screen says which of the two you are getting.
+// ⚠️ `claim` is a SEAT NUMBER and rides along because only the GAME can act on it — see
+// `claimSeatName`. It is deliberately not folded into `profile`: it is an event ("this
+// name was just typed in the menu"), not a piece of state, and state is what this
+// message is otherwise made of.
+function syncPush(claim){
+  if (syncing) return;
+  syncPost({ t:'state', sel: syncState(), profile, profiles, claim });
+}
 function syncPeerLive(){ return syncPeer && (Date.now() - syncPeer) < 4000; }
-// ⚠️ **A SETTINGS TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW, NOT ON ITSELF.** /settings is
+// ⚠️ **THE MENU TAB'S MATCH BUTTONS ACT ON THE GAME WINDOW, NOT ON ITSELF.** /menu is
 // the same document with the game switched off, so KICK OFF there used to be hidden
 // outright — and Warm-up, which was NOT hidden, started a match inside the settings window
 // that nothing draws: `panelState` came back `kickoff` with `#game` display:none. Both are
@@ -9006,18 +9134,32 @@ function syncRefresh(){
     if (sliderDragging){ syncRefresh(); return; }   // never yank a control out from under a thumb
     syncDirty = false;
     buildSettings(); refreshPitchTiles();
-    const nm=$('pname'); if (nm && document.activeElement!==nm) nm.value = ep().name;
-    if (typeof buildSwatches==='function') buildSwatches();
-    buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildCaps(); buildSpinPick(); updatePreview();
+    refreshLookUI(false);
     buildMatchOpts(); buildPartyMods();
   });
+}
+// ⚠️ **MUTATED IN PLACE, never replaced.** `ep()` looks the seat up per call, but
+// `seatProfile(i)` hands the OBJECT out and the debug hook exposes `profiles` — so
+// swapping an entry leaves anything holding a reference reading a record that has
+// stopped being the one on screen. Seat 0 arrives as `msg.profile` and is not in here.
+function adoptProfiles(list){
+  if (!Array.isArray(list)) return;
+  for (let i = 1; i < profiles.length; i++){
+    const src = list[i];
+    if (src && typeof src === 'object' && profiles[i]) Object.assign(profiles[i], src);
+  }
 }
 function syncAdopt(msg){
   syncing = true;
   try {
     if (msg.sel) Object.assign(sel, msg.sel);
     if (msg.profile) Object.assign(profile, msg.profile);
-    saveSel(); saveProfile();      // persist locally; syncing suppresses the echo
+    if (msg.profiles) adoptProfiles(msg.profiles);
+    // ⚠️ **BEFORE the save, not after.** `saveProfile()` is what pushes the look onto the
+    // pitch (`syncProfileToWorld`), so a claim honoured after it takes effect one message
+    // late — which reads as the menu needing two edits to change a name.
+    if (!PANEL && msg.claim != null) claimSeatName(msg.claim);
+    saveSel(); saveProfiles(); saveProfile();   // persist locally; syncing suppresses the echo
   } finally { syncing = false; }
   syncApply();                     // now
   syncRefresh();                   // and repaint the pickers when there's a frame
@@ -9031,7 +9173,7 @@ if (bc){
     if (m.t === 'hello'){
       if (!PANEL){
         if (!wasLive) syncPush();                 // first contact: full state
-        syncPost({ t:'tel', rows: telemetryRows() });   // every time: proof of life + readout
+        syncPost({ t:'tel', rows: telemetryRows(), seats: seatCount() });   // proof of life + readout
         // ⚠️ VJ state rides THIS message. Do not add a second handshake: `hello` is the
         // only thing that triggers the full push above, and it is gated on !wasLive —
         // any earlier message marks the peer live and the panel comes up stale.
@@ -9052,7 +9194,7 @@ if (bc){
     if (m.t === 'vjs'){ if (PANEL){ vjView = m.s; vjPanelRender(); } return; }
   };
 }
-// PANIC lives on the game page on purpose: it has to work with /settings closed,
+// PANIC lives on the game page on purpose: it has to work with /menu closed,
 // crashed, or never opened. Shift+Esc kills both video decks, drops master audio and
 // restores the theme. Alt+Space taps the master clock without leaving the projector.
 window.addEventListener('keydown', e => { if (typeof vjKey === 'function') vjKey(e); }, true);
@@ -9084,12 +9226,8 @@ function resetSettings(alsoAppearance){
   applyTheme(sel.look.palette); applyDisplayMode(); applyFeel();
   if (typeof Aud!=='undefined' && Aud.setVol) Aud.setVol(sel.snd.vol);
   buildSettings();
-  if (alsoAppearance){
-    // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
-    const nm=$('pname'); if (nm) nm.value = ep().name;
-    if (typeof buildSwatches==='function') buildSwatches();
-    if (typeof buildCaps==='function'){ buildCaps(); buildFlagPicker(); buildAnimalPicker(); buildTextPicker(); buildEyesPicker(); buildSpinPick(); updatePreview(); }
-  }
+  // Refresh the appearance UI so name field, swatches, pickers and preview reflect the reset.
+  if (alsoAppearance) refreshLookUI(true);
   toast(alsoAppearance ? 'Settings & appearance reset' : 'Settings reset to defaults', 'ok', '↺');
 }
 
@@ -9336,7 +9474,7 @@ function recordResult(w){
   return delta;
 }
 // ============================================================
-//  VJ MODE — two video decks + two DJ decks, driven from /settings
+//  VJ MODE — two video decks + two DJ decks, driven from /menu
 //
 //  RENDER AND AUDIO ONLY. Nothing in here is reachable from step(), integrate(),
 //  moveBall(), collide*(), runBot() or w.rng. The sim cannot see it, so
@@ -9350,7 +9488,7 @@ function recordResult(w){
 //     is no deck value, no crossfader position and no transition that can put
 //     video in front of a player. "Players always full opacity" is draw order.
 //  2. ALL AUDIO IS ONE AudioContext IN THE GAME TAB. Two contexts in two tabs
-//     cannot be mixed and would drift apart within seconds. /settings sends
+//     cannot be mixed and would drift apart within seconds. /menu sends
 //     commands and receives meters; it never makes a sound.
 //
 //  Default off. With vj.on false, vjPaintVideo() returns immediately, vjMarkA()
@@ -9638,7 +9776,7 @@ function vjApplyMix(){
 }
 
 // Load a File into a deck. The BLOB arrives over the channel and the object URL is
-// minted HERE — a URL created in the /settings document is meaningless in this one.
+// minted HERE — a URL created in the /menu document is meaningless in this one.
 async function vjLoadAudio(deckId, file){
   if (!vjArm()) return false;
   const d = deckId === 'b' ? vj.b : vj.a;
@@ -10063,7 +10201,7 @@ function vjTickerSync(){
 }
 
 // ---------- PANIC ------------------------------------------------------------
-// Must work with /settings disconnected, dead, or never opened. It is a keydown
+// Must work with /menu disconnected, dead, or never opened. It is a keydown
 // listener on the game page and touches nothing but the render and audio layer.
 function vjPanic(){
   if (vj.pendingTake){ clearTimeout(vj.pendingTake); vj.pendingTake = null; }
@@ -10102,10 +10240,10 @@ function vjSetOn(on){
 
 // ---------- Cross-tab protocol ----------------------------------------------
 // The game tab OWNS everything: the AudioContext, the video elements, the clock.
-// /settings sends commands and receives a state snapshot to draw itself from. It
+// /menu sends commands and receives a state snapshot to draw itself from. It
 // never holds a node and never makes a sound.
 //
-// ⚠️ Blobs, not object URLs. A URL.createObjectURL() minted in the /settings
+// ⚠️ Blobs, not object URLs. A URL.createObjectURL() minted in the /menu
 // document is invalid in this one — the blob is structured-cloned across and the
 // game tab mints its own. MediaStream is NOT cloneable, which is why the webcam
 // (if it is ever added) must be opened by the game tab on command, not sent.
@@ -10221,7 +10359,7 @@ function vjExec(cmd, arg){ const f = VJ_CMDS[cmd]; if (!f) return;
   try { f(arg); } catch(e){ console.warn('vj', cmd, e); }
   if (!PANEL) vjPush(false); }
 
-// The snapshot /settings draws from. Throttled to VJ.meterHz — pushing this per
+// The snapshot /menu draws from. Throttled to VJ.meterHz — pushing this per
 // frame floods the channel and starves the very thing it is reporting on.
 // Waveforms are sent ONCE per load (they are ~8KB) and never in the meter tick.
 function vjSnap(full){
@@ -10315,7 +10453,7 @@ function vjPresetDelete(name){ const all=vjPresets(); delete all[name];
   try { localStorage.setItem(VJ_PRESET_KEY, JSON.stringify(all)); } catch(_){} return all; }
 
 // ---------- Game-page wiring -------------------------------------------------
-// PANIC is on the game page and works with /settings closed, crashed, or never
+// PANIC is on the game page and works with /menu closed, crashed, or never
 // opened. Everything else about VJ Mode is remote; this one thing cannot be.
 const VJ_PANIC_KEYS = ['Escape'];
 function vjKey(e){
@@ -11623,7 +11761,7 @@ function buildAnimalPicker(){ buildRecentRow('animalRecent','animal',ANIMAL_KEYS
 // Ball-look tiles paint an actual ball with paintBall(), at a fixed angle so the
 // pattern reads. No emoji, no image — what you see is what rolls.
 // ⚠️ Guarded: the standalone Ball card is gone (see the markup), so this host may not
-// exist. It stays as a function because `/settings` and the theme rebuild both call it,
+// exist. It stays as a function because `/menu` and the theme rebuild both call it,
 // and a missing element is a no-op rather than a throw that takes the rebuild with it.
 function buildBallLookPick(){ const h = $('ballLookPick'); if (h) buildSlotPicker('ball', h); }
 // One tile strip for one theme slot, painted into whatever host is handed over —
@@ -11819,8 +11957,15 @@ function buildCaps(){
   });
 }
 $('pname').value = ep().name;
-$('pname').oninput = e => { ep().name = e.target.value.slice(0,12); saveProfile(); updatePreview(); };
-$('pname').onblur  = () => { if(!ep().name.trim()){ ep().name = editSeat ? 'P'+(editSeat+1) : 'You'; $('pname').value = ep().name; saveProfile(); updatePreview(); } };
+// ⚠️ **TYPING A NAME HERE IS AN OVERRIDE, so it CLAIMS the seat** — see `claimSeatName`.
+// Without it the two things that outrank a profile name (the lobby's mid-edit guard and
+// the Player names box) make this field silently do nothing for anybody who named
+// themselves in warm-up, which is exactly the person you most want to be able to rename.
+// ⚠️ `syncPush(editSeat)` rather than a bare one: on /menu there is no world to map a
+// seat onto a body, so the claim has to travel to the window that has one.
+function nameEdited(){ claimSeatName(editSeat); saveProfile(); syncPush(editSeat); updatePreview(); }
+$('pname').oninput = e => { ep().name = e.target.value.slice(0,12); nameEdited(); };
+$('pname').onblur  = () => { if(!ep().name.trim()){ ep().name = editSeat ? 'P'+(editSeat+1) : 'You'; $('pname').value = ep().name; nameEdited(); } };
 
 buildSwatches();
 buildCaps();
@@ -12090,7 +12235,7 @@ if (mspeedEl){
 // reasons don't necessarily want to lose the strike either.
 // The goal camera's two dials, wired the same way. Read through goalZoom() /
 // goalZoomSecs() rather than off sel directly, so the clamp and the default live in
-// one place and a synced value from /settings can't push the camera out of range.
+// one place and a synced value from /menu can't push the camera out of range.
 // ⚠️ A percentage below 1.5x. "1.1×" for a 5% push is a rounding error presented as
 // a setting — at this end of the range the number the player cares about is the
 // percent, and at the other end it is the multiple.
@@ -12126,7 +12271,7 @@ function syncRepSecs(){
 }
 // Hold-to-kick: a switch and a dial, wired like the goal camera's pair. Read through
 // chargeSecs() rather than off `sel` directly, so the clamp and the default stay in one
-// place and a value synced in from /settings cannot push the wind-up out of range.
+// place and a value synced in from /menu cannot push the wind-up out of range.
 function syncCharge(){
   const c=$('chargeMs'), cv=$('chargeVal');
   if (c){ c.value = Math.round(chargeSecs()*1000); c.disabled = !chargeOn(); c.style.opacity = chargeOn() ? '' : '0.4'; }
@@ -12399,7 +12544,7 @@ if (namesEl){
 
 updatePreview();
 updatePadInfo();
-// The daily reward belongs to the game window. On /settings its full-screen modal
+// The daily reward belongs to the game window. On /menu its full-screen modal
 // (z-index 40) covered the page and ate every click, and nothing ever closed it —
 // the game only clears it when a match starts, and the panel never starts one.
 if (!PANEL) checkDailyLogin();   // grant + show today's reward on the first visit each day
@@ -12561,7 +12706,7 @@ function arcadeKeyDown(e){
 // started the match underneath, left it frozen until the replay ran itself out, and
 // then landed in the lobby anyway. Pressing play must never mean "watch this first".
 function tryKickOff(){
-  // ⚠️ On /settings this is a COMMAND, not a match — see `syncAct`. It has to come first:
+  // ⚠️ On /menu this is a COMMAND, not a match — see `syncAct`. It has to come first:
   // `arcadeSpend` would take a credit for a game this window is never going to run.
   if (PANEL) return void syncAct('kickoff');
   if (typeof replayAbort === 'function') replayAbort();
@@ -12808,7 +12953,7 @@ function syncMuteUI(){
 }
 // ⚠️ `saveSel()` is mandatory, not tidiness. `syncAdopt` SHALLOW-merges `sel`, so `snd` is
 // replaced wholesale by whatever the other window holds: toggle without pushing and
-// `/settings` still says `muted:false`, and its next write of any unrelated setting shoves
+// `/menu` still says `muted:false`, and its next write of any unrelated setting shoves
 // that stale `snd` back and un-mutes the game.
 // ⚠️ And it does NOT call `buildSettings()` — that is a ~24ms re-render of a menu which,
 // pressed from the HUD, is not even on screen. Only the Master tiles are repainted, and
@@ -13287,9 +13432,7 @@ $('lookReset').onclick = () => {
   Object.assign(profile, defaultProfile());
   photoSrc = null; photoImg = null;   // the photo is part of your look, so it goes too
   saveProfile();                      // this is also what pushes the look to the pitch live
-  buildPhotoPane();
-  const nm = $('pname'); if (nm) nm.value = ep().name;
-  buildSettings(); updatePreview();
+  buildSettings(); refreshLookUI(true);
 };
 // Keep the section headers pinned right below the sticky KICKOFF bar by feeding
 // its live height into --sticky-top (recomputed on resize + once fonts settle).
@@ -13738,7 +13881,7 @@ function menuRoot(){ return (deskDockId && $(deskDockId)) || $('setup'); }
 function padDrivesMenu(){
   if (deckMenuOwnsPad()) return true;               // the deck's docked menu, unchanged
   if (isDeck()) return false;                       // on a deck, only the dock counts
-  if (PANEL) return false;                          // /settings and /vj are mouse pages
+  if (PANEL) return false;                          // /menu and /vj are mouse pages
   const root = menuRoot();
   if (!root || root.classList.contains('hidden')) return false;
   if (root.classList.contains('docked') && dockCollapsedNow()) return false;
@@ -14224,17 +14367,28 @@ function applyPanelMode(){
   document.documentElement.classList.toggle('panelroute', PANEL);
   document.body.classList.toggle('detached', detached);
   if (PANEL){
-    const h1 = document.querySelector('#setup .logo h1'); if (h1) h1.textContent = 'SETTINGS';
+    const h1 = document.querySelector('#setup .logo h1'); if (h1) h1.textContent = 'MENU';
     const tag = document.querySelector('#setup .logo p:last-child');
     if (tag) tag.textContent = 'Live-linked to the game tab';
-    document.title = 'Magnetball — Settings';
+    document.title = 'Magnetball — Menu';
     const st = $('panelState');
     if (st) st.textContent = syncPeerLive() ? 'connected' : 'waiting for the game…';
   }
 }
-function settingsUrl(){ try { return new URL('settings/', location.href).href; } catch(_){ return './settings/'; } }
+// ⚠️ **`menu/`, and the name of this function did not change.** `settingsUrl` is on the
+// debug hook and is what four suites and two call sites ask for; renaming it as well
+// would be a second, unrelated edit riding along with a route change. What it returns is
+// the only thing that had to move.
+function settingsUrl(){ try { return new URL('menu/', location.href).href; } catch(_){ return './menu/'; } }
 // The panel's debug readout. Fed by the game tab; there is no world here to read.
 function renderTelemetry(m){
+  // ⚠️ The seat count comes with the heartbeat, and a CHANGE has to rebuild the picker:
+  // somebody plugging a second pad into the game window is exactly when a second tile
+  // should appear over here, and this message is the only thing that knows.
+  if (typeof m.seats === 'number' && m.seats !== syncSeats){
+    syncSeats = m.seats;
+    if (typeof buildSeatPick === 'function') buildSeatPick();
+  }
   const el = $('panelTel'); if (!el) return;
   const st = $('panelState'); if (st) st.textContent = 'connected';
   el.textContent = m.rows ? m.rows.join('\n') : 'no match running';
@@ -14261,7 +14415,9 @@ function pumpTelemetry(){
   const now = Date.now();
   if (now - telT < 100) return;
   telT = now;
-  syncPost({ t:'tel', rows: telemetryRows() });
+  // ⚠️ The seat count rides here too — this is the pump that keeps running while a match
+  // is live, so a pad plugged in mid-match brings a tile up in the menu tab within 100ms.
+  syncPost({ t:'tel', rows: telemetryRows(), seats: seatCount() });
 }
 function applyDisplayMode(){
   document.body.classList.toggle('cocktail', sel.display==='cocktail');
@@ -14701,7 +14857,7 @@ function buildSettings(){
     });
   }
   // Wired at init like the other plain sliders, but re-read here so a rebuild —
-  // a preset, a reset, a cross-tab sync from /settings — shows the live value.
+  // a preset, a reset, a cross-tab sync from /menu — shows the live value.
   { const hs=$('hitStop'), hv=$('hitStopVal');
     if (hs){ hs.value = hitStopFrames();
       if (hv) hv.textContent = hitStopFrames() ? hitStopFrames()+' frames' : 'off'; } }
@@ -14807,9 +14963,9 @@ function buildSettings(){
   // Changing the Warm-up lobby pick or the display mode changes whether the Warm-up
   // button has anywhere to go, and both of those rebuild the settings.
   syncWarmupOffer();
-  // ⚠️ The deck surface builds ONLY on /vj now. It used to build inside /settings and
+  // ⚠️ The deck surface builds ONLY on /vj now. It used to build inside /menu and
   // was reported looking exactly like what it was: a DJ rig squeezed into a 460px
-  // settings column. /settings and the in-game card keep a pointer to the route instead.
+  // settings column. /menu and the in-game card keep a pointer to the route instead.
   if (VJVIEW && !$('vjPanel').childElementCount) vjOpenView();
   // ⚠️ THE LANGUAGE PASS GOES LAST, after everything above has finished writing fresh
   // ENGLISH into the DOM. It ran before `buildSubTabs()` for one build and the chip rows
@@ -15971,7 +16127,7 @@ async function cloudRefresh(live){
   cloudSaveRec({ at: Date.now(), rows: got.rows, managed: got.managed });
   if (live){
     // The recipe that already exists for adopting a changed `sel` mid-session — the same
-    // one the /settings window uses. Defaults under, then a managed sheet over.
+    // one the /menu window uses. Defaults under, then a managed sheet over.
     const rec = cloudRec();
     cloudApply(rec, false);
     try { Object.assign(sel, JSON.parse(localStorage.getItem('magnetball.sel')||'{}')); } catch(e){}
@@ -16607,10 +16763,10 @@ function pickNames(n, used){
 //  MATCH SETUP
 // ============================================================
 function startMatch(opts){
-  // ⚠️ **A PANEL NEVER RUNS A MATCH.** /settings and /vj are the same document with the
+  // ⚠️ **A PANEL NEVER RUNS A MATCH.** /menu and /vj are the same document with the
   // game switched off — `#game` is `display:none` there — so a match started here is one
-  // nobody can see, driving nobody, burning a frame loop behind a settings screen.
-  // Measured before this: pressing Warm-up on /settings left that window in `kickoff`.
+  // nobody can see, driving nobody, burning a frame loop behind a menu screen.
+  // Measured before this: pressing Warm-up on /menu left that window in `kickoff`.
   // The two buttons that mean "play" forward to the game window instead (see `syncAct`);
   // this is the backstop for every other route in (a drill tile, a season round).
   if (PANEL) return;
@@ -20198,22 +20354,39 @@ function kbPress(p, ch){
 // somebody set in the Player names box.
 function lobbyKbCommit(w){
   if (!w.kb) return;
-  const list = seatNameList();
-  let seats = false;
   // ⚠️ `firstHumanSeat`, NOT `ctrl === 'human1'`. A pad taking seat one sets `ctrl` to
   // 'gamepad', so on any machine with a controller plugged in there is no `human1` on the
   // pitch at all — and the profile seat's typed name went into the Player names box
   // instead of into the profile, which is the same trap the keyboard/controller merge is
   // built on. This is the one helper in the file that means "you".
   const you = firstHumanSeat(w);
+  let seat = 0, dirty = false;
   w.players.forEach((p, i) => {
+    const human = p.ctrl === 'human1' || p.ctrl === 'human2' || p.ctrl === 'gamepad';
+    const mine = human ? seat++ : -1;
     if (!p.kbTyped) return;
     const nm = String(p.name || '').trim().slice(0, LOBBYKB.maxLen);
     p.name = nm || (p === you ? (profile.name || 'You') : 'P' + (i + 1));
-    if (p === you){ profile.name = p.name; saveProfile(); }
-    else { list[i] = p.name; seats = true; }
+    // ⚠️ **A TYPED NAME GOES INTO THAT SEAT'S OWN PROFILE, and a guest's used to go into
+    // the PLAYER NAMES BOX.** That predates there being a profile per seat, and it is
+    // what made a warm-up name unchangeable afterwards: `syncProfileToWorld` lets the
+    // names box outrank a profile (deliberately — the box is how you name a BOT), so a
+    // guest who spelled `XYZ` on the lobby keyboard had `XYZ` pinned in `sel.names` and
+    // the Your Player card could not shift it. Filed under the seat, the name shows up
+    // in the very field the owner would reach for to change it.
+    // ⚠️ `claimSeatName` also lowers the mid-edit guard and clears any STALE box entry
+    // for this body — one helper, so "the menu is the last word on a name" is written
+    // down once and both the lobby and the name field go through it.
+    if (mine >= 0){ seatProfile(mine).name = p.name; claimSeatName(mine, w); dirty = true; }
+    else p.kbTyped = false;
   });
-  if (seats) { sel.names = list.map(s => s || '').join('\n'); saveSel(); }
+  // ⚠️ BOTH stores: `saveProfile()` branches on whichever seat the CARD is editing, and
+  // a lobby can commit several seats at once — none of them the one that card is on.
+  if (dirty){
+    saveProfiles();
+    try { localStorage.setItem('magnetball.profile', JSON.stringify(profile)); } catch(e){}
+    syncPush();
+  }
 }
 // ---------- Warm-up balls, and the wall that keeps them home -----------------
 // The lobby is where you test a stick, and one ball between six people is a queue
@@ -25944,34 +26117,23 @@ function drawLobbyKeys(w, ox, oy){
       ctx.fillText('BOT SKILL  \u00b7  ' + dn, Math.max(60, Math.min(cw - 60, x)), y);
     });
   }
-  // ⚠️ Measured over the LETTERS ONLY, not over `kb.L..B`. Those bounds now cover the
-  // colour strips and the difficulty column, which run the whole depth of the pitch —
-  // so a caption placed off them lands above the halfway line, on the court.
-  const cs = [];
-  for (const k of kb.keys){
-    if (!k.ch) continue;
-    for (const [px, py] of [[k.x, k.y], [k.x + k.w, k.y], [k.x, k.y + k.h], [k.x + k.w, k.y + k.h]])
-      cs.push(screenPt(wx(px), wy(py)));
-  }
-  // ⚠️ No letters means no caption, rather than a caption over an empty patch of grass:
-  // a lite lobby (a tournament tie) has no keyboard to introduce.
-  if (!cs.length){ ctx.restore(); return; }
-  const bx0 = Math.min.apply(null, cs.map(c => c[0])) + ox;
-  const bx1 = Math.max.apply(null, cs.map(c => c[0])) + ox;
-  const by0 = Math.min.apply(null, cs.map(c => c[1])) + oy;
-  screenUpright((bx0 + bx1)/2, by0 - 13, (x, y) => {
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `10px ${LOBBY_FONT}`;
-    ctx.fillStyle = T.hudSub || T.hudText;
-    // ⚠️ Held inside the canvas, the same reason the floaters and the drop-in prompts
-    // are: the block can sit hard against an edge, and a centred caption then loses the
-    // half of itself that says what to do.
-    // ⚠️ It says BOTH ways in, because the tap is the only one that can type a double
-    // letter and nothing on screen would otherwise imply it exists.
-    const cap = 'STAND ON A LETTER TO SPELL YOUR NAME  \u00b7  KICK = PRESS IT';
-    const half = ctx.measureText(cap).width/2 + 4;
-    ctx.fillText(cap, Math.max(half, Math.min(cw - half, x)), Math.max(8, y));
-  });
+  // ⚠️ **THERE IS NO CAPTION OVER THE KEYBOARD, and its absence is the point.** It read
+  // "STAND ON A LETTER TO SPELL YOUR NAME · KICK = PRESS IT" — a line of help text over
+  // a QWERTY keyboard laid out on the grass with a person stood on it. Asked to go, in
+  // those words: it is too obvious to be worth the room, and the standing preference in
+  // this file now is to MINIMISE help text rather than to add a line wherever something
+  // could be explained.
+  // ⚠️ What it was carrying that is not obvious — that KICK is the press, and therefore
+  // that a double letter is reachable — is said by the room itself: a key lights up under
+  // you, and pressing the button types it. The headline above the pitch still says what
+  // START does, which is the one thing you cannot discover by walking around.
+  // ⚠️ `tests/lobbykb.mjs` measured the KEYS' clearance from the touchline and then
+  // measured the caption's own clearance 13px above them. That second check is gone with
+  // the caption rather than being left to pass against nothing — a probe that derives a
+  // position from a constant belonging to a thing that no longer exists is the definition
+  // of a vacuous check. `LOBBYKB.clear` (70) is unchanged: it was tuned so the CAPTION
+  // cleared a turned pitch's touchline, so with the caption gone the board simply has
+  // more room than it needs, which is the safe direction.
   ctx.restore();
 }
 function drawLobby(w){
@@ -26179,7 +26341,51 @@ function drawLobby(w){
 // rather than BOXED, and at that weight it had stopped being one. It still has to lay the
 // backing solid (that is what the second pass is for), so this is as thin as it goes.
 // The fade rule is `haloAlpha`'s and is untouched.
-const NAMEPLATE = { size: 13, halo: 3.6, gap: 16 };
+// ⚠️ **THE HALO WAS EATING THE LETTERS, AND THE HALO IS WHY THE NAMES LOOKED WRONG.**
+// Reported as the names looking "a bit AI generated", which is a fair description of
+// type whose letterforms have been thickened until they stop being letterforms.
+// Magnified, a 13px name came out as a black bar with coloured holes in it: at
+// `halo: 3.6` a round-joined stroke adds 1.8px EITHER SIDE of every stem, and Kenney
+// Mini Square's stems and counters at 13px are about 2px — so the counter of a P closed,
+// the A and the P of VAPE merged into one shape, and the two O's of BOOTS shared a wall.
+// Three things fix it and all three were measured against magnified renders:
+//   • the halo comes down to 2.4, which is under the font's own internal gap, so the
+//     counters stay open. It is still struck twice, so it is still a solid BACKING —
+//     that part was never the problem.
+//   • `track` puts a pixel between the letters, so one letter's backing cannot merge
+//     with the next one's. This is the single biggest readability win in the set.
+//   • the size goes 13 → 14, which widens the counters the halo has to fit around.
+// ⚠️ **AND THE BASELINE IS SNAPPED TO WHOLE DEVICE PIXELS** (`snapTextPt`). A pixel font
+// drawn at a fractional device offset is resampled across two columns per stem, so the
+// same letter comes out 2px wide in one place and 3px in another — the "blur that is
+// common with AI generated content" the owner named when the canvas DPR was fixed, one
+// layer further in. `screenPt` returns fractional coordinates by construction (a body's
+// world position is continuous), so this can never be right by luck.
+const NAMEPLATE = { size: 14, halo: 2.4, gap: 16, track: 1 };
+// ⚠️ **`ctx.letterSpacing` IS A PROGRESSIVE ENHANCEMENT AND IS TREATED AS ONE.** Chromium,
+// Firefox 127+ and Safari 17.4+ have it; anything older simply ignores the assignment and
+// gets today's spacing with the smaller halo and the snap, which is still the better half
+// of the fix. Nothing is imported and nothing is polyfilled — the alternative is drawing
+// glyph by glyph, which would give every letter its own double-struck halo and put the
+// merging back by a different route.
+// ⚠️ **ONE `getTransform()`, NOT ONE PER AXIS.** It mints a fresh DOMMatrix every call
+// and this is on the render path once per body per frame; two calls at 16 bodies is 32
+// throwaway matrices a frame for an answer that needs one.
+// ⚠️ **SCREEN-ALIGNED FRAMES ONLY.** A name plate is drawn after `uprightAt` has
+// cancelled the pitch's quarter-turn, so the frame here is a translate and a scale and
+// nothing else — which is exactly the case a device-pixel grid can be snapped to. The
+// guard is not defensive padding: it is what makes this safe to reuse anywhere later,
+// including inside a rotated frame where the right answer is to leave the point alone.
+function snapTextPt(x, y){
+  const m = ctx.getTransform();
+  if (!m.a || !m.d || Math.abs(m.b) > 1e-6 || Math.abs(m.c) > 1e-6) return [x, y];
+  const dx = m.a * x + m.e, dy = m.d * y + m.f;
+  return [ x + (Math.round(dx) - dx) / m.a, y + (Math.round(dy) - dy) / m.d ];
+}
+const HAS_TRACKING = (function(){
+  try { const c = document.createElement('canvas').getContext('2d'); return 'letterSpacing' in c; }
+  catch(_){ return false; }
+})();
 // ⚠️ **A HALO MAY NEVER OUTLIVE THE TEXT IT IS BEHIND.** Text that fades is drawn as a
 // backing stroke plus a fill, and the two do not fade alike: the backing is the opposite
 // tone by design, so over a mid-green pitch a black halo at alpha 0.2 still reads clearly
@@ -29508,6 +29714,10 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       // pitch, and the backing is the whole reason the plate is outlined and not boxed.
       ctx.font = `${NAMEPLATE.size}px 'Kenney', system-ui, -apple-system, sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+      // ⚠️ Set BEFORE `measureText`, or the plate rectangle the overlap fade hit-tests is
+      // narrower than the letters actually drawn — the one thing this file already
+      // insists on for `by`, arriving on the other axis.
+      if (HAS_TRACKING) ctx.letterSpacing = NAMEPLATE.track + 'px';
       const label = p.name;
       const tw = ctx.measureText(label).width;
       const [psx, psy] = screenPt(wx(ix(p)), wy(iy(p)));
@@ -29517,7 +29727,17 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       // the floating stat labels (GOAL, ASSIST, SAVE) which RISE off a player: two lots
       // of text in the same place over the same body, one of them moving.
       const by = r + NAMEPLATE.gap;                     // centre → text baseline, downward
-      const lx = psx - tw/2 - 5, ly = psy + by - 7, lw = tw + 10, lh = 16;
+      // ⚠️ **CENTRED TEXT DRIFTS LEFT BY HALF THE TRACKING.** `letterSpacing` follows the
+      // CSS rule and adds its space after EVERY character, the last one included, so the
+      // measured width carries one trailing gap that has no letter in it and `textAlign:
+      // 'center'` centres that. Half of it back is the exact correction, and without it
+      // every name sits half a pixel off the body it belongs to.
+      const kern = HAS_TRACKING ? NAMEPLATE.track/2 : 0;
+      // ⚠️ The hit rectangle grows with the type rather than being a literal 16: it is
+      // what decides when a plate is "covered" by a disc, so a box that stopped matching
+      // the letters would fade the name at the wrong moment.
+      const lh = Math.round(NAMEPLATE.size * 1.25);
+      const lx = psx - tw/2 - 5, ly = psy + by - lh*0.45, lw = tw + 10;
       let blocked = false;
       for (const q of w.players){
         if (q === p) continue;
@@ -29594,14 +29814,24 @@ function drawOneDisc(w, p, x, y, r, s, idx){
         // name plate changes) and gone well before the letters are. A halo exists to make
         // text legible, so it can have nothing to do once the text is on its way out.
         const hA = haloAlpha(a, 2);
+        // ⚠️ Snapped ONCE and reused by all three passes — the halo and the fill have to
+        // land on the same grid or the backing sits half a pixel off its own letters,
+        // which is the fringe this is here to remove.
+        const [sx2, sy2] = snapTextPt(x + kern, y + by);
         ctx.globalAlpha = prevA * hA;
-        ctx.strokeText(label, x, y + by);
-        ctx.strokeText(label, x, y + by);
+        ctx.strokeText(label, sx2, sy2);
+        ctx.strokeText(label, sx2, sy2);
         ctx.globalAlpha = prevA * a;
         ctx.fillStyle = team ? readableInk(team, halo) : (TH.nameText || '#ffffff');
-        ctx.fillText(label, x, y + by);
+        ctx.fillText(label, sx2, sy2);
         ctx.globalAlpha = prevA;
       }
+      // ⚠️ **PUT BACK, AND OUTSIDE THE `LABEL_MIN` BRANCH.** `letterSpacing` is canvas
+      // STATE, so leaving it set leaks a pixel of tracking into every later text draw in
+      // the frame — the floaters, the shirt numbers, the scorebug, the whole lobby board.
+      // Out here it is put back whether or not the plate was faint enough to skip, which
+      // is most of the pitch; inside, the quiet case would leak on every frame.
+      if (HAS_TRACKING) ctx.letterSpacing = '0px';
     }
   }
 }
@@ -30903,7 +31133,7 @@ function updParseVersion(html){
 }
 // ⚠️ Only where there is actually a server to ask. On a `file://` page the fetch cannot even
 // be ATTEMPTED — it throws "URL scheme file is not supported" straight into the console
-// rather than failing quietly — and there is no deploy to discover anyway. The /settings
+// rather than failing quietly — and there is no deploy to discover anyway. The /menu
 // window is excluded too: it is the same document with the game switched off, and two windows
 // both prompting for one update is one prompt too many.
 function updPossible(){ return /^https?:$/.test(location.protocol) && !PANEL; }
@@ -31101,7 +31331,7 @@ async function updApply(){
 function updLater(){ updSeen = updFound; updFound = null; updHide(); }
 // ⚠️ Deferred, on the same reasoning as the update check right below: the pull only
 // refreshes the CACHE that the next launch reads, so there is nothing to wait for and
-// every reason not to make boot wait. Gated on `!PANEL` so the /settings window does not
+// every reason not to make boot wait. Gated on `!PANEL` so the /menu window does not
 // fetch the same sheet a second time — the reason `updPossible()` excludes it too.
 (function wireCloud(){
   const btn = $('cloudCheckBtn');
@@ -31309,6 +31539,7 @@ if (window.__MAGNETDEBUG) {
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,
+    claimSeatName, seatBodyIndex, adoptProfiles, refreshLookUI, get profiles(){ return profiles; },
     pollDropIn, dropInBlocked, dropOut, padSeatOrder, padsTakeSeats, DROPIN,
     MAPMAKER, POST, mapsPossible, mapClean, openMapMaker, buildMapMaker, mapStore, drawMapPreview,
     get maps(){ return maps; }, get mapEdit(){ return mapEdit; }, set mapEdit(v){ mapEdit = v; },
