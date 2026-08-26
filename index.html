@@ -943,8 +943,7 @@
       body.panel-open #hud { padding-left: 372px; }
       /* Centre the play-screen overlays on the PITCH (right of the dock), not the
          whole viewport — goal banner, replay buttons, and the result screen. */
-      body.panel-open #banner,
-      body.panel-open #replayBar { padding-left: 372px; }
+      body.panel-open #banner { padding-left: 372px; }
       body.panel-open #overlay { padding-left: 372px; }
 
       /* Collapse the dock: slide it off-screen and give the pitch the full width. */
@@ -952,7 +951,6 @@
       body.dock-collapsed .screen.docked { transform: translateX(-100%); }
       body.dock-collapsed.panel-open #hud,
       body.dock-collapsed.panel-open #banner,
-      body.dock-collapsed.panel-open #replayBar,
       body.dock-collapsed.panel-open #overlay { padding-left: 0; }
 
       /* A small tab on the dock edge to collapse (‹) / expand (›) it. */
@@ -1000,12 +998,10 @@
     }
     body.deck.panel-open #hud,
     body.deck.panel-open #banner,
-    body.deck.panel-open #replayBar,
     body.deck.panel-open #overlay { padding-left: 372px; }
     body.deck.dock-collapsed .screen.docked { transform: translateX(-100%); }
     body.deck.dock-collapsed.panel-open #hud,
     body.deck.dock-collapsed.panel-open #banner,
-    body.deck.dock-collapsed.panel-open #replayBar,
     body.deck.dock-collapsed.panel-open #overlay { padding-left: 0; }
     /* The ‹ tab is still clickable, but Select is the documented way in/out. */
     body.deck.panel-open #dockToggle {
@@ -1101,11 +1097,6 @@
     #pauseBtn svg.ic, #fsHudBtn svg.ic, #muteBtn svg.ic { width: 20px; height: 20px; }
 
     /* Goal replay / clip-share buttons — appear under the scorebug after a goal */
-    #replayBar {
-      position: fixed; top: 66px; left: 0; right: 0; z-index: 13;
-      display: flex; gap: 10px; justify-content: center; pointer-events: none;
-    }
-    #replayBar.hidden { display: none; }
     /* Replay transport. Same corner language as the replay bar, but full width so the
        three targets are big enough to hit while something is moving on screen. */
     #repCtl {
@@ -1139,12 +1130,6 @@
     #repCtl button:active { transform: translateY(1px); }
     #repCtl .repspd.sel { border-color: var(--accent); color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent) inset; }
-    #replayBar button {
-      pointer-events: auto; background: var(--overlay); border: 1px solid var(--edge);
-      backdrop-filter: blur(6px); color: var(--overlay-ink); font-family: var(--pix);
-      font-size: 12px; padding: 8px 12px; border-radius: 14px; cursor: pointer;
-    }
-    #replayBar button:active { transform: translateY(1px); }
 
     /* Toast / goal banner — glows in its own colour */
     #banner {
@@ -1729,14 +1714,16 @@
          being unavailable while you are still playing it; and the video is the thing you
          send someone, which is an end-of-match errand rather than a mid-match one. It
          lives on the result screen, where there is nothing to interrupt. -->
-    <!-- ⚠️ NO SAVE BUTTON HERE. This bar comes up mid-match, in the seconds between a
-         goal and the kickoff, and saving a file is not something to be offered while
-         there is a match to get back to. Saving lives where there is nothing to
-         interrupt: on the replay TRANSPORT (a replay you sat down to watch) and on the
-         result screen, which has both a goal save and a match save. -->
-    <div id="replayBar" class="hidden">
-      <button id="replayBtn">⟲ Replay</button>
-    </div>
+    <!-- ⚠️ **THERE IS NO MID-MATCH REPLAY BAR, and it was deleted rather than hidden.**
+         A "⟲ Replay" button appeared under the scorebug at the first goal and then sat
+         there for the REST OF THE MATCH — `repOnGoal` showed it and only `repReset` (a
+         new match) ever took it down. So a control for the seconds between a goal and
+         the kickoff was parked over the pitch during open play, which is what it was
+         reported as. The goal still plays itself back (`sel.autoReplay`), auto-record
+         still keeps it, and watching or saving one lives where there is nothing to
+         interrupt: the replay TRANSPORT, the result screen and the Replays card. Hiding
+         it would have left dead markup, dead CSS and a dead handler — the standing rule
+         here is that a control nobody can reach is a control that should not exist. -->
   </div>
 
   <!-- Transport for a replay you chose to watch. ⚠️ OUTSIDE #hud: playback hides the HUD,
@@ -5362,7 +5349,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260826.1015AM';
+const VERSION = '20260826.0330PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5378,6 +5365,13 @@ const VERSION = '20260826.1015AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260826.0330PM', title: 'A tidier pitch, and START into warm-up',
+    changed: [
+      '<b>The Replay button no longer sits under the score during a match.</b> It appeared at the first goal and stayed there for the rest of the game; goals still replay themselves, and watching or saving one lives on the result screen and in Replays.',
+      '<b>Press START on the result screen to go straight to warm-up.</b> You used to have to move the cursor onto the Warm-up option first \u2014 A and KICK still pick whatever is highlighted.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260826.1015AM', title: 'Dress the other players again',
     fixed: 'Assorted fixes and tidying.',
     changed: [
@@ -13878,7 +13872,6 @@ function isDesktop(){
 { const lb=$('lobbyStartBtn'); if (lb) lb.onclick = onLobbyStartPress; }
 { const ib=$('inlinePanelBtn'); if (ib) ib.onclick = () => {
     sel.settingsPanel='inline'; saveSel(); applyPanelMode(); buildSettings(); openLook('theme'); }; }
-$('replayBtn').onclick = () => { if (!replay.active) playReplay(); };
 // ⚠️ Guarded: the button is only on the result screen now, so it does not exist while the
 // replay bar is the only thing on screen. An unguarded `$(id).onclick` here threw during
 // the bootstrap and took the rest of the wiring with it.
@@ -17488,7 +17481,6 @@ function repReset(){
   repBuf = []; lastReplay = null; repPend = -1; repGoalIdx = -1;
   repMatchBuf = []; repMatchEvery = REPMATCH.every; repMatchTick = 0;
   repMatchGoals = []; repMatchSlots = [];
-  const b=$('replayBar'); if(b) b.classList.add('hidden');
 }
 function repCapture(w){
   if (!w || w.drillMode) return;
@@ -17578,7 +17570,6 @@ function repOnGoal(w){
                  roster: w.players.map(repFilePlayer) };
   repMatchGoals.push(repMatchBuf.length - 1);   // ...and mark it on the match record too
   repPend = REP_TAIL_F;
-  const b=$('replayBar'); if(b) b.classList.remove('hidden');
 }
 // One frame part-way between two recorded ones. `k` is a boolean per body and is taken
 // from whichever frame is nearer — a kick is an event, not a quantity.
@@ -22284,11 +22275,30 @@ function pollOverOptions(){
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
   const g = host.ctrl === 'gamepad' ? gps[host.padIndex] : null;
   const left  = pad.dx < -0.55, right = pad.dx > 0.55;
-  const go    = pad.kick || (g && (btn(g, START_BTN) || btn(g, 0)));
+  // ⚠️ **START IS NOT A SECOND CONFIRM BUTTON ANY MORE — it goes straight to warm-up.**
+  // It used to be folded in with A and KICK, so the only way to the room was to walk the
+  // cursor onto it first. START already means "get me playing" everywhere else in the
+  // game — it begins the match from the lobby, and with nothing running it opens warm-up —
+  // so the result screen was the one place it meant something else.
+  // ⚠️ KICK and A still confirm whatever the cursor is on, so nothing that was reachable
+  // stopped being reachable; this only takes a meaning AWAY from START and gives it one
+  // that matches the rest of the game.
+  const go    = pad.kick || !!(g && btn(g, 0));
+  const start = !!(g && btn(g, START_BTN));
   const step = (k, v, fn) => { if (v && !_overPrev[k]) fn(); _overPrev[k] = v; };
   step('l', left,  () => { overNav--; syncOverNav(); playSfx('kick'); });
   step('r', right, () => { overNav++; syncOverNav(); playSfx('kick'); });
-  step('a', !!go,  () => { const b = overButtons()[overNav]; if (b) b.click(); });
+  step('a', go,    () => { const b = overButtons()[overNav]; if (b) b.click(); });
+  // ⚠️ Through the BUTTON's own click, never a second copy of what warm-up means — the
+  // result screen's Warm-up option is `restartToWarmup`, and `syncWarmupOffer` is what
+  // decides whether it is offered at all. ⚠️ And it FALLS BACK to confirming the cursor
+  // where warm-up is not on offer (a phone with no controller, a cup tie, a Gauntlet run
+  // borrowing that button for Menu), or START would be dead on exactly those screens.
+  step('s', start, () => {
+    const ov = $('ovRematch');
+    if (ov && ov.dataset.role === 'warmup' && ov.style.display !== 'none'){ ov.click(); return; }
+    const b = overButtons()[overNav]; if (b) b.click();
+  });
 }
 
 // Full time. The whistle goes and play eases to a standstill over FINAL_SLOW

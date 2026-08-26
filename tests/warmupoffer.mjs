@@ -148,7 +148,84 @@ const DESKTOP = { w:1280, h:900, mobile:false };
   await p.close();
 }
 
+// ============================================================================
+// START ON THE RESULT SCREEN GOES STRAIGHT TO WARM-UP.
+// ============================================================================
+// ⚠️ START used to be folded in with A and KICK as a second CONFIRM button, so the only
+// way into the room from a result screen was to walk the cursor onto the Warm-up option
+// first. START already means "get me playing" everywhere else — it begins the match from
+// the lobby, and with nothing running it opens warm-up — so this screen was the one place
+// it meant something else.
+{
+  const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => {
+    window.__MAGNETDEBUG = true; localStorage.clear();
+    window.__pads = [{ axes:[0,0,0,0], buttons:new Array(17).fill(false) }];
+    navigator.getGamepads = () => window.__pads.map((pd,i) => ({
+      index:i, connected:true, id:'f'+i, mapping:'standard', axes:pd.axes,
+      buttons: pd.buttons.map(v => ({ pressed:!!v, value:v?1:0 })) }));
+  });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const press = (i) => { window.__pads[0].buttons[i] = true;  M.pollOverOptions();
+                           window.__pads[0].buttons[i] = false; M.pollOverOptions(); };
+    const toResult = () => {
+      M.sel.controllers = 'on'; M.sel.lobby = 'off'; M.sel.mode = '2v2';
+      M.startMatch(); M.endMatch(M.world); M.finishMatch(M.world);
+    };
+    toResult();
+    const ov = document.getElementById('ovRematch');
+    o.warmupOffered = !!(ov && ov.dataset.role === 'warmup' && ov.style.display !== 'none');
+    // ⚠️ The cursor is deliberately NOT on the Warm-up option — that is the whole point.
+    o.cursorAt = M.overButtons()[0] && M.overButtons()[0].id;
+    o.cursorIsNotWarmup = o.cursorAt !== 'ovRematch';
+    press(9);                                   // START
+    o.wentToWarmup = M.world && M.world.state === 'warmup';
+
+    // ⚠️ KICK/A must still confirm whatever the cursor is on, or this took a meaning away
+    // without putting one back — every option has to stay reachable.
+    toResult();
+    const btns = M.overButtons();
+    o.buttons = btns.map(x => x.id);
+    let clicked = null;
+    const idx = btns.findIndex(x => x.id === 'ovMenu');
+    if (idx >= 0){
+      const b2 = btns[idx], was = b2.onclick;
+      b2.onclick = () => { clicked = 'ovMenu'; };
+      for (let i = 0; i < idx; i++) press(15);   // walk right with the D-pad
+      press(0);                                 // A confirms
+      b2.onclick = was;
+    }
+    o.aStillConfirms = clicked === 'ovMenu';
+
+    // ⚠️ ...and where warm-up is NOT on offer, START falls back to confirming the cursor,
+    // or it is dead on exactly the screens that borrow that button for Menu / Cup.
+    toResult();
+    const ov2 = document.getElementById('ovRematch');
+    ov2.dataset.role = '';                      // a cup tie / Gauntlet run borrows it
+    let fb = null;
+    const first = M.overButtons()[0];
+    const wasFb = first.onclick; first.onclick = () => { fb = first.id; };
+    press(9);
+    first.onclick = wasFb;
+    o.startFallsBack = fb === first.id;
+    return o;
+  });
+  if (!r.warmupOffered) fails.push('result screen: warm-up was not on offer to begin with');
+  if (!r.cursorIsNotWarmup)
+    fails.push('result screen: the cursor started ON the warm-up option, so the check is vacuous — ' + r.cursorAt);
+  if (!r.wentToWarmup) fails.push('START on the result screen did not go to warm-up');
+  if (!r.aStillConfirms)
+    fails.push('A no longer confirms the selected option (buttons: ' + JSON.stringify(r.buttons) + ')');
+  if (!r.startFallsBack)
+    fails.push('START is dead where warm-up is not offered — it must fall back to confirming the cursor');
+  await p.close();
+}
+
 await b.close();
-if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));
+if (errors.length) fails.push('console/page errors: '  + errors.slice(0, 4).join(' | '));
 if (fails.length){ console.log('FAIL warmupoffer\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS warmupoffer');

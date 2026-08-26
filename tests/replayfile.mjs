@@ -436,12 +436,13 @@ await p.close();
   const ui = await q.evaluate(() => {
     const M = window.__magnet; const o = {};
     const dm = document.getElementById('dmCollect'); if (dm) dm.click();
-    const bar = document.getElementById('replayBar');
-    o.barExists = !!bar;
-    o.barButtons = bar ? [...bar.querySelectorAll('button')].map(b => b.textContent.trim()) : [];
-    o.noClipOnTheBar = !document.querySelector('#replayBar #clipBtn');
-    // ...and the bar still offers the goal save, or removing the clip took the wrong one.
-    o.barSavesTheGoal = !!document.getElementById('repSaveBtn');
+    // ⚠️ **THE MID-MATCH BAR IS GONE ENTIRELY**, which supersedes the two checks that used
+    // to live here ("no Save clip on it", "but it still saves the goal"). It appeared under
+    // the scorebug at the first goal and then stayed for the rest of the match, so what was
+    // meant for the pause between a goal and the kickoff was parked over open play.
+    o.noBar = !document.getElementById('replayBar') && !document.getElementById('replayBtn');
+    // The goal save still exists — on the TRANSPORT, which is where it belongs.
+    o.transportSavesTheGoal = !!document.getElementById('repSaveBtn');
 
     // The result screen, built by the real path.
     M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
@@ -467,11 +468,11 @@ await p.close();
     return o;
   });
 
-  ok('the replay bar exists to test', ui.barExists);
-  ok('SAVE CLIP IS NOT ON THE IN-MATCH REPLAY BAR', ui.noClipOnTheBar,
-     `the bar carries ${JSON.stringify(ui.barButtons)} — recording a clip plays the replay back through MediaRecorder for its whole length, which mid-match is the game being unavailable while you are still playing it`);
-  ok('...but the bar still saves the goal', ui.barSavesTheGoal,
-     `the bar carries ${JSON.stringify(ui.barButtons)} — removing the clip must not take the replay save with it`);
+  ok('THERE IS NO MID-MATCH REPLAY BAR', ui.noBar,
+     'it came up under the scorebug at the first goal and stayed for the rest of the match — ' +
+     'a control for the pause between a goal and the kickoff, parked over open play');
+  ok('...and the goal save is still on the transport', ui.transportSavesTheGoal,
+     'taking the bar away must not take the replay save with it');
   ok('Save clip IS on the result screen', ui.clipAtTheEnd,
      `the result screen carries ${JSON.stringify(ui.resultButtons)} — moving it off the bar is only right if it turns up where there is nothing to interrupt`);
   ok('...next to TWO different replay saves', ui.twoDistinctSaves,

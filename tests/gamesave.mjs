@@ -190,9 +190,11 @@ const btns = await p.evaluate(() => {
   // (No backticks in here: this file builds pages with new Function() + a template
   // literal, and a backtick in a comment closes it early.)
   M.sel.orient = 'v';
-  const bar = document.getElementById('replayBar');
-  o.inMatchButtons = [...bar.querySelectorAll('button')].map(x => x.id);
-  o.noSaveOnTheMatchBar = !o.inMatchButtons.some(id => /save/i.test(id));
+  // ⚠️ THERE IS NO MID-MATCH BAR AT ALL NOW, which is a stronger claim than the one this
+  // used to make ("no save button on it"). It appeared under the scorebug at the first
+  // goal and stayed for the rest of the match, so a control for the seconds between a goal
+  // and the kickoff sat over the pitch during open play.
+  o.noMatchBar = !document.getElementById('replayBar') && !document.getElementById('replayBtn');
   // It IS on the playback transport...
   const ctl = document.getElementById('repCtl');
   o.transportButtons = [...ctl.querySelectorAll('button')].map(x => x.id);
@@ -344,8 +346,8 @@ ok('...down to a LEGIBLE floor, then nothing', labels.snapsAtTheFloor,
    JSON.stringify({ floor: labels.floor, mid: labels.midWay, justUnder: labels.justUnderTheFloor }) +
    ' — everything the draw accepts must be readable, and everything below it exactly zero: a plate too faint to read is a smear that says a name is there without saying which');
 
-ok('the in-match bar offers NO save', btns.noSaveOnTheMatchBar,
-   JSON.stringify(btns.inMatchButtons) + ' — it comes up between a goal and the kickoff, and saving a file is not something to offer while there is a match to get back to');
+ok('there is no mid-match replay bar', btns.noMatchBar,
+   'it appeared under the scorebug at the first goal and stayed for the rest of the match — watching and saving live where there is nothing to interrupt: the transport, the result screen and the Replays card');
 ok('...the playback transport does', btns.saveOnTheTransport, JSON.stringify(btns.transportButtons));
 ok('...and the result screen still has both saves', btns.resultHasBothSaves, JSON.stringify(btns.resultButtons));
 

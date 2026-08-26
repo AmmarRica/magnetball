@@ -4722,6 +4722,35 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   `blob.type`, never off what `repMime()` asked for, or a webm gets handed over called
   `.mp4`; mp4 is first in the candidate list so any browser that can encode one does.
   ⚠️ Clips are named per goal — one fixed filename means each overwrites the last.
+- **THERE IS NO MID-MATCH REPLAY BAR** (`#replayBar`, deleted). A "⟲ Replay" button
+  appeared under the scorebug at the first goal and then **sat there for the rest of the
+  match** — `repOnGoal` showed it and only `repReset` (a new match) ever took it down. So a
+  control meant for the seconds between a goal and the kickoff was parked over the pitch
+  during open play, which is how it was reported.
+  ⚠️ **DELETED, NOT HIDDEN.** Hiding it would have left dead markup, dead CSS and a dead
+  handler, and this file's standing rule is that a control nobody can reach should not
+  exist. The goal still plays itself back (`sel.autoReplay`), auto-record still keeps it,
+  and watching or saving one lives where there is nothing to interrupt: the replay
+  TRANSPORT, the result screen and the Replays card.
+  ⚠️ What is lost is the manual "show me that again" DURING play with auto-replay switched
+  off — which is the setting whose whole point is not being interrupted.
+  `tests/gamesave.mjs` and `tests/replayfile.mjs` both used to assert what was ON the bar;
+  they assert it does not exist now, which is the stronger claim.
+- **START ON THE RESULT SCREEN GOES STRAIGHT TO WARM-UP** (`pollOverOptions`). It used to
+  be folded in with A and KICK as a second CONFIRM button, so the only way into the room
+  from a result screen was to walk the cursor onto the Warm-up option first.
+  ⚠️ **START already means "get me playing" everywhere else** — it begins the match from the
+  lobby, and `pollSeatRotate`'s idle branch opens warm-up with nothing running — so the
+  result screen was the one place it meant something else.
+  ⚠️ **KICK and A still confirm the cursor**, so nothing that was reachable stopped being
+  reachable; this takes a meaning away from START and gives it the one the rest of the game
+  uses. ⚠️ And it **falls back** to confirming the cursor where warm-up is not on offer (a
+  phone with no controller, a cup tie or a Gauntlet run borrowing that button for Menu /
+  Cup), or START would be dead on exactly those screens.
+  ⚠️ Through the BUTTON's own click, never a second copy of what warm-up means —
+  `restartToWarmup` is the action and `syncWarmupOffer` decides whether it is offered.
+  ⚠️ The check has to start with the cursor **somewhere else**, or it passes on the old
+  build too. `tests/warmupoffer.mjs`.
 - **TWO replays, and a clip — three different things** (`repBuf` vs `repMatchBuf` vs
   `saveClip`). The rolling ring holds the last few seconds, which is a **goal**. A second
   un-ringed buffer holds the **match**, kickoff to whistle. The clip is a **video**.
