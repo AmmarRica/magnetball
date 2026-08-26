@@ -21511,6 +21511,18 @@ function pollLobbyStart(w){
       anyHeld = arcadeMode() ? (pressed || arcadeFireHeld(p.padIndex))
                              : !!(g && padAnyHeld(g));
       key = 'pad' + p.padIndex;
+      // ⚠️ **NOT WHILE YOU ARE STANDING ON THE BOARD.** The lobby keyboard is a control
+      // SURFACE — KICK there means "press this key", and the `+`/`−` squares REPEAT at
+      // `LOBBYKB.repeat` (0.20s) specifically so a held button walks a 1v1 up to 11v11.
+      // Counting that toward the kickoff makes a deliberate hold on one control fire a
+      // different one: at the cap, where nothing more happens, leaning on `+` would kick
+      // off. `tests/lobbykb.mjs` caught exactly that — its stepper block holds KICK for
+      // 300 steps and the match started underneath it, leaving `w.lobby` null and the
+      // suite throwing rather than reporting anything.
+      // ⚠️ START still counts up there, so the board's own START pad and a real Start
+      // button both work from anywhere; only the widened set stands down. Walk off the
+      // board and any button holds again.
+      if (w.kb && kbKeyAt(w.kb, p.x, p.y)) anyHeld = pressed;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
       // ⚠️ A keyboard seat is NOT widened: every keyboard has an Enter, so there is no

@@ -200,6 +200,37 @@ const any = await p.evaluate(() => {
   };
   o.tapKickStarts  = tap(0);
   o.tapStartStarts = tap(9);
+
+  // ⚠️ **NOT WHILE STANDING ON THE BOARD.** The lobby keyboard is a control SURFACE — KICK
+  // there means "press this key" — and the `+`/`−` squares REPEAT while held, on purpose,
+  // so a held button walks a 1v1 up to 11v11. Counting that toward the kickoff makes a
+  // deliberate hold on one control fire a different one. `tests/lobbykb.mjs` found this the
+  // hard way: its stepper block holds KICK for 300 steps and the match started underneath
+  // it, so `w.lobby` was null and the suite threw rather than reporting anything.
+  // ⚠️ START must still count from up there, or the board's own START pad stops working
+  // for anyone holding rather than tapping.
+  const onKey = i => {
+    M.setMatchSeed(7); M.startMatch({ lobby: true });
+    const w = M.world;
+    // ⚠️ A NON-HOST seat, for the same reason the block at the top uses one: the HOST's
+    // START tap starts the match on frame one, so there is no hold left to measure and
+    // `startHold` reads 0 on a perfectly good build. That false negative was seen.
+    const humans = w.players.filter(x => x.ctrl !== 'bot');
+    const host = M.lobbyHost(w);
+    const me = humans.find(x => x !== host) || host;
+    const k = w.kb.keys.find(x => x.act === 1) || w.kb.keys.find(x => x.ch);
+    clear(); M.step(w); M.step(w);
+    window.__pads[me.padIndex].buttons[i] = { pressed: true, value: 1 };
+    for (let n = 0; n < 60; n++){
+      me.x = k.x + k.w / 2; me.y = k.y + k.h / 2; me.vx = 0; me.vy = 0;
+      M.step(w);
+    }
+    const held = +(me.startHold || 0).toFixed(2);
+    clear();
+    return held;
+  };
+  o.onKeyKick  = onKey(0);
+  o.onKeyStart = onKey(9);
   return o;
 });
 
@@ -247,6 +278,13 @@ ok('...while a TAP of a kick button still does nothing', !any.tapKickStarts,
    'bug where A was bound to both jobs and did the wrong one');
 ok('...and a tap of START still starts it', any.tapStartStarts,
    'taking a meaning away without leaving the old one is not a fix');
+ok('a kick button does NOT hold while you are standing on the board', any.onKeyKick === 0,
+   'startHold reached ' + any.onKeyKick + ' — the +/- squares repeat while KICK is held so a ' +
+   '1v1 can be walked up to 11v11, and counting that toward the kickoff makes a deliberate ' +
+   'hold on one control fire a different one');
+ok('...while START still does', any.onKeyStart > 0.5,
+   'startHold reached ' + any.onKeyStart + ' — the board has its own START pad, and standing ' +
+   'on the keyboard must not disarm a real Start button');
 
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 console.log(JSON.stringify({ any }, null, 1));

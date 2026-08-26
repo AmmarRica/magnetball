@@ -3730,6 +3730,21 @@ three lines a second time, name it.
   a goal is a *different, legitimate* way to start the match — so button 15 read
   "HOLD-STARTS" on the fixed build **and** on the sabotaged one with the hold back on START
   only. A probe watching the state cannot tell the two mechanisms apart.
+  ⚠️ **AND IT STANDS DOWN WHILE YOU ARE STANDING ON THE BOARD.** The lobby keyboard is a
+  control SURFACE — KICK there means *press this key* — and the `+`/`−` squares REPEAT at
+  `LOBBYKB.repeat` **on purpose**, so a held button walks a 1v1 up to 11v11. Counting that
+  toward the kickoff makes a deliberate hold on one control fire a different one: at the
+  cap, where nothing more happens, leaning on `+` would kick off. START still counts up
+  there, so the board's own START pad and a real Start button both work from anywhere —
+  only the widened set stands down.
+  ⚠️ **`tests/lobbykb.mjs` FOUND THIS, and not as an assertion**: its stepper block holds
+  KICK for 300 steps, the match started underneath it, and the suite threw on
+  `w.lobby` being null. A crash rather than a finding — but the crash is what a suite that
+  drives the real path buys you, and no check written for the new feature would have looked
+  at the stepper.
+  ⚠️ **The check for it needs a NON-HOST seat**, and the host version reads a FALSE
+  NEGATIVE: a host's START *tap* starts the match on frame one, so there is no hold left to
+  measure and `startHold` reads 0 on a perfectly good build.
   ⚠️ **`w.lobby.ready` IS WRITTEN AND READ BY NOTHING** — found while measuring this, not
   fixed here. So a non-host's tap toggles a Set nobody consults and nothing draws: the
   `kickTeam` shape, still open.
