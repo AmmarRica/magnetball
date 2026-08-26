@@ -4235,6 +4235,31 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
   single choice is furniture, and it would be the first thing on the card for the people who
   least need it. The count comes from the live match if there is one, otherwise from the
   pads that are plugged in.
+  ⚠️ **`seatCount` COUNTS SEATS, NOT BODIES, and counting bodies was wrong in BOTH
+  directions.** A seat is a PERSON. Duo hands one player every body on their side
+  (`mode.duo` sets `ctrl = 'human1'` on all of them), so a duo match offered **two** profiles
+  for one human; and the pad branch added a keyboard seat on top of the pads, so two
+  controllers offered **three** and four offered **five**. Both are dead controls — a look
+  you can set for somebody who is not there. The keyboard MERGES into the first pad seat
+  (`mergePads`), so it only adds a seat of its own when there are no pad seats at all, and
+  whether pads take seats is `padsTakeSeats()`, never the raw connected count.
+  ⚠️ **THE MODE HAS TO BE ASKED TOO.** Two thumbs on one phone is `mode.twoP` — two seats and
+  not a controller in sight — and before the first kickoff there is no world to count.
+  ⚠️ **AND THE PICKER IS RE-ASKED WHEREVER THE COUNT CAN MOVE, which for a long time it was
+  not.** `buildSettings` builds it at boot and on an option tap, and `seatCount()` reads the
+  LIVE match — so on a machine with no controller the count only became 2 the moment a
+  two-player match started, which is *after* the card was last built. Reported as *"I did not
+  see options to customise the rest of the players despite being able to play as them"*, and
+  it stayed hidden for exactly the people it exists for. Rebuilt from `startMatch` (where the
+  seats are dealt), from `toMenu` and from `updatePadInfo` now — a handful of DOM nodes,
+  against `buildSettings`' 24ms. **With pads it happened to work**, because a connected pad
+  is countable before anybody kicks off, which is why this survived so long.
+  ⚠️ **THE PICKER EXISTING IS NOT THE SAME AS IT WORKING**, so `tests/seatprofiles.mjs` ends
+  by dressing seat two and checking that body wears it AND that seat one does not — a build
+  that writes every seat at once passes every visibility check. ⚠️ It checks the FACEPLATE
+  and the NAME, never the colour: team colour is one shade a side and `applyTeamColours` wins
+  over the profile wherever it applies, so a colour probe measures that rule instead of this
+  feature and reads as seat one changing when nothing about seat one did.
   ⚠️ **`syncProfileToWorld` counts HUMANS in roster order**, and a bot sitting between two
   people must not consume a slot or plugging a third pad in re-dresses everybody.
   `seatNameList()` still indexes by PLAYER index — that is what the Player names box has
@@ -5127,11 +5152,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 128 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 129 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **127 green + proladder red**, and `proladder` going green means the
+green run is therefore **128 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

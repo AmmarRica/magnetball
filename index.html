@@ -5362,7 +5362,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260825.0705PM';
+const VERSION = '20260826.1015AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5378,6 +5378,13 @@ const VERSION = '20260825.0705PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260826.1015AM', title: 'Dress the other players again',
+    fixed: 'Assorted fixes and tidying.',
+    changed: [
+      '<b>The player picker now appears whenever more than one of you is playing.</b> On a device with no controller it stayed hidden \u2014 so you could play as player two and had no way to give them a name, a face or a hat.',
+      '<b>...and it offers exactly as many players as there really are.</b> Two controllers used to offer three, and Duo offered two for one person steering both.',
+    ],
+  },
   { v: '20260825.0705PM', title: 'The warm-up room fills the screen',
     changed: [
       '<b>Warm-up is far bigger on a wide screen.</b> The shirts, the flags and the bot-skill row now sit in the space either side of the pitch instead of stacked above it, so the court and the keyboard get the room. On a typical desktop the pitch is half again as large and the keys are nearly twice the size.',
@@ -8718,14 +8725,43 @@ function saveProfile(){
 // control offering a single choice is furniture, and it would be the first thing on the
 // card for the people who least need it. The count comes from the live match if there is
 // one, otherwise from the pads that are plugged in, so it is what you can actually see.
+// ⚠️ **SEATS, NOT BODIES — and it counted bodies, which is wrong in both directions.**
+// A seat is a PERSON. Duo hands one player every body on their side (`mode.duo` sets
+// `ctrl = 'human1'` on all of them), so a 2-body duo offered TWO profiles for one human;
+// and the pad branch added a keyboard seat on top of the pads, so two controllers offered
+// three profiles. Both are dead controls: a look you can set for somebody who is not there.
+// ⚠️ **THE KEYBOARD MERGES INTO THE FIRST PAD SEAT** (`mergePads`, `firstHumanSeat`) — that
+// is the whole of "the keyboard and the first controller drive one player" — so it only
+// adds a seat of its own when there are NO pad seats at all. And whether pads take seats is
+// `padsTakeSeats()`, never the raw connected count: with `sel.controllers` off they drive
+// nobody.
+// ⚠️ **THE MODE HAS TO BE ASKED TOO, or the answer is only right once a match exists.**
+// Two thumbs on one phone is `mode.twoP` — two seats and not a controller in sight — and
+// before the first kickoff there is no world to count. That was the reported bug: you can
+// play as them, and the card offered no way to dress them.
 function seatCount(){
   const w = (typeof world !== 'undefined') ? world : null;
-  let n = 0;
-  if (w && w.players && !w.demo)
-    for (const p of w.players) if (p.ctrl === 'human1' || p.ctrl === 'human2' || p.ctrl === 'gamepad') n++;
-  if (typeof connectedGamepadIndices === 'function')
-    try { n = Math.max(n, connectedGamepadIndices().length + (keyboardDrivesGame() ? 1 : 0)); } catch(e){}
-  return Math.max(1, Math.min(PROFILES.max, n));
+  let live = 0;
+  if (w && w.players && !w.demo){
+    const pads = new Set();
+    let k1 = false, k2 = false;
+    for (const p of w.players){
+      if (p.ctrl === 'human1') k1 = true;
+      else if (p.ctrl === 'human2') k2 = true;
+      else if (p.ctrl === 'gamepad') pads.add(p.padIndex);
+    }
+    live = (k1 ? 1 : 0) + (k2 ? 1 : 0) + pads.size;
+  }
+  // ...and what the CURRENT settings would field, which is the answer before a first match.
+  let want = 0;
+  try {
+    const gp = (typeof padsTakeSeats === 'function' && padsTakeSeats() &&
+                typeof connectedGamepadIndices === 'function')
+      ? connectedGamepadIndices().length : 0;
+    want = gp > 0 ? gp : 1;                       // the keyboard/touch seat, or seat one
+    if ((MODES[sel.mode] || {}).twoP) want = Math.max(want, 2);
+  } catch(e){}
+  return Math.max(1, Math.min(PROFILES.max, Math.max(live, want)));
 }
 function seatLabel(i){ return i === 0 ? 'Player 1 (you)' : 'Player ' + (i + 1); }
 function setEditSeat(n){
@@ -8733,6 +8769,13 @@ function setEditSeat(n){
   uiState._seat = editSeat; saveUI(uiState);
   buildSettings();
 }
+// ⚠️ **RE-ASKED WHEREVER THE COUNT CAN MOVE, and for a long time it was built ONCE.**
+// `buildSettings` runs it at boot and on an option tap, and `seatCount()` reads the LIVE
+// match — so on a machine with no controller the count only becomes 2 the moment a
+// two-player match starts, which is after the card was last built. The picker therefore
+// stayed hidden for exactly the people it exists for: you could play as them and the card
+// offered no way to dress them. It is rebuilt from `startMatch`, from `toMenu` and from
+// `updatePadInfo` as well now — a handful of DOM nodes, against `buildSettings`' 24ms.
 function buildSeatPick(){
   const host = $('seatPick'), wrap = $('seatPickWrap');
   if (!host || !wrap) return;
@@ -12573,6 +12616,10 @@ function updatePadInfo(){
     !(sel.controllers==='on' && !(MODES[sel.mode]||{}).twoP && !(MODES[sel.mode]||{}).train));
   // A pad arriving or leaving changes whether warming up has anything to do.
   syncWarmupOffer();
+  // ...and how many people there are to dress. ⚠️ The seat picker is DERIVED from
+  // `seatCount()`, so it has to be re-asked wherever that answer can move — see
+  // `buildSeatPick`'s own note.
+  buildSeatPick();
   syncMapMakerRow();          // desktop-only, and the window can change under us
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
@@ -16780,6 +16827,10 @@ function startMatch(opts){
     }
   }
   running = true; paused = false;
+  // ⚠️ The seats are DEALT here, so this is where the profile picker's count becomes
+  // definite — on a machine with no controller it is the only place it can. Skipped for
+  // the attract demo, which has no people in it. See `buildSeatPick`.
+  if (!_startQuiet) buildSeatPick();
   resize();
   updateScoreUI();
   updateClock(world);   // show the starting time immediately (don't inherit a prior match's "OT")
@@ -30534,6 +30585,7 @@ function showResult(title, sub){
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
   setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
+  setTimeout(buildSeatPick, 0);  // the seat count changes with the match — see buildSeatPick
   // ⚠️ FIRST, before anything here can take the world away from a replay that is still
   // drawing it. Leaving mid-celebration is ordinary, and the tick that survives it reads
   // `world.field` off null, throws inside its own rAF, and strands `replay.active` true for
