@@ -1287,15 +1287,25 @@ three lines a second time, name it.
   ramp; that is the difference, and it needs no constant tuned to a particular red.
   ⚠️ ...and the shading is checked as the CONTROL: a lit counter has a real light-to-dark
   spread, so "one side is darker" is true of both and the alternation is the claim.
-  ⚠️ `DYN_FIELDS.tacticsboard` adds only what the game's pitch is MISSING — penalty areas,
-  six-yard boxes, penalty spots and the D. It does **not** fill: `drawPitch` owns the
-  surface, and a fill here would cover the goal boxes already drawn under it.
-  ⚠️ **Every number is a fraction of the field**, never a pixel from the reference drawing:
-  the courts run from Futsal to Leviathan and differ threefold in width. The proportions
-  are a real pitch's (penalty area 40% of the width by 16.5/105 of the length).
-  ⚠️ The **D is computed, not eyeballed** — the arc between the two angles where a circle
-  of the penalty radius crosses the box edge, so it stays a D on a court of any size, and
-  is skipped entirely when the radius cannot reach the edge.
+  ⚠️ **THERE IS NO `DYN_FIELDS.tacticsboard` ANY MORE.** It drew the markings a real pitch
+  has and this one never did — penalty areas, six-yard boxes, penalty spots and the D,
+  every number a fraction of the field so it held from Futsal to Leviathan. Deleted on
+  request: *"remove the goal lines that I have as decoration, they are not needed"*.
+  ⚠️ **THEY WERE DECORATION IN THE LITERAL SENSE — nothing in the game reads them.** There
+  is no offside, no penalty and no six-yard restart; the one rule that does use a region
+  near the goal (`applyGoalBox`) reads the NET POCKET's mirror off `w.bounds`, never these.
+  So what they added was four more white rectangles at the two ends of a pitch that already
+  draws a goal box there, in the part of the court where the play is busiest.
+  ⚠️ **DELETED, NOT LEFT UNLISTED** — the `tennis` call again — and the bundle drops its
+  `field` and falls to `none` through `bundleSlots`. ⚠️ **A save that names it is FOLDED**
+  (`normalizeLook`): `dynField()` returns null for a key it does not have, so nothing
+  breaks, but the Field slot would come up with NO tile selected, which reads to a player
+  as their theme being reset. A key that disappears gets a fold, every time.
+  ⚠️ What the theme still IS: the palette and `DISC_SKINS.counter`. That is the same shape
+  `tennis` has — a palette and a look, with `drawPitch` owning the surface. The suite's
+  three markings probes are INVERTED rather than deleted (the same ground must now read as
+  plain court) and paired with the touchline still being inked, or "nothing is painted
+  there" is equally true of a build that draws no pitch at all.
   ⚠️ **The ball is `BALL_LOOKS.classic`, which already IS the panelled football** the board
   wants — one black pentagon in the middle and five round the rim. Adding a second copy is
   the mistake the withdrawn `seam` look made against `BALL_LOOKS.tennis`: check the
@@ -1392,8 +1402,8 @@ three lines a second time, name it.
   ⚠️ `tests/dyntheme.mjs` **could not catch any of this** because it stepped these two fields
   as `f.step(stB, 1.0)` — **passing a `dt` the real caller never passes**. It tested the
   painter's arithmetic against a call the game does not make.
-  `ledge` (shown as **Mirror Ledge**) = a white rooftop hung over a drop, with the way on
-  painted in red: concrete slabs, red pipe runs down the touchlines, a red chevron aimed
+  `ledge` (shown as **Mirror Ledge**) = a TEAL rooftop hung over a BLUE drop, with the way
+  on painted in red: panel seams, red pipe runs down the touchlines, a red chevron aimed
   into each goal, and a night city with its lights a long way down.
   ⚠️ **THE NAME IS OURS TO CHANGE; THE LOOK IT TAKES AFTER IS NOT OURS AT ALL.** The
   palette arrived as a swatch and it is the signature of a real first-person parkour game
@@ -1411,19 +1421,40 @@ three lines a second time, name it.
   ⚠️ **GREEN WAS ASKED TO BE IGNORED**, so the swatch's two greens are gone and the UI's
   `green` slot borrows the cyan — a palette still has to answer for every ink it is asked
   for, which is what Warp does with white.
-  ⚠️ **TEN COLOURS, TEN JOBS, ONE EACH** — the `tennis` argument. Court is the concrete
-  (`#ededeb`), surround the drop (`#060c1c`), markings indigo (`#1a1f7b`), the teams the
-  hot red (`#ff1701`) and the sky blue (`#2eaef7`), and the BALL the yellow (`#ffd800`)
-  because it is the one colour nothing else claims. The DARK red (`#940306`) is a second
-  red on purpose: the painter's marks and the goal pocket.
+  ⚠️ **TWO FLOOR TONES — A TEAL COURT IN A BLUE SURROUND — AND IT SHIPPED WHITE FIRST.**
+  White concrete is the reference's own colour and is exactly why it had to go: it leaves
+  the markings nowhere to be (they were INDIGO, the only ink dark enough to read on it)
+  and it made the surround do all the work. Teal takes the ink and gives the WHITE
+  markings back, which is what was asked for. ⚠️ The teal is the swatch's `#1ddcf6` taken
+  down to about half: at full strength it is luminance 0.62, which puts white markings on
+  it at **1.6:1** — under half the 4.5 this file holds every label to. At `#0e7a8c` they
+  read 4.9:1. ⚠️ The surround is the swatch's blue `#1a1f7b`, and the BALL is the yellow
+  `#ffd800` because it is the one colour nothing else claims — the `tennis` argument, and
+  it survives the recolour unchanged.
+  ⚠️ **THE PLAYERS ARE THE STANDARD BODIES**, asked for. A block-vs-pipe disc skin shipped
+  here for one build and is DELETED rather than left in the registry — the `tennis` call,
+  since a withdrawn entry is still a tile in the Players picker offering exactly the thing
+  that was rejected. Nothing is lost that a plain body does not already do: it carries the
+  team colour AND the shirt number, which is how every unskinned palette (Grass, Neon,
+  Flat, Paper, Tennis) tells the sides apart. **The silhouette rule binds a skin that
+  EXISTS; it does not require one.**
   ⚠️ **THE RED ON THE ROOF IS ALL LINEWORK, AND THE FILLED VERSION WAS BUILT FIRST AND
   CUT.** A solid wedge into each end came out as a pale pink triangle a third of the half
-  deep — too weak to read (a dark red at 0.30 over white concrete composites to a pink,
-  not to a red) and too BLOB-like to be safe, because a filled red shape on a roof where
-  team 0 IS a filled red shape is the decoy this theme has to avoid; turning the alpha up
-  would only have made it a better decoy. Thin strokes cannot be mistaken for a body at
-  any strength, so the red gets to be a real red: a chevron is 2px of ink and a player is
-  thirty across. Measured on the RENDERED peak — roof 79 against the team's 232.
+  deep — too weak to read and too BLOB-like to be safe. Thin strokes cannot be mistaken
+  for a body at any strength: a chevron is 2px of ink and a player is thirty across.
+  ⚠️ **AND THE GUARD ON IT WAS REPLACED WHEN ITS PREMISE WENT, NOT TUNED TO KEEP PASSING.**
+  On the white build the marks had to be the DARK red `#940306` at 0.30, checked as a
+  rendered peak far below the team's — because the court was white and team 0 was a filled
+  `#ff1701` block. Both halves of that are now false (teal court, standard bodies), and a
+  dark red over teal composites to a dull maroon that reads as dirt. So the ink is the hot
+  `#ff1701` at 0.60 and `tests/dyntheme.mjs` measures the property that actually makes a
+  mark safe: **THICKNESS**. The widest red run must stay far under the chevron's own span
+  — 6px against 32 — which a stroke satisfies and a fill cannot (the filled build measures
+  32 against 32). Derived from `LEDGE.markW`, so no constant is tuned to a colour or a
+  canvas size. ⚠️ A BODY's diameter was tried as the yardstick first and is the wrong one
+  at probe scale: `rw` has a `max(1.5, …)` floor and antialiasing adds a pixel either
+  side, so in a small test box the line is proportionally far fatter than it renders in a
+  match — 0.55 of a body against a real ratio of about 0.25.
   ⚠️ **THE CHEVRON'S TIP IS THE END NEARER THE GOAL, and the first build had it
   backwards** — both pointed into the middle of the pitch, which is the one direction a
   way-on mark is not about. Nothing but a screenshot catches that: the shape, the size,
@@ -1432,19 +1463,6 @@ three lines a second time, name it.
   same construction Faceoff Orbit uses. ⚠️ Nothing decorative reaches the middle — the
   chevrons sit where the goal boxes already are and the pipe runs hug the touchlines (the
   Pontions and Prixels rule).
-  ⚠️ **THE SIDES ARE A SOLID BLOCK AGAINST A HOLLOW PIPE, and the difference is what is
-  in the MIDDLE** — an axis no other skin in this file uses. Hot red against sky blue is
-  what protanopia flattens toward the same dark (the Retrowave trap), and both shapes are
-  round-ish, so hue cannot carry the sides: a rooftop unit is filled to its centre and a
-  pipe end-on is a ring with the concrete showing through. `tests/dyntheme.mjs` measures
-  **two probes in opposite directions** — at 0.25r the block is inked and the pipe is
-  court (358 against 0), and at 0.80r along the AXES the pipe is inked and the block is
-  court (248 against 0), because a square of half-side 0.64r does not reach that far
-  except on its diagonals. Neither reading alone can be satisfied by one shape pretending
-  to be both. ⚠️ The square is INSCRIBED including its own stroke — a corner sits at
-  0.905r and the outline adds 0.07r, landing at 0.975r — because a square drawn to `r`
-  puts its corners at 1.41r, which is the VideoSoccer arrowhead. ⚠️ No rotation: neither
-  shape has a front, so it deliberately does not go through `discFace`.
   ⚠️ **The drop `bleed`s and the roof is punched out of its clip** with the field's own
   path (`pooltable.path`, borrowed not copied), so it follows a rounded or chamfered court
   for free. Both halves run before `drawPitch` lays the markings down, so nothing here can
@@ -1455,8 +1473,6 @@ three lines a second time, name it.
   adding to it — the withdrawn `seam` ball look was a duplicate of `tennis` nobody noticed
   for a whole build. ⚠️ **No `pitch`**: a rooftop is a treatment that works on any
   rectangle.
-  ⚠️ `TH.shadow` is held to 0.12. On a court this light the usual 0.20 renders as a grey
-  disc a body wide behind every player — the loudest thing on the roof after the discs.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It

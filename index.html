@@ -5361,7 +5361,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260827.0910PM';
+const VERSION = '20260828.0135AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5377,11 +5377,10 @@ const VERSION = '20260827.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260827.0910PM', title: 'A new theme: Mirror Ledge',
+  { v: '20260828.0135AM', title: 'A new theme: Mirror Ledge',
     changed: [
-      '<b>Mirror Ledge.</b> A white rooftop hung over a drop, with the way on painted in red \u2014 concrete slabs, red pipe runs down the touchlines, a chevron aimed into each goal, and a night city with its lights a long way below.',
-      '<b>The two sides are a solid block against a hollow pipe</b>, so you can tell them apart by shape as well as colour \u2014 which matters most for anyone who finds red and blue hard to separate.',
-      '<b>The ball is the one yellow thing on the pitch</b>, so it never gets lost against either team or the concrete.',
+      '<b>Mirror Ledge.</b> A teal rooftop hung over a blue drop, with the way on painted in red \u2014 panel seams, pipe runs down the touchlines, a chevron aimed into each goal, and a night city with its lights a long way below. White markings, and the ball is the one yellow thing on the pitch so it never gets lost.',
+      '<b>Tactics Board has lost its painted penalty boxes.</b> The penalty areas, six-yard boxes, spots and the D were decoration \u2014 nothing in the game uses them \u2014 and they doubled up with the box already drawn in front of each goal. The green pitch and the magnet counters are unchanged.',
     ],
     fixed: 'Assorted fixes and tidying.',
   },
@@ -6680,29 +6679,42 @@ const THEMES = {
       bg:'#060c1c', panel:'rgba(46,174,247,0.09)', edge:'#1a1f7b', text:'#ededeb', muted:'#8fa6c6',
       red:'#ff1701', blue:'#2eaef7', cyan:'#1ddcf6', magenta:'#940306', green:'#1ddcf6',
       yellow:'#ffd800', accent:'#1ddcf6', go:'#2eaef7', field:'#ededeb', onAccent:'#060c1c' },
+    // ⚠️ **TWO FLOOR TONES — a TEAL court in a BLUE surround**, asked for in those words.
+    // It shipped for one build as a WHITE roof, which is the reference's own colour and
+    // is exactly why it had to go: white concrete leaves the markings nowhere to be
+    // (they were indigo, the only ink dark enough to read on it) and it made the surround
+    // do all the work. Teal takes the ink and gives the white markings back.
     // ⚠️ FLAT (`stripeA === stripeB`). Mown stripes are a grass thing and this is a
-    // concrete roof; the panel seams the surface does have are the painter's job, drawn
-    // in `dynAlt` at a fraction of a marking's strength.
-    pitch: { glow:false, fieldBg:'#060c1c', court:'#ededeb', stripeA:'#ededeb', stripeB:'#ededeb',
-      netPocket:'rgba(148,3,6,0.26)', line:'#1a1f7b', centerDot:'#1a1f7b',
-      netMesh:'rgba(26,31,123,0.42)', post:'#1a1f7b', teamRed:'#ff1701', teamBlue:'#2eaef7',
-      discRim:'#000000', kickRing:'#000000', kickText:'#ededeb', cbRing:'#000000',
+    // rooftop; the panel seams the surface does have are the painter's job, drawn in
+    // `dynAlt` at a fraction of a marking's strength.
+    // ⚠️ The teal is `#1ddcf6` taken down to about half: the swatch's own colour at full
+    // strength is luminance 0.62, which puts WHITE markings on it at **1.6:1** — under
+    // half the 4.5 this file holds every label to. At `#0e7a8c` they read 4.9:1.
+    pitch: { glow:false, fieldBg:'#1a1f7b', court:'#0e7a8c', stripeA:'#0e7a8c', stripeB:'#0e7a8c',
+      // ⚠️ The pocket is DARK, not the dark red it was on the white build: the net sits on
+      // the SURROUND, and a red wash over a blue surround composites to purple.
+      netPocket:'rgba(6,12,28,0.38)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.42)', post:'#ffffff', teamRed:'#ff1701', teamBlue:'#2eaef7',
+      discRim:'#000000', kickRing:'#ffffff', kickText:'#060c1c', cbRing:'#ffffff',
       eyeWhite:'#ffffff', eyePupil:'#060c1c', nameBg:'#060c1c', nameText:'#ededeb',
-      // ⚠️ HELD BACK to 0.12. `drawOneDisc` lays this straight down under every body, and
-      // on a court this light a 0.20 navy renders as a grey disc a body wide sitting
-      // behind each player — measured as the loudest thing on the roof after the discs
-      // themselves. A shadow on white concrete is a hint, not a second body.
-      shadow:'rgba(6,12,28,0.12)', ballRim:'#000000', ball:'#ffd800', ballSpot:'#060c1c',
+      shadow:'rgba(6,12,28,0.20)', ballRim:'#000000', ball:'#ffd800', ballSpot:'#060c1c',
       trailRGB:'255,216,0',
       obstacle:'#940306', good:'#2eaef7', warn:'#ffd800', dim:'#5d6b8c', cone:'#ff1701',
-      // The HUD sits on the DROP, which is nearly black, so it goes light — the same
+      // The HUD sits on the DROP, which is a deep blue, so it goes light — the same
       // exception Bambamzone, Warp and Tennis make for the same reason. The scorebug over
-      // the white court is not this: `--overlay-*` is derived from `TH.court`.
+      // the court is not this: `--overlay-*` is derived from `TH.court`.
       hudText:'#ededeb', hudSub:'#9db3d0', accent:'#1ddcf6', padRing:'rgba(29,220,246,0.55)',
-      dynMark:'#940306',        // the red way on, painted on the roof
-      dynAlt:'#1a1f7b',         // the panel seams under it
+      // ⚠️ **THE HOT RED, not the dark one, now the court is teal.** On the white build
+      // the marks had to be `#940306` or they were a field of decoys for a team drawn in
+      // `#ff1701`; teal changes both halves of that. A dark red over teal composites to a
+      // dull maroon that reads as dirt rather than as guidance, and the sides are the
+      // STANDARD bodies now, so nothing on the pitch is a filled `#ff1701` disc. The marks
+      // are still thin strokes at `markA`, which is what keeps them un-mistakable for a
+      // body whatever the ink — see the note on `LEDGE`.
+      dynMark:'#ff1701',        // the red way on, painted on the roof
+      dynAlt:'#060c1c',         // the panel seams under it
       dynEdge:'#1ddcf6',        // the city, a long way down
-      dynGlow:'#16225a' },      // ...and the haze it throws up
+      dynGlow:'#2eaef7' },      // ...and the haze it throws up
   },
   // Limoncello (#f3e65a) field, black lines, WHITE everywhere else, dithered — and
   // Klein Wave (#315dce) as the second team, both taken from a supplied swatch.
@@ -7947,7 +7959,10 @@ const THEME_BUNDLES = {
   // wants is ALREADY in the registry — one black pentagon in the middle and five round
   // the rim — and adding a second copy of it is the mistake the withdrawn `seam` look
   // made against `BALL_LOOKS.tennis`. Check the registry before adding to it.
-  tactics:   { field:'tacticsboard', discs:'counter',   ball:'classic', sfx:'classic' },
+  // ⚠️ **NO `field`** — see the note where `DYN_FIELDS.tacticsboard` used to be. The
+  // painted penalty boxes were decoration nothing in the game reads, and they doubled up
+  // with the goal box `drawPitch` already draws at each end.
+  tactics:   { discs:'counter',   ball:'classic', sfx:'classic' },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
@@ -7963,7 +7978,14 @@ const THEME_BUNDLES = {
   // ⚠️ **NO `pitch`.** A rooftop is a TREATMENT that works on any rectangle, so it does
   // not reach into the Match card and pick your court. Faceoff Orbit is the one bundle
   // that does, because it is a picture OF a particular court.
-  ledge:     { field:'rooftop',   discs:'ledge',       ball:'plain',   sfx:'classic', trail:'comet' },
+  // ⚠️ **`discs: 'none'` — STANDARD PLAYERS, asked for, and the block-vs-pipe skin that
+  // shipped here for one build is DELETED rather than left in the registry.** That is the
+  // `tennis` call: a withdrawn piece left unlisted is still a tile in the Players picker
+  // offering exactly the thing that was rejected. Nothing is lost that the standard disc
+  // does not already do — a plain body carries the team colour AND the shirt number, which
+  // is how every unskinned palette (Grass, Neon, Flat, Paper, Tennis) tells the sides
+  // apart. The silhouette rule binds a skin that EXISTS; it does not require one.
+  ledge:     { field:'rooftop',   discs:'none',        ball:'plain',   sfx:'classic', trail:'comet' },
 };
 function bundleKeys(){ return Object.keys(THEMES); }
 // Names and emoji live in THEMES and are read from there, never copied.
@@ -8046,6 +8068,15 @@ function normalizeLook(){
   if (L.field === 'blastzone') L.field = 'bambamzone';
   if (L.discs === 'smash') L.discs = 'bambam';
   if (L.palette === 'gba') L.palette = 'gameman';
+  // Two registry entries were withdrawn rather than renamed, so these fold to `none`
+  // rather than to a replacement: the tactics board's painted penalty boxes (decoration
+  // nothing in the game read) and Mirror Ledge's block-vs-pipe discs (that theme uses the
+  // standard bodies now). A vanished key leaves its slot with NO tile selected, which
+  // reads to a player as their theme having been reset — hence a fold, not a shrug.
+  // ⚠️ Pure string swaps with no registry lookup, for the reason the seabed fold below
+  // records: this runs during the bootstrap and those tables are declared far past it.
+  if (L.field === 'tacticsboard') L.field = 'none';
+  if (L.discs === 'ledge') L.discs = 'none';
   // The seabed skin was one entry that drew shrimp vs crab, then shrimp vs lobster.
   // It is three creatures and three pairings now, so an old save naming the vanished
   // key gets the theme's current pairing instead of no skin at all.
@@ -27645,61 +27676,27 @@ DYN_FIELDS.bambamzone = {
   },
 };
 // ============================================================
-//  THE TACTICS BOARD — the markings a real pitch has and this one never drew
+//  THERE IS NO TACTICS-BOARD PAINTER ANY MORE
 // ============================================================
-// The game's own pitch is a rectangle, a halfway line and a centre circle. A board has
-// the rest of them: penalty boxes, six-yard boxes, penalty spots and the D. This painter
-// adds only what is missing, over whatever `drawPitch` has already laid down.
-// ⚠️ **EVERY NUMBER IS A FRACTION OF THE FIELD**, never a pixel from the reference
-// drawing. The courts here run from Futsal to Leviathan and differ threefold in width, so
-// a box measured in pixels is a box that swallows a small pitch and is a postage stamp on
-// a big one. The proportions are a real pitch's: the penalty area is 40% of the width and
-// 16.5/105 of the length, the six-yard box 18.3/68 by 5.5/105.
-// ⚠️ **The D IS CLIPPED to outside the penalty area**, which is what makes it a D rather
-// than a circle — drawn as the arc between the two angles where a circle of the penalty
-// radius crosses the box edge, computed rather than eyeballed, so it stays a D on a court
-// of any shape.
-// ⚠️ It does NOT bleed and does NOT repaint the court: `drawPitch` owns the surface, and
-// a second fill here would cover the goal boxes it has already drawn. Marks only.
-// ⚠️ Falls back through `TH.dynMark || TH.line` like every other painter — slots mix, so
-// this can be asked for over any palette, and on a dark court white markings are still
-// what it wants.
-DYN_FIELDS.tacticsboard = {
-  name: 'Tactics board',
-  paint(c, st, L, T, W, H){
-    const ink = TH.dynMark || TH.line || '#ffffff';
-    const lw = Math.max(1, Math.min(W, H) * 0.006);
-    c.save();
-    c.strokeStyle = ink; c.fillStyle = ink; c.lineWidth = lw;
-    // The pitch runs goal-to-goal down H, so the boxes hang off the two ends.
-    const boxW = W * 0.40, boxD = H * (16.5/105);          // penalty area
-    const sixW = W * (18.3/68), sixD = H * (5.5/105);      // six-yard box
-    const spot = H * (11/105);                             // penalty spot from the line
-    const pr = W * (9.15/68);                              // penalty arc radius
-    const cx = L + W/2;
-    for (const end of [0, 1]){
-      const y0 = end ? T + H : T;                          // the goal line
-      const dir = end ? -1 : 1;                            // ...and into the pitch
-      c.strokeRect(cx - boxW/2, Math.min(y0, y0 + dir*boxD), boxW, boxD);
-      c.strokeRect(cx - sixW/2, Math.min(y0, y0 + dir*sixD), sixW, sixD);
-      const sy = y0 + dir*spot;
-      c.beginPath(); c.arc(cx, sy, Math.max(1.2, lw*1.4), 0, 2*Math.PI); c.fill();
-      // ⚠️ The D: the part of the penalty circle that is OUTSIDE the box. `boxD - spot`
-      // is how far the box edge is from the spot, so the half-angle is its arccos — and
-      // when the radius cannot reach the edge at all there is no D to draw.
-      const reach = (boxD - spot) / pr;
-      if (Math.abs(reach) < 1){
-        const half = Math.acos(Math.max(-1, Math.min(1, reach)));
-        const mid = end ? -Math.PI/2 : Math.PI/2;           // pointing into the pitch
-        c.beginPath(); c.arc(cx, sy, pr, mid - half, mid + half); c.stroke();
-      }
-    }
-    // The centre spot, which the game marks in `centerDot` — restated here at full
-    // strength because on a board it is a mark like any other.
-    c.beginPath(); c.arc(cx, T + H/2, Math.max(1.2, lw*1.4), 0, 2*Math.PI); c.fill();
-    c.restore();
-  },
-};
+// `DYN_FIELDS.tacticsboard` drew the markings a real pitch has and this one never did —
+// penalty areas, six-yard boxes, penalty spots and the D, every number a fraction of the
+// field so it held from Futsal to Leviathan. It is DELETED, asked for: *"remove the goal
+// lines that I have as decoration, they are not needed"*.
+// ⚠️ **THEY WERE DECORATION IN THE LITERAL SENSE — nothing in the game reads them.** There
+// is no offside, no penalty, no six-yard restart; the one rule that does use a region near
+// the goal (`applyGoalBox`) reads the NET POCKET's mirror from `w.bounds`, never these.
+// So what they added was four more white rectangles at the two ends of a pitch that
+// already draws a goal box there, in the part of the court where the play is busiest.
+// ⚠️ **DELETED, NOT LEFT UNLISTED.** That is the `tennis` call: a withdrawn registry entry
+// is still a tile in the Field picker offering exactly the thing that was rejected. The
+// bundle drops its `field` and falls to `none` through `bundleSlots`.
+// ⚠️ **AND A SAVE THAT NAMES IT IS FOLDED** (`normalizeLook`). `dynField()` returns null
+// for a key it does not have, so nothing breaks — but the Field slot would show no tile
+// selected at all, which reads as *"my theme was reset"*. The standing rule: a key that
+// disappears gets a fold, every time.
+// ⚠️ What the theme still IS: the palette (flat green, white markings at full strength)
+// and `DISC_SKINS.counter`, the magnet counters. That is the same shape `tennis` has —
+// a palette and a look, with `drawPitch` owning the surface.
 // A pool table: baize, cushions and pockets. Not animated — a dynamic theme is one
 // that OWNS its field, and some of those fields simply hold still. `step` is optional.
 DYN_FIELDS.pooltable = {
@@ -28387,11 +28384,13 @@ const LEDGE = {
   runIn: 0.085,    // the red pipe run, inset from each touchline (fraction of the WIDTH)
   markL: 0.085,    // the guidance chevron at each end, as a fraction of the LENGTH
   markW: 0.20,     // ...and of the width
-  markA: 0.55,     // how hard the red linework is drawn — see the decoy note above
-  sq: 0.64,        // the block's half-side. See DISC_SKINS.ledge: a square drawn to r
-                   // puts its CORNERS at 1.41r, which is the VideoSoccer arrowhead again.
-  pipeIn: 0.55,    // the pipe's inner radius...
-  pipeOut: 0.92,   // ...and its outer, both as fractions of r
+  // ⚠️ 0.60. On the white build this was 0.30 and the constraint was the DECOY risk — a
+  // filled red shape on a roof where team 0 was a filled `#ff1701` block. Both halves of
+  // that are gone (teal court, standard bodies), and what is left is legibility: under
+  // about 0.5 a red over teal composites to a dusty brick that reads as dirt rather than
+  // as guidance. What keeps the marks un-mistakable for a body is that they are STROKES —
+  // 2px across against a body's thirty — which is what `tests/dyntheme.mjs` measures now.
+  markA: 0.60,     // how hard the red linework is drawn — see the thickness note above
 };
 DYN_FIELDS.rooftop = {
   name: 'Rooftop',
@@ -28432,7 +28431,10 @@ DYN_FIELDS.rooftop = {
     // does not turn the horizon.
     const g = c.createLinearGradient(0, T - H*M*LEDGE.hazeH, 0, T);
     g.addColorStop(0, rgba(haze, 0));
-    g.addColorStop(1, rgba(haze, 0.9));
+    // ⚠️ 0.35, not 0.9. The haze ink is now a bright sky blue rather than a dark navy, so
+    // the strength that read as depth against the old surround reads as a painted BAND
+    // against this one — the glow has to be something the eye finds, not a stripe.
+    g.addColorStop(1, rgba(haze, 0.35));
     c.fillStyle = g;
     c.fillRect(L - W*M, T - H*M, W*(1 + 2*M), H*(1 + 2*M));
     const dx = ((st.t | 0) * LEDGE.drift) % 1;
@@ -29373,54 +29375,6 @@ DISC_SKINS.sleeve = {
     c.drawImage(chalkMask('#000000'), x - r, y - r, 2*r, 2*r);
     c.globalAlpha = a;
     c.restore();
-  },
-};
-// ⚠️ **A SOLID BLOCK AGAINST A HOLLOW PIPE — and the difference is what is in the
-// MIDDLE, which is an axis no other skin in this file uses.** The two teams here are hot
-// red and sky blue, and red-against-blue is what protanopia flattens toward the same
-// dark — the same trap Retrowave records — so hue cannot be allowed to carry the sides on
-// its own. Both are round-ish, so the silhouette has to be something a scan can find:
-// a rooftop unit is filled to its centre and a pipe seen end-on is a ring with the
-// concrete showing through it.
-// ⚠️ **TWO PROBES IN OPPOSITE DIRECTIONS, which is what makes the pair honest.** At 0.25r
-// the block is inked and the pipe is court; at 0.80r along the axes the PIPE is inked and
-// the block is court, because a square of half-side 0.64r does not reach that far except
-// on its diagonals. Neither reading can be satisfied by one shape pretending to be both,
-// and `tests/dyntheme.mjs` measures both.
-// ⚠️ **THE SQUARE IS INSCRIBED, INCLUDING ITS OWN STROKE.** A square drawn to `r` puts
-// its corners at 1.41r — the VideoSoccer arrowhead mistake, where the shape on screen was
-// a third bigger than the shape in the physics. At `sq` 0.64 a corner sits at 0.905r and
-// the outline's half-width adds 0.07r, landing at 0.975r: inside the guide ring, which is
-// the one thing a skin may not cross.
-// ⚠️ **NO ROTATION.** Neither shape has a front — a pipe end-on is the same from every
-// angle and a roof unit that spun would read as a loose object rather than part of the
-// building — so this deliberately does not go through `discFace`, exactly as the Ammari
-// mirror pair and Spaceships' level-flying saucer do not.
-// ⚠️ The heavy black outline is the look, and it is `TH.discRim` rather than a literal
-// black: slots mix, and this skin can be worn over a palette whose rim is not black.
-DISC_SKINS.ledge = {
-  name: 'Block vs pipe',
-  paint(c, p, x, y, r, w){
-    const block = p.team === 0;
-    const col = block ? (TH.teamRed || '#ff1701') : (TH.teamBlue || '#2eaef7');
-    const ink = TH.discRim || '#000000';
-    if (block){
-      const h = r * LEDGE.sq;
-      c.fillStyle = col;
-      c.fillRect(x - h, y - h, h*2, h*2);
-      c.lineJoin = 'miter';
-      c.lineWidth = Math.max(1, r * 0.14);
-      c.strokeStyle = ink;
-      c.strokeRect(x - h, y - h, h*2, h*2);
-    } else {
-      const ri = r * LEDGE.pipeIn, ro = r * LEDGE.pipeOut;
-      c.beginPath(); c.arc(x, y, (ri + ro)/2, 0, 2*Math.PI);
-      c.lineWidth = ro - ri; c.strokeStyle = col; c.stroke();
-      // The two black rims, drawn INSIDE the wall so neither can reach the guide ring.
-      c.lineWidth = Math.max(1, r * 0.09); c.strokeStyle = ink;
-      c.beginPath(); c.arc(x, y, ri, 0, 2*Math.PI); c.stroke();
-      c.beginPath(); c.arc(x, y, ro - r*0.045, 0, 2*Math.PI); c.stroke();
-    }
   },
 };
 function seaPair(name, t0, t1){

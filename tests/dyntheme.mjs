@@ -1065,31 +1065,42 @@ const r = await p.evaluate(async ()=>{
     o.tacLeftOfRing = ringAt(0, 1.10, Math.PI) + ringAt(1, 1.10, Math.PI);
     o.tacStaysInsideTheRing = o.tacLeftOfRing < 40;
 
-    // ---- the board's own markings ------------------------------------------
-    // ⚠️ Measured as marks ADDED over a plain court, because `drawPitch` owns the surface
-    // and this painter must not repaint it: a fill here would cover the goal boxes the game
-    // has already drawn. So the check is that ink appears where a penalty box edge, a
-    // penalty spot and the D belong — and nowhere across the middle of an empty half.
+    // ---- the board has NO painted markings any more --------------------------
+    // ⚠️ **`DYN_FIELDS.tacticsboard` IS DELETED and this block checks its ABSENCE**, which
+    // is the feature: the penalty areas, six-yard boxes, penalty spots and the D were
+    // decoration nothing in the game reads (there is no offside and no penalty; the one
+    // rule that uses a region near the goal reads the net pocket's mirror off `w.bounds`),
+    // and they doubled up with the goal box `drawPitch` already draws at each end.
+    // ⚠️ The old block measured ink at a box edge, a penalty spot and the D. Those probes
+    // are INVERTED rather than deleted — the same ground must now come back as plain
+    // court — and they are paired with the touchline still being inked, or "nothing is
+    // painted there" is equally true of a build that draws no pitch at all.
     {
-      const cvM = document.createElement('canvas'); cvM.width = cvM.height = 400;
+      o.boardFieldGone = !M.DYN_FIELDS.tacticsboard;
+      o.boardBundleHasNoField = M.bundleSlots('tactics').field === 'none';
+      // ⚠️ ...and a save that still names it folds to `none`, so the Field slot does not
+      // come up with NO tile selected — which reads to a player as their theme resetting.
+      M.sel.look.field = 'tacticsboard'; M.normalizeLook();
+      o.boardKeyFolds = M.sel.look.field === 'none';
+      M.applyBundle('tactics');
+
+      const N = 400;
+      const cvM = document.createElement('canvas'); cvM.width = cvM.height = N;
       const ccM = cvM.getContext('2d');
-      ccM.fillStyle = '#7f7f7f'; ccM.fillRect(0,0,400,400);
+      ccM.fillStyle = '#7f7f7f'; ccM.fillRect(0,0,N,N);
       const L = 60, T = 40, W = 280, H = 320;
-      M.DYN_FIELDS.tacticsboard.paint(ccM, {}, L, T, W, H, { field: M.FIELDS.classic });
+      const f = M.dynField();
+      o.boardPainterIsNull = f === null;
+      if (f) f.paint(ccM, {}, L, T, W, H, { field: M.FIELDS.classic });
       const inked = (x, y) => { const d = ccM.getImageData(Math.round(x), Math.round(y), 1, 1).data;
                                 return Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127) > 40; };
       const near = (x, y) => inked(x, y) || inked(x, y-1) || inked(x, y+1) || inked(x-1, y) || inked(x+1, y);
       const cx = L + W/2;
-      const boxD = H * (16.5/105), boxW = W * 0.40, spot = H * (11/105), pr = W * (9.15/68);
-      o.markBoxFront = near(cx, T + boxD);
-      o.markBoxSide  = near(cx - boxW/2, T + boxD*0.5);
-      o.markSpot     = near(cx, T + spot);
-      // ⚠️ ...and the D really is a D: ink beyond the box edge on the centre line, which is
-      // the only place a penalty ARC reaches and a penalty BOX never does.
-      o.markArc      = near(cx, T + spot + pr);
-      // Nothing painted across the middle of a half — this adds marks, it does not fill.
-      o.markNotAFill = !near(cx + boxW*0.9, T + H*0.30);
-      o.boardMarksIt = o.markBoxFront && o.markBoxSide && o.markSpot && o.markArc && o.markNotAFill;
+      const boxD = H * (16.5/105), spot = H * (11/105), pr = W * (9.15/68);
+      o.boardNoBoxFront = !near(cx, T + boxD);
+      o.boardNoSpot     = !near(cx, T + spot);
+      o.boardNoArc      = !near(cx, T + spot + pr);
+      o.boardDrawsNothing = o.boardNoBoxFront && o.boardNoSpot && o.boardNoArc;
     }
     // ⚠️ `grass`, not `classic` — there is no `classic` palette and `applyBundle('classic')`
     // is a silent no-op, which is written up at the top of this file.
@@ -1195,51 +1206,16 @@ const r = await p.evaluate(async ()=>{
     M.applyBundle('classic');
   }
 
-  // ---- Mirror Ledge: a block against a pipe, and red that is not a decoy -----
-  // ⚠️ **THE SIDES ARE HOT RED AND SKY BLUE, which protanopia flattens toward the same
-  // dark** — the trap Retrowave records — so the silhouette has to carry them. Both
-  // shapes are round-ish, so the difference is WHAT IS IN THE MIDDLE: a rooftop unit is
-  // filled to its centre and a pipe seen end-on is a ring with the concrete showing
-  // through. Two probes in OPPOSITE directions, which is what makes the pair honest:
-  // neither reading can be satisfied by one shape pretending to be both.
+  // ---- Mirror Ledge: a teal roof over a blue drop, and red that is LINEWORK ----
+  // ⚠️ **THE BLOCK-VS-PIPE DISC SKIN IS GONE and its checks went with it**, rather than
+  // being left to pass against a registry entry that no longer exists. The theme uses the
+  // STANDARD bodies now, asked for — which is how every unskinned palette (Grass, Neon,
+  // Flat, Paper, Tennis) works, and they tell the sides apart by team colour plus the
+  // shirt number. The silhouette rule binds a skin that EXISTS; it does not require one.
   {
     M.applyBundle('ledge');
     o.ledgeName = M.bundleName();
     o.ledgeSlots = JSON.stringify(M.sel.look);
-    const R = 60, CX = 150, CY = 150;
-    const cvL = document.createElement('canvas'); cvL.width = cvL.height = 300;
-    const ccL = cvL.getContext('2d');
-    const drawBody = (team) => {
-      ccL.fillStyle = '#7f7f7f'; ccL.fillRect(0,0,300,300);
-      const q = { team, faceX:1, faceY:0, r:R, name:'x', cap:'none', color:'#46d17a' };
-      M.DISC_SKINS.ledge.paint(ccL, q, CX, CY, R, { players:[q] });
-    };
-    const inkAt = (team, fr, ang) => {
-      drawBody(team);
-      const px = Math.round(CX + Math.cos(ang)*R*fr), py = Math.round(CY + Math.sin(ang)*R*fr);
-      const d = ccL.getImageData(px, py, 1, 1).data;
-      return Math.abs(d[0]-127)+Math.abs(d[1]-127)+Math.abs(d[2]-127);
-    };
-    // Averaged over four angles so a single probe cannot land on a black rim by luck.
-    const band = (team, fr) => [0, Math.PI/2, Math.PI, -Math.PI/2]
-      .reduce((t, a) => t + inkAt(team, fr, a), 0) / 4;
-    o.ledgeBlockMid = Math.round(band(0, 0.25));
-    o.ledgePipeMid  = Math.round(band(1, 0.25));
-    // ⚠️ 1. The MIDDLE. The block is filled through it; the pipe's is the roof.
-    o.ledgeMiddleSplits = o.ledgeBlockMid > 60 && o.ledgePipeMid < 25;
-    o.ledgeBlockOut = Math.round(band(0, 0.80));
-    o.ledgePipeOut  = Math.round(band(1, 0.80));
-    // ⚠️ 2. ...and 0.80r ALONG THE AXES, which reads the other way round: the pipe's wall
-    // is there and the block's half-side is 0.64r, so the square does not reach that far
-    // except on its diagonals. A shape that scored "inked" on both probes would be one
-    // that has quietly stopped being either of these two.
-    o.ledgeRingSplits = o.ledgePipeOut > 60 && o.ledgeBlockOut < 25;
-    // ⚠️ Nothing crosses the guide ring, INCLUDING its own stroke. A square drawn to `r`
-    // puts its corners at 1.41r — the VideoSoccer arrowhead — so this is measured on the
-    // DIAGONAL, where a square reaches furthest, not on the axes where it never could.
-    o.ledgeCorner = Math.round(Math.max(inkAt(0, 1.06, Math.PI/4), inkAt(1, 1.06, Math.PI/4)));
-    o.ledgeInsideTheRing = o.ledgeCorner < 30;
-
     // ---- the roof, and the red on it ---------------------------------------
     {
       const N = 400;
@@ -1273,34 +1249,50 @@ const r = await p.evaluate(async ()=>{
       // because "the roof is mostly clear" is equally true of a painter that drew nothing.
       o.ledgeRoofIsLinework = o.ledgeRoofFrac < 0.25 && o.ledgeRoofFrac > 0.01;
 
-      // ⚠️ **THE RED ON THE ROOF MAY NOT BE A DECOY FOR THE RED TEAM.** Team 0 is a
-      // filled `#ff1701` block; a roof painted in that is a field of decoys, which is
-      // what the Bootleg dot field and the Apologies! lane squares are both written up
-      // for. Measured on the RENDERED peak, never the hex it was asked to draw at — an
-      // alpha over white concrete composites to something else entirely, and the filled
-      // wedge this replaced came out a pale pink at the same nominal colour.
-      let markRed = 0;
-      for (let y = T+2; y < T+H-2; y++) for (let x = L+2; x < L+W-2; x++){
-        const c2 = at(x,y); const red = c2[0] - Math.max(c2[1], c2[2]);
-        if (red > markRed) markRed = red;
+      // ⚠️ **THE RED ON THE ROOF IS LINEWORK, AND THIS CHECK REPLACES A BRIGHTNESS ONE
+      // WHOSE PREMISE HAS GONE.** It used to require the roof's red to be far darker than
+      // the red TEAM, because the court was white and team 0 was a filled `#ff1701` block
+      // — a roof painted in that is a field of decoys, the mistake the Bootleg dots and
+      // the Apologies! lane squares record. Both halves of that premise are now false:
+      // the court is teal and the bodies are the standard discs in the player's own
+      // colours. Keeping the old check and turning the alpha down to satisfy it would be
+      // the "threshold tuned until it passes" move in reverse — a real red on teal needs
+      // 0.6, and a dimmer one reads as dirt.
+      // ⚠️ So what is measured is what ACTUALLY makes a mark un-mistakable for a body:
+      // THICKNESS. Every red run across the roof is a stroke a couple of pixels wide; a
+      // player is `2r` across. Derived from the painter's own line width and the body
+      // radius in the same render, so no constant is tuned to a colour.
+      let maxRun = 0, redPix = 0;
+      const isRed = (x,y) => { const c2 = at(x,y); return c2[0] - Math.max(c2[1], c2[2]) > 30; };
+      for (let y = T+2; y < T+H-2; y += 2){
+        let run = 0;
+        for (let x = L+2; x < L+W-2; x++){
+          if (isRed(x,y)){ run++; redPix++; if (run > maxRun) maxRun = run; }
+          else run = 0;
+        }
       }
-      drawBody(0);
-      const dimg = ccL.getImageData(0,0,300,300).data;
-      let teamRed = 0;
-      for (let i = 0; i < dimg.length; i += 4){
-        const red = dimg[i] - Math.max(dimg[i+1], dimg[i+2]);
-        if (red > teamRed) teamRed = red;
-      }
-      o.ledgeMarkRed = markRed; o.ledgeTeamRed = teamRed;
-      o.ledgeRedIsNotADecoy = teamRed > markRed * 1.8;
-      // ...and the marks are REALLY THERE: "held back" is trivially true of no red at all.
-      o.ledgeRoofHasRed = markRed > 25;
+      o.ledgeMaxRedRun = maxRun;
+      o.ledgeRedPixels = redPix;
+      // ⚠️ **THE BAR IS THE CHEVRON'S OWN SPAN, not a body's diameter — and a body was
+      // tried first and is the WRONG yardstick at probe scale.** `rw` has a `max(1.5, …)`
+      // floor and antialiasing adds a pixel either side, so in a small test box the line
+      // is proportionally far fatter than it renders in a match: the widest run measured
+      // 6px against a 10.9px body (0.55) on a build whose real ratio is about 0.25.
+      // Deriving it from `markW` instead is scale-free and is the actual claim — a STROKE
+      // cannot approach half the span of the shape it outlines, and a FILL exceeds it.
+      // Measured: 6px against a 16px bar here, and 32px on the filled build this replaced.
+      const K = M.LEDGE;
+      const wedge = W * K.markW;
+      o.ledgeWedgePx = +wedge.toFixed(1);
+      o.ledgeRedIsLinework = maxRun > 0 && maxRun < wedge * 0.5;
+      // ...and the marks are REALLY THERE: "thin" is trivially true of no red at all.
+      o.ledgeRoofHasRed = redPix > 300;
 
       // ⚠️ **THE TWO ENDS ARE MIRRORS**, drawn from one `half()` called twice — measured
       // by probing a point on one chevron and its reflection about the halfway line.
       // Paired with a control point that is on NEITHER, or "both are inked" passes on a
       // painter that filled the whole roof.
-      const cx = L + W/2, cy = T + H/2, K = M.LEDGE;
+      const cx = L + W/2, cy = T + H/2;
       const armY = (sign) => cy + sign * (H/2 - H*K.markL*1.25);
       const armX = cx - W*K.markW*0.25;
       const near = (x,y) => changed(x,y) || changed(x+1,y) || changed(x-1,y)
@@ -1581,34 +1573,31 @@ ok(r.tacShadingIsNotStripes,
    `the red counter spans only ${r.tacRedSpread} of luminance, so it is not really being lit — "one side is darker" would then be doing the work the alternation is supposed to do`);
 ok(r.tacStaysInsideTheRing,
    `a counter spills past the guide ring on the lit side (${r.tacLeftOfRing} of ink at 1.10r) — the ring is what collides`);
-ok(r.boardMarksIt,
-   `the board's markings are wrong: ${JSON.stringify({ front:r.markBoxFront, side:r.markBoxSide, spot:r.markSpot, arc:r.markArc, notAFill:r.markNotAFill })}`);
+ok(r.boardFieldGone, 'DYN_FIELDS.tacticsboard still exists — a withdrawn registry entry is still a tile in the Field picker offering exactly the thing that was rejected');
+ok(r.boardBundleHasNoField, `the tactics bundle still names a field (${JSON.stringify(r.boardBundleHasNoField)})`);
+ok(r.boardKeyFolds, 'a save naming the deleted field does not fold to `none` — the Field slot comes up with NO tile selected, which reads to a player as their theme being reset');
+ok(r.boardPainterIsNull, 'dynField() still returns a painter for the tactics theme');
+ok(r.boardDrawsNothing,
+   `the penalty markings are still being painted (box front ${!r.boardNoBoxFront}, spot ${!r.boardNoSpot}, D ${!r.boardNoArc}) — ` +
+   'they were decoration nothing in the game reads, and they doubled up with the goal box drawPitch already draws at each end');
 ok(r.bambamName === 'Bambamzone', `the Bambamzone bundle does not resolve: ${r.bambamName}`);
 ok(r.bambamSidesDiffer, `the KO star and the shield bubble do not differ by SHAPE at 0.62r: star inked ${r.starInk}/32, shield ${r.shieldInk}/32`);
 ok(r.indicatorNotAPlate, `the player indicator is a filled plate behind the mark (star reads ${r.starInk}/32) — it covers every probe angle and defeats the silhouette it was added alongside`);
 
 // ---- Mirror Ledge ---------------------------------------------------------------
 ok(r.ledgeName === 'Mirror Ledge', `the bundle is called "${r.ledgeName}"`);
-ok(r.ledgeSlots === JSON.stringify({palette:'ledge',field:'rooftop',discs:'ledge',ball:'plain',trail:'comet',court:'',surround:''}),
+ok(r.ledgeSlots === JSON.stringify({palette:'ledge',field:'rooftop',discs:'none',ball:'plain',trail:'comet',court:'',surround:''}),
    `Mirror Ledge's slots are ${r.ledgeSlots}`);
-ok(r.ledgeMiddleSplits,
-   `the block and the pipe do not differ in the MIDDLE (block ${r.ledgeBlockMid}, pipe ${r.ledgePipeMid} at 0.25r) — ` +
-   'hot red against sky blue is what protanopia flattens toward the same dark, so the sides are carried by the silhouette');
-ok(r.ledgeRingSplits,
-   `...and they do not differ the other way round at 0.80r on the axes (pipe ${r.ledgePipeOut}, block ${r.ledgeBlockOut}) — ` +
-   'one probe alone is satisfied by a shape that has quietly stopped being either of these two');
-ok(r.ledgeInsideTheRing,
-   `the block's CORNER crosses the guide ring (${r.ledgeCorner} of ink at 1.06r on the diagonal) — a square drawn to r ` +
-   'puts its corners at 1.41r, which is the VideoSoccer arrowhead: the shape on screen bigger than the shape in the physics');
 ok(r.ledgeDropIsAFill,
    `the drop does not cover the surround (${r.ledgeDropFrac} of it painted) — the point of the look is a roof hanging in nothing`);
 ok(r.ledgeRoofIsLinework,
    `the roof is not linework: ${r.ledgeRoofFrac} of the play area is painted on. Over ~0.25 the field is filling the court ` +
    'the game already drew; under 0.01 it is drawing nothing at all and every check above is vacuous');
-ok(r.ledgeRedIsNotADecoy,
-   `the red on the ROOF is as loud as the red TEAM (roof ${r.ledgeMarkRed}, team ${r.ledgeTeamRed}) — a rooftop covered in ` +
-   'the colour team 0 is drawn in is a field of decoys, the mistake the Bootleg dots and the Apologies! lane squares record');
-ok(r.ledgeRoofHasRed, `there is no red on the roof at all (peak ${r.ledgeMarkRed}) — "held back" is trivially true of nothing`);
+ok(r.ledgeRedIsLinework,
+   `the red on the roof is not linework: the widest red run is ${r.ledgeMaxRedRun}px against a chevron ${r.ledgeWedgePx}px ` +
+   'across. What makes a mark un-mistakable for a player is its THICKNESS, not its colour — this replaces a brightness ' +
+   'check whose premise (a white court and a filled red disc skin) no longer holds');
+ok(r.ledgeRoofHasRed, `there is no red on the roof at all (${r.ledgeRedPixels}px) — "thin" is trivially true of nothing`);
 ok(r.ledgeEndsMirror,
    `the two ends are not mirrors (top arm ${r.ledgeTopArm}, bottom ${r.ledgeBotArm}) — the way on has to look the same ` +
    'whichever end you are attacking, which is why one half() is called twice with the sign flipped');
