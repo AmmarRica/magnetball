@@ -1068,6 +1068,25 @@ three lines a second time, name it.
   the button as an ARGUMENT: the pane is still detached from the document when it runs, so a
   `getElementById` there silently does nothing and shipped a Reset that was live with no
   colours to reset. Render only — `tests/courtcolour.mjs` hashes the world over 900 steps.
+- **THE THEME LISTS READ A–Z, BY THE NAME ON THE TILE** (`themeKeys`, read by
+  `bundleKeys()` and by `SLOTS.palette.keys`). Twenty-six themes in declaration order is a
+  list you have to scan rather than look in.
+  ⚠️ **BY NAME, NEVER BY KEY, and the two orders are nothing alike**: `light` is *Paper*,
+  `ufo` is *Abduction*, `board` is *Apologies!*, `sleeve` is *Bootleg*, `chalk` is
+  *Highlighter*, `vector` is *Spaceships*. Sorting keys gives *Ammari, Bambamzone,
+  Apologies!, Highlighter, Attribute Clash…* — a shuffle to the only person who reads it.
+  ⚠️ **ONE OWNER, TWO READERS.** The Bundle row and the Background palette pane were each
+  their own `Object.keys(THEMES)`, which is the duplication rule with the second copy being
+  the one that gets missed — a sabotage that un-sorts only the palette pane is caught
+  separately for exactly that reason.
+  ⚠️ **CUSTOM STAYS LAST** and is not alphabetised: it is derived from your live slots
+  rather than being a theme, so filing it under C would file a state under a name.
+  ⚠️ **ORDER IS PRESENTATION ONLY** — `currentBundle()` walks the list to match live slots
+  and `bundleSlots()` is a lookup by key, so nothing is stored by position and no save
+  refers to an index. ⚠️ The check measures the RENDERED tiles, because `themeKeys()`
+  returning a sorted array proves only that a helper exists; and it **strips the leading
+  emoji** first, or it sorts by the codepoint of the picture and calls a perfectly
+  alphabetical row unsorted (which the first run did). `tests/themeslots.mjs`.
 - **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares six — `palette`
   (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
   (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key), `trail` (a `TRAIL_LOOKS` key)

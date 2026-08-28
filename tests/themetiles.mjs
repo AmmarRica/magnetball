@@ -50,8 +50,16 @@ const r = await p.evaluate(async ()=>{
     rc.fillStyle = col; rc.fillRect(0,0,1,1); return rc.getImageData(0,0,1,1).data; };
   const near = (A, B) => [0,1,2].every(i=>Math.abs(A[i]-B[i]) <= 2);
   const keys = Object.keys(M.THEMES);
-  o.bandsMatchPalette = keys.map((k, ti)=>{
-    const cv = tiles()[ti].querySelector('canvas'), c = cv.getContext('2d');
+  // ⚠️ **ADDRESSED BY KEY, NEVER BY POSITION.** The pickers are ordered A-Z by the name on
+  // the tile, which has nothing to do with declaration order (`light` is "Paper", `ufo` is
+  // "Abduction"), so `keys[i]` against `tiles()[i]` compares one theme's palette with a
+  // different theme's swatch and every band reads wrong. It also has to be right for any
+  // future reordering: a suite that has to be edited whenever the list moves is one nobody
+  // trusts. `dataset.key` is what `buildSlotPicker` stamps on every tile.
+  const tileFor = k => tiles().find(t => t.dataset.key === k);
+  o.everyTileKeyed = keys.every(k => !!tileFor(k));
+  o.bandsMatchPalette = keys.map((k)=>{
+    const cv = tileFor(k).querySelector('canvas'), c = cv.getContext('2d');
     const want = M.themeSwatchColors(M.THEMES[k]);
     const pad = cv.width/64*4, w = cv.width - pad*2, bw = w/want.length, y = Math.round(cv.height/2);
     return want.every((col, i)=>{
@@ -73,17 +81,20 @@ const r = await p.evaluate(async ()=>{
   o.bundlesPainted = bsigs.every(s=>s.ink > 0);
   o.bundlesDistinct = new Set(bsigs.map(s=>s.h)).size === bsigs.length;
   o.customPainted = sig(bundles().find(t=>t.dataset.bundle==='custom').querySelector('canvas')).ink > 0;
-  o.bundleIsNotThePalette = keys.every((k,i)=>bsigs[i].h !== sigs[i].h);
+  // Positional here as well, and for the same reason: match the two rows by KEY.
+  const sigByKey = {}; tiles().forEach(t => { sigByKey[t.dataset.key] = sig(t.querySelector('canvas')); });
+  const bSigByKey = {}; named().forEach(t => { bSigByKey[t.dataset.bundle] = sig(t.querySelector('canvas')); });
+  o.bundleIsNotThePalette = keys.every(k => bSigByKey[k] && sigByKey[k] && bSigByKey[k].h !== sigByKey[k].h);
   o.swatchUsesSixColours = M.themeSwatchColors(M.THEMES.neon).length === 6;
 
   // Picking one still switches the theme (the tiles are controls, not decoration).
   const before = M.sel.look.palette;
   const other = keys.find(k=>k!==before);
-  tiles()[keys.indexOf(other)].click(); await wait(120);
+  tileFor(other).click(); await wait(120);
   o.paletteAloneIsCustom = M.currentBundle() === null;   // one slot moved, not the theme
   o.clickSwitches = M.sel.look.palette === other &&
     getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === M.THEMES[other].ui.bg;
-  o.selectedTileMarked = tiles()[keys.indexOf(other)].classList.contains('sel') &&
+  o.selectedTileMarked = tileFor(other).classList.contains('sel') &&
     tiles().filter(t=>t.classList.contains('sel')).length === 1;
   // ...and the tiles repaint under the new theme without going blank.
   o.stillPaintedAfterSwitch = tiles().every(t=>sig(t.querySelector('canvas')).ink > 0);
@@ -94,7 +105,7 @@ const r = await p.evaluate(async ()=>{
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.oneTilePerTheme && r.everyTileHasCanvas && r.noEmojiSpans && r.everyTileNamed &&
-  r.allPainted && r.allDistinct && r.everyBandRight && r.swatchUsesSixColours &&
+  r.allPainted && r.allDistinct && r.everyTileKeyed && r.everyBandRight && r.swatchUsesSixColours &&
   r.oneBundlePerTheme && r.hasCustomTile && r.customPainted &&
   r.bundlesPainted && r.bundlesDistinct && r.bundleIsNotThePalette &&
   r.paletteAloneIsCustom &&

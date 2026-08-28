@@ -249,7 +249,56 @@ ok(r.legacyKeysGone, 'migration left the legacy keys behind to be read again');
 ok(r.handPickedWhistleKept, 'migration overwrote a hand-picked sound');
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
-console.log(JSON.stringify(r, null, 1));
+// ---- the theme lists read A-Z ------------------------------------------------------
+// ⚠️ **BY THE NAME ON THE TILE, NOT BY THE KEY, and the two orders are nothing alike** —
+// `light` is "Paper", `ufo` is "Abduction", `board` is "Apologies!", `sleeve` is "Bootleg",
+// `vector` is "Spaceships". A build that sorted KEYS would look like a shuffle to the only
+// person who reads this list, and would sail through a check that sorted keys to compare.
+// ⚠️ **MEASURED ON THE RENDERED TILES, not on the helper.** `themeKeys()` returning a
+// sorted array proves a helper exists; what matters is that both pickers ask it, and there
+// are two of them — the Bundle row and the Background palette pane — which is exactly the
+// duplication that put the unsorted expression in two places to begin with.
+// ⚠️ **Custom is EXEMPT and must stay last.** It is derived from your live slots rather
+// than being a theme, so alphabetising it into the middle would file a state under a name.
+const order = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.openLook('theme');
+  // ⚠️ **STRIP THE LEADING EMOJI.** A tile's text is its emoji then its name ("👽
+  // Abduction"), so comparing the raw text sorts by codepoint of the PICTURE and reports a
+  // perfectly alphabetical row as unsorted — which is what the first run of this did. The
+  // game has `EMOJI_LEAD` for the same reason on the same strings.
+  const nameOf = el => {
+    const lab = el.querySelector('span,.lbl,div:last-child');
+    return (lab ? lab.textContent : el.textContent).replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  };
+  const bundle = [...document.querySelectorAll('#themePick .opt')].map(nameOf);
+  const pane = document.querySelector('.subpane[data-pane="palette"]');
+  const palette = pane ? [...pane.querySelectorAll('.opt')].map(nameOf) : [];
+  o.bundle = bundle; o.palette = palette;
+  o.customLast = bundle[bundle.length - 1] === 'Custom';
+  o.themeCount = Object.keys(M.THEMES).length;
+  // the declaration order, so the check can say it is NOT just reading the table back
+  o.declFirst = M.THEMES[Object.keys(M.THEMES)[0]].name;
+  return o;
+});
+const az = a => a.every((v, i) => i === 0 ||
+  a[i-1].localeCompare(v, undefined, { sensitivity: 'base' }) <= 0);
+const bundleThemes = order.bundle.slice(0, -1);      // drop the trailing Custom
+ok(order.themeCount >= 10 && bundleThemes.length === order.themeCount,
+   `the bundle row does not list every theme: ${bundleThemes.length} tiles for ${order.themeCount} themes`);
+ok(order.palette.length === order.themeCount,
+   `the Background pane does not list every theme: ${order.palette.length} for ${order.themeCount}`);
+ok(az(bundleThemes),
+   'the BUNDLE row is not A-Z: ' + bundleThemes.join(' | '));
+ok(az(order.palette),
+   'the BACKGROUND palette pane is not A-Z — both pickers have to ask the same owner, and this is the one that was a second copy of the expression: ' + order.palette.join(' | '));
+ok(order.customLast,
+   `Custom is not last in the bundle row (${order.bundle[order.bundle.length-1]}) — it is derived from your live slots rather than a theme, so it does not get alphabetised into the middle`);
+ok(bundleThemes[0] !== order.declFirst || order.themeCount === 1,
+   `the row still leads with the first entry in THEMES ("${order.declFirst}"), so nothing was actually sorted`);
+
+
+console.log(JSON.stringify({ r, order }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\nthemeslots OK');

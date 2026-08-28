@@ -5386,7 +5386,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0245PM';
+const VERSION = '20260828.0330PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5402,6 +5402,13 @@ const VERSION = '20260828.0245PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0330PM', title: 'Themes are listed A to Z',
+    changed: [
+      '<b>The theme list is in alphabetical order.</b> Both of them \u2014 the row of whole themes and the background palettes underneath it \u2014 so a theme you are looking for is where you would look for it rather than wherever it happened to be added.',
+      '<b>Custom stays at the end of the row.</b> It is whatever mix you have built rather than a theme with a name, so it keeps its place instead of being filed under C.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0245PM', title: 'A new theme: Sketchbook',
     changed: [
       '<b>Sketchbook.</b> A hand-drawn dungeon floor on a sheet of paper \u2014 the pitch tiled with a scribbled grass tile, and the players are the little inked counters that come with it. A red ball, so it is the one thing on the sheet you cannot lose.',
@@ -8059,7 +8066,7 @@ function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
 // By index, not on the player — see labelA above for why.
 const SLOTS = {
   palette: { label:'Background', emoji:'🎨', hint:'Page and pitch colours. Pick a palette, then set the pitch and the surround to any colour you like — the markings, the mow and the scorebug all follow.',
-             keys:()=>Object.keys(THEMES), name:k=>THEMES[k].name,
+             keys:()=>themeKeys(), name:k=>THEMES[k].name,
              get:()=>sel.look.palette, set:k=>{ sel.look.palette = k; applyTheme(k); },
              // ⚠️ An `extra` hook rather than an `if (slot === 'palette')` in the pane
              // loop: the loop stays one generic builder and the slot that wants a control
@@ -8165,7 +8172,21 @@ const THEME_BUNDLES = {
   // no mixer. ⚠️ **No `pitch`**: an attribute screen is a treatment for any rectangle.
   clash:     { field:'attribs',   discs:'none',        ball:'plain',   sfx:'space' },
 };
-function bundleKeys(){ return Object.keys(THEMES); }
+// ⚠️ **ALPHABETICAL BY THE NAME ON THE TILE, never by the key.** The two orders are
+// nothing alike — `light` is "Paper", `ufo` is "Abduction", `board` is "Apologies!",
+// `sleeve` is "Bootleg", `chalk` is "Highlighter", `vector` is "Spaceships" — so sorting
+// keys would look like a shuffle to the only person who reads this list.
+// ⚠️ **ONE OWNER, TWO READERS.** The Bundle row and the Background palette picker were
+// both `Object.keys(THEMES)` written out separately, which is exactly the duplication this
+// file's own rule warns about: the second copy is the one that gets missed. Both ask here.
+// ⚠️ **ORDER IS PRESENTATION ONLY.** `currentBundle()` walks this list to match the live
+// slots and `bundleSlots()` is a lookup by key, so neither cares what order it comes in;
+// nothing is stored by position and no save refers to an index.
+function themeKeys(){
+  return Object.keys(THEMES).sort((a, b) =>
+    String(THEMES[a].name).localeCompare(String(THEMES[b].name), undefined, { sensitivity: 'base' }));
+}
+function bundleKeys(){ return themeKeys(); }
 // Names and emoji live in THEMES and are read from there, never copied.
 // ⚠️ **SLOTS ONLY — `pitch` is deliberately NOT in here.** The pitch is something a bundle
 // DOES, never part of what a bundle IS: `currentBundle()` matches the live slots against
@@ -32346,7 +32367,7 @@ if (window.__MAGNETDEBUG) {
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER,
-    SCRIB, scribCell, scribChar, scribGrass,
+    SCRIB, scribCell, scribChar, scribGrass, themeKeys,
     pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
