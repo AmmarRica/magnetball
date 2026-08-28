@@ -358,6 +358,16 @@ three lines a second time, name it.
   ⚠️ **THREE SECONDS, not `holdStart`'s five, and they are different kinds of decision**:
   forcing the kickoff commits four other people to a match, where going to warm-up is a way
   OUT and is undone by one press of START.
+  ⚠️ **THE RING'S RADIUS IS DERIVED FROM THE REACH, NOT TUNED AGAINST IT.** It was a flat
+  3.4 body radii and was reported as too large — 58px of ring around a 17px player. The
+  clearance it bought is real, though, and 2.9 had already been measured as too close: the
+  stroke has a 2px FLOOR, so on the huge courts (a body at 2.5px) a fixed multiple of `r` is
+  a stroke 0.8 radii thick and the ring's inner edge lands on the reach circle. Both claims
+  are now one expression — sit at 2.3 radii, or outside the kick ring by a stroke, whichever
+  is further — which is a third smaller on a normal body and clears by construction at every
+  zoom and every value of the dial. ⚠️ **The INNER edge is what has to clear, not the centre
+  line**, and getting that wrong by half a stroke read 11 inked angles at the reach radius;
+  and 2.15 was still only 0.53px of margin, which a 2px stroke's own antialiasing crosses.
   ⚠️ **ONE PAINTER FOR BOTH RINGS** (`drawHoldRing`), because they are the same gesture
   wearing two clocks and never appear together. `padHoldFrac` takes whichever is running, so
   the corner icon carries this one too — that row is the only readout for somebody looking
@@ -3860,13 +3870,16 @@ three lines a second time, name it.
   a goal is a *different, legitimate* way to start the match — so button 15 read
   "HOLD-STARTS" on the fixed build **and** on the sabotaged one with the hold back on START
   only. A probe watching the state cannot tell the two mechanisms apart.
-  ⚠️ **AND IT STANDS DOWN WHILE YOU ARE STANDING ON THE BOARD.** The lobby keyboard is a
-  control SURFACE — KICK there means *press this key* — and the `+`/`−` squares REPEAT at
-  `LOBBYKB.repeat` **on purpose**, so a held button walks a 1v1 up to 11v11. Counting that
-  toward the kickoff makes a deliberate hold on one control fire a different one: at the
-  cap, where nothing more happens, leaning on `+` would kick off. START still counts up
-  there, so the board's own START pad and a real Start button both work from anywhere —
-  only the widened set stands down.
+  ⚠️ **AND IT STANDS DOWN ON A KEY THAT REPEATS — "the whole board" was too broad and was
+  reported straight back.** The `+`/`−` squares REPEAT at `LOBBYKB.repeat` on purpose, so a
+  held button walks a 1v1 up to 11v11; counting that toward the kickoff makes a deliberate
+  hold on one control fire a different one, and at the size cap — where nothing more happens
+  — leaning on `+` would kick off. The first fix stood the hold down on EVERY key, and the
+  report came back as *"hold start to start a match sometimes does not work"*. Measured: on
+  grass a kick button starts the match, on a LETTER it did nothing, and which of those you
+  are standing on is invisible. A letter does not repeat — it latches on the button, types
+  once, and the hold is free — so only `act` keys stand down. START counts everywhere
+  regardless, so the board's own START pad and a real Start button work wherever you are.
   ⚠️ **`tests/lobbykb.mjs` FOUND THIS, and not as an assertion**: its stepper block holds
   KICK for 300 steps, the match started underneath it, and the suite threw on
   `w.lobby` being null. A crash rather than a finding — but the crash is what a suite that
@@ -3930,6 +3943,37 @@ three lines a second time, name it.
   player who came in here by holding START on the menu is still holding it, no edge ever
   fires, and the one button the lobby exists to get you past does nothing until they let
   go and press again.
+- **A PAD MISSING FROM ONE POLL IS NOT AN UNPLUGGED PAD** (`PAD_GRACE`, `_padSeen`,
+  `padForget`, `padForgetAll`). `navigator.getGamepads()` is a snapshot, and a browser
+  re-enumerating — a focus change, a Bluetooth blip, Steam Input reconnecting — can hand
+  back a slot of nulls for a frame with the controller still in somebody's hands.
+  Everything downstream believed it instantly: measured, **ONE dropped poll took the
+  controller row in the corner from 2 icons to 0**, which is what *"the icons at bottom
+  right hide sometimes"* is. The same list decides seats, drop-in and the warm-up lobby, so
+  the same blip is a body benched and handed back with an "unplugged"/"back" toast pair.
+  ⚠️ **WALL-CLOCK, not steps** — it is about how often the BROWSER polls, not how fast the
+  sim runs, and `connectedGamepadIndices` is called from a draw as well as from `step()`.
+  ⚠️ It can only ever DELAY a disconnect, never invent a pad: a slot is remembered only
+  after it has been seen, and `gamepadPad` already returns a neutral pad for an empty slot,
+  so a body inside the window simply stops moving.
+  ⚠️ **A REAL disconnect skips the window**, because the browser says so outright — and the
+  handler **sweeps every remembered slot** rather than trusting `e.gamepad`, which a
+  synthetic event does not carry at all.
+  ⚠️ **`padForgetAll` exists only for a harness that swaps `navigator.getGamepads` out from
+  under the game**, which no browser does. Without it a slot remembered by one test block
+  survives into the next for 400ms — `tests/dropin.mjs` compares two runs of the same match
+  and one of them saw a ghost pad, so its "the machinery disturbs nothing" hash differed.
+  ⚠️ **THE FIXTURES HAD TO LEARN TO FIRE `gamepaddisconnected`**, which a real browser
+  always does. Three suites unplugged a pad by writing `null` into its slot and checking
+  immediately; that is now indistinguishable from a poll glitch, and it is the fixture that
+  was unfaithful. They count LIVE entries rather than array length (a null leaves the length
+  alone) and set the counter BEFORE dispatching, or the game's own sweep re-enters the stub
+  and recurses for ever.
+  ⚠️ `PAD_GRACE` and `_padSeen` are both **`var`, with the map lazily initialised inside the
+  function — the TWENTY-FIRST temporal-dead-zone bite in this file, and it took the page out
+  on boot.** `connectedGamepadIndices` is a hoisted declaration the bootstrap calls, so a
+  `const` here is in the dead zone; and `var` hoists the DECLARATION and not the initialiser,
+  so `_padSeen` was `undefined` on that early call and `_padSeen[i] = now` threw.
 - **A PAD DOES NOT ALWAYS COME BACK ON THE INDEX IT LEFT** (`padReclaim`, `padIdOf`,
   `p._padId`). `_padWas` is what hands somebody their own body back after a cable is kicked
   out, and it matched on the INDEX alone — but unplug pad 0 while pad 1 is still connected,

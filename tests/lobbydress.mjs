@@ -254,13 +254,21 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
       }
     const off = kb.keys.filter(k => { const q = M.screenPt(M.wx(k.x + k.w/2), M.wy(k.y + k.h/2));
       return q[0] < 0 || q[1] < 0 || q[0] > innerWidth || q[1] > innerHeight; }).length;
+    const perBoard = M.LOBBYKB.rows.reduce((n, r2) => n + r2.length, 0) + 2;   // letters + DEL + SPACE
     return { counts, overlaps, off, camS: +M.cam.s.toFixed(3),
+             boards: kb.keys.some(k => k.far) ? 2 : 1, perBoard,
              listLen: M.LOBBY_FLAGS.length, colsLen: M.TEAM_COLS.length };
   });
   console.log(name, JSON.stringify(r));
   ok(`${name}: every family of pads is there`,
      r.counts.col === r.colsLen * 2 && r.counts.flag === r.listLen * 2 &&
-     r.counts.diff === 7 && r.counts.start === 1 && r.counts.letter >= 28,
+     // ⚠️ **THE LETTER BLOCK IS MIRRORED BEHIND BOTH GOALS IN THE FLAT LAYOUT**, so the
+     // letters and the START pad come in ONE or TWO boards depending on orientation — and
+     // the count is derived from `LOBBYKB.rows`, never a literal, so retuning the keyboard
+     // cannot make this need editing. The stepper and the difficulty row stay single: they
+     // are match-wide controls rather than part of the board.
+     r.counts.diff === 7 && (r.counts.start === r.boards) &&
+     r.counts.letter === r.perBoard * r.boards,
      JSON.stringify(r.counts));
   ok(`${name}: no two families overlap`, r.overlaps === 0, String(r.overlaps));
   ok(`${name}: every pad is on screen`, r.off === 0, String(r.off));

@@ -64,6 +64,8 @@ const r = await p.evaluate(() => {
   // reach and drawing all work off one thing.
   const lets = w.kb.keys.filter(k => k.ch);
   o.keyCount = lets.length;
+  o.perBoard = M.LOBBYKB.rows.reduce((n, r2) => n + r2.length, 0) + 2;
+  o.boardsHere = lets.some(k => k.far) ? 2 : 1;
   o.letters = lets.map(k => k.ch).join('');
   o.swatches = w.kb.keys.filter(k => k.colTeam !== undefined).length;
   o.diffPads = w.kb.keys.filter(k => k.diff).length;
@@ -535,8 +537,12 @@ await rp.close();
 
 // -------------------------------------------------------------------- report --
 ok('the warm-up lobby has a keyboard', r.state === 'warmup' && r.hasKb, JSON.stringify({ state: r.state, kb: r.hasKb }));
-ok('...with a key per letter, plus DEL and SPACE', r.keyCount === 28,
-   `${r.keyCount} keys: ${r.letters}`);
+// ⚠️ **ONE BOARD PER GOAL when the pitch is upright**, so the letter count is a whole
+// number of boards — derived from `LOBBYKB.rows`, never a literal, or this needs editing
+// every time the keyboard is retuned.
+ok('...with a key per letter, plus DEL and SPACE',
+   r.keyCount === r.perBoard * r.boardsHere && r.boardsHere >= 1,
+   `${r.keyCount} keys across ${r.boardsHere} board(s): ${r.letters}`);
 ok('...the two stepper squares', r.steppers === 2, String(r.steppers));
 ok('...a colour swatch per colour PER SIDE', r.swatches === 16, String(r.swatches));
 ok('...and a difficulty pad per tier', r.diffPads === 7, String(r.diffPads));
@@ -690,12 +696,25 @@ const clearOf = async (vp) => {
     M.render();
     const P = (x,y) => M.screenPt(M.wx(x), M.wy(y));
     const bb = w.bounds;
-    const pitchBot = Math.max(...[[-bb.halfW,-bb.halfL],[bb.halfW,-bb.halfL],
-                                  [-bb.halfW,bb.halfL],[bb.halfW,bb.halfL]].map(c=>P(c[0],c[1])[1]));
-    const cor = [];
-    for (const k of w.kb.keys) if (k.ch)
-      for (const [dx,dy] of [[-1,-1],[1,-1],[-1,1],[1,1]]) cor.push(P(k.x+dx*k.w/2, k.y+dy*k.h/2));
-    const topKey = Math.min(...cor.map(c=>c[1]));
+    const ys = [[-bb.halfW,-bb.halfL],[bb.halfW,-bb.halfL],
+                [-bb.halfW,bb.halfL],[bb.halfW,bb.halfL]].map(c=>P(c[0],c[1])[1]);
+    const pitchBot = Math.max(...ys), pitchTop = Math.min(...ys);
+    // ⚠️ **PER BOARD.** The letter block is mirrored behind BOTH goals in the flat layout,
+    // so the topmost key on the screen belongs to the FAR board, which sits above the pitch
+    // — taking the global minimum reported a −352px "gap" on a perfectly good build. Each
+    // board is measured against the pitch edge it is actually behind, and the check takes
+    // the WORSE of the two, so neither can crowd the court.
+    const cornersOf = ks => { const c = [];
+      for (const k of ks) for (const [dx,dy] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+        c.push(P(k.x+dx*k.w/2, k.y+dy*k.h/2));
+      return c; };
+    const letters = w.kb.keys.filter(k => k.ch);
+    const nearC = cornersOf(letters.filter(k => !k.far));
+    const farC  = cornersOf(letters.filter(k => k.far));
+    const gaps = [Math.min(...nearC.map(c=>c[1])) - pitchBot];
+    if (farC.length) gaps.push(pitchTop - Math.max(...farC.map(c=>c[1])));
+    const topKey = pitchBot + Math.min(...gaps);   // the worse of the two, as a gap
+    const boards = farC.length ? 2 : 1;
     // ⚠️ Every `fillText` for one frame, patched on the PROTOTYPE so the board's own
     // offscreen context is covered too — the key letters are baked there, not onto `#game`.
     // ⚠️ **THE CONTROL IS THE `BOT SKILL` READOUT, not the key letters**, and that is not a
@@ -709,8 +728,9 @@ const clearOf = async (vp) => {
     const realFill = proto.fillText;
     proto.fillText = function(t){ drawn.push(String(t)); return realFill.apply(this, arguments); };
     try { M.render(); } finally { proto.fillText = realFill; }
-    return { turned: M.pitchHorizontal(), gap:+(topKey-pitchBot).toFixed(1),
-             keys: cor.length/4,
+    return { turned: M.pitchHorizontal(), gap:+(topKey-pitchBot).toFixed(1), boards,
+             keys: letters.length,
+             perBoard: M.LOBBYKB.rows.reduce((n,r2)=>n+r2.length,0) + 2,
              sawLobbyText: drawn.some(t => /BOT SKILL/.test(t)),
              caption: drawn.filter(t => /SPELL|PRESS IT|STAND ON A LETTER/i.test(t)),
              drawnCount: drawn.length };
@@ -736,8 +756,11 @@ for (const [name, m] of [['upright', upright], ['turned', turned]]){
      `${m.drawnCount} strings recorded and none of them was the BOT SKILL readout — that line ` +
      'comes out of the same function the caption was removed from, so without it "no caption" ' +
      'is equally true of a probe that recorded the wrong frame');
-  ok(`${name}: the keys are actually there`, m.keys === 28,
-     `${m.keys} letter keys — "it clears the pitch" is also true of a keyboard that drew nothing`);
+  // ⚠️ Derived from `LOBBYKB.rows` and the board count, never a literal: the block is
+  // mirrored behind both goals when the pitch is upright and single when it is turned.
+  ok(`${name}: the keys are actually there`, m.keys === m.perBoard * m.boards && m.keys > 0,
+     `${m.keys} letter keys across ${m.boards} board(s) — "it clears the pitch" is also true of a keyboard that drew nothing`);
+
 }
 
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));

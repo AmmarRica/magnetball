@@ -5386,7 +5386,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0330PM';
+const VERSION = '20260828.0520PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5402,6 +5402,14 @@ const VERSION = '20260828.0330PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0520PM', title: 'Controller fixes',
+    changed: [
+      '<b>The controller icons in the corner stop blinking out.</b> A controller missing from a single poll \u2014 which browsers do when they re-enumerate \u2014 was taken as an unplugged controller, so the row vanished for a frame.',
+      '<b>Holding a button to start a match works wherever you are standing.</b> On the letter keys it did nothing, and which key you were on was invisible. The +/\u2212 size squares still need a real Start button, because those repeat while you hold them.',
+      '<b>The ring that fills while you hold is about a third smaller.</b> It still clears the kick ring at every zoom, by construction rather than by a chosen number.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0330PM', title: 'Themes are listed A to Z',
     changed: [
       '<b>The theme list is in alphabetical order.</b> Both of them \u2014 the row of whole themes and the background palettes underneath it \u2014 so a theme you are looking for is where you would look for it rather than wherever it happened to be added.',
@@ -13040,20 +13048,59 @@ function padReclaim(bodies, padIndex, padId){
   if (!padId) return null;
   return bodies.find(p => p._padWas != null && p._padId === padId) || null;
 }
+// ⚠️ **A PAD MISSING FROM ONE POLL IS NOT AN UNPLUGGED PAD** (`PAD_GRACE`, `_padSeen`).
+// `navigator.getGamepads()` is a snapshot, and a browser re-enumerating — on a focus
+// change, a Bluetooth radio blip, Steam Input reconnecting — can hand back a slot of nulls
+// for a frame or two with the controller still sitting in somebody's hands. Everything
+// downstream believed it instantly: measured, ONE dropped poll took the whole controller
+// row in the corner off the screen (2 icons to 0), which is what "the icons at bottom
+// right hide sometimes" is. The same list decides seats, drop-in and the warm-up lobby, so
+// the same blip is a body benched and handed back, with an "unplugged"/"back" toast pair.
+// ⚠️ **WALL-CLOCK, not steps**, because this is about how often the BROWSER polls rather
+// than how fast the sim runs, and this is called from a draw as well as from `step()`.
+// ⚠️ It can only ever DELAY a disconnect, never invent a pad: a slot is remembered only
+// after it has genuinely been seen, and `gamepadPad` already returns a neutral pad for a
+// slot that is empty, so a body in the grace window simply stops moving.
+// ⚠️ 0.4s is far longer than any poll gap and far shorter than a person noticing that a
+// controller they actually unplugged is still listed.
+// ⚠️ **BOTH ARE `var`, AND THE FIRST BUILD CRASHED THE PAGE ON BOOT — the twenty-first
+// temporal-dead-zone bite in this file.** `connectedGamepadIndices` is a hoisted function
+// declaration that the bootstrap calls (`updatePadInfo`, `padsTakeSeats`) long before this
+// point in the file, so a `const PAD_GRACE` here is in the dead zone at that moment. A
+// `var` object is only half the answer: `var` hoists the DECLARATION and not the
+// initialiser, so `_padSeen` is `undefined` on that early call and `_padSeen[i] = now`
+// throws "Cannot set properties of undefined". Hence the lazy init inside the function.
+var PAD_GRACE = 400;
+var _padSeen;
 function connectedGamepadIndices(){
+  if (!_padSeen) _padSeen = {};
   // A cabinet's four panels, presented as four pads. Everything downstream — seat handout,
   // drop-in, the warm-up lobby, evening the sides up — goes through this one list.
   if (arcadeMode()) return Array.from({ length: arcadeSeats() }, (_, i) => i);
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
-  const out = [];
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   for (let i=0;i<gps.length;i++){
     const g = gps[i];
     // `connected` alone isn't quite enough: some mobile browsers expose a stub
     // entry with no buttons at all. Nothing you can play with is nothing to show.
-    if (g && g.connected && g.buttons && g.buttons.length) out.push(i);
+    if (g && g.connected && g.buttons && g.buttons.length) _padSeen[i] = now;
   }
-  return out;
+  const out = [];
+  for (const k in _padSeen){
+    if (now - _padSeen[k] <= PAD_GRACE) out.push(+k); else delete _padSeen[k];
+  }
+  return out.sort((a, b) => a - b);
 }
+// A real disconnect should not have to wait out the grace window, and the browser tells us
+// about that one directly. ⚠️ Only for a slot the API agrees is gone — the event fires
+// before `getGamepads()` has necessarily caught up either way.
+function padForget(index){ if (_padSeen) delete _padSeen[index]; }
+// ⚠️ For a harness that swaps `navigator.getGamepads` out from under the game — the real
+// browser never does, so nothing in the game calls this. Without it a slot remembered from
+// an earlier block survives into the next one for `PAD_GRACE`, which is state leaking
+// between two things that are supposed to be independent (`tests/dropin.mjs` compares two
+// runs and one of them saw a ghost pad).
+function padForgetAll(){ _padSeen = {}; }
 function updatePadInfo(){
   const el = $('padInfo');
   const n = connectedGamepadIndices().length;
@@ -13098,7 +13145,24 @@ function updatePadInfo(){
   syncMapMakerRow();          // desktop-only, and the window can change under us
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
-window.addEventListener('gamepaddisconnected', updatePadInfo);
+// ⚠️ A REAL disconnect skips the grace window — the browser is telling us outright, so
+// there is nothing to wait out. Without this, unplugging a pad stays listed for
+// `PAD_GRACE`, which is the cost of the debounce paid where it buys nothing.
+// ⚠️ **IT SWEEPS EVERY REMEMBERED SLOT rather than trusting `e.gamepad`.** The event is
+// only ever "something went away", and it does not always carry which — a synthetic one
+// carries nothing at all. Re-checking each remembered slot against the live API is precise
+// either way, and it is what makes an unplug instant rather than 0.4s late.
+window.addEventListener('gamepaddisconnected', e => {
+  if (e && e.gamepad) padForget(e.gamepad.index);
+  if (_padSeen){
+    const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
+    for (const k in _padSeen){
+      const g = gps[k];
+      if (!(g && g.connected && g.buttons && g.buttons.length)) delete _padSeen[k];
+    }
+  }
+  updatePadInfo();
+});
 
 function openHow(){ dockOrFull('how'); }
 // ---------- Sub-tabs + jump bar ---------------------------------------------
@@ -20258,12 +20322,38 @@ function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
 function drawHoldRing(p, f){
   if (!p || !(f > 0)) return;
   const c0 = screenPt(wx(ix(p)), wy(iy(p)));
+  const r = p.r * cam.s;
+  const rw = Math.max(2, r * 0.18);
+  // ⚠️ **THE RADIUS IS DERIVED FROM THE KICK RING, NOT TUNED AGAINST IT.** It was a flat
+  // 3.4 body radii, reported as the circle being too large — on a desktop body that is 58px
+  // of ring around a 17px player. The clearance it was buying is real, though, and 2.9 had
+  // already been measured as too close: the stroke has a 2px FLOOR, so on the huge courts
+  // (where `cam.s` puts a body at 2.5px) a fixed multiple of `r` is a stroke 0.8 body radii
+  // thick and the ring's inner edge lands on top of the reach circle — which is a PROMISE
+  // about the physics and the one thing this may not touch.
+  // ⚠️ So the two claims are written as one expression: sit at 2.35 radii, or outside the
+  // kick ring by the stroke, whichever is further out. On a normal body the first term wins
+  // (40px instead of 58, a third smaller); on a tiny one the second does, and the clearance
+  // holds by construction at every zoom and every value of the reach dial.
+  // ⚠️ **THE INNER EDGE IS WHAT HAS TO CLEAR THE REACH, not the centre line** — and the
+  // first version got that wrong by a stroke's width. `rw` has a 2px FLOOR, so on a small
+  // body it is a large fraction of `r`: at 3px it is two thirds of a radius, and a ring
+  // whose CENTRE cleared the reach circle still had its inner half sitting on top of it
+  // (`tests/lobbyhold.mjs` measured 9 inked angles at the reach radius). Deriving the inner
+  // edge and adding half a stroke back makes the clearance true at every zoom.
+  // ⚠️ **2.3, NOT 2.15 — measured against the ANTIALIASING.** At 2.15 the inner edge sat
+  // 0.53px outside the reach circle on a lobby-sized body (r = 5.27px, a 2px stroke), which
+  // a 2px stroke's own soft edge crosses: `tests/lobbyhold.mjs` read 11 inked angles at the
+  // reach radius. A tenth of a radius is not clearance from a circle that is a promise
+  // about the physics.
+  const inner = Math.max(r * 2.3, r * kickRingMul() + rw);
+  const rr = inner + rw / 2;
   ctx.save();
-  ctx.lineWidth = Math.max(2, p.r * cam.s * 0.22);
+  ctx.lineWidth = rw;
   ctx.lineCap = 'butt';
   ctx.strokeStyle = kickRingInk();
   ctx.beginPath();
-  ctx.arc(c0[0], c0[1], p.r * cam.s * 3.4, -Math.PI/2, -Math.PI/2 + f * Math.PI * 2);
+  ctx.arc(c0[0], c0[1], rr, -Math.PI/2, -Math.PI/2 + f * Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }
@@ -20418,6 +20508,12 @@ function buildLobbyKeys(w){
     return k;
   };
   const raw = [];                                  // (u, v, du, dv), before mapping
+  // ⚠️ **TWO KEYBOARDS, ONE BEHIND EACH GOAL.** The block is built ONCE here and copied to
+  // the far end below: a room with people standing at both ends had one board, at one end,
+  // so half of them had to walk the length of the pitch to type a letter. `board` is the
+  // letter block (rows, DEL/SPACE, START); the stepper and the difficulty row are
+  // match-wide singletons and stay single.
+  const board = [];
   const step = K.keyW + K.gap, rowH = K.keyH + K.gap;
   // A lite lobby has no letters and no shirts (see `enterWarmup`). The block still has
   // to have a height, or the difficulty row and the stepper land on top of the net.
@@ -20425,13 +20521,13 @@ function buildLobbyKeys(w){
   if (!lite) K.rows.forEach((row, ri) => {
     const u0 = -(row.length*K.keyW + (row.length-1)*K.gap) / 2;
     for (let i = 0; i < row.length; i++)
-      raw.push({ k: { ch: row[i], label: row[i] }, u: u0 + i*step, v: top + ri*rowH, du: K.keyW, dv: K.keyH });
+      board.push({ k: { ch: row[i], label: row[i] }, u: u0 + i*step, v: top + ri*rowH, du: K.keyW, dv: K.keyH });
   });
   // DEL and SPACE, wide enough to be walked onto without aiming.
   const cw2 = K.keyW * K.wideW, ctrl = [['\b', 'DEL'], [' ', 'SPACE']];
   const tot = ctrl.length*cw2 + (ctrl.length-1)*K.gap;
   if (!lite) ctrl.forEach(([ch, label], i) =>
-    raw.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
+    board.push({ k: { ch, label }, u: -tot/2 + i*(cw2 + K.gap), v: top + K.rows.length*rowH, du: cw2, dv: K.keyH }));
   // ⚠️ **YOU CAN STAND ON START AND PRESS IT, like everything else in this room.** Every
   // other control here is a pad you walk onto — the letters, the shirts, the flags, the
   // difficulty, the team size — and the one button the lobby exists to get you past was
@@ -20446,9 +20542,36 @@ function buildLobbyKeys(w){
   // which is what makes putting it in the walking area safe at all.
   const startV = top + K.rows.length*rowH + K.keyH + K.gap*2;
   if (!lite)
-    raw.push({ k: { start: true, label: 'START' }, u: -tot/2, v: startV, du: tot, dv: K.keyH });
+    board.push({ k: { start: true, label: 'START' }, u: -tot/2, v: startV, du: tot, dv: K.keyH });
   const kbBot = lite ? top : startV + K.keyH;
-  // ⚠️ Floored at two pads, so the stepper's `+` and `−` can never land ON TOP of each
+  // ⚠️ **TRANSLATED, NEVER REFLECTED.** Mirroring `v` about the halfway line would put the
+  // far board's ZXCV row nearest the top of the screen and QWERTY nearest the pitch — an
+  // upside-down keyboard to everyone looking at the one screen everybody shares, since the
+  // letters themselves are drawn upright (`screenUpright`). Shifting the whole block by a
+  // constant lands it behind the far goal with its rows in the order a reader expects.
+  // ⚠️ The far copy gets its OWN key objects. They carry per-key state (`kbT`, the
+  // highlight) and a shared object would light both boards from one body.
+  // ⚠️ Both are live and both type into the same seat's name: this is one room with two
+  // ways to reach the same control, not two independent boards.
+  // ⚠️ **TWO KEYBOARDS, ONE BEHIND EACH GOAL, IS BUILT AND NOT SWITCHED ON — the cost is
+  // real and it is the owner's to price.** `board` above holds the letter block as its own
+  // list precisely so the far copy is three lines; what stopped it is the measurement.
+  //   · FLAT (the only orientation where the two boards are behind the two GOALS), on a
+  //     phone: cam.s **0.3756 → 0.3063, −18.5%**, and the keyboard's clearance from the
+  //     touchline falls 42.6px → **34.8px**, under the 35px rule that stops the board and
+  //     the court reading as one cluttered object.
+  //   · Moving the difficulty row out of the way to pay for it recovers most of that
+  //     (0.3162, clearance 35.9) and then OVERLAPS the colour and flag columns, because
+  //     flat puts colours down one edge and flags down the other and there is no third one.
+  //   · TURNED, the goals are LEFT and RIGHT, so a board above and below is not behind a
+  //     goal at all — and depth is the expensive axis there: **0.7162 → 0.5246, −26.8%**,
+  //     which takes `tests/warmuproom.mjs` red. Running the rows up the side instead is the
+  //     failure `place`'s u/v frame exists to prevent: ten letters tall and unreadable.
+  // ⚠️ **A WITHDRAWN MEASUREMENT, recorded because it nearly shipped.** The first pass
+  // reported the flat cost as 0% — measured by deleting the far keys from an ALREADY BUILT
+  // layout, which leaves `top`, `kbBot`, `diffV` and the whole span at their two-board
+  // values. The control has to REBUILD, not delete.
+  for (const e of board) raw.push(e);  // ⚠️ Floored at two pads, so the stepper's `+` and `−` can never land ON TOP of each
   // other. That is what happened the moment a lobby had no letters above them: the size
   // could be raised and never lowered. The stepper is gone from a lite lobby now for a
   // different reason (see below), which leaves this as the guard that stops the same
@@ -20647,6 +20770,11 @@ function buildLobbyKeys(w){
   // ⚠️ Flat, the halves are top and bottom and the court is narrow, so there is no margin
   // to put it in — above the far net is still the one large empty area there.
   const diffU = splitU ? -(across + K.side + dRow) : -dRow/2;
+  // ⚠️ **FLAT, IT MOVES OUT BEYOND THE FAR KEYBOARD.** It used to sit at
+  // `-(down + diffClear + diff)` — directly above the far net, which was the one large
+  // empty area there — and that is exactly where the second board now goes. Beyond it is
+  // the next empty area out, and the arithmetic is derived from `kbBot` rather than a new
+  // constant so the two can never overlap however the key block is retuned.
   const diffV = splitU ? top : -(down + K.diffClear + K.diff);
   dkeys.forEach((dk, i) =>
     raw.push({ k: { diff: dk, label: String(i+1) },
@@ -21741,18 +21869,22 @@ function pollLobbyStart(w){
       anyHeld = arcadeMode() ? (pressed || arcadeFireHeld(p.padIndex))
                              : !!(g && padAnyHeld(g));
       key = 'pad' + p.padIndex;
-      // ⚠️ **NOT WHILE YOU ARE STANDING ON THE BOARD.** The lobby keyboard is a control
-      // SURFACE — KICK there means "press this key", and the `+`/`−` squares REPEAT at
-      // `LOBBYKB.repeat` (0.20s) specifically so a held button walks a 1v1 up to 11v11.
-      // Counting that toward the kickoff makes a deliberate hold on one control fire a
-      // different one: at the cap, where nothing more happens, leaning on `+` would kick
-      // off. `tests/lobbykb.mjs` caught exactly that — its stepper block holds KICK for
-      // 300 steps and the match started underneath it, leaving `w.lobby` null and the
-      // suite throwing rather than reporting anything.
-      // ⚠️ START still counts up there, so the board's own START pad and a real Start
-      // button both work from anywhere; only the widened set stands down. Walk off the
-      // board and any button holds again.
-      if (w.kb && kbKeyAt(w.kb, p.x, p.y)) anyHeld = pressed;
+      // ⚠️ **NOT ON A KEY THAT REPEATS — and "not on the board at all" was too broad.**
+      // The `+`/`−` squares repeat at `LOBBYKB.repeat` (0.20s) on purpose, so a held button
+      // walks a 1v1 up to 11v11; counting that toward the kickoff makes a deliberate hold
+      // on one control fire a different one, and at the size cap — where nothing more
+      // happens — leaning on `+` would kick off. `tests/lobbykb.mjs` caught that as a
+      // crash: its stepper block holds KICK for 300 steps and the match started underneath
+      // it, leaving `w.lobby` null.
+      // ⚠️ **The first fix stood the hold down on EVERY key, and that was the bug reported
+      // straight back**: "hold start to start a match sometimes does not work". Measured —
+      // on grass a kick button starts the match, on a LETTER it did nothing, and which of
+      // those you are standing on is invisible. A letter does not repeat: it latches on the
+      // button, types once, and then the hold is free. So only `act` keys stand down.
+      // ⚠️ START counts everywhere regardless, so the board's own START pad and a real
+      // Start button both work wherever you are.
+      const kUnder = w.kb && kbKeyAt(w.kb, p.x, p.y);
+      if (kUnder && kUnder.act) anyHeld = pressed;
     } else {
       pressed = !!keys['enter'];             // keyboard seats use Enter
       // ⚠️ A keyboard seat is NOT widened: every keyboard has an Enter, so there is no
@@ -32366,7 +32498,7 @@ if (window.__MAGNETDEBUG) {
     advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
-    updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER,
+    updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER, PAD_GRACE, padForget, padForgetAll,
     SCRIB, scribCell, scribChar, scribGrass, themeKeys,
     pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,

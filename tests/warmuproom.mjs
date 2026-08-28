@@ -425,7 +425,12 @@ const PRESS = `(w, M, who, padIdx, k, steps) => {
   });
   const before = await p.evaluate(() => {
     const M = window.__magnet, q = M.world.kb.keys.find(k => k.ch === 'Q');
-    return { turned: M.pitchHorizontal(), q: { x:q.x, y:q.y }, keys: M.world.kb.keys.length };
+    const fam = k => k.ch ? 'letter' : k.act ? 'act' : k.diff ? 'diff'
+                  : k.colTeam !== undefined ? 'col' : k.flagTeam !== undefined ? 'flag'
+                  : k.start ? 'start' : 'other';
+    const fams = {}; for (const k of M.world.kb.keys) fams[fam(k)] = (fams[fam(k)]||0) + 1;
+    const perBoard = M.LOBBYKB.rows.reduce((n, r2) => n + r2.length, 0) + 2;
+    return { turned: M.pitchHorizontal(), q: { x:q.x, y:q.y }, keys: M.world.kb.keys.length, fams, perBoard };
   });
   await p.setViewportSize({ width: 1200, height: 600 });
   await p.waitForTimeout(300);
@@ -436,15 +441,29 @@ const PRESS = `(w, M, who, padIdx, k, steps) => {
     const off = w.kb.keys.filter(k => [[k.x,k.y],[k.x+k.w,k.y],[k.x,k.y+k.h],[k.x+k.w,k.y+k.h]]
       .map(([x,y]) => M.screenPt(M.wx(x), M.wy(y)))
       .some(([sx,sy]) => sx < 0 || sy < 0 || sx > window.innerWidth || sy > window.innerHeight)).length;
+    const fam = k => k.ch ? 'letter' : k.act ? 'act' : k.diff ? 'diff'
+                  : k.colTeam !== undefined ? 'col' : k.flagTeam !== undefined ? 'flag'
+                  : k.start ? 'start' : 'other';
+    const fams = {}; for (const k of w.kb.keys) fams[fam(k)] = (fams[fam(k)]||0) + 1;
+    const perBoard = M.LOBBYKB.rows.reduce((n, r2) => n + r2.length, 0) + 2;
     return { turned: M.pitchHorizontal(), q: { x:q.x, y:q.y }, keys: w.kb.keys.length,
-             off, state: w.state };
+             fams, perBoard, off, state: w.state };
   });
   ok('the window really crossed the orientation threshold', before.turned !== after.turned,
      `${before.turned} → ${after.turned} — without this the checks below are vacuous`);
   ok('the board is rebuilt for the new orientation',
      before.q.x !== after.q.x || before.q.y !== after.q.y,
      'Q did not move, so the layout was not re-asked');
-  ok('...with every pad still there', after.keys === before.keys, `${before.keys} → ${after.keys}`);
+  // ⚠️ **NOT A RAW TOTAL ANY MORE.** The letter block is mirrored behind BOTH goals in the
+  // flat layout and single when turned — free flat (cam.s 0.4062 with one board and with
+  // two), where turned it costs 26.8% and takes the ratio check above red. So the total
+  // legitimately changes across this threshold, and what "nothing is lost" means is that
+  // every FAMILY survives and the letters arrive in a whole number of boards.
+  ok('...with every family still there',
+     after.fams.diff === before.fams.diff && after.fams.col === before.fams.col &&
+     after.fams.flag === before.fams.flag && after.fams.act === before.fams.act &&
+     after.fams.letter > 0 && after.fams.letter % before.perBoard === 0,
+     JSON.stringify({ before: before.fams, after: after.fams, perBoard: before.perBoard }));
   ok('...and every pad still on screen', after.off === 0, `${after.off} off screen`);
   ok('...and the room is still open', after.state === 'warmup', after.state);
   await p.close();

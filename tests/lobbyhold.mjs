@@ -126,7 +126,7 @@ const pix = await p.evaluate(() => {
   o.frac25 = +M.startHoldFrac(other).toFixed(2);
   let [A, B] = pair();
   const cO = spot(other);
-  o.ring25 = arcAngles(A, B, cO[0], cO[1], rB*2.5, rB*3.3);
+  o.ring25 = arcAngles(A, B, cO[0], cO[1], rB*2.0, rB*3.6);
   // ⚠️ It must NOT reach the kick ring, whose radius IS the reach — a promise about the
   // physics, and the stamina gauge is that same ring recoloured. A third arc there would
   // be a third meaning for one circle. The dial's own maximum is 2.0 body radii.
@@ -138,7 +138,7 @@ const pix = await p.evaluate(() => {
   o.frac70 = +M.startHoldFrac(other).toFixed(2);
   [A, B] = pair();
   const cO2 = spot(other);
-  o.ring70 = arcAngles(A, B, cO2[0], cO2[1], rB*2.5, rB*3.3);
+  o.ring70 = arcAngles(A, B, cO2[0], cO2[1], rB*2.0, rB*3.6);
   o.corner70 = boxDiff(A, B, cv.width-120, cv.height-120, cv.width, cv.height);
   return o;
 });

@@ -52,7 +52,21 @@ await page.addInitScript(() => {
     buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) });
   window.__mk = mk;
   const pads = [mk(0)];
-  navigator.getGamepads = () => pads;
+  // ⚠️ Fires `gamepaddisconnected` on a shrink, as the platform does: without it a pad that
+  // merely stops being reported is a POLL GLITCH to the game (`PAD_GRACE`), ridden out
+  // rather than acted on — which is the whole point of the debounce.
+  let _padN = 0;
+  navigator.getGamepads = () => {
+    // ⚠️ Counts LIVE entries, not array length: a pad is unplugged here by writing `null`
+    // into its slot, which leaves the length alone.
+    // ⚠️ `_padN` is updated BEFORE the dispatch: the game's handler calls `getGamepads()`
+    // itself to sweep, which re-enters this and would recurse for ever otherwise.
+    const n = pads.reduce((c, g) => c + (g && g.connected && g.buttons && g.buttons.length ? 1 : 0), 0);
+    const shrank = n < _padN;
+    _padN = n;
+    if (shrank) window.dispatchEvent(new Event('gamepaddisconnected'));
+    return pads;
+  };
   window.__pads = pads;
 });
 await page.goto('file://' + process.cwd() + '/index.html');

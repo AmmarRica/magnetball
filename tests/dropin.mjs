@@ -50,9 +50,32 @@ const FIX = `
                                               value:(down||[]).includes(i)?1:0 })) });
   const realPads = navigator.getGamepads;
   let PADS = [];
-  navigator.getGamepads = () => PADS;
+  // WARNING: NO BACKTICKS IN HERE — this file builds its page with new Function() and a
+  // template literal, so one closes the string early (the trap tests/lobbykb.mjs records).
+  // THE FIXTURE FIRES gamepaddisconnected, because a real browser always does. Without it
+  // this emulates a pad that silently stops being REPORTED, which the game now treats as a
+  // poll glitch and rides out for PAD_GRACE: a slot of nulls for a frame is exactly what a
+  // re-enumerating browser hands back, and it used to bench a body and blank the controller
+  // row in the corner. A genuine unplug comes with the event and is acted on at once.
+  let _padN = 0;
+  navigator.getGamepads = () => {
+    // Counts LIVE entries rather than array length: a pad is unplugged in these suites by
+    // writing null into its slot, which leaves the length alone.
+    // _padN is updated BEFORE the dispatch: the game's handler calls getGamepads() itself
+    // to sweep, which re-enters this and would recurse for ever otherwise.
+    const n = PADS.reduce((c, g) => c + (g && g.connected && g.buttons && g.buttons.length ? 1 : 0), 0);
+    const shrank = n < _padN;
+    _padN = n;
+    if (shrank) window.dispatchEvent(new Event('gamepaddisconnected'));
+    return PADS;
+  };
   const START = 9;
   const match = (mode, coop) => {
+    // A fresh match here is also a fresh PLATFORM: PADS is reassigned wholesale between
+    // blocks, and a slot remembered from the last one stays live for PAD_GRACE, which is
+    // state leaking across two scenarios that are meant to be independent. A real browser
+    // never swaps its own gamepad list out like this.
+    M.padForgetAll();
     M.sel.controllers='on'; M.sel.coop = coop||'off'; M.sel.dropIn='on';
     M.sel.mode = mode || '3v3'; M.sel.kickoffRule='off'; M.sel.autoReplay = false;
     PADS = [];
@@ -422,6 +445,10 @@ const det = await p.evaluate(()=>{
     // disturbs anything — a run where somebody actually joined is a different match by
     // design, and comparing those two would prove nothing.
     navigator.getGamepads = () => [];
+    // Swapping the platform out from under the game leaves slots remembered from the
+    // blocks above alive for PAD_GRACE, so the first arm can see a ghost pad the second
+    // one does not. A real browser never swaps its own gamepad API.
+    M.padForgetAll();
     M.setMatchSeed(21); M.startMatch();
     const w = M.world; w.state='play'; w.stateT=2;
     for (let i=0;i<600;i++){ M.step(w); if (poll) M.pollDropIn(w); }

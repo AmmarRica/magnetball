@@ -348,7 +348,12 @@ const ring = await p.evaluate(() => {
   // the control: same frame, hold stood down
   sel(0, false); M.pollWarmupHold(M.world);
   const Z = shot();
-  o.ring25 = annulus(A, Z, c0[0], c0[1], rB * 3.0, rB * 3.8);
+  // ⚠️ A GENEROUS BAND, because the ring's radius is DERIVED (2.35 radii, or outside the
+  // kick ring by its own stroke, whichever is further) rather than a constant this could
+  // be pinned to. Pinning the band to the same expression would be testing the code
+  // against itself; what has to be true is that an arc is there and GROWS, and that the
+  // reach radius stays clear — which is the separate check below.
+  o.ring25 = annulus(A, Z, c0[0], c0[1], rB * 1.9, rB * 3.9);
   o.keep25 = +keep.toFixed(2);
 
   sel(0, true); run(2); run(130);           // ~72%
@@ -356,7 +361,7 @@ const ring = await p.evaluate(() => {
   const C = shot();
   sel(0, false); M.pollWarmupHold(M.world);
   const Z2 = shot();
-  o.ring70 = annulus(C, Z2, c0[0], c0[1], rB * 3.0, rB * 3.8);
+  o.ring70 = annulus(C, Z2, c0[0], c0[1], rB * 1.9, rB * 3.9);
   // ⚠️ And it must stay clear of the KICK RING, which is a promise about the physics.
   o.clearOfKickRing = annulus(C, Z2, c0[0], c0[1], rB * M.kickRingMul() * 0.96,
                                                    rB * M.kickRingMul() * 1.04);
