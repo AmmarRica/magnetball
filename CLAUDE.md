@@ -884,6 +884,50 @@ three lines a second time, name it.
   came from*, not what the whole possession looked like. Advanced in `advanceTrails`
   next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
   streak instead of 190.
+- **THE TWO FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP** (`stopSecs`,
+  `STOP_FRAC`, the `pdamp` and `bdamp` rows of `FEEL_SLIDERS`). Reported as wanting *"a
+  slider for friction, for how long before a player stops, for how long before the ball
+  stops"* — and **both already existed**. They were called *Player float (more glide →)*
+  and *Ball glide*, and they read out the raw damping coefficient: **0.960** and **0.992**.
+  ⚠️ **THAT IS THE MAGNET SLIDER'S LESSON SAID AGAIN** — *"45 told a player nothing and 4.5
+  is a number you can aim at"*. Neither the NAME nor the NUMBER could answer the question
+  being asked of them, so a control that had been there the whole time was reported as
+  missing. The fix is a label and a readout; the storage, the presets, `applyFeel` and the
+  physics are untouched.
+  ⚠️ **THE READOUT IS A CLOSED FORM AND IT IS START-INDEPENDENT**, which is what makes it a
+  readout for the DIAL rather than for one particular kick: velocity is multiplied by `d`
+  every fixed step, so it decays as `d^n` and the time to fall to a given FRACTION of
+  whatever it was does not depend on what it was. An absolute *"below N units a step"*
+  would, and would give a different answer for a tap and for a belted shot.
+  ⚠️ `STOP_FRAC` is **5%**, because exponential decay never reaches zero and some fraction
+  has to be named. It is a presentation constant — nothing in the physics reads it, and
+  moving it changes the words rather than the game.
+  ⚠️ **It is the BASE number, before `surfaceFeel` bends it.** Ice multiplies the glide by
+  2.11 and Mud by 0.678, so the pitch you pick moves the real figure; naming the surface in
+  it would make one dial read three ways for one setting.
+  ⚠️ **RIGHT IS LONGER, so the handle and the number travel together** — and friction is
+  the inverse of that, which is why the label names the STOPPING TIME and only mentions
+  friction. Inverting the slider would rewrite every stored value and both presets.
+  ⚠️ **The word FRICTION is in both labels because that is what somebody looking for this
+  control searches for**, and `menuSearchIndex` indexes the label text. That is the half
+  that actually fixes the report.
+  ⚠️ **`get` gained a `!= null` fallback, and the old readout had the same hole**: a
+  partial `sel.feel` (an imported save — `applySaveDoc` validates nothing, and `loadSel`'s
+  shallow merge replaces the whole object rather than filling gaps) made the label read
+  **`NaNs`**. The idiom is the one the trap window and the sprint dials already use.
+  ⚠️ **THE CHECK IS MEASURED AGAINST THE REAL STEP LOOP, never against the formula** — a
+  readout verified against its own arithmetic proves only that the arithmetic is
+  idempotent. `tests/surfacefeel.mjs` gives a body a velocity and counts how long the
+  engine actually takes to lose 95% of it: **0.517s against a claimed 0.500**, 3.317
+  against 3.304, and the ball 4.983 against 4.968. Paired with the two ends of the dial
+  being genuinely different, or "it agrees" is true of a readout that says the same thing
+  everywhere.
+  ⚠️ **EVERY OTHER BODY HAS TO BE RE-PARKED ON EVERY STEP OF THAT PROBE, and without it the
+  ball never stopped at all** — it measured the 4000-step cap. `integrate` clamps a body to
+  the bounds, so parking the bots at 9e3 is undone on the first step (the trap
+  `tests/fourpads.mjs` records), and they then chase the pinned ball for the three hundred
+  steps it takes to coast down and reach it long before it gets there. Parked once, the
+  block measures the AI rather than the damping.
 - **Surface vs feel:** `PITCH` entries are **multipliers** on the Game Feel sliders, not
   replacements — `surfaceFeel(v)` is the one place that bends one by the other, and a
   match, a drill and a live slider change all go through it. ⚠️ They used to be absolute

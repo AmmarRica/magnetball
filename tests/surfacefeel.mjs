@@ -82,6 +82,76 @@ const r = await p.evaluate(()=>{
     return Math.abs(d.accel - m.accel) < 1e-6 && Math.abs(d.damp - m.damp) < 1e-6; });
 
   M.sel.pitch = 'normal'; M.sel.feel = {};
+  // ---- THE FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP -------------
+  // ⚠️ **MEASURED AGAINST THE REAL ENGINE, never checked against the formula.** The two
+  // friction sliders used to read out the raw damping coefficient — 0.960, 0.992 — which
+  // is not a number anybody can aim at, and "how long before a player stops" was not
+  // askable of the name or the value. The readout is a stopping time now, and the only
+  // claim worth making about it is that the pitch AGREES: so the body is given a velocity
+  // and the real step loop counts how long it actually takes to lose 95% of it.
+  // ⚠️ Grass, deliberately: `surfaceFeel` bends the damping by 2.11 on Ice and 0.678 on
+  // Mud, and the readout is the BASE number the slider sets. Measuring on Ice would be
+  // measuring the surface.
+  {
+    const coast = (dampMilli, who) => {
+      M.sel.pitch = 'normal'; M.sel.mode = '1v1'; M.sel.kickoffRule = 'off';
+      M.sel.feel = who === 'ball' ? { bdamp: dampMilli } : { pdamp: dampMilli };
+      M.sel.sprint = 'off';                  // no boost, no tired speed, just the damping
+      M.setMatchSeed(5); M.startMatch();
+      const w = M.world; w.state = 'play'; w.stateT = 2;
+      // Everybody else parked far away and the ball taken out of reach, so nothing is
+      // measured but the damping — a collision or a magnet pull is a different force.
+      w.players.forEach((q, i) => { q.x = (i%2?1:-1) * 9e3; q.y = 9e3; q.vx = q.vy = 0;
+                                    q.inX = 0; q.inY = 0; q.kick = false; });
+      const body = who === 'ball' ? w.ball : w.players[0];
+      body.x = 0; body.y = 0;
+      if (who !== 'ball'){ w.ball.x = 9e3; w.ball.y = 9e3; w.ball.vx = 0; w.ball.vy = 0; }
+      body.vx = 8; body.vy = 0;
+      const v0 = Math.hypot(body.vx, body.vy);
+      let n = 0;
+      // ⚠️ The position is re-pinned every step: `integrate` clamps a body to the bounds
+      // and `clampBallInside` contains the ball, so a body coasting at 8 a step leaves the
+      // court long before it stops and an unpinned run measures a WALL. Only the position
+      // goes back; the velocity is the thing being measured and is left entirely alone.
+      const px = body.x, py = body.y;
+      // ⚠️ **EVERY OTHER BODY IS RE-PARKED ON EVERY STEP, and without that the ball never
+      // stops at all** — it measured the 4000-step cap. `integrate` clamps a body to the
+      // bounds, so the far-away parking is undone on the first step (the trap
+      // `tests/fourpads.mjs` records), the bots then chase the ball for the three hundred
+      // steps it takes to coast down, and reach it long before it gets there. Parked once,
+      // this block measures the AI rather than the damping.
+      while (n < 4000 && Math.hypot(body.vx, body.vy) > v0 * 0.05){
+        M.step(w); n++;
+        for (const q of w.players){
+          if (q === body) continue;
+          q.x = 9e3; q.y = 9e3; q.vx = 0; q.vy = 0; q.inX = 0; q.inY = 0; q.kick = false;
+        }
+        if (who !== 'ball'){ w.ball.x = 9e3; w.ball.y = 9e3; w.ball.vx = 0; w.ball.vy = 0; }
+        body.x = px; body.y = py;
+        if (who !== 'ball'){ body.inX = 0; body.inY = 0; body.kick = false; }
+      }
+      return { measured: n / 60, says: M.stopSecs(dampMilli / 1000) };
+    };
+    o.coastPlayer = coast(905, 'player');
+    o.coastPlayerSlow = coast(985, 'player');
+    o.coastBall = coast(990, 'ball');
+    const agrees = (c) => c.measured > 0 && Math.abs(c.measured - c.says) < Math.max(0.05, c.says * 0.06);
+    o.readoutIsTrue = agrees(o.coastPlayer) && agrees(o.coastPlayerSlow) && agrees(o.coastBall);
+    // ...and the two ends of the dial are genuinely different, or "it agrees" is true of a
+    // readout that says the same thing everywhere.
+    o.readoutMoves = o.coastPlayerSlow.says > o.coastPlayer.says * 2;
+  }
+  // ⚠️ The LABELS have to carry the word somebody searches for. Both dials existed the
+  // whole time under "Player float" and "Ball glide", which is why they were reported as
+  // missing: nothing in the menu said friction, or stopping, or anything a person would
+  // look for. Read off the live table rather than the DOM, so the check does not depend on
+  // which Game Feel pane happens to be open.
+  const fr = M.FEEL_SLIDERS.filter(x => /friction/i.test(x.label));
+  o.frictionLabels = fr.map(x => x.label);
+  o.saysFriction = fr.length === 2;
+  // ...and both read out a TIME rather than the coefficient.
+  o.frictionFmt = fr.map(x => x.fmt(x.get()));
+  o.readsSeconds = fr.length === 2 && o.frictionFmt.every(t => /^[0-9]+\.[0-9][0-9]s$/.test(t));
   return o;
 });
 
@@ -121,6 +191,10 @@ ok(r.applyFeelReachesEverySurface, `moving a slider mid-match changed nothing on
 ok(r.drillMatchesMatch, 'a drill builds its movement differently from a match, so practising is not practising');
 ok(rep.haveFrames, 'no replay frames were recorded, so the animation check below proves nothing');
 ok(rep.movedDuringReplay, 'the animated field did NOT advance during a replay — a replay is not the step loop, so it has to tick the field itself or every animated theme freezes the moment a goal goes in');
+ok(r.readoutIsTrue, `the stopping-time readout disagrees with the pitch: ${JSON.stringify({p:r.coastPlayer, slow:r.coastPlayerSlow, ball:r.coastBall})}. It is measured against the real step loop on purpose — a readout checked against its own formula proves only that the formula is idempotent`);
+ok(r.readoutMoves, `the two ends of the player friction dial read ${r.coastPlayer && r.coastPlayer.says} and ${r.coastPlayerSlow && r.coastPlayerSlow.says} — "the readout agrees with the pitch" is also true of one that says the same thing everywhere`);
+ok(r.saysFriction, `${JSON.stringify(r.frictionLabels)} — both friction dials have to carry the word somebody searches for. They existed the whole time as "Player float" and "Ball glide", which is exactly why they were reported as missing`);
+ok(r.readsSeconds, `the friction dials read ${JSON.stringify(r.frictionFmt)} instead of a time in seconds — a damping coefficient of 0.960 is not a number anybody can aim at`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 
 console.log(JSON.stringify({ ...r, ...rep }, null, 1));

@@ -4544,6 +4544,28 @@ function surfaceFeel(v, key){
   return { accel: v.accel * pt.accel,
            damp:  Math.max(0, Math.min(0.999, 1 - (1 - v.pdamp) / pt.glide)) };
 }
+// ⚠️ **A DAMPING COEFFICIENT IS NOT A NUMBER ANYBODY CAN AIM AT.** Both friction dials
+// were shown as the raw multiplier — `0.960` for the player, `0.992` for the ball — which
+// is the magnet slider's lesson said again: *"45 told a player nothing and 4.5 is a number
+// you can aim at"*. What a person actually wants from a friction control is **how long
+// something takes to stop**, so that is what the readout says now.
+// ⚠️ **CLOSED FORM, and it is START-INDEPENDENT, which is what makes it a readout for the
+// DIAL rather than for one particular kick.** Velocity is multiplied by `d` every fixed
+// step, so it decays as `d^n` and the time to fall to a given FRACTION of whatever it was
+// does not depend on what it was. An absolute "below N units a step" would, and would give
+// a different answer for a tap and for a belted shot.
+// ⚠️ 5% is "as good as stopped" rather than a physical zero — exponential decay never
+// reaches zero, so some fraction has to be named. It is a presentation constant: nothing
+// in the physics reads it, and moving it changes the words and not the game.
+// ⚠️ It is the BASE number, before `surfaceFeel` bends it. Ice multiplies the glide by
+// 2.11 and Mud by 0.678, so the pitch you pick moves the real figure — the slider is what
+// this readout is for, and naming the surface in it would make the same dial read three
+// different ways for the same setting.
+const STOP_FRAC = 0.05;
+function stopSecs(damp){
+  const d = Math.max(0.001, Math.min(0.999999, damp));
+  return STEP * Math.log(STOP_FRAC) / Math.log(d);
+}
 const SPECT = { play:{ name:'Play', emoji:'🎮' }, watch:{ name:'Watch', emoji:'👀' } };
 const CB    = { off:{ name:'Off', emoji:'🎨' }, on:{ name:'On', emoji:'🔶' } };
 
@@ -5396,7 +5418,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0910PM';
+const VERSION = '20260828.1035PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5412,6 +5434,13 @@ const VERSION = '20260828.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.1035PM', title: 'The friction dials say how long things take to stop',
+    changed: [
+      '<b>Game Feel now has Player stopping time and Ball stopping time, in seconds.</b> Both dials were already there \u2014 as Player float and Ball glide, reading out numbers like 0.960 and 0.992, which tell you nothing. Same sliders, same physics; they just say what they do now, so you can set the ball to take five seconds to roll to a stop and know that is what you are getting.',
+      '<b>They are easier to find.</b> Both are labelled with the word friction, so searching the menu for it turns them up.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0910PM', title: 'Everyone picks again after every match',
     changed: [
       '<b>At full time everybody steps off the pitch, and you walk back on to play the next one.</b> Restart puts you all outside the touchline; whoever walks in is in, and the match is however many of you did \u2014 three of you split two and one is a 2v2 with one bot. Somebody who has gone home is simply a bot.',
@@ -14519,10 +14548,29 @@ $('settingsReset').onclick = () => {
 // what YOU do. They used to be one undifferentiated stack of eight.
 const FEEL_SLIDERS = [
   {g:'player', label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
-  {g:'player', label:'Player float (more glide →)', get:()=>sel.feel.pdamp, set:v=>sel.feel.pdamp=v, min:850,max:985,step:5, fmt:v=>(v/1000).toFixed(3)},
+  // ⚠️ **THE FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP** — see `stopSecs`. They
+  // were "Player float" and "Ball glide", reading out the raw damping coefficient, and the
+  // question they answer ("how long before a player stops") was not askable of either the
+  // name or the number. The word FRICTION is in both labels because that is what somebody
+  // looking for this control searches for; the readout is the stopping time because that is
+  // the thing you can want a particular value of. Nothing about the storage or the physics
+  // moved — the presets, the save and `applyFeel` are untouched.
+  // ⚠️ Right is LONGER, so the number and the handle travel together. Friction is the
+  // inverse of that, which is why the label names the stopping time and only mentions
+  // friction: inverting the slider would rewrite every stored value and both presets.
+  // ⚠️ The `!= null` fallback is the idiom this table already uses for the trap window and
+  // the sprint dials, and it is not decoration: `applySaveDoc` validates nothing, so an
+  // imported save can carry a PARTIAL `sel.feel`, and `loadSel`'s shallow merge then
+  // replaces the whole object rather than filling the gaps. Without it the label reads
+  // `NaNs` — which is what it did, and the old coefficient readout did too.
+  {g:'player', label:'Player stopping time (friction)',
+   get:()=>sel.feel.pdamp!=null?sel.feel.pdamp:905, set:v=>sel.feel.pdamp=v,
+   min:850,max:985,step:5, fmt:v=>stopSecs(v/1000).toFixed(2)+'s'},
   {g:'kick', label:'Kick power', get:()=>sel.feel.kick, set:v=>sel.feel.kick=v, min:25,max:120,step:5, fmt:v=>(v/10).toFixed(1)},
   {g:'ball', label:'Max ball speed', get:()=>sel.feel.ballcap, set:v=>sel.feel.ballcap=v, min:12,max:60,step:2, fmt:v=>''+v},
-  {g:'ball', label:'Ball glide', get:()=>sel.feel.bdamp, set:v=>sel.feel.bdamp=v, min:970,max:998,step:2, fmt:v=>(v/1000).toFixed(3)},
+  {g:'ball', label:'Ball stopping time (friction)',
+   get:()=>sel.feel.bdamp!=null?sel.feel.bdamp:990, set:v=>sel.feel.bdamp=v,
+   min:970,max:998,step:2, fmt:v=>stopSecs(v/1000).toFixed(2)+'s'},
   {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
   {g:'kick', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
@@ -32734,7 +32782,7 @@ if (window.__MAGNETDEBUG) {
     SIDE, SIDEOPT, sideViewWant, sideLift, sideBallLift, sideSquashY, drawBodiesSide,
     get sideNow(){ return sideNow; }, set sideNow(v){ sideNow = v; },
     LOBBYKB, buildLobbyKeys, stepLobbyKeys, kbKeyAt, lobbyReach, lobbyKbCommit, lobbySizeBump,
-    SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS,
+    SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
     KICKRING, kickRingMul, LABEL_BALL,
