@@ -1,0 +1,45 @@
+# The suite is the only thing keeping the game honest — there is no build step to
+# fail, so an untested push goes straight to the live site. Run it on every push.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Playwright is a DEV-only tool: the game itself ships no dependencies, and
+      # the repo deliberately has no package.json or lockfile. --no-save
+      # --no-package-lock keeps it that way — nothing is written but node_modules,
+      # which is gitignored. The version is pinned here instead of in a lockfile so
+      # a Playwright release can't turn a green suite red on its own.
+      - name: Install Playwright
+        run: npm install --no-save --no-package-lock playwright@1.62.1
+
+      - name: Cache browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-1.62.1-${{ runner.os }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # run.mjs exits non-zero if any suite fails, and prints the last 25 lines of
+      # whichever one did.
+      - name: Run suites
+        run: node tests/run.mjs

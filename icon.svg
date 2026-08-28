@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- JUST A COURT. It used to carry two players and a ball as well, which at the size an
+       icon is actually seen — 48px in a tab, 64px on a home screen — was three coloured
+       dots on top of the markings rather than three things you could make out. The pitch
+       on its own is the shape the game is. -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#1f7a3f"/>
@@ -6,19 +10,20 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="url(#g)"/>
-  <!-- pitch markings -->
-  <g fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="10">
-    <rect x="86" y="70" width="340" height="372" rx="8"/>
-    <line x1="86" y1="256" x2="426" y2="256"/>
-    <circle cx="256" cy="256" r="66"/>
+  <!-- ⚠️ EVERYTHING FITS THE MASKABLE SAFE ZONE, and the old drawing did not. The manifest
+       declares this icon `maskable`, so Android may crop it to a CIRCLE of 80% diameter —
+       radius 204.8 about the centre. The old court's corners sat 252 out and the goal ends
+       213, so both were cropped off on a round mask. The court's corners are now 194 out
+       and the goals' 185, plus 6 for the half stroke: inside it with room. -->
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.88" stroke-width="12"
+     stroke-linejoin="round" stroke-linecap="round">
+    <rect x="146" y="96" width="220" height="320" rx="10"/>
+    <line x1="146" y1="256" x2="366" y2="256"/>
+    <circle cx="256" cy="256" r="52"/>
+    <!-- The goals, open onto the pitch the way the game draws them — three sides, so the
+         mouth is a gap rather than a second line laid over the goal line. -->
+    <path d="M206 96 L206 78 L306 78 L306 96" stroke="#5a7de0"/>
+    <path d="M206 416 L206 434 L306 434 L306 416" stroke="#e05a5a"/>
   </g>
-  <!-- goals -->
-  <rect x="196" y="52" width="120" height="26" fill="none" stroke="#5a7de0" stroke-width="10"/>
-  <rect x="196" y="434" width="120" height="26" fill="none" stroke="#e05a5a" stroke-width="10"/>
-  <!-- players -->
-  <circle cx="196" cy="330" r="34" fill="#e05a5a" stroke="#fff" stroke-width="8"/>
-  <circle cx="316" cy="182" r="34" fill="#5a7de0" stroke="#fff" stroke-width="8"/>
-  <!-- ball -->
-  <circle cx="256" cy="256" r="24" fill="#f7f7f7" stroke="#20242e" stroke-width="7"/>
-  <circle cx="256" cy="256" r="9" fill="#20242e"/>
+  <circle cx="256" cy="256" r="8" fill="#ffffff" fill-opacity="0.88"/>
 </svg>

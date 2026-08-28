@@ -1,8 +1,7 @@
 # Magnetball — Feature Roadmap
 
-A backlog derived from what the HaxBall community most asks for
-(github.com/haxball/haxball-issues, r/haxball, community threads), filtered to
-what makes sense for a **mobile, touch-first** game. Each item notes rough
+A backlog derived from what players of top-down football games most often ask
+for, filtered to what makes sense for a **mobile, touch-first** game. Each item notes rough
 **effort** (S/M/L/XL) and **why** it's wanted.
 
 Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL(big)
@@ -10,6 +9,33 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 ---
 
 ## ✅ Shipped since
+- **Bot AI rebuilt (four layers)** — the old bots oscillated on the spot: the standoff waypoint sat
+  27 units behind the ball and the branch that discarded it fired at 43, so a bot could never arrive
+  and never touched a stationary ball. Above Normal they reached a loose ball **0–2%** of the time,
+  which made *higher* difficulties worse. Now: team phase → roles (chaser/support/defender/**goalie**)
+  → per-bot decision → steering, with intercept prediction, an elastic ball-anchored formation, a
+  support-spot grid, lane-checked passing, **bank shots off the boards** (corrected for the real
+  0.90 restitution *and* the ball's radius — mean miss 4.0 units vs 21.5 for a naive mirror), and a
+  feel layer. Bots emit only what a thumb can, and now trap and carry like a human. **Fully
+  deterministic** — same seed, same match. See `docs/BOT-AI-AUDIT.md`.
+- **Shirt numbers + Text plates** — players wear a **number** by default (you 1, your bots 2 up, the
+  opposition from 1 again), and a new Text faceplate category adds 48 the classic style glyph avatars.
+- **Ball looks, Skins out** — nine drawn ball patterns (Classic, Plain, Stripe, Cross, Beach, Tennis,
+  8-Ball, Dots, Swirl). The old Skins card pointed at two PNGs that were never in the repo and did
+  nothing; removed. Everything on screen is drawn, not blitted.
+- **Kick Off is the Match card's heading** — collapsed it's the green bar you press; the chevron
+  beside it opens mode/field/difficulty in place.
+- **Contrast pass** — every themed ink is derived from the surface it lands on and nudged to clear
+  WCAG AA, measured. Five real failures fixed, including a HUD that was dark-on-dark at **1.89:1**
+  on Paper and a shop label that always fell back to a hardcoded green.
+- **Theme picker shows the palette** — each tile paints the six colours that make the theme instead
+  of an emoji.
+- **Awards say the number** — "Most Saves · 5 saves", formatted from the same value that picked the
+  winner so it can't drift.
+- **Accordion settings** + a **`/settings` route** (the same document with the game switched off,
+  synced live over BroadcastChannel).
+- **Pitch surfaces wear in** — mud churns and ice picks up skate cuts where the traffic actually was,
+  deterministically, reset per match.
 - **Roguelike "Gauntlet" mode** — a run of escalating matches vs rising bot tiers (1v1 → 2v2 →
   3v3). Start with **3 lives**; **win to descend** a depth and **pick 1 of 3 random upgrades**
   (Cannon, Sprint, Magnet, Beach Ball, Floaty, Stopwatch, Extra Life) that **stack** for the run;
@@ -83,9 +109,9 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
   first-visit popup shows today's unlock, your streak, and a roadmap of what's coming. Granted
   items unlock instantly on top of the milestone system; a 🎁 menu button reopens the track.
 - **Players step outside the line** — boundary walls are now ball-only, so players can nudge
-  ~20px past the pitch edge (HaxBall-style) to get around a ball hugging the wall; the ball is
+  ~20px past the pitch edge (the classic style) to get around a ball hugging the wall; the ball is
   still fully contained (verified on all 10 fields).
-- **Ball size** — trimmed the ball's render rim so it matches HaxBall's exact 3:2 player:ball
+- **Ball size** — trimmed the ball's render rim so it matches the top-down originals's exact 3:2 player:ball
   radius ratio (player 15 / ball 10).
 - **Removed the kick aim line** — the on-pitch charge arrow was misleading, so it's gone (the
   KICK-pad charge ring stays).
@@ -93,7 +119,7 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
   screen (Controls → Configure buttons) where you rebind Up / Down / Left / Right / Kick by
   pressing them on your gamepad. Rebind-all walks all five; per-row rebinding; reset to
   default; the mapping (`sel.pad`) persists and drives gamepad input (analog stick still works).
-- **Polish pass** — HaxBall-feel refinements: a **charge/aim arrow** that grows and turns
+- **Polish pass** — the top-down originals-feel refinements: a **charge/aim arrow** that grows and turns
   yellow with kick power so shots are readable; **first-touch feedback** (a ring flash on a
   clean trap or sharp redirect); a **crowd swell** on shots toward goal and a **groan** on a
   post/near-miss (SFX only, no music); and **auto-replay of goals** in slow-motion with a
@@ -142,12 +168,12 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
   records that playback with `MediaRecorder` and opens the native share sheet
   (`navigator.share`), falling back to a file download. No external libraries.
 - **Kick feel + Pro preset** — one-shot kicks now carry the striker's momentum, so a
-  running shot is stronger and more directional than a standing one (HaxBall-like). New
+  running shot is stronger and more directional than a standing one (classic top-down football). New
   **Casual / Pro** feel presets in Settings: Pro is authentic — no magnet, no trap (instant
   kick), floatier acceleration and a higher ball-speed cap for a raw, high-skill feel.
 - **Themes** (#17) — a full theme engine: palettes drive both the CSS and the canvas, so a
   theme reskins the entire game. 6 built-in looks — **Neon** (the CRT default), **Flat**,
-  **Grass**, **Mono**, **Paper** (light), **Videoball** (flat vivid, geometric) — picked live
+  **Grass**, **Mono**, **Paper** (light), **VideoSoccer** (flat vivid, geometric) — picked live
   from Settings. Player colours still customise the disc core on top of any theme.
 - **Sound & SFX** (#2) — programmatic Web Audio (no files): whistle on kickoff/reset, crowd on
   goal, pass/kick, wall-bounce and net sounds. **3 selectable variants per sound**, tap-to-hear,
@@ -176,37 +202,41 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 
 ## ✅ Already in Magnetball
 - Mobile-native, touch dual-thumb controls — *the single most-requested platform gap*
-- 1v1 / 2v2 / 3v3 / 4v4 vs bots, difficulty tiers
-- Player customization: name, colour, cap
+- 1v1 / 2v2 / 3v3 / 4v4 vs bots, 7 difficulty tiers
+- Player customization: name, colour, cap, faceplate (flag / animal / text), eyes
 - Ball Magnet (0–100) — adjustable ball control
 - Magnet-charged kicks (hold-close → further shot)
 - Gamepad support (up to 4v4)
-- Multiple fields, PWA/offline, Amiga visual theme
+- 30 fields, PWA/offline, a pixel-art (Amiga-era) look across 7 themes
 
 ---
 
 ## 🎯 Tier 1 — Quick wins (S–M, high delight)
-1. **Charge-kick power meter** (M) — hold KICK to build power, release to shoot; ring/bar shows charge.
+
+> Items 1–7 and 8–11 below are **all shipped** — they're kept for the community-ask
+> rationale that motivated them. The live backlog is Tier 3 onward.
+
+1. ✅ **Charge-kick power meter** (M) — hold KICK to build power, release to shoot; ring/bar shows charge.
    *Top gameplay ask ("variable pass/kick power, FIFA/PES-style").* Extends the magnet-charge you already have.
-2. **Sound & music** (M) — kick/goal/whistle SFX + optional chiptune loop and crowd; mute toggle.
+2. ✅ **Sound & music** (M) — kick/goal/whistle SFX + optional chiptune loop and crowd; mute toggle.
    *Community wants audio/commentary.* Fits the Amiga theme.
-3. **Local stats** (S–M) — goals, assists, wins/losses, win streak, per-session totals in localStorage.
+3. ✅ **Local stats** (S–M) — goals, assists, wins/losses, win streak, per-session totals in localStorage.
    *Stats tracking is a perennial request.*
-4. **Avatars & flags** (S) — emoji or initial avatar on the disc, optional country flag.
+4. ✅ **Avatars & flags** (S) — emoji or initial avatar on the disc, optional country flag.
    *Requested: disc avatars, country flags, custom colours.*
-5. **Match rules** (S) — overtime / golden goal, and a **penalty shootout** on draws.
-6. **Left-handed / swap-thumbs toggle & control tuning** (S) — joystick sensitivity, deadzone, kick keybind.
+5. ✅ **Match rules** (S) — overtime / golden goal, and a **penalty shootout** on draws.
+6. ✅ **Left-handed / swap-thumbs toggle & control tuning** (S) — joystick sensitivity, deadzone, kick keybind.
    *Configurable controls / keybinds are requested.*
-7. **Colourblind-friendly team markers** (S) — shapes/patterns in addition to red/blue.
+7. ✅ **Colourblind-friendly team markers** (S) — shapes/patterns in addition to red/blue.
 
 ## 🎯 Tier 2 — Progression & replay (M–L)
-8. **Rank / ELO ladder vs bots** (M) — climb divisions by beating higher difficulties; title/prefix by rank.
+8. ✅ **Rank / ELO ladder vs bots** (M) — climb divisions by beating higher difficulties; title/prefix by rank.
    *Ranked/ELO + rank prefixes are heavily requested.*
-9. **Goal replays & clip share** (L) — record the last few seconds, instant-replay a goal, export/share a clip/GIF.
+9. ✅ **Goal replays & clip share** (L) — record the last few seconds, instant-replay a goal, export/share a clip/GIF.
    *Replays & clip export (HBR-style) are wanted.*
-10. **Career / season mode** (L) — play a fixture list or bracket **tournament**, track a table.
+10. ✅ **Career / season mode** (L) — play a fixture list or bracket **tournament**, track a table.
     *In-client tournaments / championships.*
-11. **Training mode** (M) — free practice, shooting drills, magnet/kick sandbox.
+11. ✅ **Training mode** (M) — free practice, shooting drills, magnet/kick sandbox.
 
 ## 🎯 Tier 3 — Online & rooms (L–XL)
 
@@ -228,7 +258,7 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 15. **Spectator view** (M) — watch a bot-vs-bot match; useful for demos and streams.
 
 ## 🎯 Tier 4 — Creation & variety (L–XL)
-16. **Stadium editor** (XL) — draw pitches with **curves, gradients, RGBA/transparency**, custom goals; save/share via link.
+16. **Stadium editor** (XL) — draw pitches with **curves, gradients, RGameMan/transparency**, custom goals; save/share via link.
     *Mapmakers' top wishes: higher vertex limits, curves, gradients, alpha.* Biggest lift, biggest community pull.
 17. **Field & ball themes** (S–M) — grass patterns, night/retro/ice skins; heavier/lighter/bouncier ball presets.
     *Different grass patterns; configurable disc physics.*

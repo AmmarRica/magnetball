@@ -1,0 +1,628 @@
+// SPRINT — a stamina ring you spend and have to earn back.
+//
+// ⚠️ SPRINTING IS HOLDING KICK. It first fired off the stick being at FULL TILT, and
+// that was wrong for a reason worth keeping: a keyboard and a D-pad have no half-way, so
+// they were sprinting the entire match and never chose anything. KICK is a thing you
+// press on purpose, on every input the game has — and it composes with what KICK already
+// does rather than fighting it, since holding traps and winds up and releasing fires.
+// ⚠️ Which means KICK_SLOW has to be OFF while Sprint is on, or the two features cancel:
+// one says "holding kick makes you fast", the other "holding kick makes you slow".
+//
+// ⚠️ SPENT IS LATCHED, and without that the feature does not exist. "Slow while the ring
+// is not full", read literally, slows you on the second frame of the first run — so the
+// checks below measure that a sprint really does last `sprintSecs()` at FULL speed and
+// only then drops to the tired multiplier.
+//
+// ⚠️ AND IT IS OFF BY DEFAULT, because it changes how every body on the pitch moves.
+// The determinism check is what proves the default costs nothing.
+import { chromium, LAUNCH } from './_browser.mjs';
+
+const b = await chromium.launch(LAUNCH);
+const fails = [], errors = [];
+const ok = (n, c, x) => { if (!c) fails.push(n + (x ? ' — ' + x : '')); };
+const o0 = v => (v == null ? '?' : String(v));
+const p = await b.newPage({ viewport: { width: 1000, height: 900 } });
+p.on('pageerror', e => errors.push(e.message));
+p.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|favicon|manifest|sw\.js|Failed to load|ERR_TUNNEL/i.test(m.text())) errors.push(m.text()); });
+await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+await p.goto('file://' + process.cwd() + '/index.html');
+await p.waitForTimeout(800);
+
+const r = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  // ⚠️ **ON BY DEFAULT**, and it shipped off. The report was "holding kick does not
+  // deplete stamina, it just makes me move really slow" — which is precisely the off
+  // state: `KICK_SLOW` takes 55% of your acceleration with nothing on screen saying why,
+  // while the mechanic KICK is wired to sits behind a switch nothing implies exists.
+  o.defaultOn = M.defaultSel().sprint === 'on';
+
+  // ---- 1. off is genuinely off ------------------------------------------------
+  M.sel.sprint = 'off';
+  M.sel.length = '5';   // timed play — every number in this file was measured under it
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(7); M.startMatch();
+  {
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    const me = w.players[0];
+    // ⚠️ Driven through `pads.p1`, never by writing `p.inX`/`p.kick` — the pad is read
+    // every step and a directly-set flag is overwritten before `integrate` ever sees it.
+    // This is the trap CLAUDE.md records, and it cost this suite its first run.
+    M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = true;
+    for (let i = 0; i < 600; i++) M.step(w);
+    M.pads.p1.dx = 0; M.pads.p1.kick = false;
+    o.offKeepsFullStamina = me.stam === 1 && !me.spent;
+  }
+
+  // ---- 2. a run at full tilt drains, and lasts as long as the dial says --------
+  M.sel.sprint = 'on';
+  M.sel.feel.sprintSecs = 200;      // 2.00s, stored in hundredths
+  M.sel.feel.sprintRefill = 400;    // 4.00s
+  M.sel.feel.sprintSlow = 50;       // half speed when spent
+  o.secs = M.sprintSecs(); o.refill = M.sprintRefill(); o.slow = M.sprintSlow();
+
+  M.setMatchSeed(7); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const me = w.players[0];
+  me.x = 0; me.y = 0; me.vx = me.vy = 0; me.stam = 1; me.spent = false;
+  let emptiedAt = -1;
+  const speeds = [];
+  M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = true;   // running, KICK held
+  for (let i = 0; i < 600; i++){
+    // ⚠️ Held in the MIDDLE of the pitch, velocity untouched. Left to run, the body is
+    // against the touchline inside two seconds and `integrate`'s clamp pins it at zero —
+    // so the "after" speed measured 0.008 and the check was reading a wall, not a dial.
+    me.x = 0; me.y = 0;
+    M.step(w);
+    if (emptiedAt < 0 && me.stam <= 0) emptiedAt = i;
+    speeds.push(Math.hypot(me.vx, me.vy));
+  }
+  o.emptiedAt = emptiedAt;
+  o.emptiedAtSecs = +(emptiedAt/60).toFixed(2);
+  // ⚠️ Measured against the DIAL, not a constant, so retuning the default cannot
+  // silently break the claim that the slider is what decides it.
+  o.lastsTheDial = Math.abs(emptiedAt/60 - M.sprintSecs()) < 0.2;
+  o.spentAfter = me.spent === true;
+  // Top speed before it emptied vs after — the tired multiplier, measured.
+  const before = Math.max.apply(null, speeds.slice(30, emptiedAt));
+  // ⚠️ A WINDOW, not "everything after". KICK is still held, so the moment the ring
+  // refills the body is sprinting again — taking the max over the whole tail measured
+  // the second sprint and read 0.974 of the first. This window sits well inside the
+  // spent stretch: the refill is 4s (240 steps) and this ends at 150.
+  const after = Math.max.apply(null, speeds.slice(emptiedAt + 60, emptiedAt + 150));
+  o.fullSpeed = +before.toFixed(3);
+  o.tiredSpeed = +after.toFixed(3);
+  // ⚠️ Against slow/boost, not against slow alone — the sprint is a BOOST now, so the
+  // ratio between running spent and running sprinting is the two dials divided.
+  o.wantRatio = +(M.sprintSlow()/M.sprintBoost()).toFixed(3);
+  o.tiredIsTheDial = Math.abs(after/before - M.sprintSlow()/M.sprintBoost()) < 0.06;
+  o.boostIsReal = M.sprintBoost() > 1.05;
+
+  // ---- 3. ...and standing still earns it back ---------------------------------
+  let refilledAt = -1;
+  // ⚠️ Let go of KICK. The ring refills whenever you are not sprinting — you do not have
+  // to stand still, you have to stop asking for it.
+  // ⚠️ Emptied by hand first: the loop above kept KICK held after the ring ran out, and
+  // a spent ring refills, so by the end of it the thing was most of the way back and the
+  // recovery measured half its dial.
+  me.stam = 0; me.spent = true;
+  M.pads.p1.kick = false; M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+  for (let i = 0; i < 1800; i++){
+    M.step(w);
+    if (refilledAt < 0 && me.stam >= 1) refilledAt = i;
+  }
+  o.refilledAt = refilledAt;
+  o.refilledAtSecs = +(refilledAt/60).toFixed(2);
+  o.refillIsTheDial = refilledAt >= 0 && Math.abs(refilledAt/60 - M.sprintRefill()) < 0.3;
+  o.rested = me.spent === false;
+  // ⚠️ And full speed is BACK. Without this the check above passes on a build that
+  // simply never lets you off the tired multiplier again.
+  me.vx = me.vy = 0;
+  const back = [];
+  M.pads.p1.dx = 1; M.pads.p1.kick = true;
+  for (let i = 0; i < 60; i++){ M.step(w); back.push(Math.hypot(me.vx, me.vy)); }
+  M.pads.p1.kick = false;
+  o.speedComesBack = Math.max.apply(null, back) > o.tiredSpeed * 1.3;
+
+  // ---- 4. RUNNING WITHOUT HOLDING KICK IS FREE -------------------------------
+  // ⚠️ The whole point of moving the trigger to KICK: getting about the pitch must cost
+  // nothing, or the ring is a tax on playing rather than a thing you spend.
+  me.stam = 1; me.spent = false;
+  M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = false;
+  for (let i = 0; i < 600; i++) M.step(w);
+  M.pads.p1.dx = 0;
+  o.joggingIsFree = me.stam === 1 && !me.spent;
+  // ...and recovery is SLOWER than the spend, whatever the sliders say.
+  M.sel.feel.sprintRefill = 50;                  // ask for half a second
+  o.refillFloored = M.sprintRefill() >= M.sprintSecs();
+  M.sel.feel.sprintRefill = 500;
+
+  // ---- 4b. KICK_SLOW IS OFF WHILE SPRINT IS ON --------------------------------
+  // ⚠️ Measured as BEHAVIOUR, not as a flag. `KICK_SLOW` drops you to 45% of your accel
+  // while KICK is held, so leaving it on alongside a 1.35x sprint means holding KICK
+  // makes you SLOWER — the two features cancelling each other out, which is exactly what
+  // "sprint is not implemented correctly" felt like. So: on a fresh ring, holding KICK
+  // has to be faster than not holding it.
+  const topSpeed = (kick) => {
+    me.stam = 1; me.spent = false; me.vx = me.vy = 0;
+    M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = kick;
+    let best = 0;
+    for (let i = 0; i < 90; i++){ me.x = 0; me.y = 0; M.step(w); best = Math.max(best, Math.hypot(me.vx, me.vy)); }
+    M.pads.p1.kick = false; M.pads.p1.dx = 0;
+    return best;
+  };
+  o.heldSpeed = +topSpeed(true).toFixed(3);
+  o.looseSpeed = +topSpeed(false).toFixed(3);
+  o.kickDoesNotBrake = o.heldSpeed > o.looseSpeed * 1.1;
+
+  // ---- 5. BOTS DO NOT SPRINT, and that reverses an earlier call ---------------
+  // ⚠️ The rule used to be that they carried the same ring, because "a tired human playing
+  // a side that never gets tired is a handicap". Measured, that argument was pointing at
+  // something that was not happening: bots spent 0.0% of ticks locked out and the ring
+  // never fell below 0.62, because a bot holds KICK to TRAP rather than to run. What they
+  // actually got was the 1.35x boost with none of the cost — and it COMPRESSED THE
+  // DIFFICULTY LADDER, the one guarantee the AI exists to keep. Over 36 duels a rung, goal
+  // difference for the stronger side: rookie<normal +39 -> +14, normal<hard +19 -> 0.
+  M.setMatchSeed(11); M.sel.mode = '4v4'; M.startMatch();
+  {
+    const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
+    let lowest = 1;
+    for (let i = 0; i < 1800; i++){
+      M.step(w2);
+      for (const q of w2.players) if (q.ctrl === 'bot' && q.stam != null) lowest = Math.min(lowest, q.stam);
+    }
+    const bots = w2.players.filter(q => q.ctrl === 'bot');
+    o.lowestBotRing = +lowest.toFixed(3);
+    o.botsNeverTire = lowest > 0.999 && bots.every(q => !q.sprinting && !q.spent);
+    // ⚠️ And the predicate is read off `ctrl`, so a body somebody drops into mid-match gets
+    // the ring and a bot taking a seat back loses it. Checked directly, because "bots do
+    // not sprint" written as a check on the roster at kickoff would miss that entirely.
+    const one = bots[0];
+    o.botHasNoRing = M.sprintsFor(one) === false;
+    const was = one.ctrl; one.ctrl = 'gamepad';
+    o.seatDecidesIt = M.sprintsFor(one) === true;
+    one.ctrl = was;
+  }
+  M.sel.sprint = 'off'; M.sel.mode = '1v1';
+  return o;
+});
+
+// ======================================= what a fresh install actually does ==
+// ⚠️ THE REPORT, MEASURED. Every other block here sets `sel.sprint` by hand, so all of
+// them passed on the build that shipped the wrong default — the complaint was never that
+// the mechanic was broken, it was that nobody got it. This one clears storage, reloads
+// the page and touches no setting at all.
+const dflt = await (async () => {
+  const q = await b.newPage({ viewport: { width: 900, height: 900 } });
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(700);
+  const out = await q.evaluate(() => {
+    const M = window.__magnet, o = {};
+    const top = (kick, sprint) => {
+      if (sprint != null) M.sel.sprint = sprint;
+      M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(11); M.startMatch();
+      const w = M.world; w.state = 'play'; w.stateT = 2;
+      const me = w.players.find(x => x.ctrl === 'human1') || w.players[0];
+      // ⚠️ SETTLED speed, and two traps had to be walked round to get one. Taking the
+      // MAXIMUM over the run catches the shove from the opposing bot running into you and
+      // read 3.44 for a build whose steady state is 1.71 — the whole gap being measured.
+      // Averaging the TAIL instead then read 0, because 90 steps at full pelt puts the
+      // body into `integrate`'s boundary clamp and it is pressed against a wall.
+      // So: the body is held at the centre every step and everything else is parked at the
+      // far end. Only its VELOCITY is being measured, and position does not feed accel.
+      let sum = 0, n = 0;
+      for (let i = 0; i < 90; i++){
+        M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = kick;
+        w.ball.x = 9000; w.ball.y = 9000; w.ball.vx = 0; w.ball.vy = 0;   // never near the ball
+        me.x = 0; me.y = 0;                                              // never near a wall
+        for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }  // never near anyone
+        M.step(w);
+        if (i >= 40){ sum += Math.hypot(me.vx, me.vy); n++; }
+      }
+      return { v: +(sum / Math.max(1, n)).toFixed(2), stam: me.stam == null ? null : +me.stam.toFixed(2) };
+    };
+    const held = top(true);            // untouched settings
+    o.heldSpeed = held.v; o.stamAfter = held.stam;
+    o.looseSpeed = top(false).v;
+    o.wasSpeed = top(true, 'off').v;   // what the shipped default did
+    o.outOfTheBox = held.stam < 0.9 && held.v > o.looseSpeed * 1.1 && o.wasSpeed < o.looseSpeed * 0.7;
+    return o;
+  });
+  await q.close();
+  return out;
+})();
+
+// ================================= a bot-only match does not know Sprint exists ==
+// ⚠️ THE LADDER IS WHAT THIS PROTECTS. `KICK_SLOW` is lifted for a sprinter — with Sprint
+// on, holding KICK IS the sprint — and it was lifted on `sprintOn()`, a GLOBAL answer, so
+// every bot got the exemption while having no ring: a straight buff, and rookie-vs-normal
+// still fell from +39 to +23 with the ring already taken off them. `sprintsFor(p)` is one
+// predicate both places read. Hashed over 900 steps of an all-bot match.
+const botw = await p.evaluate(() => {
+  const M = window.__magnet;
+  const run = () => {
+    M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+    M.setMatchSeed(77); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (const q of w.players) q.ctrl = 'bot';        // nobody here has a ring either way
+    for (let i = 0; i < 900; i++) M.step(w);
+    return w.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
+           `#${w.ball.x.toFixed(6)},${w.ball.y.toFixed(6)}#${w.score.join('-')}`;
+  };
+  M.sel.sprint = 'off'; const off = run();
+  M.sel.sprint = 'on';  const on  = run();
+  M.sel.sprint = 'off';
+  return { same: off === on, on };
+});
+
+// ============================================ off changes NOTHING at all ==
+// ⚠️ With it OFF the world must be bit identical to a build that never had it. That was
+// written when off was the default; now that on is, it is the escape hatch that has to
+// hold — somebody who switches Sprint off is asking for the pre-Sprint game, and this is
+// what says they get it. Hashed over 900 steps.
+// ⚠️ It sets `sel.sprint` explicitly at every step of the comparison and never leans on
+// the default, which is why flipping that default did not touch this block.
+const det = await p.evaluate(() => {
+  const M = window.__magnet;
+  // ⚠️ `hold` drives the HUMAN seat's KICK, and it has to, because that is now the only
+  // thing Sprint changes: bots do not sprint, so an idle match is identical either way.
+  // The first version of this block compared two idle matches and asserted they DIFFERED
+  // — true when bots carried the ring, and quietly false the moment they stopped.
+  const run = (hold) => {
+    M.sel.mode = '3v3'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+    M.setMatchSeed(23); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (let i = 0; i < 900; i++){
+      M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = !!hold;
+      M.step(w);
+    }
+    M.pads.p1.dx = 0; M.pads.p1.kick = false;
+    return w.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
+           `#${w.ball.x.toFixed(6)},${w.ball.y.toFixed(6)}#${w.score.join('-')}`;
+  };
+  M.sel.sprint = 'off'; const a = run(false);
+  M.sel.sprint = 'off'; const b2 = run(false);
+  M.sel.sprint = 'on';  const idleOn = run(false);
+  M.sel.sprint = 'off'; const heldOff = run(true);
+  M.sel.sprint = 'on';  const heldOn = run(true);
+  M.sel.sprint = 'off';
+  return { stable: a === b2, idleSame: a === idleOn, onDiffers: heldOff !== heldOn,
+           sample: a.slice(0, 60) };
+});
+
+// ================================ ONE RING, AND ITS COLOUR IS THE GAUGE ==
+// ⚠️ **THE TWO-RING BLOCK IS GONE BECAUSE THE SECOND RING IS GONE**, and the reason is a
+// FALSE PASS THIS SUITE PRODUCED. The stamina arc was drawn under a full-circle background
+// track at 0.16 alpha. Measured on a phone, the ring lit **118 of 120** probe angles at
+// HALF stamina and **119** when spent — half and empty were the same shape, because the
+// track is always complete and swamped the 1.7px arc whose LENGTH was the only signal.
+// ⚠️ And this file HID that: the diff threshold in the block below was raised from 30 to
+// 90 with a comment calling the track a measurement artefact, which made
+// `isAnArcNotACircle` — a check whose own message reads "a progress bar that is always a
+// full ring shows no progress" — go green again. The check was tuned until it stopped
+// seeing precisely the thing it names. Lowered back to 30 now, as the proof.
+// ⚠️ The gauge is the wind-up ring's COLOUR: one complete circle, white for the stamina
+// you still have and `RING.spent` for what you have used. It must stay COMPLETE — that
+// radius is the kick reach, so a gap in it is a lie about where you can kick.
+// ⚠️ Grass on purpose, and pinned: the default palette and the one the old arc hid on
+// (green `TH.good` on green mown stripes is 1.29:1). A suite that samples pixels has to
+// say which palette it is sampling.
+const bands = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.applyTheme('grass');
+  M.sel.sprint = 'on'; M.sel.mode = '1v1'; M.sel.lobby = 'off';
+  M.setMatchSeed(7); M.startMatch();
+  // ⚠️ **A LEFTOVER GOAL FLASH WAS TINTING THE WHOLE PICTURE, and it made this block
+  // read the FORMATION.** `shake`/`flash` are module-level juice, decayed in `decayJuice()`
+  // — which `loop()` calls and a headless probe never does — and `startMatch` does not
+  // clear them. The blocks above play bot matches, so whoever scored last left a
+  // full-screen wash in THEIR team's colour still on the canvas: measured as every one of
+  // the 900,000 pixels differing between two builds, the court reading 103,127,75 under a
+  // red flash and 45,143,125 under a blue one. Change anything that alters a bot match —
+  // a kickoff mark, a bot name — and the last scorer changes with it, so this block went
+  // red for a formation tweak it cannot otherwise see (it is a 1v1, and only bodies past
+  // the first moved). `juiceReset()` is the one owner of that state.
+  M.juiceReset();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  const me = w.players.find(q => q.ctrl === 'human1') || w.players[0];
+  me.x = 60; me.y = 90; me.vx = me.vy = 0; me.name = '';
+  w.ball.x = 9000; w.ball.y = 9000;
+  for (const q of w.players) if (q !== me){ q.x = 0; q.y = 9000; }
+  const cv = document.getElementById('game'), c = cv.getContext('2d');
+  const dpr = cv.width / cv.clientWidth;
+  M.computeCam();
+  const r = me.r * M.cam.s, L = M.ringLayout(me, r);
+  o.layout = { kickR: +L.kickR.toFixed(1), kickW: +L.kickW.toFixed(2), asR: +(L.kickR/r).toFixed(2) };
+  const px = M.wx(me.x) * dpr, py = M.wy(me.y) * dpr;
+  // ⚠️ **CLASSIFIED AS A DIFFERENCE against the rested body, never an absolute cut.** A
+  // fixed `sum > 640` worked on a 3x phone page and read ZERO on this 1x one, and a
+  // court-relative cut then read the whole ring as lit at rest because the reference
+  // landed on a different mown stripe. The rested body draws no ring at all, so it is the
+  // one honest baseline: anything that differs from it IS the ring, and the pixel's own
+  // hue says which half of the gauge it is.
+  // ⚠️ **THE SAMPLE TAKEN IS THE ONE THAT DIFFERS MOST, never the BRIGHTEST, and picking
+  // the brightest is what made this block fragile.** The ring is ~2px wide and the radii
+  // are stepped half a pixel, so most angles sample the ANTIALIASED EDGE as well as the
+  // ink: on a spent ring the edge blend came back 189,137,107 against the red core's
+  // 225,95,69 — brighter summed, and green 137 fails the red test, so nearly every angle
+  // was filed as `pale` and a fully spent ring measured 17 red out of 120. Which sample
+  // is brightest then turns on sub-pixel luck. The largest difference from the rested
+  // frame at the SAME radius is the ring ink by construction, which is what the paragraph
+  // above already says the baseline is for — and it is right for both halves of the
+  // gauge, since white over grass differs more than any blend of it does.
+  const band = (kick, stam, spent) => {
+    me.kick = kick; me.stam = stam; me.spent = spent; me.chargeT = 0;
+    M.renderAlpha = 1; M.render();
+    const out = [];
+    for (let a = 0; a < 360; a += 3){
+      const t = (a - 90) * Math.PI/180, row = [];
+      for (let d = -1.5; d <= 1.5; d += 0.5){
+        const rad = L.kickR + d;
+        const q = c.getImageData(Math.round(px + Math.cos(t)*rad*dpr),
+                                 Math.round(py + Math.sin(t)*rad*dpr), 1, 1).data;
+        row.push([q[0], q[1], q[2]]);
+      }
+      out.push(row);
+    }
+    return out;
+  };
+  const rested = band(false, 1, false);
+  const scan = (kick, stam, spent) => {
+    const now = band(kick, stam, spent);
+    let red = 0, pale = 0, none = 0;
+    for (let i = 0; i < now.length; i++){
+      let q = null, diff = -1;
+      for (let j = 0; j < now[i].length; j++){
+        const s = now[i][j], b0 = rested[i][j];
+        const d = Math.abs(s[0]-b0[0]) + Math.abs(s[1]-b0[1]) + Math.abs(s[2]-b0[2]);
+        if (d > diff){ diff = d; q = s; }
+      }
+      if (diff < 40) none++;
+      else if (q[0] > 150 && q[1] < 130 && q[2] < 120) red++;
+      else pale++;
+    }
+    return { red, pale, none };
+  };
+  o.idleFull      = scan(false, 1, false);
+  o.holdFull      = scan(true, 1, false);
+  // ⚠️ **DERIVED FROM `sprintShow()`, NOT FROM A CONSTANT.** The threshold used to be
+  // `SPRINT.show`, a fraction; it is a TIME now (`SPRINT.showAfter`) turned into a
+  // fraction by `sprintShow()`, because the fraction that means "half a second in" is
+  // different at every setting of the Sprint length slider. The old key was deleted
+  // outright: had it survived, these three probes would have gone on reading it and
+  // passing while measuring a threshold the game no longer uses.
+  o.show          = M.sprintShow();
+  o.holdAbove     = scan(true, o.show + (1 - o.show)*0.5, false);   // safely above it
+  o.holdLow       = scan(true, o.show * 0.5, false);
+  o.spentReleased = scan(false, 0.02, true);
+  o.refilling     = scan(false, 0.5, true);
+  // ⚠️ **THE HEADLINE CLAIM, AND NOTHING CHECKED IT BEFORE.** Every probe above sets
+  // `stam` by hand, so they pin the SHAPE of the gauge and say nothing at all about WHEN
+  // it starts — which is the thing that was actually reported ("the circle stays white for
+  // a bit before running out"). Measured on the old build: the first red pixel landed at
+  // step 73, **1.217 s**. Driven through the real `advanceStamina` so the drain rate and
+  // the threshold are tested together, and bracketed either side of half a second rather
+  // than pinned to one step, so retuning the drain cannot make it vacuous.
+  const heldFor = (secs) => {
+    me.stam = 1; me.spent = false; me.kick = true;
+    const n = Math.round(secs * 60);
+    for (let i = 0; i < n; i++) M.advanceStamina(w, me);
+    return { stam: +me.stam.toFixed(4), spent: me.spent, ...scan(true, me.stam, me.spent) };
+  };
+  o.held040 = heldFor(0.40);
+  o.held075 = heldFor(0.75);
+  o.N = 120;
+  // ⚠️ ...and it grows CLOCKWISE FROM TWELVE, the one thing an angular count cannot say.
+  // Index 0 is straight up; part spent must be red at the top and pale at the bottom.
+  {
+    me.kick = true; me.stam = M.sprintShow() * 0.5; me.spent = false; me.chargeT = 0;
+    M.renderAlpha = 1; M.render();
+    const at = (deg) => { const t = (deg - 90) * Math.PI/180;
+      let red = 0;
+      for (let d = -1.5; d <= 1.5; d += 0.5){
+        const rad = L.kickR + d;
+        const q = c.getImageData(Math.round(px + Math.cos(t)*rad*dpr),
+                                 Math.round(py + Math.sin(t)*rad*dpr), 1, 1).data;
+        if (q[0] > 150 && q[1] < 130 && q[2] < 120) red = 1;
+      }
+      return red; };
+    o.topIsRed = at(6) === 1 && at(20) === 1;
+    o.bottomIsNot = at(186) === 0 && at(200) === 0;
+  }
+  return o;
+});
+
+// Nothing at all in ordinary play: no second band, and no ring unless you ask for one.
+ok('a rested player who is not kicking wears NOTHING', bands.idleFull.none === bands.N,
+   JSON.stringify(bands.idleFull) + ' — the stamina gauge may not be furniture on every body');
+// ...and holding KICK is the plain white ring, unchanged, while there is nothing to say.
+ok('...holding KICK with plenty left is the plain ring', bands.holdFull.pale === bands.N && bands.holdFull.red === 0,
+   JSON.stringify(bands.holdFull));
+ok('the ring is still PLAIN at 0.4s of holding KICK', bands.held040.red === 0,
+   JSON.stringify(bands.held040) + ' — half a second is the promise, so it must not start before it');
+ok('...and the red HAS started by 0.75s', bands.held075.red > 0,
+   JSON.stringify(bands.held075) +
+   ' — the old build showed nothing until 1.217s, which is what "stays white for a bit" was');
+ok('...and it stays plain ABOVE the threshold', bands.holdAbove.red === 0,
+   JSON.stringify({ show: bands.show, at: bands.holdAbove }) +
+   ' — "only when it matters" means the gauge does not exist until it is worth reading');
+// ⚠️ THE CLAIM THE OLD SUITE COULD NOT MAKE: half and empty are different shapes. The
+// build this replaces read 118 of 120 at half and 119 when spent — six angles apart.
+ok('the gauge SHOWS A LEVEL: part spent is part red', bands.holdLow.red > bands.N*0.25 && bands.holdLow.red < bands.N*0.75,
+   JSON.stringify(bands.holdLow) + ' — half drained must be about half the circle, not all of it');
+ok('...and empty is clearly MORE than half spent', bands.spentReleased.red > bands.holdLow.red + bands.N*0.25,
+   JSON.stringify({ half: bands.holdLow.red, empty: bands.spentReleased.red }) +
+   ' — the old arc read 118 at half and 119 at empty, indistinguishable at every screen size');
+// ⚠️ Visible with KICK RELEASED. Folding the gauge into a hold-only ring would mean you
+// could never watch it refill, and being locked out is exactly when you need to know.
+ok('...and being LOCKED OUT shows without holding KICK', bands.spentReleased.red > bands.N*0.8,
+   JSON.stringify(bands.spentReleased) + ' — you have to be able to watch it come back');
+ok('...and it visibly comes back as it refills', bands.refilling.red < bands.spentReleased.red - bands.N*0.25,
+   JSON.stringify({ empty: bands.spentReleased.red, halfway: bands.refilling.red }));
+// ⚠️ THE RING IS ALWAYS A COMPLETE CIRCLE. Its radius is the kick REACH, so a gap in it is
+// a lie about where you can kick — this is why the gauge is carried by colour and not by
+// arc length, and `tests/tells.mjs` pins the same circle from the other side.
+ok('...and it grows clockwise FROM TWELVE', bands.topIsRed && bands.bottomIsNot,
+   JSON.stringify({ topIsRed: bands.topIsRed, bottomIsNot: bands.bottomIsNot }) +
+   ' — an angular count cannot tell a gauge that fills from the top from one that fills from anywhere');
+ok('...and the circle is never broken, whatever the level',
+   [bands.holdFull, bands.holdLow, bands.spentReleased, bands.refilling]
+     .every(x => x.red + x.pale === bands.N),
+   JSON.stringify({ full: bands.holdFull, low: bands.holdLow, empty: bands.spentReleased, refill: bands.refilling }) +
+   ' — the radius is the reach, so a missing arc would be a lie about where the ball can be kicked from');
+
+// ==================================================== the ring, in pixels ==
+// ⚠️ Measured as RENDERED INK, never from the flag — a "stamina exists" check passes on
+// a build that draws nothing at all.
+// ⚠️ And measured as a DIFFERENCE against the same body drawn rested, per probe angle.
+// The disc already has a guide ring and a rim within a few pixels of this radius, so an
+// absolute ink count reads 65 of 120 with no stamina ring drawn at all — which is the
+// trap this file exists to avoid. The arc is whatever is inked when draining and is not
+// inked when rested; a full circle would show up as no difference.
+// ⚠️ THE PALETTE IS PINNED, because a suite that samples pixels has to say which one it
+// is sampling — grass puts mown stripes exactly where this is looking.
+// ============================ drag-only sliders, and swipe-down to pause ==
+// ⚠️ A native range input JUMPS to wherever you press it. On a phone that is a trap: the
+// sliders are wide, they sit in a column you scroll with your thumb, and a graze anywhere
+// along one silently rewrites a value you had tuned. Both halves are measured — a press
+// on the TRACK must do nothing, and a press on the HANDLE must still start a drag —
+// because "presses are refused" is also true of a slider nobody can move at all.
+const drag = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.toMenu(); M.buildSettings(); M.openSection('feel'); M.showSubTab('feel', 'player');
+  const el = document.querySelector('.subpane[data-pane="player"] input.slider');
+  o.found = !!el;
+  if (!el) return o;
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect();
+  const min = +el.min || 0, max = +el.max, span = max - min;
+  const frac = ((+el.value) - min) / span;
+  const pad = M.SLIDER_GRAB/2;
+  const handleX = r.left + pad + frac * (r.width - pad*2);
+  const fire = (x, kind) => {
+    const ev = new PointerEvent('pointerdown', { clientX: x, clientY: r.top + r.height/2,
+      pointerType: kind, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  // Far end of the track, on a touch: refused.
+  const far = handleX > r.left + r.width/2 ? r.left + 6 : r.right - 6;
+  o.trackRefusedOnTouch = fire(far, 'touch');
+  // On the handle: allowed, so the native drag still runs.
+  o.handleAllowedOnTouch = !fire(handleX, 'touch');
+  // ⚠️ A MOUSE is exempt: a click on the track is precise and deliberate, it is the
+  // long-standing desktop behaviour, and there is no scrolling thumb to graze.
+  o.mouseStillJumps = !fire(far, 'mouse');
+  o.grabPx = M.SLIDER_GRAB;
+  return o;
+});
+
+// ⚠️ SWIPE DOWN FROM THE TOP EDGE PAUSES, and it has to be a GESTURE rather than a
+// region: `zoneForTouch` splits the WHOLE screen into a move half and a kick half, so
+// there is nowhere to put a "pause here" area that is not already a control.
+// ⚠️ On a PHONE-sized page with touch. `swipeStart` is gated on `isTouchLayout()`, and
+// this file's main page is 1000x900 — where the gesture correctly does nothing, so the
+// whole block passed for the wrong reason on its first run.
+const ph = await b.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+ph.on('pageerror', e => errors.push(e.message));
+await ph.addInitScript(() => { window.__MAGNETDEBUG = true; });
+await ph.goto('file://' + process.cwd() + '/index.html');
+await ph.waitForTimeout(800);
+const swipe = await ph.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(5); M.startMatch();
+  const S = M.SWIPEPAUSE;
+  const pull = (x0, y0, dx, dy) => {
+    M.onDown(77, x0, y0); M.onMove(77, x0 + dx, y0 + dy); M.onUp(77);
+  };
+  o.edge = S.edge; o.dist = S.dist;
+  // A pull down from the top edge pauses.
+  pull(200, 10, 0, S.dist + 30);
+  o.pausedAfterPull = M.paused === true;
+  M.togglePause(false);
+  // ...a pull that starts BELOW the strip does not — that is somebody steering.
+  pull(200, S.edge + 60, 0, S.dist + 30);
+  o.midScreenIsNotAPause = M.paused === false;
+  // ...nor does a short one, nor a sideways one along the top.
+  pull(200, 10, 0, S.dist - 30);
+  o.shortIsNotAPause = M.paused === false;
+  pull(200, 10, S.dist + 40, 8);
+  o.sidewaysIsNotAPause = M.paused === false;
+  // ⚠️ ...and a touch that starts in the strip drives NO pad, which is what makes the
+  // gesture safe: it cannot half-steer you on the way to being recognised.
+  M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+  M.onDown(78, 200, 10); M.onMove(78, 260, 30);
+  o.stripDrivesNothing = M.pads.p1.dx === 0 && M.pads.p1.dy === 0;
+  M.onUp(78);
+  return o;
+});
+await ph.close();
+await p.close();
+
+// -------------------------------------------------------------------- report --
+ok('sprint is ON by default', r.defaultOn,
+   'it shipped off, so holding KICK gave you KICK_SLOW and none of the mechanic it is wired to');
+ok('...so out of the box, holding KICK spends the ring and runs FASTER', dflt.outOfTheBox,
+   `ring went 1 -> ${dflt.stamAfter} and top speed ${dflt.heldSpeed} against ${dflt.looseSpeed} loose` +
+   ` — the reported build read ${dflt.wasSpeed} held, which is 45% of loose and no ring at all`);
+ok('...and off means the ring never moves', r.offKeepsFullStamina);
+
+ok('a run at full tilt lasts exactly as long as the dial says', r.lastsTheDial,
+   `emptied at ${r.emptiedAtSecs}s against a dial of ${r.secs}s`);
+ok('...at FULL speed the whole way', r.fullSpeed > r.tiredSpeed,
+   `${r.fullSpeed} then ${r.tiredSpeed} — "slow while the ring is not full" read literally slows you on the second frame of the first run, which is not a sprint`);
+ok('...then the tired multiplier is the dial', r.tiredIsTheDial,
+   `${(r.tiredSpeed/r.fullSpeed).toFixed(3)} against ${r.wantRatio} (tired \u00f7 sprint)`);
+ok('...and a sprint really is FASTER than not sprinting', r.boostIsReal,
+   'a sprint with no boost is a button that only ever costs you something');
+ok('holding KICK no longer BRAKES you while Sprint is on', r.kickDoesNotBrake,
+   `${o0(r.heldSpeed)} holding vs ${o0(r.looseSpeed)} loose — KICK_SLOW drops you to 45% of your accel, so left on alongside a 1.35\u00d7 sprint, holding KICK makes you slower and the two features cancel out`);
+ok('...and it latches until the ring is FULL again', r.spentAfter);
+
+ok('standing still earns it back on its own dial', r.refillIsTheDial,
+   `full again after ${r.refilledAtSecs}s against a dial of ${r.refill}s`);
+ok('...and the speed really comes back', r.speedComesBack && r.rested,
+   `${r.tiredSpeed} then a peak of the recovered run — without this, "it refills" is true of a build that never lets you off the tired speed`);
+ok('running WITHOUT holding kick costs nothing', r.joggingIsFree,
+   'getting about the pitch has to be free, or the ring is a tax on playing rather than something you spend');
+ok('...and recovery can never be set faster than the spend', r.refillFloored,
+   'a ring that refills quicker than it drains is one you never stop holding');
+
+ok('bots do NOT sprint', r.botsNeverTire,
+   `lowest bot ring over half a minute of 4v4 was ${r.lowestBotRing} — they used to carry it, ` +
+   'and since a bot holds KICK to TRAP rather than to run it never emptied: 0.0% of ticks spent, ' +
+   'so what they got was the 1.35x boost with none of the cost');
+ok('...and it is the SEAT that decides, not what the body started as', r.botHasNoRing && r.seatDecidesIt,
+   'a body somebody drops into mid-match gets the ring; a bot taking a seat back loses it');
+ok('...so a bot-only match is bit identical with Sprint on and off', botw.same,
+   `${botw.on.slice(0,44)} — the ladder is what this protects: with bots sprinting, normal-vs-hard ` +
+   'went from +19 goal difference over 36 duels to exactly 0, which is two tiers nobody can tell apart');
+
+ok('with sprint off the world is unchanged', det.stable, det.sample);
+ok('...and with nobody holding KICK it is the same match either way', det.idleSame,
+   'bots do not sprint, so an untouched match cannot tell the setting apart — which is exactly what keeps the ladder where it was');
+ok('...but hold KICK and it is a different match', det.onDiffers,
+   'if switching it on changes nothing for the one seat that has a ring then nothing was wired up');
+
+
+ok('a slider ignores a touch on its TRACK', drag.found && drag.trackRefusedOnTouch,
+   `grab window ${drag.grabPx}px — a range input jumps to wherever you press, and on a phone that rewrites a tuned value from a graze while scrolling`);
+ok('...but a touch on its HANDLE still drags', drag.handleAllowedOnTouch,
+   '"presses are refused" is also true of a slider nobody can move at all');
+ok('...and a mouse still clicks the track', drag.mouseStillJumps,
+   'precise, deliberate, the long-standing desktop behaviour, and no scrolling thumb to graze');
+
+ok('a pull down from the top edge pauses', swipe.pausedAfterPull,
+   `${swipe.dist}px from inside the top ${swipe.edge}px`);
+ok('...a drag lower down does not', swipe.midScreenIsNotAPause, 'that is somebody steering');
+ok('...nor a short pull', swipe.shortIsNotAPause);
+ok('...nor a sideways one along the top', swipe.sidewaysIsNotAPause,
+   'reaching for the fullscreen button is not asking for the menu');
+ok('...and a touch in the strip drives no pad at all', swipe.stripDrivesNothing,
+   'it must not half-steer you on the way to being recognised');
+
+ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+console.log(JSON.stringify({ r, det, bands, drag, swipe }, null, 1));
+await b.close();
+if (fails.length){ console.log('FAIL sprint\n  ' + fails.join('\n  ')); process.exit(1); }
+console.log('PASS sprint');

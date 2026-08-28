@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Magnetball — Menu</title>
+  <meta name="theme-color" content="#0b3d1f" />
+  <meta http-equiv="refresh" content="0; url=../menu/" />
+  <style>body{background:#0b0f18;color:#dfe7f2;font:14px system-ui,sans-serif;margin:0;padding:28px}a{color:#3ee08a}</style>
+</head>
+<body>
+  <!--
+    THE ROUTE MOVED TO /menu, AND THIS IS THE ONLY THING LEFT HERE.
+
+    The accordion behind KICK OFF *is* the menu — eleven cards of it — so a route
+    called "settings" named one card's worth of what is on the page. It is /menu now.
+
+    ⚠️ This stub exists because a page cannot fix somebody's bookmark. /settings has
+    been the panel route for the whole life of the feature, and the service worker
+    precached it, so deleting the directory outright turns every saved link and every
+    already-installed copy into a 404. A redirect costs one file and never lies about
+    where the page went.
+    ⚠️ A <meta refresh> AND a script: the meta works with scripting off and is what a
+    crawler follows, and `location.replace` keeps the dead URL out of the back button
+    so "back" from the menu returns to the game rather than bouncing here again.
+  -->
+  <p>The settings screen is now at <a href="../menu/">/menu</a>. Taking you there…</p>
+  <script>location.replace('../menu/');</script>
+</body>
+</html>
