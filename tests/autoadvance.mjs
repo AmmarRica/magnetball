@@ -107,6 +107,12 @@ const r = await p.evaluate(async ()=>{
   M.resultIdle = 0.5; M.stepResultClock(1);
   o.resultAutoStarts = !document.getElementById('overlay').classList.contains('show')
                     && M.world.state === 'kickoff';
+  // ⚠️ **AND A KEYBOARD-ONLY DESKTOP IS STILL A PLAIN RESTART.** Full time now takes
+  // everybody off the pitch and they walk back in — but only where a lobby is wanted at
+  // all. Gated on `warmupUseful` instead, whose last line is `!isTouchLayout()`, this
+  // player's one body was put outside the touchline and they had to walk it back on and
+  // press START to play again: two steps added to the button whose whole job is "again".
+  // That is what this block caught, and `sameTeams` is what says which build it is.
   o.sameTeams = M.world.players.map(q=>q.team+':'+q.ctrl).join('|') === teamsBefore;
   o.sameField = M.world.fieldKey === M.sel.field;
   o.scoreReset = M.world.score.join('-') === '0-0';
@@ -135,7 +141,7 @@ ok(r.clockArmed, 'the result screen did not arm its clock');
 ok(r.hintCountsDown, 'the result screen does not say a match is coming');
 ok(r.inputHoldsResult, 'a held button did not hold the result clock open');
 ok(r.resultAutoStarts, 'the result screen never started the next match');
-ok(r.sameTeams, 'the auto-started match changed the teams');
+ok(r.sameTeams, 'the auto-started match changed the teams. With no controller in play a restart is a plain restart: the re-join room (everybody outside, walk back in) is gated on lobbyWanted, and gating it on warmupUseful instead reaches every desktop, pad or no pad');
 ok(r.sameField, 'the auto-started match changed the field');
 ok(r.scoreReset, 'the auto-started match kept the old score');
 ok(r.leavesDrillsAlone, 'the result clock armed itself in a drill');

@@ -376,14 +376,29 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     r.p1MovesSelection = M.overNav === 1;
     window.__pads[0].axes[0]=-1; M.pollOverOptions(); window.__pads[0].axes[0]=0; M.pollOverOptions();
     r.selectionGoesBack = M.overNav === 0;
-    // Restart: same teams, fresh scoreline, bench preserved.
+    // ⚠️ **RESTART EMPTIES THE PITCH OF PEOPLE NOW, and these three assertions are REVERSED
+    // ON PURPOSE rather than nudged.** They used to read "kicks off, same teams, bench
+    // preserved", which was the whole of what Restart meant: the last roster dealt again.
+    // Asked for: everybody steps outside at full time, walks back in to play, and a
+    // controller that went away is a bot next match — so a restart lands in the re-join
+    // room, the teams are deliberately NOT the ones that just finished, and the bench is
+    // emptied back into the pool rather than kept.
+    // ⚠️ What has to stay true is that nobody is LOST: the same people are still in the
+    // world, standing outside it. `teams` is kept as the control for exactly that count.
+    // ⚠️ Counted off `allBodies`, never `w.players`: one of the three walked outside before
+    // the whistle and is on the BENCH, so a players-only count is 2 and the check reads as
+    // the restart having invented somebody. "Nobody is lost" is a claim about everyone the
+    // match knew of, which is what that function is for.
+    const heads = M.allBodies(M.world).filter(q => q.ctrl !== 'bot').length;
     M.overButtons()[0].click();
-    r.restartKicksOff = M.world.state === 'kickoff';
-    r.restartKeepsTeams = M.world.players.map(q=>q.team+':'+q.ctrl).join('|') === teams;
+    r.restartToRoom = M.world.state === 'warmup';
+    r.restartEmptiesPitch = M.lobbyHumans(M.world).every(q => M.lobbyOutside(M.world, q));
+    r.restartKeepsEveryone = M.lobbyHumans(M.world).length === heads && heads > 0;
+    r.restartSizeFollows = M.world.lobby && M.world.lobby.per === 1;
     r.restartResetsScore = M.world.score.join('-') === '0-0';
     r.restartResetsStats = M.world.players.every(q=>q.ms.goals===0);
-    r.restartKeepsBench = M.world.bench.length > 0;
     r.restartNoOverlay = !document.getElementById('overlay').classList.contains('show');
+    r.teamsWere = teams.length > 0;
     // Warm-up: back to the lobby with everyone available again.
     M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world); M.finishMatch(M.world);
     M.overButtons()[1].click();
@@ -522,8 +537,9 @@ const must = ['selectOpensWarmup','selectTurnsSeat','stillInWarmup','noSecondLob
   'sidesStillEqual','rosterIntact','cannotEnterMidMatch','benchNeverTouchesTheBall',
   'benchStillMoves','benchStaysOnScreen','benchHasAPad',
   'showsBothOptions','restartIsDefault','statsShownToo','saysPlayerOneChooses',
-  'othersCannotPick','p1MovesSelection','selectionGoesBack','restartKicksOff',
-  'restartKeepsTeams','restartResetsScore','restartResetsStats','restartKeepsBench',
+  'othersCannotPick','p1MovesSelection','selectionGoesBack','restartToRoom',
+  'restartEmptiesPitch','restartKeepsEveryone','restartSizeFollows',
+  'restartResetsScore','restartResetsStats',
   'restartNoOverlay','warmupOption','warmupFreesTheBench'];
 const bad = must.filter(k => o[k] !== true);
 const ok = bad.length === 0 && allErrs.length === 0;

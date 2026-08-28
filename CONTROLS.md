@@ -145,10 +145,16 @@ setup.
 ## Joining, leaving and swapping
 
 - **A controller takes a seat out of the box** (`sel.controllers`, default on).
-- **Plug one in mid-match** and a body walks out to the touchline. Walk to the half you
-  want, press **any button**, and you come on at the next goal. Pressing again cancels.
+- **Plug one in mid-match** and a body walks out to the touchline. Walk **along** the line
+  to stand beside the half you want, then **push the stick into the pitch and hold it for
+  three seconds** — a ring fills round you — and you come straight on, mid-play. If that
+  side has a bot you take its shirt; if it is all people, the match grows and the other side
+  gets a bot.
 - **Unplug** and your body keeps your name, shirt and stats; a filler bot takes the place.
-  Plug back in and **any button** takes it straight back, mid-play.
+  Plug back in, hold toward the pitch the same way, and you take it straight back.
+- **At full time everybody steps off the pitch.** Restart puts you all outside the
+  touchline; walk back in to play, and the next match is however many of you did — three
+  people split two and one is a 2v2 with one bot. Somebody who has gone home is a bot.
 - **A pad missing from a single poll is not an unplugged pad** (`PAD_GRACE`). Browsers
   re-enumerate — on a focus change, a Bluetooth blip — and a slot of nulls for a frame used
   to take the whole controller row off the corner of the screen and bench a body. Both

@@ -3436,6 +3436,104 @@ three lines a second time, name it.
   each of the eight sites that repurpose that button for Menu / Cup / Retry / Drills.
   `tests/warmupoffer.mjs`, which pins the rule from **both** ends — a predicate that only
   ever returns false passes every hiding check and would have deleted the feature.
+- **AT FULL TIME EVERYBODY STEPS OFF THE PITCH, AND WALKS BACK ON TO PLAY THE NEXT ONE**
+  (`enterWarmup(w, lite, 'out')`, `w.lobby.reJoin`, `restartToPick`). Asked for in those
+  words — *"when a match ends, have all players sit outside the field"* — and the reason
+  given with it is the half that matters: *"so if someone leaves then they are replaced by
+  bot next match"*. Nobody on the pitch has a claim on a shirt, so who plays is whoever
+  walks back in, and a controller that went away simply never does.
+  ⚠️ **THE SIZE FOLLOWS THE PEOPLE, and one line does it**: `w.lobby.per = 1`.
+  `lobbyPlan` already computes `max(want, a.length, b.length)`, so with the stepper at one
+  the answer IS the fullest half. Measured on the owner's own example — a 4v4 finishes, one
+  controller has gone, three people walk back in split 2 and 1: **2v2 with a bot beside the
+  lone one**. One person walks in: **1 vs AI**. Nothing new decides the size; the existing
+  owner is told not to floor it at the mode.
+  ⚠️ **THE MODE FLOOR IS LEFT ALONE EVERYWHERE ELSE**, which is what keeps the Match card's
+  team size from becoming a dead control: one person opening warm-up from the MENU on a 4v4
+  still gets a 4v4 against bots. This is the room you land in AFTER a match, where the
+  question really is "who is still here".
+  ⚠️ **`enterWarmup`'s third argument is now WHERE THE PEOPLE STAND, and there are three
+  answers** — nothing (the halfway line, undecided), `'keep'` (back on the half they were
+  playing, the result screen's Warm-up button) and `'out'`. `true` is still accepted for
+  `'keep'`, because a rename only ever ADDS a spelling and four suites pass it.
+  ⚠️ **`lobbyPlan`'s "everyone stepped out, so the host comes back on" line HAD TO STAND
+  DOWN**, and without that the feature does not exist at all: it would put player one back
+  on the grass on frame one. An empty pitch is the STARTING state in this room rather than
+  everybody giving up — which is exactly why the guard is a flag on the room and not a
+  change to the rule, which is right everywhere else.
+  ⚠️ **They stand beside the half they were just on, not in one heap** — a nudge, not a
+  commitment, since out there `lobbySideOf` answers −1 and `lobbyPlan` files them under
+  `out`. Through **`lobbySpotFor`**, the one owner of "where does a body wait": it clears
+  the keyboard and the colour swatches (both of which sit outside a touchline) and pushes
+  out of a gap block. `_px`/`_py` are set with the position, or `ix`/`iy` interpolate the
+  body across the pitch for a frame.
+  ⚠️ **RESTART is the door, and the AUTO-ADVANCE goes through the same one** —
+  `restartToPick`, never a second copy of what "next match" means.
+  ⚠️ **GATED ON `lobbyWanted`, NOT `warmupUseful`, and the difference is the whole of
+  whether this is an improvement or an annoyance.** `warmupUseful` asks whether the room is
+  worth OFFERING and its last line is `!isTouchLayout()` — true on **every desktop, pad or
+  no pad** — so a keyboard-only player pressing Restart had their one body put outside the
+  touchline and had to walk it back on and press START, which is two steps added to a button
+  whose whole job is "again". `lobbyWanted` is the question actually being asked (should
+  THIS match start in the lobby) and already honours Skip, cocktail, the touch opt-in and
+  otherwise wants a real controller on the pitch. **`tests/autoadvance.mjs` caught it**, on
+  its `sameTeams` assertion. Not a cup tie either: a tie is two entrants the DRAW named.
+  ⚠️ **Three assertions in `tests/lobby.mjs` are REVERSED, deliberately.** They read "kicks
+  off, same teams, bench preserved", which was the whole of what Restart meant. What
+  replaces them is that nobody is LOST — counted off `allBodies`, never `w.players`, or the
+  one person who had walked outside before the whistle is on the bench and the check reads
+  as the restart having invented somebody.
+- **HOLD TOWARD THE PITCH FOR THREE SECONDS TO JOIN A MATCH ALREADY RUNNING**
+  (`LOBBY.holdJoin`, `SUB.holdStick`, `pollSubHold`, `subInward`, `joinHoldFrac`). Asked
+  for: *"they have to hold direction toward the field or side they want to be in for 3
+  seconds and then they either replace the bot or a bot joins other team"*.
+  ⚠️ **IT REPLACES A PRESS, and the press is DELETED rather than left beside it.** `runSubs`,
+  `_subIn`, `pollSubReady` and the `w._subDone` goal hook are gone. Two things were wrong
+  with the press: a goal can be minutes away, so the wait was far longer than the decision;
+  and out on the touchline every button is spare, so "any button" was a gesture with no
+  weight behind it. A dead mechanism beside a live one is the second copy that gets edited
+  by mistake.
+  ⚠️ **THE STICK IS THE ONE INPUT THAT ALREADY MEANS SOMETHING OUT HERE**, which is what
+  makes it the right one: you walk ALONG the touchline to stand beside the half you want,
+  then push IN. Along the line moves you, into the line joins you, and `stepBench` pushes
+  you straight back out while the hold runs — so the two never fight and there is nothing to
+  un-learn. `SUB.holdStick` is 0.5, so a run along the line is 0 on this axis.
+  ⚠️ **`subInward` IS AN AXIS, NOT A BEARING AT THE CENTRE SPOT.** A waiting body is held in
+  the ring just outside the rectangle, so it is over one edge and one edge only; aiming at
+  the middle would make the push a diagonal from the corners, where "toward the pitch" and
+  "along the touchline" stop being separable.
+  ⚠️ **REPLACE OR GROW, AND THE BRANCH IS DECIDED BY THE PEOPLE ON THAT SIDE, NEVER THE
+  BODIES.** Walk onto a side carrying a bot and the size does not move, so `evenUpSides`
+  finds one body too many and drops that bot — the shirt was already there. Walk onto a side
+  that is all people and the size has to go up, so `evenUpSides` puts a bot on the other
+  half instead. **Counting bodies grows in BOTH cases**, and the first then reads as
+  arriving having cost the other team a bot for nothing; sabotaged that way, a 3v3 becomes
+  4v4 and a 6v6 becomes 7v7. This **REVERSES** the old rule that *"a 3v3 that gains a player
+  is a 4v4, and arriving must never cost a body its place"* — which is still true of the
+  second branch and was never true of the first.
+  ⚠️ **ONE RULE FOR A NEWCOMER AND A RETURNER ALIKE.** The returner had a press of its own;
+  two ways on is two things to explain, and the ring says which is happening either way.
+  What still differs is the arithmetic — `_subPerWas` restores the size the match was at
+  before they left, which is a different question from "how many people are on this half".
+  ⚠️ **COUNTED IN THE STEP LOOP.** `pollSubHold` runs from `pollDropIn`, which `loop()`
+  calls beside `step(world)` rather than once a frame — so `STEP` is a real sixtieth and
+  three seconds is three seconds on a 144Hz screen.
+  ⚠️ **THE SAME THREE SECONDS AS `holdWarm`, and the same painter** (`drawHoldRing`): three
+  holds, one gesture, one ring, so nothing can drift about what a filling circle means.
+  `holdStart`'s five is the odd one out because it commits everybody else.
+  ⚠️ **The ring is drawn at FULL strength, outside the 0.45 a benched body is painted at** —
+  the body is dimmed because it is not in the match; the ring is the one thing out here that
+  IS happening. `padHoldFrac` carries it to the corner icon too, which is the readout that
+  matters most here because the body it belongs to is off the pitch and greyed.
+  ⚠️ **The prompt moved with the gate.** It read ANY BUTTON, which was already the fix for
+  an earlier version that said START; a label that names a gate that has changed is the same
+  bug again. It says HOLD IN, and still names the side through the same two functions the
+  swap uses.
+  ⚠️ `tests/dropin.mjs` blocks 2, 3+4 and the balance block are rewritten rather than
+  nudged, and the ring is measured as a DIFFERENCE against the same frame with the hold
+  stood down — a bench body already carries a rim and a faceplate, so an absolute count
+  reads well above zero on a build that draws no ring. Paired with the ring being GONE at
+  zero, or "there is ink there" is equally true of furniture. All four sabotage-verified.
 - **Drop-in / substitutions (`sel.dropIn`, default on):** plug a controller in mid-match and
   a body walks out to the **touchline**; walk to the half you want, press START, and you come
   on **at the next goal**. ⚠️ Seats used to be handed out exactly once in `startMatch`, so a

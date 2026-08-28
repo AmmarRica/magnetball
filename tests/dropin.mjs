@@ -95,10 +95,25 @@ const FIX = `
   const sides   = (w) => [w.players.filter(q=>q.team===0).length,
                           w.players.filter(q=>q.team===1).length];
   const drive = (w, n) => { for (let i=0;i<(n||1);i++){ M.step(w); M.pollDropIn(w); } };
-  // A goal, driven through the real step hook rather than by calling runSubs: the whole
-  // point is that the goal STATE is what opens the window.
-  const goal = (w) => { w.state='goal'; w.stateT=0; w._subDone=false;
+  // A goal, driven through the real step hook. It no longer brings anybody on — the hold
+  // does that — but the goal state is still what several other rules key off.
+  const goal = (w) => { w.state='goal'; w.stateT=0;
                         M.step(w); M.pollDropIn(w); };
+  // Bring a waiting body on the way a PERSON does: hold the stick straight into the pitch
+  // for three seconds. It mutates the live pad object rather than rebuilding PADS, so every
+  // other seat keeps whatever it was doing, and it drives the real step loop, because
+  // pollSubHold reads inX/inY exactly as stepBench wrote them. Setting the flag by hand
+  // would test nothing about the wiring, which is the whole of what changed.
+  const holdIn = (w, p, steps) => {
+    const g = PADS[p.padIndex];
+    if (!g) return false;
+    const inw = M.subInward(w, p);
+    g.axes = [inw.x, inw.y, 0, 0];
+    drive(w, steps || 220);
+    g.axes = [0, 0, 0, 0];
+    drive(w, 1);
+    return w.players.includes(p);
+  };
 `;
 
 const r = await p.evaluate(new Function(FIX + `
@@ -121,48 +136,72 @@ const r = await p.evaluate(new Function(FIX + `
   drive(w, 10);
   o.oneBodyPerPad = waiting(w).length === 1;
 
-  // ---- 2. a goal does nothing until it has ASKED ---------------------------
+  // ---- 2. NO BUTTON JOINS — you hold toward the pitch --------------------
+  // ⚠️ **THIS BLOCK IS REVERSED, DELIBERATELY.** It used to check that START armed you,
+  // that START again cancelled, and that a goal was what brought you on. That whole
+  // mechanism is gone: a goal can be minutes away, and out on the touchline every button
+  // is spare, so a press was a gesture with no weight behind it. Holding the stick INTO
+  // the pitch for three seconds is the gate now, and these lines check the OLD gate is
+  // shut — pressing everything for a good while must leave the guest exactly where it is.
   goal(w);
-  o.goalWithoutAskingDoesNothing = onPitch(w).length === 0 && waiting(w).length === 1;
-  // START arms it, and START again cancels — a long wait needs a way back.
+  o.goalBringsNobodyOn = onPitch(w).length === 0 && waiting(w).length === 1;
   w.state='play'; w.stateT=2;
-  PADS = [pad([START])]; drive(w, 1);
-  o.startArms = guest._subIn === true;
-  PADS = [pad([])];      drive(w, 1);
-  PADS = [pad([START])]; drive(w, 1);
-  o.startCancels = guest._subIn === false;
-  PADS = [pad([])];      drive(w, 1);
-  PADS = [pad([START])]; drive(w, 1);
-  PADS = [pad([])];      drive(w, 1);
-  o.armedAgain = guest._subIn === true;
-  // ⚠️ Armed is not on: it must still be waiting through a stretch of PLAY, or "they
-  // join between goals" is really "they join immediately".
-  drive(w, 60);
-  o.armedStillWaitsDuringPlay = onPitch(w).length === 0 && waiting(w).length === 1;
-
-  // ---- 3 + 4. the goal, the side it picked, and the sides evening up -------
+  PADS = [pad([START])]; drive(w, 40);
+  PADS = [pad([0])];     drive(w, 40);   // ...and a kick button, which the old gate took
+  PADS = [pad([])];      drive(w, 5);
+  o.buttonsDoNotJoin = onPitch(w).length === 0 && waiting(w).length === 1;
+  // ⚠️ ...and neither does walking about. stepBench pushes a waiting body back out, so
+  // "held the stick toward the pitch" and "crossed the line" are different claims and only
+  // the first one is the gate — without this, a build with no hold at all but a leaky
+  // touchline would pass the block below.
   guest.y = 140;                          // walked well into team 0's half
   o.pickedSide = M.subSideOf(w, guest);
-  goal(w);
-  o.joinedOnGoal   = onPitch(w).length === 1 && waiting(w).length === 0;
+
+  // ---- 3 + 4. THE THREE-SECOND HOLD, the side it picked, and evening up ----
+  // The gate is at +x, so "into the pitch" is -x. Driven through the real stick, because
+  // pollSubHold reads inX/inY as stepBench wrote them — writing the flag by hand would
+  // test nothing about the wiring, and writing the stick tests the seat rotation too.
+  const inw = M.subInward(w, guest);
+  o.inward = [inw.x, inw.y];
+  // ⚠️ Counted BEFORE, because "the side lost a bot" is the claim and an absolute number
+  // is a different one. There is already a KEYBOARD seat on team 0 (startMatch gives seat
+  // one to the keys when no pad has taken it), so team 0 is a person and two bots rather
+  // than three — the first version of this asserted 2 bots after and was measuring that
+  // seat rather than the rule.
+  o.botsOnSideBefore = w.players.filter(q=>q.team===o.pickedSide && q.ctrl==='bot').length;
+  const push = () => { const g = pad([]); g.axes = [inw.x, inw.y, 0, 0]; return g; };
+  PADS = [push()]; drive(w, 60);          // one second in
+  o.holdShows = M.joinHoldFrac(guest) > 0.2 && M.joinHoldFrac(guest) < 0.6;
+  o.stillWaitingAt1s = onPitch(w).length === 0;
+  // ⚠️ AND IT RESETS when the stick comes off, or three seconds of holding is really
+  // three seconds of nudging it whenever you remember.
+  PADS = [pad([])]; drive(w, 3);
+  o.holdResets = M.joinHoldFrac(guest) === 0;
+  PADS = [push()]; drive(w, 200);         // and now hold it out
+  o.joinedOnHold   = onPitch(w).length === 1 && waiting(w).length === 0;
   o.joinedTeam     = onPitch(w)[0] ? onPitch(w)[0].team : -1;
   o.joinedPickedSide = o.joinedTeam === o.pickedSide;
+  o.joinedDuringPlay = w.state === 'play';
+  PADS = [pad([])]; drive(w, 1);
   o.sidesAfterJoin = sides(w);
-  o.grewToEven     = o.sidesAfterJoin[0] === 4 && o.sidesAfterJoin[1] === 4;
   o.perAfterJoin   = M.subPer(w);
-  // ⚠️ The bot added to the other side came on THROUGH THE GATE, not out of thin air in
-  // the middle of the pitch.
-  const fresh = w.players.filter(q=>q.team===1 && q._subTo);
-  o.freshWalkers = fresh.length;
-  o.evenBotWalksOn = fresh.length === 1 && Math.abs(fresh[0].x - M.subGate(w).x) < 40;
-  // The AI is suppressed while it walks, or a thinking bot fights walkTo and jitters.
-  const walker = fresh[0];
+  o.botsOnSideAfter = w.players.filter(q=>q.team===o.joinedTeam && q.ctrl==='bot').length;
+  // ⚠️ **THE SIDE WAS ALL BOTS, SO THE JOINER TAKES A SHIRT AND THE MATCH DOES NOT GROW.**
+  // This assertion is REVERSED from what it used to be (a 3v3 that gained a player had to
+  // become a 4v4). The growth branch is measured in the balance block, on a side that is
+  // all people — the two are different halves of one rule and neither alone is it.
+  o.rosterAfterJoin = w.players.map(q=>q.team+':'+q.ctrl).join('|');
+  o.takesTheBotsShirt = o.sidesAfterJoin[0] === 3 && o.sidesAfterJoin[1] === 3 &&
+                        o.perAfterJoin === 3 &&
+                        o.botsOnSideAfter === o.botsOnSideBefore - 1;
+  // The AI is suppressed while a body walks on, or a thinking bot fights walkTo and jitters.
+  const walker = w.players.find(q => q._subTo);
   o.walkerMoves = null;
   if (walker){ const wx0 = walker.x, wy0 = walker.y; M.step(w);
                o.walkerMoves = (walker.x !== wx0 || walker.y !== wy0); }
   // Kickoff closes the window and finishes any walk.
   w.stateT = 2.0; M.step(w);
-  o.kickoffClearsWalks = w.players.every(q=>!q._subTo) && w._subDone === false;
+  o.kickoffClearsWalks = w.players.every(q=>!q._subTo);
 
   // ---- 5. unplugging: back to 3v3, name and stats kept ---------------------
   const left = onPitch(w)[0];
@@ -192,8 +231,8 @@ const r = await p.evaluate(new Function(FIX + `
   // old wait is still in place. The walk in through the gate then has to be allowed to
   // finish before anything is measured, or stepSubWalk is still steering the body and
   // the probe below reads the walk instead of the stick.
-  w.state = 'play'; w.stateT = 1; w._subDone = true;   // mid-play, and the goal hook spent
-  PADS = [pad([START])]; drive(w, 2); PADS = [pad([])]; drive(w, 1);
+  w.state = 'play'; w.stateT = 1;                      // mid-play, no goal anywhere near
+  holdIn(w, left);
   o.reclaimedState = w.state;
   o.reclaimedComesBackOnAtOnce = w.players.includes(left) && w.state === 'play';
   for (let i = 0; i < 240 && left._subTo; i++){ M.step(w); M.pollDropIn(w); }
@@ -226,9 +265,7 @@ const r = await p.evaluate(new Function(FIX + `
     PADS = [pad([])]; drive(w2, 3);
     const guest = waiting(w2)[0];
     const guestName = guest.name;
-    PADS = [pad([START])]; drive(w2, 2); PADS = [pad([])]; drive(w2, 1);
-    w2.state = 'goal'; drive(w2, 2); w2.state = 'play'; w2._subDone = false; drive(w2, 2);
-    o.movedIdxCameOn = w2.players.includes(guest);
+    o.movedIdxCameOn = holdIn(w2, guest);
     guest.ms.goals = 2;
     PADS = []; drive(w2, 3);
     PADS = [null, pad([])]; drive(w2, 3);          // back, on index 1
@@ -260,9 +297,7 @@ const r = await p.evaluate(new Function(FIX + `
       // the touchline), so a twin check on two waiting bodies measures two bodies that
       // no longer exist — which is what the first version of this block did, and it
       // reported a brand-new P2 for a reason that had nothing to do with the rule.
-      PADS = [pad([START]), pad([START])]; drive(w3, 2);
-      PADS = [pad([]), pad([])];           drive(w3, 1);
-      goal(w3); w3.state = 'play'; w3._subDone = false; drive(w3, 2);
+      g.forEach(q => holdIn(w3, q));
       o.twinsCameOn = g.every(q => w3.players.includes(q));
       PADS = []; drive(w3, 3);                     // both walk away
       o.bothGone = waiting(w3).length === 0;
@@ -274,6 +309,63 @@ const r = await p.evaluate(new Function(FIX + `
       o.twinRightOne = backList.length === 1 && backList[0].name === want;
       o.twinGot      = backList.map(q => q.name);
       o.twinWanted   = want;
+    }
+  }
+
+  // ---- 4b. THE HOLD IS DRAWN, as a ring round the waiting body -------------
+  // ⚠️ Measured as a DIFFERENCE against the same frame with the hold stood down, taken at
+  // the same camera in the same run. A bench body already carries a rim and a faceplate,
+  // so an absolute ink count in that annulus reads well over zero on a build that draws no
+  // ring at all — the trap tests/lobbyhold.mjs records for the other two holds.
+  // ⚠️ ...and paired with the ring being GONE at zero, or "there is ink there" is equally
+  // true of something painted round every waiting body all the time, which is furniture.
+  {
+    const w5 = match('3v3');
+    PADS = [pad([])]; drive(w5, 4);
+    const g5 = waiting(w5)[0];
+    o.ringGuest = !!g5;
+    if (g5){
+      const cv = document.getElementById('game'), gx = cv.getContext('2d');
+      const grab = () => gx.getImageData(0, 0, cv.width, cv.height).data;
+      g5.joinHold = M.LOBBY.holdJoin * 0.6;
+      M.computeCam(); M.render();
+      const withRing = grab();
+      g5.joinHold = 0;
+      M.computeCam(); M.render();
+      const without = grab();
+      const c = M.screenPt(M.wx(g5.x), M.wy(g5.y));
+      const r0 = g5.r * M.cam.s * 1.6, r1 = g5.r * M.cam.s * 3.4;
+      let angles = 0;
+      for (let a = 0; a < 360; a += 2){
+        for (let rr = r0; rr <= r1; rr += 0.5){
+          const x = Math.round(c[0] + Math.cos(a*Math.PI/180)*rr);
+          const y = Math.round(c[1] + Math.sin(a*Math.PI/180)*rr);
+          if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) continue;
+          const i = (y*cv.width + x)*4;
+          if (Math.abs(withRing[i]-without[i]) + Math.abs(withRing[i+1]-without[i+1]) +
+              Math.abs(withRing[i+2]-without[i+2]) > 40){ angles++; break; }
+        }
+      }
+      o.ringAngles = angles;
+      // 60% of the way round, from twelve o'clock — well clear of a full circle and well
+      // clear of nothing.
+      o.ringDrawn = angles > 60 && angles < 175;
+      // ...and nothing at all when the hold is not running.
+      M.computeCam(); M.render();
+      const again = grab();
+      let idle = 0;
+      for (let a = 0; a < 360; a += 2){
+        for (let rr = r0; rr <= r1; rr += 0.5){
+          const x = Math.round(c[0] + Math.cos(a*Math.PI/180)*rr);
+          const y = Math.round(c[1] + Math.sin(a*Math.PI/180)*rr);
+          if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) continue;
+          const i = (y*cv.width + x)*4;
+          if (Math.abs(again[i]-without[i]) + Math.abs(again[i+1]-without[i+1]) +
+              Math.abs(again[i+2]-without[i+2]) > 40){ idle++; break; }
+        }
+      }
+      o.ringIdle = idle;
+      o.ringGoesAway = idle === 0;
     }
   }
 
@@ -388,9 +480,7 @@ const bal = await p.evaluate(new Function(FIX + `
   const join = (w, y) => {
     PADS = [pad([])]; drive(w, 2);
     const g = waiting(w)[waiting(w).length-1];
-    if (g) g.y = y;
-    PADS = [pad([START])]; drive(w, 1); PADS = [pad([])]; drive(w, 1);
-    goal(w);
+    if (g){ g.y = y; holdIn(w, g); }
     return g;
   };
 
@@ -403,12 +493,41 @@ const bal = await p.evaluate(new Function(FIX + `
   o.undecidedCoop = onPitch(w)[0] ? onPitch(w)[0].team : -1;
   o.undecidedFollowsCoop = o.undecidedVersus === 1 && o.undecidedCoop === 0;
 
-  // A 1v1 grows to 2v2 — the smallest case, where "add a bot to the other side" is the
-  // whole of the change.
+  // ⚠️ **TWO BRANCHES, AND THE OLD SUITE ONLY HAD ONE.** It required a 1v1 to become a 2v2
+  // whatever the joiner walked onto, under the rule "arriving must never cost a body its
+  // place". Asked for instead: they either replace the bot or a bot joins the other team.
+  // Which of the two happens is decided by the PEOPLE on that side — a side carrying a bot
+  // has a shirt going spare and the size does not move; a side that is all people has to
+  // grow, and the other half gets a bot to match. Counting BODIES cannot separate them: it
+  // grows in both cases, and the first then reads as arriving having cost the other side a
+  // bot for nothing.
+  // (a) REPLACE: a 1v1 with nobody on the pitch is a bot each way, so a joiner takes one.
   w = match('1v1', 'off');
-  join(w, -140);
-  o.oneVone = sides(w);
-  o.oneVoneGrew = JSON.stringify(o.oneVone) === '[2,2]';
+  {
+    const g = join(w, -140);
+    o.replaceSides = sides(w);
+    o.replaceTeam  = g ? g.team : -1;
+    o.replaceBots  = w.players.filter(q => q.team === o.replaceTeam && q.ctrl === 'bot').length;
+    o.replacesBot  = JSON.stringify(o.replaceSides) === '[1,1]' && o.replaceBots === 0 &&
+                     M.subPer(w) === 1 && o.replaceTeam >= 0;
+  }
+  // (b) GROW: now that side is a person, so the next one onto it makes the match bigger.
+  {
+    PADS = [PADS[0], pad([])]; drive(w, 3);
+    const g2 = waiting(w)[0];
+    o.growSecondWaiting = !!g2;
+    if (g2){
+      g2.y = -140;                                  // the same half, which is now a person
+      const other = 1 - o.replaceTeam;
+      o.growOtherBefore = w.players.filter(q => q.team === other && q.ctrl === 'bot').length;
+      holdIn(w, g2);
+      o.growSides = sides(w);
+      o.growPer   = M.subPer(w);
+      o.growOtherBots = w.players.filter(q => q.team === other && q.ctrl === 'bot').length;
+      o.growsToTwo = JSON.stringify(o.growSides) === '[2,2]' && o.growPer === 2 &&
+                     o.growOtherBots === o.growOtherBefore + 1;
+    }
+  }
 
   // ⚠️ The CAP holds. Pads keep arriving and pressing START; the sides must stop growing
   // at LOBBY.maxPerSide rather than filling the pitch with bodies.
@@ -416,9 +535,7 @@ const bal = await p.evaluate(new Function(FIX + `
   for (let k=0;k<14;k++){
     PADS = Array.from({length:k+1}, ()=>pad([]));      drive(w, 2);
     waiting(w).forEach(q=>{ q.y = 140; });
-    PADS = Array.from({length:k+1}, ()=>pad([START])); drive(w, 2);
-    PADS = Array.from({length:k+1}, ()=>pad([]));      drive(w, 1);
-    goal(w);
+    waiting(w).slice().forEach(q=>{ holdIn(w, q, 200); });
   }
   o.cappedSides = sides(w);
   // WARNING: this block is inside a new Function(...) TEMPLATE LITERAL, so a backtick in
@@ -441,9 +558,12 @@ const bal = await p.evaluate(new Function(FIX + `
   w.subFloor = null; w.subPer = null;          // as resetKickoff(w, true) would
   o.floor = M.subFloorOf(w);
   o.floorReadsRoster = o.floor === 6;
-  join(w, 140);                                // 6v6 → 7v7
+  // ⚠️ A joiner onto a 6v6 of BOTS takes a shirt rather than making it a 7v7 — the same
+  // two-branch rule as above, and the floor is what this block is really about: the match
+  // must not fall back to the mode's 4v4 when the pad goes away again.
+  join(w, 140);
   o.fromSix = sides(w);
-  o.grewFromSix = JSON.stringify(o.fromSix) === '[7,7]';
+  o.holdsAtSix = JSON.stringify(o.fromSix) === '[6,6]';
   PADS = []; drive(w, 2);                      // ...and back to 6v6, not 4v4
   o.backToFloor = sides(w);
   o.shrankToFloor = JSON.stringify(o.backToFloor) === '[6,6]';
@@ -562,14 +682,15 @@ ok(all.notOnPitch, 'a controller that had only just been plugged in was put stra
 ok(all.rosterUntouched, 'connecting a pad changed the roster — a body on the touchline is what makes appearing on CONNECTION safe, and it stops being safe the moment it touches the match');
 ok(all.outsidePitch && all.atTheGate, `the waiting body is not outside the pitch at the gate: outside ${all.outsidePitch}, gate ${all.atTheGate}`);
 ok(all.oneBodyPerPad, 'a connected pad grew a second body on a later step');
-ok(all.goalWithoutAskingDoesNothing, 'a goal dragged a waiting player on who never pressed START');
-ok(all.startArms && all.startCancels && all.armedAgain, `START does not arm/cancel cleanly: arm ${all.startArms}, cancel ${all.startCancels}, again ${all.armedAgain}`);
-ok(all.armedStillWaitsDuringPlay, 'an armed player came on during PLAY — "they join between goals" is the whole timing rule, and joining mid-play drops a body into a live ball');
-ok(all.joinedOnGoal, 'an armed player did not come on at the goal');
+ok(all.goalBringsNobodyOn, 'a goal dragged a waiting player onto the pitch — a goal is not a gate any more, the three-second hold is');
+ok(all.buttonsDoNotJoin, 'a BUTTON put a waiting player on. The press was replaced deliberately: a goal can be minutes away, and out on the touchline every button is spare, so a press was a gesture with nothing behind it');
+ok(all.holdShows, `one second of holding toward the pitch read ${all.holdShows} — the hold has to be running and visibly part way, or the ring has nothing to draw and the three seconds are not being counted`);
+ok(all.stillWaitingAt1s, 'a waiting player came on after one second — three seconds is the whole safeguard, and it is what makes the stick safe to use for this at all');
+ok(all.holdResets, 'letting go did not reset the hold, so three seconds of holding is really three seconds of nudging it whenever you remember');
+ok(all.joinedOnHold, `holding toward the pitch (${JSON.stringify(all.inward)}) for three seconds did not bring the waiting player on`);
+ok(all.joinedDuringPlay, 'the hold only took effect once the state had left PLAY — a hold that long is a decision already taken, and waiting for a goal on top of it is the thing being removed');
 ok(all.joinedPickedSide, `the joiner went to team ${all.joinedTeam} having stood beside half ${all.pickedSide} — the side you walk to is the side you get`);
-ok(all.grewToEven, `a 3v3 that gained a player became ${JSON.stringify(all.sidesAfterJoin)} instead of 4v4 — arriving must add a bot to the other side, never cost a body its place`);
-ok(all.perAfterJoin === 4, `the match size reads ${all.perAfterJoin} after a 3v3 grew`);
-ok(all.evenBotWalksOn, `the bot added to even the sides up did not walk on through the touchline gate (${all.freshWalkers} walkers)`);
+ok(all.takesTheBotsShirt, `a joiner onto a side of BOTS left it at ${JSON.stringify(all.sidesAfterJoin)} with ${all.botsOnSideAfter} bots and a size of ${all.perAfterJoin} — asked for as "they either replace the bot or a bot joins other team", and a side carrying a bot has a shirt going spare, so the match must not get bigger`);
 ok(all.walkerMoves !== false, 'a bot walking on through the gate never moved — walkTo sets position directly, so the AI has to be suppressed for it or the two fight');
 ok(all.kickoffClearsWalks, 'the kickoff left a half-finished walk-on steering a body away from its mark, or the substitution window stayed open');
 ok(all.shrankBack, `unplugging left the sides at ${JSON.stringify(all.sidesAfterLeave)} instead of back at 3v3`);
@@ -581,6 +702,9 @@ ok(all.reclaimedComesBackOnAtOnce && all.reclaimedWalkFinished,
    `a reconnecting player did not come straight back on: onAtOnce ${all.reclaimedComesBackOnAtOnce}, walkFinished ${all.reclaimedWalkFinished}. Unplugging benches the body and a filler bot takes the shirt; coming back it used to be handed over as a stranger ("START = JOIN HOME") and then made to wait for a goal, which is a long time out of a match you were already playing for a cable somebody kicked`);
 ok(all.reclaimedComesBackOn && all.reclaimedDrives,
    `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
+ok(all.ringGuest, 'no guest reached the touchline, so the ring check measures nothing');
+ok(all.ringDrawn, `the join hold drew ${all.ringAngles} of 180 probe angles round the waiting body — the hold has to be SEEN, or three seconds of nothing happening reads as a controller that is not working`);
+ok(all.ringGoesAway, `${all.ringIdle} angles were still inked with no hold running — a ring round every waiting body all the time is furniture, not a progress arc`);
 ok(all.glitchSeats === 3, `only ${all.glitchSeats} of 3 pads took a seat, so the poll-gap check below is measuring nothing`);
 ok(all.glitchRidesOut,
    `one dropped getGamepads() poll benched a player: seats ${all.glitchSeats} -> ${all.glitchKeptSeats}, bench ${all.glitchBenched}. A slot of nulls for a frame with no gamepaddisconnected is a browser re-enumerating, not somebody pulling a cable — PAD_GRACE rides it out, and the roster has to ask connectedGamepadIndices() the same as everything else rather than reading the raw snapshot itself`);
@@ -597,10 +721,12 @@ ok(all.twinBackOne && all.twinRightOne,
 ok(all.movedIdxOneBody && all.movedIdxSameBody && all.movedIdxKeptGoals && all.movedIdxNewIndex,
    `a controller that came back on a DIFFERENT index was treated as a new player: ${JSON.stringify(all.movedIdxNames)}, one body ${all.movedIdxOneBody}, same body ${all.movedIdxSameBody}, goals kept ${all.movedIdxKeptGoals}, new index ${all.movedIdxNewIndex} — a pad rarely gets its old slot back once another is connected, and matching on the index alone stranded a two-goal half-match on the bench`);
 ok(all.undecidedFollowsCoop, `an undecided joiner went to ${all.undecidedVersus} on Versus and ${all.undecidedCoop} on Co-op — Extra controllers already means exactly this question`);
-ok(all.oneVoneGrew, `a 1v1 became ${JSON.stringify(all.oneVone)} instead of a 2v2`);
+ok(all.replacesBot, `a joiner onto a bot's side made it ${JSON.stringify(all.replaceSides)} with ${all.replaceBots} bots still on that half — replacing is the no-growth branch`);
+ok(all.growSecondWaiting, 'the second guest never reached the touchline, so the growth check below measures nothing');
+ok(all.growsToTwo, `a joiner onto a side that is ALL PEOPLE left the match at ${JSON.stringify(all.growSides)} (size ${all.growPer}, ${all.growOtherBots} bots opposite) instead of a 2v2 — with no bot to replace, the other half has to gain one`);
 ok(all.capHolds, `pads kept arriving and the sides reached ${JSON.stringify(all.cappedSides)} — the per-side cap has to hold`);
 ok(all.floorReadsRoster, `the floor read ${all.floor} for a 6v6 on a 4v4 mode — the lobby can field six a side, and a floor of mode.per would take two bots off each side`);
-ok(all.grewFromSix, `a 6v6 became ${JSON.stringify(all.fromSix)} instead of 7v7`);
+ok(all.holdsAtSix, `a joiner onto a 6v6 of bots made it ${JSON.stringify(all.fromSix)} — there was a bot's shirt going spare, so the size must not move`);
 ok(all.shrankToFloor, `a 7v7 losing its guest became ${JSON.stringify(all.backToFloor)} — it may never shrink past the size it kicked off at`);
 ok(all.idempotent, 'evenUpSides changed a balanced pitch, so it is not safe to call twice');
 ok(all.settingOff, 'Joining late = At kickoff still produced a waiting player');
