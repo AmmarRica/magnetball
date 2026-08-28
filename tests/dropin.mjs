@@ -58,7 +58,13 @@ const FIX = `
   // re-enumerating browser hands back, and it used to bench a body and blank the controller
   // row in the corner. A genuine unplug comes with the event and is acted on at once.
   let _padN = 0;
+  // A TRANSIENT POLL GAP, which is a DIFFERENT THING from an unplug and is the whole of
+  // what block 5d measures: the browser hands back a slot of nulls for one poll and fires
+  // NO gamepaddisconnected. Deliberately returns before the shrink counting below, so no
+  // event goes out — telling those two apart is the game's job, not the fixture's.
+  let GLITCH = null;
   navigator.getGamepads = () => {
+    if (GLITCH) return GLITCH;
     // Counts LIVE entries rather than array length: a pad is unplugged in these suites by
     // writing null into its slot, which leaves the length alone.
     // _padN is updated BEFORE the dispatch: the game's handler calls getGamepads() itself
@@ -269,6 +275,65 @@ const r = await p.evaluate(new Function(FIX + `
       o.twinGot      = backList.map(q => q.name);
       o.twinWanted   = want;
     }
+  }
+
+  // ---- 5d. A DROPPED POLL IS NOT AN UNPLUG ---------------------------------
+  // ⚠️ THE BUG (no backticks in here — see the fixture's warning): pollDropIn's leaver
+  // test read navigator.getGamepads() ITSELF rather than connectedGamepadIndices(), which
+  // is the file's one answer to "is this pad here" and the only thing that knows about
+  // PAD_GRACE. So the debounce that stopped a re-enumeration blanking the controller row
+  // in the corner did nothing for the ROSTER: one dropped poll benched a player,
+  // evenUpSides walked a filler bot on in their shirt, and the pad came back only as a
+  // touchline prompt. Measured on the shipped build, sixty frames later it was still gone.
+  // ⚠️ THE CONTROL IS A REAL UNPLUG IN THE SAME RUN. "A poll gap changes nothing" is also
+  // true of a build where drop-out never fires at all, which would be a worse bug than the
+  // one being fixed — so the same pad is then genuinely unplugged (event and all) and must
+  // leave. Blocks 5/5b already prove the reclaim; this one is only about telling the two
+  // events apart.
+  {
+    // ⚠️ The pads have to be there AT THE WHISTLE. match() clears PADS before
+    // startMatch, and a pad that connects afterwards is a GUEST on the touchline — so a
+    // block built on it measures nobody on the pitch, which is what the guard above is
+    // for. Seats are dealt in startMatch; this is about keeping one.
+    M.padForgetAll();
+    M.sel.controllers='on'; M.sel.coop='off'; M.sel.dropIn='on';
+    M.sel.mode='3v3'; M.sel.kickoffRule='off'; M.sel.autoReplay=false;
+    PADS = [pad([]), pad([]), pad([])];
+    M.setMatchSeed(3); M.startMatch();
+    const w4 = M.world; w4.state='play'; w4.stateT=2;
+    drive(w4, 3);
+    o.glitchSeats = onPitch(w4).length;
+    GLITCH = [PADS[0], null, PADS[2]];   // one poll with the middle slot missing
+    drive(w4, 1);
+    GLITCH = null;
+    drive(w4, 2);
+    o.glitchKeptSeats = onPitch(w4).length;
+    o.glitchBenched   = bench(w4).length;
+    o.glitchRidesOut  = o.glitchSeats === 3 && o.glitchKeptSeats === 3 && o.glitchBenched === 0;
+    PADS = [PADS[0], null, PADS[2]];     // ...and now it really goes away
+    drive(w4, 3);
+    o.realUnplugSeats = onPitch(w4).length;
+    o.realUnplugLeaves = o.realUnplugSeats === 2;
+  }
+
+  // ---- 5e. AN ARCADE CABINET'S PANEL SEATS ARE NOT REAL GAMEPADS ------------
+  // ⚠️ A cabinet's four panels are VIRTUAL pads — the harness wires them into a keyboard
+  // encoder and connectedGamepadIndices() answers for them directly — so
+  // navigator.getGamepads() is EMPTY by construction. Reading it for liveness therefore
+  // benched every seat on the machine: measured on the shipped build, all four gone
+  // within ten frames of the whistle, with every stick driving a bot.
+  {
+    const wasDisp = M.sel.display, wasPlay = M.sel.arcadePlay;
+    M.sel.display = 'arcade'; M.sel.arcadePlay = 'free';
+    PADS = [];                                  // a cabinet has no real pads at all
+    M.padForgetAll();
+    M.sel.mode = '2v2'; M.setMatchSeed(3); M.startMatch();
+    const wc = M.world; wc.state = 'play'; wc.stateT = 2;
+    o.cabSeats = onPitch(wc).length;
+    drive(wc, 10);
+    o.cabKeptSeats = onPitch(wc).length;
+    o.cabHoldsSeats = o.cabSeats === 4 && o.cabKeptSeats === 4 && bench(wc).length === 0;
+    M.sel.display = wasDisp; M.sel.arcadePlay = wasPlay;
   }
 
   // ---- the prompt actually says what will happen ---------------------------
@@ -516,6 +581,14 @@ ok(all.reclaimedComesBackOnAtOnce && all.reclaimedWalkFinished,
    `a reconnecting player did not come straight back on: onAtOnce ${all.reclaimedComesBackOnAtOnce}, walkFinished ${all.reclaimedWalkFinished}. Unplugging benches the body and a filler bot takes the shirt; coming back it used to be handed over as a stranger ("START = JOIN HOME") and then made to wait for a goal, which is a long time out of a match you were already playing for a cable somebody kicked`);
 ok(all.reclaimedComesBackOn && all.reclaimedDrives,
    `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
+ok(all.glitchSeats === 3, `only ${all.glitchSeats} of 3 pads took a seat, so the poll-gap check below is measuring nothing`);
+ok(all.glitchRidesOut,
+   `one dropped getGamepads() poll benched a player: seats ${all.glitchSeats} -> ${all.glitchKeptSeats}, bench ${all.glitchBenched}. A slot of nulls for a frame with no gamepaddisconnected is a browser re-enumerating, not somebody pulling a cable — PAD_GRACE rides it out, and the roster has to ask connectedGamepadIndices() the same as everything else rather than reading the raw snapshot itself`);
+ok(all.realUnplugLeaves,
+   `a REAL unplug left ${all.realUnplugSeats} seats instead of 2 — "a poll gap changes nothing" is also true of a build where nobody can ever leave, which is why the control is measured in the same run`);
+ok(all.cabSeats === 4, `an arcade cabinet dealt ${all.cabSeats} of 4 panel seats, so the check below is measuring nothing`);
+ok(all.cabHoldsSeats,
+   `an arcade cabinet lost its panel seats in ten frames: ${all.cabSeats} -> ${all.cabKeptSeats}. A panel is a VIRTUAL pad, so navigator.getGamepads() is empty by construction and reading it for liveness benches every stick on the machine`);
 ok(all.movedIdxCameOn, 'the guest never made it onto the pitch, so the different-index check below is measuring nothing');
 ok(all.twoGuests && all.twinsCameOn && all.bothGone,
    `the two-identical-controllers fixture did not set up (two guests ${all.twoGuests}, both came on ${all.twinsCameOn}, both left ${all.bothGone}), so the check below measures nothing`);

@@ -151,7 +151,12 @@ setup.
   Plug back in and **any button** takes it straight back, mid-play.
 - **A pad missing from a single poll is not an unplugged pad** (`PAD_GRACE`). Browsers
   re-enumerate — on a focus change, a Bluetooth blip — and a slot of nulls for a frame used
-  to take the whole controller row off the corner of the screen and bench a body.
+  to take the whole controller row off the corner of the screen and bench a body. Both
+  halves of that are held now: the corner icons ride it out, and so does the roster, which
+  had a second copy of the question and believed every blip.
+- **An arcade cabinet's four panels are not controllers** as far as the browser is
+  concerned, so nothing may ask the browser about them. Anything that wants to know whether
+  a seat is live asks `connectedGamepadIndices()`, which answers for the panel too.
 - **A returning pad reclaims its own body** by slot first, then by device: a controller does
   not always come back on the index it left.
 

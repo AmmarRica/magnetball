@@ -5386,7 +5386,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.0520PM';
+const VERSION = '20260828.0645PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5402,6 +5402,13 @@ const VERSION = '20260828.0520PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0645PM', title: 'Controllers stop dropping out mid-match',
+    changed: [
+      '<b>A controller no longer loses its player because of a single missed poll.</b> Browsers re-enumerate controllers now and then, and mid-match that was taken as somebody unplugging: your body walked off the pitch, a bot took your shirt, and the controller came back only as a prompt on the touchline. The corner icons were fixed for this last time and the players were not.',
+      '<b>An arcade cabinet keeps its four panels.</b> A cabinet\u2019s controls are not controllers as far as the browser is concerned, so every seat was being handed to a bot within a moment of kick-off.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.0520PM', title: 'Controller fixes',
     changed: [
       '<b>The controller icons in the corner stop blinking out.</b> A controller missing from a single poll \u2014 which browsers do when they re-enumerate \u2014 was taken as an unplugged controller, so the row vanished for a frame.',
@@ -17932,15 +17939,29 @@ function dropOut(w, p){
 // otherwise have walked a stranger straight into the play. A new pad gets a body on the
 // TOUCHLINE now, where it can touch nothing, so connection is signal enough; the press
 // that matters is the START which asks to come on.
+// ⚠️ **BOTH HALVES ASK `connectedGamepadIndices()`, AND THE LEAVER HALF USED TO ASK
+// `navigator.getGamepads()` ITSELF.** That one function is the file's only answer to "is
+// this pad here": it holds a slot for `PAD_GRACE` after a poll misses it, and on an arcade
+// cabinet it returns the panel's VIRTUAL seats, which no browser reports at all. Reading
+// the raw snapshot here was a second opinion on the same question and it was wrong in both
+// directions. Measured on the shipped build: **one dropped poll benched a player for the
+// rest of the match** — the body walked off through the gate, `evenUpSides` walked a filler
+// bot on in its shirt, and the pad came back only as a touchline prompt nobody was looking
+// for (60 frames later, still off). And on a CABINET, where the raw snapshot is empty by
+// construction, **all four panel seats were benched within ten frames of the whistle**, so
+// every stick on the machine drove a bot. `pollLobbyPads` was written afterwards and got
+// this right; the match path was left behind, which is the duplication rule exactly.
+// ⚠️ A GENUINE unplug is still acted on at once, because the browser says so outright:
+// `gamepaddisconnected` calls `padForget` and sweeps, so the slot leaves the live set on
+// that frame rather than at the end of the grace window.
 function pollDropIn(w){
   if (dropInBlocked(w)) return;
-  const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
-  const alive = (i) => { const g = gps[i]; return !!(g && g.connected && g.buttons && g.buttons.length); };
+  const live = new Set(connectedGamepadIndices());
   // Leavers first, so a pad unplugged and replugged in one step is not two bodies.
   for (const p of allBodies(w).slice())
-    if (p.ctrl === 'gamepad' && !alive(p.padIndex)) dropOut(w, p);
+    if (p.ctrl === 'gamepad' && !live.has(p.padIndex)) dropOut(w, p);
   const held = new Set(allBodies(w).filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
-  for (const i of connectedGamepadIndices()) if (!held.has(i)) subWaitFor(w, i);
+  for (const i of live) if (!held.has(i)) subWaitFor(w, i);
   pollSubReady(w);
 }
 

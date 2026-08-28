@@ -3951,6 +3951,28 @@ three lines a second time, name it.
   controller row in the corner from 2 icons to 0**, which is what *"the icons at bottom
   right hide sometimes"* is. The same list decides seats, drop-in and the warm-up lobby, so
   the same blip is a body benched and handed back with an "unplugged"/"back" toast pair.
+  ⚠️ **AND `connectedGamepadIndices()` IS THE ONLY THING THAT MAY ANSWER "IS THIS PAD
+  HERE" — `pollDropIn` HAD A SECOND COPY AND IT WAS WRONG BOTH WAYS.** Its leaver half read
+  `navigator.getGamepads()` itself while its joiner half asked the function, so the debounce
+  above fixed the corner icons and did nothing at all for the ROSTER. Measured on the
+  shipped build: **one dropped poll benched a player for the rest of the match** — the body
+  walked out through the gate, `evenUpSides` walked a filler bot on in its shirt, and the
+  pad came back only as a touchline prompt nobody was looking for (sixty frames later, still
+  off). That is the *"random issue with flickering of the players"*, and it can only ever
+  happen during a live match, because `dropInBlocked` stands the whole poll down in warm-up,
+  in a drill, in the demo and after the whistle.
+  ⚠️ **ON A CABINET THE RAW SNAPSHOT IS EMPTY BY CONSTRUCTION**, so the same line benched
+  **all four panel seats within ten frames of the whistle** and every stick on the machine
+  drove a bot. A panel is a VIRTUAL pad — `connectedGamepadIndices` answers for it directly
+  — which is exactly why nothing else may go behind its back.
+  ⚠️ **`pollLobbyPads` was written afterwards and got it right**, and its own comment even
+  points at "the ordering `pollDropIn` already settles for the match". The older copy is the
+  one that rotted, which is the duplication rule with the usual ending.
+  ⚠️ **A GENUINE unplug is still acted on at once** and that is the control the check
+  measures in the same run: "a poll gap changes nothing" is equally true of a build where
+  nobody can ever leave, which would be the worse bug. `gamepaddisconnected` calls
+  `padForget` and sweeps, so a real disconnect leaves the live set on that frame rather than
+  at the end of the window.
   ⚠️ **WALL-CLOCK, not steps** — it is about how often the BROWSER polls, not how fast the
   sim runs, and `connectedGamepadIndices` is called from a draw as well as from `step()`.
   ⚠️ It can only ever DELAY a disconnect, never invent a pad: a slot is remembered only
