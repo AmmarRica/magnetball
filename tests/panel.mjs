@@ -136,9 +136,17 @@ o.stylesIdentical = (await feelStyle(game)) === (await feelStyle(panel));
 
 // --- Panel → game, instantly
 // The theme NAMED "Paper" has the key 'light' — assert the key the code really uses.
+// ⚠️ **AN EXACT NAME, NOT A SUBSTRING, and a substring already picked the wrong tile.**
+// This was `/paper/i` and `find` takes the FIRST match, so the moment a second theme with
+// "paper" in its name arrived it clicked that one instead and three assertions went red
+// blaming the sync. A tile's text is its emoji plus its name, so the name is matched at a
+// word boundary against the tail of it.
 await panel.evaluate(()=>{
   const tiles=[...document.querySelectorAll('#themePick .opt')];
-  tiles.find(t=>/paper/i.test(t.textContent)).click();
+  const t = tiles.find(x=>/(^|\s)paper$/i.test(x.textContent.trim()));
+  if (!t) throw new Error('no tile named exactly "Paper": ' +
+    tiles.map(x=>x.textContent.trim()).join(' | '));
+  t.click();
 });
 o.panelPickedLight = await panel.evaluate(()=>window.__magnet.sel.look.palette === 'light');
 o.panelToGame = await until(game, ()=>window.__magnet.sel.look.palette === 'light');

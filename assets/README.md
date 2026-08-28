@@ -15,8 +15,21 @@ drawn over the same physics disc/ball.
 | Country flags | `assets/flags/4x3/<iso>.svg` | Countryball faceplates |
 | Animal faces | `assets/Kenney/kenney_animal-pack/PNG/Round/*.png` | Animal faceplates |
 | Controller flair | `assets/Kenney/kenney_input-prompts_1.5/Flairs/Vector/` | The connected-pad icons |
+| Scribble tiles + characters | `assets/Kenney/kenney_scribble-dungeons/Vector/` | The **Sketchbook** theme: the floor tiles and the player counters |
 
-**The ball and the players are not sprites and are not meant to be.** Both are
+### The one exception, and why it is one
+
+**Sketchbook** is the only theme whose players and pitch surface are sprites: it was asked
+for with those two sheets, and the art is the point of it. Everything else about the rule
+still holds — `spriteImg` returns null while a file loads and for ever if it is missing, so
+the skin falls back to a drawn counter and the field to plain paper. A copy of the game
+saved on its own, without this folder beside it, still fields two readable sides.
+
+Credit: the pack is Kenney's **Scribble Dungeons** (CC0 — free to use, credit welcome but
+not required). The THEME's name is ours; naming our content after somebody else's title is
+the one thing the project's standing rule asks us not to do.
+
+**Otherwise the ball and the players are not sprites and are not meant to be.** Both are
 drawn on the canvas — see `BALL_LOOKS` and `paintFace()` in `index.html`. A disc is
 9–15 px across in play; a bitmap at that size is mush, while a path stays crisp at
 any zoom and can roll with the real spin. The old `assets/ball/soccer.png` /

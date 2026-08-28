@@ -5386,7 +5386,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.1150AM';
+const VERSION = '20260828.0245PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5402,6 +5402,13 @@ const VERSION = '20260828.1150AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260828.0245PM', title: 'A new theme: Sketchbook',
+    changed: [
+      '<b>Sketchbook.</b> A hand-drawn dungeon floor on a sheet of paper \u2014 the pitch tiled with a scribbled grass tile, and the players are the little inked counters that come with it. A red ball, so it is the one thing on the sheet you cannot lose.',
+      '<b>The sides are yellow and purple.</b> Every counter in the set is the same shape, so colour is all there is to tell the teams apart \u2014 those two are the furthest apart in lightness of any pair available, which means they still read for a colour-blind player where red against green would not.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.1150AM', title: 'Hold Select to go to warm-up',
     changed: [
       '<b>Hold Select for three seconds and everyone goes to the warm-up room.</b> A circle fills round your player while you hold it, so you can see it coming and let go. Any player can do it, not just the first controller \u2014 it used to work only from the menu, and only for one pad, so a match that wanted different sides or a different team size had to be played out first.',
@@ -6719,6 +6726,67 @@ const THEMES = {
   // the goal pocket, held far enough back that a rooftop covered in red guidance is never
   // a field of decoys for the red TEAM (the Bootleg dots and the Apologies! lane squares
   // are both written up for that exact mistake). Black is the outline, white is the type.
+  // A hand-drawn dungeon on paper: white sheet, pencil-blue ink, and the four scribbled
+  // counters the tile pack ships as its characters.
+  // ⚠️ **THE NAME IS OURS.** The art is Kenney's Scribble Dungeons pack (CC0, credit
+  // welcome but not required) and the ART is what was asked for — but "Scribble Dungeons"
+  // is somebody else's title, and this file's standing rule is that our content does not
+  // take one. `gameman`, `clash` and `ledge` are the precedent: the LOOK as an idea, with
+  // a name of our own. Kenney is credited in `assets/README.md`, where the packs are.
+  // ⚠️ **THE TEAM PAIR IS MEASURED, and the obvious one is the forbidden one.** The four
+  // characters are red #fc5c65, purple #9179ff, yellow #ffb600 and green #37d98c, and
+  // every one of them is the SAME SHAPE — a scribbled disc — so hue is all there is and
+  // the silhouette rule cannot be satisfied. That makes the lightness gap the whole of the
+  // separation, and it was computed rather than eyeballed (contrast ratio between the two
+  // fills): purple/yellow **1.87**, purple/green 1.80, red/yellow 1.74, red/green 1.67,
+  // red/purple 1.07, yellow/green 1.04.
+  //   · **purple vs yellow wins outright** — the widest gap, and cool-dark against
+  //     warm-light, which is a difference no colour-blindness type flattens.
+  //   · red/green is rejected on the hue rule this file states everywhere, and it is not
+  //     even the best gap; yellow/green (1.04) is the worst possible pick on both counts.
+  // ⚠️ That leaves RED free for the BALL, which is the one-job-each rule: nothing else on
+  // the pitch claims it, and at 3.06:1 against white paper it is the thing you can track.
+  // Green is spare.
+  // ⚠️ **THE KEY IS `sketch`, DELIBERATELY GENERIC, and the shown name has already moved
+  // once**: it was "Pen & Paper" for one build and collided with the existing **Paper**
+  // palette — two themes with the same word in a picker is a player's problem before it is
+  // a suite's, and `tests/panel.mjs` found it by clicking the first tile matching /paper/i
+  // and landing on the wrong theme. A key is what `sel.look`, `THEME_BUNDLES`, the map
+  // votes and every saved replay refer to; a display name is one string in one table. That
+  // is the `ledge` rule, and it is why the cheap half is the one that carries the taste.
+  sketch: {
+    name: 'Sketchbook', emoji: '📝',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #ffffff 0%, #f4f6f8 55%, #e7ebef 100%)',
+      bg:'#eef1f4', panel:'rgba(43,54,66,0.06)', edge:'#d0d6da', text:'#2b3642', muted:'#4c545e',
+      // ⚠️ **THE MENU INKS ARE DEEPER THAN THE PITCH ONES, and that is a contrast floor
+      // rather than taste.** The pack's colours are pitched for a hand-drawn sprite with a
+      // black outline round it; as MENU TEXT on a pale panel they have no outline and the
+      // art's own green and purple measured **4.47:1** and **4.33:1** — under the 4.5
+      // `tests/contrast.mjs` holds every label to. These are the same hues taken down until
+      // they clear it. The PITCH keeps the pack's colours exactly (`teamRed`, `teamBlue`,
+      // `ball` below), because there the black scribble outline is what separates them.
+      red:'#e0343f', blue:'#5f3fd6', cyan:'#0a4d2f', magenta:'#5f3fd6', green:'#0a4d2f',
+      yellow:'#a06f00', accent:'#5f3fd6', go:'#0a4d2f', field:'#ffffff', onAccent:'#ffffff' },
+    // ⚠️ FLAT (`stripeA === stripeB`): a sheet of paper has no mown stripes. What the
+    // surface DOES have is the tile grid, and that is the painter's job.
+    // ⚠️ The markings are a PENCIL BLUE a step darker than the tile ink (#d0d6da, measured
+    // off the art) — drawn ON the tiles, so at the tiles' own strength they would vanish
+    // into them. At #8e9aa6 a marking reads 2.6:1 against the paper, which is a drawn line
+    // rather than a label and is what the ink is for.
+    pitch: { glow:false, fieldBg:'#e7ebef', court:'#ffffff', stripeA:'#ffffff', stripeB:'#ffffff',
+      netPocket:'rgba(145,121,255,0.14)', line:'#8e9aa6', centerDot:'#2b3642',
+      netMesh:'rgba(43,54,66,0.34)', post:'#2b3642', teamRed:'#ffb600', teamBlue:'#9179ff',
+      discRim:'#2b3642', kickRing:'#2b3642', kickText:'#ffffff', cbRing:'#2b3642',
+      eyeWhite:'#ffffff', eyePupil:'#2b3642', nameBg:'#2b3642', nameText:'#ffffff',
+      shadow:'rgba(43,54,66,0.16)', ballRim:'#2b3642', ball:'#fc5c65', ballSpot:'#ffffff',
+      trailRGB:'252,92,101',
+      obstacle:'#fc5c65', good:'#37d98c', warn:'#ffb600', dim:'#b6bec6', cone:'#ffb600',
+      // The HUD floats over WHITE paper, so it goes dark — the opposite exception to the
+      // dark-court themes, for the same reason.
+      hudText:'#2b3642', hudSub:'#4c545e', accent:'#9179ff', padRing:'rgba(43,54,66,0.45)',
+      dynMark:'#d0d6da', dynAlt:'#8e9aa6', dynEdge:'#2b3642', dynGlow:'#9179ff' },
+  },
   ledge: {
     name: 'Mirror Ledge', emoji: '🏙️',
     ui: { scan:false,
@@ -8025,6 +8093,11 @@ const SLOTS = {
 const SLOT_KEYS = Object.keys(SLOTS);
 // Every palette is a bundle; only the ones that own more than colour say so here.
 const THEME_BUNDLES = {
+  // ⚠️ `ball: 'plain'` is REUSED — check the registry before adding to it, the rule the
+  // withdrawn `seam` look earned. A red disc on white paper is what a plain ball already
+  // is once the palette has set `ball` to #fc5c65. `trail: 'dots'` is the default.
+  // ⚠️ **No `pitch`**: a sheet of paper is a treatment that works on any rectangle.
+  sketch:  { field:'scribfloor', discs:'scribble', ball:'plain', sfx:'classic' },
   warp:      { field:'starfield', discs:'mono',  ball:'plain', sfx:'space' },
   // ⚠️ **`pitch` IS A `FIELDS` KEY AND `field` IS A `DYN_FIELDS` KEY, and those two
   // meanings sharing one word is the whole of what went wrong here.** This entry sets
@@ -27419,6 +27492,80 @@ function surfaceTexture(w){
 // so it can't perturb `w.rng` or the match.
 //
 // To add one: give it {reset, step, paint} here and point a theme's `dyn` at it.
+// ---------- SKETCHBOOK: the scribbled tile pack, baked once and blitted ------------
+// The one place in the file where the PLAYERS and the PITCH SURFACE are sprites rather
+// than paths — asked for directly, with these two sheets.
+// ⚠️ **`assets/` IS OPTIONAL AND THAT RULE STILL HOLDS.** `spriteImg` returns null while a
+// file is loading and null for ever if it is missing, so both the skin and the field draw a
+// path fallback: the downloaded single-file copy, or a deploy without the pack, gets a
+// plain inked counter on plain paper rather than an empty pitch. A missing file is never a
+// broken feature — that is what `assets/README.md` promises.
+// ⚠️ **BOTH SHEETS ARE ONE 1280x800 SVG on an 80px grid**, cell (col,row) starting at
+// (50 + 80*(col-1), 50 + 80*(row-1)). Measured off the art at 4x rather than read off the
+// pack: every character's ink is a uniform **42.75 x 42** box inside its cell, and the
+// grass tile's is **63.25 x 63.75**. Those two numbers are what make "draw it at the size
+// it collides at" expressible at all.
+// ⚠️ **BAKED ONCE AT `bake`x, THEN SCALED DOWN.** Chromium rasterises an SVG at its
+// intrinsic size for a source-rect `drawImage`, so cropping a 42.75px sprite and blowing it
+// up to a 60px body is an upscale of a 42px raster — soft, which is exactly the complaint
+// the DPR work was about. Baking the sheet at 4x and scaling DOWN is the good direction,
+// and it is one-off: a body never exceeds ~40px on screen, against a 171px bake.
+const SCRIB = {
+  dir:  'assets/Kenney/kenney_scribble-dungeons/Vector/',
+  chars:'scribbleDungeons_characters.svg',
+  tiles:'scribbleDungeons_tiles.svg',
+  cell: 80, ox: 50, oy: 50,        // the sheets' own grid
+  bake: 4,                         // rasterise the vector at this multiple, once
+  // ⚠️ Column of each character on row 1. The odd columns are the CHARACTERS and the even
+  // ones are their little "hands" — half the size, and not a player.
+  cols: { red:1, purple:3, yellow:5, green:7 },
+  // The ink box inside a character's cell, measured. `d` is what maps to the body diameter.
+  ink:  { x:18.5, y:18.5, w:43.0, d:43.0 },
+  // Grass: row 1, column 8 — asked for by that address. Its ink box, measured.
+  grass:{ col:8, row:1, x:8.25, y:8.25, w:63.5 },
+  // The team's own sheet colour, so `teamRed`/`teamBlue` and the sprite cannot disagree.
+  team: ['yellow', 'purple'],
+  tile: 62,                        // world units per floor tile, before the exact-fit round
+  tileA: 0.85,                     // ...and how strongly the tile grid is laid down
+};
+var _scribBake = {};
+// One bake per (sheet, cell). Keyed on the cell so the characters and the tile share the
+// machinery without sharing a canvas.
+function scribCell(sheet, col, row, box){
+  // ⚠️ **THE DIRECTORY IS IN THE KEY.** Without it the bake survives a change of
+  // `SCRIB.dir`, which is how the missing-pack path is exercised — the fallback block in
+  // `tests/dyntheme.mjs` went on being handed the cached sprites and reported the pack as
+  // present. One line, and it is the difference between a fallback that is tested and one
+  // that is asserted.
+  const key = SCRIB.dir + sheet + ':' + col + ':' + row;
+  let cv = _scribBake[key];
+  if (cv !== undefined) return cv;
+  const img = spriteImg(SCRIB.dir + sheet);
+  if (!img) return null;                       // still loading, or the pack is not there
+  const K = SCRIB.bake, C = SCRIB.cell;
+  const sx = SCRIB.ox + C * (col - 1) + box.x, sy = SCRIB.oy + C * (row - 1) + box.y;
+  cv = document.createElement('canvas');
+  cv.width = Math.round(box.w * K); cv.height = Math.round(box.w * K);
+  const c = cv.getContext('2d');
+  // ⚠️ Drawn as the WHOLE sheet scaled by K and translated, never as a source-rect crop:
+  // that is what makes the browser rasterise the VECTOR at K x rather than crop a
+  // 1:1 raster. The clip keeps the neighbouring cells out.
+  c.save();
+  c.beginPath(); c.rect(0, 0, cv.width, cv.height); c.clip();
+  c.drawImage(img, -sx * K, -sy * K, img.naturalWidth * K, img.naturalHeight * K);
+  c.restore();
+  _scribBake[key] = cv;
+  return cv;
+}
+function scribChar(team){
+  const name = SCRIB.cols[SCRIB.team[team === 1 ? 1 : 0]] ? SCRIB.team[team === 1 ? 1 : 0] : 'red';
+  return scribCell(SCRIB.chars, SCRIB.cols[name], 1, SCRIB.ink);
+}
+function scribGrass(){
+  return scribCell(SCRIB.tiles, SCRIB.grass.col, SCRIB.grass.row,
+                   { x: SCRIB.grass.x, y: SCRIB.grass.y, w: SCRIB.grass.w });
+}
+
 const DYN_FIELDS = {
   // Flying through starfall: stars stream out from the centre spot with perspective,
   // so the pitch reads as the view out of the front of something moving fast.
@@ -27479,6 +27626,39 @@ const DYN_FIELDS = {
       if (!st.cv || st.ink !== ink) this.build(st, ink);
       const a = c.globalAlpha; c.globalAlpha = a * this.alpha;
       c.drawImage(st.cv, L, T, W, H);
+      c.globalAlpha = a;
+    },
+  },
+  // SKETCHBOOK: the pitch tiled with one hand-drawn floor tile.
+  // ⚠️ **A GRID COMPUTED OFF THE PITCH RECT, so a wider field gets MORE tiles rather than
+  // stretched ones** — the `boardtrack` rule, and the reason a fraction of the field would
+  // be wrong here: a floor tile is a real-world size, and stretching it to eight-across on
+  // Leviathan would draw eight enormous squares nobody reads as a floor.
+  // ⚠️ The count is rounded and the tile size derived back from it, so the tiles fit the
+  // court EXACTLY and there is no sliver of untiled paper at the right-hand edge.
+  // ⚠️ **FALLS BACK TO NOTHING, deliberately.** With the pack missing `scribGrass()` is
+  // null and this paints the court and stops — which is a plain white sheet, exactly what
+  // the palette already says. A drawn imitation of a hand-drawn tile would be a second,
+  // worse version of the art.
+  scribfloor: {
+    name: 'Paper floor',
+    paint(c, st, L, T, W, H){
+      const g = scribGrass();
+      if (!g) return;
+      const cols = Math.max(3, Math.round(W / SCRIB.tile));
+      const rows = Math.max(3, Math.round(H / SCRIB.tile));
+      const tw = W / cols, th = H / rows;
+      const a = c.globalAlpha;
+      c.save();
+      c.beginPath(); c.rect(L, T, W, H); c.clip();
+      c.globalAlpha = a * SCRIB.tileA;
+      // ⚠️ Half a pixel of overlap: the tile art has a hand-drawn edge that does not reach
+      // its own bounding box on every side, so butting them exactly leaves a hairline of
+      // paper between rows at some zooms.
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < cols; i++)
+          c.drawImage(g, L + i*tw - 0.5, T + j*th - 0.5, tw + 1, th + 1);
+      c.restore();
       c.globalAlpha = a;
     },
   },
@@ -28931,6 +29111,37 @@ const DISC_SKINS = {
   // ⚠️ The shade and the highlight are drawn with `TH` nowhere in sight — they are light,
   // not colour, so they hold over a red counter, a pale one and any team colour a player
   // picks. Only the base and the rim come from the palette.
+  // SKETCHBOOK: the pack's own character counters, one colour a side.
+  // ⚠️ **DRAWN AT THE SIZE IT COLLIDES AT**, which is the VideoSoccer arrowhead rule and is
+  // the whole of "resize the character to match the player size". The sprite's measured ink
+  // box (43 x 43 inside an 80px cell) is mapped to the body DIAMETER, so the scribbled
+  // outline lands on the guide ring rather than a third outside it.
+  // ⚠️ **THE SIDES ARE YELLOW AND PURPLE, and that pair is measured** — see the palette
+  // note. Every character in this pack is the same shape, so the silhouette rule cannot be
+  // met and the lightness gap is doing all the work: purple/yellow is 1.87, the widest of
+  // the six pairs, where red/green is both narrower and the one hue pair a colour-blind
+  // player cannot separate at all. This is the second deliberate exception to the
+  // silhouette rule in the file, after Abduction's two saucers, and for the same reason:
+  // it is the art that was asked for.
+  // ⚠️ **FALLS BACK TO A DRAWN COUNTER** when the pack is missing — the same shape in the
+  // team ink with an inked rim, so a single-file offline copy still fields two readable
+  // sides. `assets/` is an optional enhancement, and this keeps that true.
+  scribble: {
+    name: 'Scribbles',
+    paint(c, p, x, y, r, w){
+      const im = scribChar(p.team);
+      if (im){
+        // The bake is square and its ink fills it, so the whole canvas maps to 2r.
+        c.drawImage(im, x - r, y - r, r*2, r*2);
+        return;
+      }
+      c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
+      c.fillStyle = p.team === 0 ? (TH.teamRed || '#ffb600') : (TH.teamBlue || '#9179ff');
+      c.fill();
+      c.lineWidth = Math.max(1.2, r*0.16); c.strokeStyle = TH.discRim || '#2b3642';
+      c.beginPath(); c.arc(x, y, r*0.92, 0, 2*Math.PI); c.stroke();
+    },
+  },
   counter: {
     name: 'Counters',
     paint(c, p, x, y, r, w){
@@ -32135,6 +32346,7 @@ if (window.__MAGNETDEBUG) {
     get drillBest(){ return drillBest; }, updateDrill, drillDone,
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER,
+    SCRIB, scribCell, scribChar, scribGrass,
     pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore,

@@ -1744,7 +1744,144 @@ ok(r.stageIsClean, `${r.stageStars} star pixels landed ON the stage — the cour
 ok(r.paintIsPure, 'two paints of one sim step gave different frames — the drift must advance in step(), or a paused screen crawls at the refresh rate');
 ok(r.driftMovesWithStep, 'the star drift never moved when the field was stepped');
 
-console.log(JSON.stringify(r, null, 1));
+// ============================================================================
+// SKETCHBOOK — the one theme whose players and floor are SPRITES.
+//
+// ⚠️ `assets/` is optional with a drawn fallback, and that rule still binds: the checks
+// below run twice, once with the pack present and once with `SCRIB.dir` pointed at
+// nothing, because a single-file offline copy without the art must still field two
+// readable sides on a plain sheet rather than an empty pitch.
+// ⚠️ **THE SPRITES LOAD ASYNCHRONOUSLY.** `spriteImg` returns null until the file
+// arrives, so a probe that paints immediately measures the FALLBACK and reports it as
+// the feature working. Every block here waits for `scribChar(0)` first.
+const pen = await p.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  M.sel.look.palette = 'sketch'; M.applyTheme('sketch');
+  const until = async fn => { for (let i = 0; i < 80; i++){ if (fn()) return true; await new Promise(z => setTimeout(z, 50)); } return false; };
+  o.spritesLoaded = await until(() => M.scribChar(0) && M.scribChar(1) && M.scribGrass());
+  if (!o.spritesLoaded) return o;
+
+  // ---- 1. DRAWN AT THE SIZE IT COLLIDES AT ---------------------------------
+  // The VideoSoccer arrowhead rule, and the whole of "resize the character to match the
+  // player size": the sprite's ink box maps to the body DIAMETER, so the scribbled
+  // outline lands on the guide ring rather than a third outside it.
+  // ⚠️ One body per canvas. A shared strip lets a neighbour's ink into the scan window,
+  // which reported a 40px body as 59.5px drawn on a build that was perfectly correct.
+  o.fit = [50, 25, 12].map(r => {
+    const q = document.createElement('canvas'); q.width = r*6; q.height = 3;
+    const qc = q.getContext('2d'); qc.fillStyle = '#fff'; qc.fillRect(0,0,q.width,q.height);
+    M.DISC_SKINS.scribble.paint(qc, { team:0 }, r*3, 1, r, null);
+    const d = qc.getImageData(0,1,q.width,1).data;
+    let x0 = -1, x1 = -1;
+    for (let i = 0; i < d.length; i += 4){ if (d[i]+d[i+1]+d[i+2] < 730){ if (x0 < 0) x0 = i/4; x1 = i/4; } }
+    return { r, excess: +(((x1 - x0 + 1)/2) - r).toFixed(2) };
+  });
+
+  // ---- 2. THE TWO SIDES SEPARATE WITHOUT HUE -------------------------------
+  // ⚠️ **THE SILHOUETTE RULE CANNOT BE MET HERE and that is deliberate**: every character
+  // in this pack is the same scribbled disc, so hue is all there is — the second such
+  // exception in the file after Abduction's two saucers. What replaces it is Abduction's
+  // own measurement: the LIGHTNESS gap between the two fills, taken on rendered pixels
+  // rather than off the palette hex (a hex says nothing about what the art did to it).
+  const mid = team => {
+    const q = document.createElement('canvas'); q.width = 80; q.height = 80;
+    const qc = q.getContext('2d'); qc.fillStyle = '#fff'; qc.fillRect(0,0,80,80);
+    M.DISC_SKINS.scribble.paint(qc, { team }, 40, 40, 34, null);
+    const d = qc.getImageData(40, 40, 1, 1).data;
+    return [d[0], d[1], d[2]];
+  };
+  const rel = c => { const f = v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+                     return 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]); };
+  const A = mid(0), B = mid(1);
+  o.teamA = A; o.teamB = B;
+  const la = rel(A), lb = rel(B);
+  o.lightGap = +(((Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05))).toFixed(2);
+
+  // ---- 3. THE FLOOR IS A GRID THAT GROWS WITH THE COURT ---------------------
+  // The `boardtrack` rule: a wider field gets MORE tiles, never stretched ones.
+  // ⚠️ **MEASURE THE TILE PITCH, NOT THE COUNT — a count check is VACUOUS and a sabotage
+  // proved it.** Pinning the grid at a fixed 8x8 (exactly the defect: stretched tiles)
+  // still read MORE seams on the wider canvas — 1 against 8 — because at 440/8 = 55px the
+  // seams merge into one run at that scan line and at 1200/8 = 150px they separate. So
+  // "more seams on a wider court" sails through the build it exists to catch. What a
+  // real-world-sized tile actually promises is that the PITCH between seams is the same on
+  // both courts, and that is what is measured.
+  const seams = (W, H) => {
+    const q = document.createElement('canvas'); q.width = Math.ceil(W); q.height = Math.ceil(H);
+    const qc = q.getContext('2d'); qc.fillStyle = '#ffffff'; qc.fillRect(0,0,q.width,q.height);
+    M.DYN_FIELDS.scribfloor.paint(qc, {}, 0, 0, W, H);
+    const d = qc.getImageData(0, Math.floor(H/2), q.width, 1).data;
+    const at = []; let wasInk = false;
+    for (let i = 0; i < d.length; i += 4){
+      const ink = d[i]+d[i+1]+d[i+2] < 700;
+      if (ink && !wasInk) at.push(i/4);
+      wasInk = ink;
+    }
+    return at;
+  };
+  const pitchOf = at => at.length < 3 ? 0 : (at[at.length-1] - at[0]) / (at.length - 1);
+  const sN = seams(440, 300), sW = seams(1200, 300);
+  o.tilesNarrow = sN.length; o.tilesWide = sW.length;
+  o.pitchNarrow = +pitchOf(sN).toFixed(1); o.pitchWide = +pitchOf(sW).toFixed(1);
+  // ...and it actually covers the court rather than leaving bare paper.
+  const cov = (() => {
+    const q = document.createElement('canvas'); q.width = 300; q.height = 200;
+    const qc = q.getContext('2d'); qc.fillStyle = '#ffffff'; qc.fillRect(0,0,300,200);
+    M.DYN_FIELDS.scribfloor.paint(qc, {}, 0, 0, 300, 200);
+    const d = qc.getImageData(0,0,300,200).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i]+d[i+1]+d[i+2] < 760) n++;
+    return n;
+  })();
+  o.floorInk = cov;
+  return o;
+});
+
+// ---- 4. the pack MISSING: a drawn fallback, never an empty pitch ------------
+const penFB = await p.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  M.SCRIB.dir = 'assets/__no_such_pack__/';
+  M.sel.look.palette = 'sketch'; M.applyTheme('sketch');
+  await new Promise(z => setTimeout(z, 500));
+  o.spriteGone = !M.scribChar(0) && !M.scribGrass();
+  const q = document.createElement('canvas'); q.width = 200; q.height = 100;
+  const qc = q.getContext('2d'); qc.fillStyle = '#fff'; qc.fillRect(0,0,200,100);
+  let threw = false;
+  try {
+    M.DYN_FIELDS.scribfloor.paint(qc, {}, 0, 0, 200, 100);
+    M.DISC_SKINS.scribble.paint(qc, { team:0 }, 55, 50, 34, null);
+    M.DISC_SKINS.scribble.paint(qc, { team:1 }, 145, 50, 34, null);
+  } catch(_){ threw = true; }
+  o.threw = threw;
+  const px = (x,y) => { const d = qc.getImageData(x,y,1,1).data; return [d[0],d[1],d[2]]; };
+  o.fbA = px(55,50); o.fbB = px(145,50);
+  o.fbDiffer = o.fbA.join() !== o.fbB.join();
+  o.fbInked = o.fbA.reduce((s,v)=>s+v,0) < 730 && o.fbB.reduce((s,v)=>s+v,0) < 730;
+  return o;
+});
+
+ok(pen.spritesLoaded, 'the Sketchbook sprites never loaded, so every check below would have been measuring the FALLBACK and calling it the feature');
+ok(pen.fit && pen.fit.every(f => Math.abs(f.excess) <= 1.5),
+   `the character is not drawn at the size it collides at: ${JSON.stringify(pen.fit)} — a sprite a third bigger than its collider is the VideoSoccer arrowhead again, and "resize the character to match the player size" is exactly this number`);
+// ⚠️ **THE BAR IS SET ABOVE THE RED/GREEN PAIR ON PURPOSE, and a looser one is vacuous.**
+// A lightness-gap check cannot say "not red and green" in so many words — but under the
+// colour blindness that flattens that pair, the lightness gap is exactly what is left of
+// it, and red/green measures **1.67**. So the bar sits above 1.67 rather than at some
+// round number: 1.6 would have waved the forbidden pair straight through, which is what
+// this file was first written with. The six pairs measure purple/yellow 1.87 (shipped),
+// purple/green 1.80, red/yellow 1.74, red/green 1.67, red/purple 1.07, yellow/green 1.04.
+ok(pen.lightGap >= 1.75,
+   `the two sides are only ${pen.lightGap}:1 apart in lightness (${JSON.stringify(pen.teamA)} vs ${JSON.stringify(pen.teamB)}) — every character in this pack is the same scribbled disc, so the silhouette rule cannot be met and the lightness gap is the whole of the separation`);
+ok(pen.pitchNarrow > 20 && pen.pitchWide > 20 &&
+   Math.abs(pen.pitchWide - pen.pitchNarrow) / pen.pitchNarrow < 0.25,
+   `the floor stretches its tiles instead of laying more of them: a tile is ${pen.pitchNarrow}px across a 440-wide court and ${pen.pitchWide}px across 1200 (${pen.tilesNarrow} and ${pen.tilesWide} seams) — a floor tile is a real-world SIZE, and eight enormous squares on Leviathan is not a floor`);
+ok(pen.floorInk > 300, `the floor painted almost nothing (${pen.floorInk} inked pixels), so the tile-count check above is comparing two empty canvases`);
+ok(penFB.spriteGone && !penFB.threw,
+   'pointing the pack at nothing did not disable the sprites, so the fallback below is not being exercised');
+ok(penFB.fbDiffer && penFB.fbInked,
+   `with the pack MISSING the two sides are not two readable bodies: ${JSON.stringify(penFB.fbA)} vs ${JSON.stringify(penFB.fbB)} — \`assets/\` is an optional enhancement and a missing file must never be a broken feature`);
+
+
+console.log(JSON.stringify({ r, pen, penFB }, null, 1));
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\ndyntheme OK');

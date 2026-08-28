@@ -1488,6 +1488,80 @@ three lines a second time, name it.
   machine was a flat two-colour sprite, which is what the standard disc already is once the
   palette has made it bright red or bright cyan on black; and `space` is the closest set in
   the file to one square wave and no mixer. `tests/dyntheme.mjs`.
+  `sketch` (shown as **Sketchbook**) = a hand-drawn dungeon on paper: a white sheet
+  tiled with one scribbled floor tile, and the tile pack's own character counters for
+  players. Asked for with two sheets by name, and the grass tile picked by address —
+  *"one 8th column top row"*.
+  ⚠️ **THE ONLY THEME IN THE FILE WHOSE PLAYERS AND SURFACE ARE SPRITES, and it is a
+  deliberate exception to a rule written in three places.** `assets/README.md` says *"the
+  ball and the players are not sprites and are not meant to be"*, and the warm-up shirt
+  entry says the same. That rule is about a bitmap turning to mush at nine pixels; here the
+  art IS the ask, so the exception is written down in all three places rather than left to
+  be rediscovered as an inconsistency.
+  ⚠️ **THE FALLBACK IS WHAT KEEPS THE OTHER HALF OF THE RULE.** `spriteImg` returns null
+  while a file loads and for ever if it is missing, so the skin draws an inked counter in
+  the team ink and the field paints nothing over the paper. A downloaded single-file copy
+  with no `assets/` beside it still fields two readable sides — a missing file is never a
+  broken feature, which is what that README promises.
+  ⚠️ **THE NAME IS OURS.** The art is Kenney's Scribble Dungeons pack (CC0, credit welcome
+  and not required) and Kenney is credited in `assets/README.md`; the theme is not named
+  after it. `gameman`, `clash` and `ledge` are the precedent — the look as an idea, with a
+  name of our own — and the key is generic so it can be renamed for free.
+  ⚠️ **BOTH SHEETS ARE ONE 1280×800 SVG ON AN 80px GRID**, cell (col,row) at
+  `(50 + 80*(col−1), 50 + 80*(row−1))`. The geometry is **measured off the art at 4×**, not
+  read off the pack: every character's ink is a uniform **42.75 × 42** box inside its cell
+  and the grass tile's is **63.25 × 63.75**. Those two numbers are what make *"draw it at
+  the size it collides at"* expressible at all. The odd columns are characters and the
+  **even ones are their little hands** — half the size, and not a player.
+  ⚠️ **BAKED ONCE AT 4×, THEN SCALED DOWN.** Chromium rasterises an SVG at its intrinsic
+  size for a source-rect `drawImage`, so cropping a 42.75px sprite and blowing it up to a
+  60px body is an upscale of a 42px raster — soft, which is the whole complaint the DPR
+  work was about. Baking the sheet at 4× and scaling DOWN is the good direction, and a body
+  never exceeds ~40px on screen against a 171px bake.
+  ⚠️ **THE BAKE CACHE IS KEYED ON THE PATH, and without that the fallback cannot be
+  TESTED.** Keyed on (sheet, col, row) alone, the bake survives a change of `SCRIB.dir` —
+  so the suite's missing-pack block went on being handed the cached sprites and reported
+  the pack as present. One line, and it is the difference between a fallback that is
+  checked and one that is merely asserted.
+  ⚠️ **DRAWN AT THE SIZE IT COLLIDES AT** — the VideoSoccer arrowhead rule, and the whole
+  of *"resize the character to match the player size"*. The sprite's ink box maps to the
+  body DIAMETER. Measured: excess over the collider is **−0.5 / 0 / 0 px** at radii 50, 25
+  and 12.
+  ⚠️ **THE SILHOUETTE RULE CANNOT BE MET AND THE PAIR IS MEASURED INSTEAD.** Every
+  character in the pack is the same scribbled disc, so hue is all there is — the second
+  deliberate exception in the file after Abduction's two saucers, and for the same reason
+  (it is the art that was asked for). What replaces it is Abduction's own instrument, the
+  LIGHTNESS gap, computed over all six pairs: **purple/yellow 1.87** (shipped),
+  purple/green 1.80, red/yellow 1.74, **red/green 1.67**, red/purple 1.07, yellow/green
+  1.04. Purple against yellow is the widest, and cool-dark against warm-light survives
+  every type of colour blindness.
+  ⚠️ **THE CHECK'S BAR IS SET ABOVE RED/GREEN'S 1.67 ON PURPOSE, and 1.6 was vacuous.** A
+  lightness check cannot say *"not red and green"* in so many words — but under the
+  blindness that flattens that pair, the lightness gap is what is left of it, so the bar
+  goes above the forbidden pair rather than at a round number.
+  ⚠️ **RED IS LEFT FOR THE BALL** (one job each): nothing else claims it, and at 3.06:1 on
+  white paper it is the thing you can track. Green is spare.
+  ⚠️ **THE MENU INKS ARE DEEPER THAN THE PITCH ONES, and that is a contrast floor.** The
+  pack's colours are pitched for a sprite with a black outline round it; as menu TEXT on a
+  pale panel they have no outline, and the art's own green and purple measured **4.47:1**
+  and **4.33:1** — under the 4.5 `tests/contrast.mjs` holds every label to. `ui.*` is
+  darkened until it clears; the PITCH keeps the pack's colours exactly.
+  ⚠️ **THE FLOOR IS A GRID COMPUTED OFF THE PITCH RECT** — the `boardtrack` rule, so a
+  wider court gets MORE tiles rather than stretched ones, with the count rounded and the
+  size derived back from it so they fit exactly.
+  ⚠️ **CHECKING THAT BY COUNTING SEAMS IS VACUOUS, AND A SABOTAGE PROVED IT.** Pinning the
+  grid at a fixed 8×8 — exactly the defect — still read MORE seams on the wider canvas (1
+  against 8), because at 440/8 = 55px the seams merge into one run at the scan line and at
+  1200/8 = 150px they separate. What a real-world-sized tile promises is that the PITCH
+  between seams is the same on both courts: measured **62.6px and 63.1px**, against 0 and
+  150 on the stretched build.
+  ⚠️ **The goal frame follows `teamColOf`, not the skin**, so with the default red/blue
+  team colours the frames and the bodies disagree. That is not new here — every one of the
+  nine disc skins paints from the theme while `drawGoal` reads the player's own choice —
+  and it is left alone rather than redesigned under a theme. Setting the two team colours
+  to yellow and purple in warm-up makes them agree.
+  ⚠️ `ball: 'plain'` is REUSED — check the registry before adding to it. **No `pitch`**: a
+  sheet of paper is a treatment that works on any rectangle. `tests/dyntheme.mjs`.
   `ledge` (shown as **Mirror Ledge**) = a TEAL rooftop hung over a BLUE drop, with the way
   on painted in red: panel seams, red pipe runs down the touchlines, a red chevron aimed
   into each goal, and a night city with its lights a long way down.
