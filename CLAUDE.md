@@ -2209,6 +2209,79 @@ three lines a second time, name it.
   drill has no `total`, so the shared `0/0` claimed it was complete and empty at once.
   ⚠️ The player is never moved to the next ball — walking to it is the drill.
   `tests/targetsdrill.mjs`.
+- **MINI GOLF — eight holes, scored in TOUCHES** (`GOLF`, `GOLF_HOLES`, `golfLay`,
+  `ballPlayable`, `DRILLS.golf`). Asked for as *"a drill that works like golf — how many
+  touches to get the ball inside a circle, with 8 mini golf courses"*, with an offer to
+  split it into its own thing if it needed one.
+  ⚠️ **IT IS A DRILL, AND THE OFFER TO SPLIT IT OUT WAS DECLINED ON PURPOSE.** Everything
+  golf needs already exists and is already tested: a world with no goals, `dWall`/`dCone`/
+  `dZone` for the course, `drillBest` for the record, the three-slot board, the reset
+  button, the Next-drill footer. A separate mode would be a second copy of every one of
+  those and the two would drift the first time either was touched. What golf actually
+  needed was one table entry, one branch in `updateDrill` and one predicate in the physics.
+  ⚠️ **ONE ROUND OF EIGHT, NOT EIGHT DRILLS.** A golf score is a ROUND — the interesting
+  number is what you went round in — and eight entries would be eight records that never
+  add up to one. It also keeps the drill list at 26 rather than 33.
+  ⚠️ **THE HARD PART IS WHAT COUNTS AS A TOUCH, AND EVERY OBVIOUS ANSWER IS EXPLOITABLE.**
+  Counting frames of contact makes a dribble sixty touches. Counting one contact EVENT
+  makes a dribble ONE touch, so you can walk the ball round the whole course and go round
+  in eight. Golf's own rule is the way out: **you may only play the ball when it is at
+  rest**. While it rolls the player is a ghost to it — no kick, no control, no collision —
+  and every impulse given to a resting ball is one touch, whether it came from a kick or
+  from a shoulder. Pushing therefore costs exactly what striking costs and there is nothing
+  left to game.
+  ⚠️ **`ballPlayable` IS ONE PREDICATE WITH TWO READERS** — `integrate`'s ball-control pass
+  and `moveBall`'s disc collision — the same shape `bodyStaged` has, and for the same
+  reason: two copies would give a ball you cannot strike but can still shove. **Sabotaging
+  either one alone is a green suite unless both are checked**, so both are.
+  ⚠️ **THE COUNTER NEEDS NO HOOK IN THE PHYSICS AT ALL**: a touch is *the ball's speed
+  crossed `rest` upward*. That is sound only because nothing else in a golf world can
+  ACCELERATE the ball — the magnet is off, and every wall and cone has a `bCoef` below 1 —
+  which is worth writing down because it is the assumption the whole score rests on. Put a
+  bumper with `bCoef > 1` on a course and the count starts lying.
+  ⚠️ **THE GREEN IS A SURFACE, and it is the ONE number golf overrides.** At the shipped
+  ball glide a struck ball takes over six seconds to stop, and eight holes of standing
+  still waiting for it is not a game. `GOLF.damp` 0.965 is a putting green: measured, a
+  full-power shot runs **279 units** — a third of Classic's length — and settles in
+  **1.6s**. A deliberate exception to *"a drill uses the ball you PICKED"*: the ball's size,
+  mass and bounce are still yours, and only the friction of the surface it rolls on is the
+  mode's.
+  ⚠️ **`GOLF.rest` IS ALSO THE LIP-OUT RULE.** A ball crossing the cup at pace has not
+  holed out, which is golf, and is what stops a long shot scoring because it happened to
+  pass over on its way to the far wall.
+  ⚠️ **NO GHOST IS RECORDED, and that is a decision rather than a limitation.** A ghost is
+  indexed by ELAPSED TIME and golf is scored in strokes, so one racing you round would pace
+  a thing nobody is measuring — a slower round with fewer touches is the BETTER round, and
+  the ghost would say the opposite. `GHOST.maxSecs` would cut it off part way in any case.
+  `ghostRecord` returns for a holes drill and `drillAddRun` stores the score with no path,
+  which the medals row and the ghost filter both already handle.
+  ⚠️ **THE CLOCK IS A BACKSTOP AND NOTHING ELSE** (`GOLF.cap`, 480). That widened a written
+  rule rather than breaking it: *"every drill has the same two-minute backstop"* was the
+  same claim as *"every drill scored on TIME does"* only while Break the Targets was the
+  one drill not measured in seconds. `tests/drillghost.mjs` now says the exemption is **the
+  score is not the clock**, and pairs it with "a drill whose clock outruns `GHOST.maxSecs`
+  records no ghost".
+  ⚠️ **`d.total` IS THE HOLE COUNT, not gates-plus-zones.** `golfLay` replaces the course
+  every hole, so the generic count reads the ONE cup that is out and the round would finish
+  on the first putt. `golfLay` empties walls, posts, cones, zones and gates before it lays
+  the next one — hole eight is not hole one with seven courses standing on it.
+  ⚠️ **`drillScoreText` IS THE ONE PLACE THAT KNOWS A DRILL'S UNIT**, and there are three
+  now: goals, touches, seconds. The banner, the board and the drill list all read it, so a
+  fourth unit is one edit rather than four; the list's own `say()` was a fourth copy and is
+  gone.
+  ⚠️ **A TEE IS NOT JUST THE BALL — the player stands 46 units behind it.** Two courses
+  were authored with `by: 330`, putting the BODY at 376 against a half-length of 380 less
+  its radius: outside the pitch, where `integrate`'s clamp drags it in on frame one.
+  `tests/golf.mjs` measures the body's spot rather than the ball's, and caught both.
+  ⚠️ **TWO MEASUREMENT TRAPS in that suite, and each produced a false result first.**
+  (a) A push has to be measured as a DIFFERENCE against the same step with the player
+  parked away: the ball is damped every step, so one rolling at 5 loses 0.175 of velocity on
+  its own and an absolute reading calls that "the player moved it" on a build where nobody
+  was near it. (b) **The rolling case has to put the player IN THE BALL'S PATH**, not behind
+  it — `moveBall` advances the ball and THEN collides, so a ball leaving a body at five
+  units a step is already clear by the first sub-step, and with the gate deleted the probe
+  still read zero. That is a check that cannot see the defect it exists for, and a sabotage
+  is what said so. `tests/golf.mjs`.
 - **DRILL GHOSTS — your three best runs, on the pitch at once** (`GHOST`, `drillRuns`,
   `drillTop`, `drillBetter`, `ghostRecord`, `ghostSpline`, `ghostAt`, `drillAddRun`,
   `drawGhosts`). Gold, silver and bronze, coloured by rank.

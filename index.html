@@ -5418,7 +5418,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260828.1035PM';
+const VERSION = '20260829.0120PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5434,6 +5434,13 @@ const VERSION = '20260828.1035PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260829.0120PM', title: 'Mini Golf: eight holes, fewest touches',
+    changed: [
+      '<b>A new drill: Mini Golf.</b> Eight courses in a row, and the score is how many touches it took to get the ball into the circle. Walls to bank off, cones to go round, and a par for each hole.',
+      '<b>You may only play the ball when it has stopped.</b> That is golf\u2019s own rule and it is what makes the count mean something \u2014 while the ball is rolling it goes straight through you, so shoving it along is not free. Nudging costs a touch exactly like striking does.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260828.1035PM', title: 'The friction dials say how long things take to stop',
     changed: [
       '<b>Game Feel now has Player stopping time and Ball stopping time, in seconds.</b> Both dials were already there \u2014 as Player float and Ball glide, reading out numbers like 0.960 and 0.992, which tell you nothing. Same sliders, same physics; they just say what they do now, so you can set the ball to take five seconds to roll to a stop and know that is what you are getting.',
@@ -15550,7 +15557,7 @@ function buildDrillList(){
     const dl = DRILLS[key]; const best = drillTop(key);
     const runs = drillRuns(key);
     const el = document.createElement('div'); el.className='opt';
-    const say = v => dl.high ? (v + (v === 1 ? ' goal' : ' goals')) : (v.toFixed(2) + 's');
+    const say = v => drillScoreText(key, v);
     // A medal per kept run, so the tile says how many ghosts will be out there with you.
     const medals = runs.map((r, i) => r.p ? ['\ud83e\udd47','\ud83e\udd48','\ud83e\udd49'][i] : '').join('');
     el.innerHTML = `<span class="emoji">${dl.emoji}</span><span>${dl.name}</span>`+
@@ -20177,7 +20184,12 @@ function integrate(w, ballFrozen, playersFrozen){
       // trap the ball is a real hole. One predicate, read here and by the collision pass,
       // so the two can never disagree about who is a ghost.
       if (bodyStaged(p)) continue;
-      handleBallControl(w, p, nearestControlBall(w, p, ball), ballFrozen);
+      // ⚠️ **AND IN MINI GOLF YOU MAY ONLY PLAY A BALL THAT IS AT REST** — see `GOLF`.
+      // The same predicate gates `moveBall`'s collision below, so a rolling ball is one
+      // you can neither kick nor shove; two answers here would give a ball you cannot
+      // strike but can still walk into, which is the exploit the rule exists to shut.
+      const cb = nearestControlBall(w, p, ball);
+      if (ballPlayable(w, cb)) handleBallControl(w, p, cb, ballFrozen);
       handleSnailKick(w, p, ballFrozen);
       handleKickPush(w, p);
     }
@@ -20324,9 +20336,14 @@ function moveBall(w, ball, discs){
   if (sp0 > cap){ const k = cap/sp0; ball.vx *= k; ball.vy *= k; }
   const speed = Math.hypot(ball.vx, ball.vy);
   const n = Math.max(1, Math.min(20, Math.ceil(speed / (ball.r*0.5))));
+  // ⚠️ Answered ONCE, outside the sub-step loop: it is a property of the whole step, and
+  // asking it per sub-step would let a ball that slowed through `rest` mid-flight become
+  // touchable half way along its own travel. Everything that is not a golf ball answers
+  // true, so every other drill and every match is exactly what it was.
+  const playable = ballPlayable(w, ball);
   for (let s=0; s<n; s++){
     ball.x += ball.vx/n; ball.y += ball.vy/n;
-    for (const p of discs) collideDiscs(p, ball);
+    if (playable) for (const p of discs) collideDiscs(p, ball);
     for (const post of w.posts) collideDiscs(ball, post);
     for (const wall of w.walls) collideWall(ball, wall);
     for (const arc of w.arcs) collideArc(ball, arc);
@@ -25549,7 +25566,14 @@ function drillLimit(def){ return (def && def.timed) || DRILLTIME.max; }
 // is a check on the real rule: a suite that re-derives "elapsed or countdown?" for itself
 // is testing its own arithmetic, which is the false pass this file keeps recording.
 function drillReadout(d){
-  if (d.def.high || (d.timed && d.timeLeft <= DRILLTIME.warn)) return Math.ceil(d.timeLeft) + 's';
+  // ⚠️ **GOLF IS NOT SCORED ON TIME AT ALL**, so a clock there is a number that decides
+  // nothing sitting where the score should be. What it shows is the round: the touches
+  // this hole has cost and the total so far. The countdown still comes back in the last
+  // `DRILLTIME.warn` seconds of the backstop, because that is the one moment the cap means
+  // anything on any drill.
+  if (d.timed && d.timeLeft <= DRILLTIME.warn) return Math.ceil(d.timeLeft) + 's';
+  if (d.def.holes) return (d.holeStrokes || 0) + ' \u00b7 ' + (d.strokes || 0) + ' TOTAL';
+  if (d.def.high) return Math.ceil(d.timeLeft) + 's';
   return d.elapsed.toFixed(1) + 's';
 }
 const GHOST = {
@@ -25588,6 +25612,12 @@ function drillBetter(key, a, b){
 // itself for the rest of the run.
 function ghostRecord(w){
   const d = w.drill; if (!d || d.complete || d.failed) return;
+  // ⚠️ **A ROUND OF GOLF RECORDS NO GHOST, and that is a decision rather than a
+  // limitation.** A ghost is indexed by ELAPSED TIME and golf is scored in strokes, so one
+  // racing you round would be pacing a thing nobody is measuring — a slower round with
+  // fewer touches is the BETTER round, and a ghost would say the opposite. `GHOST.maxSecs`
+  // would cut it off part way round in any case, leaving a ghost that walks off the course.
+  if (d.def.holes) return;
   if (!d.rec) d.rec = { p: [], b: [], n: 0 };
   const every = Math.max(1, Math.round(1 / (STEP * ghostRate())));
   if ((d.rec.n++ % every) !== 0) return;
@@ -25708,6 +25738,131 @@ function drillBoundary(w){ const hw=w.field.W/2, hl=w.field.L/2, b=0.3;
                {a:{x:hw,y:hl},b:{x:-hw,y:hl},bCoef:b},{a:{x:-hw,y:hl},b:{x:-hw,y:-hl},bCoef:b});
   w.bounds={halfW:hw,halfL:hl,gh:0,net:0}; }
 
+// ============================================================
+//  MINI GOLF — eight holes, scored in TOUCHES
+// ============================================================
+// Asked for as *"a drill that works like golf — how many touches to get the ball inside a
+// circle, with 8 mini golf courses"*.
+//
+// ⚠️ **IT IS A DRILL, NOT ITS OWN MODE, and the offer to split it out was declined for a
+// reason.** Everything golf needs already exists here and is already tested: a world with
+// no goals, `dWall` / `dCone` / `dZone` for the course, `drillBest` for the record, the
+// three-slot board, the reset button, the Next-drill footer. A separate mode would be a
+// second copy of all of that, and the two would drift the first time either was touched.
+// What golf actually needs is one entry, one branch in `updateDrill` and one predicate in
+// the physics — see below.
+//
+// ⚠️ **ONE ROUND OF EIGHT, not eight drills.** A golf score is a ROUND: the interesting
+// number is what you went round in, and eight separate entries would be eight records that
+// never add up to one. It also keeps the drill list at 26 rather than 33.
+//
+// ⚠️ **THE HARD PART IS WHAT COUNTS AS A TOUCH, and the obvious answers are all
+// exploitable.** Counting every frame of contact makes a dribble sixty touches; counting
+// one contact EVENT makes a dribble ONE touch, and you can then walk the ball round the
+// whole course for a score of eight. Golf's own rule is the way out: **you may only play
+// the ball when it is at rest**. So while the ball is rolling the player is a GHOST to it
+// — no kick, no control, no collision — and every impulse you give a resting ball is one
+// touch. Pushing it costs a touch per push, exactly as striking does, so there is nothing
+// to game and the count means what it says.
+//
+// ⚠️ **THE COUNTER NEEDS NO HOOK IN THE PHYSICS AT ALL.** A touch is "the ball's speed
+// crossed `rest` upward", which is sound only because nothing else in a golf world can
+// ACCELERATE the ball: the magnet is off, walls and cones have `bCoef` below 1, and the
+// player is the sole source of energy. That is worth stating because it is the assumption
+// the whole score rests on — put a bumper with `bCoef > 1` on a course and the count
+// starts lying.
+//
+// ⚠️ **THE GREEN IS A SURFACE, and it is the one number golf overrides.** At the shipped
+// ball glide a struck ball takes over six seconds to stop, and eight holes of standing
+// still waiting for it is not a game. `GOLF.damp` is a putting green: a full shot travels
+// about a third of the pitch and settles in a second and a half. This is a deliberate
+// exception to *"a drill uses the ball you PICKED"* — the ball's size, mass and bounce are
+// still yours, and only the friction of the surface it is rolling on is the mode's.
+//
+// ⚠️ **NO GHOSTS, and that is a decision rather than a limitation.** A ghost is indexed by
+// ELAPSED TIME and golf is scored in strokes, so a ghost racing you through a round would
+// be pacing a thing nobody is measuring — and `GHOST.maxSecs` would cut it off half way
+// round anyway. `d.rec` is left null and `drillAddRun` stores the score with no path, which
+// the medals row and the ghost filter both already handle.
+const GOLF = {
+  // Measured rather than picked: at 0.965 a full-power shot with the shipped kick runs
+  // about 290 units — a third of Classic's length — and settles in 1.43s. Slower and a
+  // hole needs six shots; faster and the whole round is one blast per hole.
+  damp: 0.965,
+  // Below this the ball is "at rest" and may be played. It is also the lip-out rule: a
+  // ball crossing the cup at speed has not holed out, which is golf and is what stops a
+  // long shot counting because it happened to pass over.
+  rest: 0.35,
+  // A backstop and nothing else — golf is not scored on time. Deliberately far above
+  // `DRILLTIME.max`, because a round of eight is minutes of play and the two-minute cap
+  // would fail a perfectly good one.
+  cap: 480,
+};
+// ⚠️ **ONE ANSWER TO "MAY THIS PLAYER PLAY THE BALL RIGHT NOW", read by `integrate`'s
+// ball-control pass AND by `moveBall`'s disc collision** — the same shape `bodyStaged`
+// has, and for the same reason: two copies would disagree about who is a ghost, and here
+// that would mean a ball you cannot kick but can still shove.
+// ⚠️ It answers TRUE for everything that is not a golf ball, so every other drill, every
+// match and the warm-up lobby are byte-for-byte what they were.
+function ballPlayable(w, ball){
+  if (!w || !w.golf || !ball) return true;
+  return Math.hypot(ball.vx, ball.vy) <= GOLF.rest;
+}
+// The eight courses. Coordinates are absolute on Classic (x +/-220, y +/-380), the same
+// frame every other drill is laid out in — a drill world is always `FIELDS.classic`, so
+// fractions would buy nothing here and cost legibility.
+// ⚠️ Every hole tees off at the BOTTOM and cups at the TOP, so the round reads as eight
+// versions of one journey rather than eight puzzles about which way to face.
+// ⚠️ **A TEE IS NOT JUST THE BALL: the player stands 46 units BEHIND it**, so `by` is
+// capped well short of the back wall. Two courses were authored at 330, which puts the
+// BODY at 376 against a half-length of 380 less its own radius of 15 — outside the pitch,
+// where `integrate`'s clamp drags it in on frame one. `tests/golf.mjs` measures the body's
+// spot rather than the ball's for exactly that reason, and caught both.
+// ⚠️ **A TEE IS NOT JUST THE BALL: the player stands 46 units BEHIND it**, so `by` is
+// capped well short of the back wall. Two courses shipped at 330, which put the body at
+// 376 against a half-length of 380 less its own radius — outside the pitch, where
+// `integrate`'s clamp would drag it in on frame one. `tests/golf.mjs` measures the BODY's
+// spot rather than the ball's for exactly that reason.
+const GOLF_HOLES = [
+  { name:'The Green', par:2, bx:0, by:300, cup:{x:0, y:-280, r:40} },
+  { name:'Dogleg', par:3, bx:-120, by:300, cup:{x:-120, y:-280, r:36},
+    walls:[[-220,40, 60,40]] },
+  { name:'The Gap', par:3, bx:0, by:300, cup:{x:0, y:-290, r:34},
+    walls:[[-220,0, -45,0], [45,0, 220,0]] },
+  { name:'Bumpers', par:3, bx:0, by:300, cup:{x:0, y:-290, r:36},
+    cones:[[-70,180],[75,120],[-40,20],[95,-40],[-105,-110],[45,-190]] },
+  { name:'Bank Shot', par:3, bx:-140, by:300, cup:{x:140, y:-280, r:34},
+    walls:[[0,340, 0,-120]] },
+  { name:'The Corridor', par:3, bx:0, by:300, cup:{x:150, y:-280, r:34},
+    walls:[[-50,320, -50,-120], [50,320, 50,-120]] },
+  { name:'The Island', par:4, bx:0, by:310, cup:{x:0, y:-250, r:32},
+    cones:[[-90,-250],[-64,-172],[0,-145],[64,-172],[90,-250],[64,-328],[-64,-328]] },
+  { name:'The Long One', par:4, bx:0, by:300, cup:{x:0, y:-320, r:34},
+    walls:[[-220,150, 70,150], [-70,-90, 220,-90]] },
+];
+// Lay one hole out on a world that is already a drill world. ⚠️ It REPLACES the course
+// rather than adding to it — walls, posts, cones and zones are emptied first — so hole
+// eight is not hole one with seven courses still standing on it. `drillBoundary` is
+// re-run because it is what writes `w.bounds`, which the camera and the containment
+// backstop both read.
+function golfLay(w, i){
+  const h = GOLF_HOLES[i];
+  w.walls.length = 0; w.posts.length = 0; w.cones.length = 0; w.zones.length = 0; w.gates.length = 0;
+  drillBoundary(w);
+  for (const q of (h.walls || [])) dWall(w, q[0], q[1], q[2], q[3]);
+  for (const c of (h.cones || [])) dCone(w, c[0], c[1]);
+  dZone(w, h.cup.x, h.cup.y, h.cup.r, 'reach');
+  // ⚠️ The player stands BEHIND the ball, not on it: `dSet` puts a body at a point and a
+  // body overlapping the ball on frame one is a touch you did not take.
+  dSet(w, h.bx, h.by + 46, h.bx, h.by);
+  const d = w.drill;
+  d.holeStrokes = 0;
+  // ⚠️ Armed as "at rest" on the way in, so the first strike of a hole counts. Left
+  // false, the ball is already below `rest` and the rise that follows is not seen.
+  d.atRest = true;
+  return h;
+}
+
 // ---- the 12+ drills. Each build() lays out gates / zones / cones on a fresh world.
 const DRILLS = {
   // ----- Basics: easy movement drills. Goal is just to finish in the (generous)
@@ -25780,6 +25935,24 @@ const DRILLS = {
       dGate(w,-150,130,84,0);              // …then the left gap
       dCone(w,0,-235); dCone(w,10,15); dCone(w,-30,290);
       dZone(w,150,300,42,'reach'); } },
+  // ⚠️ **THE ONLY DRILL SCORED IN TOUCHES, and the only one that is a ROUND rather than a
+  // route** — eight courses in order, and what it records is how many touches the whole
+  // round took. See `GOLF` for why a touch is defined the way it is, and why the green is
+  // the one number a golf world overrides.
+  golf:{ name:'Mini Golf', emoji:'\u26f3', unit:'k', desc:'Eight holes \u2014 fewest touches into the circle',
+    holes:true, timed:GOLF.cap,
+    build(w){
+      // ⚠️ `golf` is what `ballPlayable` reads, so it has to be set before the first step.
+      w.golf = true;
+      // ⚠️ **ONE-TOUCH AND NO MAGNET, and both are load-bearing rather than taste.** A trap
+      // glues the ball to your feet and carries it, which is the exploit the at-rest rule
+      // exists to shut; and a magnet ACCELERATES the ball, which is the one thing that
+      // would make "speed crossed rest upward" stop meaning "somebody touched it".
+      w.trapOff = true; w.magnet = 0;
+      w.ball.damp = GOLF.damp;              // the green — see GOLF
+      w.drill.hole = 0; w.drill.strokes = 0;
+      golfLay(w, 0);
+    } },
   // ⚠️ The only drill scored on POINTS rather than on time, and the only one with
   // real goals. `high:true` flips which way `drillBest` compares — everything else
   // here is "lower is better" and a straight `t < prev` would record your worst run
@@ -25940,7 +26113,10 @@ function startDrill(key){
              ghosts: drillRuns(key).filter(r => r.p && r.p.length >= 4) },
   };
   def.build(world);
-  world.drill.total = world.gates.length + world.zones.length;
+  // ⚠️ A round of golf is counted in HOLES, not in the one cup that happens to be laid out
+  // right now: `golfLay` replaces the course every hole, so gates-plus-zones would read 1
+  // and the drill would finish on the first putt.
+  world.drill.total = def.holes ? GOLF_HOLES.length : (world.gates.length + world.zones.length);
   // ⚠️ The coaching demonstration is a PRECOMPUTE, built once here — see COACH. It reads
   // `pAccel`/`pDamp` off the world, so it is built after those are set and it picks up a
   // live Game Feel change on the next run of the drill.
@@ -26008,6 +26184,37 @@ function updateDrill(w){
   //      current position part-way down. Checked after that line, the segment handed to
   //      `segCross` is zero-length and no shot ever crosses anything — measured, with
   //      the ball sitting in the back of the net and the score still reading 0.
+  // ⚠️ **GOLF IS HANDLED FIRST AND RETURNS**, the same two reasons Break the Targets is:
+  // its `total` is a hole count rather than a zone count, so the generic `doneCount >=
+  // total` below would read the one cup on the current hole and finish the round on the
+  // first putt; and the crossing trail `b.px/b.py` is reset part-way down, which nothing
+  // here wants.
+  if (d.def.holes){
+    // ⚠️ **THE TOUCH COUNTER IS AN EDGE ON THE BALL'S OWN SPEED**, and it needs no hook in
+    // the physics because in a golf world the player is the only thing that can make the
+    // ball faster — the magnet is off and every wall and cone has a `bCoef` below 1. Two
+    // states, latched, so one shot is one touch however many steps it takes to leave.
+    if (speed > GOLF.rest){
+      if (d.atRest){ d.atRest = false; d.strokes++; d.holeStrokes = (d.holeStrokes||0) + 1; }
+    } else d.atRest = true;
+    // Holed out: inside the cup AND slow. ⚠️ The speed test is the LIP-OUT rule — a ball
+    // crossing the cup at pace has not gone in, which is golf, and it is also what stops a
+    // long shot counting because it happened to pass over on its way to the far wall.
+    const cup = w.zones[0];
+    if (cup && !cup.done && Math.hypot(b.x - cup.x, b.y - cup.y) < cup.r && speed <= GOLF.rest){
+      cup.done = true;
+      for (let k = 0; k < 14; k++) spawnConfetti(cup.x, cup.y);
+      playSfx('goal');
+      d.hole++;
+      if (d.hole < GOLF_HOLES.length) golfLay(w, d.hole);
+    }
+    b.px = b.x; b.py = b.y;
+    d.doneCount = d.hole;
+    d.timeLeft = Math.max(0, d.timed - d.elapsed);
+    if (d.hole >= GOLF_HOLES.length && !d.complete){ drillDone(w); return; }
+    if (d.timeLeft <= 0 && !d.complete){ drillFail(w); return; }
+    return;
+  }
   if (d.def.targets){
     if (targetScored(w)){
       d.scored = (d.scored || 0) + 1;
@@ -26066,20 +26273,24 @@ function drillDone(w){
   // Break the Targets scores on goals, where higher wins. A single `t < prev` would
   // quietly record your WORST run as your record on that one.
   const high = !!d.def.high;
-  const t = high ? (d.scored || 0) : d.elapsed;
+  // ⚠️ **THREE UNITS NOW: goals, touches and seconds** — and `drillScoreText` is the one
+  // place that turns a stored number into words, so the banner, the board and the drill
+  // list cannot disagree about what the number is.
+  const t = high ? (d.scored || 0) : d.def.holes ? (d.strokes || 0) : d.elapsed;
   // ⚠️ The run and its GHOST go in together, and the table decides whether it earned a
   // place — so a personal best and a third-best are the same code path and the recording
   // can never be attached to a run the table then throws away.
   const rank = drillAddRun(d.key, t, d.rec);
   const isBest = rank === 0;
-  const say = v => high ? (v + (v === 1 ? ' goal' : ' goals')) : ('Time ' + v.toFixed(2) + 's');
-  showBanner(high ? "TIME'S UP" : 'COMPLETE!', high ? 'var(--accent)' : 'var(--green)');
+  const say = v => high || d.def.holes ? drillScoreText(d.key, v) : ('Time ' + v.toFixed(2) + 's');
+  showBanner(high ? "TIME'S UP" : d.def.holes ? 'ROUND COMPLETE!' : 'COMPLETE!',
+             high ? 'var(--accent)' : 'var(--green)');
   // ⚠️ The subtitle no longer repeats the board below it. It used to carry the medal and
   // "best <time>" as words, which is the same three numbers said twice within an inch of
   // each other — the same call the result screen's scoreline made about `#ovSub`. What is
   // left up here is only what the board cannot say: what you just did, and whether it was
   // a best. `medal` is still read by nothing else, so it goes with it.
-  showDrillResult(high ? "TIME'S UP \u23f1\ufe0f" : 'COMPLETE! \u2705',
+  showDrillResult(high ? "TIME'S UP \u23f1\ufe0f" : d.def.holes ? 'ROUND COMPLETE! \u26f3' : 'COMPLETE! \u2705',
     say(t) + (isBest ? '   \u00b7   NEW BEST \ud83c\udfc6' : ''), true,
     { key: d.key, rank, t });
 }
@@ -26087,10 +26298,11 @@ function drillFail(w){
   w.drill.failed = true;
   showBanner("TIME'S UP", 'var(--red)');
   const done = w.drill.doneCount, tot = w.drill.total;
+  const noun = w.drill.def.holes ? 'holes' : 'gates';
   // ⚠️ The board is shown on a FAILURE as well. What you are trying to beat is exactly
   // what you want in front of you on the run that did not get there, and a board that
   // only appears when you succeed is missing on the screen it is most use on.
-  showDrillResult("TIME'S UP ⏱️", `${done}/${tot} gates — try again`, false,
+  showDrillResult("TIME'S UP ⏱️", `${done}/${tot} ${noun} — try again`, false,
                   { key: w.drill.key, rank: -1, t: null });
 }
 function nextDrillKey(){ const i = DRILL_KEYS.indexOf(drillKey); return DRILL_KEYS[(i+1) % DRILL_KEYS.length]; }
@@ -26112,10 +26324,16 @@ function nextDrillKey(){ const i = DRILL_KEYS.indexOf(drillKey); return DRILL_KE
 // ⚠️ Built as NODES rather than `innerHTML`, and the reason is the same one `buildMapList`
 // and the match history give: a drill row carries no typed text today, but `#ovStats` is
 // shared with the match result, whose panels hold player NAMES.
+// ⚠️ **THE ONE PLACE THAT KNOWS WHAT UNIT A DRILL SCORES IN**, and there are three of
+// them: Break the Targets counts goals, Mini Golf counts touches, everything else counts
+// seconds. Three call sites read it — the banner, the board and the drill list — so a
+// fourth unit is one edit rather than four.
 function drillScoreText(key, v){
   if (v == null) return '\u2014';
-  const high = !!(DRILLS[key] && DRILLS[key].high);
-  return high ? (v + (v === 1 ? ' goal' : ' goals')) : (v.toFixed(2) + 's');
+  const def = DRILLS[key] || {};
+  if (def.high) return v + (v === 1 ? ' goal' : ' goals');
+  if (def.holes) return v + (v === 1 ? ' touch' : ' touches');
+  return v.toFixed(2) + 's';
 }
 const DRILL_MEDALS = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'];
 const DRILL_PLACES = ['Gold', 'Silver', 'Bronze'];
@@ -26484,7 +26702,9 @@ function renderDrill(){
   // ⚠️ A drill scored on POINTS has no `total`, so the shared `0/0` readout was not
   // just unhelpful, it was wrong — it said the drill was complete and empty at once.
   const n = d.doneCount || 0;
-  const prog = d.def.high ? (n + (n === 1 ? ' goal' : ' goals')) : `${n}/${d.total}`;
+  const prog = d.def.high ? (n + (n === 1 ? ' goal' : ' goals'))
+             : d.def.holes ? `HOLE ${Math.min(n + 1, d.total)}/${d.total} \u00b7 ${(GOLF_HOLES[Math.min(n, d.total-1)]||{}).name||''} \u00b7 PAR ${(GOLF_HOLES[Math.min(n, d.total-1)]||{}).par||''}`.toUpperCase()
+             : `${n}/${d.total}`;
   const time = drillReadout(d);
   ctx.fillText(prog + '   ' + time, cw/2, 74);
   drawControls();
@@ -32712,7 +32932,7 @@ if (window.__MAGNETDEBUG) {
     SCRIB, scribCell, scribChar, scribGrass, themeKeys,
     pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
-    resetKickoff, MODES, nearestControlBall, youTeam, yourScore,
+    resetKickoff, MODES, nearestControlBall, youTeam, yourScore, GOLF, GOLF_HOLES, golfLay, ballPlayable,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
     TARGET_SPOTS, targetSpot, targetNext, targetScored, drillGoals, drawDrillGoals, drawTargetSpots,
     deckMenuOwnsPad, pollDeckUI, deckSetMenuOpen, toMenu, showBanner, showOverlay,

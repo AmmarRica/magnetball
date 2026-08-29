@@ -560,9 +560,24 @@ const clocks = await p.evaluate(() => {
   o.max = M.DRILLTIME.max;
   o.own = M.DRILL_KEYS.filter(k => M.DRILLS[k].timed);
   o.limits = {}; M.DRILL_KEYS.forEach(k => o.limits[k] = M.drillLimit(M.DRILLS[k]));
-  o.allAtTheCap = M.DRILL_KEYS.every(k => M.DRILLS[k].high || o.limits[k] === M.DRILLTIME.max);
+  // ⚠️ **EVERY DRILL SCORED ON TIME IS AT THE ONE BACKSTOP; a drill scored on something
+  // ELSE sets its own, and there are two of those.** This used to read "every drill except
+  // `high`", which was the same claim while Break the Targets was the only drill not
+  // measured in seconds — golf is measured in touches, so the exemption is now "the score
+  // is not the clock" rather than "this one drill".
+  const notTimed = k => M.DRILLS[k].high || M.DRILLS[k].holes;
+  o.allAtTheCap = M.DRILL_KEYS.every(k => notTimed(k) || o.limits[k] === M.DRILLTIME.max);
   // ⚠️ Break the Targets keeps its own, because there the clock is the SCORING RULE.
   o.targetsKeepsIts60 = o.limits.targets === 60 && !!M.DRILLS.targets.high;
+  // ⚠️ Golf keeps its own for the opposite reason — the clock decides NOTHING there, so it
+  // has to be long enough never to fail a real round of eight holes, which the two-minute
+  // cap plainly would.
+  o.golfHasRoom = o.limits.golf > M.DRILLTIME.max * 2 && !!M.DRILLS.golf.holes;
+  // ⚠️ **AND A DRILL WHOSE CLOCK OUTRUNS `GHOST.maxSecs` MUST RECORD NO GHOST**, or the
+  // recording stops part way through and the ghost walks off the course. That is the pairing
+  // the one-number rule below is really about, stated for the case where the two differ.
+  o.longOnesHaveNoGhost = M.DRILL_KEYS.every(k =>
+    o.limits[k] <= M.GHOST.maxSecs || !!M.DRILLS[k].holes);
   // ⚠️ The same 120 as GHOST.maxSecs — a recording stops at that mark, so a run may not
   // outlive the ghost of it.
   o.matchesTheRecordingCap = M.DRILLTIME.max === M.GHOST.maxSecs;
@@ -588,9 +603,12 @@ const clocks = await p.evaluate(() => {
   return o;
 });
 
-ok('every drill has the same two-minute backstop', clocks.allAtTheCap && clocks.max === 120,
-   `${clocks.max}s, and the only drill with a clock of its own is ${JSON.stringify(clocks.own)}`);
+ok('every drill SCORED ON TIME has the same two-minute backstop', clocks.allAtTheCap && clocks.max === 120,
+   `${clocks.max}s, and the drills with a clock of their own are ${JSON.stringify(clocks.own)} — a drill may only set its own when its SCORE is not the clock`);
 ok('...except Break the Targets, where the clock IS the score', clocks.targetsKeepsIts60);
+ok('...and Mini Golf, where the clock decides nothing and a round of eight needs room', clocks.golfHasRoom);
+ok('a drill whose clock outruns GHOST.maxSecs records no ghost', clocks.longOnesHaveNoGhost,
+   'otherwise the recording stops part way through and the ghost walks off the course');
 ok('...and it is the same number a recording stops at', clocks.matchesTheRecordingCap,
    `DRILLTIME.max and GHOST.maxSecs are one number — a shorter cap wastes the headroom, a longer one lets a run outlive its own ghost`);
 ok('a time drill shows YOUR TIME, not a countdown', clocks.showsYourTime,
