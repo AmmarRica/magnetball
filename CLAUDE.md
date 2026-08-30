@@ -2763,8 +2763,45 @@ three lines a second time, name it.
   drops the oldest with one `length =`. ⚠️ The score stays in **TEAM order**, the same
   rule the result screen follows; the W/L/D carries the perspective. ⚠️ Drawn as NODES —
   a row holds names typed by a person. Travels in the game save. `tests/history.mjs`.
-- **KEEP THE LAST FEW WHOLE MATCHES** (`MATCHKEEP`, `matchKeepN`, `sel.keepMatches`,
-  default **5**). Kickoff to whistle, with nothing to press.
+- **KEEP UP TO A HUNDRED WHOLE MATCHES** (`MATCHKEEP`, `matchKeepN`, `sel.keepMatches`,
+  default **5**, options `0 · 3 · 5 · 10 · 25 · 50 · 100`). Kickoff to whistle, with
+  nothing to press.
+  ⚠️ **A HUNDRED OF ANYTHING IS A STORAGE QUESTION BEFORE IT IS A FEATURE, so it was
+  measured on the shipped recorder rather than estimated**: a whole match is **234KB at
+  1v1, 615KB at 3v3 and 803KB at 4v4** — and FLAT past that, because `REPMATCH.max` halves
+  the sample rate rather than letting a long game grow, so a ten-minute 4v4 measures
+  **806KB** against a five-minute one's 803. A hundred 4v4s is therefore about **80MB**;
+  an 11v11, the biggest match the game can field, is the worst case at roughly 2.7MB each.
+  ⚠️ **THE CAP IS PER KIND AND THE MATCH CAP IS NOT `REPLIB.max`**, which is the one way a
+  build could offer a hundred and silently keep forty. `tests/history.mjs` writes 105 match
+  rows and 3 goal rows as bare metadata — at 803KB a real fixture would be 80MB, and what
+  is under test is the cap rather than the encoder — and requires exactly 100 and 3 to
+  survive, with the oldest five gone.
+  ⚠️ **A FULL DISK IS A STATE SOMEBODY MEETS NOW** (`repIsQuota`, `repMakeRoom`,
+  `repSaveFailed`). At five kept matches it was unreachable in practice; at a hundred it is
+  not, and all three save sites ended in `.catch(() => {})` — so the match you had just
+  played simply was not there and nothing said why. On a quota error the library drops the
+  OLDEST row of the SAME KIND and retries **once**: a full disk must not let a match evict
+  the goals, and a device too small for the number you asked for should keep the NEWEST
+  matches rather than refuse to save anything new. The cap becomes the disk instead of the
+  setting, which is the only honest thing it can become.
+  ⚠️ **ONE retry, and only for a quota error.** Anything else — no IndexedDB, a blocked
+  private window — is not something deleting a replay would fix, and a loop on it would eat
+  the library one row at a time looking for room that was never the problem. `repIsQuota`
+  names it by every spelling a browser gives it (Firefox has its own, and the legacy
+  `DOMException` code is 22) and returns `!!` — the last term is `e && …`, so a null error
+  made it answer `null` rather than false.
+  ⚠️ **The toast is LATCHED per session** (`_repToldFull`): auto-record writes on every
+  goal, so an unlatched message on a full disk is a toast a second.
+  ⚠️ **The size readout scales** (`repSizeText`). At five matches the pane heading was a
+  few thousand KB; at a hundred it is `81920 KB`, which is a number nobody reads. It is the
+  one readout that says what the setting actually costs, so it has to be in a unit a person
+  can weigh — and the card's hint now quotes the measured per-match sizes rather than a
+  single rounded figure.
+  ⚠️ **CHECKING "the oldest of its own kind" IS VACUOUS IF THE FIXTURE WRITES THE GOALS
+  LAST**, and a sabotage that dropped the kind filter entirely sailed through the first
+  version: with the goals newest, the oldest row overall is a match either way, so "it took
+  a match" is true of a build that never looks at the kind. The goals go in FIRST.
   ⚠️ **THIS SPLIT `autoRec: 'all'` IN TWO, and the split is the point.** One dial was
   answering "save goals as they happen?" and "keep the whole match?" at once — which is
   why `all`'s own comment had to explain it was "gated separately because a match file is

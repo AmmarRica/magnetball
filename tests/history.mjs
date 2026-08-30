@@ -122,6 +122,84 @@ const r = await p.evaluate(async () => {
   o.zeroTrimsAll = (await M.repLibAll()).filter(x => x.kind === 'match').length === 0;
   M.sel.keepMatches = '5';
 
+  // ---- A HUNDRED WHOLE MATCHES --------------------------------------------
+  // ⚠️ **THE LIBRARY HAS TO ACTUALLY HOLD THEM, and "the picker offers 100" does not say
+  // it does.** `repLibTrim` caps per kind, and the goal cap is `REPLIB.max` (40) — so a
+  // build that read the wrong cap for a match row would quietly stop at forty with the
+  // setting still saying a hundred. Written as bare metadata rather than a hundred real
+  // recordings: at 803KB a 4v4 that is 80MB of fixture, and what is under test is the cap
+  // rather than the encoder.
+  {
+    o.hundredOffered = M.MATCHKEEP.opts.indexOf(100) >= 0;
+    M.sel.keepMatches = '100';
+    o.hundredReads = M.matchKeepN() === 100;
+    await M.repLibClear();
+    const stub = (kind, i) => ({ format:'magnetball-replay', v:1, kind, saved: 1e12 + i,
+                                 field:'classic', mode:'1v1', fps:30,
+                                 players:[{name:'a'},{name:'b'}], frames:[[0,0]] });
+    for (let i = 0; i < 105; i++) await M.repLibAdd(stub('match', i));
+    for (let i = 0; i < 3; i++) await M.repLibAdd(stub('goal', i));
+    const lib = await M.repLibAll();
+    o.keptAtHundred = lib.filter(x => x.kind === 'match').length;
+    o.goalsUntouched = lib.filter(x => x.kind !== 'match').length;
+    o.holdsAHundred = o.keptAtHundred === 100 && o.goalsUntouched === 3;
+    // ⚠️ ...and the OLDEST five went, not five off the top. `saved` rises with `i`, so the
+    // survivors are the last hundred written.
+    const kept = lib.filter(x => x.kind === 'match').map(x => x.saved);
+    o.oldestWent = Math.min(...kept) === 1e12 + 5;
+    await M.repLibClear();
+  }
+
+  // ---- A FULL DISK IS A STATE SOMEBODY MEETS AT A HUNDRED -------------------
+  // ⚠️ At five kept matches a quota failure was unreachable in practice; at a hundred —
+  // about 80MB of 4v4s — it is not, and all three save sites ended in `.catch(() => {})`,
+  // so the match you had just played simply was not there and nothing said why.
+  {
+    const q = (name, code) => { const e = new Error('x'); e.name = name; if (code) e.code = code; return e; };
+    o.quotaNames = [
+      M.repIsQuota(q('QuotaExceededError')),
+      M.repIsQuota(q('NS_ERROR_DOM_QUOTA_REACHED')),      // Firefox says it its own way
+      M.repIsQuota(q('NotEnoughSpace')),
+      M.repIsQuota(q('SomethingElse', 22)),               // the legacy DOMException code
+    ];
+    o.knowsQuota = o.quotaNames.every(Boolean);
+    // ...and does NOT fire on an ordinary failure, or the retry below eats the library one
+    // row at a time looking for room that was never the problem.
+    o.notEveryError = M.repIsQuota(q('InvalidStateError')) === false && M.repIsQuota(null) === false;
+    // ⚠️ Room is made from the SAME KIND and from the OLDEST end: a full disk must not let
+    // a match evict the goals, and a device too small for the number you asked for should
+    // keep the NEWEST matches rather than refuse to save anything new.
+    await M.repLibClear();
+    const stub = (kind, i) => ({ format:'magnetball-replay', v:1, kind, saved: 1e12 + i,
+                                 field:'classic', mode:'1v1', fps:30,
+                                 players:[{name:'a'}], frames:[[0,0]] });
+    // ⚠️ **THE GOALS GO IN FIRST, and writing them LAST made this check VACUOUS** — a
+    // sabotage that dropped the kind filter entirely sailed through it. With the goals
+    // newest, the oldest row overall is a match either way, so "it took a match" is true
+    // of a build that never looks at the kind at all. Oldest-of-all has to be a GOAL for
+    // the filter to be the thing under test.
+    for (let i = 0; i < 2; i++) await M.repLibAdd(stub('goal', i));
+    for (let i = 0; i < 3; i++) await M.repLibAdd(stub('match', i));
+    const made = await M.repMakeRoom('match');
+    const after = await M.repLibAll();
+    o.roomMade = made === true;
+    o.roomFromMatches = after.filter(x => x.kind === 'match').length === 2;
+    o.roomLeftGoals = after.filter(x => x.kind !== 'match').length === 2;
+    o.roomTookOldest = Math.min(...after.filter(x => x.kind === 'match').map(x => x.saved)) === 1e12 + 1;
+    o.evictsOldestOfItsOwnKind = o.roomMade && o.roomFromMatches && o.roomLeftGoals && o.roomTookOldest;
+    await M.repLibClear();
+    o.roomOnEmpty = (await M.repMakeRoom('match')) === false;   // nothing to give: say so
+  }
+
+  // ---- the size readout scales, because the number went up twentyfold -------
+  // ⚠️ At five kept matches the total was a few thousand KB; at a hundred it is "81920 KB",
+  // which is a number nobody reads. This is the one readout that says what the setting
+  // actually costs.
+  o.sizeSmall = M.repSizeText(500 * 1024);
+  o.sizeBig   = M.repSizeText(80 * 1024 * 1024);
+  o.sizeScales = /^500 KB$/.test(o.sizeSmall) && /^80\.0 MB$/.test(o.sizeBig);
+
+  M.sel.keepMatches = '5';
   // ⚠️ AND THE HISTORY SURVIVES ITS REPLAY BEING TRIMMED. The row keeps the id for ever
   // and the library keeps only the last few, so most rows point at a replay that is gone —
   // a Watch button that fails is worse than no button.
@@ -214,6 +292,20 @@ ok('the last few matches are kept as replays', r.keptRespectsTheDial,
 ok('...and they are the newest ones', r.newestRowsHaveReplays);
 ok('turning the count to 0 trims immediately', r.zeroTrimsAll,
    'leaving the files on disk until the next match is the setting not doing what it says');
+ok('a hundred is on offer and reads back', r.hundredOffered && r.hundredReads,
+   'MATCHKEEP.opts must carry 100 and matchKeepN must accept it, or the picker lights no tile and silently falls back to the default');
+ok('the library really holds a hundred whole matches', r.holdsAHundred,
+   `${r.keptAtHundred} matches and ${r.goalsUntouched} goals survived 105 + 3 writes — repLibTrim caps PER KIND, and reading the goal cap (REPLIB.max, 40) for a match row would stop at forty with the setting still saying a hundred`);
+ok('...and the oldest are what went', r.oldestWent);
+ok('a quota error is recognised by every name a browser gives it', r.knowsQuota,
+   JSON.stringify(r.quotaNames));
+ok('...and an ordinary failure is NOT one', r.notEveryError,
+   'otherwise the retry eats the library one row at a time looking for room that was never the problem');
+ok('a full disk makes room from the oldest of its OWN kind', r.evictsOldestOfItsOwnKind,
+   `matches left ${r.roomFromMatches}, goals left ${r.roomLeftGoals}, oldest went ${r.roomTookOldest} — a full disk must not let a match evict the goals, and a device too small for the number you asked for should keep the NEWEST matches rather than refuse to save anything new`);
+ok('...and says so rather than looping when there is nothing to give', r.roomOnEmpty);
+ok('the size readout scales past a megabyte', r.sizeScales,
+   `${r.sizeSmall} / ${r.sizeBig} — a hundred 4v4s is about 80MB, and "81920 KB" is a number nobody reads`);
 ok('a history row outlives its replay', r.rowsOutliveReplays,
    JSON.stringify({ rows:r.rowsAfterTrim, watch:r.watchBtnsAfterTrim }) +
    ' — the row keeps the id for ever, so a Watch button has to be offered only when the replay is still there');

@@ -2417,7 +2417,7 @@
       <div style="height:14px"></div>
       <label class="field">Keep whole matches</label>
       <div class="opts" id="keepMatchesPick"></div>
-      <div class="hint always" style="text-align:left">The last few matches are kept in full, kickoff to whistle, with no need to press anything &mdash; so a match somebody asks about afterwards is still there. They appear under <b>Saved matches</b> above and in your match history, and the oldest goes when the count is full. A whole match is roughly twenty times a single goal (about 0.8MB for a long one), which is why this is a count and not a switch; goals are capped separately, so neither pushes out the other.</div>
+      <div class="hint always" style="text-align:left">The last few matches are kept in full, kickoff to whistle, with no need to press anything &mdash; so a match somebody asks about afterwards is still there. They appear under <b>Saved matches</b> above and in your match history, and the oldest goes when the count is full. A whole match is roughly twenty times a single goal &mdash; measured, about 0.23MB for a 1v1, 0.8MB for a 4v4, and no more than that however long the game runs, because the recording thins itself rather than growing. So a hundred 4v4s is about 80MB on your device, which is why this is a count and not a switch: the size above tells you what you are actually using. Goals are capped separately, so neither pushes out the other, and if the device runs out of room the oldest match makes way and the game says so.</div>
       <div style="height:14px"></div>
       <label class="field">Watch a replay from a file</label>
       <button class="ghost" id="repWatchBtn" type="button"><span class="btnlab">Pick a .json file</span></button>
@@ -4763,7 +4763,18 @@ const AUTORECOPT = {
 // ⚠️ A COUNT rather than a toggle, because the size varies more than tenfold with match
 // length and mode — ten short 1v1s cost less than three long 6v6s, so the right number is
 // not something the game can pick for somebody. Default 5, as asked for.
-const MATCHKEEP = { def: 5, opts: [0, 3, 5, 10] };
+// ⚠️ **UP TO A HUNDRED**, asked for. Measured on the shipped recorder rather than guessed,
+// because a hundred of anything is a storage question before it is a feature: a whole
+// match is **234KB at 1v1, 615KB at 3v3 and 803KB at 4v4** — and FLAT past that, because
+// `REPMATCH.max` halves the sample rate rather than letting a long game grow, so a
+// ten-minute 4v4 measures 806KB against a five-minute one's 803. A hundred 4v4s is
+// therefore about **80MB**, and an 11v11 — the biggest match the game can field — is the
+// worst case at roughly 2.7MB each.
+// ⚠️ **WHICH IS WHY THE CARD SAYS WHAT IT COSTS AND THE LIBRARY REPORTS A FULL DISK.**
+// At five matches a quota failure was unreachable in practice; at a hundred it is a state
+// somebody will meet, and `.catch(() => {})` on the save meant the match you just played
+// silently was not there. See `repIsQuota` / `repMakeRoom`.
+const MATCHKEEP = { def: 5, opts: [0, 3, 5, 10, 25, 50, 100] };
 // ⚠️ Stored as a STRING ('0'|'3'|'5'|'10'), because `buildOpts` decides which tile is lit
 // with `sel[key] === k` against the table's own keys — a number there lights no tile at
 // all and the picker looks broken while working perfectly. Read as a number here, once.
@@ -5418,7 +5429,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260829.0120PM';
+const VERSION = '20260829.0335PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5434,6 +5445,13 @@ const VERSION = '20260829.0120PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260829.0335PM', title: 'Keep up to a hundred whole matches',
+    changed: [
+      '<b>Keep whole matches now goes up to a hundred.</b> The card tells you what it costs: a saved match is about 0.23MB for a 1v1 and 0.8MB for a 4v4, and no more than that however long the game runs, so a hundred 4v4s is around 80MB on your device. Saved matches shows the running total.',
+      '<b>And it says so if your device runs out of room.</b> Before, a save that could not fit simply did not happen and nothing told you \u2014 now the oldest match makes way for the new one, and you get a message when there is no more room at all.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260829.0120PM', title: 'Mini Golf: eight holes, fewest touches',
     changed: [
       '<b>A new drill: Mini Golf.</b> Eight courses in a row, and the score is how many touches it took to get the ball into the circle. Walls to bank off, cones to go round, and a par for each hole.',
@@ -18278,7 +18296,7 @@ function autoRecSave(w){
   const doc = repFileBuild();
   if (!doc) return;
   doc.name = autoRecName(w);
-  repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {});
+  repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(repSaveFailed);
 }
 // A name you can find later: who scored, and the score it made. ⚠️ Built from the world at
 // the moment of the goal rather than left to the list to work out — a library row is read
@@ -18865,7 +18883,41 @@ function repLibTx(stores, mode, fn){
 // cannot collide — a keyPath clash silently REPLACES the earlier one.
 let _repLibN = 0;
 function repLibId(){ return Date.now() + '-' + (++_repLibN); }
-function repLibAdd(doc){
+// ⚠️ **A FULL DISK IS A STATE SOMEBODY MEETS NOW.** At five kept matches it was unreachable
+// in practice; at a hundred — about 80MB of 4v4s, measured — it is not, and every one of
+// the three save sites ended in `.catch(() => {})`, so the match you had just played simply
+// was not there and nothing said why. Named by the browsers that raise it: Firefox has its
+// own name and the legacy DOMException code is 22.
+function repIsQuota(e){
+  const n = (e && e.name) || '';
+  // ⚠️ `!!`, because the last term is `e && …` and a null error made this return `null`
+  // rather than false — a predicate that answers with three different falsy values is one
+  // whose callers cannot compare it to anything.
+  return !!(n === 'QuotaExceededError' || n === 'NS_ERROR_DOM_QUOTA_REACHED'
+         || n === 'NotEnoughSpace' || (e && e.code === 22));
+}
+// Make room by dropping the OLDEST row of the same kind. ⚠️ Same kind, for the reason
+// `repLibTrim` is per-kind: a full disk must not let a match evict the goals or the other
+// way round. ⚠️ And oldest-first, so a device too small for the number you asked for keeps
+// the NEWEST matches rather than refusing to save anything new — the cap becomes the disk
+// instead of the setting, which is the only honest thing it can become.
+function repMakeRoom(kind){
+  return repLibAll().then(rows => {
+    const mine = rows.filter(r => (r.kind === 'match' ? 'match' : 'goal') === kind);
+    const oldest = mine[mine.length - 1];
+    if (!oldest) return false;
+    return repLibDel(oldest.id).then(() => true);
+  });
+}
+// ⚠️ ONE PLACE THAT TELLS YOU A SAVE FAILED, and it is latched per session: auto-record
+// writes on every goal, so an unlatched toast on a full disk is a toast a second.
+var _repToldFull = false;
+function repSaveFailed(err){
+  if (!repIsQuota(err) || _repToldFull) return;
+  _repToldFull = true;
+  toast('Storage full — replays are not being saved. Delete some in Replays.', 'err', 'clipboard');
+}
+function repLibAdd(doc, _retried){
   const json = JSON.stringify(doc);
   const rec = {
     // ⚠️ The caller may name the id, which is what lets a match history row hold it: the
@@ -18882,7 +18934,16 @@ function repLibAdd(doc){
   };
   return repLibTx([REPLIB.store, REPLIB.blobs], 'readwrite', (meta, blob) => {
     meta.put(rec); blob.put({ id: rec.id, json });
-  }).then(() => repLibTrim()).then(() => rec);
+  }).then(() => repLibTrim()).then(() => rec)
+    .catch(err => {
+      // ⚠️ ONE retry, and only for a quota error. Anything else — no IndexedDB, a blocked
+      // private window — is not something deleting a replay would fix, and a loop on it
+      // would eat the whole library one row at a time looking for room that is not the
+      // problem. If the retry fails too, the error reaches the caller and is reported.
+      if (_retried || !repIsQuota(err)) throw err;
+      return repMakeRoom(rec.kind === 'match' ? 'match' : 'goal')
+        .then(made => { if (!made) throw err; return repLibAdd(doc, true); });
+    });
 }
 // ⚠️ Metadata ONLY. This is what the list is drawn from and it must stay cheap — reading
 // the frames here is what cost 68ms for twenty rows.
@@ -19008,7 +19069,7 @@ function saveReplayFile(kind){
   const doc = kind === 'match' ? repMatchFileBuild() : repFileBuild();
   if (!doc) return false;
   downloadBlob(new Blob([JSON.stringify(doc)], { type:'application/json' }), repFilename(null, doc.kind, doc.name));
-  repLibAdd(doc).then(() => buildReplayList()).catch(() => {});
+  repLibAdd(doc).then(() => buildReplayList()).catch(repSaveFailed);
   return true;
 }
 // Parse + validate. Returns the document or throws with a reason a human can act on.
@@ -19185,12 +19246,22 @@ function buildReplayList(){
     }
   });
 }
+// KB below a megabyte, MB above it. ⚠️ One owner, because the pane heading and the
+// per-row line would otherwise pick different units for the same bytes.
+function repSizeText(bytes){
+  const kb = (bytes || 0) / 1024;
+  return kb < 1024 ? Math.round(kb) + ' KB' : (kb / 1024).toFixed(1) + ' MB';
+}
 function fillRepPane(host, rows, sub, kind){
   if (!host) return;
   host.innerHTML = '';
+  // ⚠️ **SCALED, because the number went up by a factor of twenty.** At five kept matches
+  // the total was a few thousand KB; at a hundred it is "81920 KB", which is a number
+  // nobody reads. This is the one readout that says what the setting actually costs, so it
+  // has to be in a unit a person can weigh.
   if (sub) sub.textContent = rows.length
     ? rows.length + (rows.length === 1 ? ' replay' : ' replays') + ' · ' +
-      Math.round(rows.reduce((n, r) => n + (r.bytes || 0), 0) / 1024) + ' KB'
+      repSizeText(rows.reduce((n, r) => n + (r.bytes || 0), 0))
     : '';
   if (!rows.length){
     const e = document.createElement('div'); e.className = 'mvempty';
@@ -23419,7 +23490,7 @@ function finishMatch(w){
     const doc = repMatchFileBuild();
     if (doc){ doc.name = 'Final ' + w.score[0] + '-' + w.score[1];
               doc.id = repLibId(); w._repId = doc.id;
-              repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(() => {}); }
+              repLibAdd(doc).then(() => { if (!PANEL) buildReplayList(); }).catch(repSaveFailed); }
   }
   if (w.rogue){ rogueEnd(w); return; }     // gauntlet run handles its own overlay
   if (w.cup){ cupEnd(w); return; }         // tournament writes its own result into the bracket
@@ -32838,6 +32909,7 @@ if (window.__MAGNETDEBUG) {
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
+    repIsQuota, repMakeRoom, repSizeText,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
