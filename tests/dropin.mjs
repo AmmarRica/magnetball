@@ -369,6 +369,60 @@ const r = await p.evaluate(new Function(FIX + `
     }
   }
 
+  // ---- 4c. A WAITING BODY'S STICK POINTS THE SAME WAY AS A PLAYING ONE'S ----
+  // ⚠️ **EVERY ONE OF THE ELEVEN applySeatRotation CALL SITES PASSED w.players, which
+  // is exactly the list a waiting body is NOT in.** So a controller standing on the
+  // touchline got neither the layout's quarter-turn nor SELECT's — mkPlayer leaves
+  // rotQuarter undefined and nothing on that path ever wrote it. Measured on the shipped
+  // build: the body on the pitch travelled (+60, 0) for a stick pushed up and the body
+  // waiting beside it travelled (0, -104) for the SAME push, ninety degrees apart; SELECT
+  // stored the turn in sel.seatRot and left the body alone.
+  // ⚠️ **THE PITCH HAS TO BE TURNED OR THIS CHECK IS VACUOUS.** The fixture pins
+  // sel.orient = 'v' on purpose (this suite is not about orientation), and upright the
+  // layout's base rotation is 0 — so both bodies read 0 and the broken build passes. It is
+  // forced to 'h' here and put back afterwards.
+  // ⚠️ Compared as the HEADING the game was told (inX/inY after applyHumanInput),
+  // never as travel: stepBench holds a waiting body in the ring outside the pitch, so a
+  // push toward the outer margin reads as zero movement on a perfectly rotated body.
+  {
+    const wasOrient = M.sel.orient;
+    M.sel.orient = 'h';
+    const w6 = match('3v3');
+    if (M.syncPitchTurn) M.syncPitchTurn();
+    PADS = [pad([])]; drive(w6, 4);
+    // The on-pitch control is the KEYBOARD seat, which startMatch gives seat one when no
+    // pad took it — a human either way, and the thing a waiting body has to agree with.
+    const onPitch = w6.players.find(q => q.ctrl !== 'bot');
+    const wait6 = waiting(w6)[0];
+    o.rotGuest = !!(onPitch && wait6);
+    if (o.rotGuest){
+      o.turned = M.pitchHorizontal();
+      o.onPitchRot = onPitch.rotQuarter;
+      o.waitRot = wait6.rotQuarter;
+      o.rotMatches = wait6.rotQuarter === onPitch.rotQuarter;
+      // The same physical stick, pushed once, read off both bodies.
+      const g = PADS[0]; g.axes = [0, -1, 0, 0];
+      M.pads.p1.dx = 0; M.pads.p1.dy = -1;
+      M.step(w6); M.pollDropIn(w6);
+      o.onPitchIn = [Math.round(onPitch.inX*100)/100, Math.round(onPitch.inY*100)/100];
+      o.waitIn = [Math.round(wait6.inX*100)/100, Math.round(wait6.inY*100)/100];
+      o.sameHeading = Math.abs(onPitch.inX - wait6.inX) < 0.02 &&
+                      Math.abs(onPitch.inY - wait6.inY) < 0.02;
+      g.axes = [0,0,0,0]; M.pads.p1.dx = 0; M.pads.p1.dy = 0;
+      // ⚠️ ...AND SELECT REACHES IT. Driven through bumpSeatRot, which is what the real
+      // poll calls — pollSeatRotate fires on a RELEASE inside pollWarmupHold during a
+      // live match, and what is under test here is that the turn reaches the BENCH.
+      const before = wait6.rotQuarter;
+      M.bumpSeatRot(wait6.padIndex);
+      o.selStored = (M.sel.seatRot || {})[wait6.padIndex];
+      o.waitRotAfterSel = wait6.rotQuarter;
+      o.selectReaches = wait6.rotQuarter !== before && wait6.rotQuarter === (before + 1) % 4;
+      M.sel.seatRot = {};
+    }
+    M.sel.orient = wasOrient;
+    if (M.syncPitchTurn) M.syncPitchTurn();
+  }
+
   // ---- 5d. A DROPPED POLL IS NOT AN UNPLUG ---------------------------------
   // ⚠️ THE BUG (no backticks in here — see the fixture's warning): pollDropIn's leaver
   // test read navigator.getGamepads() ITSELF rather than connectedGamepadIndices(), which
@@ -702,6 +756,11 @@ ok(all.reclaimedComesBackOnAtOnce && all.reclaimedWalkFinished,
    `a reconnecting player did not come straight back on: onAtOnce ${all.reclaimedComesBackOnAtOnce}, walkFinished ${all.reclaimedWalkFinished}. Unplugging benches the body and a filler bot takes the shirt; coming back it used to be handed over as a stranger ("START = JOIN HOME") and then made to wait for a goal, which is a long time out of a match you were already playing for a cable somebody kicked`);
 ok(all.reclaimedComesBackOn && all.reclaimedDrives,
    `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
+ok(all.rotGuest, 'no guest reached the touchline, so the stick-rotation checks below measure nothing');
+ok(all.turned === true, `the pitch is not turned (${all.turned}), so both bodies read rotation 0 and the check below passes on the broken build`);
+ok(all.rotMatches, `a waiting body's stick rotation is ${all.waitRot} against ${all.onPitchRot} on the pitch — every applySeatRotation call site passed w.players, which is the one list a waiting body is not in, so a joiner got neither the layout's quarter-turn nor SELECT's`);
+ok(all.sameHeading, `the same stick gave ${JSON.stringify(all.onPitchIn)} on the pitch and ${JSON.stringify(all.waitIn)} on the touchline — ninety degrees apart is what "the controller direction does not match" is`);
+ok(all.selectReaches, `SELECT stored ${all.selStored} and left the waiting body at ${all.waitRotAfterSel} — the turn has to reach the bench, or flipping it does nothing for the one body you are trying to steer`);
 ok(all.ringGuest, 'no guest reached the touchline, so the ring check measures nothing');
 ok(all.ringDrawn, `the join hold drew ${all.ringAngles} of 180 probe angles round the waiting body — the hold has to be SEEN, or three seconds of nothing happening reads as a controller that is not working`);
 ok(all.ringGoesAway, `${all.ringIdle} angles were still inked with no hold running — a ring round every waiting body all the time is furniture, not a progress arc`);

@@ -5429,7 +5429,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260829.0335PM';
+const VERSION = '20260829.0555PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5445,6 +5445,13 @@ const VERSION = '20260829.0335PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260829.0555PM', title: 'A waiting controller steers the right way',
+    changed: [
+      '<b>A controller waiting on the touchline now points the same way as one on the pitch.</b> On a wide screen the pitch turns sideways, and that turn was never reaching a player who had not joined yet \u2014 so the stick was ninety degrees out for the whole time you were choosing a side.',
+      '<b>And SELECT turns it too.</b> Flipping your controls while waiting stored the change and did nothing to the body you were actually steering.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260829.0335PM', title: 'Keep up to a hundred whole matches',
     changed: [
       '<b>Keep whole matches now goes up to a hundred.</b> The card tells you what it costs: a saved match is about 0.23MB for a 1v1 and 0.8MB for a 4v4, and no more than that however long the game runs, so a hundred 4v4s is around 80MB on your device. Saved matches shows the running total.',
@@ -14743,7 +14750,7 @@ function syncPitchTurn(){
   if (now === _turnWas) return;
   _turnWas = now;
   if (!world) return;
-  applySeatRotation(world.players);
+  syncSeatRotation(world);
   if (world.state === 'warmup' && world.kb) buildLobbyKeys(world);
 }
 // ============================================================
@@ -14768,8 +14775,24 @@ function bumpSeatRot(padIndex){
   if (!sel.seatRot) sel.seatRot = {};
   sel.seatRot[padIndex] = (seatRotOf(padIndex) + 1) % 4;
   saveSel();
-  if (world) applySeatRotation(world.players);
+  syncSeatRotation(world);
   return sel.seatRot[padIndex];
+}
+// ⚠️ **EVERYBODY THE WORLD KNOWS ABOUT, NOT JUST THE BODIES ON THE PITCH — and every one
+// of the eleven call sites passed `w.players`, which is exactly the list a WAITING body is
+// not in.** So a controller standing on the touchline waiting to join got neither the
+// layout's quarter-turn nor SELECT's: `mkPlayer` leaves `rotQuarter` undefined and nothing
+// ever wrote it. Measured on a wide window, where `auto` turns the pitch — the body on the
+// pitch has `rotQuarter` 1 and travels (+60, 0) for a stick pushed up, while the body
+// waiting beside it travels **(0, −104)** for the same push: ninety degrees apart. Pressing
+// SELECT stored `sel.seatRot[1] = 1` and left the body untouched, which is the second half
+// of the report — *"I flipped it with select but it still did not listen"*.
+// ⚠️ **THE BENCH GOES LAST**, so no body already on the pitch changes slot: cocktail's
+// `seatSide(slot)` is an ordinal over the non-bots in list order, and inserting anywhere
+// but the end would re-seat everybody. A waiting person is a seat too, and gets one after
+// the players.
+function syncSeatRotation(w){
+  if (w) applySeatRotation(allBodies(w));
 }
 // Re-run on any layout/direction change or a live match steers 90° off.
 function applySeatRotation(players){
@@ -14957,7 +14980,7 @@ function pumpTelemetry(){
 function applyDisplayMode(){
   document.body.classList.toggle('cocktail', sel.display==='cocktail');
   document.body.classList.toggle('deck', isDeck());
-  if (world) applySeatRotation(world.players);   // keep live controls aligned to the new view
+  syncSeatRotation(world);   // keep live controls aligned to the new view
   // Entering deck: bring the menu in on the left so Select has something to toggle.
   // Deferred — this also runs during boot, before the dock machinery is wired up.
   if (isDeck() && !PANEL) setTimeout(() => { if (isDeck() && !deskDockId) dockOrFull('setup', null, true); else if (world) resize(); deckFocusReset(); }, 0);
@@ -20604,7 +20627,7 @@ function enterWarmup(w, lite, place){
     w.bench.forEach(p => { p.sittingOut = false; });
     w.players = w.players.concat(w.bench);
     w.bench = [];
-    applySeatRotation(w.players);
+    syncSeatRotation(w);          // the bench is empty here, but one owner means one rule
     labelA = w.players.map(()=>1); labelT = [];
   }
   w.state = 'warmup'; w.stateT = 0; w.endRamp = null;
@@ -21549,7 +21572,7 @@ function pollLobbyPads(w){
     p._lobT = undefined; p._lobTo = null;      // a new job is a new walk
     toast(p.name + ' unplugged', 'err', 'gamepad');
   }
-  if (w.cup) { applySeatRotation(w.players); return; }
+  if (w.cup) { syncSeatRotation(w); return; }
   const held = new Set(w.players.filter(p => p.ctrl === 'gamepad').map(p => p.padIndex));
   for (const i of live){
     if (held.has(i)) continue;
@@ -21586,7 +21609,7 @@ function pollLobbyPads(w){
     w.players.push(p);
     toast(p.name + ' joined — walk onto a side', 'ok', 'gamepad');
   }
-  applySeatRotation(w.players);
+  syncSeatRotation(w);
 }
 function stepWarmup(w){
   const L = w.lobby;
@@ -21781,7 +21804,9 @@ function lobbyStart(w){
   // spot; teleporting them to a tidy line throws away the one thing they just did.
   benchLine(w, w.bench.filter(p => p.ctrl === 'bot'));
   // Seat rotation is per-seat-ordinal, so it has to be recomputed after a reshuffle.
-  applySeatRotation(w.players);
+  // ⚠️ And over the BENCH too: `lobbyStart` is the one place that fills it, so a person who
+  // sat this one out would otherwise be the only body in the match with no rotation at all.
+  syncSeatRotation(w);
   w.players.forEach(p => { p.ms = freshMs(); });
   labelA = w.players.map(()=>1); labelT = [];
   botInit(w);
@@ -22018,7 +22043,7 @@ function finishCalibration(w, p, got){
   sel.cocktailSides = sel.cocktailSides || {};
   sel.cocktailSides[seat] = side;
   saveSel();
-  applySeatRotation(w.players);
+  syncSeatRotation(w);
   p.calibrated = true;
   toast('Player ' + seat + ' facing ' + side);
 }
@@ -22309,7 +22334,7 @@ function evenUpSides(w){
       subOff(w, bot);
     }
   }
-  applySeatRotation(w.players);
+  syncSeatRotation(w);
 }
 // Take a body off: onto the bench, walking out through the gate and along to the row.
 function subOff(w, p){
@@ -22338,7 +22363,8 @@ function subWaitFor(w, padIndex){
     mine.ctrl = 'gamepad'; mine.padIndex = padIndex; mine._padWas = null;
     mine._padId = padId;
     mine.sittingOut = true; mine.joinHold = 0; mine._subBack = true;
-    toast(mine.name + ' back — press any button to take over', 'ok', 'gamepad');
+    syncSeatRotation(w);                 // ...and a returner's, for the same reason
+    toast(mine.name + ' back — hold toward the pitch to take over', 'ok', 'gamepad');
     return mine;
   }
   if (benchHumans(w).length + w.players.length >= LOBBY.maxPerSide * 2) return null;
@@ -22351,6 +22377,11 @@ function subWaitFor(w, padIndex){
   const g = subGate(w);
   p.x = g.x; p.y = g.y;
   (w.bench = w.bench || []).push(p);
+  // ⚠️ **THE ROTATION IS APPLIED THE MOMENT THE BODY EXISTS.** `mkPlayer` leaves
+  // `rotQuarter` undefined, and nothing else on this path ever wrote it — so on a turned
+  // pitch a waiting body's stick was ninety degrees out from the moment it appeared, which
+  // is the state somebody is in while they are deciding which half to walk to.
+  syncSeatRotation(w);
   toast(p.name + ' — walk to a side, then hold toward the pitch', 'ok', 'gamepad');
   return p;
 }
@@ -33002,7 +33033,7 @@ if (window.__MAGNETDEBUG) {
     zoneForTouch, get pads(){ return pads; },
     updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER, PAD_GRACE, padForget, padForgetAll,
     SCRIB, scribCell, scribChar, scribGrass, themeKeys,
-    pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
+    pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, syncSeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
     BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore, GOLF, GOLF_HOLES, golfLay, ballPlayable,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,

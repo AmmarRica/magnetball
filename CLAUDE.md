@@ -379,6 +379,36 @@ three lines a second time, name it.
   stronger check either way. `tests/seatcontrols.mjs` measures the ring in rendered pixels
   as a difference against the same frame with the hold stood down, and drives **pad 1**: a
   probe on pad 0 passes on a build that kept the first-pad-only rule.
+- **A BODY WAITING ON THE TOUCHLINE GETS THE SAME STICK ROTATION AS ONE ON THE PITCH**
+  (`syncSeatRotation`). Reported as *"when starting and trying to join, the controller
+  direction does not match up down left right — I flipped it with select but it still did
+  not listen to that rotation"*, and it is one cause with two visible halves.
+  ⚠️ **ALL ELEVEN `applySeatRotation` CALL SITES PASSED `w.players`, WHICH IS THE ONE LIST A
+  WAITING BODY IS NOT IN.** `mkPlayer` leaves `rotQuarter` undefined and nothing on the
+  drop-in path ever wrote it, so a joiner had neither the LAYOUT's quarter-turn — `auto`
+  orientation turns the pitch on any wide screen — nor SELECT's. Measured on a 1280×720
+  window: the body on the pitch reads `rotQuarter` 1 and travels **(+60, 0)** for a stick
+  pushed up, while the body waiting beside it travels **(0, −104)** for the same push.
+  Ninety degrees apart. And `bumpSeatRot` stored `sel.seatRot[1] = 1` and left the body
+  untouched, which is the second half of the report exactly.
+  ⚠️ **ONE OWNER, `syncSeatRotation(w)` = `applySeatRotation(allBodies(w))`**, and every
+  site that has a world goes through it — the resize/turn hooks, `bumpSeatRot`, the lobby,
+  `evenUpSides`, `subSwapNow` and cocktail calibration. `startMatch`'s call is left alone:
+  it is handed a local roster before the world exists.
+  ⚠️ **AND THE ROTATION IS APPLIED THE MOMENT THE BODY EXISTS** (`subWaitFor`, both the
+  fresh-guest and the reclaim branch). Without it the first frames out there are wrong,
+  which is the whole of the time somebody spends deciding which half to walk to.
+  ⚠️ **THE BENCH GOES LAST** in `allBodies`, so nobody already on the pitch changes slot:
+  cocktail's `seatSide(slot)` is an ordinal over the non-bots in list order, and inserting
+  anywhere but the end would re-seat everybody.
+  ⚠️ **THE CHECK IS VACUOUS ON AN UPRIGHT PITCH, and `tests/dropin.mjs` pins `orient: 'v'`
+  for the whole suite on purpose.** Upright the layout's base rotation is 0, so both bodies
+  read 0 and the broken build passes. The block forces `'h'`, calls `syncPitchTurn`, and
+  puts the setting back.
+  ⚠️ **Compared as the HEADING the game was told (`inX`/`inY` after `applyHumanInput`),
+  never as travel.** `stepBench` holds a waiting body in the ring outside the pitch, so a
+  push toward the outer margin reads as **zero movement on a perfectly rotated body** — the
+  first probe measured (0, 0) on the FIXED build and looked like a regression.
 - **SELECT TURNS YOUR CONTROLS A QUARTER TURN** (`seatRotOf`, `bumpSeatRot`,
   `pollSeatRotate`, `sel.seatRot`). Four people round one screen do not face the same way,
   and the only previous answer was cocktail's calibration wizard — a mode you had to be in,

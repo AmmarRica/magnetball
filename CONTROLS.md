@@ -165,6 +165,9 @@ setup.
   a seat is live asks `connectedGamepadIndices()`, which answers for the panel too.
 - **A returning pad reclaims its own body** by slot first, then by device: a controller does
   not always come back on the index it left.
+- **A body waiting on the touchline steers exactly like one on the pitch.** It takes the
+  layout's quarter-turn (a wide screen turns the pitch) and your own SELECT turns, so the
+  stick means the same thing before you join as after.
 
 ---
 
