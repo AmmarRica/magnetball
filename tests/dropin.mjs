@@ -369,6 +369,29 @@ const r = await p.evaluate(new Function(FIX + `
     }
   }
 
+  // ---- 4b2. A BOT EVENUPSIDES ADDS WEARS THE SIDE'S COUNTRY ----------------
+  // ⚠️ Reported from a screenshot: a side wearing Brazil had its filler bot walk on in the
+  // warm-up ROBOT plate. spawnLobbyBot mints a body with BOT_FACE and evenUpSides never
+  // dressed what it added — so the country was right on everybody who kicked off and wrong
+  // on everybody who arrived afterwards, which is the half of a long match nobody sets up.
+  // ⚠️ Both ends are checked in the same run: the kickoff roster must ALREADY be right, or
+  // "the filler wears Brazil" is equally true of a build where nothing wears it at all and
+  // the check is measuring a default.
+  {
+    const wasFlag = M.teamFlagOf(1);
+    M.setTeamFlag(1, 'brazil');
+    const w7 = match('2v2');
+    o.flagOnSide = M.teamFlagOf(1);
+    o.kickoffWearsIt = w7.players.filter(q => q.team === 1).every(q => q.flag === 'brazil');
+    o.otherSideUntouched = w7.players.filter(q => q.team === 0).every(q => q.flag !== 'brazil');
+    w7.subPer = 3;
+    M.evenUpSides(w7);
+    const fresh = w7.players.filter(q => q.team === 1);
+    o.fillerFlags = fresh.map(q => q.flag);
+    o.fillerWearsIt = fresh.length === 3 && fresh.every(q => q.flag === 'brazil');
+    M.setTeamFlag(1, wasFlag || 'none');
+  }
+
   // ---- 4c. A WAITING BODY'S STICK POINTS THE SAME WAY AS A PLAYING ONE'S ----
   // ⚠️ **EVERY ONE OF THE ELEVEN applySeatRotation CALL SITES PASSED w.players, which
   // is exactly the list a waiting body is NOT in.** So a controller standing on the
@@ -756,6 +779,11 @@ ok(all.reclaimedComesBackOnAtOnce && all.reclaimedWalkFinished,
    `a reconnecting player did not come straight back on: onAtOnce ${all.reclaimedComesBackOnAtOnce}, walkFinished ${all.reclaimedWalkFinished}. Unplugging benches the body and a filler bot takes the shirt; coming back it used to be handed over as a stranger ("START = JOIN HOME") and then made to wait for a goal, which is a long time out of a match you were already playing for a cable somebody kicked`);
 ok(all.reclaimedComesBackOn && all.reclaimedDrives,
    `a reclaimed body did not DRIVE again — came back on: ${all.reclaimedComesBackOn}, travel ${JSON.stringify(all.reclaimedTravel)}. "The same body came back" and "that person can play" are different claims, and a stale padIndex looks exactly like a reclaim that worked`);
+ok(all.flagOnSide === 'brazil' && all.kickoffWearsIt,
+   'the side did not kick off wearing its country, so the filler check below is measuring a default rather than the rule');
+ok(all.otherSideUntouched, 'a team flag reached the OTHER side too — it is per half');
+ok(all.fillerWearsIt,
+   `a bot added by evenUpSides came on wearing ${JSON.stringify(all.fillerFlags)} — a side wearing a country has to dress what it gains, or the country is right on everybody who kicked off and wrong on everybody who arrived afterwards`);
 ok(all.rotGuest, 'no guest reached the touchline, so the stick-rotation checks below measure nothing');
 ok(all.turned === true, `the pitch is not turned (${all.turned}), so both bodies read rotation 0 and the check below passes on the broken build`);
 ok(all.rotMatches, `a waiting body's stick rotation is ${all.waitRot} against ${all.onPitchRot} on the pitch — every applySeatRotation call site passed w.players, which is the one list a waiting body is not in, so a joiner got neither the layout's quarter-turn nor SELECT's`);

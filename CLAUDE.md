@@ -4072,6 +4072,25 @@ three lines a second time, name it.
   `teamFlagOf(1)` null. It is also what makes `none` work, so there is no second mechanism
   for taking a flag off; a first attempt had a separate `restoreOwnFaces` walking the
   roster, which is a second place to keep in step with the rule right beside it.
+  ⚠️ **AND `evenUpSides` HAS TO DRESS WHAT IT ADDS**, which it did not. Reported from a
+  screenshot as *"bot should have been brazil as well"*: `spawnLobbyBot` mints a body with
+  `BOT_FACE` and nothing in that function ever put the side's flag on it, so the country was
+  right on everybody who kicked off and wrong on everybody who arrived afterwards — which is
+  the half of a long match nobody sets up and everybody plays. Measured: a 2v2 with Brazil on
+  team 1 kicks off `brazil, brazil` and the mid-match filler reads `bot`.
+  ⚠️ **`applyTeamColours` over the WHOLE roster, not the one bot just spawned.** It is the
+  one place that knows what a side wears and it is idempotent — it stashes `_ownFlag` the
+  first time and leaves an already-stamped body alone — so a blanket call costs nothing and
+  cannot double-stamp, where dressing only the new body is a second copy of the rule that
+  goes stale the day a side gains anything else.
+  ⚠️ **The COLOUR was already right and the flag was not**, which is why this reads as a
+  flag bug rather than a dressing bug: `spawnLobbyBot` takes `teamTint(team, seat)`, and
+  that function ignores its index and returns the team colour.
+  ⚠️ Still open, and NOT fixed here because it was not what was asked: with no team flag set,
+  a mid-match filler keeps the warm-up **robot** plate rather than a shirt number, because
+  `numberTheSides` only ever runs at `lobbyStart`. With a flag it is invisible — the country
+  covers it — which is why the screenshot showed a robot on a side that should have been
+  Brazil and nothing odd anywhere else.
   ⚠️ **BOTH SIDES MAY WEAR THE SAME COUNTRY, unlike the colours.** Two teams in one shade is
   unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still told
   apart by the shirt, which is what colour is for. Refusing would be a control that

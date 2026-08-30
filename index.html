@@ -5429,7 +5429,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260829.0555PM';
+const VERSION = '20260829.0715PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5445,6 +5445,13 @@ const VERSION = '20260829.0555PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260829.0715PM', title: 'A bot joining a side wears that side\u2019s country',
+    changed: [
+      '<b>A bot that comes on to even the sides up now wears the country that side picked.</b> The flag was right on everyone who kicked off and wrong on everyone who arrived afterwards, so a long match ended up with one body in a robot face on a team of Brazilians.',
+      '<b>Its shirt colour was already right</b> \u2014 only the flag was being missed.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260829.0555PM', title: 'A waiting controller steers the right way',
     changed: [
       '<b>A controller waiting on the touchline now points the same way as one on the pitch.</b> On a wide screen the pitch turns sideways, and that turn was never reaching a player who had not joined yet \u2014 so the stick was ninety degrees out for the whole time you were choosing a side.',
@@ -22334,6 +22341,20 @@ function evenUpSides(w){
       subOff(w, bot);
     }
   }
+  // ⚠️ **A BODY THIS FUNCTION ADDS HAS TO BE DRESSED, and it was not.** Reported as
+  // *"bot should have been brazil as well"*: a side wearing a country had its filler bot
+  // walk on in the warm-up robot plate, because `spawnLobbyBot` mints a body with
+  // `BOT_FACE` and nothing here ever put the team's flag on it. Measured — a 2v2 with
+  // Brazil on team 1 kicks off `brazil, brazil` and the bot `evenUpSides` adds mid-match
+  // reads `bot`.
+  // ⚠️ `applyTeamColours` is the ONE place that knows what a side wears, and it is idempotent
+  // — it stashes `_ownFlag` the first time and leaves an already-stamped body alone — so
+  // running it over the whole roster here costs nothing and cannot double-stamp. The
+  // alternative, dressing only the bot just spawned, is a second copy of the rule that goes
+  // stale the day a side gains anything else.
+  // ⚠️ `subSwapNow` calls it too, BEFORE this: it has to dress the returning person for the
+  // side they are going back to before the arithmetic below reads the roster.
+  applyTeamColours(w.players);
   syncSeatRotation(w);
 }
 // Take a body off: onto the bench, walking out through the gate and along to the row.
