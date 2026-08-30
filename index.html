@@ -5429,7 +5429,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260829.0715PM';
+const VERSION = '20260830.1040AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5445,6 +5445,13 @@ const VERSION = '20260829.0715PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260830.1040AM', title: 'The ball\u2019s trail is a ball wide',
+    changed: [
+      '<b>The streak behind the ball is thicker, and once the ball is really moving it is at least as wide as the ball itself.</b> It was under half a ball wide at a dribble and still under a whole one at a good pace, so the tell was thinner than the thing it was a tell about.',
+      '<b>A barely-moving ball still gets a short, thin streak rather than a blob</b> \u2014 the trail can never be wider than it is long, which is what stops it turning into a lump stuck to the back of the ball.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260829.0715PM', title: 'A bot joining a side wears that side\u2019s country',
     changed: [
       '<b>A bot that comes on to even the sides up now wears the country that side picked.</b> The flag was right on everyone who kicked off and wrong on everyone who arrived afterwards, so a long match ended up with one body in a robot face on a team of Brazilians.',
@@ -31522,12 +31529,19 @@ function drawBallTrail(w){
   // ⚠️ The RANGE was 0.55..1.70 ball radii, which put the top of it exactly where the
   // old flat width was — so at full pelt nothing changed and everything slower got
   // thinner, which is what "did you make the trail thinner?" was about. Lifted at both
-  // ends, then lifted again (0.85..2.30 → 1.05..2.75) when a thicker streak was asked
-  // for. The clamp below is what keeps the invariant, not this number, so the width is
-  // free to be a taste dial — but only the TOP of the range is: raise the bottom too far
-  // and a barely-moving ball is back to wearing a stub, which is the blob this whole
-  // block exists to stop.
-  const wantW = b.r * s * (1.05 + 1.70 * drive);
+  // ends, then lifted again (0.85..2.30 → 1.05..2.75), and now to 2.00..3.60 because
+  // "the width of the ball itself" was asked for and measured NOT to be what it drew:
+  // against a 14.9px ball the streak read 7 / 11 / 13 / 21px at a crawl, a jog, a belt
+  // and full pelt — under HALF a ball wide at the slow end and under a whole one for
+  // most of the range. The BOTTOM of the range is the half that answers that, so it is
+  // now exactly 2.00 radii — one ball diameter, by construction rather than by a number
+  // that happens to land near one.
+  // ⚠️ Raising the bottom is only safe because the clamp below is what holds the
+  // invariant. A barely-moving ball does NOT get a stub back: its path is a few pixels
+  // long, so `Math.min` takes the LENGTH and the width follows it down. What the floor
+  // really sets is the speed at which the streak stops being clamped and starts being a
+  // ball wide, and that is the whole of what was asked for.
+  const wantW = b.r * s * (2.00 + 1.60 * drive);
   ctx.lineWidth = Math.max(1, Math.min(wantW, lenPx));
   ctx.strokeStyle = col ? rgba(col, 0.34 + 0.30*drive) : `rgba(${TH.trailRGB},${0.20 + 0.22*drive})`;
   ctx.stroke();

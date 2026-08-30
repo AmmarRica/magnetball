@@ -129,6 +129,24 @@ const r = await p.evaluate(async ()=>{
   };
   o.crawlBox = streakBox(0, -1.1, 10);
   o.beltBox  = streakBox(0, -18, 10);
+  // 4c) ⚠️ **AND A MOVING BALL'S STREAK IS AT LEAST AS WIDE AS THE BALL.** Asked for in
+  //     those words, and measured NOT to be true: against a 14.9px ball the streak read
+  //     7 / 11 / 13 / 21px at a crawl, a jog, a belt and full pelt — under half a ball
+  //     wide at the slow end and under a whole one for most of the range.
+  //     ⚠️ This is a FLOOR on the streak measured ALONE, which is a different claim from
+  //     the withdrawn "no wider than the ball" check the repo records: that one was a
+  //     CEILING on a union box of the ball AND its streak, and a union box cannot
+  //     separate the two, so it passed on the very build it existed to catch. Here the
+  //     box is already a difference against a frame with no trail, so nothing but the
+  //     streak is in it.
+  //     ⚠️ Against the ball's OWN drawn diameter, measured in the same run — never a
+  //     pixel constant. `cam.s` depends on the court, the window and the layout, so an
+  //     absolute number would be vacuous on one screen and impossible on another.
+  //     ⚠️ At a CRAWL this deliberately does not hold: there the path is a few pixels
+  //     long and the clamp takes the length, which is the "never wider than it is long"
+  //     rule directly above winning — as it must. The claim is about a ball in play.
+  o.ballDiaPx = +(w.ball.r * M.cam.s * 2).toFixed(1);
+  o.streakIsBallWide = !!o.beltBox && o.beltBox.across >= o.ballDiaPx;
   // ⚠️ **AND THE BALL GOES BACK TO BEING A BALL.** Asked for in as many words. Measured on
   // the whole drawn object — ball plus whatever the streak adds — so a resting ball has to
   // come out as a CIRCLE, and the streak may only ever lengthen it, never widen it. The
@@ -338,6 +356,7 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.movingTail > r.slowTail &&         // and speed drives how much
            r.fastBall > 12 && r.slowBall < r.fastBall &&
            r.crawlIsAStreak && r.beltIsAStreak &&   // a streak, never a lump — see 4b
+           r.streakIsBallWide &&                    // and a ball wide in play — see 4c
            r.ballIsRoundAtRest && r.roundAgainAfterAKick && r.streakLengthens &&
 
            r.chargeVisible > 20 &&              // wind-up reads on the disc
@@ -354,6 +373,7 @@ if(!ok) console.log('checks:', {
   roundAgainAfterAKick:r.roundAgainAfterAKick, fastShape:r.fastShape, settledShape:r.settledShape,
   streakLengthens:r.streakLengthens,
   crawlIsAStreak:r.crawlIsAStreak, crawlBox:r.crawlBox,
+  streakIsBallWide:r.streakIsBallWide, ballDiaPx:r.ballDiaPx,
   beltIsAStreak:r.beltIsAStreak, beltBox:r.beltBox,
   ringSolid:r.ringSolid, ringInked:r.ringInked, ringFull:r.ringIsFullCircle,
   ringDial:[r.ringAtMin, r.ringAtMax] });

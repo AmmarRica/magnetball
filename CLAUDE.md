@@ -894,6 +894,41 @@ three lines a second time, name it.
   the slow end further below where it started. The clamp to path length is untouched and
   is what still makes *wider than it is long* impossible, which is why this pair stays a
   taste dial: the invariant does not live in these two numbers.
+  ⚠️ **AND THEN TO 2.00..3.60** (`2.00 + 1.60 * drive`), asked for as *"make the line trail
+  for the ball the width of the ball itself, make it thicker"* — **and the first half of
+  that was a finding rather than a preference.** Measured against a **14.9px** ball on a
+  1280×800 desktop, the streak drew **7 / 11 / 13 / 21px** at a crawl, a jog, a belt and
+  full pelt: under **half** a ball wide at the slow end and under a whole one for most of
+  the range, so the tell was thinner than the thing it is a tell about. It reads
+  **7 / 17 / 21 / 27px** now — the crawl deliberately unchanged, see below.
+  ⚠️ **THE BOTTOM OF THE RANGE IS THE HALF THAT ANSWERS IT, and it is exactly 2.00 radii —
+  one ball diameter by CONSTRUCTION**, not a number that happens to land near one. The top
+  is still taste.
+  ⚠️ **RAISING THE BOTTOM IS SAFE ONLY BECAUSE THE CLAMP HOLDS THE INVARIANT, and this
+  REVERSES the caution written just above** (*"raise the bottom too far and a barely-moving
+  ball is back to wearing a stub"*). It cannot: a crawling ball's path is a few pixels long,
+  so `Math.min` takes the LENGTH and the width follows it down — measured, the crawl box is
+  **16 × 7** on the old range and on the new one, identically. What the floor actually moves
+  is the speed at which the clamp stops binding: **1.55 units a step**, barely above
+  `BALL_MIN_SPD`'s 0.8. Everything above that is a ball wide.
+  ⚠️ **THE NEW CHECK IS A FLOOR ON THE STREAK ALONE, which is a different claim from the
+  withdrawn CEILING recorded below.** That one was a ceiling on a union box of the ball AND
+  its streak, could not separate the two, and passed on the build it existed to catch.
+  `streakIsBallWide` reads the `beltBox` difference — nothing but the streak is in it —
+  against the ball's **own drawn diameter taken in the same run**, never a pixel constant:
+  `cam.s` depends on the court, the window and the layout, so an absolute number would be
+  vacuous on one screen and impossible on another.
+  ⚠️ **BOTH SABOTAGES ARE CAUGHT, BY DIFFERENT CHECKS, which is what says the pair is
+  independent**: putting the old range back reads 13 against 14.9 and fails
+  `streakIsBallWide`, and removing the clamp while keeping the wide range draws a
+  **23 × 15 blob** on a crawling ball and fails `crawlIsAStreak`. Neither check can see the
+  other's defect.
+  ⚠️ **A MEASUREMENT TRAP, and it produced a false result first: `drawPitch` DOES NOT CLEAR
+  THE CANVAS.** `render()` does; a probe calling `drawPitch` by hand composites over
+  whatever was there, and with translucent layers (the goal boxes at `GOAL_BOX_A`, the mown
+  stripes) two "identical" bare frames differed by **1035 pixels** and every streak box read
+  the whole 360px sample square as inked. The control — two bare frames, which must differ
+  by **zero** — is what said so. Clear at identity transform before each draw.
   ⚠️ **AND THE BALL GOES BACK TO BEING A BALL** — asked for in those words. Belt it and
   the silhouette is a long streak; let it stop and what is left is the round shape it
   started as, measured against the same never-kicked frame. **TWO independent guards hold
