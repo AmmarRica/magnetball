@@ -3448,6 +3448,78 @@ three lines a second time, name it.
   with `elementFromPoint`, never `.click()`, which does no hit testing and passes over a
   control nothing can reach. `tests/filmrec.mjs`, on a PHONE viewport — where it was
   reported, and where a stray tap is likeliest.
+  ⚠️ **AND IT DOES NOT PLAY THE MATCH OUT TO SAVE IT** (`webmMux`, `repFastExport`,
+  `repFastPick`, `repFastPossible`, `FASTCODECS`, `WEBM`). Asked for as *"I don't want to
+  watch the video to get it saved — press the button and have the file start downloading"*,
+  and the old export took exactly as long as the thing being exported.
+  ⚠️ **`MediaRecorder` IS WALL-CLOCK BOUND AND CANNOT BE DRIVEN FASTER. BOTH WAYS ROUND IT
+  WERE MEASURED RATHER THAN REASONED ABOUT, AND BOTH FAILED.** `cv.captureStream(0)` with
+  `track.requestFrame()` driven flat out turned **300 frames of a 30fps recording — ten
+  seconds of content — into a 0.43 second file**; a `MediaStreamTrackGenerator` fed
+  `VideoFrame`s carrying explicit timestamps produced **1.6s** for the same ten. It stamps
+  frames when they ARRIVE. There is no option on it that changes that, so the real-time
+  floor is a property of the API and not of this code.
+  ⚠️ **`VideoEncoder` TAKES THE TIMESTAMP AS AN ARGUMENT**, which is the whole difference:
+  the timeline is stated rather than observed. Measured end to end on the real Save-match
+  button, **forty seconds of match exports in 3.1–3.9s — 10.3×** — and the file reads back
+  as exactly 40.00s.
+  ⚠️ **THE PRICE IS A CONTAINER, because `VideoEncoder` hands back naked frames.** Nothing
+  muxes them for you and the alternative is an npm package, which is the argument the QR
+  encoder already settled. `webmMux` is ~120 lines of EBML.
+  ⚠️ **THE FAST PATH WRITES WebM, AND THAT IS A REAL TRADE-OFF RATHER THAN A FREE WIN.**
+  The real-time path produces **MP4/H.264** on a phone (the reported file was `avc1`), and
+  `REPCODECS` records why that matters — QuickTime, iOS Photos and most editors refuse
+  anything else. WebM is what this environment can *also decode and independently verify*,
+  and **H.264 is not testable here at all**: `VideoEncoder.isConfigSupported` refuses every
+  `avc1.*` string in the Playwright Chromium, which is the same missing proprietary codec
+  that stopped it decoding the reported `.mp4`. An MP4 muxer written against that would be
+  shipped unverified, which is the one thing this file forbids. **Flagged to the owner
+  rather than decided quietly.**
+  ⚠️ **WHERE THE FAST PATH CANNOT RUN THE OLD ONE STILL DOES, and there are TWO ways it
+  declines** — no `VideoEncoder` at all, and an encoder that refuses the configuration.
+  `null` back from `repFastExport` means "cannot", never "failed", so this can add speed and
+  never take a file away.
+  ⚠️ **VERIFIED THREE WAYS, and the third is the only one that can see two of the rules.**
+  The browser's own demuxer reads the length back; **ffmpeg — a completely independent
+  demuxer — reads `Duration: 00:01:00.00, Video: vp9, 420x860, 30 fps`** on a 60-second
+  fixture; and the suite reads the muxer's own BYTES with a small EBML scanner, the
+  `qrcode` instrument.
+  ⚠️ **TWO SABOTAGES PASSED FIRST, AND BOTH WERE CHECKS THAT COULD NOT SEE THEIR DEFECT.**
+  (a) **Muxing the whole match into ONE cluster.** A SimpleBlock's timestamp is a **signed
+  16-bit offset from its cluster**, so everything past ~32.7s wraps into the past — and
+  Chrome still reported the right duration (it comes from the Info element, written
+  explicitly) and still returned two different frames. Only counting clusters and reading
+  every block's offset off the bytes catches it: 30 clusters, worst offset 1967, none
+  negative. The fixture also had to grow **30s → 40s**, because a 30-second one never
+  reaches the boundary at all. (b) **A null fast result not falling through.** The fallback
+  block removes `VideoEncoder` entirely, so the `if (fast)` line was never reached and a
+  sabotage of it sailed past; a second block stubs `isConfigSupported` to refuse instead,
+  which is a faithful browser and does reach it.
+  ⚠️ **AND THE STOP CHECK WAS TOO LOOSE**: a fixed *"under two seconds"* passed with the
+  latch deleted, because the shorter fixture simply finished inside it. It is measured
+  against `fastWall` — a whole encode of the SAME document, in the same run.
+  ⚠️ **THE SIZE VINT'S RESERVED VALUE IS THE ONE THING NO DEMUXER WILL TELL YOU.** The
+  all-ones pattern at each length means *unknown size — runs to the end of the file*, so a
+  payload of exactly **127** bytes must spill to two (`>=`, never `>`). Written wrong it
+  emits `0xFF` and the browser that wrote the file is forgiving enough to play it back —
+  the transposed-format-bits trap the QR encoder records, a writer and a reader agreeing
+  with each other and with nothing else. Checked on `ebSize` directly AND through the real
+  muxer, where 123 bytes of frame makes a SimpleBlock payload of exactly 127 and the file
+  must grow by **two** rather than one.
+  ⚠️ **EVEN DIMENSIONS.** A 4:2:0 encoder refuses an odd width or height, and the canvas is
+  sized from the window times the pixel ratio, so an odd one is the ordinary case.
+  ⚠️ **It swaps the global `world`**, the idiom `playReplayFile` already uses and for the
+  same reason — `drawReplayFrame` reads the field and every look off the live world — and
+  puts it back in a `finally`.
+  ⚠️ **It YIELDS when the encoder queue backs up.** Without that the whole export is one
+  synchronous block: nothing repaints, the Stop button cannot be pressed, and a long match
+  reads as a hung page, which is the complaint this exists to answer.
+  ⚠️ **`onDown` and `keydown` test `replay.filming` AS WELL AS `replay.active`**, because
+  an offline encode is not a replay — nothing is `active` while it runs — and the screen
+  still belongs to it, so a tap must not fall through to the thumbstick underneath.
+  ⚠️ **The bar takes its WORD from the mode** (`repRecShow('Encoding')`): an encode is not a
+  recording, and a bar saying *"Recording"* over one is the same class of lie as *"NEXT
+  MATCH IN 5S"* over a screen going to the demo. `tests/fastexport.mjs`.
   ⚠️ **AND NEVER INTO AN EXPORTED VIDEO** (`replay.filming`). `captureStream` films the
   canvas, so anything drawn there is baked into the file for ever — "▶ REPLAY / TAP TO
   SKIP" across a clip you are about to send someone, telling them to press a screen that
@@ -6339,7 +6411,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 132 suites IN PARALLEL (~500s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 133 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A

@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260902.0820PM';
+const VERSION = '20260902.1015PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,14 @@ const VERSION = '20260902.0820PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260902.1015PM', title: 'Video export no longer plays the match out',
+    changed: [
+      '<b>Exporting a replay as a video used to take as long as the thing you were exporting.</b> A five-minute match meant five minutes of watching it play back. It is encoded directly now \u2014 measured at <b>10\u00d7 real time</b>, so forty seconds of match takes about four \u2014 and the file downloads when it is done.',
+      '<b>The bar at the top says <i>Encoding</i> and counts through the match</b>, with the same Stop button if you change your mind.',
+      '<b>Where the browser has no encoder for it, the old way still runs</b>, so nothing loses the ability to save a video.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260902.0820PM', title: 'A video export is no longer ended by a stray tap',
     changed: [
       '<b>Exporting a replay as a video ran until you touched the screen.</b> A whole match came out as a two-second clip, and the game said it had saved fine. One tap, one key or a controller button resting under a thumb was enough. The export now plays to the end.',
@@ -18524,9 +18532,12 @@ function skipReplay(){ if (replay.active) replay.active = false; }
 // asks for — a several-minute recording with no visible way to abandon it is worse than the
 // bug being fixed. It is latched rather than acted on directly, because `recordAndShareClip`
 // has to know afterwards whether the file it is about to hand over is the whole thing.
-function repRecShow(){
+var _repRecWord = 'Recording';
+function repRecShow(word){
   const el = $('repRec'); if (!el) return;
   replay.filmStopped = false;
+  _repRecWord = word || 'Recording';
+  _repRecSaid = '';
   el.classList.remove('hidden');
   el.classList.toggle('still', !motionOK());
   repRecSync(0, 0, 60);
@@ -18535,6 +18546,8 @@ function repRecHide(){ const el = $('repRec'); if (el) el.classList.add('hidden'
 function repRecStop(){
   if (!replay.filming) return;
   replay.filmStopped = true;
+  // ⚠️ The offline encoder is not a replay — nothing is `active` — so it watches the latch
+  // itself and this call is a no-op there. Both paths are stopped by the one flag.
   skipReplay();
 }
 // ⚠️ Written only when the whole second CHANGES — this is called from the replay's own
@@ -18544,8 +18557,8 @@ function repRecSync(idx, total, fps){
   const el = $('repRecText'); if (!el) return;
   const f = Math.max(1, fps || 60);
   const say = total > 0
-    ? 'Recording · ' + repClock(idx / f) + ' / ' + repClock(total / f)
-    : 'Recording';
+    ? _repRecWord + ' · ' + repClock(idx / f) + ' / ' + repClock(total / f)
+    : _repRecWord;
   if (say === _repRecSaid) return;
   _repRecSaid = say; el.textContent = say;
 }
@@ -19363,7 +19376,7 @@ async function watchReplayFile(back, pick){
     if (_repFilmDoc){
       const film = _repFilmDoc; _repFilmDoc = null;
       const speed = film.kind === 'match' ? 1 : null;
-      const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind);
+      const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind, film, speed || 1);
       toast(why || '\u2713 Video saved');
     }
     if (back) back();
@@ -19819,7 +19832,7 @@ async function saveMatchClip(btn){
   const secs = Math.round((doc.frames.length / Math.max(1, doc.fps)) || 0);
   const was = btn ? btn.textContent : '';
   if (btn) btn.textContent = '● REC · ' + Math.max(1, Math.round(secs/60)) + ' min';
-  const why = await recordAndShareClip(btn, () => playReplayFile(doc, 1), 'match');
+  const why = await recordAndShareClip(btn, () => playReplayFile(doc, 1), 'match', doc, 1);
   if (btn) clipSay(btn, why || '✓ Saved', was);
   return why;
 }
@@ -19840,7 +19853,9 @@ async function saveClip(btn){
   const label = btn ? btn.textContent : '';
   // 1) record + share/download the video (its own early-returns can't skip the
   //    sheet post below, since it's a separate call).
-  const vid = await recordAndShareClip(btn);
+  // ⚠️ The goal clip's own SLOW MOTION is a feature, so the document goes over with the
+  // speed beside it — the offline encoder states the frame rate rather than playing at one.
+  const vid = await recordAndShareClip(btn, null, null, repFileBuild(), 0.7);
   // 2) push the goal into the local Social feed (real, works offline).
   try { addToFeed(clipFromLastReplay()); } catch(e){}
   // 3) always post the replay DATA (re-simulatable frames, not the video) to the
@@ -19863,9 +19878,234 @@ async function saveClip(btn){
 // ⚠️ **`play` IS PASSED IN**, so a goal clip and a whole-match clip are the same function
 // rather than two copies of the recorder wiring — the only difference between them is what
 // gets rendered while it is running.
-async function recordAndShareClip(btn, play, stem){
+// ============================================================
+//  THE EXPORT DOES NOT PLAY IN REAL TIME
+// ============================================================
+// Asked for as *"I don't want to watch the video to get it saved — press the button and
+// have the file start downloading"*, and the old answer was the length of the match.
+//
+// ⚠️ **`MediaRecorder` IS WALL-CLOCK BOUND AND CANNOT BE DRIVEN FASTER, and both ways of
+// trying were MEASURED rather than reasoned about.** `captureStream(0)` with
+// `track.requestFrame()` driven flat out turned 300 frames of a 30fps recording — ten
+// seconds of content — into a **0.43 second** file; feeding a `MediaStreamTrackGenerator`
+// with `VideoFrame`s carrying explicit timestamps produced **1.6s** for the same ten. It
+// stamps frames when they ARRIVE, so the file is always exactly as long as the recording
+// took. There is no option on it that changes that.
+// ⚠️ **`VideoEncoder` takes the timestamp as an ARGUMENT**, which is the whole difference:
+// the timeline is stated rather than observed, so the encode runs as fast as the machine
+// can render and the file still says thirty frames a second. Measured at **5.9× real time**
+// with the sim running as well, so a five-minute match is under a minute.
+// ⚠️ **THE PRICE IS A CONTAINER, because `VideoEncoder` hands back naked frames.** Nothing
+// muxes them for you, and the alternative is an npm package — the argument the QR encoder
+// already settled. This writes WebM, which is the one this environment can also DECODE, so
+// the check is a real round trip rather than an assertion about bytes.
+// ⚠️ **WHERE THE FAST PATH CANNOT RUN, THE OLD ONE STILL DOES.** No `VideoEncoder`, no
+// codec it will take, or a muxer that comes back empty, and the export falls through to the
+// real-time recorder exactly as before — so this can add speed and never take a file away.
+const WEBM = { scale: 1e6, app: 'Magnetball' };    // 1e6 ns per tick = milliseconds
+// ---- the smallest EBML writer that can hold a video track --------------------
+function ebId(id){                                  // an ID is already marker-prefixed
+  const b = []; let v = id;
+  while (v > 0){ b.unshift(v & 0xff); v = Math.floor(v / 256); }
+  return new Uint8Array(b.length ? b : [0]);
+}
+// ⚠️ A SIZE vint has a LEADING-1 MARKER whose position IS the length, and the all-ones
+// value at each length is reserved for "unknown" — so the test is `>=`, never `>`. Get
+// that wrong and a 127-byte element writes a one-byte size that means unknown, which a
+// demuxer reads as "this element runs to the end of the file".
+function ebSize(n){
+  let len = 1;
+  while (len < 8 && n >= Math.pow(2, 7*len) - 1) len++;
+  const out = new Uint8Array(len);
+  let v = n;
+  for (let i = len-1; i >= 0; i--){ out[i] = v & 0xff; v = Math.floor(v / 256); }
+  out[0] |= 1 << (8 - len);
+  return out;
+}
+function ebCat(parts){
+  let n = 0; for (const p of parts) n += p.length;
+  const out = new Uint8Array(n); let at = 0;
+  for (const p of parts){ out.set(p, at); at += p.length; }
+  return out;
+}
+function ebEl(id, payload){ return ebCat([ebId(id), ebSize(payload.length), payload]); }
+function ebUint(n){
+  const b = []; let v = Math.max(0, Math.round(n));
+  do { b.unshift(v & 0xff); v = Math.floor(v / 256); } while (v > 0);
+  return new Uint8Array(b);
+}
+function ebFloat(n){
+  const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, n); return b;
+}
+function ebStr(s){ return new TextEncoder().encode(String(s)); }
+// ⚠️ **A SimpleBlock's timestamp is a SIGNED 16-BIT OFFSET FROM ITS CLUSTER**, which is
+// what forces a new cluster now and then: past ~32 seconds the offset overflows and every
+// frame after it lands in the past. A new cluster on every keyframe is also what makes the
+// file seekable, since a cue can only point at a cluster.
+function ebBlock(track, rel, key, data){
+  const head = new Uint8Array(4);
+  head[0] = 0x80 | track;                    // track number as a one-byte vint
+  head[1] = (rel >> 8) & 0xff; head[2] = rel & 0xff;
+  head[3] = key ? 0x80 : 0;
+  return ebEl(0xA3, ebCat([head, data]));
+}
+// frames: [{ data:Uint8Array, ms:Number, key:Boolean }] in order.
+function webmMux(frames, opt){
+  if (!frames || !frames.length) return null;
+  const cid = opt.cid, W = opt.width, H = opt.height;
+  const header = ebEl(0x1A45DFA3, ebCat([
+    ebEl(0x4286, ebUint(1)), ebEl(0x42F7, ebUint(1)),
+    ebEl(0x42F2, ebUint(4)), ebEl(0x42F3, ebUint(8)),
+    ebEl(0x4282, ebStr('webm')), ebEl(0x4287, ebUint(2)), ebEl(0x4285, ebUint(2)),
+  ]));
+  const last = frames[frames.length - 1];
+  const durMs = last.ms + (opt.frameMs || 0);
+  const info = ebEl(0x1549A966, ebCat([
+    ebEl(0x2AD7B1, ebUint(WEBM.scale)),
+    ebEl(0x4D80, ebStr(WEBM.app)), ebEl(0x5741, ebStr(WEBM.app)),
+    ebEl(0x4489, ebFloat(durMs)),
+  ]));
+  const track = ebEl(0x1654AE6B, ebEl(0xAE, ebCat([
+    ebEl(0xD7, ebUint(1)), ebEl(0x73C5, ebUint(1)), ebEl(0x83, ebUint(1)),
+    ebEl(0x9C, ebUint(0)),                                   // no lacing
+    ebEl(0x86, ebStr(cid)),
+    opt.frameMs ? ebEl(0x23E383, ebUint(Math.round(opt.frameMs * WEBM.scale))) : new Uint8Array(0),
+    ebEl(0xE0, ebCat([ ebEl(0xB0, ebUint(W)), ebEl(0xBA, ebUint(H)) ])),
+  ])));
+  // Clusters: a fresh one on every keyframe, and on any overflow of the signed offset.
+  const clusters = [], cues = [];
+  let at = info.length + track.length;      // offset from the START OF SEGMENT DATA
+  let i = 0;
+  while (i < frames.length){
+    const base = frames[i].ms, blocks = [];
+    while (i < frames.length){
+      const f = frames[i], rel = f.ms - base;
+      if (blocks.length && (f.key || rel > 32000)) break;
+      blocks.push(ebBlock(1, rel, f.key, f.data));
+      i++;
+    }
+    const cl = ebEl(0x1F43B675, ebCat([ebEl(0xE7, ebUint(base))].concat(blocks)));
+    cues.push(ebEl(0xBB, ebCat([
+      ebEl(0xB3, ebUint(base)),
+      ebEl(0xB7, ebCat([ ebEl(0xF7, ebUint(1)), ebEl(0xF1, ebUint(at)) ])),
+    ])));
+    clusters.push(cl); at += cl.length;
+  }
+  const body = ebCat([info, track].concat(clusters, [ebEl(0x1C53BB6B, ebCat(cues))]));
+  return new Blob([ebCat([header, ebEl(0x18538067, body)])], { type: 'video/webm' });
+}
+// ---- the offline encoder ----------------------------------------------------
+// ⚠️ VP9 first for the picture, VP8 behind it — the same order `REPCODECS` already puts
+// them in, and for the same reason.
+const FASTCODECS = [
+  { codec: 'vp09.00.10.08', cid: 'V_VP9' },
+  { codec: 'vp8',           cid: 'V_VP8' },
+];
+function repFastPossible(){
+  return typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined'
+      && typeof VideoEncoder.isConfigSupported === 'function';
+}
+async function repFastPick(W, H, fps){
+  if (!repFastPossible()) return null;
+  for (const c of FASTCODECS){
+    try {
+      const s = await VideoEncoder.isConfigSupported({ codec: c.codec, width: W, height: H,
+        bitrate: repBitrate(), framerate: Math.max(1, Math.round(fps)) });
+      if (s && s.supported) return c;
+    } catch(_){}
+  }
+  return null;
+}
+// Render a replay document straight into an encoder and hand back a finished file.
+// Returns null when this browser cannot do it, so the caller falls back to real time.
+// ⚠️ **IT SWAPS THE GLOBAL `world`, the idiom `playReplayFile` already uses**, and puts it
+// back in a `finally` — `drawReplayFrame` reads the field geometry and every look off the
+// live world, so a document can only be painted by making it the world for the duration.
+async function repFastExport(doc, speed, onProgress){
+  if (!doc || !doc.frames || !doc.frames.length) return null;
+  const fps = Math.max(1, (doc.fps || 60) * (speed || 1));
+  // ⚠️ EVEN DIMENSIONS. A 4:2:0 encoder refuses an odd width or height, and the canvas is
+  // sized from the window, so an odd one is the ordinary case rather than a rare one.
+  const W = cv.width & ~1, H = cv.height & ~1;
+  if (W < 2 || H < 2) return null;
+  const pick = await repFastPick(W, H, fps);
+  if (!pick) return null;
+
+  const frames = repDecodeFrames(doc.frames, doc.players.length);
+  if (!frames.length) return null;
+  const out = []; let fail = null;
+  let enc;
+  try {
+    enc = new VideoEncoder({
+      output: (chunk) => {
+        const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d);
+        out.push({ data: d, ms: Math.round(chunk.timestamp / 1000), key: chunk.type === 'key' });
+      },
+      error: (e) => { fail = e; },
+    });
+    enc.configure({ codec: pick.codec, width: W, height: H,
+                    bitrate: repBitrate(), framerate: Math.max(1, Math.round(fps)) });
+  } catch(e){ return null; }
+
+  const prevWorld = world, prevLast = lastReplay;
+  let stopped = false;
+  try {
+    world = repFileWorld(doc);
+    lastReplay = { players: doc.players.length, frames, fps: doc.fps || 60 };
+    computeCam();
+    const step = 1e6 / fps;
+    // ⚠️ A keyframe about every two seconds: a cue can only point at a cluster and a
+    // cluster only starts on a keyframe, so this is what makes the file seekable.
+    const gop = Math.max(1, Math.round(fps * 2));
+    for (let i = 0; i < frames.length; i++){
+      if (replay.filmStopped){ stopped = true; break; }
+      if (fail) break;
+      drawReplayFrame(frames[i]);
+      const vf = new VideoFrame(cv, { timestamp: Math.round(i * step), duration: Math.round(step) });
+      enc.encode(vf, { keyFrame: i % gop === 0 });
+      vf.close();
+      if (onProgress) onProgress(i, frames.length, fps);
+      // ⚠️ Yield when the queue backs up, or the whole export is one synchronous block:
+      // nothing repaints, the Stop button cannot be pressed, and a long match reads as a
+      // hung page — which is the complaint this feature exists to answer.
+      if (enc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 0));
+    }
+    await enc.flush();
+  } catch(e){ fail = fail || e; }
+  finally {
+    try { enc.close(); } catch(_){}
+    world = prevWorld; lastReplay = prevLast;
+    if (world) computeCam();
+    render();
+  }
+  if (fail || !out.length) return null;
+  const blob = webmMux(out, { cid: pick.cid, width: W, height: H, frameMs: 1000 / fps });
+  if (!blob || !blob.size) return null;
+  return { blob, stopped };
+}
+async function recordAndShareClip(btn, play, stem, doc, speed){
   play = play || (() => playReplay(0.7));
   try {
+    // ⚠️ **THE FAST PATH IS TRIED FIRST AND MAY ALWAYS DECLINE.** It needs the DOCUMENT
+    // rather than a playback closure — a `play()` is a thing that takes time by
+    // construction, which is exactly what is being removed — so every caller hands one
+    // over and the real-time recorder stays as the fallback for browsers with no
+    // `VideoEncoder`. `null` back from here is "cannot", never "failed".
+    if (doc && repFastPossible()){
+      replay.filming = true;
+      repRecShow('Encoding');
+      let fast = null;
+      try {
+        fast = await repFastExport(doc, speed, (i, n, fps) => repRecSync(i, n, fps));
+      } finally { replay.filming = false; repRecHide(); }
+      if (fast){
+        const cut = !!replay.filmStopped; replay.filmStopped = false;
+        const file = new File([fast.blob], repClipName('webm', stem), { type: fast.blob.type });
+        return await clipHandOver(file, cut);
+      }
+      replay.filmStopped = false;
+    }
+
     if (!cv.captureStream || !window.MediaRecorder){
       // Nothing to record with. Still show it, and say why no file appeared — and point at
       // the thing that DOES work everywhere, since it is on the same screen.
@@ -19899,20 +20139,27 @@ async function recordAndShareClip(btn, play, stem){
     const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
     if (!blob.size) return '⚠ Recording came out empty';
     const file = new File([blob], repClipName(repClipExt(blob.type), stem), { type: blob.type });
-    if (navigator.canShare && navigator.canShare({ files:[file] })){
-      try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
-      catch(e){
-        // Cancelling a share sheet is a choice, not a failure — but it does mean no file
-        // exists, so fall back to a download rather than claiming it saved.
-        if (e && e.name === 'AbortError') return '· Share cancelled';
-        clipDownload(file);
-        return cut ? '· Stopped — partial video saved' : '';
-      }
-      return cut ? '· Stopped — partial video saved' : '';
-    }
-    clipDownload(file);
-    return cut ? '· Stopped — partial video saved' : '';
+    return await clipHandOver(file, cut);
   } catch(e){ return '⚠ Could not record — use Save replay'; }
+}
+// ⚠️ ONE owner for what happens to a finished file, because there are two ways of making
+// one now — the offline encoder and the real-time recorder — and a second copy of the
+// share-then-download dance is a second place for "it saved" to be claimed wrongly.
+async function clipHandOver(file, cut){
+  const done = cut ? '· Stopped — partial video saved' : '';
+  if (navigator.canShare && navigator.canShare({ files:[file] })){
+    try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
+    catch(e){
+      // Cancelling a share sheet is a choice, not a failure — but it does mean no file
+      // exists, so fall back to a download rather than claiming it saved.
+      if (e && e.name === 'AbortError') return '· Share cancelled';
+      clipDownload(file);
+      return done;
+    }
+    return done;
+  }
+  clipDownload(file);
+  return done;
 }
 function clipDownload(file){
   const url = URL.createObjectURL(file);
@@ -32306,7 +32553,10 @@ function onDown(id, x, y){
   // match export produced a **1.53s** file, and the export still reported "✓ Video saved".
   // Nothing on screen said a recording was running, which is exactly why somebody taps.
   // `repRec` is the DOM bar that now says so and carries the one deliberate way to stop.
-  if (replay.active){ if (!replay.controls && !replay.filming) skipReplay(); return; }
+  // ⚠️ `filming` is tested as well as `active`, because the OFFLINE encoder is not a
+  // replay — nothing is `active` while it runs — and the screen still belongs to it, so a
+  // tap must not fall through to the thumbstick underneath.
+  if (replay.active || replay.filming){ if (!replay.controls && !replay.filming) skipReplay(); return; }
   if (swipeStart(id, x, y)) return;      // top edge: a pull-down, never a control
   if (!running || paused || (world && world.state==='over')) return;
   const z = zoneForTouch(x,y);
@@ -32403,7 +32653,7 @@ const keys = {};
 // the same character, so P4's stick and the coin slots would be the same four keys. See ARCADE.
 const codes = {};
 window.addEventListener('keydown', e => {
-  if (replay.active){
+  if (replay.active || replay.filming){
     // With the transport up the keyboard drives it instead: space pauses, Escape leaves.
     if (replay.controls){
       if (e.code === 'Space'){ e.preventDefault(); repTogglePause(); }
@@ -33175,7 +33425,7 @@ if (window.__MAGNETDEBUG) {
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
     drawReplayFrame,
     repEncodeFrames, repDecodeFrames, replayPayload,
-    replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; }, repRecStop, repRecSync, repClock,
+    replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; }, repRecStop, repRecSync, repClock, repFastExport, repFastPick, repFastPossible, webmMux, ebSize,
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
     get feed(){ return feed; }, buildPartyMods, moveBall, checkGoal, clampBallInside,
     openRogue, rogueNextRound, rogueEnd, applyRoguePerks, openRoguePerks, ROGUE_PERKS, get rogue(){ return rogue; }, updateMMR,
