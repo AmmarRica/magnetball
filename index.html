@@ -5429,7 +5429,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260830.1040AM';
+const VERSION = '20260830.0325PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5445,6 +5445,14 @@ const VERSION = '20260830.1040AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260830.0325PM', title: 'A cocktail table behaves like a table',
+    changed: [
+      '<b>A cocktail table lays out 2 a side now instead of 1 v 1.</b> It took four controllers to reach a 2 v 2 before, so two people stood at a table got one body each and a lot of empty pitch. The warm-up stepper still takes it down to 1 v 1 if that is what you want.',
+      '<b>Walking on to a cocktail match in progress restarts it at 0\u20130.</b> Whoever comes over did not start the match and should not inherit somebody else\u2019s scoreline. Everywhere else joining mid-match still takes a bot\u2019s shirt and plays on.',
+      '<b>The result screen goes back to the demo after five seconds on a cocktail table</b>, rather than dealing the same match again after thirty to people who may have walked off.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260830.1040AM', title: 'The ball\u2019s trail is a ball wide',
     changed: [
       '<b>The streak behind the ball is thicker, and once the ball is really moving it is at least as wide as the ball itself.</b> It was under half a ball wide at a dribble and still under a whole one at a good pace, so the tell was thinner than the thing it was a tell about.',
@@ -14669,6 +14677,17 @@ function closeSettings(){ if (dockCapable()) dockOrFull('setup'); else toMenu();
 const SIDES = [['bottom','⬇'],['top','⬆'],['left','⬅'],['right','➡']];
 function sideQuarter(side){ return {bottom:0, left:1, top:2, right:3}[side] || 0; }
 function seatSide(n){ return (sel.cocktailSides && sel.cocktailSides[n]) || ['bottom','top','left','right'][(n-1)%4]; }
+// ⚠️ **A COCKTAIL TABLE IS A ROOM, NOT A DEVICE, and all three of these follow from
+// that.** It is a flat screen people stand around in a bar — nobody owns it, nobody
+// configured it, and whoever walks up has not read a menu. So: it lays out **2 a side**
+// rather than the shipped 1v1 default, somebody joining a match in progress **restarts it
+// at 0–0** rather than walking into somebody else's scoreline, and the result screen goes
+// back to the attract demo in **five seconds** rather than dealing the same match again to
+// people who may have walked off. Asked for in those words.
+// ⚠️ `per` is a DEFAULT and not a floor: `lobbySizeBump` floors at 1, so the warm-up
+// stepper still takes a table down to 1v1 for two people on opposite edges. What this
+// changes is what you get without asking, which is the whole of what cocktail is for.
+const COCKTAIL = { per: 2, resultSecs: 5 };
 // Steam Deck view: landscape pitch, menu docked left, driven entirely by a pad.
 function isDeck(){ return sel.display==='deck'; }
 // ⚠️ Arcade is its own mode and NOT 'mobile', however narrow the cabinet's monitor is. An
@@ -17378,6 +17397,18 @@ function startMatch(opts){
   // the match GROWS to fit rather than turning people away. Co-op puts every pad on
   // one side, so there it takes the whole count rather than half of it.
   let per = mode.per;
+  // ⚠️ **A COCKTAIL TABLE LAYS OUT 2 A SIDE BEFORE ANY PAD IS COUNTED**, asked for.
+  // Measured: with 0, 1 or 2 controllers a cocktail table played **1v1**, because the
+  // shipped default is 1v1 and only the pad raise below moves it — so it took FOUR pads
+  // to reach a 2v2. Two people stood at a table are the ordinary case and they were
+  // getting a match with one body a side and two spectators' worth of empty pitch.
+  // ⚠️ `Math.max`, so it composes with the pad raise rather than fighting it: four pads
+  // still make a 2v2 and eight still make a 4v4, and Killer Lobsters' own 3 is untouched.
+  // ⚠️ **The attract demo gets it too** — deliberately, and unlike the pad raise. That one
+  // excludes the demo so a stray controller cannot size the wallpaper; a fixed number
+  // cannot, and what a passer-by sees on the table should be the match they would get.
+  if (sel.display === 'cocktail' && !mode.train && !mode.twoP)
+    per = Math.max(per, COCKTAIL.per);
   if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet){
     const np = connectedGamepadIndices().length;
     if (np > 0) per = Math.max(per, Math.min(LOBBY.maxPerSide,
@@ -22509,6 +22540,25 @@ function subSwapNow(w, p){
   evenUpSides(w);
   toast(p.name + (back ? ' back on for ' : ' joined ') + (team === 0 ? 'HOME' : 'AWAY'),
         'ok', 'gamepad');
+  // ⚠️ **ON A COCKTAIL TABLE, JOINING RESTARTS THE MATCH AT 0–0**, asked for. Everywhere
+  // else walking on mid-play is the point of the hold — you take a bot's shirt and the
+  // game carries on. A table in a bar is the opposite case: the person walking up did not
+  // start this match, may not know who is winning, and inherits somebody else's scoreline
+  // the moment they arrive. Measured on the shipped build: a join at **2–1 and 47.7s**
+  // left both standing. A fresh 0–0 is what "I want to play" means there.
+  // ⚠️ `restartMatch`, never `restartToPick` — that one is the FULL-TIME door and takes
+  // everybody off the pitch to re-pick sides, which would immediately undo the join that
+  // just happened. This keeps the roster and resets the scoreline, the clock, the seed and
+  // the kickoff.
+  // ⚠️ `_subTo` is cleared FIRST. It is the walk-on target set a few lines above, and
+  // `resetKickoff` inside the restart has already put this body on its formation mark —
+  // so left set, `stepSubWalk` immediately walks it off that mark to a spot the restart
+  // has made meaningless.
+  // ⚠️ Safe to call from here because `pollSubHold` runs from `pollDropIn`, which `loop()`
+  // calls BESIDE `step(world)` rather than inside it — the same reason the hold can be
+  // counted in fixed steps at all. `restartMatch` mutates the world in place and does not
+  // replace it, so nothing downstream is left holding a stale one.
+  if (sel.display === 'cocktail'){ p._subTo = null; restartMatch(w); }
   return true;
 }
 // ⚠️ **`runSubs` AND THE GOAL-TIME SUBSTITUTION WINDOW ARE GONE, DELETED RATHER THAN
@@ -23441,6 +23491,15 @@ let _overPrev = {};
 // Counted on WALL-CLOCK, because the result screen is a paused state and step()
 // isn't running — the same reason the final whistle's ramp lives in loop().
 let resultIdle = null, _overHint = '';
+// ⚠️ **HOW LONG THE RESULT SCREEN WAITS, AND WHERE IT THEN GOES, ARE ONE OWNER EACH —
+// and the duration having TWO writers is what made the first build of this half-work.**
+// `showOverlay` sets the clock on a fresh screen and `stepResultClock` re-sets it on every
+// input, and only the second one was taught about cocktail: the words changed to "DEMO IN"
+// and the number stayed at **30**, because the screen had already been armed with
+// `AUTO.result` a moment earlier. A duration read in two places is a duration that will be
+// changed in one.
+function resultGoesToDemo(){ return sel.display === 'cocktail'; }
+function resultSecs(){ return resultGoesToDemo() ? COCKTAIL.resultSecs : AUTO.result; }
 function anyoneTouchingSomething(){
   for (const k in keys) if (keys[k]) return true;
   const gps = (navigator.getGamepads && navigator.getGamepads()) || [];
@@ -23456,14 +23515,33 @@ function stepResultClock(dt){
   const live = ov && ov.classList.contains('show') && world && world.state === 'over'
                && !world.rogue && !world.season && !world.drillMode && !world.demo;
   if (!live){ resultIdle = null; return; }
-  if (resultIdle == null) resultIdle = AUTO.result;
-  if (anyoneTouchingSomething()) resultIdle = AUTO.result;
+  // ⚠️ **A COCKTAIL TABLE GOES BACK TO THE ATTRACT DEMO IN FIVE SECONDS**, asked for,
+  // where everywhere else the result screen deals the same match again after thirty.
+  // Both halves of that are about who is standing there: a table in a bar is unattended
+  // between games, so a result screen left up is a dead screen, and dealing another match
+  // to people who have walked off is a match nobody plays. Everywhere else somebody owns
+  // the machine and "again" is what they want.
+  // ⚠️ ONE answer, read once and used for the clock, the words and the door — three
+  // reads of `sel.display` is three places for them to disagree about which screen this is.
+  const bar = resultGoesToDemo();
+  const full = resultSecs();
+  if (resultIdle == null) resultIdle = full;
+  if (anyoneTouchingSomething()) resultIdle = full;
   else resultIdle -= dt;
   const hint = $('ovHint');
-  if (hint) hint.textContent = _overHint + ' · NEXT MATCH IN ' + Math.max(0, Math.ceil(resultIdle)) + 'S';
+  // ⚠️ The countdown says where it is actually going. "NEXT MATCH IN 5S" over a screen
+  // that goes to the demo is a promise the clock does not keep.
+  if (hint) hint.textContent = _overHint + (bar ? ' · DEMO IN ' : ' · NEXT MATCH IN ')
+                             + Math.max(0, Math.ceil(resultIdle)) + 'S';
   // ⚠️ The same door as the button, never a second copy of what "next match" means — the
   // auto-advance is the button pressing itself when nobody does.
-  if (resultIdle <= 0){ resultIdle = null; restartToPick(world); }
+  // ⚠️ And `toMenu()` rather than a `startDemo()` of its own: it is already the one place
+  // that knows how to leave a match on every layout, and its own rule is that the demo is
+  // started where it can be SEEN. Below 900px `#setup` is a full-bleed screen over the
+  // canvas, so a demo behind it would be a match burning a frame loop where nobody can
+  // watch it — the defect `startMatch`'s panel guard exists for. A small cocktail screen
+  // therefore lands on the menu, which is still the front of the machine.
+  if (resultIdle <= 0){ resultIdle = null; if (bar) toMenu(); else restartToPick(world); }
 }
 function pollOverOptions(){
   const ov = $('overlay');
@@ -23632,7 +23710,7 @@ function finishMatch(w){
       : 'PLAYER 1 CHOOSES';
     hint.textContent = _overHint;
     hint.style.display = '';
-    resultIdle = AUTO.result;          // fresh screen, fresh clock
+    resultIdle = resultSecs();         // fresh screen, fresh clock — see resultSecs
   }
   // ⚠️ Deferred to the next tick so the result screen is up first: the update panel sits over
   // it, and putting it up before the thing it covers reads as the match never finishing.
@@ -33029,13 +33107,13 @@ if (window.__MAGNETDEBUG) {
     PHOTO, setPhoto, photoFrom, photoFromFile, buildPhotoPane, startPhotoCam, stopPhotoCam, paintFace,
     PHOTOLIB, photoLibAdd, photoLibAll, photoLibDel, photoLibTrim, photoPick, photoDeleteArmed,
     renderStats, saveStats, updateScoreUI,
-    viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec,
+    viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec, COCKTAIL,
     ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
     syncScorebug, toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
-    LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock,
+    LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock, resultSecs, resultGoesToDemo,
     pollLobbyPads, stepWarmup, stepLobbyKeys,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
     addLobbyWall, clearLobbyProps, syncLobbyBalls, lobbyBallCount, lobbyBallSpot,

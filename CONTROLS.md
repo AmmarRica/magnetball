@@ -171,6 +171,26 @@ setup.
 
 ---
 
+## Cocktail table
+
+`sel.display === 'cocktail'`. A flat screen people stand around, each controller rotated to
+the side that person stands on so "up" always points into the table. Three things differ,
+because a table in a bar is a room rather than somebody's machine:
+
+- **It lays out 2 a side**, not the 1 v 1 the game ships with. The warm-up `+`/`−` squares
+  still take it anywhere from 1 v 1 to 11 v 11 — this is the default, not a floor.
+- **Joining a match in progress restarts it at 0-0.** Hold toward the pitch the same way as
+  everywhere else; the difference is that you are not walking into somebody else's
+  scoreline. On every other layout the join takes a bot's shirt and the match plays on.
+- **The result screen returns to the attract demo after five seconds**, rather than dealing
+  the same match again after thirty. Any input holds the clock open, and Restart, Warm-up
+  and Main Menu all still work as they do everywhere else.
+
+Calibration is cocktail-only too: everybody faces a different way, so each controller seat
+is asked which direction is "up" before it plays.
+
+---
+
 ## HUD
 
 Pause is top-left, mute and full screen top-right, the score in the middle. On a desktop the

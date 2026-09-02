@@ -3574,6 +3574,69 @@ three lines a second time, name it.
   function rather than a `buildArcadeRows()` call: it runs on every coin and every game, and
   rebuilding the panel map for a number that changed relayouts the screen under the
   operator's finger. `tests/arcade.mjs`.
+- **A COCKTAIL TABLE IS A ROOM, NOT A DEVICE** (`COCKTAIL`, `resultSecs`,
+  `resultGoesToDemo`). Three rules, asked for together, and all three follow from the same
+  thing: it is a flat screen people stand around in a bar, so nobody owns it, nobody
+  configured it, and whoever walks up has not read a menu.
+  ⚠️ **TWO A SIDE BY DEFAULT, and it took FOUR PADS to get there before.** `per` starts at
+  `mode.per` and only the pad raise moves it, so measured on the shipped build a cocktail
+  table played **1v1 with 0, 1 or 2 controllers** — two people stood at a table got one
+  body each. `Math.max(per, COCKTAIL.per)` sits beside the pad raise so the two compose:
+  four pads is still 2v2, eight still 4v4, and Killer Lobsters' own 3 is untouched.
+  ⚠️ **A DEFAULT, NOT A FLOOR, and the difference is checkable**: `lobbySizeBump` floors at
+  1, so the warm-up stepper still takes a table down to 1v1 for two people on opposite
+  edges, and a 4v4 picked in the Match card stays a 4v4. Sabotaging the `Math.max` into a
+  bare assignment fails `biggerModeKept` on its own.
+  ⚠️ **The ATTRACT DEMO gets it too, deliberately, and unlike the pad raise.** That one
+  excludes the demo so a stray controller cannot size the wallpaper; a fixed number cannot,
+  and what a passer-by sees on the table should be the match they would actually get.
+  ⚠️ **JOINING A MATCH IN PROGRESS RESTARTS IT AT 0–0.** Everywhere else walking on
+  mid-play is the whole point of the hold — you take a bot's shirt and the game carries on
+  — and that is right for a machine somebody owns. A table in a bar is the opposite: the
+  person walking up did not start this match and may not know who is winning. Measured on
+  the shipped build, a join at **2–1 and 47.7s** left both standing.
+  ⚠️ **`restartMatch`, NEVER `restartToPick`.** That one is the FULL-TIME door and takes
+  everybody off the pitch to re-pick sides, which would immediately undo the join that just
+  happened. And `p._subTo` is cleared FIRST: it is the walk-on target set a few lines above,
+  and `resetKickoff` inside the restart has already put the body on its formation mark, so
+  left set `stepSubWalk` walks it straight off that mark to a spot the restart made
+  meaningless.
+  ⚠️ Safe to call from there because `pollSubHold` runs from `pollDropIn`, which `loop()`
+  calls **beside** `step(world)` rather than inside it — the same reason the hold can be
+  counted in fixed steps at all. `restartMatch` mutates the world in place rather than
+  replacing it, so nothing is left holding a stale one (which is what makes this different
+  from `restartToWarmup`, where `step()` has to return on the frame it fires).
+  ⚠️ **THE RESULT SCREEN GOES TO THE ATTRACT DEMO IN FIVE SECONDS**, where everywhere else
+  it deals the same match again after thirty. Both halves are about who is standing there:
+  a table is unattended between games, so a result screen left up is a dead screen and
+  another match dealt is a match nobody plays.
+  ⚠️ **THE DURATION HAD TWO WRITERS, AND THAT IS WHAT MADE THE FIRST BUILD HALF-WORK.**
+  `showOverlay` arms the clock on a fresh screen and `stepResultClock` re-arms it on every
+  input, and only the second knew about cocktail: the words changed to *"DEMO IN"* and the
+  number stayed at **30**, because the screen had already been armed with `AUTO.result` a
+  moment earlier. `resultSecs()` and `resultGoesToDemo()` are one owner each now — the
+  duplication rule, with the usual ending.
+  ⚠️ **The countdown says where it is actually GOING.** *"NEXT MATCH IN 5S"* over a screen
+  that goes to the demo is a promise the clock does not keep.
+  ⚠️ **`toMenu()` rather than a `startDemo()` of its own.** That function is already the one
+  place that knows how to leave a match on every layout, and its own rule is that the demo
+  starts only where it can be SEEN: below 900px `#setup` is a full-bleed screen over the
+  canvas, so a demo behind it would be a match burning a frame loop where nobody can watch
+  it — the defect `startMatch`'s panel guard exists for. A small cocktail screen therefore
+  lands on the menu, which is still the front of the machine.
+  ⚠️ **EVERY CLAIM IS PAIRED WITH THE SAME MEASUREMENT ON A NON-COCKTAIL LAYOUT, in the
+  same run.** All three read `sel.display`, so a build applying them everywhere satisfies
+  every cocktail-side check on its own and is a far worse bug — a desktop match restarted
+  under whoever walks in, and everybody's result screen cut to five seconds. Both of those
+  sabotages are caught, by the controls alone.
+  ⚠️ **A MEASUREMENT TRAP: COCKTAIL ROTATES EACH SEAT'S STICK**, so the raw axes producing
+  a given WORLD heading are the INVERSE rotation of it. Pushing world-inward straight onto
+  the axes drives the joiner the opposite way and the hold never completes — the first run
+  of the probe reported "no join" on a build that joins perfectly well. The seat that joins
+  in the suite reads quarter **2**, a full 180°.
+  ⚠️ **AND THE HINT MUST BE READ ON A SCREEN ARMED BY `finishMatch`**, never one armed by a
+  call to `stepResultClock` — a probe that arms the clock itself cannot see the two-writer
+  defect at all. `tests/cocktailroom.mjs`.
 - **Cocktail calibration is for CONTROLLER seats** — `needsCalibration(p)`, the one
   predicate the on-screen button, the pad poll and the button's label all read.
   Cocktail is a tabletop layout where people sit on different edges, and what has to be
@@ -6228,7 +6291,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 129 suites IN PARALLEL (~350s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 131 suites IN PARALLEL (~450s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
