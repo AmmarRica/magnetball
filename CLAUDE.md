@@ -3400,6 +3400,54 @@ three lines a second time, name it.
   cancels the pending frame, so the tick that would have called `finish()` never runs, and
   the awaiter — and the `finally` that puts the menu back — was orphaned. Lowering the flag
   was enough only while the tick was left alive to notice.
+  ⚠️ **AND A RECORDING IS NOT A REPLAY YOU CAN TAP AWAY** (`repRecShow`, `repRecStop`,
+  `repRecSync`, `#repRec`). Reported as *"generated video only makes a 2 second video
+  despite the replay being for a full match"*, with the file attached: **1.60s**, 94 H.264
+  samples at 60fps, 1007×2129 — a phone.
+  ⚠️ **A FILMED EXPORT IS AN UNCONTROLLED REPLAY, which is the whole of the bug.** It plays
+  with the transport down, so `replay.controls` is false — and all three "skip an
+  uncontrolled replay" paths therefore ended the RECORDING: `onDown`'s
+  `if (!replay.controls) skipReplay()`, `keydown`'s bare `else skipReplay()`, and
+  `playReplay`'s `!replay.controls && idx > 4 && anyPadPressed()`. Measured on the shipped
+  build, a **20-second** match export: **1.53s** from one tap, **1.54s** from one keypress,
+  against **20.04s** left alone. All three consult `replay.filming` now — the flag that
+  already existed for the caption, one layer up.
+  ⚠️ **AND IT REPORTED "✓ Video saved" EVERY TIME, which is why it survived.** `why` came
+  back `''` on a truncated file, so the export always claimed success and nothing anywhere
+  said a recording had been cut short. A stopped one says so now, and still hands the
+  partial file over — it is what the player asked to keep.
+  ⚠️ **THE DOCUMENT AND THE PLAYBACK WERE BOTH INNOCENT, and checking them first is what
+  stopped a day going into the encoder.** 1200 steps of 2v2 gives a doc of **600 frames at
+  30fps**, `repDecodeFrames` returns 600, and `playReplayFile(doc, 1)` takes **exactly 20.0s**.
+  The frame count, the fps, `REPMATCH`'s halving and the codec list are all fine.
+  ⚠️ **THE BAR AND THE GUARDS ARE ONE CHANGE, and shipping the guards alone would have been
+  the worse bug.** A match export runs for the length of the match with the transport gone;
+  made un-tappable and silent, that is indistinguishable from a hung game — and it is
+  precisely because nothing said a recording was running that somebody taps. `#repRec` gives
+  it a name, a clock (`0:07 / 5:00`) and **one deliberate way out**, which is the no-dead-ends
+  rule applied to the thing just made un-tappable. Escape is the keyboard's, because it is
+  deliberate, named, and already the transport's own stop key.
+  ⚠️ **IT IS DOM, NEVER PAINTED ON THE CANVAS.** `captureStream` films the canvas, so a
+  recording indicator drawn on the pitch would be baked into the file for ever — the same
+  trap `replay.filming` exists to keep the "TAP TO SKIP" caption out of, wearing a different
+  word. Outside `#hud`, like `#repCtl`, because playback hides the HUD; and at the TOP,
+  because the transport is at the bottom and a Stop button where a Pause button lives is a
+  mis-press waiting to happen.
+  ⚠️ **`repRecSync` writes only when the whole SECOND changes** — it is called from the
+  replay's own tick, once a frame, which is `syncTiltUI`'s rule. It is ticked from there
+  rather than off a clock of its own because `idx` and the frame count are already there,
+  and a second clock is a second answer to how far through we are.
+  ⚠️ **THE CONTROL IS THE LOAD-BEARING HALF: an ordinary uncontrolled replay must STILL be
+  skippable by a tap.** *"Filming ignores input"* is equally true of a build where nothing
+  can ever be skipped, which takes the goal replay's one-gesture skip away — a worse bug,
+  and invisible to every other check. Sabotaged that way (`if (replay.active) return;`) only
+  `plainStillSkippable` goes red.
+  ⚠️ **Six sabotages, each caught by its own check**: the three input guards separately, the
+  over-correction above, the bar never showing (`barShown` **and** `stopReachable`), and a
+  stopped recording claiming it saved. The Stop button is pressed by hit-testing its centre
+  with `elementFromPoint`, never `.click()`, which does no hit testing and passes over a
+  control nothing can reach. `tests/filmrec.mjs`, on a PHONE viewport — where it was
+  reported, and where a stray tap is likeliest.
   ⚠️ **AND NEVER INTO AN EXPORTED VIDEO** (`replay.filming`). `captureStream` films the
   canvas, so anything drawn there is baked into the file for ever — "▶ REPLAY / TAP TO
   SKIP" across a clip you are about to send someone, telling them to press a screen that
@@ -6291,7 +6339,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 131 suites IN PARALLEL (~450s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 132 suites IN PARALLEL (~500s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
