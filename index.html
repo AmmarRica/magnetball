@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260902.1015PM';
+const VERSION = '20260903.0210AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260902.1015PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260903.0210AM', title: 'Saved videos are MP4 again',
+    changed: [
+      '<b>Videos are saved as MP4 wherever your browser can make one</b>, which is what Instagram and the rest will accept — the faster encoder added last time wrote a .webm, and a .webm is a file most places refuse and an iPhone will not even take into Photos. The fast encoder is still used where MP4 was never possible anyway, so nothing got slower for anyone who could not post the file regardless. If a video does come out as .webm, it now says so instead of just saying it saved.',
+      '<b>The word REPLAY really is out of saved videos now.</b> It was kept off every frame that gets drawn during a recording, but the recording opened on whatever was on screen the instant you pressed the button — which after a goal is the replay you were just watching. On a short clip that was most of what you saw.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260902.1015PM', title: 'Video export no longer plays the match out',
     changed: [
       '<b>Exporting a replay as a video used to take as long as the thing you were exporting.</b> A five-minute match meant five minutes of watching it play back. It is encoded directly now \u2014 measured at <b>10\u00d7 real time</b>, so forty seconds of match takes about four \u2014 and the file downloads when it is done.',
@@ -20083,15 +20090,40 @@ async function repFastExport(doc, speed, onProgress){
   if (!blob || !blob.size) return null;
   return { blob, stopped };
 }
+// Let go of a capture stream we are not going to record with. A `captureStream` track
+// keeps the canvas being read every frame until it is stopped, so building one to ask a
+// question and walking away leaves that cost on every frame for the rest of the session.
+function repDropStream(stream){
+  if (!stream) return;
+  try { stream.getTracks().forEach(t => t.stop()); } catch(e){}
+}
 async function recordAndShareClip(btn, play, stem, doc, speed){
   play = play || (() => playReplay(0.7));
+  let stream = null, rec = null;
   try {
-    // ⚠️ **THE FAST PATH IS TRIED FIRST AND MAY ALWAYS DECLINE.** It needs the DOCUMENT
-    // rather than a playback closure — a `play()` is a thing that takes time by
-    // construction, which is exactly what is being removed — so every caller hands one
-    // over and the real-time recorder stays as the fallback for browsers with no
-    // `VideoEncoder`. `null` back from here is "cannot", never "failed".
-    if (doc && repFastPossible()){
+    // ⚠️ **THE CONTAINER DECIDES WHICH PATH RUNS, AND THE CONTAINER IS THE WHOLE POINT OF
+    // THE FILE.** A video nobody can post is not a saved video: Instagram takes MP4/H.264
+    // and MOV, and on iOS a `.webm` will not even import into Photos, so it never reaches
+    // the picker. The offline encoder is fast — 10.3x measured — but it writes WebM,
+    // because `VideoEncoder` hands back naked frames and the only muxer in this file is
+    // `webmMux`. So the two paths are ordered by what comes OUT rather than by speed:
+    // **an MP4 beats a fast WebM every time**, and the fast path runs only where no MP4
+    // was ever on offer — where it costs the player nothing and buys them the speed.
+    // ⚠️ THE RECORDER IS BUILT FIRST BECAUSE ITS `mimeType` IS THE ONLY TRUTHFUL ANSWER.
+    // `isTypeSupported('video/mp4')` returns **true in a browser with no H.264 encoder at
+    // all** — measured here — and what comes back is `video/mp4;codecs=vp9`, which is the
+    // trap `repBadMux` exists for. `repMakeRecorder` already walks the list and checks
+    // what it got, so asking it is asking the one owner rather than re-deriving the answer.
+    if (cv.captureStream && window.MediaRecorder){
+      stream = cv.captureStream(60);
+      rec = repMakeRecorder(stream);
+    }
+    const canMp4 = !!rec && repClipExt(rec.mimeType) === 'mp4';
+    // ⚠️ **THE FAST PATH MAY ALWAYS DECLINE.** It needs the DOCUMENT rather than a playback
+    // closure — a `play()` is a thing that takes time by construction, which is exactly
+    // what is being removed — so every caller hands one over and the real-time recorder
+    // stays as the fallback. `null` back from here is "cannot", never "failed".
+    if (!canMp4 && doc && repFastPossible()){
       replay.filming = true;
       repRecShow('Encoding');
       let fast = null;
@@ -20099,6 +20131,7 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
         fast = await repFastExport(doc, speed, (i, n, fps) => repRecSync(i, n, fps));
       } finally { replay.filming = false; repRecHide(); }
       if (fast){
+        repDropStream(stream); stream = null; rec = null;
         const cut = !!replay.filmStopped; replay.filmStopped = false;
         const file = new File([fast.blob], repClipName('webm', stem), { type: fast.blob.type });
         return await clipHandOver(file, cut);
@@ -20112,12 +20145,30 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
       await play();
       return '⚠ No video support — use Save replay';
     }
-    const stream = cv.captureStream(60);
-    const rec = repMakeRecorder(stream);
     if (!rec) return '⚠ No video support — use Save replay';
     const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise(r => rec.onstop = r);
     if (btn) btn.textContent = '● REC';
+    // ⚠️ **THE STREAM'S FIRST FRAME IS THE CANVAS AS IT ALREADY IS, and that frame is not
+    // part of the replay at all.** `captureStream` publishes the current content the moment
+    // recording starts, so whatever the page last drew is frame one of the file — and after
+    // a goal the page last drew the auto-replay, caption and all. Measured on a produced
+    // file: frame 0 sat **728** from the stale captioned frame against **1233** from that
+    // same frame without the caption and **1815** from where the replay actually starts, on
+    // a noise floor of 238. So "▶ REPLAY / TAP TO SKIP" was in the exported video after
+    // all — not because the painter drew it during the recording, but because the recording
+    // opened on a picture taken before it began. On a short clip that frame is a large
+    // share of what anybody sees, which is why it was reported off a 1.6-second file.
+    // ⚠️ Cleared to the SURROUND colour, which is the border the video already has, so the
+    // one frame at the head reads as the picture starting rather than as a glitch.
+    // ⚠️ At identity transform: `pitchXform` and the tilt are live on `ctx`, so a rect in
+    // the current frame is a rotated rect that leaves the screen corners untouched — the
+    // same trap the YouTube layer's punch records.
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = (TH && TH.fieldBg) || '#000';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.restore();
     rec.start(250);                       // emit chunks periodically
     // ⚠️ **THE ONE PLACE THE CAPTION IS SUPPRESSED, because it is the one place all three
     // exports go through** — Save clip, Save match clip and the transport's Video button.
@@ -20141,12 +20192,22 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     const file = new File([blob], repClipName(repClipExt(blob.type), stem), { type: blob.type });
     return await clipHandOver(file, cut);
   } catch(e){ return '⚠ Could not record — use Save replay'; }
+  finally { repDropStream(stream); }
 }
 // ⚠️ ONE owner for what happens to a finished file, because there are two ways of making
 // one now — the offline encoder and the real-time recorder — and a second copy of the
 // share-then-download dance is a second place for "it saved" to be claimed wrongly.
 async function clipHandOver(file, cut){
-  const done = cut ? '· Stopped — partial video saved' : '';
+  // ⚠️ **A `.webm` IS SAID OUT LOUD, because "✓ Video saved" over a file the player cannot
+  // post is the same silence the truncated recording shipped behind.** Every path here now
+  // makes an MP4 wherever the browser can, so reaching this line means H.264 was not on
+  // offer at all — and the player is going to find that out when the upload refuses the
+  // file, which is the worst possible moment. Derived from the NAME, so there is one place
+  // that decides what the file is called and one reading of it.
+  const notes = [];
+  if (cut) notes.push('Stopped — partial video saved');
+  if (!/\.mp4$/i.test(file.name)) notes.push('saved as .webm — this browser cannot make MP4');
+  const done = notes.length ? '· ' + notes.join(' · ') : '';
   if (navigator.canShare && navigator.canShare({ files:[file] })){
     try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
     catch(e){

@@ -1140,7 +1140,9 @@ const mv = await vpage.evaluate(async () => {
   } finally {
     HTMLAnchorElement.prototype.click = realClick; URL.createObjectURL = realURL;
   }
-  o.made = o.reason === '' && o.blobs === 1 && o.bytes > 20000;
+  // ⚠️ NOT `reason === ''`: an export now names the container when the browser could
+  // only make a `.webm`. That is a fact about the file — a warning or a truncation is not.
+  o.made = !/⚠|Stopped/.test(o.reason || '') && o.blobs === 1 && o.bytes > 20000;
   o.namedMatch = /magnetball-match-/.test(o.name || '') && !M.repBadMux(o.type);
   return o;
 });

@@ -3466,15 +3466,38 @@ three lines a second time, name it.
   ⚠️ **THE PRICE IS A CONTAINER, because `VideoEncoder` hands back naked frames.** Nothing
   muxes them for you and the alternative is an npm package, which is the argument the QR
   encoder already settled. `webmMux` is ~120 lines of EBML.
-  ⚠️ **THE FAST PATH WRITES WebM, AND THAT IS A REAL TRADE-OFF RATHER THAN A FREE WIN.**
-  The real-time path produces **MP4/H.264** on a phone (the reported file was `avc1`), and
-  `REPCODECS` records why that matters — QuickTime, iOS Photos and most editors refuse
-  anything else. WebM is what this environment can *also decode and independently verify*,
-  and **H.264 is not testable here at all**: `VideoEncoder.isConfigSupported` refuses every
-  `avc1.*` string in the Playwright Chromium, which is the same missing proprietary codec
-  that stopped it decoding the reported `.mp4`. An MP4 muxer written against that would be
-  shipped unverified, which is the one thing this file forbids. **Flagged to the owner
-  rather than decided quietly.**
+  ⚠️ **THE FAST PATH WRITES WebM, SO IT IS NO LONGER TRIED FIRST — THE CONTAINER OUTRANKS
+  THE SPEED, and this REVERSES the order this entry shipped with.** It was flagged rather
+  than decided quietly, and the owner decided: *"this feature is not that important then.
+  Let us focus on .mp4. Also ensure that all the videos made can be uploaded to
+  instagram."* Instagram takes MP4/H.264 and MOV; on iOS a `.webm` will not even import
+  into Photos, so it never reaches the picker. **A video nobody can post is not a saved
+  video**, and Chrome on Android has `VideoEncoder` with VP9 — so trying the fast path
+  first meant every export on the reporter's own phone came out fast, correctly timed and
+  unpostable, where the real-time path had been producing `avc1`/MP4.
+  ⚠️ So `recordAndShareClip` asks **what comes OUT**, and the fast path runs only where no
+  MP4 was on offer anyway — where it costs the player nothing and buys them the 10.3×. The
+  offline encoder is therefore still shipped, still tested, and simply no longer able to
+  take an MP4 away from anybody.
+  ⚠️ **THE RECORDER IS BUILT BEFORE THE QUESTION IS ASKED, because `rec.mimeType` is the
+  only truthful answer.** `MediaRecorder.isTypeSupported('video/mp4')` returns **true in a
+  browser with no H.264 encoder at all** — measured in this environment — and what comes
+  back is `video/mp4;codecs=vp9`, the trap `repBadMux` already exists for. `repMakeRecorder`
+  walks the list and checks what it got, so `repClipExt(rec.mimeType) === 'mp4'` asks the
+  one owner rather than re-deriving the answer. A stream built to ask and then not used is
+  **stopped** (`repDropStream`): a `captureStream` track has the canvas read every frame
+  until it is.
+  ⚠️ **AND A `.webm` IS SAID OUT LOUD** (`clipHandOver`). Reaching that line now means
+  H.264 was not on offer at all, and the player would otherwise find out when the upload
+  refuses the file — the worst possible moment. Derived from the file NAME, so one place
+  decides what a file is called and one place reads it. Four suites asserted `why === ''`
+  and now assert **no warning and no truncation** (`!/⚠|Stopped/`) instead: the note is a
+  fact about the file, not a failure.
+  ⚠️ **WRITING AN MP4 MUXER IS STILL THE ONLY WAY TO HAVE BOTH, AND IT REMAINS UNVERIFIABLE
+  HERE.** `VideoEncoder.isConfigSupported` refuses every `avc1.*` string in the Playwright
+  Chromium, and the bundled ffmpeg has no H.264 decoder — the same missing proprietary
+  codec that stopped it decoding the reported `.mp4`. An MP4 muxer written against that
+  would be shipped unverified, which is the one thing this file forbids. `tests/clipfile.mjs`.
   ⚠️ **WHERE THE FAST PATH CANNOT RUN THE OLD ONE STILL DOES, and there are TWO ways it
   declines** — no `VideoEncoder` at all, and an encoder that refuses the configuration.
   `null` back from `repFastExport` means "cannot", never "failed", so this can add speed and
@@ -3536,6 +3559,40 @@ three lines a second time, name it.
   keeps its caption. `tests/replayfile.mjs` holds all three: the painter obeys the flag,
   something actually raises it, and it comes down on a throw. Sabotage any one and only
   that one's check goes red.
+  ⚠️ **AND THE FLAG WAS NOT THE WHOLE FIX — THE CAPTION WAS STILL IN THE FILE, PUT THERE BY
+  A FRAME THE PAINTER NEVER DREW.** Reported again eight days after the flag shipped, and
+  the flag was innocent: every frame `drawReplayFrame` paints during a recording is clean.
+  **`captureStream` publishes the canvas AS IT ALREADY IS the moment recording starts**, so
+  whatever the page last drew is frame one of the file — and after a goal the page last drew
+  the auto-replay, caption and all. Measured on a produced file: frame 0 sat **728** from
+  the stale captioned frame against **1233** from that same frame without the caption and
+  **1815** from where the replay actually starts, on a noise floor of **238**. The recording
+  opened on a picture taken before it began. On a short clip — and the reported file was
+  **1.60s**, truncated by the stray tap one entry along — that one frame is a large share of
+  everything anybody sees.
+  ⚠️ **THE FIX IS TO CLEAR THE CANVAS BEFORE `rec.start()`**, to `TH.fieldBg` — the surround
+  the video already has, so the head frame reads as the picture starting rather than as a
+  glitch — and **at identity transform**, because `pitchXform` and the tilt are live on
+  `ctx` and a rect in the current frame is a rotated rect that leaves the screen corners
+  untouched (the YouTube layer's punch records the same trap). Frame 0 now measures
+  **13570 / 13724 / 13792** against the three references: a flat fill, matching nothing.
+  ⚠️ **THE OFFLINE ENCODER NEVER HAD THIS**, which is worth knowing before anybody "fixes"
+  it there too: it renders every frame itself with `filming` already set and hands the
+  encoder that frame, so there is no stale canvas to publish.
+  ⚠️ **THE DETECTOR NEEDS A MARGIN, NOT A NEAREST-NEIGHBOUR, and nearest-neighbour is what
+  gets written first.** Once the head frame is a flat fill it is far from everything, and
+  "which reference is nearest" then picks the captioned one by **one percent** — noise
+  reporting a caption. A caption counts as present only when the captioned reference wins by
+  a real margin: **41% on the broken build, 1% on the fixed one**.
+  ⚠️ **AND THE DETECTOR IS CONTROLLED IN THE SAME RUN** against a locally rendered captioned
+  frame — *"no caption found"* is equally true of a detector that can never find one.
+  ⚠️ **Two probes were VACUOUS before one worked**, both for the reason recorded below: a
+  brightness count over the middle band reads the halfway line and the centre circle and
+  scored **2095 / 2097 / 2165** for caption-on, caption-off and menu-replay alike; and a
+  cyan count reads **359 without the caption against 342 with it**, because `TH.accent` is
+  not cyan on the grass palette. What works is comparing a decoded frame against the SAME
+  frame rendered locally both ways — compression noise is common to both comparisons, so it
+  cancels. `tests/clipfile.mjs`.
   ⚠️ **No "▶ REPLAY" caption over it.** The label exists to explain a replay that cut in by
   itself; on one you opened it is a word sitting on top of what you came to watch.
   ⚠️ `tests/replayfile.mjs` measures the caption as a **DIFFERENCE** between the same frame
@@ -6411,11 +6468,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 133 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 134 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **128 green + proladder red**, and `proladder` going green means the
+green run is therefore **133 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

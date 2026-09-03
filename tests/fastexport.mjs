@@ -91,7 +91,11 @@ const o = await p.evaluate(async ()=>{
   o.fastWhy = fast.why; o.fastName = fast.name; o.fastBytes = fast.bytes;
   o.speedup = +(o.contentSecs / Math.max(0.01, o.fastWall)).toFixed(1);
   o.fasterThanRealTime = o.fastWall < o.contentSecs * 0.6;
-  o.saysSaved = fast.why === '';
+  // ⚠️ NOT `why === ''` any more: every export now says so when the file it made is a
+  // `.webm`, because this browser has no H.264 encoder and a WebM cannot be posted to
+  // Instagram. That note is a FACT about the file, not a failure — what must not appear
+  // is a warning or a truncation.
+  o.saysSaved = !/⚠|Stopped/.test(fast.why || '');
   if (fast.blob){
     const r = await probeFile(fast.blob, 1, o.contentSecs - 2);
     o.fastFile = r;
@@ -119,7 +123,7 @@ const o = await p.evaluate(async ()=>{
     const slow = await grab(() => M.saveMatchClip(null));
     o.slowWall = +((performance.now()-t1)/1000).toFixed(2);
     o.slowName = slow.name; o.slowBytes = slow.bytes;
-    o.fallbackSaves = !!slow.bytes && slow.bytes > 0 && slow.why === '';
+    o.fallbackSaves = !!slow.bytes && slow.bytes > 0 && !/⚠|Stopped/.test(slow.why || '');
     // ⚠️ ...and it is REAL TIME, which is what says the fallback really is the old path
     // rather than the fast one under another name.
     o.fallbackIsRealTime = o.slowWall > 2.0;
@@ -139,7 +143,7 @@ const o = await p.evaluate(async ()=>{
     const t3 = performance.now();
     const refused = await grab(() => M.saveMatchClip(null));
     o.refusedWall = +((performance.now()-t3)/1000).toFixed(2);
-    o.refusedSaves = !!refused.bytes && refused.bytes > 0 && refused.why === '';
+    o.refusedSaves = !!refused.bytes && refused.bytes > 0 && !/⚠|Stopped/.test(refused.why || '');
     o.refusedIsRealTime = o.refusedWall > 2.0;
   } finally { VideoEncoder.isConfigSupported = ICS; }
 

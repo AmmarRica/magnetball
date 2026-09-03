@@ -115,7 +115,9 @@ const o = await p.evaluate(async ()=>{
   // ⚠️ ...and it is REPORTED as stopped. Saying "✓ Video saved" over a truncated file is
   // how the original defect stayed invisible: the export always claimed success.
   o.stopSaysSo = /Stopped/.test(o.stopped.why || '');
-  o.cleanSaysSaved = o.clean.why === '';
+  // ⚠️ NOT `why === ''`: an export now names the container when it could only make a
+  // `.webm`. That is a fact about the file; a warning or a truncation is not.
+  o.cleanSaysSaved = !/⚠|Stopped/.test(o.clean.why || '');
   // A stopped recording still hands the partial file over — it is what was asked to be kept.
   o.stopStillSaves = !!o.stopped.bytes && o.stopped.bytes > 0;
 
