@@ -5852,6 +5852,64 @@ three lines a second time, name it.
   3.2, because the encoder spends it only where the picture changes and a pitch is mostly
   still. Left to itself MediaRecorder picks ~2.5Mbps, and flat colour with hard edges is
   the worst case for that.
+- **THE MP4 A RECORDER HANDS BACK SAYS IT IS ZERO SECONDS LONG** (`mp4Remux`, `mp4Fixup`,
+  `mp4Kids`, `MP4_DUR_AT`). Reported as *"why is video not showing as full regular video
+  when I try to pick it to post to insta"*, and the file was the evidence: **4,286 frames =
+  91.3 seconds** of real video in a 13.8MB file whose `mvhd` duration is **0** and whose
+  `mdhd` duration is **1664/30000 = 0.055s**.
+  ⚠️ **`MediaRecorder` WRITES A STREAMING FRAGMENTED MP4, and that is the whole cause.** It
+  cannot know the length while it is recording, so it writes 0 into the movie header, never
+  returns to correct it, and appends no `mfra` index either — 48 `moof`/`mdat` pairs with
+  `mvex`/`trex` up top. An app that reads the container sees a zero-length clip and shows it
+  as broken or refuses it. This is a property of the API, not of this code.
+  ⚠️ **EVERY EXISTING CHECK WAS BLIND TO IT, AND NOT BY BAD LUCK.** Chrome plays the file
+  perfectly by scanning fragments, so `clipfile`, `filmrec`, `fastexport` and `replayfile` —
+  which decode frames, count them and measure playback length — all pass on the broken file.
+  **The defect exists only in the DECLARED metadata**, so the only check that can see it
+  reads the bytes.
+  ⚠️ **THE ASPECT RATIO WAS THE FIRST DIAGNOSIS AND IT WAS WRONG — a withdrawn claim.** A
+  phone-shaped export is 1170 × 2532 = **0.462**, against Instagram's tallest 0.5625 (9:16)
+  and widest 1.91; the reported file is 1007 × 1861 = **0.541**. That is real, is worth
+  fixing, and is NOT what was reported — a few percent of crop, not a file the picker will
+  not take. It is written down because it is the plausible answer somebody reaches for, and
+  because reaching for it cost a round trip.
+  ⚠️ **A REMUX NEEDS NO H.264 ENCODER OR DECODER**, which is exactly why this is verifiable
+  here when an MP4 muxer for `VideoEncoder` output is not: the compressed samples are copied
+  through untouched and only the tables are rebuilt. So the load-bearing check is a **BYTE
+  COMPARE of the video payload** — *the picture is unchanged* is measured rather than
+  asserted. Measured end to end on the reported file through the shipped in-page function:
+  **22ms** for 14MB, output byte-identical to a separately written Node prototype, and the
+  file grows **0.08%** (the sample tables).
+  ⚠️ **VERSION 1 IS THE ORDINARY CASE HERE, NOT THE EXOTIC ONE, and assuming otherwise does
+  not miss a field — it OVERWRITES A DIFFERENT ONE.** MediaRecorder writes v1 (64-bit times)
+  for `mvhd`, `tkhd` and `mdhd` alike. `tkhd`'s duration sits at **+28 in v0 and +36 in v1**,
+  and +28 in v1 is `track_ID`; the first build wrote there and silently destroyed the track.
+  `MP4_DUR_AT` spells the offsets out per (box, version) rather than deriving them, because
+  the derivation is what got it wrong. The check is a **byte-diff of each header box**:
+  exactly three bytes may change, all inside the duration field.
+  ⚠️ **`mvex` IS DROPPED.** It is what declares the movie fragmented, and the output is not;
+  left in, a reader can still expect fragments that are no longer there.
+  ⚠️ **ONE chunk holding every sample**, so `stco` is a single entry — which means the mdat
+  offset can be filled in on a second `build()` pass without any box changing size. Guarded
+  at 4GB, where `co64` would be needed instead.
+  ⚠️ **`stss` IS OMITTED WHEN EVERY SAMPLE IS A SYNC SAMPLE**, because that is what its
+  absence means; emitting a full list instead is legal and says less.
+  ⚠️ **IT MAY NEVER COST SOMEBODY A FILE.** `null` from `mp4Remux` means *cannot*, never
+  *failed*, and `mp4Fixup` hands the original blob straight back for a WebM, for anything it
+  cannot parse, and on a throw. A remux may add a correct duration and may never lose a
+  recording — sabotaged the other way, only `keep_badMp4Survives` goes red.
+  ⚠️ **THE FIXTURE IS SYNTHETIC AND HAS TO STAY FAITHFUL** — a 14MB fixture is not committed,
+  so `tests/clipvalid.mjs` builds a fragmented MP4 to what MediaRecorder actually emits (v1
+  headers, `default-base-is-moof`, per-sample duration/size/flags in `trun`) and feeds in
+  **both v1 and v0**: a v0-only fixture cannot see the `tkhd` bug at all.
+  ⚠️ **AND THE WIRING IS CHECKED SEPARATELY FROM THE FUNCTION**, with a stand-in
+  `MediaRecorder` that emits a genuine fragmented MP4 in chunks — this Chromium has no H.264
+  encoder and cannot produce one — so the real `recordAndShareClip` is driven and its
+  download inspected. Sabotaging the call site alone reddens only the `wire_*` checks.
+  ⚠️ **Six sabotages, each caught by its own check.** One of them (`mediaDur = 0`) was
+  invalid JS on the first attempt and the run printed nothing at all rather than failing —
+  a sabotage that does not parse proves nothing, the same trap the "verify the sabotage
+  applied" rule records. `tests/clipvalid.mjs`.
 - **THE WHOLE MATCH AS A VIDEO** (`saveMatchClip`). Its own button beside Save clip, not a
   state of it: a goal clip is a few seconds and a match is however long the match was,
   played back in full to film it — so the label says so, because a button that appears to
@@ -6468,11 +6526,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 134 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 135 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **133 green + proladder red**, and `proladder` going green means the
+green run is therefore **134 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

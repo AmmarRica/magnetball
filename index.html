@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260903.0210AM';
+const VERSION = '20260903.0355AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260903.0210AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260903.0355AM', title: 'Saved videos work in Instagram',
+    changed: [
+      '<b>A saved video said it was zero seconds long.</b> Recording writes the length into the file at the end and never went back to fill it in, so a match that really ran a minute and a half claimed to be a twentieth of a second. Instagram and anything else that reads that number treated it as an empty clip, which is why it would not post. Saved videos now carry their real length.',
+      '<b>The picture is untouched by that.</b> Nothing is re-encoded, so a saved video is exactly the one you watched \u2014 same quality, and it takes no longer to save.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260903.0210AM', title: 'Saved videos are MP4 again',
     changed: [
       '<b>Videos are saved as MP4 wherever your browser can make one</b>, which is what Instagram and the rest will accept — the faster encoder added last time wrote a .webm, and a .webm is a file most places refuse and an iPhone will not even take into Photos. The fast encoder is still used where MP4 was never possible anyway, so nothing got slower for anyone who could not post the file regardless. If a video does come out as .webm, it now says so instead of just saying it saved.',
@@ -20001,6 +20008,208 @@ function webmMux(frames, opt){
   const body = ebCat([info, track].concat(clusters, [ebEl(0x1C53BB6B, ebCat(cues))]));
   return new Blob([ebCat([header, ebEl(0x18538067, body)])], { type: 'video/webm' });
 }
+// ---- the MP4 the recorder writes is FRAGMENTED, AND ITS DURATION IS ZERO --------
+// `MediaRecorder` writes a STREAMING fragmented MP4: it does not know how long the
+// recording will be while it is running, so it writes 0 into the movie header and never
+// goes back to correct it, and it appends no index at the end either. Measured on a
+// reported 13.8MB file: 4,286 frames = **91.3 seconds** of real video, with `mvhd`
+// duration **0** and `mdhd` duration **1664/30000 = 0.055s**.
+// ⚠️ **THE PICTURE WAS NEVER THE PROBLEM AND NEITHER WAS THE ASPECT RATIO** — the first
+// diagnosis was that a phone-shaped 0.462 export sits outside Instagram's 9:16, and that
+// is true and is NOT what was reported. An app that reads the container metadata sees a
+// zero-length clip and shows it as broken or refuses it, which is what
+// *"video not showing as full regular video when I try to pick it to post"* is.
+// ⚠️ **AND EVERY EXISTING CHECK WAS BLIND TO IT.** Chrome plays the file back perfectly
+// by scanning fragments, so every probe that decoded frames, counted them or measured
+// playback length passed — see `tests/clipvalid.mjs`, which reads the DECLARED duration
+// off the bytes because that is the only place the defect exists.
+// ⚠️ **A REMUX NEEDS NO H.264 ENCODER OR DECODER**, which is the whole reason this one
+// can be verified here where an MP4 *muxer* for `VideoEncoder` output could not be: the
+// compressed samples are copied through untouched and only the tables are rebuilt. The
+// suite byte-compares the payload, so "the video is unchanged" is measured rather than
+// asserted.
+const rd32b = (b,o) => ((b[o]<<24) | (b[o+1]<<16) | (b[o+2]<<8) | b[o+3]) >>> 0;
+const rd64b = (b,o) => rd32b(b,o) * 4294967296 + rd32b(b,o+4);
+function mp4U32(n){ return new Uint8Array([(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]); }
+function mp4Cat(parts){
+  let n = 0; for (const p of parts) n += p.length;
+  const out = new Uint8Array(n); let o = 0;
+  for (const p of parts){ out.set(p, o); o += p.length; }
+  return out;
+}
+function mp4Box(type, ...parts){
+  const body = mp4Cat(parts), t = new Uint8Array(4);
+  for (let i=0;i<4;i++) t[i] = type.charCodeAt(i);
+  return mp4Cat([mp4U32(body.length + 8), t, body]);
+}
+// One level of children. A `size` of 0 means "to the end", 1 means a 64-bit size follows.
+function mp4Kids(b, start, end){
+  const out = []; let o = start;
+  while (o + 8 <= end){
+    const raw = rd32b(b, o);
+    const typ = String.fromCharCode(b[o+4],b[o+5],b[o+6],b[o+7]);
+    let hdr = 8, size = raw;
+    if (raw === 1){ size = rd64b(b, o+8); hdr = 16; }
+    else if (raw === 0) size = end - o;
+    if (size < hdr || o + size > end) break;
+    out.push({ typ, start:o, size, body:o+hdr, end:o+size });
+    o += size;
+  }
+  return out;
+}
+// ⚠️ **VERSION 1 IS THE ORDINARY CASE HERE, NOT THE EXOTIC ONE.** MediaRecorder writes v1
+// for all three headers (64-bit times), and a writer that assumes v0 does not merely miss
+// the duration — it writes over a DIFFERENT FIELD. Caught exactly that way while building
+// this: the first version put `tkhd`'s duration at +28, which is v0's slot and v1's
+// `track_ID` + `reserved`. Spelled out per (box, version) rather than derived, because
+// the derivation is what got it wrong.
+const MP4_DUR_AT = {
+  mvhd: [24, 32],   // version/flags, creation, modification, timescale, DURATION
+  tkhd: [28, 36],   // version/flags, creation, modification, track_ID, reserved, DURATION
+  mdhd: [24, 32],   // version/flags, creation, modification, timescale, DURATION
+};
+// Fragmented MP4 in, progressive MP4 with a true duration out. `null` means "cannot",
+// never "failed" — every caller keeps the original file on null.
+function mp4Remux(buf){
+  const pick = (l,t) => l.find(x => x.typ === t);
+  const cut  = (x) => buf.subarray(x.start, x.end);
+  const top  = mp4Kids(buf, 0, buf.length);
+  const ftyp = pick(top,'ftyp'), moov = pick(top,'moov');
+  if (!ftyp || !moov) return null;
+  const mvL = mp4Kids(buf, moov.body, moov.end);
+  const mvhd = pick(mvL,'mvhd'), trak = pick(mvL,'trak');
+  if (!mvhd || !trak) return null;
+  const trL = mp4Kids(buf, trak.body, trak.end);
+  const tkhd = pick(trL,'tkhd'), mdia = pick(trL,'mdia');
+  if (!tkhd || !mdia) return null;
+  const mdL = mp4Kids(buf, mdia.body, mdia.end);
+  const mdhd = pick(mdL,'mdhd'), minf = pick(mdL,'minf');
+  if (!mdhd || !minf) return null;
+  const mnL = mp4Kids(buf, minf.body, minf.end);
+  const stbl = pick(mnL,'stbl');
+  if (!stbl) return null;
+  const stsd = pick(mp4Kids(buf, stbl.body, stbl.end), 'stsd');
+  if (!stsd) return null;
+  const movieTs = rd32b(buf, mvhd.body + (buf[mvhd.body] ? 20 : 12));
+  const mediaTs = rd32b(buf, mdhd.body + (buf[mdhd.body] ? 20 : 12));
+  if (!movieTs || !mediaTs) return null;
+
+  // Every sample out of every fragment, in order.
+  const samples = []; let anyCto = false;
+  for (const f of top){
+    if (f.typ !== 'moof') continue;
+    for (const tf of mp4Kids(buf, f.body, f.end)){
+      if (tf.typ !== 'traf') continue;
+      // ⚠️ With no explicit base offset the data is relative to the MOOF, which is what
+      // `default-base-is-moof` means and what MediaRecorder emits.
+      let base = f.start, dDur = 0, dSize = 0, dFlags = 0;
+      const kids = mp4Kids(buf, tf.body, tf.end), tfhd = pick(kids,'tfhd');
+      if (tfhd){
+        const fl = rd32b(buf, tfhd.body) & 0xffffff;
+        let r = tfhd.body + 8;
+        if (fl & 0x01){ base = rd64b(buf, r); r += 8; }
+        if (fl & 0x02) r += 4;
+        if (fl & 0x08){ dDur   = rd32b(buf, r); r += 4; }
+        if (fl & 0x10){ dSize  = rd32b(buf, r); r += 4; }
+        if (fl & 0x20){ dFlags = rd32b(buf, r); r += 4; }
+      }
+      for (const tr of kids){
+        if (tr.typ !== 'trun') continue;
+        const fl = rd32b(buf, tr.body) & 0xffffff, cnt = rd32b(buf, tr.body + 4);
+        let r = tr.body + 8, dataOff = 0, firstFlags = null;
+        if (fl & 0x001){ dataOff = rd32b(buf, r) | 0; r += 4; }   // signed
+        if (fl & 0x004){ firstFlags = rd32b(buf, r); r += 4; }
+        let p = base + dataOff;
+        for (let i = 0; i < cnt; i++){
+          let dur = dDur, size = dSize, flags = dFlags, cto = 0;
+          if (fl & 0x100){ dur   = rd32b(buf, r); r += 4; }
+          if (fl & 0x200){ size  = rd32b(buf, r); r += 4; }
+          if (fl & 0x400){ flags = rd32b(buf, r); r += 4; }
+          if (fl & 0x800){ cto   = rd32b(buf, r) | 0; r += 4; }
+          if (i === 0 && firstFlags != null) flags = firstFlags;
+          if (cto) anyCto = true;
+          samples.push({ off:p, size, dur, sync: !(flags & 0x00010000), cto });
+          p += size;
+        }
+      }
+    }
+  }
+  if (!samples.length) return null;
+  const mediaDur = samples.reduce((s,x) => s + x.dur, 0);
+  if (!mediaDur) return null;
+  const movieDur = Math.round(mediaDur * movieTs / mediaTs);
+
+  const runs = (get) => {
+    const out = [];
+    for (const s of samples){
+      const last = out[out.length-1], v = get(s);
+      if (last && last[1] === v) last[0]++; else out.push([1, v]);
+    }
+    return out;
+  };
+  const sttsR = runs(s => s.dur);
+  const sttsBox = mp4Box('stts', mp4U32(0), mp4U32(sttsR.length),
+    mp4Cat(sttsR.map(([c,v]) => mp4Cat([mp4U32(c), mp4U32(v)]))));
+  const syncs = []; samples.forEach((s,i) => { if (s.sync) syncs.push(i+1); });   // 1-based
+  // ⚠️ Omitted when EVERY sample is a sync sample — that is what its absence means.
+  const stssBox = (syncs.length && syncs.length < samples.length)
+    ? mp4Box('stss', mp4U32(0), mp4U32(syncs.length), mp4Cat(syncs.map(mp4U32))) : null;
+  const cttsR = anyCto ? runs(s => s.cto) : null;
+  const cttsBox = cttsR ? mp4Box('ctts', mp4U32(0), mp4U32(cttsR.length),
+    mp4Cat(cttsR.map(([c,v]) => mp4Cat([mp4U32(c), mp4U32(v >>> 0)])))) : null;
+  // ⚠️ ONE chunk holding every sample in order. Legal, and it keeps `stco` to a single
+  // entry — so the offset can be filled in on a second pass without any box changing size.
+  const stscBox = mp4Box('stsc', mp4U32(0), mp4U32(1), mp4U32(1), mp4U32(samples.length), mp4U32(1));
+  const stszBox = mp4Box('stsz', mp4U32(0), mp4U32(0), mp4U32(samples.length),
+    mp4Cat(samples.map(s => mp4U32(s.size))));
+  const payload = samples.reduce((s,x) => s + x.size, 0);
+
+  function withDur(src, dur){
+    const out = cut(src).slice();
+    const ver = out[8] ? 1 : 0, at = MP4_DUR_AT[src.typ][ver];
+    if (ver){ out.set(mp4U32(Math.floor(dur / 4294967296)), at); out.set(mp4U32(dur >>> 0), at + 4); }
+    else out.set(mp4U32(dur), at);
+    return out;
+  }
+  const build = (chunkOff) => {
+    const stblNew = mp4Box('stbl', cut(stsd), sttsBox,
+      ...(cttsBox ? [cttsBox] : []), ...(stssBox ? [stssBox] : []),
+      stscBox, stszBox, mp4Box('stco', mp4U32(0), mp4U32(1), mp4U32(chunkOff)));
+    const minfNew = mp4Box('minf',
+      ...mp4Kids(buf, minf.body, minf.end).filter(x => x.typ !== 'stbl').map(cut), stblNew);
+    const mdiaNew = mp4Box('mdia', ...mp4Kids(buf, mdia.body, mdia.end).map(x =>
+      x.typ === 'mdhd' ? withDur(x, mediaDur) : x.typ === 'minf' ? minfNew : cut(x)));
+    const trakNew = mp4Box('trak', ...mp4Kids(buf, trak.body, trak.end).map(x =>
+      x.typ === 'tkhd' ? withDur(x, movieDur) : x.typ === 'mdia' ? mdiaNew : cut(x)));
+    // ⚠️ `mvex` is DROPPED: it is what declares the movie fragmented, and this one is not
+    // any more. Left in place, a reader can still expect fragments that are no longer there.
+    return mp4Box('moov', ...mp4Kids(buf, moov.body, moov.end)
+      .filter(x => x.typ !== 'mvex').map(x =>
+        x.typ === 'mvhd' ? withDur(x, movieDur) : x.typ === 'trak' ? trakNew : cut(x)));
+  };
+  const head = cut(ftyp);
+  let moovNew = build(0);
+  const chunkOff = head.length + moovNew.length + 8;      // +8 for the mdat header
+  if (chunkOff + payload > 0xffffffff) return null;       // would need co64; ~4GB of clip
+  moovNew = build(chunkOff);                              // same length, real offset
+
+  const mdat = new Uint8Array(payload + 8);
+  mdat.set(mp4U32(payload + 8), 0);
+  mdat.set([0x6d,0x64,0x61,0x74], 4);                     // 'mdat'
+  let o = 8;
+  for (const s of samples){ mdat.set(buf.subarray(s.off, s.off + s.size), o); o += s.size; }
+  return mp4Cat([head, moovNew, mdat]);
+}
+// The one caller-facing wrapper: hand it what the recorder produced, get back something
+// an app will accept. Anything it cannot understand comes straight back out — a remux
+// may add a correct duration and may never cost somebody their recording.
+async function mp4Fixup(blob){
+  try {
+    if (!blob || !/mp4/i.test(blob.type || '') || repBadMux(blob.type)) return blob;
+    const out = mp4Remux(new Uint8Array(await blob.arrayBuffer()));
+    return out ? new Blob([out], { type: blob.type }) : blob;
+  } catch(e){ return blob; }
+}
 // ---- the offline encoder ----------------------------------------------------
 // ⚠️ VP9 first for the picture, VP8 behind it — the same order `REPCODECS` already puts
 // them in, and for the same reason.
@@ -20187,8 +20396,14 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     const cut = !!replay.filmStopped; replay.filmStopped = false;
     try { rec.requestData(); } catch(e){}
     rec.stop(); await stopped;
-    const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
-    if (!blob.size) return '⚠ Recording came out empty';
+    const raw = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
+    if (!raw.size) return '⚠ Recording came out empty';
+    // ⚠️ **THE FILE IS NOT FINISHED WHEN THE RECORDER STOPS.** What MediaRecorder hands
+    // back for MP4 is a fragmented stream whose declared duration is ZERO — measured, 91.3
+    // seconds of video in a file that says 0.055 — so an app reading the container sees a
+    // zero-length clip. `mp4Fixup` rewrites it as a progressive MP4 with the real duration
+    // and passes the compressed video through untouched; a WebM comes back unchanged.
+    const blob = await mp4Fixup(raw);
     const file = new File([blob], repClipName(repClipExt(blob.type), stem), { type: blob.type });
     return await clipHandOver(file, cut);
   } catch(e){ return '⚠ Could not record — use Save replay'; }
@@ -33479,6 +33694,7 @@ if (window.__MAGNETDEBUG) {
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
+    mp4Remux, mp4Fixup,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
