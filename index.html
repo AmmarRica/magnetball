@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260903.0355AM';
+const VERSION = '20260903.0620AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260903.0355AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260903.0620AM', title: 'Saved videos are a shape you can post',
+    changed: [
+      '<b>A saved video used to be the shape of your screen, which nowhere will take.</b> A phone records far taller than any of them allow, so posting one meant it got cropped or padded for you — in the middle of the frame, with no idea where the pitch was. Videos now come out at a shape that can be posted as it is.',
+      '<b>The pitch is never cut to get there.</b> What gets trimmed is the empty border above and below the court, and on the long thin pitches, where there is no border to spare, the picture is eased out instead so both goals stay in. Nothing is re-sized on the shapes that were already fine.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260903.0355AM', title: 'Saved videos work in Instagram',
     changed: [
       '<b>A saved video said it was zero seconds long.</b> Recording writes the length into the file at the end and never went back to fill it in, so a match that really ran a minute and a half claimed to be a twentieth of a second. Instagram and anything else that reads that number treated it as an empty clip, which is why it would not post. Saved videos now carry their real length.',
@@ -20210,6 +20217,99 @@ async function mp4Fixup(blob){
     return out ? new Blob([out], { type: blob.type }) : blob;
   } catch(e){ return blob; }
 }
+// ---- the shape of the exported frame ----------------------------------------
+// **A SAVED VIDEO IS THE SHAPE OF THE WINDOW, AND A PHONE'S WINDOW IS TALLER THAN
+// ANYWHERE WILL TAKE IT.** The canvas is the viewport times the pixel ratio, so measured:
+// a portrait handset exports at **0.462** and the reported file at **0.542**, against the
+// 0.5625 (9:16) floor that Instagram and the rest work to — and a landscape phone at
+// **2.164** and an ultrawide desktop at **2.370** against a 1.91 ceiling. Four of the six
+// shapes people play on are outside it, and what happens to an out-of-range video is that
+// whoever it is posted to crops or pads it themselves, to the middle of the frame, with no
+// idea where the pitch is.
+// ⚠️ **ON A PHONE THE SNAP IS A CROP OF THE RESERVED BANDS, NOT OF THE PITCH.**
+// `computeCam` already holds back headroom at the top for the HUD and a band at the bottom
+// for the thumbsticks, and both are surround colour — so there the court's drawn box sits
+// entirely inside the snapped frame with hundreds of pixels of slack, and the crop is
+// **1:1, never resampled**: the file is the same pixels the game drew. Resampling it would
+// be the soft-rescale defect the whole DPR entry above is about, applied to the video
+// somebody keeps.
+// ⚠️ **BUT IT DOES NOT ALWAYS FIT, AND ASSUMING IT DID WAS WRONG — MEASURED ON EVERY FIELD
+// RATHER THAN ON CLASSIC.** Classic fits on all five shapes, which is what the first probe
+// checked and what made a pure crop look safe. Swept over all 34 courts, **five are cut on
+// an ultrawide** — `long`, `marathon`, `slim`, `endless` and `faceoff`, the long narrow ones,
+// which turn goal-to-goal and then span nearly the whole width, so trimming 2560 to 1.91
+// takes the ends off. Cutting a goal out of somebody's saved video is worse than an odd
+// aspect ratio, so where a court cannot fit the frame the picture is **scaled down until it
+// does** and the remainder is the surround it already had. That branch cannot fire on a
+// phone, which is where this was reported; it is what stops the fix being a new bug
+// somewhere else.
+// ⚠️ **AND WHERE THE SHAPE IS ALREADY IN RANGE THERE IS NO MIRROR AT ALL** — `repClipMirror`
+// returns null, both export paths use the canvas directly, and a desktop export is
+// byte-for-byte what it always was. The fallback to today's behaviour is structural rather
+// than a branch somebody has to keep right.
+const CLIPFIT = { min: 0.5625, max: 1.91 };
+// ⚠️ **THE SIZE IS A PURE FUNCTION OF THE CANVAS**, which is what lets the capture stream
+// and the encoder be set up before a single frame is drawn — only the offset below needs to
+// know where the court is, and that is not answerable until a world is installed.
+// ⚠️ EVEN DIMENSIONS: a 4:2:0 encoder refuses an odd width or height, and the canvas is
+// sized from the window, so an odd one is the ordinary case rather than a rare one.
+function clipFrameSize(W, H){
+  const a = W / H;
+  const want = Math.min(CLIPFIT.max, Math.max(CLIPFIT.min, a));
+  let w = W, h = Math.round(W / want);
+  if (h > H){ h = H; w = Math.round(H * want); }
+  return { w: Math.max(2, w & ~1), h: Math.max(2, h & ~1) };
+}
+// What part of the canvas that frame is taken from, and at what scale.
+// ⚠️ **CENTRED ON THE COURT'S OWN DRAWN BOX, NEVER ON THE CANVAS.** The two reserved bands
+// are different depths — 96px of HUD headroom against a thumbstick band that is over a
+// hundred on a phone and zero on a desktop — so the middle of the canvas is not the middle
+// of the pitch, and only the second is safe to crop around.
+// ⚠️ **`scale` IS 1 WHENEVER THE COURT FITS**, which is every shipped shape but the five
+// long courts on an ultrawide, so the ordinary export is a straight 1:1 crop and this is
+// the backstop rather than the path.
+// ⚠️ An oversized source rect is CENTRED rather than clamped: `drawImage` clips the source
+// to the canvas and scales the overlapping part into the right place, so what shows through
+// at the edges is the surround fill underneath, which is what the pitch is bordered with
+// anyway.
+function clipFramePlan(W, H, fw, fh){
+  let cx = W / 2, cy = H / 2, s = 1;
+  try {
+    if (world && world.field){
+      const f = world.field, e = f.L/2 + f.net, hw = f.W/2;
+      const pts = [[-hw,-e],[hw,-e],[-hw,e],[hw,e]].map(([a,b]) => screenPt(wx(a), wy(b)));
+      const xs = pts.map(q => q[0] * DPR), ys = pts.map(q => q[1] * DPR);
+      const L = Math.min(...xs), R = Math.max(...xs);
+      const T = Math.min(...ys), B = Math.max(...ys);
+      cx = (L + R) / 2; cy = (T + B) / 2;
+      s = Math.min(1, fw / Math.max(1, R - L), fh / Math.max(1, B - T));
+    }
+  } catch(_){}
+  const sw = fw / s, sh = fh / s;
+  const put = (c, span, lim) => span >= lim ? (lim - span) / 2
+                                            : Math.max(0, Math.min(lim - span, c - span / 2));
+  return { sx: Math.round(put(cx, sw, W)), sy: Math.round(put(cy, sh, H)),
+           sw, sh, scale: s };
+}
+// null when the canvas is already a shape that can be posted, which is the whole of the
+// "nothing changes on a desktop" guarantee.
+function repClipMirror(){
+  const W = cv.width, H = cv.height;
+  const fit = clipFrameSize(W, H);
+  if (fit.w >= W - 1 && fit.h >= H - 1) return null;
+  const m = document.createElement('canvas');
+  m.width = fit.w; m.height = fit.h;
+  return { cv: m, ctx: m.getContext('2d'), w: fit.w, h: fit.h };
+}
+function clipBlit(m){
+  const p = clipFramePlan(cv.width, cv.height, m.w, m.h);
+  m.ctx.setTransform(1,0,0,1,0,0);
+  // The surround the video already has, so an uncovered edge reads as the pitch's own
+  // border rather than as a bar.
+  m.ctx.fillStyle = (TH && TH.fieldBg) || '#000';
+  m.ctx.fillRect(0, 0, m.w, m.h);
+  m.ctx.drawImage(cv, p.sx, p.sy, p.sw, p.sh, 0, 0, m.w, m.h);
+}
 // ---- the offline encoder ----------------------------------------------------
 // ⚠️ VP9 first for the picture, VP8 behind it — the same order `REPCODECS` already puts
 // them in, and for the same reason.
@@ -20242,7 +20342,10 @@ async function repFastExport(doc, speed, onProgress){
   const fps = Math.max(1, (doc.fps || 60) * (speed || 1));
   // ⚠️ EVEN DIMENSIONS. A 4:2:0 encoder refuses an odd width or height, and the canvas is
   // sized from the window, so an odd one is the ordinary case rather than a rare one.
-  const W = cv.width & ~1, H = cv.height & ~1;
+  // ⚠️ **AND SNAPPED INTO A SHAPE THAT CAN BE POSTED** (`clipFrameSize`) — which on a
+  // canvas already in range is exactly `cv.width & ~1`, so this is what it always was.
+  const mirror = repClipMirror();
+  const W = mirror ? mirror.w : cv.width & ~1, H = mirror ? mirror.h : cv.height & ~1;
   if (W < 2 || H < 2) return null;
   const pick = await repFastPick(W, H, fps);
   if (!pick) return null;
@@ -20277,7 +20380,11 @@ async function repFastExport(doc, speed, onProgress){
       if (replay.filmStopped){ stopped = true; break; }
       if (fail) break;
       drawReplayFrame(frames[i]);
-      const vf = new VideoFrame(cv, { timestamp: Math.round(i * step), duration: Math.round(step) });
+      // ⚠️ The crop is taken AFTER the frame is painted and AFTER the world is installed,
+      // which is what makes `clipFramePlan` able to ask where the court is at all.
+      if (mirror) clipBlit(mirror);
+      const vf = new VideoFrame(mirror ? mirror.cv : cv,
+                               { timestamp: Math.round(i * step), duration: Math.round(step) });
       enc.encode(vf, { keyFrame: i % gop === 0 });
       vf.close();
       if (onProgress) onProgress(i, frames.length, fps);
@@ -20308,7 +20415,7 @@ function repDropStream(stream){
 }
 async function recordAndShareClip(btn, play, stem, doc, speed){
   play = play || (() => playReplay(0.7));
-  let stream = null, rec = null;
+  let stream = null, rec = null, mirror = null, pump = 0;
   try {
     // ⚠️ **THE CONTAINER DECIDES WHICH PATH RUNS, AND THE CONTAINER IS THE WHOLE POINT OF
     // THE FILE.** A video nobody can post is not a saved video: Instagram takes MP4/H.264
@@ -20324,7 +20431,13 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     // trap `repBadMux` exists for. `repMakeRecorder` already walks the list and checks
     // what it got, so asking it is asking the one owner rather than re-deriving the answer.
     if (cv.captureStream && window.MediaRecorder){
-      stream = cv.captureStream(60);
+      // ⚠️ **THE STREAM COMES OFF THE MIRROR WHEN THERE IS ONE**, so the file is the
+      // snapped shape rather than the window's. `captureStream` films the canvas it is
+      // asked for and nothing downstream can change the frame size afterwards, so this is
+      // the one place the decision can be made. Null mirror = the shape is already
+      // postable and this is the canvas, exactly as it always was.
+      mirror = repClipMirror();
+      stream = (mirror ? mirror.cv : cv).captureStream(60);
       rec = repMakeRecorder(stream);
     }
     const canMp4 = !!rec && repClipExt(rec.mimeType) === 'mp4';
@@ -20378,7 +20491,18 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     ctx.fillStyle = (TH && TH.fieldBg) || '#000';
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.restore();
+    // ⚠️ The mirror is what gets filmed, so the cleared canvas has to be carried across
+    // BEFORE `start` or the head frame is an empty mirror rather than the surround.
+    if (mirror) clipBlit(mirror);
     rec.start(250);                       // emit chunks periodically
+    // ⚠️ **THE MIRROR IS PUMPED ON ITS OWN rAF**, because `playReplayFile` draws to the
+    // game canvas and knows nothing about an export. A frame of lag against the replay's
+    // own tick is constant and invisible; what must not happen is the pump outliving the
+    // recording, so it is cancelled in the same `finally` that lowers `filming`.
+    if (mirror) pump = requestAnimationFrame(function tick(){
+      clipBlit(mirror);
+      pump = requestAnimationFrame(tick);
+    });
     // ⚠️ **THE ONE PLACE THE CAPTION IS SUPPRESSED, because it is the one place all three
     // exports go through** — Save clip, Save match clip and the transport's Video button.
     // Setting it at the three call sites instead would be three copies of the same thought,
@@ -20389,7 +20513,11 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     // and is an ordinary on-screen replay, so it keeps its caption.
     replay.filming = true;
     repRecShow();
-    try { await play(); } finally { replay.filming = false; repRecHide(); }
+    try { await play(); }
+    finally {
+      replay.filming = false; repRecHide();
+      if (pump){ cancelAnimationFrame(pump); pump = 0; }
+    }
     // ⚠️ **A RECORDING THAT WAS STOPPED IS NOT A RECORDING THAT FINISHED, and saying "✓ Video
     // saved" over a truncated file is how the original defect stayed invisible.** The file is
     // still handed over — it is what the player asked to keep — and the word says what it is.
@@ -20407,7 +20535,10 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
     const file = new File([blob], repClipName(repClipExt(blob.type), stem), { type: blob.type });
     return await clipHandOver(file, cut);
   } catch(e){ return '⚠ Could not record — use Save replay'; }
-  finally { repDropStream(stream); }
+  // ⚠️ The pump is cancelled here as well as on the happy path: `play()` can throw before
+  // the inner `finally` is reached at all, and a rAF loop blitting into a canvas nobody is
+  // filming runs for the rest of the session.
+  finally { if (pump) cancelAnimationFrame(pump); repDropStream(stream); }
 }
 // ⚠️ ONE owner for what happens to a finished file, because there are two ways of making
 // one now — the offline encoder and the real-time recorder — and a second copy of the
@@ -33694,7 +33825,7 @@ if (window.__MAGNETDEBUG) {
     get repMatchGoals(){ return repMatchGoals; }, get repMatchEvery(){ return repMatchEvery; },
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
-    mp4Remux, mp4Fixup,
+    mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,

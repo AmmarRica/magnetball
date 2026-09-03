@@ -5852,6 +5852,64 @@ three lines a second time, name it.
   3.2, because the encoder spends it only where the picture changes and a pitch is mostly
   still. Left to itself MediaRecorder picks ~2.5Mbps, and flat colour with hard edges is
   the worst case for that.
+- **A SAVED VIDEO IS THE SHAPE OF THE WINDOW, AND A PHONE'S WINDOW IS TALLER THAN ANYWHERE
+  WILL TAKE IT** (`CLIPFIT`, `clipFrameSize`, `clipFramePlan`, `repClipMirror`, `clipBlit`).
+  The canvas is the viewport times the pixel ratio, so measured on the shipped build: a
+  portrait handset exports at **0.462** and the reported file at **0.542**, against the
+  **0.5625** (9:16) floor every platform works to — and a landscape phone at **2.164** and an
+  ultrawide desktop at **2.370** against a **1.91** ceiling. **Four of the six shapes people
+  play on are outside it**, and what happens to an out-of-range video is that whoever it is
+  posted to crops or pads it themselves, in the middle of the frame, with no idea where the
+  pitch is.
+  ⚠️ **ASKED FOR AS "MATCH THE PITCH, SNAPPED INTO RANGE"** — the nearest legal aspect to
+  whatever the court and the layout actually are, rather than one fixed frame everything is
+  forced into. So `clipFrameSize` clamps the canvas's OWN aspect into `[min, max]` and a
+  portrait phone stays portrait, a landscape one stays landscape.
+  ⚠️ **THE SIZE IS A PURE FUNCTION OF (W, H)**, which is what lets the capture stream and the
+  encoder be configured before a single frame is drawn. Only the OFFSET needs to know where
+  the court is, and that is not answerable until a world is installed.
+  ⚠️ **ON A PHONE IT IS A CROP OF THE RESERVED BANDS, 1:1 AND NEVER RESAMPLED.** `computeCam`
+  already holds back 96px of HUD headroom at the top and a thumbstick band at the bottom, both
+  surround colour, so the crop eats those and the file is the same pixels the game drew.
+  Resampling it would be the soft-rescale defect the whole DPR entry is about, applied to the
+  video somebody keeps.
+  ⚠️ **BUT IT DOES NOT ALWAYS FIT, AND ASSUMING IT DID WAS WRONG — THE FIRST PROBE MEASURED
+  CLASSIC AND CLASSIC IS NOT THE HARD CASE.** Classic fits on all five shapes with hundreds of
+  pixels of slack, which made a pure crop look safe. Swept over **all 34 courts**, five are cut
+  on an ultrawide — `long`, `marathon`, `slim`, `endless`, `faceoff`, the long narrow ones,
+  which turn goal-to-goal and then span nearly the whole width. So where a court cannot fit,
+  the picture is **scaled down until it does** (measured at 0.842–0.860, so a 15% ease-out) and
+  the remainder is the surround it already had. Cutting a goal out of somebody's saved video is
+  worse than an odd aspect ratio. That branch **cannot fire on a phone**, which is where this
+  was reported: it is what stops the fix being a new bug somewhere else.
+  ⚠️ **WHERE THE SHAPE IS ALREADY POSTABLE THERE IS NO MIRROR AT ALL.** `repClipMirror` returns
+  null, both export paths use the canvas directly, and a desktop export is what it always was.
+  The fallback to today's behaviour is **structural**, not a branch somebody has to keep right.
+  ⚠️ **BOTH PATHS HAD TO BE WIRED, AND THE REAL-TIME ONE IS THE HALF THAT MATTERS.** The
+  offline encoder only runs where MP4 was never on offer, so on the phone this was reported
+  from it is `MediaRecorder` that makes the file — and `captureStream` films the canvas it is
+  handed with nothing downstream able to change the frame size, so the stream has to come off
+  the mirror. It is **pumped on its own rAF**, because `playReplayFile` draws to the game canvas
+  and knows nothing about an export; a frame of lag is constant and invisible, and the pump is
+  cancelled in **two** `finally`s, because `play()` can throw before the inner one is reached
+  and a rAF loop blitting into a canvas nobody is filming runs for the rest of the session.
+  ⚠️ **THE RIGHT SHAPE IS NOT THE RIGHT PICTURE, and a sabotage proved it.** Encoding the whole
+  canvas into a frame configured at the snapped size does not fail — the encoder squashes it —
+  so the file comes out 1170×2080 with the court the wrong shape inside it and **every
+  dimension check stays green**. What separates them is the content, compared against the same
+  frame rendered locally BOTH ways (the crop it should be, and the squashed canvas it is when
+  the mirror is skipped): **157 against 999, with the two references 925 apart**. Compression
+  noise is common to both comparisons, so it cancels — the `clipfile` idiom.
+  ⚠️ **`world` IS A GETTER ON THE DEBUG HOOK and cannot be swapped from a suite**, so those
+  references are taken during a live `playReplayFile`, which installs the document's world
+  itself. A reference drawn against the live match world would be a different field.
+  ⚠️ **ONE SABOTAGE OF EIGHT IS NOT CAUGHT, AND IT IS WRITTEN DOWN RATHER THAN PAPERED OVER.**
+  Replacing the court-centred window with a canvas-centred one passes everything — measured,
+  not guessed: over all 34 courts on all three cropped shapes a canvas-centred window contains
+  the court every time, because those two reservations leave enough slack today.
+  `clipFramePlan` centres on the court anyway, so the crop follows the pitch by construction
+  rather than by `padTop`/`padBot` staying as they are; if they move, this suite is not what
+  will tell you. `tests/clipshape.mjs`.
 - **THE MP4 A RECORDER HANDS BACK SAYS IT IS ZERO SECONDS LONG** (`mp4Remux`, `mp4Fixup`,
   `mp4Kids`, `MP4_DUR_AT`). Reported as *"why is video not showing as full regular video
   when I try to pick it to post to insta"*, and the file was the evidence: **4,286 frames =
@@ -6526,11 +6584,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 135 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 136 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **134 green + proladder red**, and `proladder` going green means the
+green run is therefore **135 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
