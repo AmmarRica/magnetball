@@ -136,6 +136,22 @@ three lines a second time, name it.
   match showed a 69-unit ball streak instead of 190. Draw functions only draw. Equally,
   anything anchored to a moving body must use `ix`/`iy`, not the raw position — mid-step
   they differ by up to a full step of travel. `tests/smooth.mjs` holds both lines.
+- **THE FREEZE-FRAME SHIPS OFF** (`defaultSel().hitStop` = 0). Reported as *"move that
+  frame freeze — let the game run in a smooth manner, right now it looks like it is
+  lagging"*, and that is a fair description of what it was: `loop()` returns early while
+  `hitStop > 0`, so the sim does not advance and the same picture is drawn again. Measured
+  over one minute of real 2v2 at the old default of 2, it fired **6 times and froze 12 whole
+  frames** — six hitches a minute at moments the player did not cause and cannot predict.
+  ⚠️ **THE DIAL, THE MACHINERY AND `tests/hitstop.mjs` ARE ALL UNTOUCHED.** This is which of
+  the two you get without asking, not a feature removed — and `predictsGoal` still has to
+  stay provably inert, because turning the dial up puts it straight back on the path. The
+  suite's control is exactly that: at 6 the freeze has to come back, or "no freeze" is
+  equally true of a build that deleted it.
+  ⚠️ **This REVERSES the owner's own earlier `hitStop:2`**, which shipped as part of the Pro
+  feel because it was being picked by hand. Same person, later call.
+  ⚠️ The `v == null` fallback moved 5 → 0 with it. Two numbers for one default is the drift
+  this file keeps recording, and the case it bites in is the one nobody looks at: a partial
+  `sel` out of an imported save, which `applySaveDoc` does not validate.
 - **Hit stop:** its own dial (`sel.hitStop`, `hitStopFrames()`), deliberately *not* under the
   Screen shake toggle. Fires on a goal, and on a **first touch** whose shot `predictsGoal()` has
   walked forward and seen go in — never on `releaseTrap` (a carried shot isn't a first touch).
@@ -580,19 +596,27 @@ three lines a second time, name it.
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
 - **THE GAME SHIPS ON THE PRO FEEL** (`defaultSel().feel` = the `pro` preset, plus
-  `trapOff:true`, `hitStop:2`, `rumble:15`, `kickRing:125` and match speed 1.00). Asked
+  `trapOff:true`, `hitStop:0`, `rumble:15`, `kickRing:125` and match speed 1.00). Asked
   for: it is the setup that was being picked by hand every time, so a fresh install gets
   it. Every one is still a slider and `resetSettings` gives this set back, not the old one.
-  ⚠️ **IT COLLAPSES THE BOT DIFFICULTY LADDER, and that is a known, measured, SHIPPED
-  defect rather than something nobody noticed.** Measured on `botplans`' own harness
-  (2v2, 60s, both orientations), Insane against Rookie per strategy:
+  ⚠️ **IT COLLAPSED THE BOT DIFFICULTY LADDER, AND THE FLOAT CHANGE HAS LARGELY REPAIRED
+  IT — the numbers below are UPDATED and the old ones are kept, because the claim moved.**
+  Measured on `botplans`' own harness (2v2, 60s, both orientations), Insane against Rookie
+  per strategy:
 
-      plan       standard  balanced  attack  bus  counter  press  passing   pooled
-      Casual        +18       +17     +22    +16    +11     +11     +12      +107
-      Pro (shipped)  -4        +6     -11     +1     -9      -4      -4       -25
+      plan            standard  balanced  attack  bus  counter  press  passing   pooled
+      Casual (old)      +18       +17      +22    +16    +11     +11     +12      +107
+      Pro 12/960/992     -4        +6      -11     +1     -9      -4      -4       -25
+      Pro 18/940/988     +5         0      +10     +2    +13      +7      -1       +36
+      Casual, same run  +10        +7       +9     +4     +7      +7      +6       +50
 
-  Every plan falls by 20 to 33 and the two arms do not overlap anywhere — seven independent
-  measurements agreeing, which is what makes it a finding. `botstuck` fails at the shipped
+  ⚠️ **Pooled went from −25 to +36 and NOTHING INVERTS ANY MORE** — four plans used to
+  finish negative and none does; two merely fail to BEAT (balanced 0, passing −1), which is
+  why `proladder` is still red. The two arms nearly overlap now (+36 against +50) where
+  they used to be a hundred and thirty apart. That is the prediction written one layer
+  along coming true: the cause was `accel` 12 in acceleration space plus `pdamp` 960's
+  float compounding it, and this change raised the first and cut the second **for entirely
+  unrelated reasons** — the owner asked for less float. Nothing in the AI was retuned. `botstuck` fails at the shipped
   default too, and concretely: **5 own goals** off the escape kick and a sanity minute that
   finishes **0–0**.
   ⚠️ **The cause is written down one layer along**: `botArrive` writes in ACCELERATION
@@ -949,6 +973,77 @@ three lines a second time, name it.
   came from*, not what the whole possession looked like. Advanced in `advanceTrails`
   next to `step(world)`, never in a draw: at 144Hz the same match showed a 69-unit ball
   streak instead of 190.
+- **BOTH BODIES FLOAT LESS, AND `accel` HAD TO GO UP WITH `pdamp` COMING DOWN**
+  (`defaultSel().feel` and `FEEL_PRESETS.pro`: accel 12 → **18**, pdamp 960 → **940**,
+  bdamp 992 → **988**). Asked for as *"lower how much the ball floats, and how much the
+  player floats also"*. Measured against the REAL step loop, never `stopSecs`' own
+  arithmetic: player **1.23s → 0.82s** and ball **6.22s → 4.15s** to lose 95% of their
+  speed, both about a third off.
+  ⚠️ **`pdamp` SETS THE COAST AND THE TOP SPEED WITH ONE NUMBER, and lowering it alone is a
+  35% SLOWER PLAYER.** A body settles at `v = a·d/(1−d)` under full stick — the expression
+  the coaching demonstration already derives its pace from — so 960 → 940 took the top speed
+  from **2.88 to 1.88**. That is a drive-by nobody asked for, which this file calls a
+  regression with good intentions; `accel` 12 → 18 puts it back at **2.82**, within 2%.
+  **`tests/bigcourt.mjs` is what caught it** — a Leviathan length went 30s → 41.1s — and
+  `tests/shippedfeel.mjs` now measures the top speed directly so it cannot happen quietly.
+  ⚠️ **THE BALL WENT TO 984 FIRST AND THAT WAS TOO FAR.** A halved float (3.10s) broke the
+  football in Killer Lobsters: over the eight seeded 300-second matches `tests/kqberry.mjs`
+  runs, total goals read **45 at 992, 34 at 990, 19 at 988, 21 at 986**, against a floor of
+  eight. The mechanism is written down one layer along and is not a surprise — **the bots'
+  stuck-ball escape is deliberately switched OFF in that mode**, so a ball at rest on the
+  boards freezes the chaser for good, and "less float" is exactly "the ball comes to rest
+  sooner and more often". The float was masking it. 988 is a third off the coast with the
+  goals still there.
+  ⚠️ **A FOUR-SEED READING OF THAT WAS NOISE AND SAID THE OPPOSITE** — 988 scored 5 and 984
+  scored 8, non-monotonic, and one config flipped 5 → 24 on a 10-unit `pdamp` change. At
+  eight seeds it is cleanly monotonic. The `proladder` rule again: below a couple of goals a
+  match, a goal count is a coin toss.
+  ⚠️ **`tests/bigcourt.mjs`' `goalsHappen` IS A COIN TOSS AND ALWAYS WAS** — it asks one
+  seeded 90-second 4v4 on Leviathan for one goal, on a court measured at **2 goals across
+  three such matches on the OLD feel** and 3 on the new one. It went red because the coin
+  landed differently, not because anything got worse. Left as it is here rather than
+  quietly widened, and written down so the next person does not read it as a regression.
+  ⚠️ Ball float has no compensating dial the way the player does: the ball is not driven
+  continuously, so its coast IS its reach. A full-power kick runs **2521 → 1868** units, and
+  that is the ask rather than a side effect.
+  ⚠️ All three land on their own slider's step (2, 5, 2), or the dial jumps the moment
+  anybody touches it — the `KICKRING.def` lesson. And all three must stay equal to
+  `FEEL_PRESETS.pro`, which `presetMatches` checks, or a fresh install comes up with neither
+  preset tile selected.
+- **A DEVICE ALREADY CARRYING THE OLD FEEL IS MOVED ON, ONCE** (`magnetball.feelfold`,
+  `FEEL_WAS`). Without it the whole change above reaches **nobody who has ever opened the
+  menu**, which includes the person who reported it: a factory default only ever meets a
+  fresh install.
+  ⚠️ **TWO HALVES UNDER ONE KEY** — the freeze going off and the three feel numbers — because
+  they ship as one answer to "how does this feel out of the box", each guarded separately so
+  a device that customised one still gets the other.
+  ⚠️ **ONLY AN UNTOUCHED VALUE MOVES.** The feel half requires the stored numbers to match
+  the OLD Pro preset field for field (`presetMatches(FEEL_WAS)`) and the hit-stop half the
+  old default of exactly 2. A fold that overwrites a deliberate choice is a setting changing
+  behind somebody's back.
+  ⚠️ **`accel` TRAVELS WITH `pdamp` IN THE FOLD OR IT SHIPS THE BUG** — a device handed the
+  new damping and the old acceleration is the 35%-slower player, on exactly the machines
+  that were playing happily before.
+  ⚠️ **A FOLD MAY ONLY TOUCH A DEVICE THAT ALREADY HAS SETTINGS, and leaving that implicit
+  was a real bug.** The branches fire on the OLD values, and the old hit-stop value used to
+  be the shipped default too — so on a FRESH install the fold matched, "moved" the setting it
+  had just been given, and called `saveSel()`. That writes `magnetball.sel`, and the ABSENCE
+  of that key is the whole of how `isFirstRun` detects a fresh install: the first-run lineup
+  would have become dead code on the very first frame. It is safe today only because 2 is no
+  longer the default, so the premise is asked outright now.
+  ⚠️ **A SABOTAGE FOUND THAT, and it found it by NOT being caught.** Reverting the shipped
+  `hitStop` passed every check, because the fold quietly folded the fresh install back. The
+  suite reads `defaultSel()` rather than the live `sel` now — the one thing no fold can
+  reach.
+  ⚠️ **`var`, and the new values are read through `defaultSel()` rather than named.**
+  `FEEL_PRESETS` is declared some two and a half thousand lines BELOW the bootstrap, so
+  naming it here is a temporal dead zone — the **twenty-second** TDZ bite in this file, and
+  the `try/catch` the fold needs would have SWALLOWED the ReferenceError and left it
+  silently never running, which is the second time a catch block would have hidden one.
+  ⚠️ **ONE-SHOT and stamped either way**, so somebody who sets the old feel back on purpose
+  next month is not folded out of it. `tests/shippedfeel.mjs`, nine sabotages each caught by
+  their own check; the tenth (the fresh-install guard) is recorded there as not catchable on
+  today's values and why.
 - **THE TWO FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP** (`stopSecs`,
   `STOP_FRAC`, the `pdamp` and `bdamp` rows of `FEEL_SLIDERS`). Reported as wanting *"a
   slider for friction, for how long before a player stops, for how long before the ball
@@ -2118,6 +2213,38 @@ three lines a second time, name it.
   45,143,125 under a blue one. Change anything that alters a bot match — a kickoff mark, a
   bot name — and the last scorer changes with it. **Any suite that samples pixels after a
   bot match must call `juiceReset()`**, which is the one owner of that state.
+- **THE SIDE THAT SCORED MAY NOT PLAY THE RESTART** (`applyKickoffLine`'s circle ejection,
+  and the team gate on the kickoff touch). Asked for as *"fix the goal start to mirror the
+  real soccer one — the team that scored cannot touch the ball on the next reset in that
+  circle"*.
+  ⚠️ **THE CIRCLE STRADDLES THE HALFWAY LINE, WHICH IS THE WHOLE DEFECT.** The rule below
+  held a body to its own HALF, and half the circle is in each half with the ball at the
+  centre of both — so the scoring side had a perfectly legal spot a stride from the
+  restart. Measured on the shipped build: placed at **y = 21.7**, inside the 58-unit circle
+  and **25** units from a ball whose touch reach is **26.5**, it started the match itself on
+  the **very first step**, with the wrong side in possession.
+  ⚠️ **TWO HALVES, AND EITHER ALONE HIDES A SABOTAGE OF THE OTHER.** A body with no free
+  pass is now ejected RADIALLY from the circle as well as held to its half; and the touch
+  that starts play is gated on `w.kickTeam`. The ejection alone very nearly settles it —
+  the backstop holds a body at `CENTER_R + r - KICKOFF_HARD` = **43** against a 26.5 reach —
+  but that is arithmetic between four constants and a party modifier can move two of them,
+  so the gate is what says what the rule MEANS. `tests/kickoff.mjs` therefore blows the ball
+  up to r 40 (reach 56.5, body at 55) to check the gate with the geometry taken away.
+  ⚠️ **THE EJECTION IS REFLECTED INTO YOUR OWN HALF, and without that the two pushes FIGHT.**
+  Straight outward is the wrong way for a body inside the circle and already over the line:
+  the radial direction there points DEEPER into the half it is being thrown out of, so it
+  cancels the half-line shove and the body ends up further in than it started. Measured
+  exactly that way — 14 units over the line settled at 15 — and the suite's own
+  `otherSideHeldBack`, which predates all of this, is what caught it.
+  ⚠️ A PUSH WITH A HARD BACKSTOP, the same two constants the half-line rule uses, for the
+  same reason: a clamp reads as an invisible wall you are grinding against and a push reads
+  as a rule pushing back.
+  ⚠️ **Gated on `kickoffLineOn(w)`**, so switching the kickoff rule OFF still means what it
+  says rather than leaving half of one behind — and the six-second timeout is untouched, so
+  a restart nobody takes still goes live rather than hanging on a rule.
+  ⚠️ The check is PAIRED with the side that conceded still being able to walk onto the ball
+  and go: *"the scorer cannot start play"* is equally true of a build where nobody can,
+  which would hang every restart in the game. `tests/kickoff.mjs`.
 - **Kickoff possession:** `kickoffFreePass` gates the centre circle on `w.kickTeam` — the
   side that CONCEDED. ⚠️ `kickTeam` was written on every goal and **read by nothing**, so
   the gate stood open to both teams and a restart was a race for a loose ball, which in
@@ -6584,11 +6711,11 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 136 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 137 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
 at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **135 green + proladder red**, and `proladder` going green means the
+green run is therefore **136 green + proladder red**, and `proladder` going green means the
 steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 

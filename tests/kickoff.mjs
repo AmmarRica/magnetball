@@ -111,6 +111,62 @@ const r = await p.evaluate(()=>{
   o.turnedAround = mec.vy > 0;                       // moving back toward own half
   o.endsInOwnHalf = mec.y > worst;
 
+  // 4c) THE SIDE THAT SCORED MAY NOT PLAY THE RESTART.
+  // ⚠️ THE CIRCLE STRADDLES THE HALFWAY LINE, so the half-line rule above does NOT keep
+  // the wrong side out of it — half the circle is in each half and the ball sits at the
+  // centre of both. Measured on the build before this: the scoring side stood at y = 21.7,
+  // inside the 58-unit circle and 25 units from a ball whose touch reach is 26.5, and
+  // started the match itself on the VERY FIRST STEP of the restart.
+  // ⚠️ Placed in its OWN half deliberately — that is the spot the old rule called legal,
+  // and a probe that puts the body over the line instead is testing the half-line rule
+  // that already worked.
+  const koTouch = (kickTeam) => {
+    M.sel.kickoffRule='on'; M.startMatch();
+    const wk = M.world; wk.state='kickoff'; wk.stateT=0.6;
+    const hum = wk.players.find(x=>x.ctrl==='human1');
+    wk.kickTeam = kickTeam === 'me' ? hum.team : (hum.team===0?1:0);
+    for (const q of wk.players) if (q!==hum){ q.x=0; q.y=q.team===0?300:-300; q.vx=q.vy=0; }
+    wk.ball.x=0; wk.ball.y=0; wk.ball.vx=wk.ball.vy=0;
+    const own = hum.team === 0 ? 1 : -1;
+    hum.x=0; hum.y=own*20; hum.vx=hum.vy=0; hum._px=hum.x; hum._py=hum.y;
+    let started=false;
+    for(let i=0;i<40;i++){ hum.vx=hum.vy=0; M.step(wk); if(wk.state!=='kickoff'){ started=true; break; } }
+    return { started, dist:+Math.hypot(wk.ball.x-hum.x, wk.ball.y-hum.y).toFixed(1),
+             fromCentre:+Math.hypot(hum.x,hum.y).toFixed(1) };
+  };
+  const scored = koTouch('them');            // the OTHER side kicks off, i.e. we scored
+  o.scorerCannotStart = scored.started === false;
+  o.scorerPushedOff   = scored.dist > (15 + wc.ball.r + M.KICKOFF_TOUCH);
+  o.scorerDist = scored.dist; o.scorerFromCentre = scored.fromCentre;
+  // ⚠️ THE CONTROL, and it is the load-bearing half: "the scorer cannot start play" is
+  // equally true of a build where NOBODY can, which would hang every restart until the
+  // six-second timeout. The side that conceded must still be able to walk onto the ball
+  // and go — which is what the restart IS.
+  const kicks = koTouch('me');
+  o.kickerCanStart = kicks.started === true;
+  // ⚠️ THE TEAM GATE ON ITS OWN. The ejection and the gate are belt and braces, so with
+  // both in place a sabotage of EITHER passes every check above — the other one covers it.
+  // This is the case the gate exists for and the geometry cannot reach: the backstop holds
+  // a body at `CENTER_R + r - KICKOFF_HARD` = 43, which beats a 26.5 touch reach only
+  // while the ball is its normal size. Blow the ball up — which a party modifier really
+  // does — and 43 is inside the reach, and nothing but the team check is left.
+  {
+    M.sel.kickoffRule='on'; M.startMatch();
+    const wb = M.world; wb.state='kickoff'; wb.stateT=0.6;
+    const hum = wb.players.find(x=>x.ctrl==='human1');
+    wb.kickTeam = hum.team===0?1:0;                       // we scored; they restart
+    for (const q of wb.players) if (q!==hum){ q.x=0; q.y=q.team===0?300:-300; q.vx=q.vy=0; }
+    wb.ball.r = 40;                                       // touch reach 56.5, past the backstop
+    wb.ball.x=0; wb.ball.y=0; wb.ball.vx=wb.ball.vy=0;
+    const own = hum.team===0?1:-1;
+    hum.x=0; hum.y=own*20; hum.vx=hum.vy=0; hum._px=hum.x; hum._py=hum.y;
+    let started=false;
+    for(let i=0;i<40;i++){ hum.vx=hum.vy=0; M.step(wb); if(wb.state!=='kickoff'){ started=true; break; } }
+    o.bigBallReach = +(hum.r + wb.ball.r + M.KICKOFF_TOUCH).toFixed(1);
+    o.bigBallDist  = +Math.hypot(wb.ball.x-hum.x, wb.ball.y-hum.y).toFixed(1);
+    o.gateHoldsWhenGeometryCannot = !started && o.bigBallDist < o.bigBallReach;
+  }
+
   // 5) rule OFF: free even during kickoff
   M.sel.kickoffRule='off'; M.startMatch();
   const w2=M.world; w2.state='kickoff'; w2.stateT=0.1;
@@ -136,6 +192,7 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.defaultOn&&r.startsInKickoff&&r.blockedDuringKickoff&&r.foeHeldInOwnHalf&&
   r.onBallInCircleExempt&&r.onBallCanCross&&r.offBallInCircleExempt&&r.offBallCanCross&&
   r.otherSideNotExempt&&r.otherSideHeldBack&&r.gateFollowsKickTeam&&
+  r.scorerCannotStart&&r.scorerPushedOff&&r.kickerCanStart&&r.gateHoldsWhenGeometryCannot&&
   r.outsideCircleNoExempt&&r.neverPastBackstop&&r.turnedAround&&r.endsInOwnHalf&&
   r.freeAfterKickoff&&r.noPossessionState&&r.roamsBothHalves&&r.freeWhenRuleOff&&
   r.resetHoldsAgain&&r.clearsInPlay&&errors.length===0;

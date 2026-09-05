@@ -44,7 +44,12 @@ const filter = process.argv[2] || '';
 // swatch row rebuilds in single-digit MILLISECONDS, and six browsers sharing the machine
 // is exactly the condition that makes a 1.4ms operation measure as 12. It passes alone
 // every time — which is the signature of a timing suite, not of a bug.
-const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache']);
+// ⚠️ `clipshape` joined for the plainest reason of the four: half of it drives the
+// REAL-TIME recorder, and `MediaRecorder` is wall-clock bound by construction — it stamps
+// frames when they ARRIVE, which is exactly why the offline encoder exists. Three browsers
+// sharing the machine make a recording come up short, so it went red in a busy pool and
+// passed alone every time.
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper

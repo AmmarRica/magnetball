@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260903.0620AM';
+const VERSION = '20260905.0410AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,14 @@ const VERSION = '20260903.0620AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260905.0410AM', title: 'Smoother, less floaty, and a proper kickoff',
+    changed: [
+      '<b>The game no longer stutters when something big happens.</b> There was a brief freeze on a goal and on a shot heading in \u2014 a couple of frames where everything stopped dead. It fired about six times a minute and read as the game lagging rather than as a moment landing, so it is off. It is still a slider if you want it back.',
+      '<b>The ball and the players float less.</b> Both used to coast for a long time after you stopped pushing \u2014 the ball for over six seconds. They settle about a third quicker now. Players are no slower than before; only the drifting is gone.',
+      '<b>A goal restart works the way it does in football.</b> The side that conceded takes the kickoff, and the side that scored now has to be out of the centre circle and cannot play the ball. Half the circle sits in each half, so they could previously stand next to the restart and take it themselves.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260903.0620AM', title: 'Saved videos are a shape you can post',
     changed: [
       '<b>A saved video used to be the shape of your screen, which nowhere will take.</b> A phone records far taller than any of them allow, so posting one meant it got cropped or padded for you — in the middle of the frame, with no idea where the pitch was. Videos now come out at a shape that can be posted as it is.',
@@ -6696,7 +6704,7 @@ const CHANGELOG = [
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
 function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'g3', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
             ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:2, rumble:15, kickRing:125, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:0, rumble:15, kickRing:125, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], teamFlag:['none','none'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -6745,7 +6753,21 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // ⚠️ The sprint four are NOT part of the preset and are unchanged; `applyPreset`
             // rewrites `sel.feel` wholesale and deliberately leaves them out, so they fall
             // back through `SPRINT` rather than living here twice.
-            feel: { accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, trap:50,
+            // ⚠️ `pdamp` and `bdamp` are the FLOAT dials and both came down (960 → 940,
+            // 992 → 988), with `accel` up to hold the top speed. They must stay equal to
+            // `FEEL_PRESETS.pro`, per the note above. All three land on their slider's own
+            // step (2, 5 and 2), or the dial would jump the moment anybody touched it —
+            // the `KICKRING.def` lesson.
+            // ⚠️ **THE BALL WENT TO 984 FIRST AND THAT WAS TOO FAR — a halved float, and
+            // it broke the football.** Measured over the eight seeded 300-second Killer
+            // Lobsters matches `tests/kqberry.mjs` runs, total goals: **45 at 992, 34 at
+            // 990, 19 at 988, 21 at 986** — and the suite needs eight. The mechanism is
+            // written down one layer along and is not a surprise: the bots' stuck-ball
+            // escape is deliberately switched OFF in that mode, so a ball that comes to
+            // rest against the boards freezes the chaser for good — and less float is
+            // exactly "the ball comes to rest sooner and more often". The float was
+            // masking it. 988 is a third off the coast with the goals still there.
+            feel: { accel:18, pdamp:940, ballcap:46, kick:55, bdamp:988, trap:50,
                     sprintSecs:300, sprintRefill:500, sprintSlow:75, sprintBoost:135 } }; }
 let sel = defaultSel();
 
@@ -13131,6 +13153,72 @@ try {
     localStorage.setItem('magnetball.zoomfold', '1');
   }
 } catch(e){}
+// A DEVICE ALREADY CARRYING THE OLD FEEL IS MOVED ON, ONCE (`magnetball.feelfold`).
+// ⚠️ **Without this the change reaches nobody who has ever opened the menu**, which
+// includes the person who reported it: a factory default only ever meets a fresh install,
+// and `magnetball.sel` has existed on their device for months. Same reason
+// `magnetball.zoomfold` above exists, and `magnetball.lookfold` before it.
+// ⚠️ **TWO HALVES UNDER ONE KEY, because they ship as one answer to "how does this feel
+// out of the box"** — the freeze-frame going off, and the two float dials coming down.
+// Each is guarded on its own, so a device that customised one still gets the other.
+// ⚠️ **ONLY AN UNTOUCHED VALUE IS MOVED.** The feel half requires the stored numbers to
+// match the OLD Pro preset field for field (`presetMatches` against `FEEL_WAS`), so
+// anybody who has tuned a slider keeps every one of them; the hit-stop half requires the
+// old default of exactly 2, so anybody who chose 5 or 9 keeps it. A fold that overwrites a
+// deliberate choice is not a fix, it is a setting changing behind somebody's back.
+// ⚠️ **ONE-SHOT.** Both of these stay reachable by hand for ever — unlike a key rename,
+// where the old spelling is unreachable afterwards and re-running is free — so an
+// unguarded fold would quietly undo them again every launch.
+// ⚠️ **The key is stamped whether or not anything moved**, or somebody who later sets the
+// old numbers back deliberately would be folded out of them the next morning.
+// ⚠️ `saveSel()` only inside a branch that changed something: the bootstrap must not write
+// `magnetball.sel` in general, because the ABSENCE of that key is how `isFirstRun` detects
+// a fresh install. Both branches require a stored value that differs from today's default,
+// which proves a save already exists and first-run is long over.
+// ⚠️ **`var`, AND THE NEW VALUES ARE READ THROUGH `defaultSel()` RATHER THAN NAMED.**
+// `FEEL_PRESETS` is declared some two and a half thousand lines BELOW this block, which
+// runs during the bootstrap — so `FEEL_PRESETS.pro.pdamp` here is a temporal dead zone,
+// and the `try/catch` this fold needs (for a browser that refuses `localStorage`) would
+// have SWALLOWED the ReferenceError whole and left the fold silently never running. That
+// is the twenty-second TDZ bite in this file and the second one a catch block would have
+// hidden. `defaultSel` is a hoisted function declaration, the zoomfold above already calls
+// it, and `defaultSel().feel` is required to equal `FEEL_PRESETS.pro` anyway — so reading
+// it there is both safe and the one place that is not a second copy of the numbers.
+// ⚠️ Only the OLD values are written out, because they are history rather than a live
+// value: nothing else in the file knows them and nothing can derive them.
+var FEEL_WAS = { magnet:0, trapOff:true, accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, trap:50 };
+try {
+  if (!localStorage.getItem('magnetball.feelfold')){
+    // ⚠️ **A FOLD MAY ONLY EVER TOUCH A DEVICE THAT ALREADY HAS SETTINGS, and leaving that
+    // implicit was a real bug.** The branches below fire on the OLD values, and the old
+    // hit-stop value used to be the shipped default too — so on a FRESH install the fold
+    // matched, "moved" the setting it had just been given, and called `saveSel()`. That
+    // writes `magnetball.sel`, and the ABSENCE of that key is the whole of how
+    // `isFirstRun` detects a fresh install: the first-run lineup would have become dead
+    // code on the very first frame. It is safe today only because 2 is no longer the
+    // default, which is an accident of this change rather than a guarantee — so the
+    // premise of a fold ("this device has been played") is now asked outright.
+    // ⚠️ The key is stamped either way, so a fresh install is never folded LATER either:
+    // somebody who deliberately sets the old feel back next month is choosing it.
+    if (localStorage.getItem('magnetball.sel')){
+      let moved = false;
+      if (sel.hitStop === 2){ sel.hitStop = 0; moved = true; }
+      // ⚠️ **`accel` MOVES WITH `pdamp` OR THE FOLD SHIPS THE BUG.** They are one change —
+      // the damping sets the top speed as well as the coast — so a device handed the new
+      // damping and the old acceleration is the 35%-slower player, on exactly the machines
+      // that were playing happily before.
+      if (presetMatches(FEEL_WAS) && sel.feel){
+        const d = defaultSel().feel;
+        sel.feel.accel = d.accel;
+        sel.feel.pdamp = d.pdamp;
+        sel.feel.bdamp = d.bdamp;
+        moved = true;
+      }
+      if (moved) saveSel();
+    }
+    localStorage.setItem('magnetball.feelfold', '1');
+  }
+} catch(e){}
 loadArcade();
 // ⚠️ Here and not with `loadSel()`: `applyMaps` reads `sel.field` (so the save must
 // already be in) and `mapClean` clamps against `POST`, which is declared below the map
@@ -15651,7 +15739,23 @@ function buildSettings(){
 // acceleration and a higher ball speed cap for a raw, high-skill feel.
 const FEEL_PRESETS = {
   casual: { label:'Casual', emoji:'😊', magnet:0,  trapOff:false, accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, sens:1.0, trap:50 },
-  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:12, pdamp:960, ballcap:46, kick:55, bdamp:992, sens:1.0, trap:50 },
+  // ⚠️ **LESS FLOAT ON BOTH BODIES, asked for**, and the two numbers moved together with
+  // `defaultSel().feel` because the shipped default IS this preset — they are compared
+  // field by field by `presetMatches`, so changing one and not the other brings the card up
+  // with neither tile selected on a fresh install.
+  // ⚠️ Measured against the REAL step loop, never the formula: the ball took **5.77s** to
+  // lose 95% of its speed (the dial claimed 6.22) and the player **1.22s**. A ball that
+  // drifts for the better part of six seconds is the "floaty" being reported.
+  // ⚠️ **`accel` WENT UP BECAUSE `pdamp` CAME DOWN, and they are not two changes.** A body
+  // settles at `v = a·d/(1−d)` under full stick — the same expression the coaching
+  // demonstration derives its pace from — so the damping sets the COAST and the TOP SPEED
+  // with one number. Dropping it to kill the float and stopping there made the player
+  // **35% slower**: measured 2.88 → 1.88 at full stick, which is not what "floats less"
+  // asked for and is exactly the kind of drive-by this repo calls a regression with good
+  // intentions. `tests/bigcourt.mjs` caught it — a Leviathan length went from 30s to 41.1s.
+  // At accel 18 the top speed is **2.82**, within 2% of where it was, and the coast is
+  // still a third shorter. Both new values sit on their slider's own step (2 and 5).
+  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:18, pdamp:940, ballcap:46, kick:55, bdamp:988, sens:1.0, trap:50 },
 };
 function presetMatches(p){
   const f=sel.feel||{};
@@ -17968,7 +18072,19 @@ function goalBurst(w, team){
   flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9;
 }
 // Hit stop is the player's own dial, not part of the Screen shake toggle. 0 = off.
-function hitStopFrames(){ const v = sel.hitStop; return v == null ? 5 : Math.max(0, Math.min(12, v|0)); }
+// ⚠️ **THE FREEZE SHIPS OFF, and the unset fallback is 0 to MATCH the shipped default.**
+// It was 2 frames, and a frame here is a whole frame of the loop returning early — the sim
+// does not advance and the same picture is drawn again. Measured over a minute of 2v2 it
+// fired **6 times, freezing 12 frames**, which is six hitches a minute at moments the
+// player did not cause and cannot predict: reported as *"it looks like it is lagging"*.
+// ⚠️ The dial, the machinery and `tests/hitstop.mjs` are all untouched — this is which of
+// the two you get without asking, not the removal of a feature. `predictsGoal` still has to
+// stay provably inert, because turning the dial up puts it straight back on the path.
+// ⚠️ The `v == null` fallback used to be 5, which disagreed with a shipped default of 2 in
+// the one case nobody looks at — a partial `sel` out of an imported save, which
+// `applySaveDoc` does not validate. Two numbers for one default is the drift this file
+// keeps recording; there is one now.
+function hitStopFrames(){ const v = sel.hitStop; return v == null ? 0 : Math.max(0, Math.min(12, v|0)); }
 // ============================================================
 //  CONTROLLER RUMBLE
 // ============================================================
@@ -20625,10 +20741,23 @@ function step(w){
     // went straight through the thing it was standing on and the match sat waiting for
     // a button. Running onto the ball and driving away with it is the ordinary way to
     // start, and having to stop and press KICK first is a rule nobody is told about.
+    // ⚠️ **AND ONLY THE SIDE THAT KICKS OFF MAY PLAY IT.** The restart belongs to the team
+    // that CONCEDED, so the side that just scored starting the match by walking into the
+    // ball is the wrong side taking possession — which is exactly what happened, because
+    // the centre circle straddles the halfway line and the half-line rule left them a
+    // legal spot 25 units from it. `applyKickoffLine` now ejects them from the circle, and
+    // this is the other half: the geometry can be defeated by a party modifier that resizes
+    // a ball or a body, and a team check cannot.
+    // ⚠️ Gated on `kickoffLineOn(w)`, so switching the kickoff rule OFF still means what it
+    // says — no restrictions at the restart — rather than leaving half of one behind.
+    // ⚠️ The timeout below is untouched and is the backstop: if the side that should kick
+    // off never does, the match still goes live rather than hanging on a rule.
     if (w.stateT > 0.5 && !entryBusy(w)){
       const b=w.ball; let go=false;
+      const gate = kickoffLineOn(w) && w.kickTeam != null;
       for (const p of w.players){
         if (p.ctrl==='bot') continue;
+        if (gate && p.team !== w.kickTeam) continue;
         const d = Math.hypot(b.x-p.x, b.y-p.y);
         if (d < p.r + b.r + KICKOFF_TOUCH){ go=true; break; }
         if (p.kick && d < p.r+b.r+(w.kickRange||PLAYER.kickRange)+2){ go=true; break; }
@@ -23366,12 +23495,66 @@ function kickoffFreePass(w, p){
 // can never be out-run.
 const KICKOFF_PUSH = 0.7;                       // accel back toward your own half
 const KICKOFF_HARD = 30;                        // furthest you can get past the line
+// ⚠️ **THE CIRCLE STRADDLES THE HALFWAY LINE, so holding a body to its own HALF does not
+// keep it out of the CIRCLE — half the circle is in each half, and the ball sits at the
+// centre of both.** That is the whole of the reported defect: the side that had just
+// SCORED could stand in its own half of the centre circle, a stride from the restart, and
+// play the ball itself. Measured on the shipped build — team 0 concedes nothing, is placed
+// at y = **21.7** (inside the 58-unit circle), ends up **25** units from a ball whose touch
+// reach is **26.5**, and the match went live on the **very first step** of the restart with
+// the wrong side in possession.
+// ⚠️ **In football the restart belongs to the side that CONCEDED**, and the opposition has
+// to be outside the centre circle altogether until the ball is in play — not merely in
+// their own half. So a body with no free pass is ejected RADIALLY from the circle as well
+// as being held to its half; the two pushes compose, and near the halfway line they point
+// much the same way anyway.
+// ⚠️ **A PUSH WITH A HARD BACKSTOP, exactly like the half-line rule** — a clamp on its own
+// reads as an invisible wall you are grinding against, and a push reads as a rule pushing
+// back. Same two constants, so there is one answer to "how hard" and "how far".
+// ⚠️ The backstop alone would very nearly settle it: the closest a body can be held is
+// `CENTER_R + p.r - KICKOFF_HARD`, and it beats the touch reach whenever
+// `CENTER_R - KICKOFF_HARD > b.r + KICKOFF_TOUCH` — 28 against 11.5 at the shipped sizes.
+// That is arithmetic between four constants and a party modifier can move two of them, so
+// the touch is ALSO gated by team where it is read. Belt and braces, and the gate is the
+// half that says what the rule MEANS.
 function applyKickoffLine(w, discs){
   if (!kickoffLineOn(w)) return;
   for (const p of discs){
     if (p.team !== 0 && p.team !== 1) continue;
     if (kickoffFreePass(w, p)) continue;
     const own = p.team === 0 ? 1 : -1;          // own half sits at own*y > 0
+    // ---- out of the centre circle, wherever you are standing --------------------------
+    // Only ever reached by a side with no free pass, which is the side that did not kick
+    // off — `kickoffFreePass` has already `continue`d anybody entitled to be in there.
+    const need = KICKOFF_CIRCLE_R + p.r;
+    const d = Math.hypot(p.x, p.y);
+    if (d < need){
+      // Dead centre has no outward direction, so fall back to "toward your own half",
+      // which is where the rule is sending them regardless.
+      let nx = d > 1e-4 ? p.x / d : 0;
+      let ny = d > 1e-4 ? p.y / d : own;
+      // ⚠️ **REFLECTED INTO YOUR OWN HALF, and without this the two pushes FIGHT.** Straight
+      // outward is the wrong way for a body that is inside the circle and already over the
+      // halfway line: the radial direction there points DEEPER into the half it is being
+      // thrown out of, so it cancels the half-line shove below and the body ends up further
+      // in than it started. Measured exactly that way — a body 14 units over the line
+      // settled at 15 instead of being driven home, and `tests/kickoff.mjs`' own
+      // `otherSideHeldBack` caught it. What the rule actually wants is the nearest point
+      // that is BOTH outside the circle and on your own side, so the outward normal is
+      // mirrored whenever it points across the line and the two pushes then agree.
+      if (own * ny < 0) ny = -ny;
+      p.vx += nx * KICKOFF_PUSH; p.vy += ny * KICKOFF_PUSH;
+      if (nx * p.vx + ny * p.vy < 0){ p.vx *= 0.86; p.vy *= 0.86; }   // bleed off the drive in
+      const floor = need - KICKOFF_HARD;        // backstop — the shove is never a bypass
+      if (d < floor){
+        p.x = nx * floor; p.y = ny * floor;
+        if (nx * p.vx + ny * p.vy < 0){ p.vx = 0; p.vy = 0; }
+      }
+      p._koFx = (p._koFx || 0) - STEP;
+      if (p._koFx <= 0){ p._koFx = 0.3;
+        spawnTouchFx(p.x, p.y, TH.lineLock2 || '#ff8080', 10); }
+    }
+    // ---- and behind the halfway line ------------------------------------------------
     const past = p.r - own * p.y;               // >0 once any part of you is over
     if (past <= 0) continue;
     p.vy += own * KICKOFF_PUSH;                 // shoved back toward your half
