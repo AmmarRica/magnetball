@@ -144,6 +144,111 @@ const pix = await p.evaluate(() => {
 });
 
 // ============================================================================
+// A NON-HOST'S TAP IS SEEN — `w.lobby.ready` had ONE writer and NO reader.
+//
+// ⚠️ MEASURED FIRST, on the build before the fix: the tap toggled a Set that nothing in
+// `index.html` ever consulted — the only two readers in the whole repo were this suite's
+// own `edgeIsReady` above and one line in `tests/lobby.mjs`, both asserting the Set had
+// grown. So the headline said PRESS START TO CONTINUE and, for everybody who is not the
+// host, pressing it did nothing anybody could see.
+//
+// ⚠️ THE PAIR IS THE CHECK. "There is ink above the body" is true of a build with no mark
+// at all — the name plate, the hold ring and the body's own rim are all up there — so it is
+// measured as a DIFFERENCE against the same frame with the Set emptied, which is the trap
+// this file already records for the ring. Paired the other way too: with nobody readied the
+// difference must be exactly ZERO, or the probe is reading the lobby moving.
+const ready = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.controllers = 'on'; M.sel.lobby = 'on'; M.sel.orient = 'v'; M.sel.length = '5';
+  M.sel.look.palette = 'grass';
+  M.setMatchSeed(7); M.startMatch({ lobby: true });
+  const w = M.world;
+  const humans = w.players.filter(x => x.ctrl !== 'bot');
+  const host = M.lobbyHost(w), other = humans.find(x => x !== host);
+  if (!other) return o;
+  // TRAP 2 again: apart, with `_px`/`_py` set, or `ix()` interpolates across the pitch.
+  const put = (pl, fx, fy) => { pl.x = w.field.W*fx; pl.y = w.field.L*fy; pl.vx = pl.vy = 0;
+                                pl._px = pl.x; pl._py = pl.y; };
+  put(host, -0.34, -0.34); put(other, 0.34, 0.34);
+  const cv = document.getElementById('game'), g = cv.getContext('2d');
+  const grab = () => g.getImageData(0, 0, cv.width, cv.height).data;
+  const ringR = (pl) => { const r = pl.r * M.cam.s, rw = Math.max(2, r*0.18);
+                          return M.holdRingR(r, rw) + rw/2; };          // the ring's OUTER edge
+  const spot = pl => M.screenPt(M.wx(M.ix(pl)), M.wy(M.iy(pl)));
+  // Changed pixels within `r1` of a body, optionally excluding everything inside `r0`.
+  const nearBody = (A, B, pl, r0, r1) => {
+    const c = spot(pl); let n = 0;
+    for (let y = Math.floor(c[1]-r1); y <= c[1]+r1; y++)
+      for (let x = Math.floor(c[0]-r1); x <= c[0]+r1; x++){
+        if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) continue;
+        const d = Math.hypot(x-c[0], y-c[1]); if (d > r1 || d < r0) continue;
+        const i = (y*cv.width + x)*4;
+        if (Math.abs(A[i]-B[i]) + Math.abs(A[i+1]-B[i+1]) + Math.abs(A[i+2]-B[i+2]) > 40) n++;
+      }
+    return n;
+  };
+  // The pair: render with the Set as `set` gives it, then as `alt` gives it, and put the
+  // real one back. Everything below is a difference between two states of that ONE Set, so
+  // the only thing that can move between the frames is the mark.
+  const pair = (set, alt) => {
+    const keep = new Set(w.lobby.ready);
+    const use = s => { w.lobby.ready.clear(); for (const q of s) w.lobby.ready.add(q); };
+    use(set); M.render(); const on = grab();
+    use(alt); M.render(); const off = grab();
+    use(keep); M.render();
+    return [on, off];
+  };
+  const R = ringR(other) * 3;                       // a box comfortably past the mark
+
+  // ⚠️ THE NULL, not a claim about the mark: two renders of the SAME empty Set must be
+  // identical, or every number below is measuring the lobby moving between frames rather
+  // than anything being drawn. It can never fail on a build that ignores the Set — that is
+  // what `hostFollows` is for.
+  let [A, B] = pair([], []);
+  o.renderStable = nearBody(A, B, other, 0, R);
+
+  // ---- the real path: a non-host taps START ---------------------------------
+  const START = 9;
+  window.__pads[other.padIndex].buttons[START] = { pressed: true, value: 1 };
+  M.step(w);
+  window.__pads[other.padIndex].buttons[START] = { pressed: false, value: 0 };
+  M.step(w);
+  put(host, -0.34, -0.34); put(other, 0.34, 0.34);
+  o.tapReadied = w.lobby.ready.has(other);
+  o.stillWarmup = w.state === 'warmup';
+  [A, B] = pair([other], []);
+  o.marked      = nearBody(A, B, other, 0, R);
+  // ⚠️ It must clear the HOLD RING, and the two DO appear together — a readied player can
+  // lean on the button to force the kickoff. Derived from `holdRingR`, so no constant here
+  // is tuned to a zoom or to the reach dial.
+  o.insideRing  = nearBody(A, B, other, 0, ringR(other));
+  // ⚠️ ...and readying one body marks THAT body and no other.
+  o.hostMarked  = nearBody(A, B, host, 0, R);
+  // ⚠️ **THE MARK MUST FOLLOW THE SET PER BODY, and checking that needs the OTHER pairing.**
+  // A build that ignores the Set and marks everybody draws the same picture in both frames
+  // of every pair above, so the differences all read ZERO and `hostMarked === 0` passes for
+  // exactly the wrong reason. Adding the host to the Set has to make ink appear on the HOST:
+  // that is the one comparison such a build cannot fake, because for it nothing changes.
+  [A, B] = pair([other, host], [other]);
+  o.hostFollows = nearBody(A, B, host, 0, R);
+
+  // ---- tapping again takes it off ------------------------------------------
+  window.__pads[other.padIndex].buttons[START] = { pressed: true, value: 1 };
+  M.step(w);
+  window.__pads[other.padIndex].buttons[START] = { pressed: false, value: 0 };
+  M.step(w);
+  put(host, -0.34, -0.34); put(other, 0.34, 0.34);
+  o.untapped = w.lobby.ready.has(other);
+  // ⚠️ Measured as "the live picture is NOT the readied picture": the frame the Set actually
+  // gives now, against the frame it would give with `other` put back in. A difference means
+  // the mark really has come off the screen. Asserting the live frame equals itself would be
+  // true on every build, which is the shape of the vacuous check one block up.
+  [A, B] = pair([...w.lobby.ready], [other]);
+  o.clearedOnScreen = nearBody(A, B, other, 0, R);
+  return o;
+});
+
+// ============================================================================
 // ANY BUTTON HOLDS — "some of my controllers don't have start button".
 //
 // ⚠️ MEASURED FIRST: of seventeen button indices, exactly ONE (9) did anything at all in
@@ -259,6 +364,29 @@ ok('...and it stays clear of the kick ring', pix.clearOfKickRing <= 4,
    `${pix.clearOfKickRing} angles inked at the reach radius — that circle is a promise about the physics`);
 ok('the controller icon carries the same fill', pix.corner25 > 20 && pix.corner70 > pix.corner25 + 40,
    `${pix.corner25} then ${pix.corner70} pixels — the corner row is the only readout for somebody looking at their own hands`);
+
+// ---- a non-host's tap is seen ----------------------------------------------
+console.log(JSON.stringify({ ready }, null, 1));
+ok('a non-host START tap readies them and starts nothing', ready.tapReadied && ready.stillWarmup);
+ok('two renders of one empty Set are identical', ready.renderStable === 0,
+   ready.renderStable + ' pixels differ with nothing changed — the null, without which every ' +
+   'number below is measuring the lobby moving between frames');
+ok('a readied body carries a mark', ready.marked > 40,
+   ready.marked + ' pixels — measured as a difference against the same frame with the Set ' +
+   'cleared, because the plate, the rim and the ring are all up there on every build');
+ok('...clear of the hold ring it can appear beside', ready.insideRing === 0,
+   ready.insideRing + ' pixels inside the ring radius — a readied player can then lean on ' +
+   'the button to force the kickoff, so the two really do draw together');
+ok('...and readying one body marks only that body', ready.hostMarked === 0,
+   ready.hostMarked + ' pixels on the host, who did not tap');
+ok('...and the mark FOLLOWS the Set, per body', ready.hostFollows > 40,
+   ready.hostFollows + ' pixels on the host once the host is added — a build that ignores ' +
+   'the Set and marks everybody draws the same picture in both halves of every other pair ' +
+   'here, so they all read zero and the host check passes for exactly the wrong reason');
+ok('tapping again takes it off, on screen as well as in the Set',
+   !ready.untapped && ready.clearedOnScreen > 40,
+   `set=${ready.untapped} diff=${ready.clearedOnScreen} — a toggle that only ever goes on ` +
+   'is a mark you cannot correct');
 
 // ---- any button holds ------------------------------------------------------
 const DPAD = [12, 13, 14, 15];

@@ -2182,6 +2182,43 @@ three lines a second time, name it.
   ⚠️ **A lone human's number is untouched, and that is the point.** Your shirt has to read the
   same in warm-up and at kickoff, which is what was asked for, so nothing fires unless a second
   person is genuinely holding the same number. `tests/textplates.mjs` pins both directions.
+  ⚠️ **AND IT RUNS MID-MATCH TOO, in a second mode** (`numberTheSides(w, fillOnly)`, called
+  from `evenUpSides`). It used to run at `lobbyStart` and nowhere else, so a bot walking on
+  to even the sides kept the warm-up **robot** plate for the rest of the match — measured on
+  a 3v3 that kicked off `num1 num2 num3` a side, with both mid-match arrivals reading `bot`.
+  Invisible with a team flag set, because the country covers it, which is the half of a long
+  match nobody sets up and everybody plays.
+  ⚠️ **THE TWO MODES ARE DIFFERENT RULES AND MUST STAY SO.** `lobbyStart` deals every bot a
+  fresh number, because in the lobby none of them has one and that is what makes a team sheet
+  read 1..n with no gaps. `evenUpSides` cannot: those bots are wearing numbers people have
+  been watching all match, and renumbering them because a controller hiccupped swaps shirts
+  mid-play. So mid-match every existing plate is RESERVED and only a body still wearing
+  `BOT_FACE` is given one.
+  ⚠️ **RESERVE BEFORE ASSIGNING — two passes, not one.** A robot early in the roster is
+  otherwise handed a number a bot further down is already wearing; sabotaged that way, the
+  side reads `num1 num2 num3 num2`.
+  ⚠️ **A BODY'S REAL PLATE MAY BE UNDERNEATH A COUNTRY** (`plate`/`wear`). With a team flag
+  set, `applyTeamColours` wears the country and stashes the body's own plate in `_ownFlag` —
+  the shirt it goes straight back to when that flag comes off. So THAT is what has to be
+  reserved: reading `p.flag` out there reserves nothing (a country is not a number) and the
+  newcomer is handed a duplicate **nobody can see until the flag is cleared**, which is this
+  entry's own defect, hidden. Measured: with Brazil on both sides the filler stashed `num1`
+  beside a bot already stashing `num1`.
+  ⚠️ **THE ORDER AGAINST `applyTeamColours` IS NOT LOAD-BEARING — a withdrawn claim.** The
+  call was written above it with a comment saying that running after "would rip the country
+  off". It would not: `plate`/`wear` follow the stash, so once a body is stamped the
+  numbering lands on `_ownFlag` and `p.flag` keeps the country either way. Swapping the two
+  lines leaves the suite green and the end state identical. It stays above because that is
+  the order `lobbyStart` reads in — number, then dress.
+  ⚠️ **`numOf` matches `/^num(\d+)$/`, and a single `\d` was a real hole.** `shirtNo` runs to
+  `num11` — eleven a side is the cap — so one digit read `num10` as *"a flag, animal or photo
+  is theirs"* and left a genuine duplicate standing. Unreachable below ten a side, which is
+  why it survived; `tests/textplates.mjs` measures it at the only size that can see it.
+  ⚠️ **"EVERYBODY HAS A NUMBER" IS TRUE OF A BUILD THAT RENUMBERS THE WHOLE SIDE, and on a
+  tidy 1..n roster the two rules AGREE — keep-your-number and deal-from-one both hand the
+  newcomer `num4`.** So that sabotage sailed through until the check moved a body to `num7`
+  first: a real match does not stay tidy (a bot subbed off and another added leaves gaps) and
+  only in a gap do the two diverge.
 - **Caps:** one painter, `paintCap()`, centred on the disc and outlined in the opposite ink
   so it reads over a flag or a shirt number. ⚠️ There used to be **two** cap draws — the pitch
   at `-0.48r`/`0.78r` type, the menu preview at `-0.5r`/`0.72r` — so the mark you picked was
@@ -4488,11 +4525,13 @@ three lines a second time, name it.
   ⚠️ **The COLOUR was already right and the flag was not**, which is why this reads as a
   flag bug rather than a dressing bug: `spawnLobbyBot` takes `teamTint(team, seat)`, and
   that function ignores its index and returns the team colour.
-  ⚠️ Still open, and NOT fixed here because it was not what was asked: with no team flag set,
-  a mid-match filler keeps the warm-up **robot** plate rather than a shirt number, because
-  `numberTheSides` only ever runs at `lobbyStart`. With a flag it is invisible — the country
-  covers it — which is why the screenshot showed a robot on a side that should have been
-  Brazil and nothing odd anywhere else.
+  ⚠️ **AND THE SHIRT NUMBER IS THE OTHER HALF OF BEING DRESSED — now fixed, and recorded
+  here as open for a while.** `numberTheSides` ran at `lobbyStart` and nowhere else, so with
+  NO team flag set nothing covered for it and a mid-match filler kept the warm-up **robot**
+  plate for the rest of the match. Measured on a 3v3 that kicked off `num1 num2 num3` a
+  side: both arrivals read `bot`. With a flag it is invisible, which is why the original
+  screenshot showed a robot on a side that should have been Brazil and nothing odd anywhere
+  else — see `numberTheSides`' own entry for the mid-match rule.
   ⚠️ **BOTH SIDES MAY WEAR THE SAME COUNTRY, unlike the colours.** Two teams in one shade is
   unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still told
   apart by the shirt, which is what colour is for. Refusing would be a control that
@@ -4591,9 +4630,32 @@ three lines a second time, name it.
   ⚠️ **The check for it needs a NON-HOST seat**, and the host version reads a FALSE
   NEGATIVE: a host's START *tap* starts the match on frame one, so there is no hold left to
   measure and `startHold` reads 0 on a perfectly good build.
-  ⚠️ **`w.lobby.ready` IS WRITTEN AND READ BY NOTHING** — found while measuring this, not
-  fixed here. So a non-host's tap toggles a Set nobody consults and nothing draws: the
-  `kickTeam` shape, still open.
+  ⚠️ **`w.lobby.ready` WAS WRITTEN AND READ BY NOTHING — the `kickTeam` shape, now closed**
+  (`drawReadyMark`, `holdRingR`). Found while measuring the hold, and left open for a while:
+  the tap toggled a Set with **one writer in the whole file and no reader anywhere**, the
+  only two readers in the repo being `tests/lobby.mjs` and this suite asserting it had
+  grown. So the headline said PRESS START TO CONTINUE and, for everybody who is not the
+  host, pressing it did nothing anybody could see — NO DEAD CONTROLS with the control
+  already built.
+  ⚠️ **A MARK ON THE BODY, never a count in the caption.** Two readers want different
+  things: the person who pressed needs to know their own tap landed, and the HOST needs to
+  know who is still picking a shirt. *"3 READY"* answers the first and not the second; a
+  tick over a body answers both with one drawing.
+  ⚠️ **IT CHANGES NO START PATH.** The host's tap still kicks off outright, the five-second
+  any-button hold is untouched, and readying the whole room starts nothing. This is a
+  readout for the person whose button already starts the match, not a second way to start
+  it — a vote would take the kickoff off the host, and with host-plus-one the lone non-host
+  would decide.
+  ⚠️ **IT CLEARS THE HOLD RING BY CONSTRUCTION, and the two DO appear together** — a readied
+  player can then lean on the button to force the kickoff. `holdRingR` was extracted so
+  there is ONE owner of where that ring sits; a second copy of the expression is two things
+  drifting until one lands on the reach circle, which this ring has already done twice.
+  ⚠️ **THE OBVIOUS PAIRING IS VACUOUS AND TWO CHECKS HAD TO BE REWRITTEN.** Every probe here
+  is a difference between two states of that one Set — but a build that IGNORES the Set and
+  marks everybody draws the same picture in both halves of every such pair, so *"nothing is
+  drawn until somebody readies up"* and *"the host is never marked"* both read **zero** and
+  passed it. What such a build cannot fake is `hostFollows`: adding the HOST to the Set has
+  to make ink appear on the host. Caught by the sabotage, not by reasoning.
 - **ANYBODY CAN FORCE THE KICKOFF BY HOLDING START FOR FIVE SECONDS** (`LOBBY.holdStart`,
   `p.startHold`/`p.startArm`, `startHoldFrac`, `padHoldFrac`). Only the host's press started
   a match, so a room where player one had wandered off, put their pad down or was still

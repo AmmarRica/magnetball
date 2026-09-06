@@ -108,6 +108,79 @@ const r = await p.evaluate(async ()=>{
     o.botsRouteRound = new Set(others).size === others.length && others.every(x=>/^num\d$/.test(x));
   }
 
+  // ---- A MID-MATCH FILLER IS DRESSED TOO ----------------------------------
+  // ⚠️ MEASURED FIRST: `numberTheSides` ran in `lobbyStart` and nowhere else, so a bot
+  // `evenUpSides` walks on mid-match kept the warm-up ROBOT plate for the rest of the
+  // match. On a 3v3 that kicked off `num1 num2 num3` a side, both arrivals read `bot`.
+  // Invisible whenever a team flag is set — the country covers it — which is the half of
+  // a long match nobody sets up and everybody plays.
+  {
+    const grow = (flags) => {
+      M.sel.mode='3v3'; M.sel.lobby='off'; M.sel.teamFlag = flags;
+      M.setMatchSeed(11); M.startMatch();
+      const w = M.world; w.state='play'; w.stateT=2;
+      for (let i=0;i<60;i++) M.step(w);
+      const before = w.players.map(q=>q.flag);
+      w.subPer = 4;                       // a person arrived, so the match grows a body a side
+      M.evenUpSides(w);
+      return { w, before };
+    };
+    const a = grow([null, null]);
+    o.fillerBefore = a.before;
+    o.fillerAfter  = a.w.players.map(q=>q.flag);
+    o.noRobotsLeft = a.w.players.every(q => q.flag !== M.BOT_FACE);
+    // ⚠️ PAIRED with the shirts already out there not moving. "Everybody has a number" is
+    // equally true of a build that renumbers the whole side on every roster change, which
+    // swaps shirts people have been watching all match because a controller hiccupped.
+    // ⚠️ **AND THE GAP IS WHAT MAKES THAT CHECK BITE.** On a tidy 1..n side the two rules
+    // agree exactly — keep-your-number and deal-from-one both produce `num4` for the
+    // newcomer — so a sabotage that renumbers the whole side sails through. A real match
+    // does not stay tidy: a bot subbed off and another added leaves gaps, and only there do
+    // the two diverge. So one body is moved to a high number before the side grows again.
+    const kept = a.before.every((f, i) => a.w.players[i].flag === f);
+    const held = a.w.players.find(q => q.ctrl === 'bot' && q.team === 0);
+    held.flag = 'num7';
+    const snap = a.w.players.map(q => q.flag);
+    a.w.subPer = 5; M.evenUpSides(a.w);
+    o.gapShirts = a.w.players.filter(q => q.team === 0).map(q => q.flag);
+    o.existingShirtsHeld = kept && snap.every((f, i) => a.w.players[i].flag === f);
+    o.noDupePerSide = [0,1].every(t => {
+      const f = a.w.players.filter(q=>q.team===t).map(q=>q.flag);
+      return new Set(f).size === f.length;
+    });
+    // ⚠️ ...and with a COUNTRY on the side the country still wins, with the number stashed
+    // underneath. `applyTeamColours` hands `_ownFlag` back the moment the flag comes off, so
+    // a duplicate down there is the same defect hidden rather than fixed — it was real:
+    // the filler stashed `num1` beside a bot already stashing `num1`.
+    const c = grow(['brazil', 'brazil']);
+    o.countryStillWins = c.w.players.every(q => q.flag === 'brazil');
+    o.noDupeUnderneath = [0,1].every(t => {
+      const f = c.w.players.filter(q=>q.team===t).map(q=>q._ownFlag);
+      return f.every(x => /^num\d+$/.test(x || '')) && new Set(f).size === f.length;
+    });
+    // ⚠️ ...and the LOBBY path is untouched: it still deals 1..n with no gaps, which is what
+    // a team sheet looks like and is exactly what the mid-match rule must not do.
+    M.sel.teamFlag = [null, null]; M.sel.mode='3v3'; M.sel.lobby='on';
+    M.setMatchSeed(4); M.startMatch({ lobby:true });
+    const v = M.world; M.lobbyStart(v);
+    o.lobbySheet = [0,1].map(t => v.players.filter(q=>q.team===t).map(q=>q.flag).join(','));
+    o.lobbyStillDealsOneUp = o.lobbySheet.every(s => s === 'num1,num2,num3');
+    // ⚠️ **A TWO-DIGIT SHIRT IS STILL A SHIRT.** `numOf` matched `/^num(\d)$/`, so `num10`
+    // and `num11` read as "a flag / animal / photo is theirs" and a genuine duplicate was
+    // left standing. Unreachable below ten a side, which is why it survived — so it is
+    // measured at the only size that can see it, on the two plates a single digit misses.
+    {
+      M.sel.mode='3v3'; M.sel.lobby='off'; M.setMatchSeed(11); M.startMatch();
+      const w = M.world, side = w.players.filter(q=>q.team===0);
+      side[0].ctrl='human1'; side[0].flag='num10';
+      side[1].ctrl='gamepad'; side[1].flag='num10';
+      M.numberTheSides(w);
+      const f = [side[0].flag, side[1].flag];
+      o.twoDigitFlags = f;
+      o.twoDigitShirtsSeparate = f[0] !== f[1] && f.every(x => /^num\d+$/.test(x));
+    }
+  }
+
   // ---- Every glyph from the list is present and unlocked
   o.textCount = M.TEXT_KEYS.length;
   const glyphs = M.TEXT_KEYS.map(k=>M.TEXTS[k].g);
@@ -280,6 +353,8 @@ const must = ['defaultIsANumber','freshProfileIsANumber','allNumbers','noCountry
   'everyGlyphHasInk','blankHasNone','glyphIsCentred','nothingSpills',
   'defaultNoHat','defaultNoEyes','defaultDiscIsBare','defaultDiscHasItsNumber',
   'noTwoInTheSameShirt','loneNumberKept','flagFaceplateKept','photoFaceplateKept','botsRouteRound',
+  'noRobotsLeft','existingShirtsHeld','noDupePerSide','countryStillWins','noDupeUnderneath',
+  'lobbyStillDealsOneUp','twoDigitShirtsSeparate',
   'foldMovesTheOldPair','foldLeavesAStarAlone','foldLeavesGooglyAlone','foldIsOneShot'];
 const bad = must.filter(k => r[k] !== true);
 const ok = bad.length === 0 && errors.length === 0;

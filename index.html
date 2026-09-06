@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260905.0410AM';
+const VERSION = '20260906.0355AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260905.0410AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260906.0355AM', title: 'Substitutes get a shirt, and READY means something',
+    changed: [
+      '<b>A bot that comes on mid-match now wears a squad number.</b> It kept the robot face it wears in warm-up, so a side could finish a match with a robot standing among the numbers. Everyone already on the pitch keeps the shirt they started in.',
+      '<b>Pressing START in warm-up shows a tick over you.</b> Only player one’s press starts the match; everybody else’s says “I am ready”, and until now that said it to nobody. The tick tells whoever is starting that you are done choosing.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260905.0410AM', title: 'Smoother, less floaty, and a proper kickoff',
     changed: [
       '<b>The game no longer stutters when something big happens.</b> There was a brief freeze on a goal and on a shot heading in \u2014 a couple of frames where everything stopped dead. It fired about six times a minute and read as the game lagging rather than as a moment landing, so it is off. It is still a slider if you want it back.',
@@ -21445,6 +21452,11 @@ function lobbyHumans(w){ return w.players.filter(p => p.ctrl !== 'bot'); }
 // ⚠️ Drawn from the pose through `ix`/`iy` like anything else anchored to a moving body:
 // mid-step the raw position is up to a whole step of travel away. It only DRAWS — the
 // clocks live in the step loop (`pollLobbyStart`, `pollWarmupHold`).
+// ⚠️ ONE OWNER for where the hold ring sits, because a SECOND mark now has to clear it
+// (`drawReadyMark`). Two copies of this expression is two things drifting apart until one
+// of them lands on the reach circle, which is the mistake this ring has already made twice.
+// Returns the ring's CENTRE-LINE radius; its outer edge is that plus half a stroke.
+function holdRingR(r, rw){ return Math.max(r * 2.3, r * kickRingMul() + rw) + rw / 2; }
 function drawHoldRing(p, f){
   if (!p || !(f > 0)) return;
   const c0 = screenPt(wx(ix(p)), wy(iy(p)));
@@ -21472,14 +21484,59 @@ function drawHoldRing(p, f){
   // a 2px stroke's own soft edge crosses: `tests/lobbyhold.mjs` read 11 inked angles at the
   // reach radius. A tenth of a radius is not clearance from a circle that is a promise
   // about the physics.
-  const inner = Math.max(r * 2.3, r * kickRingMul() + rw);
-  const rr = inner + rw / 2;
+  const rr = holdRingR(r, rw);
   ctx.save();
   ctx.lineWidth = rw;
   ctx.lineCap = 'butt';
   ctx.strokeStyle = kickRingInk();
   ctx.beginPath();
   ctx.arc(c0[0], c0[1], rr, -Math.PI/2, -Math.PI/2 + f * Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+// ⚠️ **A NON-HOST'S START TAP NOW SHOWS UP, AND FOR THE LIFE OF THE FEATURE IT DID NOT.**
+// `w.lobby.ready` had exactly ONE writer in the file — the tap — and no reader anywhere:
+// two test suites asserted the Set had grown and nothing on screen or in the game ever
+// consulted it. So the headline said PRESS START TO CONTINUE and, for everybody who is not
+// the host, pressing it did nothing anybody could see. That is the NO DEAD CONTROLS rule
+// with the control already built.
+// ⚠️ **A MARK ON THE BODY, never a count in the caption.** It has two readers and they want
+// different things: the person who just pressed needs to know their own tap landed, and the
+// HOST needs to know who is still picking a shirt. "3 READY" answers the first and not the
+// second; a tick over a body answers both with one drawing.
+// ⚠️ **It changes no start path at all.** The host's tap still kicks off outright, the
+// five-second any-button hold is untouched, and readying everybody in the room starts
+// nothing — this is a readout for the person whose button already starts the match, not a
+// second way to start it. Handing the room a vote would take the kickoff off the host.
+// ⚠️ Cleared with the room: `w.lobby` is rebuilt by `enterWarmup`, so the Set cannot outlive
+// the warm-up it belongs to.
+// ⚠️ **CLEARS THE HOLD RING BY CONSTRUCTION** (`holdRingR`), because the two DO appear
+// together — a player who has readied up can then lean on the button to force the kickoff,
+// and the ring fills underneath this. Everything is derived from the body radius, so it
+// holds at every zoom and every value of the reach dial.
+// ⚠️ Drawn in SCREEN space off `ix`/`iy` like the name plates and the floaters, so "above"
+// stays above when the pitch is turned a quarter and the mark never lies about which body
+// it belongs to mid-step.
+function drawReadyMark(p, col){
+  if (!p) return;
+  const c0 = screenPt(wx(ix(p)), wy(iy(p)));
+  const r = p.r * cam.s;
+  const rw = Math.max(2, r * 0.18);
+  const tr = Math.max(4, r * 0.5);                  // a floor: on the huge courts r is ~3px
+  const cx = c0[0], cy = c0[1] - (holdRingR(r, rw) + rw / 2 + tr + 2);
+  const halo = TH.nameBg || '#000000';
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, tr, 0, Math.PI*2);
+  ctx.lineWidth = Math.max(1.5, tr * 0.28); ctx.strokeStyle = halo; ctx.stroke();
+  ctx.fillStyle = col; ctx.fill();
+  // The tick itself, in whichever ink reads on the colour that side picked.
+  ctx.beginPath();
+  ctx.moveTo(cx - tr*0.46, cy + tr*0.02);
+  ctx.lineTo(cx - tr*0.10, cy + tr*0.40);
+  ctx.lineTo(cx + tr*0.48, cy - tr*0.40);
+  ctx.lineWidth = Math.max(1.5, tr * 0.30);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = readableInk(col, halo);
   ctx.stroke();
   ctx.restore();
 }
@@ -22672,11 +22729,33 @@ function spawnLobbyBot(w, team, seat, used){
 // ⚠️ **A lone human's number is untouched, which is the whole point.** Your shirt has to be
 // the same in warm-up and at kickoff — that is what was asked for — so nothing here fires
 // unless a second person is genuinely holding the same number.
-function numberTheSides(w){
-  const numOf = (p) => {
-    const m = /^num(\d)$/.exec(p.flag || '');
+// ⚠️ **THE SECOND ARGUMENT IS "ONLY DRESS WHAT IS STILL A ROBOT"**, which is the mid-match
+// call. `lobbyStart` deals every bot a fresh number because in the lobby none of them has
+// one — that is what `BOT_FACE` means — and it is what keeps a team sheet reading 1..n with
+// no gaps. `evenUpSides` cannot do that: the bots already on the pitch are wearing numbers
+// people have been watching all match, and renumbering them because somebody's controller
+// hiccupped changes shirts mid-play. So mid-match every existing plate is RESERVED and only
+// a body still wearing the robot is given a number.
+// ⚠️ **AND MID-MATCH A BODY'S REAL PLATE MAY BE UNDERNEATH A COUNTRY.** With a team flag
+// set, `applyTeamColours` wears the country and stashes the body's own plate in `_ownFlag`
+// — which is the shirt it goes straight back to the moment that flag comes off. So THAT is
+// the number to reserve: reading `p.flag` out there reserves nothing (a country is not a
+// number), and the newcomer is handed a duplicate that nobody sees until the flag is
+// cleared, which is the "two people in the same shirt" defect this function exists to stop,
+// hidden. Measured: with Brazil on both sides, the mid-match filler stashed `num1` beside a
+// bot already stashing `num1`. `plate`/`wear` are the one place that knows where a body's
+// plate actually lives, so nothing below has to ask twice.
+function numberTheSides(w, fillOnly){
+  const numOf = (s) => {
+    // ⚠️ `\d+`, not `\d`. `shirtNo` runs to `num11` — eleven a side is the cap — so a single
+    // digit reads `num10` as "a flag / animal / photo is theirs" and leaves a real duplicate
+    // standing. Unreachable below ten a side, which is why it survived.
+    const m = /^num(\d+)$/.exec(s || '');
     return m ? +m[1] : null;
   };
+  const under = (p) => fillOnly && typeof p._ownFlag === 'string';
+  const plate = (p) => under(p) ? p._ownFlag : p.flag;
+  const wear  = (p, v) => { if (under(p)) p._ownFlag = v; else p.flag = v; };
   for (const team of [0, 1]){
     const side = w.players.filter(p => p.team === team);
     const taken = new Set();
@@ -22696,12 +22775,19 @@ function numberTheSides(w){
     // unless somebody on this side already has it.
     for (const p of side){
       if (p.ctrl === 'bot') continue;
-      if (numOf(p) === null) continue;                   // a flag / animal / photo is theirs
-      if (taken.has(p.flag)) p.flag = free();
-      taken.add(p.flag);
+      if (numOf(plate(p)) === null) continue;            // a flag / animal / photo is theirs
+      if (taken.has(plate(p))) wear(p, free());
+      taken.add(plate(p));
     }
+    // ⚠️ Mid-match, RESERVE before assigning — two passes, not one. A robot early in the
+    // roster would otherwise be handed a number a bot further down is already wearing.
+    // Anything that is not the robot plate is left exactly as it is.
+    if (fillOnly) for (const p of side)
+      if (p.ctrl === 'bot' && numOf(plate(p)) !== null) taken.add(plate(p));
     // ...then the bots take whatever numbers are actually left.
-    for (const p of side) if (p.ctrl === 'bot'){ p.flag = free(); taken.add(p.flag); }
+    for (const p of side) if (p.ctrl === 'bot' && !(fillOnly && plate(p) !== BOT_FACE)){
+      wear(p, free()); taken.add(plate(p));
+    }
   }
 }
 // Resolve the sides people picked, balance them with bots, and kick off.
@@ -23281,6 +23367,22 @@ function evenUpSides(w){
   // stale the day a side gains anything else.
   // ⚠️ `subSwapNow` calls it too, BEFORE this: it has to dress the returning person for the
   // side they are going back to before the arithmetic below reads the roster.
+  // ⚠️ **AND A SHIRT NUMBER IS THE OTHER HALF OF BEING DRESSED.** `numberTheSides` ran in
+  // `lobbyStart` and nowhere else, so with NO team flag set the country never covered for it
+  // and a filler bot walked on in the warm-up ROBOT plate for the rest of the match —
+  // measured on a 3v3 that kicked off `num1 num2 num3` a side, with both mid-match arrivals
+  // reading `bot`. That is the half of a long match nobody sets up and everybody plays.
+  // ⚠️ **BEFORE `applyTeamColours`, which reads in the same order `lobbyStart` does** —
+  // number the bodies, then dress the side — so with a country set the stamp lands on top
+  // and the number is the `_ownFlag` underneath, ready for the moment that flag comes off.
+  // ⚠️ **A WITHDRAWN CLAIM: the order is NOT load-bearing, and this comment said it was.**
+  // "Run after, it would rip the country off" is what was written and it is false —
+  // `numberTheSides`' own `plate`/`wear` follow the stash, so once a body is stamped the
+  // numbering lands on `_ownFlag` and `p.flag` keeps the country either way. Sabotaged by
+  // swapping these two lines, the suite stays green and the end state is identical.
+  // Recorded rather than papered over, so the next person does not go looking for the check
+  // that is supposed to catch it.
+  numberTheSides(w, true);
   applyTeamColours(w.players);
   syncSeatRotation(w);
 }
@@ -28437,6 +28539,11 @@ function drawLobby(w){
   // mid-step the raw position is up to a whole step of travel away.
   // ⚠️ It only DRAWS — `pollLobbyStart` owns the clock, in the step loop.
   for (const p of lobbyHumans(w)) drawHoldRing(p, startHoldFrac(p));
+  // --- READIED UP. A tick over whoever has tapped START to say they are done choosing —
+  // see `drawReadyMark`. Not during calibration, where the taps mean something else and
+  // the room is showing one person a direction wizard.
+  if (!L.calib)
+    for (const p of lobbyHumans(w)) if (L.ready.has(p)) drawReadyMark(p, teamColOf(p.team));
   // ⚠️ THERE IS NO PER-PLAYER PROMPT ROW ANY MORE. It was a line of plates under the
   // touchline reading "P1 START = KICK OFF · P2 START = READY · …", one per person —
   // a row that grows with the room, sitting between the pitch and the keyboard, saying
@@ -34024,7 +34131,7 @@ if (window.__MAGNETDEBUG) {
     isUnlocked, unlockCounts, UNL_CATS,
     get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
     sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection,
-    startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans,
+    startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans, holdRingR, drawReadyMark,
     kbHit, teamFlagOf, setTeamFlag, LOBBY_FLAGS, NATION_COLS, nationCol, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
