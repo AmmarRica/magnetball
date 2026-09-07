@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260907.0420AM';
+const VERSION = '20260907.1150AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260907.0420AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260907.1150AM', title: 'Controllers work in Training, and twice the confetti',
+    changed: [
+      '<b>A controller now steers the player in Training.</b> The practice room never handed the pad a seat, so on a TV with a controller and no keyboard there was a body on the pitch that nothing could move.',
+      '<b>Twice as much confetti.</b> Every celebration that threw some throws double \u2014 goals, the snail, berries, a full hive, drill gates and the cup.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260907.0420AM', title: 'The bot you replace leaves the pitch',
     changed: [
       '<b>Join a match and the bot you take over from walks off.</b> It leaves through the touchline gate, the same way substitutes come on.',
@@ -17623,6 +17630,26 @@ function startMatch(opts){
 
   if (mode.train){
     // Free practice: just you and the ball, no opponents, no clock.
+    // ⚠️ **AND THAT ONE BODY TAKES A PAD SEAT, which it did not.** The seat loop below
+    // lives inside the `else`, so training's single body stayed `human1` with
+    // `padIndex: -1` — and `padFor` sends a `human1` seat to `pads.p1`, which only the
+    // KEYBOARD and the touch stick ever write. Measured with one controller connected:
+    // holding the stick hard over for 90 steps moved the body **0 units** against the
+    // keyboard's **209.8**. On a TV with a pad and no keyboard — which is the screen this
+    // game is played on — the practice room was a body nobody could drive.
+    // ⚠️ **A REAL SEAT (`ctrl='gamepad'`), never a merge into the `human1` branch**, and
+    // that is what buys the rest of it: rumble, the corner controller icon, SELECT's
+    // quarter turn and `_padId` reclaim on an unplug all read `padIndex`, so a body left
+    // at -1 is a body the game still believes has no controller. The keyboard is not lost,
+    // because `firstHumanSeat` + `mergePads` already give the first pad seat both inputs.
+    // ⚠️ **The FIRST connected pad**, not index 0: a guest who joined an earlier match on
+    // pad 1 and then opened Training is holding pad 1.
+    // ⚠️ Gated on `padsTakeSeats()`, the one predicate for "may a controller take a seat" —
+    // somebody on Controllers = Touch with a stray Bluetooth pad keeps the touch stick.
+    if (padsTakeSeats() && !_startQuiet){
+      const gp = connectedGamepadIndices();
+      if (gp.length){ you.ctrl = 'gamepad'; you.padIndex = gp[0]; you._padId = padIdOf(gp[0]); }
+    }
     players.push(you);
   } else if (mode.twoP){
     // Local 2-player couch: two humans on one screen, split touch controls.
@@ -24264,7 +24291,7 @@ function checkGoal(w){
       if (w._trainGoalCd > 0) return;
       w.practiceGoals++;
       showBanner('GOAL!', 'var(--accent)');
-      fx.length = 0; for (let i=0;i<20;i++) spawnConfetti(ball.x, ball.y);
+      fx.length = 0; spawnConfetti(ball.x, ball.y, 20);
       goalBurst(w, inTop ? 1 : 0);
       w._trainGoalCd = 1.1;
       updateScoreUI();
@@ -24309,7 +24336,7 @@ function scoreGoal(w, team){
   playSfx('crowd');              // crowd cheer on a goal
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
   fx.length = 0;
-  for (let i=0;i<(motionOK()?40:26);i++) spawnConfetti(ball_x(w), ball_y(w));
+  spawnConfetti(ball_x(w), ball_y(w), motionOK()?40:26);
   goalBurst(w, team);   // shake + flash + hit-stop
   repOnGoal(w);   // freeze the last few seconds for replay / clip share
   // The one goal that gets the slow motion: the one nobody plays on from.
@@ -24332,7 +24359,7 @@ function scoreMultiBall(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(motionOK()?24:14);i++) spawnConfetti(ball.x, ball.y);
+  spawnConfetti(ball.x, ball.y, motionOK()?24:14);
   if (motionOK()){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }  // light burst, no hit-stop so play flows
 
   // Winning goal → freeze into the result, same as a normal match end.
@@ -24407,7 +24434,7 @@ function kqBerry(w, berry, team){
   // delivered. The event that kills the target is the right place to unlatch it.
   for (const q of w.players) if (q.aiBerry === berry) q.aiBerry = null;
   playSfx('net');
-  if (motionOK()){ addShake(5); for (let i=0;i<10;i++) spawnConfetti(berry.x, berry.y); }
+  if (motionOK()){ addShake(5); spawnConfetti(berry.x, berry.y, 10); }
   updateScoreUI();
   if (w.hive[team] >= BERRY.cells) kqHiveFull(w, team);
 }
@@ -24419,7 +24446,7 @@ function kqHiveFull(w, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('🫐 HIVE FULL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(motionOK()?30:14);i++) spawnConfetti(0, team===0 ? w.field.L/2 : -w.field.L/2);
+  spawnConfetti(0, team===0 ? w.field.L/2 : -w.field.L/2, motionOK()?30:14);
   if (motionOK()){ addShake(12); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.9; }
   w.state='goal'; w.stateT=0;
   repOnGoal(w);
@@ -24450,7 +24477,7 @@ function snailHome(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('🐌 SNAIL HOME!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(motionOK()?34:16);i++) spawnConfetti(ball.x, ball.y);
+  spawnConfetti(ball.x, ball.y, motionOK()?34:16);
   if (motionOK()){ addShake(14); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.95; }
   w.state='goal'; w.stateT=0;
   repOnGoal(w);
@@ -24469,7 +24496,7 @@ function kqGoal(w, ball, team){
   updateScoreUI();
   playSfx('crowd');
   showBanner('GOAL!', team===0?'var(--red)':'var(--cyan)');
-  for (let i=0;i<(motionOK()?24:14);i++) spawnConfetti(ball.x, ball.y);
+  spawnConfetti(ball.x, ball.y, motionOK()?24:14);
   if (motionOK()){ addShake(9); flashCol = team===0 ? TH.teamRed : TH.teamBlue; flash = 0.75; }
 
   if (w.sudden || (w.goalsTarget && w.score[team] >= w.goalsTarget)){
@@ -27485,7 +27512,7 @@ function updateDrill(w){
     const cup = w.zones[0];
     if (cup && !cup.done && Math.hypot(b.x - cup.x, b.y - cup.y) < cup.r && speed <= GOLF.rest){
       cup.done = true;
-      for (let k = 0; k < 14; k++) spawnConfetti(cup.x, cup.y);
+      spawnConfetti(cup.x, cup.y, 14);
       playSfx('goal');
       d.hole++;
       if (d.hole < GOLF_HOLES.length) golfLay(w, d.hole);
@@ -27500,7 +27527,7 @@ function updateDrill(w){
   if (d.def.targets){
     if (targetScored(w)){
       d.scored = (d.scored || 0) + 1;
-      spawnConfetti(b.x, b.y); for (let k=0;k<12;k++) spawnConfetti(b.x, b.y);
+      spawnConfetti(b.x, b.y, 13);
       playSfx('goal');
       targetNext(w);
     }
@@ -27527,7 +27554,7 @@ function updateDrill(w){
     if (g.done) return;
     if (d.def.seq && i!==firstUndoneG) return;
     if (segCross(b.px,b.py,b.x,b.y, g.p0.x,g.p0.y, g.p1.x,g.p1.y)){
-      g.done=true; spawnConfetti(g.x,g.y); for(let k=0;k<10;k++) spawnConfetti(g.x,g.y);
+      g.done=true; spawnConfetti(g.x,g.y, 11);
     }
   });
   const firstUndoneZ = zones.findIndex(z=>!z.done);
@@ -27536,9 +27563,9 @@ function updateDrill(w){
     if (d.def.seq && i!==firstUndoneZ) return;
     const inside = Math.hypot(b.x-z.x,b.y-z.y) < z.r;
     if (z.kind==='settle'){
-      if (inside && speed < 0.6){ z.tin += STEP; if (z.tin > 0.35){ z.done=true; for(let k=0;k<12;k++) spawnConfetti(z.x,z.y); } }
+      if (inside && speed < 0.6){ z.tin += STEP; if (z.tin > 0.35){ z.done=true; spawnConfetti(z.x,z.y, 12); } }
       else if (!inside) z.tin = 0;
-    } else if (inside){ z.done=true; for(let k=0;k<12;k++) spawnConfetti(z.x,z.y); }
+    } else if (inside){ z.done=true; spawnConfetti(z.x,z.y, 12); }
   });
   b.px = b.x; b.py = b.y;
 
@@ -33104,10 +33131,28 @@ function spawnKickFx(x,y,nx,ny,pow){
   }
   addShake(Math.min(5, pow*0.5));   // a stronger kick shakes more
 }
-function spawnConfetti(x,y){
+// ⚠️ **HOW MUCH CONFETTI IS ONE NUMBER, AND IT USED TO BE TWELVE.** Asked for as
+// *"double the amount of confetti"*, and `spawnConfetti` threw exactly ONE piece — so the
+// amount lived in twelve `for` loops scattered across the goal, the multi-ball goal, the
+// snail, the berry, the hive, the drill gates, the drill zones and the cup. Doubling that
+// by hand is twelve edits and a thirteenth site arriving next month at the old rate, which
+// is this file's duplication rule with the usual ending. It takes a COUNT now and
+// `CONFETTI.mul` is the one place the amount is decided.
+// ⚠️ **The count at a call site still means what it says** — `spawnConfetti(x, y, 40)` is
+// forty pieces of confetti at the old scale — because the multiplier is applied here, once.
+// A reader who wants the goal burst bigger than the berry burst still edits the 40.
+// ⚠️ **The reduced-motion halves are doubled too**, deliberately: those call sites already
+// choose a smaller number for a player who asked for less motion, and that proportion is
+// the thing to keep. `motionOK()` is not consulted here, or the two decisions would be
+// made in two places and a site could ask for a lean burst and get a fat one.
+const CONFETTI = { mul: 2 };
+function spawnConfetti(x,y,n){
   const cols=['#e05a5a','#5a7de0','#f5d547','#46d17a','#fff','#f07a5a'];
-  const a=fxRnd()*Math.PI*2, sp=1+fxRnd()*4;
-  fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1.2, max:1.2, c:cols[(fxRnd()*cols.length)|0], r:2+fxRnd()*2.5, grav:0.06});
+  const total = Math.max(1, Math.round((n == null ? 1 : n) * CONFETTI.mul));
+  for (let i=0;i<total;i++){
+    const a=fxRnd()*Math.PI*2, sp=1+fxRnd()*4;
+    fx.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1.2, max:1.2, c:cols[(fxRnd()*cols.length)|0], r:2+fxRnd()*2.5, grav:0.06});
+  }
 }
 // ============================================================
 //  FIREWORKS — only for the goal that wins it
@@ -34297,6 +34342,7 @@ if (window.__MAGNETDEBUG) {
     SPRINT, SPRINTOPT, sprintOn, sprintSecs, sprintRefill, sprintSlow, sprintBoost, sprintShow, advanceStamina,
     SWIPEPAUSE, onDown, onMove, onUp, SLIDER_GRAB, kickoffToss, KICKOFF_TOUCH,
     LABEL_BALL, labelBallFade, FIREWORK, startFireworks, advanceFireworks, SFX_SETS, iconTier,
+    CONFETTI, spawnConfetti,
     drawOneDisc, motionOK, prefersReducedMotion, firstHumanSeat, mergePads, dailyModalWanted, SFX_CATS, SFX_CHIP_ICON,
     UPD, updCheck, updParseVersion, updMaybeShow, updCanShow, updHide, updLater, updApply, updPossible,
     get updFound(){ return updFound; }, get updSeen(){ return updSeen; },

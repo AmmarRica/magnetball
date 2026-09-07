@@ -158,6 +158,51 @@ const solo = await one.evaluate(() => {
 });
 await one.close();
 
+// ========================== TRAINING MODE IS A SEAT LIKE ANY OTHER ==
+// ⚠️ THE BUG: the pad-seat loop lives inside `startMatch`'s `else`, and Training takes the
+// branch above it — so its one body stayed `human1` with `padIndex: -1`, and `padFor` sends
+// a `human1` seat to `pads.p1`, which only the KEYBOARD and the touch stick ever write.
+// Measured on the shipped build with one controller connected: the stick held hard over for
+// 90 steps moved the body **0 units** against the keyboard's 209.8. This suite's whole
+// subject is "the game can see the controller and gives it nothing to drive", and the
+// practice room was the last place it was still true.
+// ⚠️ THE CLAIM IS TRAVEL, not `ctrl === 'gamepad'`. A body relabelled and still reading the
+// wrong pad looks identical from `w.players` — the rule this file opens with.
+// ⚠️ PAIRED WITH THE KEYBOARD STILL WORKING. Handing the seat to a pad is exactly the change
+// that used to take the keyboard away, and `firstHumanSeat` + `mergePads` are what stop it;
+// "the pad drives it" is equally true of a build that broke the keys.
+const tr = await withPads(1);
+const train = await tr.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.sel.autoReplay = false; M.sel.lobby = 'off'; M.sel.orient = 'v';
+  M.sel.controllers = 'on'; M.sel.mode = 'train';
+  M.setMatchSeed(5); M.startMatch();
+  const w = M.world, pl = w.players[0];
+  o.only = w.players.length; o.ctrl = pl.ctrl; o.padIndex = pl.padIndex;
+  window.__pads[0].axes = [1, 0, 0, 0];
+  const x0 = pl.x, y0 = pl.y;
+  for (let i = 0; i < 90; i++) M.step(w);
+  o.padMoved = +Math.hypot(pl.x - x0, pl.y - y0).toFixed(1);
+  window.__pads[0].axes = [0, 0, 0, 0];
+  for (let i = 0; i < 150; i++) M.step(w);          // let it coast to a stop
+  const x1 = pl.x, y1 = pl.y;
+  M.pads.p1.dx = -1; M.pads.p1.dy = 0;
+  for (let i = 0; i < 90; i++) M.step(w);
+  M.pads.p1.dx = 0;
+  o.kbMoved = +Math.hypot(pl.x - x1, pl.y - y1).toFixed(1);
+  M.setMatchSeed(null);
+  return o;
+});
+// ...and Controllers = Touch still means touch: a stray Bluetooth pad takes nothing.
+const trTouch = await tr.evaluate(() => {
+  const M = window.__magnet;
+  M.sel.controllers = 'off'; M.sel.mode = 'train';
+  M.startMatch();
+  M.sel.controllers = 'on';
+  return { ctrl: M.world.players[0].ctrl };
+});
+await tr.close();
+
 const none = await withPads(0);
 const bare = await none.evaluate(() => {
   const M = window.__magnet;
@@ -212,9 +257,18 @@ ok('...and the keyboard still moves you', kb.moved > 5,
 ok('...and the lobby is not forced on somebody with no pad', !bare.lobbyWanted,
    'the lobby exists to test a stick and pick a side; with no controller there is neither');
 
+ok('A CONTROLLER DRIVES THE ONE BODY IN TRAINING', train.padMoved > 5,
+   `${train.padMoved} units with the stick held over — it measured 0 on the shipped build, because Training skips the seat loop and a 'human1' seat only ever reads pads.p1 (the keyboard and the touch stick)`);
+ok('...as a real seat, not a special case', train.only === 1 && train.ctrl === 'gamepad' && train.padIndex === 0,
+   JSON.stringify(train) + ' — rumble, the corner icon, SELECT\'s quarter turn and reclaim-on-unplug all read padIndex, so a body left at -1 is one the game still believes has no controller');
+ok('...and the keyboard is NOT lost with it', train.kbMoved > 5,
+   `${train.kbMoved} units — handing seat one to a pad is exactly what used to take the keys away; firstHumanSeat + mergePads are what stop it`);
+ok('...and Controllers = Touch still keeps the seat', trTouch.ctrl === 'human1',
+   `${trTouch.ctrl} — padsTakeSeats() is the one predicate for "may a controller take a seat"`);
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ o, drive, start, solo, bare, kb }, null, 1));
+console.log(JSON.stringify({ o, drive, start, solo, train, trTouch, bare, kb }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL fourpads\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS fourpads');

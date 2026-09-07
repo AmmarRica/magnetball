@@ -162,6 +162,32 @@ const touch = await p.evaluate(() => {
   return o;
 });
 
+// ============================================== HOW MUCH CONFETTI IS ONE NUMBER ==
+// ⚠️ `spawnConfetti` threw exactly ONE piece and the AMOUNT lived in twelve `for` loops
+// spread across the goal, the multi-ball goal, the snail, the berry, the hive, the drill
+// gates, the drill zones and the cup. "Double it" was twelve edits, and a thirteenth site
+// arriving next month would land at the old rate.
+// ⚠️ THE CLAIM IS NOT "the constant exists". A `CONFETTI.mul` that nothing reads passes
+// every reading of the table, so this drives the REAL goal path and counts the particles
+// that actually landed in `fx` — and pins the CALL SITE's own number as well, because a
+// build whose multiplier is applied at one site and not the others is exactly the rot the
+// one-owner rule is for.
+// ⚠️ `resetFx` before each burst, or the previous block's shells are in the count.
+const cp = await p.evaluate(() => {
+  const M = window.__magnet, o = {};
+  o.mul = M.CONFETTI.mul;
+  M.resetFx(1); M.spawnConfetti(0, 0, 10);   o.ten = M.fx.length;
+  M.resetFx(1); M.spawnConfetti(0, 0);       o.one = M.fx.length;
+  // the real goal burst, which asks for 40 at the old scale
+  M.sel.autoReplay = false; M.sel.mode = '3v3'; M.sel.lobby = 'off'; M.sel.length = '5';
+  M.setMatchSeed(3); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  M.resetFx(1); M.scoreGoal(w, 0);
+  o.goal = M.fx.length;
+  M.setMatchSeed(null);
+  return o;
+});
+
 await p.close();
 
 // -------------------------------------------------------------------- report --
@@ -192,9 +218,14 @@ ok('a TOUCH starts the match', touch.startedOnTouch,
 ok('...and standing away does not', touch.stayedWaiting,
    'without this the touch check passes on a build that starts the match on its own');
 
+ok('THE CONFETTI AMOUNT HAS ONE OWNER', cp.mul >= 2 && cp.ten === 10 * cp.mul && cp.one === cp.mul,
+   `mul ${cp.mul}, a call for 10 gave ${cp.ten}, a bare call gave ${cp.one} — it used to throw exactly one piece per call, with the amount spread over twelve for-loops`);
+ok('...and the real goal burst carries it', cp.goal === 40 * cp.mul,
+   `${cp.goal} pieces against 40 x ${cp.mul} — a multiplier applied in the helper and not reaching the call sites reads identically from the constant`);
+
 ok('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-console.log(JSON.stringify({ fw, toss, touch }, null, 1));
+console.log(JSON.stringify({ fw, toss, touch, cp }, null, 1));
 await b.close();
 if (fails.length){ console.log('FAIL fireworks\n  ' + fails.join('\n  ')); process.exit(1); }
 console.log('PASS fireworks');

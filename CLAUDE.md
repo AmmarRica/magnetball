@@ -3209,6 +3209,48 @@ three lines a second time, name it.
 - **Modes:** Season (`SEASON_ROUNDS`, `seasonEnd`), **Gauntlet roguelike** (`rogue`, `rogueNextRound`,
   `applyRoguePerks`, `rogueEnd`), drills (`DRILLS`, `stepDrill`), tutorial, party modifiers
   (`sel.party`). `endMatch(w)` routes `w.rogue`/`w.season` to their handlers.
+- **TRAINING'S ONE BODY TAKES A PAD SEAT** (`startMatch`'s `mode.train` branch). Reported
+  as *"on training mode, I can't control the one player spawning"*, and it is the seat
+  loop's placement: it lives inside the `else` and Training takes the branch above it, so
+  the single body stayed `human1` with `padIndex: -1` — and `padFor` sends a `human1` seat
+  to `pads.p1`, which only the KEYBOARD and the on-screen stick ever write. **Measured with
+  one controller connected: the stick held hard over for 90 steps moved the body 0 units
+  against the keyboard's 209.8.** On a TV with a pad and no keyboard — the screen this game
+  is played on — the practice room was a body nobody could drive.
+  ⚠️ **Same shape as `sel.controllers` shipping `off` and Sprint shipping off**, which is
+  why `tests/fourpads.mjs` is its home rather than a suite of its own: that file's whole
+  subject is *the game can SEE the controller and gives it nothing to drive*.
+  ⚠️ **A REAL SEAT (`ctrl = 'gamepad'`), never a merge into the `human1` branch.** Rumble,
+  the corner controller icon, SELECT's quarter turn and `_padId` reclaim on an unplug all
+  read `padIndex`, so a body left at −1 is one the game still believes has no controller.
+  The keyboard is not lost with it, because `firstHumanSeat` + `mergePads` already give the
+  first pad seat BOTH inputs — and that pairing is a check, since "the pad drives it" is
+  equally true of a build that took the keys away.
+  ⚠️ **The FIRST connected pad, not index 0**: a guest who joined an earlier match on pad 1
+  and then opened Training is holding pad 1. That is the user's own repro path.
+  ⚠️ **Gated on `padsTakeSeats()`**, the one predicate for "may a controller take a seat",
+  so Controllers = Touch with a stray Bluetooth pad keeps the touch stick.
+  ⚠️ **`mode.twoP` is deliberately NOT covered.** That is two thumbs on one phone with a
+  fixed split, so its second seat is `human2` by design and handing it a pad would be a
+  different feature. The `human1` branch reading `pads.p1` alone is therefore still
+  asymmetric with the `gamepad` branch's merge — written down rather than widened.
+- **HOW MUCH CONFETTI IS ONE NUMBER** (`CONFETTI.mul`, `spawnConfetti(x, y, n)`). Asked for
+  as *"double the amount of confetti"* — and `spawnConfetti` threw exactly ONE piece, so the
+  amount lived in **twelve `for` loops** across the goal, the multi-ball goal, the snail, the
+  berry, the hive, the drill gates, the drill zones and the cup. Doubling that by hand is
+  twelve edits and a thirteenth site arriving next month at the old rate, which is the
+  duplication rule with the usual ending.
+  ⚠️ **The count at a call site still means what it says** — `spawnConfetti(x, y, 40)` is
+  forty pieces at the old scale — because the multiplier is applied in the helper, once. So
+  the goal burst can still be made bigger than the berry burst by editing the 40.
+  ⚠️ **The reduced-motion halves are doubled too**, deliberately: those sites already choose
+  a smaller number for somebody who asked for less motion, and that PROPORTION is the thing
+  to keep. `motionOK()` is not consulted inside the helper, or one decision would be made in
+  two places and a site could ask for a lean burst and get a fat one.
+  ⚠️ **"The constant exists" is a vacuous check and a sabotage proved it**: a `CONFETTI.mul`
+  the helper ignores reads identically from the table. `tests/fireworks.mjs` drives the REAL
+  goal path and counts what landed in `fx` (**80 against 40 × 2**), which is also the only
+  thing that catches a call site keeping its own loop at the old rate.
 - **The snail is KICKABLE and heavy.** `handleSnailKick` — deliberately *not*
   `handleBallControl`, which traps and carries: dribbling the objective onto the goal line
   would be the whole match in one run. ⚠️ The impulse is scaled by `SNAIL.kick`, not by
