@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260906.0355AM';
+const VERSION = '20260907.0420AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260906.0355AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260907.0420AM', title: 'The bot you replace leaves the pitch',
+    changed: [
+      '<b>Join a match and the bot you take over from walks off.</b> It leaves through the touchline gate, the same way substitutes come on.',
+      '<b>It used to just stand there.</b> Faded out, but still on the court for the rest of the match — and in a state where nobody could tackle it and it could not touch the ball.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260906.0355AM', title: 'Substitutes get a shirt, and READY means something',
     changed: [
       '<b>A bot that comes on mid-match now wears a squad number.</b> It kept the robot face it wears in warm-up, so a side could finish a match with a robot standing among the numbers. Everyone already on the pitch keeps the shirt they started in.',
@@ -23211,31 +23218,53 @@ function stepBench(w){
   const accel = (w.pAccel || PLAYER.accel), damp = (w.pDamp || PLAYER.damp);
   const halfW = w.field.W/2, halfL = w.field.L/2, M = LOBBY.outMargin;
   for (const p of w.bench){
-    if (p.ctrl === 'bot'){ p.inX = 0; p.inY = 0; p.kick = false; continue; }   // reserves just wait
-    const ox = p.x, oy = p.y;                         // last position outside the pitch
-    applyHumanInput(p, padFor(p));
-    p.kick = false;                                   // nothing to kick out here
-    p.vx += p.inX * accel; p.vy += p.inY * accel;
-    p.vx *= damp; p.vy *= damp;
-    p.x += p.vx; p.y += p.vy;
-    // Held in the ring between the touchline and the outer margin: they can walk
-    // right round the pitch, but never onto it and never off the screen.
-    const insideX = Math.abs(p.x) < halfW + p.r, insideY = Math.abs(p.y) < halfL + p.r;
-    if (insideX && insideY){
-      // Pushed back out the side they CAME FROM, not the side they happen to be on:
-      // resolving by the current sign let someone walking left from +x pop out at
-      // -x the moment they crossed the centre — straight through the pitch.
-      const dx = (halfW + p.r) - Math.abs(p.x), dy = (halfL + p.r) - Math.abs(p.y);
-      const sx = Math.sign(ox) || Math.sign(p.x) || 1, sy = Math.sign(oy) || Math.sign(p.y) || 1;
-      if (Math.abs(ox) >= halfW + p.r - 0.5 || dx < dy){ p.x = sx * (halfW + p.r); p.vx = 0; }
-      else { p.y = sy * (halfL + p.r); p.vy = 0; }
+    // ⚠️ **A RESERVE WAITS; A BODY STILL LEAVING IS NOT A RESERVE YET, AND THIS BRANCH
+    // USED TO `continue` STRAIGHT PAST THE WALK BELOW.** So the bot a joiner replaced was
+    // handed a two-hop path out through the gate and never took a step of it: measured on
+    // a 3v3, `subOff` set the path and over **fifteen seconds the body moved 0.1 units**,
+    // still at (88.3, 101.5) on a 220 × 380 half. It is on the bench, so it is drawn at
+    // 0.45 alpha, and `bodyStaged` is true while `_subPath` is set — so what is left
+    // standing on the pitch for the rest of the match is a faded body that cannot be
+    // tackled and cannot touch the ball. Reported as exactly that.
+    // ⚠️ An `else` rather than a second copy of the walk inside this branch: the walk is
+    // the last thing in the loop for a human *on purpose* — it has to override the
+    // steering and the containment above it, not be overridden by them — so both kinds
+    // have to reach that one block rather than each carrying its own.
+    if (p.ctrl === 'bot'){ p.inX = 0; p.inY = 0; p.kick = false; }
+    else {
+      const ox = p.x, oy = p.y;                       // last position outside the pitch
+      applyHumanInput(p, padFor(p));
+      p.kick = false;                                 // nothing to kick out here
+      p.vx += p.inX * accel; p.vy += p.inY * accel;
+      p.vx *= damp; p.vy *= damp;
+      p.x += p.vx; p.y += p.vy;
+      // Held in the ring between the touchline and the outer margin: they can walk
+      // right round the pitch, but never onto it and never off the screen.
+      const insideX = Math.abs(p.x) < halfW + p.r, insideY = Math.abs(p.y) < halfL + p.r;
+      if (insideX && insideY){
+        // Pushed back out the side they CAME FROM, not the side they happen to be on:
+        // resolving by the current sign let someone walking left from +x pop out at
+        // -x the moment they crossed the centre — straight through the pitch.
+        const dx = (halfW + p.r) - Math.abs(p.x), dy = (halfL + p.r) - Math.abs(p.y);
+        const sx = Math.sign(ox) || Math.sign(p.x) || 1, sy = Math.sign(oy) || Math.sign(p.y) || 1;
+        if (Math.abs(ox) >= halfW + p.r - 0.5 || dx < dy){ p.x = sx * (halfW + p.r); p.vx = 0; }
+        else { p.y = sy * (halfL + p.r); p.vy = 0; }
+      }
+      p.x = clamp(p.x, -(halfW+M), halfW+M);
+      p.y = clamp(p.y, -(halfL+M), halfL+M);
     }
-    p.x = clamp(p.x, -(halfW+M), halfW+M);
-    p.y = clamp(p.y, -(halfL+M), halfL+M);
     // A body walking off after a substitution isn't steering itself. Two hops — out to
     // the gate, then along to its slot in the row — so it leaves the way it came in.
     if (p._subPath && p._subPath.length){
       if (walkTo(p, p._subPath[0], LOBBY_WALK.off)) p._subPath.shift();
+      // ⚠️ **CLEARED ON ARRIVAL, because an EMPTY ARRAY IS TRUTHY** and `bodyStaged` tests
+      // `q._subPath` rather than its length — so a body that had finished walking stayed
+      // flagged as still staging for the rest of its life. Harmless while it sits on the
+      // bench (every `bodyStaged` reader walks `w.players`, which the bench is not in) and
+      // a landmine the moment anything re-fields that body: it would take the pitch unable
+      // to collide or touch the ball. `subSwapNow` already nulls it on the reclaim path;
+      // this makes the flag mean what it says on every path.
+      if (!p._subPath.length) p._subPath = null;
     }
   }
 }

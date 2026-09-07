@@ -392,6 +392,57 @@ const r = await p.evaluate(new Function(FIX + `
     M.setTeamFlag(1, wasFlag || 'none');
   }
 
+  // ---- 4b3. THE BOT YOU REPLACED WALKS OFF THE PITCH ------------------------
+  // ⚠️ Reported as the bot going a bit transparent and STAYING ON THE COURT. Measured on
+  // the shipped build: subOff hands it a two-hop path out through the gate and it took
+  // none of it — over FIFTEEN SECONDS the body moved 0.1 units, still at (88.3, 101.5) on
+  // a 220 x 380 half. It is on the bench, so it is drawn at 0.45 alpha, and bodyStaged is
+  // true while _subPath is set — so what is left standing there for the rest of the match
+  // is a faded body that can neither be tackled nor touch the ball.
+  // ⚠️ ONE LINE: stepBench's "reserves just wait" branch continued PAST the walk-off block
+  // at the end of the loop, so the one thing a leaving bot has to do is the one thing a
+  // bot was skipped past.
+  // ⚠️ MEASURED AS THE BODY LEAVING THE RECTANGLE, never as "it moved". A bot shoved by a
+  // team-mate moves too, and the claim is that it is off the court.
+  {
+    const w8 = match('3v3');
+    PADS = [pad([])]; drive(w8, 40);
+    const g8 = waiting(w8)[0];
+    o.walkoffGuest = !!g8;
+    if (g8){
+      const halfW = w8.field.W/2, halfL = w8.field.L/2;
+      const inside = (q) => Math.abs(q.x) < halfW && Math.abs(q.y) < halfL;
+      g8.y = 140;                                   // beside team 0's half
+      const side = M.subSideOf(w8, g8);
+      // ⚠️ STEPPED TO THE MOMENT OF THE JOIN, not driven in one go. holdIn runs 220 steps
+      // in a block, and the walk-off is well under way by the end of them — so a snapshot
+      // taken afterwards reads the bot ALREADY off the pitch and "it started inside" comes
+      // back 0 on a perfectly good build, which is the guard failing rather than the rule.
+      // Same real path: the stick held straight in, read through inX/inY as stepBench wrote
+      // them.
+      const g = PADS[g8.padIndex];
+      const inw = M.subInward(w8, g8);
+      g.axes = [inw.x, inw.y, 0, 0];
+      let n = 0;
+      while (n++ < 400 && !w8.players.includes(g8)) drive(w8, 1);
+      g.axes = [0, 0, 0, 0];
+      o.walkoffJoined = w8.players.includes(g8);
+      // The bot the join dropped: on the bench, and still standing where it played.
+      const gone = bench(w8).filter(q => q.ctrl === 'bot' && q.team === side);
+      o.walkoffDropped = gone.length;
+      o.walkoffStartedInside = gone.filter(inside).length;
+      o.walkoffFrom = gone.map(q => [Math.round(q.x), Math.round(q.y)]);
+      // ⚠️ The ball and everybody else are parked away first: a shove is not a walk, and
+      // without this a bot nudged over the touchline reads as the fix working.
+      w8.ball.x = 9e3; w8.ball.y = 9e3;
+      for (const q of w8.players){ q.x = 0; q.y = -halfL*0.9; }
+      drive(w8, 900);                               // fifteen seconds
+      o.walkoffInside = gone.filter(inside).length;
+      o.walkoffStaged = gone.filter(q => M.bodyStaged(q)).length;
+      o.walkoffSpots  = gone.map(q => [Math.round(q.x), Math.round(q.y)]);
+    }
+  }
+
   // ---- 4c. A WAITING BODY'S STICK POINTS THE SAME WAY AS A PLAYING ONE'S ----
   // ⚠️ **EVERY ONE OF THE ELEVEN applySeatRotation CALL SITES PASSED w.players, which
   // is exactly the list a waiting body is NOT in.** So a controller standing on the
@@ -784,6 +835,14 @@ ok(all.flagOnSide === 'brazil' && all.kickoffWearsIt,
 ok(all.otherSideUntouched, 'a team flag reached the OTHER side too — it is per half');
 ok(all.fillerWearsIt,
    `a bot added by evenUpSides came on wearing ${JSON.stringify(all.fillerFlags)} — a side wearing a country has to dress what it gains, or the country is right on everybody who kicked off and wrong on everybody who arrived afterwards`);
+ok(all.walkoffGuest && all.walkoffJoined,
+   `no guest joined (guest ${all.walkoffGuest}, joined ${all.walkoffJoined}), so the walk-off checks below measure nothing`);
+ok(all.walkoffDropped >= 1 && all.walkoffStartedInside === all.walkoffDropped,
+   `the join dropped ${all.walkoffDropped} bot(s), ${all.walkoffStartedInside} of them on the pitch — if none started inside the rectangle then "it left" is true of a body that was never there`);
+ok(all.walkoffInside === 0,
+   `${all.walkoffInside} of ${all.walkoffDropped} replaced bots were STILL ON THE COURT after fifteen seconds, at ${JSON.stringify(all.walkoffSpots)} — reported as the bot going transparent and staying: stepBench's "reserves just wait" branch continued past the walk-off, so a leaving bot never took a step of the path subOff gave it, and a benched body is drawn at 0.45 alpha and cannot be tackled`);
+ok(all.walkoffStaged === 0,
+   `${all.walkoffStaged} arrived bodies still read bodyStaged — an EMPTY _subPath array is truthy, so a body that finished walking stayed flagged as staging and would take the pitch unable to collide or touch the ball if anything re-fielded it`);
 ok(all.rotGuest, 'no guest reached the touchline, so the stick-rotation checks below measure nothing');
 ok(all.turned === true, `the pitch is not turned (${all.turned}), so both bodies read rotation 0 and the check below passes on the broken build`);
 ok(all.rotMatches, `a waiting body's stick rotation is ${all.waitRot} against ${all.onPitchRot} on the pitch — every applySeatRotation call site passed w.players, which is the one list a waiting body is not in, so a joiner got neither the layout's quarter-turn nor SELECT's`);

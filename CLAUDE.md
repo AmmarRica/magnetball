@@ -4848,6 +4848,41 @@ three lines a second time, name it.
   the ball-control pass calls `bodyStaged` **directly**: that pass runs above the alias's
   declaration, so reading the alias there is a temporal dead zone and took the page out on
   the first step. **Nineteenth TDZ bite in this file.**
+- **THE BOT YOU REPLACE WALKS OFF THE PITCH, AND FOR THE LIFE OF THE FEATURE IT DID NOT**
+  (`stepBench`'s reserve branch). Reported as *"when I join a team the bot becomes a bit
+  transparent and still stays on the court"*, and measured as exactly that: `subOff` hands
+  the dropped bot a two-hop path out through the gate, and over **fifteen seconds it moved
+  0.1 units** — still at (88.3, 101.5) on a 220 × 380 half.
+  ⚠️ **IT IS ONE `continue`.** `stepBench`'s `if (p.ctrl === 'bot'){ …; continue; }` —
+  *"reserves just wait"* — sits ABOVE the `_subPath` walk at the end of the loop, so the
+  one thing a leaving bot has to do is the one thing a bot is skipped past. True of every
+  substitution since the gate existed; the join just made it easy to see.
+  ⚠️ **WHAT IS LEFT BEHIND IS WORSE THAN A COSMETIC BLEMISH.** A benched body is drawn at
+  0.45 alpha AND `bodyStaged` is true while `_subPath` is set — so what stands on the pitch
+  for the rest of the match is a faded body that can neither be tackled nor touch the ball.
+  ⚠️ **AN `else`, NOT A SECOND COPY OF THE WALK INSIDE THE BOT BRANCH.** The walk is the
+  LAST thing in the loop for a human on purpose — it sets position directly and has to
+  override the steering and the containment above it, not be overridden by them — so both
+  kinds have to reach that one block. Copying two lines into the bot branch would put the
+  walk before the containment for one of them and is the duplication rule besides.
+  ⚠️ **AN EMPTY ARRAY IS TRUTHY, so `_subPath` is CLEARED on arrival.** `bodyStaged` tests
+  `q._subPath` rather than its length, so a body that had finished walking stayed flagged
+  as staging for ever. Harmless today — every `bodyStaged` reader walks `w.players`, which
+  the bench is not in — and a landmine the moment anything re-fields that body: it would
+  take the pitch unable to collide or touch the ball. `subSwapNow` already nulled it on the
+  reclaim path; this makes the flag mean what it says on every path.
+  ⚠️ **THE CHECK STEPS TO THE MOMENT OF THE JOIN, and driving the hold in one block made
+  its own guard read backwards.** `holdIn` runs 220 steps at a time and the walk-off is
+  well under way by the end of them, so *"the bot started ON the pitch"* — the pairing that
+  stops *"it left"* being true of a body that was never there — came back **0 on a
+  perfectly good build**. Stepped one at a time until the join lands, it reads 1, from
+  (77, −20).
+  ⚠️ **Measured as LEAVING THE RECTANGLE, never as "it moved"** — a bot shoved by a
+  team-mate moves too — with the ball and every other body parked at the far end first.
+  ⚠️ Three sabotages, all caught: the `continue` put back (the bot sits at (77, −20), the
+  spot it was dropped), the clear removed, and the over-correction of stopping HUMANS
+  steering on the bench — that last one **throws** rather than reporting a named failure,
+  which a `FAIL`-only output filter hides. `tests/dropin.mjs`.
 - **A BODY BEING WALKED ON OR OFF DOES NOT COLLIDE** (`staged` in `integrate`).
   `walkTo` sets position directly and holds velocity at zero, so `collideDiscs` — which
   pushes BOTH bodies — shoved it off its line and the next step walked it back, which is
