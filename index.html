@@ -2407,8 +2407,9 @@
       <div class="row">
         <button class="ghost" id="saveExportBtn" type="button">⤓ Export save</button>
         <button class="ghost" id="saveImportBtn" type="button">⤒ Import save…</button>
+        <button class="ghost" id="selCopyBtn" type="button">⧉ Copy settings</button>
       </div>
-      <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season, tournament or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it.</div>
+      <div class="hint always" style="text-align:left">Writes one <b>.json</b> file holding everything this device knows about you: every setting including Game Feel, your player, your record and unlocks, custom maps, drill times, and a season, tournament or Gauntlet run in progress. Open it on the other device with <b>Import save</b> and it takes over from what is there, then the page reloads. <b>Saved replays and your photo library do not travel</b> &mdash; they run to megabytes and would make a file you could not send; the photo you are wearing does. The update deadline is never imported, so a save from a device that had been offline for a month cannot bring a countdown with it. <b>Copy settings</b> is a smaller thing and goes to your clipboard rather than to a file: just the settings you have <i>changed</i> from the defaults, as JSON, with no record, unlocks or drill times in it &mdash; paste it into a message when you want these settings to become the ones the game ships with.</div>
       <div style="height:14px"></div>
       <!-- ⚠️ A URL somebody can point a phone at, without typing it. The encoder is
            written out in this file (there is no library and no CDN here) and it takes a
@@ -5473,7 +5474,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260908.0210AM';
+const VERSION = '20260908.0605AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5490,13 @@ const VERSION = '20260908.0210AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260908.0605AM', title: 'Copy your settings to the clipboard',
+    changed: [
+      '<b>A Copy settings button in About.</b> It puts the settings you have changed from the defaults on your clipboard as JSON, ready to paste into a message.',
+      '<b>It is just the settings.</b> No record, no unlocks, no drill times \u2014 Export save beside it is still the one that takes everything to another device.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260908.0210AM', title: 'The rolling ball is a ball all the way round',
     changed: [
       '<b>The rolling ball keeps its pattern through the whole turn.</b> Half of every rotation used to come round nearly blank with one smeared marking on it \u2014 the pattern was being squeezed into the middle of each side of the ball instead of wrapping over it.',
@@ -14744,6 +14752,20 @@ function isDesktop(){
     setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2600);
   };
 }
+// \u26a0\ufe0f **IT SAYS HOW MANY IT COPIED**, because the answer can legitimately be NOTHING: on a
+// device nobody has touched the diff against `defaultSel()` is `{}`, and a button that
+// reports "Copied" over an empty object is a button that lied. "Nothing changed" is the
+// true and useful answer there, and it is the one case a plain tick would hide.
+{ const cb = $('selCopyBtn'); if (cb) cb.onclick = async (e) => {
+    const b = e.currentTarget, was = b.textContent;
+    const n = settingsChangedCount();
+    const ok = n ? await copyText(settingsText()) : false;
+    b.textContent = !n ? '\u2013 Nothing changed'
+                  : ok ? ('\u2713 Copied ' + n + ' setting' + (n === 1 ? '' : 's'))
+                       : '\u26a0 Could not copy';
+    setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2600);
+  };
+}
 // ⚠️ ARMS, THEN CONFIRMS, and then reloads. An import replaces your settings, your
 // record and your unlocks with somebody else's file and cannot be undone — the same
 // two-press rule the replay and photo deletes use, and for a bigger reason.
@@ -19778,19 +19800,17 @@ function aboutReport(){
 // on a `file://` page or plain http it is simply absent — and a copy button that silently
 // does nothing is the Save clip mistake again. The `execCommand` path is the fallback that
 // covers those, and if even that fails the hint says so rather than claiming success.
-async function copyAbout(){
-  const el = $('aboutInfo'), hint = $('aboutCopyHint');
-  const say = (msg, good) => {
-    if (!hint) return;
-    hint.textContent = msg;
-    if (el) el.classList.toggle('copied', !!good);
-    setTimeout(() => { hint.textContent = 'Tap to copy'; if (el) el.classList.remove('copied'); }, 2000);
-  };
-  const text = aboutReport();
+// ⚠️ **ONE CLIPBOARD WRITER, and there were about to be two.** `navigator.clipboard`
+// needs a SECURE CONTEXT and is simply absent on a `file://` or plain-http page — which is
+// where the downloaded copy runs and where every suite runs — so every caller needs the
+// `execCommand` fallback under it, and a second hand-written copy of that is the one that
+// gets missed. It returns whether the write LANDED, so the caller can say so: a copy button
+// that silently does nothing reads as a broken button.
+async function copyText(text){
   try {
     if (navigator.clipboard && navigator.clipboard.writeText){
       await navigator.clipboard.writeText(text);
-      say('\u2713 Copied', true); return true;
+      return true;
     }
   } catch(_){ /* denied or unavailable — fall through to the old way */ }
   try {
@@ -19803,9 +19823,58 @@ async function copyAbout(){
     ta.select();
     const ok = document.execCommand && document.execCommand('copy');
     ta.remove();
-    say(ok ? '\u2713 Copied' : '\u26a0 Could not copy', ok);
     return !!ok;
-  } catch(_){ say('\u26a0 Could not copy', false); return false; }
+  } catch(_){ return false; }
+}
+async function copyAbout(){
+  const el = $('aboutInfo'), hint = $('aboutCopyHint');
+  const ok = await copyText(aboutReport());
+  if (hint){
+    hint.textContent = ok ? '\u2713 Copied' : '\u26a0 Could not copy';
+    if (el) el.classList.toggle('copied', ok);
+    setTimeout(() => { hint.textContent = 'Tap to copy'; if (el) el.classList.remove('copied'); }, 2000);
+  }
+  return ok;
+}
+// ============================================================
+//  COPY YOUR SETTINGS — the ones you CHANGED, as JSON
+// ============================================================
+// ⚠️ **THE DIFF AGAINST `defaultSel()`, NOT THE WHOLE OF `sel`**, and that is the whole
+// point of the button. Asked for as *"a place to export current settings so I can paste it
+// here to make it the default"* — so what is wanted is the list of things to CHANGE, and a
+// full dump of some fifty keys makes somebody read it against the defaults by eye to find
+// the six that moved. Nothing is lost by leaving the rest out: everything omitted is already
+// the default by construction, so pasting this over `defaultSel()` reproduces the device.
+// ⚠️ **DEEP, so a nested group carries only its changed leaves.** `sel.feel` is thirteen
+// numbers and `sel.look` is six slots; one moved slider should copy one line rather than the
+// whole block. Arrays and anything that is not a plain object are compared and carried
+// WHOLE — `teamCol` is a PAIR, and half a pair means nothing.
+// ⚠️ **A key `defaultSel()` has never heard of is INCLUDED.** It is a real difference on
+// this device — a legacy value, an imported save, a typo in a shared cloud sheet — and
+// dropping it would make the copy claim a setting is at its default when it is not.
+// ⚠️ **SETTINGS ONLY**: no record, no unlocks, no drill times, no run in progress. Those
+// are what `Export save` is for, which is the button beside this one.
+function selDiff(cur, def){
+  const out = {};
+  const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  for (const k of Object.keys(cur || {})){
+    const a = cur[k], b = def ? def[k] : undefined;
+    if (plain(a) && plain(b)){
+      const sub = selDiff(a, b);
+      if (Object.keys(sub).length) out[k] = sub;
+    } else if (JSON.stringify(a) !== JSON.stringify(b)) out[k] = a;
+  }
+  return out;
+}
+function settingsText(){ return JSON.stringify(selDiff(sel, defaultSel()), null, 2); }
+// How many LEAVES moved, which is what the button reports back. Counting top-level keys
+// would call one changed slider inside `feel` the same as all thirteen.
+function settingsChangedCount(){
+  const walk = (o) => Object.keys(o).reduce((n, k) => {
+    const v = o[k];
+    return n + (v && typeof v === 'object' && !Array.isArray(v) ? walk(v) : 1);
+  }, 0);
+  return walk(selDiff(sel, defaultSel()));
 }
 // ============================================================
 //  DOWNLOAD IT AND PLAY OFFLINE
@@ -34264,7 +34333,7 @@ if (window.__MAGNETDEBUG) {
     repEncodeFrames, repDecodeFrames, repCtlProgress,
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
-    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, copyText, selDiff, settingsText, settingsChangedCount, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
