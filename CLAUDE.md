@@ -6964,7 +6964,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 139 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 138 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **TWO suites are RED ON PURPOSE, and both measure the SHIPPED default rather than a
 tuning the AI was built against.** `tests/proladder.mjs` measures the bot difficulty ladder,
