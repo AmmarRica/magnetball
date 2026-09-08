@@ -328,7 +328,14 @@ const pad = await p.evaluate(()=>{
   const cv=document.getElementById('game'), c2=cv.getContext('2d');
   const DPR=cv.width/cv.clientWidth;
   const KR=Math.round(M.KICK_R*DPR), m=Math.round(70*DPR);
-  const kx=m, ky=Math.round(cv.height-m);                 // p1, right-handed: bottom-left
+  // ⚠️ WHICH CORNER THE KICK PAD IS IN FOLLOWS `sel.handed`, and this probe hard-coded the
+  // right-handed one. The moment the owner shipped their own settings as the defaults —
+  // `handed: 'left'` — the pad moved to the bottom RIGHT and every reading here came off an
+  // empty corner: `padDrawsSomething` false, so the two checks under it were measuring a
+  // patch of grass. Derived from the setting now, exactly as `drawKickMarker` derives it.
+  o.handed = M.sel.handed;
+  const kx = M.sel.handed === 'left' ? Math.round(cv.width - m) : m;
+  const ky = Math.round(cv.height - m);
   const bright=(x0,y0,w0,h0)=>{ const d=c2.getImageData(x0,y0,w0,h0).data;
     let n=0; for(let i=0;i<d.length;i+=4) if(d[i]+d[i+1]+d[i+2]>330) n++; return n; };
   const ink = () => bright(kx-KR, ky-KR, KR*2, KR*2);

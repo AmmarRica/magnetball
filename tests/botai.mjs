@@ -296,7 +296,20 @@ const r = await p.evaluate(()=>{
     o.bankMeanErrCorrected = +(sumC/n).toFixed(1);
     o.bankMeanErrNaive = +(sumN/n).toFixed(1);
     o.bankWorstErrCorrected = +worstC.toFixed(1);
-    o.restitutionCorrected = Math.abs(M.botMirror(seg,-60,250,w.ball.r).x - (2*seg.a.x + 60)) > 2;
+    // ⚠️ **THIS WAS A SINGLE-POINT PROBE AND IT LANDED ON THE CANCELLATION ITS OWN COMMENT
+    // WARNS ABOUT.** It read `|botMirror(seg,-60,250,r).x - naive.x| > 2` at ONE geometry —
+    // "the corrected point is not the naive point" — and the two error terms it is made of
+    // (restitution, `d/e`, and the ball radius, `-r`) have opposite signs, so at some
+    // distance they cancel exactly. The ball radius is a PLAYER SETTING (`BALLS[sel.ball].r`,
+    // 9 to 15), and the moment the shipped default became Bouncy at r 9 the cancellation
+    // moved onto this one point: it reported "not corrected" on a build whose correction is
+    // working perfectly, with the sweep beside it reading **4.3 mean error against the naive
+    // mirror's 18.9**.
+    // ⚠️ So the claim is measured on the SWEEP, which is the thing it was always about, and
+    // it is not implied by `bankLandsOnTarget` one line down: naive scores 18.9, comfortably
+    // inside that check's ceiling of 25, so a build with the correction deleted passes it.
+    // The correction must at least HALVE the mean error, against a measured 4.4x.
+    o.restitutionCorrected = o.bankMeanErrNaive > o.bankMeanErrCorrected * 2;
     o.bankLandsOnTarget = worstC < 25 && n >= 6;
     o.correctionBeatsNaiveMirror = sumC < sumN * 0.75;
     // A bank is only offered when the line really crosses the wall segment.

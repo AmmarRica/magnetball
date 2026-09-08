@@ -59,10 +59,23 @@ const r = await p.evaluate(async ()=>{
 
   // In a real match only YOUR disc wears your look — bots have their own
   // (see botlook.mjs). This used to assert the opposite, which was the bug.
+  // ⚠️ **THE TEAM FLAG NOW SHIPS AS A COUNTRY, so `applyTeamColours` covers your plate by
+  // default** — this used to read `me.flag === 'poland'` and was only ever true because the
+  // shipped `sel.teamFlag` was ['none','none'] and nothing fought it. That is the documented
+  // one place "a person's faceplate is their own" bends, and the bend is on out of the box
+  // now. What must STILL hold is that your plate is not LOST: it is stashed on `_ownFlag`
+  // and comes straight back when the side's flag is cleared, which is what makes the team
+  // flag a layer rather than a write. Both halves are checked, or "it came back" is equally
+  // true of a build that never covered it.
   M.profile.flag = 'poland';
   M.startMatch(); await wait(120);
   const ps = M.world.players, me = ps.find(q=>q.ctrl==='human1');
+  o.teamFlagCovers = !!me && me.flag === M.teamFlagOf(me.team);
+  o.yourPlateIsKept = !!me && me._ownFlag === 'poland';
+  M.sel.teamFlag = ['none','none'];
+  M.applyTeamColours(M.world.players);
   o.realMatchKeepsYours = !!me && me.flag === 'poland';
+  M.sel.teamFlag = M.defaultSel().teamFlag;
   o.realMatchBotsDiffer = ps.filter(q=>q!==me).every(q => q.flag !== 'poland');
 
   return o;
@@ -73,7 +86,8 @@ console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.teamsUniform && r.sidesDiffer && r.realCountries && r.varietyAcrossRuns &&
   r.isDemoWorld && r.notPlayerFlag &&
   r.demoTagPixels > 30 && r.realMatchTagPixels === 0 && r.realMatchIsNotDemo &&
-  r.realMatchKeepsYours && r.realMatchBotsDiffer && errors.length === 0;
+  r.realMatchKeepsYours && r.realMatchBotsDiffer &&
+  r.teamFlagCovers && r.yourPlateIsKept && errors.length === 0;
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

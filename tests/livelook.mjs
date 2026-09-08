@@ -27,7 +27,15 @@ const r = await p.evaluate(async ()=>{
   M.profile.color='#e05a5a'; M.profile.cap='crown'; M.profile.flag='poland';
   M.profile.eyes='angry'; M.profile.name='After';
   M.saveProfile();
-  o.liveLook = { color:me().color, cap:me().cap, flag:me().flag, eyes:me().eyes, name:me().name };
+  // ⚠️ **THE FLAG IS READ OFF `_ownFlag`, because a country ships as the team's default
+  // now.** `applyTeamColours` wears the side's flag and stashes the body's own plate — the
+  // documented one place "a person's faceplate is their own" bends — so `me().flag` is the
+  // TEAM's country and the picker's write lands underneath it. Reading `me().flag` here
+  // measured the team dressing rather than the thing this suite is about, which is that a
+  // picker reaches a live body with no restart. The cap, colour, eyes and name are
+  // untouched by that layer and are still read straight.
+  const worn = () => me()._ownFlag !== undefined ? me()._ownFlag : me().flag;
+  o.liveLook = { color:me().color, cap:me().cap, flag:worn(), eyes:me().eyes, name:me().name };
   o.updatesLive = o.liveLook.color==='#e05a5a' && o.liveLook.cap==='crown' &&
                   o.liveLook.flag==='poland' && o.liveLook.eyes==='angry' && o.liveLook.name==='After';
   o.matchNotRestarted = M.world === w && w.state === 'play';

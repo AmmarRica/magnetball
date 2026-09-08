@@ -100,9 +100,19 @@ const normal = await p.evaluate(() => {
   o.share = +(ticksStuck / Math.max(1, samples)).toFixed(4);
   o.maxRun = maxRun;
   o.goals = w.score[0] + w.score[1];
+  for (const q of w.players){ const st = q.ms || {}; o.shots = (o.shots||0) + (st.shots||0); }
   // ⚠️ A minute of 4v4 has to produce football, or "the breaker never fires" is true of a
   // match where nothing happened at all.
-  o.matchHappened = o.goals > 0;
+  // ⚠️ **THE CONTROL COUNTS SHOTS, NOT GOALS, AND READING GOALS MADE IT A COIN TOSS.** It
+  // was `goals > 0` — one seeded 60-second match asked for one goal, which is the same
+  // shape `bigcourt`'s own `goalsHappen` is recorded as: "a coin toss and always was".
+  // Measured over four consecutive seeds of exactly this match, all four are real football
+  // and the goal column reads **0, 0, 0, 1** while the shot column reads **27, 31, 27, 28**.
+  // So the goal check went red when the shipped defaults moved the seed's outcome, with
+  // nothing about the game any worse. Shots happen thirty times a minute; goals do not, and
+  // a control that fires on a coin is not one. The floor is 5 — far below the measured 27
+  // and far above the 0 a match where nothing happened would give.
+  o.matchHappened = o.shots >= 5;
   return o;
 });
 
@@ -136,7 +146,8 @@ ok('...and without a body leaving the pitch', sweep.worstOutside <= 20.5,
 ok('it stays out of the way in ordinary play', normal.share < 0.02,
    `bots were in the escape for ${(normal.share*100).toFixed(2)}% of body-ticks over a minute of 4v4 (longest run ${normal.maxRun} ticks)`);
 ok('...and that minute was a real match', normal.matchHappened,
-   `${normal.goals} goals — "the breaker never fires" is also true of a match where nothing happened`);
+   `${normal.shots} shots (and ${normal.goals} goals) — "the breaker never fires" is also true of a match ` +
+   'where nothing happened. Shots, never goals: one seeded minute scores 0 or 1 whatever the build');
 
 ok('the fix is deterministic', det.same,
    `${det.sample} — the escape is counted, never rolled: a random jitter would make the freeze intermittent rather than fixed, and intermittent is the version nobody can test`);

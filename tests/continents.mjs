@@ -79,12 +79,15 @@ const fresh = async () => {
     M.sel.mode = '4v4'; M.setMatchSeed(77); M.startMatch();
     const continentOf = key => M.CONTINENT_KEYS.find(c => M.CONTINENTS[c].keys.includes(key));
     const bots = () => M.world.players.filter(q => q.ctrl === 'bot');
-    o.firstMatchNumbered = bots().every(q => /^num\d$/.test(q.flag));
-    o.firstMatchNoFlags  = bots().every(q => !continentOf(q.flag));
+    o.firstMatchNumbered = bots().every(q => /^num\d$/.test(q._ownFlag !== undefined ? q._ownFlag : q.flag));
+    o.firstMatchNoFlags  = bots().every(q => !continentOf(q._ownFlag !== undefined ? q._ownFlag : q.flag));
+    // The team dressing on top is the SIDE's, so it is one flag per side rather than a
+    // continent's worth of different ones — which is what the deleted lineup used to do.
+    o.sideFlagsAreUniform = [0,1].every(t => new Set(bots().filter(q=>q.team===t).map(q=>q.flag)).size <= 1);
     // ...and it stays that way on the next one, so this is the rule rather than a
     // one-shot that happened to be spent.
     M.setMatchSeed(78); M.startMatch();
-    o.secondMatchNumbered = bots().every(q => /^num\d$/.test(q.flag));
+    o.secondMatchNumbered = bots().every(q => /^num\d$/.test(q._ownFlag !== undefined ? q._ownFlag : q.flag));
     // ⚠️ Your own seat is still yours — name, colour, flag — which was true of the
     // lineup too and has to stay true without it.
     M.profile.name = 'Ammar'; M.profile.flag = 'none';
@@ -92,7 +95,8 @@ const fresh = async () => {
     {
       const you = M.world.players.find(q => q.ctrl === 'human1' || q.ctrl === 'gamepad');
       o.yourName = you.name; o.yourFlag = you.flag;
-      o.youAreLeftAlone = you.name === 'Ammar' && you.flag === 'none';
+      o.youAreLeftAlone = you.name === 'Ammar' &&
+        (you._ownFlag !== undefined ? you._ownFlag : you.flag) === 'none';
     }
     // The default surface and the profile are untouched by any of this.
     o.pitch = M.sel.pitch;
@@ -110,11 +114,20 @@ const fresh = async () => {
   ok('a cleared device reads as a first run', r.firstRunSeen);
   // ⚠️ These four used to assert the OPPOSITE — a first match dressed by continent. The
   // lineup is not applied any more: a default is a green pitch and numbered players.
-  ok('a first match is NUMBERED, not flagged', r.firstMatchNumbered && r.firstMatchNoFlags,
+  // ⚠️ **AND THEY READ `_ownFlag` NOW, because a COUNTRY ships as the team's default.**
+  // `applyTeamColours` wears the side's flag and stashes the body's own plate underneath,
+  // so `q.flag` out here is the SIDE's dressing and says nothing about what the body was
+  // minted with. The claim these checks exist for is unchanged and still true: a body is
+  // minted NUMBERED, and the deleted continent lineup is not coming back. What is on top
+  // of it is a separate choice, and `sideFlagsAreUniform` is what tells the two apart —
+  // a continent lineup gives a side many different countries, a team flag gives it one.
+  ok('a first match is NUMBERED underneath, not flagged', r.firstMatchNumbered && r.firstMatchNoFlags,
      'a brand-new install used to field one continent against another, which is the opposite of "players are numbered"');
   ok('...and so is the next one', r.secondMatchNumbered,
      'this is the rule now, not a one-shot that happened to be spent');
   ok('it is still on grass', r.pitch === 'normal', r.pitch);
+  ok('...and what is worn on top is ONE flag a side, not a continent', r.sideFlagsAreUniform,
+     'the deleted lineup dressed each body in a different country from one continent; a team flag is one country for the whole side');
   ok('YOUR seat keeps your own name and flag', r.youAreLeftAlone,
      `you came out as ${r.yourName} / ${r.yourFlag}`);
   ok('the profile is untouched', r.profileFlag === 'none', 'profile.flag = ' + r.profileFlag);
@@ -133,7 +146,10 @@ const fresh = async () => {
     const continentOf = key => M.CONTINENT_KEYS.find(c => M.CONTINENTS[c].keys.includes(key));
     localStorage.removeItem(M.FIRSTRUN_KEY);
     M.sel.mode = '4v4'; M.setMatchSeed(4); M.startMatch();
-    o.beforeFlags = M.world.players.filter(q => q.ctrl === 'bot').map(q => q.flag);
+    // ⚠️ `_ownFlag` again — the side's own dressing is worn on top now (see above), so
+    // `q.flag` is the team's country and the plate the body was minted with is underneath.
+    const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    o.beforeFlags = M.world.players.filter(q => q.ctrl === 'bot').map(worn);
     o.beforePlain = o.beforeFlags.every(f => !continentOf(f));
 
     M.sel.diff = 'hard'; M.saveSel();
@@ -141,7 +157,7 @@ const fresh = async () => {
     o.nowSaved = !M.isFirstRun();
 
     M.setMatchSeed(4); M.startMatch();
-    o.afterFlags = M.world.players.filter(q => q.ctrl === 'bot').map(q => q.flag);
+    o.afterFlags = M.world.players.filter(q => q.ctrl === 'bot').map(worn);
     o.afterPlain = o.afterFlags.every(f => !continentOf(f));
     return o;
   });

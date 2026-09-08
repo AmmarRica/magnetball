@@ -113,6 +113,11 @@ const r = await p.evaluate(async ()=>{
 // phone control, so this half belongs on a phone.
 const p2 = await b.newPage({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true });
 p2.on('pageerror', e => errors.push(e.message));
+// ⚠️ PINS `handed`, and that is not tidiness: `zoneForTouch` splits the screen into a MOVE
+// half and a KICK half, and which side is which is exactly what `sel.handed` decides. The
+// shipped default is left-handed now, so a probe point chosen for a right-handed layout
+// lands in the KICK zone and every check below passes on a stick that was never touched.
+// A suite about the stick has to say which hand it is holding it in.
 await p2.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p2.goto('file://' + process.cwd() + '/index.html');
 await p2.waitForTimeout(700);
@@ -136,6 +141,12 @@ const t = await p2.evaluate(() => {
   // ⚠️ Driven through the REAL touch handlers. Writing to `pads.p1` directly cannot test
   // this at all: the fix reads whether a FINGER is on the stick (`pad.move.id`), which only
   // onDown/onUp set, so a probe that pokes dx/dy measures the old code path.
+  // ⚠️ PINS `handed`, and that is not tidiness. `zoneForTouch` splits the screen into a
+  // MOVE half and a KICK half, and which side is which is exactly what `sel.handed`
+  // decides — the shipped default is LEFT-handed now, so a probe point chosen for a
+  // right-handed layout lands in the KICK zone and every check below passes on a stick
+  // that was never touched. A suite about the stick has to say which hand holds it.
+  M.sel.handed = 'right';
   M.sel.oneHand = true; M.sel.touchDigital = 'on';
   M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(5); M.startMatch();
   { const w=M.world; w.state='play'; w.stateT=2;

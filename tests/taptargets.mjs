@@ -310,6 +310,7 @@ const reduce = await rm.evaluate(() => {
   // it had not, uncoupling the two would have quietly handed a reduced-motion device a
   // camera push it never used to get.
   o.zoomDefaultedOff = M.sel.goalZoom === Math.round(M.GOALCAM.zoomMin * 100);
+  o.zoom = M.sel.goalZoom;
   o.zoomLabelSaysOff = M.goalZoomLabel() === 'off';
   // Nothing that moves for effect runs.
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
@@ -335,6 +336,9 @@ const normal = await norm.evaluate(() => ({
   prefers: window.__magnet.prefersReducedMotion(),
   juice: window.__magnet.sel.juice,
   motionOK: window.__magnet.motionOK(),
+  zoom: window.__magnet.sel.goalZoom,
+  shippedZoom: window.__magnet.defaultSel().goalZoom,
+  shippedJuice: window.__magnet.defaultSel().juice,
 }));
 await norm.close();
 
@@ -407,8 +411,23 @@ ok('...AND THE TOGGLE STILL WINS', reduce.toggleWins && reduce.shakeBack,
    'motionOK() is deliberately not `juice && !reduced` — that makes the toggle useless on exactly the devices whose owners might want it back, so the preference decides the default and your answer is honoured after that');
 ok('...and so does the zoom dial', reduce.zoomDialWins,
    'the same "a default, never an override" claim, for the control that owns the push now');
-ok('an ordinary device is untouched', !normal.prefers && normal.juice && normal.motionOK,
-   JSON.stringify(normal));
+// ⚠️ **"UNTOUCHED" IS NOT "juice IS TRUE" ANY MORE — the shipped default moved to false.**
+// Reading `normal.juice === true` was measuring the DEFAULT rather than the mechanism, and
+// it goes red on a build where the preference does nothing at all, which is the opposite of
+// what it exists to catch. The claim is that a device with no preference gets THE SHIPPED
+// VALUES, whatever those are; the reduced-motion block above is what pins that a device WITH
+// the preference gets something quieter. Measured against `defaultSel()` in the same run, so
+// it cannot go stale the next time a default moves.
+// ⚠️ The goal zoom is the half that still MOVES, and it is what makes this pairing worth
+// having: `sel.juice = false` on that first-run line is now a no-op (false over false) and
+// the zoom is not, so without the zoom half the check would be vacuous.
+ok('an ordinary device gets the SHIPPED values', !normal.prefers &&
+   normal.juice === normal.shippedJuice && normal.zoom === normal.shippedZoom,
+   JSON.stringify(normal) + ' — the preference decides the default on a device that HAS it, and touches nothing on a device that does not');
+ok('...and the reduced-motion device really got something different', reduce.zoomDefaultedOff &&
+   reduce.zoom != null && normal.zoom != null && normal.zoom !== reduce.zoom,
+   JSON.stringify({ normalZoom: normal.zoom, reducedZoom: reduce.zoom }) +
+   ' — without this, "an ordinary device gets the shipped values" is equally true of a build where the preference is read by nothing');
 
 // ⚠️ The state and the hidden scorebug are asserted FIRST: without them the two readings
 // below are taken in the same layout twice and agree on every build, broken included.

@@ -4440,7 +4440,9 @@ const TEAM_COLS = [
   { key:'blue',   name:'BLUE',   col:'#5a7de0' },
   { key:'purple', name:'PURPLE', col:'#8a5ae0' },
 ];
-const TEAMCOL_DEF = ['#e05a5a', '#5a7de0'];      // red vs blue, the way it has always read
+// ⚠️ MUST EQUAL `defaultSel().teamCol` — two copies of one default, and `tests/botlook.mjs`
+// pins them equal because the second copy is the one that gets missed.
+const TEAMCOL_DEF = ['#5a7de0', '#d8c93a'];
 // ⚠️ A BOT WEARS A ROBOT IN WARM-UP AND A NUMBER IN THE MATCH. In the lobby the shirt
 // numbers are a lie waiting to happen: people are still walking onto halves, so a bot
 // numbered 3 is number 3 only until somebody joins its side. The robot says what the
@@ -4461,6 +4463,13 @@ const BOT_GLYPH = '\ud83e\udd16';
 // ⚠️ Declared beside `teamColOf` rather than down with the tournament code, because this
 // is the function that reads it and it runs during the bootstrap. Sixteenth TDZ bite.
 let matchTeamCol = null;
+// ⚠️ **THE FLAG NEEDS THE SAME ONE-MATCH LAYER THE COLOUR HAS, and it only started to
+// matter when a country shipped as the DEFAULT.** `sel.teamFlag` used to be ['none','none']
+// out of the box, so nothing ever fought the tournament's own dressing; with a default in
+// place `applyTeamColours` stamped it over the draw and a France-vs-England tie was played
+// as whatever the settings said. A LAYER rather than a write, for the reason `matchTeamCol`
+// is one: `sel.teamFlag` is what the PLAYER chose for themselves and has to survive the cup.
+let matchTeamFlag = null;
 // The player's own match size, borrowed for the length of a PEOPLE tie (one person a
 // side, so 1v1). ⚠️ Restored in `cupEnd` rather than by whoever set it, exactly the
 // argument `matchTeamCol` above makes: walking out to the menu mid-tie is the path with
@@ -4489,6 +4498,8 @@ function cupRestoreMode(){
 // the value can arrive from a hand-edited localStorage, an imported save (`applySaveDoc`
 // validates nothing) or one typo in a shared settings sheet.
 function teamFlagOf(team){
+  const m = matchTeamFlag && matchTeamFlag[team ? 1 : 0];
+  if (m) return (m !== 'none' && FLAGS[m]) ? m : null;
   const a = sel.teamFlag;
   const k = Array.isArray(a) ? a[team ? 1 : 0] : null;
   return (k && k !== 'none' && FLAGS[k]) ? k : null;
@@ -4543,11 +4554,19 @@ function teamColOf(team){
 // place to keep in step with the rule right here.
 // ⚠️ `undefined` is the "not stamped" sentinel, so a body that genuinely wears nothing is
 // still distinguishable from one this has never touched.
-function applyTeamColours(list){
+// ⚠️ `keepFlags` is the ATTRACT DEMO, and it exists because a team flag can now be a
+// DEFAULT. The demo dresses each side in its own random country so the menu does not look
+// like your team playing itself — and this function ran straight afterwards and stamped
+// `sel.teamFlag` over both of them, so with a country shipped as the default every demo
+// anybody ever saw was the same two countries. `tests/demo.mjs`' `varietyAcrossRuns` is
+// exactly that claim. The COLOUR is still applied, deliberately: the note at the demo's own
+// dressing says so, because one shade a side is a rule the demo does not get to break.
+function applyTeamColours(list, keepFlags){
   if (!list) return;
   for (const p of list){
     if (!p) continue;
     p.color = teamColOf(p.team);
+    if (keepFlags) continue;
     const f = teamFlagOf(p.team);
     if (f){ if (p._ownFlag === undefined) p._ownFlag = p.flag; p.flag = f; }
     else if (p._ownFlag !== undefined){ p.flag = p._ownFlag; p._ownFlag = undefined; }
@@ -6738,10 +6757,10 @@ const CHANGELOG = [
 // stops either way, so nothing about the save, the presets or the physics changes — but
 // "45" told a player nothing, while "4.5" is a number you can aim at.
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
-function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', length:'g3', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
-            ball:'normal', handed:'right', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:true, hitStop:0, rumble:15, kickRing:125, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#e05a5a','#5a7de0'], teamFlag:['none','none'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
+function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
+            ball:'bouncy', handed:'left', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
+            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['usa','brazil'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
             // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
@@ -6750,8 +6769,8 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // randomiser belongs behind an explicit choice; out of the box, picking Pro
             // has to be the thing that decides how hard the match is.
             botPlan:'standard',                            // AI shape; 'auto' deals one per side
-            charge:'on', chargeMs:600,                     // hold to kick harder: on, full power at 0.6s
-            goalZoom:180, goalZoomSpd:10, repSecs:6,       // goal camera: 1.8x over 0.10s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
+            charge:'on', chargeMs:100,                     // hold to kick harder: on, full power at 0.1s
+            goalZoom:115, goalZoomSpd:5, repSecs:6,        // goal camera: 1.15x over 0.05s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
             // ⚠️ GRASS AND NUMBERS, asked for: a plain green pitch with numbered players is
@@ -6803,8 +6822,8 @@ function defaultSel(){ return { mode:'1v1', field:'classic', diff:'normal', leng
             // rest against the boards freezes the chaser for good — and less float is
             // exactly "the ball comes to rest sooner and more often". The float was
             // masking it. 988 is a third off the coast with the goals still there.
-            feel: { accel:18, pdamp:940, ballcap:46, kick:55, bdamp:988, trap:50,
-                    sprintSecs:300, sprintRefill:500, sprintSlow:75, sprintBoost:135 } }; }
+            feel: { accel:18, pdamp:940, ballcap:46, kick:80, bdamp:980, trap:50,
+                    sprintSecs:300, sprintRefill:1500, sprintSlow:75, sprintBoost:150 } }; }
 let sel = defaultSel();
 
 // ============================================================
@@ -8566,6 +8585,11 @@ function normalizeLook(){
 // speed the player moved themselves is a deliberate 5% push, and folding it would
 // overwrite a choice.
 const GOALCAM_WAS = [[500, 115], [105, 10]];
+// The zoom the game shipped with BEFORE the owner's own settings became the defaults.
+// `magnetball.zoomfold` (in the bootstrap) is for a device that turned effects off while
+// THAT was the shipped value, so it has to name the number rather than ask
+// `defaultSel()` — which has moved, and would match none of those devices.
+const GOALZOOM_WAS = 180;
 function normalizeGoalCam(){
   const d = defaultSel();
   if (GOALCAM_WAS.some(([z, sp]) => sel.goalZoom === z && sel.goalZoomSpd === sp)){
@@ -8607,7 +8631,10 @@ const KICKOFF_TOUCH = 1.5;
 // ⚠️ `CHARGE.max` stays as the DEFAULT the slider is born at, not as the value the game
 // reads: `chargeSecs()` is what the physics and the wind-up ring both go through, so the
 // dial cannot move one and leave the other behind.
-const CHARGE = { max:0.6, bonus:0.9 };   // up to +90% power at 0.6s of hold
+// ⚠️ `max` MUST EQUAL `defaultSel().chargeMs / 1000` — it is the value the SLIDER is born
+// at, never the one the game reads (that is `chargeSecs()`), so two copies of one default
+// and the second is the one that gets missed. `tests/charge.mjs` pins them equal.
+const CHARGE = { max:0.1, bonus:0.9 };   // up to +90% power at 0.1s of hold
 // ============================================================
 //  SPRINT — a stamina ring you spend and have to earn back
 // ============================================================
@@ -13190,7 +13217,25 @@ try { if (prefersReducedMotion() && !localStorage.getItem('magnetball.sel')){
 // then, which is the opposite of what they just asked for.
 try {
   if (!localStorage.getItem('magnetball.zoomfold')){
-    if (sel.juice === false && sel.goalZoom === defaultSel().goalZoom){
+    // ⚠️ **A FOLD MAY ONLY EVER TOUCH A DEVICE THAT ALREADY HAS SETTINGS**, and this one
+    // was safe only by accident until `juice` shipped as FALSE. Both arms of the test below
+    // are now true of a FRESH install — `defaultSel().juice` is false and `goalZoom` is its
+    // own default by definition — so without this guard the fold fired on frame one, threw
+    // away the shipped `goalZoom` and called `saveSel()`. That writes `magnetball.sel`, and
+    // the ABSENCE of that key is the whole of how `isFirstRun` detects a fresh install.
+    // Exactly the bug `magnetball.feelfold` records one block down, arriving from the other
+    // direction: there the old value stopped being the default, here the old value BECAME
+    // one. The premise of a fold is "this device has been played", so it is asked outright.
+    // ⚠️ **AND IT NAMES THE OLD DEFAULT OUTRIGHT (`GOALZOOM_WAS`), because
+    // `defaultSel().goalZoom` HAS SINCE MOVED.** The device this fold is for is one that
+    // stored the value shipped at the time — 180 — so the moment the shipped default became
+    // 115 the test `sel.goalZoom === defaultSel().goalZoom` stopped matching a single one
+    // of them and the fold went inert for exactly the population it exists for. A fold is
+    // about a HISTORICAL value, never about today's, which is what `FEEL_WAS` and
+    // `GOALCAM_WAS` already say. It is also what makes the fresh-install collision
+    // impossible rather than merely guarded against: 115 is not 180.
+    if (localStorage.getItem('magnetball.sel') &&
+        sel.juice === false && sel.goalZoom === GOALZOOM_WAS){
       sel.goalZoom = Math.round(GOALCAM.zoomMin * 100);
       saveSel();
     }
@@ -13246,7 +13291,11 @@ try {
     // somebody who deliberately sets the old feel back next month is choosing it.
     if (localStorage.getItem('magnetball.sel')){
       let moved = false;
-      if (sel.hitStop === 2){ sel.hitStop = 0; moved = true; }
+      // ⚠️ `defaultSel().hitStop`, never a literal. A fold carries a device from an OLD
+      // default to TODAY'S one, so writing the number here makes a second copy of a
+      // default that has now moved twice (2, then 0, then 5) — and the copy is the one
+      // that gets missed, leaving the fold moving people onto a value nothing ships.
+      if (sel.hitStop === 2){ sel.hitStop = defaultSel().hitStop; moved = true; }
       // ⚠️ **`accel` MOVES WITH `pdamp` OR THE FOLD SHIPS THE BUG.** They are one change —
       // the damping sets the top speed as well as the coast — so a device handed the new
       // damping and the old acceleration is the 35%-slower player, on exactly the machines
@@ -15813,7 +15862,7 @@ const FEEL_PRESETS = {
   // intentions. `tests/bigcourt.mjs` caught it — a Leviathan length went from 30s to 41.1s.
   // At accel 18 the top speed is **2.82**, within 2% of where it was, and the coast is
   // still a third shorter. Both new values sit on their slider's own step (2 and 5).
-  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:18, pdamp:940, ballcap:46, kick:55, bdamp:988, sens:1.0, trap:50 },
+  pro:    { label:'Pro',    emoji:'🏆', magnet:0,  trapOff:true,  accel:18, pdamp:940, ballcap:46, kick:80, bdamp:980, sens:1.0, trap:50 },
 };
 function presetMatches(p){
   const f=sel.feel||{};
@@ -16583,6 +16632,9 @@ function cupDress(w){
     cb = TEAM_COLS[(i + 1 + TEAM_COLS.length) % TEAM_COLS.length].col;
   }
   matchTeamCol = [ A.col, cb ];
+  // ⚠️ A PEOPLE tie carries names rather than countries, so it clears the layer instead of
+  // setting one — otherwise the settings' own flag would dress a bracket of people.
+  matchTeamFlag = cupIsPeople() ? ['none','none'] : [ A.flag || 'none', B.flag || 'none' ];
   // ⚠️ In a PEOPLE tie the entrant is a NAME, so the bodies take the name and no flag —
   // the plate over a player has to say who is playing, which is the whole bracket. In a
   // COUNTRY tie it is the flag and the name is left alone.
@@ -16710,7 +16762,7 @@ function cupTickerStop(){ clearTimeout(cupTickerT); if (vjTickerOn) return;
 // A cup match is over: write which SIDE went through and show the bracket's own overlay.
 function cupEnd(w){
   cupTickerStop();
-  matchTeamCol = null;
+  matchTeamCol = null; matchTeamFlag = null;
   cupRestoreMode();
   let delta = 0;
   if (!w.watch) delta = recordResult(w);
@@ -17610,7 +17662,7 @@ function startMatch(opts){
   // whoever set it to clear it is what stops a cup tie's country colours leaking into
   // every match afterwards when somebody walks out to the menu mid-tie. `cupDress`
   // re-sets it immediately after this returns.
-  matchTeamCol = null;
+  matchTeamCol = null; matchTeamFlag = null;
   // ...and the match size a people tie borrowed, for the same reason. See `cupModeWas`.
   if (typeof cupRestoreMode === 'function' && !_cupStarting) cupRestoreMode();
   // `lobby:false` is "play now" — see tryKickOff. Everything else (a season round, a
@@ -17762,7 +17814,7 @@ function startMatch(opts){
   // the attract demo's own dressing, which sets a country per side and must not also
   // set a shirt colour. `you` carries `profile.color` out of `mkPlayer` and duo mode
   // copies it onto the whole side; both are overwritten here, on purpose.
-  applyTeamColours(players);
+  applyTeamColours(players, _startQuiet);
   applySeatRotation(players);
   // Prime the turn watcher against THIS court: `fitsBetterTurned` reads the field, so a
   // Futsal match and a Leviathan one can answer differently on the same window, and a
@@ -18162,7 +18214,13 @@ function goalBurst(w, team){
 // the one case nobody looks at — a partial `sel` out of an imported save, which
 // `applySaveDoc` does not validate. Two numbers for one default is the drift this file
 // keeps recording; there is one now.
-function hitStopFrames(){ const v = sel.hitStop; return v == null ? 0 : Math.max(0, Math.min(12, v|0)); }
+// ⚠️ The `v == null` fallback reads `defaultSel()` rather than naming a number. Two answers
+// for one default is the drift this file keeps recording, and the case it bites in is the
+// one nobody looks at: a partial `sel` out of an imported save, which `applySaveDoc` does
+// not validate. It has now been wrong in both directions — 5 when the default was 0, and
+// 0 when the default went back to 5 — so it stopped being a literal.
+function hitStopFrames(){ const v = sel.hitStop;
+  return Math.max(0, Math.min(12, (v == null ? defaultSel().hitStop : v)|0)); }
 // ============================================================
 //  CONTROLLER RUMBLE
 // ============================================================
@@ -22871,7 +22929,17 @@ function numberTheSides(w, fillOnly){
     const m = /^num(\d+)$/.exec(s || '');
     return m ? +m[1] : null;
   };
-  const under = (p) => fillOnly && typeof p._ownFlag === 'string';
+  // ⚠️ **UNCONDITIONAL, and it was gated on `fillOnly` — which threw the lobby's whole
+  // numbering away whenever a side wore a country.** The stash is where a body's real
+  // plate lives whichever mode this is called in; the gate was there only because the
+  // mid-match case was the one that had been noticed. `startMatch` dresses the roster and
+  // THEN hands it to warm-up, so by the time `lobbyStart` numbers the sides every body is
+  // already wearing the team's flag: `plate` read the COUNTRY, `numOf` answered null, and
+  // `wear` wrote the new number into `p.flag` where the re-dress a few lines later painted
+  // straight over it — so the sides came out numbered from before the lobby, or not at
+  // all. A corner case while `sel.teamFlag` shipped as ['none','none']; permanent the
+  // moment a country became the default.
+  const under = (p) => typeof p._ownFlag === 'string';
   const plate = (p) => under(p) ? p._ownFlag : p.flag;
   const wear  = (p, v) => { if (under(p)) p._ownFlag = v; else p.flag = v; };
   for (const team of [0, 1]){
@@ -34408,6 +34476,7 @@ if (window.__MAGNETDEBUG) {
     cupChampion, cupRoundName, cupFill, cupShuffle, cupLock, cupReset, cupUndo, cupMove,
     openCup, buildCupScreen, buildCupBracket, startCupMatch, cupEnd, cupTickerText,
     cupTickerStart, cupTickerStop, get matchTeamCol(){ return matchTeamCol; },
+    get matchTeamFlag(){ return matchTeamFlag; }, set matchTeamFlag(v){ matchTeamFlag = v; },
     set matchTeamCol(v){ matchTeamCol = v; },
     enterWarmup, stepBench, restartMatch, restartToWarmup, restartToPick, pollOverOptions, overButtons,
     get overNav(){ return overNav; }, syncOverNav,
@@ -34468,7 +34537,7 @@ if (window.__MAGNETDEBUG) {
     setDockCollapsed, dockOrFull, get deckUI(){ return deckUI; }, get uiPadLeft(){ return uiPadLeft; },
     GRASS, paintGrass, drawFieldPreview, refreshPitchTiles, buildOpts, saveSel, render,
     PANEL, applyPanelMode, settingsUrl, syncPush, syncAdopt, syncPeerLive, telemetryRows, saveProfile,
-    teamTint, teamColOf, applyTeamColours, setTeamCol, TEAM_COLS, BOT_FACE, numberTheSides, lobbyInGoal, lobbyAllInGoal, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
+    teamTint, teamColOf, applyTeamColours, setTeamCol, TEAM_COLS, TEAMCOL_DEF, BOT_FACE, numberTheSides, lobbyInGoal, lobbyAllInGoal, BOT_CAP, paintCap, randFlag, randEyes, pollKeys, mkPlayer, LENGTHS, DIFF, BALLS, PITCH, GRASS,
     Aud, restingJoyPos, loopSource: () => loop.toString(), audMasterGain: () => Aud.gain(),
     noteWear, resetWear, wearLayer, get wearCv(){ return wearCv; }, WEAR, paintIce, paintMud,
     seatNameList, applySeatNames, keyboardDrivesGame, connectedGamepadIndices, pickTextColor, typingInField,

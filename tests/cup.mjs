@@ -142,6 +142,15 @@ const r = await p.evaluate(async () => {
   // a match between two entrants.
   M.sel.mode = '3v3'; M.sel.lobby = 'touch'; M.sel.display = 'auto'; M.applyDisplayMode();
   M.sel.teamCol = ['#4fb45f', '#8a5ae0'];            // the PLAYER's own two colours
+  // ⚠️ ...AND THE PLAYER'S OWN TWO COUNTRIES, chosen to be ABSENT FROM THE DRAW. The flag
+  // check below used to read "nobody is wearing either drawn country", which was only
+  // separable while `sel.teamFlag` shipped as ['none','none']: the moment a country became
+  // the DEFAULT it collided with the draw (`usa` is in both) and an ordinary match dressed
+  // in the player's own setting read as the cup's dressing leaking. Pinning a disjoint pair
+  // makes it the same claim the colour makes one line up, and a stronger one — the ordinary
+  // match must wear EXACTLY these, so it proves the setting applies as well as proving the
+  // draw does not leak.
+  M.sel.teamFlag = ['japan', 'germany'];
   M.startCupMatch(0);
   await new Promise(res => setTimeout(res, 300));
   let w = M.world;
@@ -205,7 +214,10 @@ const r = await p.evaluate(async () => {
   M.sel.lobby = 'on'; M.startMatch();
   o.afterWalkOut = [...new Set(M.world.players.map(q => q.color))].sort().join(',');
   o.noColourLeak = o.afterWalkOut === ['#4fb45f', '#8a5ae0'].sort().join(',');
-  o.noFlagLeak = M.world.players.every(q => q.flag !== draw[0] && q.flag !== draw[1]);
+  o.drawWas = draw.join(',');
+  o.afterWalkOutFlags = [...new Set(M.world.players.map(q => q.flag))].sort().join(',');
+  o.noFlagLeak = M.world.players.every(q => q.flag !== draw[0] && q.flag !== draw[1]) &&
+                 o.afterWalkOutFlags === ['japan', 'germany'].sort().join(',');
   o.overrideClearedByStartMatch = M.matchTeamCol === null;
   // ...and an ordinary match still gets a FULL lobby back.
   M.sel.lobby = 'touch'; M.startMatch();
@@ -390,7 +402,8 @@ ok('...and by startMatch, so walking out mid-tie cannot leak it', r.overrideClea
    `mid-tie it was ${r.midTieOverride}`);
 ok('...and your own match size', r.modeAfter === '3v3', `sel.mode came back as ${r.modeAfter}`);
 ok('an ordinary match after a tie is in your own colours', r.noColourLeak, r.afterWalkOut);
-ok('...and your own faceplate', r.noFlagLeak);
+ok('...and your own faceplate', r.noFlagLeak,
+   `the pitch wore ${r.afterWalkOutFlags}; the player's own pair is germany,japan and the draw was ${r.drawWas}. BOTH halves matter — a country is a DEFAULT now, so \"nobody wears the drawn ones\" is also true of a build that wears nothing at all`);
 ok('...and gets the full lobby back', r.liteIsNotSticky,
    `letters=${r.normalLetters} shirts=${r.normalShirts}`);
 ok('a people roster starts empty and takes names', r.peopleStartEmpty && r.peopleRoster === 'Kai,Rio,Nova,Ash,Zed', r.peopleRoster);

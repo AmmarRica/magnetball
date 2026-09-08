@@ -37,6 +37,11 @@ p.on('console', m => { if (m.type()==='error' && !/ERR_TUNNEL|Failed to load res
 // included, so clearing here would wipe the very save the reload check is looking for — and
 // it would fail as "the setting did not persist" rather than as "the test wiped it". A fresh
 // page context starts with empty storage anyway.
+// ⚠️ PINS `handed`, and that is not tidiness: `zoneForTouch` splits the screen into a MOVE
+// half and a KICK half, and which side is which is exactly what `sel.handed` decides. The
+// shipped default is left-handed now, so a probe point chosen for a right-handed layout
+// lands in the KICK zone and every check below passes on a stick that was never touched.
+// A suite about the stick has to say which hand it is holding it in.
 await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(800);
@@ -48,6 +53,12 @@ const r = await p.evaluate(() => {
   o.defaultIsDigital = M.defaultSel().touchDigital === 'on';
   o.tiles = Object.keys(M.TOUCHDIGOPT).length;
 
+  // ⚠️ PINS `handed`, and that is not tidiness. `zoneForTouch` splits the screen into a
+  // MOVE half and a KICK half, and which side is which is exactly what `sel.handed`
+  // decides — the shipped default is LEFT-handed now, so a probe point chosen for a
+  // right-handed layout lands in the KICK zone and every check below passes on a stick
+  // that was never touched. A suite about the stick has to say which hand holds it.
+  M.sel.handed = 'right';
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.sel.kickoffRule = 'off';
   M.setMatchSeed(5); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;

@@ -63,7 +63,11 @@ const r = await p.evaluate(async ()=>{
   // ...and it reaches an actual match without a restart.
   M.sel.mode='1v1'; M.startMatch();
   const me = M.world.players.find(q=>q.ctrl==='human1');
-  o.reachesThePitch = me && me.flag === 'photo';
+  // ⚠️ **`_ownFlag`, because a COUNTRY ships as the team's default.** `applyTeamColours`
+  // wears the side's flag over every body and stashes the plate underneath — so your photo
+  // is on the body, and the side's country is on top of it. That is the documented one place
+  // "a person's faceplate is their own" bends, and it is on out of the box now.
+  o.reachesThePitch = me && (me._ownFlag !== undefined ? me._ownFlag : me.flag) === 'photo';
 
   // ---- PRIVACY: the picture never leaves the device ------------------------
   // Inspect the real payload builder rather than trusting the shape of it.

@@ -106,6 +106,16 @@ export async function pinCasualFeel(page){
   await page.evaluate(() => {
     const M = window.__magnet;
     M.sel.magnet = 0; M.sel.trapOff = false; M.sel.sens = 1.0; M.sel.kickRing = 195;
+    // ⚠️ **THE BALL IS PART OF THE MOVEMENT THE AI WAS TUNED AGAINST, and leaving it out
+    // was the same hole `kickRing` was.** `BALLS[sel.ball]` sets the radius, the mass and
+    // the restitution — Normal is r 10 / bCoef 0.55 and the shipped default is now **Bouncy,
+    // r 9 / bCoef 0.92**, a ball that comes off the boards at nearly twice the speed. That
+    // is a different game to read, and `botplans` measured it: `press` fell to a goal
+    // difference of **0** (Insane failing to BEAT Rookie) with every other plan still
+    // positive. It is a pin of the tuning baseline, exactly like the six feel numbers above
+    // — not a threshold moved to make a check pass, which is what the paragraph above is
+    // about. What the ladder does at the SHIPPED ball is `proladder`'s job.
+    M.sel.ball = 'normal';
     Object.assign(M.sel.feel, { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 });
     M.applyFeel();
   });

@@ -231,6 +231,24 @@ const r = await p.evaluate(async ()=>{
   o.hiveWins = hiveWins + '/' + runs.length;
   o.hiveNotAFormality = hiveWins <= runs.length / 2 &&
                         runs.every(x => x.by !== 'hive' || x.secs > 60);
+  // ⚠️ **THIS IS RED AT THE SHIPPED DEFAULT, ON PURPOSE — the second such suite after
+  // `proladder`, and for the same reason.** This file is the instrument the ball-float
+  // choice was measured on, and its reading is recorded in CLAUDE.md: over these eight
+  // seeded 300-second matches, total goals ran **45 at bdamp 992, 34 at 990, 19 at 988,
+  // 21 at 986**, against a floor of eight — which is why 988 shipped. The owner has since
+  // shipped their own settings as the defaults and asked for **980**, further than any of
+  // those, and re-measured on the same instrument the ladder is cleanly monotonic:
+  // **63 / 36 / 29 / 12 goals at 992 / 988 / 984 / 980**, and this suite's own harness
+  // scores **4**. `bdamp` is the only cause — putting 988 back turns the whole file green
+  // with nothing else touched.
+  // ⚠️ **THE DEFECT IS THE MODE, NOT THE SETTING.** The bots' stuck-ball escape is
+  // deliberately switched OFF in Killer Lobsters (see `botstuck`), so a ball at rest on the
+  // boards freezes the chaser for good — and "less float" is exactly "the ball comes to rest
+  // sooner and more often". The float was masking it, and at 980 it no longer does. Turning
+  // the escape on here is already a measured dead end: 5 of 8 and 7 of 8 matches then end on
+  // a full hive, against a ceiling of 4.
+  // ⚠️ So the bar is NOT moved. A threshold raised to make a check pass is a defect report,
+  // and this is the report.
   o.footballStillHappens = runs.reduce((a,x)=>a+x.goals,0) >= runs.length;
   // Only one runner a side, or the football collapses.
   const ww = start(9); ww.players.forEach(q=>{ q.ctrl='bot'; });

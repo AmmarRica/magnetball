@@ -56,10 +56,16 @@ const r = await p.evaluate(async ()=>{
   M.sel.mode='4v4'; M.startMatch();
   const w=M.world;
   const t0=w.players.filter(q=>q.team===0), t1=w.players.filter(q=>q.team===1);
-  o.plates = w.players.map(q=>q.flag);
-  o.allNumbers = w.players.every(q=>/^num\d$/.test(q.flag));
-  o.noCountryballsByDefault = !w.players.some(q=>M.FLAG_KEYS.includes(q.flag) && q.flag!=='none');
-  const nums = t => t.map(q=>+q.flag.slice(3));
+  // ⚠️ **THE PLATE IS READ THROUGH THE STASH, because a COUNTRY ships as the team's
+  // default now.** `applyTeamColours` wears the side's flag and puts the body's own plate on
+  // `_ownFlag` — the documented one place "a person's faceplate is their own" bends — so
+  // `q.flag` out here is the side's dressing and says nothing about the shirt underneath.
+  // Every claim below is about the SHIRT NUMBER, which is what `worn` returns.
+  const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+  o.plates = w.players.map(worn);
+  o.allNumbers = w.players.every(q=>/^num\d$/.test(worn(q)));
+  o.noCountryballsByDefault = !w.players.some(q=>M.FLAG_KEYS.includes(worn(q)) && worn(q)!=='none');
+  const nums = t => t.map(q=>+worn(q).slice(3));
   o.youAreNumberOne = nums(t0)[0] === 1 && w.players[0].ctrl !== 'bot';
   o.eachTeamUnique = new Set(nums(t0)).size === t0.length && new Set(nums(t1)).size === t1.length;
   o.teamsNumberFromOne = Math.min(...nums(t0)) === 1 && Math.min(...nums(t1)) === 1;
@@ -84,10 +90,16 @@ const r = await p.evaluate(async ()=>{
     const side = w2.players.filter(q=>q.team===0);
     // Force the collision the lobby can really produce: two people on one side, both
     // holding the number they were dealt.
-    side[0].ctrl='human1'; side[0].flag='num1';
-    side[1].ctrl='gamepad'; side[1].flag='num1';
+    // ⚠️ **WRITTEN THROUGH THE STASH, because that is where a plate LIVES once a side wears
+    // a country** — and a country is the shipped default now. Setting `q.flag` directly puts
+    // the value where `applyTeamColours` keeps the team's dressing, so `numberTheSides` never
+    // saw it and this block was arranging a collision that did not exist.
+    const setPlate = (q, v) => { if (q._ownFlag !== undefined) q._ownFlag = v; else q.flag = v; };
+    const getPlate = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    side[0].ctrl='human1'; setPlate(side[0], 'num1');
+    side[1].ctrl='gamepad'; setPlate(side[1], 'num1');
     M.numberTheSides(w2);
-    const f = side.map(q=>q.flag);
+    const f = side.map(getPlate);
     o.collisionFlags = f;
     o.noTwoInTheSameShirt = new Set(f).size === f.length && f.every(x=>/^num\d$/.test(x));
     // ⚠️ **A LONE HUMAN'S NUMBER MUST NOT MOVE** — your shirt has to be the same in warm-up
@@ -95,16 +107,18 @@ const r = await p.evaluate(async ()=>{
     // second person is genuinely holding the same number.
     M.sel.mode='3v3'; M.setMatchSeed(5); M.startMatch();
     const w3 = M.world, you = w3.players.find(q=>q.ctrl==='human1');
-    const was = you.flag; M.numberTheSides(w3);
-    o.loneNumberKept = was === you.flag && /^num\d$/.test(was);
+    const wornY = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    const was = wornY(you); M.numberTheSides(w3);
+    o.loneNumberKept = was === wornY(you) && /^num\d$/.test(was);
     // ⚠️ ...and a person wearing a FLAG, ANIMAL or PHOTO is never renumbered. That is the
     // standing rule — a person's faceplate is their own — and it is why this cannot be
     // "renumber everybody from 1". The bots must route around them.
-    you.flag = 'poland'; M.numberTheSides(w3);
-    o.flagFaceplateKept = you.flag === 'poland';
-    you.flag = 'photo'; M.numberTheSides(w3);
-    o.photoFaceplateKept = you.flag === 'photo';
-    const others = w3.players.filter(q=>q.team===you.team && q!==you).map(q=>q.flag);
+    const setP = (q, v) => { if (q._ownFlag !== undefined) q._ownFlag = v; else q.flag = v; };
+    setP(you, 'poland'); M.numberTheSides(w3);
+    o.flagFaceplateKept = wornY(you) === 'poland';
+    setP(you, 'photo'); M.numberTheSides(w3);
+    o.photoFaceplateKept = wornY(you) === 'photo';
+    const others = w3.players.filter(q=>q.team===you.team && q!==you).map(wornY);
     o.botsRouteRound = new Set(others).size === others.length && others.every(x=>/^num\d$/.test(x));
   }
 

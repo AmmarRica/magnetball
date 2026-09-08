@@ -133,8 +133,30 @@ const r = await p.evaluate(async ()=>{
   // a flat fill — assert the direction, not a specific colour.
   o.plateTeam0 = plateAt(a2); o.plateTeam1 = plateAt(b2);
   o.platesDifferByTeam = JSON.stringify(o.plateTeam0) !== JSON.stringify(o.plateTeam1);
-  o.team0ReadsRed  = o.plateTeam0[0] > o.plateTeam0[2];          // red channel leads
-  o.team1ReadsBlue = o.plateTeam1[2] > o.plateTeam1[0];          // blue channel leads
+  // ⚠️ **"TEAM 0 READS RED AND TEAM 1 READS BLUE" IS WITHDRAWN.** It was two channel
+  // comparisons written against the shipped red/blue pair, and the owner has since shipped
+  // their own settings as the defaults — team 0 is now BLUE (#5a7de0) and team 1 YELLOW
+  // (#d8c93a), so both halves went false on a build where nothing at all was wrong. The
+  // claim was never about red or blue: it is that **a plate leans toward its OWN side's
+  // colour**, and team colour has been a player choice since `TEAM_COLS` existed.
+  // ⚠️ Measured as a DIRECTION, in the same run: the difference between the two sampled
+  // plates must point the same way as the difference between the two team inks. That
+  // survives any pair, needs no constant, and cannot be satisfied by two plates painted
+  // the same (the dot product is zero) or by the pair swapped (it goes negative).
+  const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  // ⚠️ THE REFERENCE IS `sel.teamCol`, NEVER `teamColOf` — and a sabotage proved it. Read
+  // through `teamColOf` the check compares the plates against the very function that
+  // painted them, so SWAPPING the two sides inside it moves both terms together and the
+  // dot stays positive: it passed on exactly the build it exists to catch. The claim is
+  // that a plate carries the colour the PLAYER PICKED for that side, so the picked value
+  // is what it has to be measured against.
+  o.teamInks = [M.sel.teamCol[0], M.sel.teamCol[1]];
+  const c0 = hex(o.teamInks[0]), c1 = hex(o.teamInks[1]);
+  const dot = (o.plateTeam0[0]-o.plateTeam1[0])*(c0[0]-c1[0])
+            + (o.plateTeam0[1]-o.plateTeam1[1])*(c0[1]-c1[1])
+            + (o.plateTeam0[2]-o.plateTeam1[2])*(c0[2]-c1[2]);
+  o.plateTint = dot;
+  o.platesLeanToTheirOwnTeam = dot > 0;
   // The box itself is NOT team-tinted: sample a corner of the plate, away from glyphs.
   const boxAt = (q) => { const [sx,sy]=M.screenPt(M.wx(q.x), M.wy(q.y));
     const px=sx - 0, py=sy - q.r*M.cam.s - 21;                   // top strip of the plate
@@ -505,13 +527,17 @@ const near = (v,t)=>Math.abs(v-t) < 0.02;
 const okOrient = m => near(m.clear,1) && near(m.discOver,r.floor) && near(m.discAway,1)
                    && near(m.ballOver,r.floor) && near(m.ballAway,1) && near(m.selfNeverDims,1);
 const ok = okOrient(r.upright) && okOrient(r.sideways) && r.gradual && r.replayFades &&
-  r.platesDifferByTeam && r.team0ReadsRed && r.team1ReadsBlue && r.boxesMatchEachOther &&
+  r.platesDifferByTeam && r.platesLeanToTheirOwnTeam && r.boxesMatchEachOther &&
   r.everyThemeClearsAA && r.inksDifferEveryTheme && r.rawWouldHaveFailed &&
   halo.fadesNoSlowerThanItSays && halo.solidAtFullStrength &&
   legible.nothingInTheMush && legible.drawnAtTheFloor && legible.rampMatchesTheDraw &&
   halo.oneStrokeSquares && halo.twoStrokesComposite &&
   type.snappedToTheGrid && type.aWholePixelMovesIt && type.lettersStandApart &&
   type.notASlab && type.plateIsDrawn && errors.length===0;
+if (!r.platesLeanToTheirOwnTeam)
+  console.log(`  the plates do not lean toward their own side's ink: team 0 ${JSON.stringify(r.plateTeam0)} ` +
+              `and team 1 ${JSON.stringify(r.plateTeam1)} against inks ${JSON.stringify(r.teamInks)} ` +
+              `(dot ${r.plateTint}) — negative means the two are the wrong way round`);
 if (!type.snappedToTheGrid)
   console.log('  the name plate is NOT snapped to the device pixel grid — a third of a pixel of body ' +
               'movement redrew the letters differently, which is a pixel font resampled across two columns');

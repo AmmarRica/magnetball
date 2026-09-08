@@ -106,7 +106,12 @@ const ring = await p.evaluate(() => {
     const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
     const me2 = w2.players[0];
     for (const q of w2.players) if (q !== me2){ q.x = 0; q.y = 9000; }
-    const ringWorld = 15 * (dial/100), touchAt = ringWorld + 10;
+    // ⚠️ **BOTH RADII COME OFF THE LIVE BODIES, and they were written out as 15 and 10.**
+    // The shipped ball is not the 10-unit one any more, so a hard-coded 10 put `touchAt` a
+    // whole unit beyond where the ball's edge actually meets the ring and this check went red
+    // on a build whose ring and reach agree exactly. `kickRangeUnits` is derived from
+    // `PLAYER.r`, so reading the player too keeps the arithmetic on one source.
+    const ringWorld = me2.r * (dial/100), touchAt = ringWorld + w2.ball.r;
     let furthest = -1;
     for (let d = touchAt + 6; d >= 18 && furthest < 0; d -= 0.25){
       const b2 = w2.ball;

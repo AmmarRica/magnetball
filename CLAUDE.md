@@ -136,7 +136,13 @@ three lines a second time, name it.
   match showed a 69-unit ball streak instead of 190. Draw functions only draw. Equally,
   anything anchored to a moving body must use `ix`/`iy`, not the raw position — mid-step
   they differ by up to a full step of travel. `tests/smooth.mjs` holds both lines.
-- **THE FREEZE-FRAME SHIPS OFF** (`defaultSel().hitStop` = 0). Reported as *"move that
+- **THE FREEZE-FRAME SHIPS OFF** — ⚠️ **SUPERSEDED: `defaultSel().hitStop` IS 5.** The owner
+  has since shipped their own settings as the defaults and asked for it back (see the
+  owner's-defaults entry below). Everything else in this entry still holds and is kept
+  because it is WHY the value was ever moved — a reader turning the dial down is turning off
+  six hitches a minute, and `predictsGoal` is back on the live path at the shipped default,
+  so its inertness matters more now than it did. The original entry follows.
+  Reported as *"move that
   frame freeze — let the game run in a smooth manner, right now it looks like it is
   lagging"*, and that is a fair description of what it was: `loop()` returns early while
   `hitStop > 0`, so the sim does not advance and the same picture is drawn again. Measured
@@ -152,6 +158,10 @@ three lines a second time, name it.
   ⚠️ The `v == null` fallback moved 5 → 0 with it. Two numbers for one default is the drift
   this file keeps recording, and the case it bites in is the one nobody looks at: a partial
   `sel` out of an imported save, which `applySaveDoc` does not validate.
+  ⚠️ **AND THAT DRIFT HAPPENED ANYWAY, EXACTLY AS PREDICTED.** The fallback was written as a
+  LITERAL `0`, so when the default moved to 5 it was left behind pointing at a value nothing
+  ships — caught by `tests/shippedfeel.mjs`. It reads `defaultSel().hitStop` now, which is
+  the only spelling that cannot drift again.
 - **Hit stop:** its own dial (`sel.hitStop`, `hitStopFrames()`), deliberately *not* under the
   Screen shake toggle. Fires on a goal, and on a **first touch** whose shot `predictsGoal()` has
   walked forward and seen go in — never on `releaseTrap` (a carried shot isn't a first touch).
@@ -576,6 +586,74 @@ three lines a second time, name it.
   the "PRESS START" headline lives. ⚠️ `beginPath()` before each plate: `roundRectPath` only
   appends, so without it every `fill()` repaints the earlier plates over their own text —
   four boxes came out with only the last one's words in them.
+- **THE OWNER'S OWN SETTINGS ARE THE DEFAULTS** (`defaultSel()`), asked for by pasting the
+  clipboard that `⧉ Copy settings` produces and saying *"make this the default settings"*.
+  Sixteen values moved: **mode 3v3**, **length '5'** (a five-minute timed match, no longer
+  first-to-3), **ball Bouncy**, **handed left**, **juice false**, **hitStop 5**,
+  **kickRing 140**, **chargeMs 100**, **goalZoom 115 / goalZoomSpd 5**,
+  **teamCol `['#5a7de0','#d8c93a']`**, **teamFlag `['usa','brazil']`**, and in `feel`
+  **kick 80, bdamp 980, sprintRefill 1500, sprintBoost 150**.
+  ⚠️ **FIVE OF THEM REVERSE A CALL THIS FILE RECORDS, and that is not a contradiction —
+  it is the same person, later, choosing by hand.** *"THE FREEZE-FRAME SHIPS OFF"* becomes
+  hit stop at 5; *"the default match is FIRST TO 3"* becomes a timed five; the ball float
+  the entries below measured at 988 goes to 980; the goal camera's 1.8x becomes 1.15x; and
+  Screen shake & effects ships OFF. The old entries are kept exactly as they are, because
+  each one records WHY its value was chosen and that reasoning is what the next person needs
+  in order to move it back knowingly.
+  ⚠️ **`orient` WAS THE ONE VALUE NOT TAKEN.** The paste carried `'h'` — a hard "sideways"
+  override — and the shipped `'auto'` already answers `'h'` on the landscape window it was
+  captured on, while `'h'` costs a PHONE **37% of pitch scale**. So the setting that produces
+  the same picture where it was measured and a better one everywhere else is the one that
+  ships. Also skipped: `ballSkin` and `playerSkin` (no such keys — zero mentions in the
+  file), `deskDock` (written by nothing that reads it), `customLook` (a stored mix, not a
+  setting) and `seatRot:{"0":0}` (a no-op).
+  ⚠️ **EVERY SECOND COPY OF A DEFAULT HAD TO MOVE WITH IT, and there are four.**
+  `TEAMCOL_DEF`, `FEEL_PRESETS.pro`, `CHARGE.max` and `hitStopFrames()`'s `v == null`
+  fallback — the last of which was a hard-coded `0` against a new default of 5, caught by
+  `tests/shippedfeel.mjs`. Two are now PINNED equal to `defaultSel()` by a check
+  (`tests/botlook.mjs` for `TEAMCOL_DEF`, `tests/charge.mjs` for `CHARGE.max`) and the
+  other two already were. This is the duplication rule with the usual ending.
+  ⚠️ **AND FOUR REAL GAME BUGS WERE UNCOVERED BY THE NEW VALUES, none of them in the
+  paste.** Each was invisible only because the old default happened to be the quiet one:
+  the **zoomfold fired on a FRESH install** (its two arms — `juice === false` and `goalZoom`
+  at its own default — are both true out of the box now, so it overwrote the shipped zoom
+  and wrote `magnetball.sel`, which is the whole of how `isFirstRun` works);
+  **`applyTeamColours` stamped the settings' flag over the ATTRACT DEMO**, so with a country
+  as the default every demo was the same two countries (`keepFlags`);
+  **it stamped it over a CUP TIE too**, so a France-vs-England match was played as USA vs
+  Brazil (`matchTeamFlag`, the one-match layer `matchTeamCol` already had); and
+  **`numberTheSides` threw the lobby's numbering away whenever a side wore a country**,
+  because its `under` test was gated on `fillOnly` rather than on the plate being stashed.
+  ⚠️ **`bdamp: 980` COSTS KILLER LOBSTERS ITS FOOTBALL, and `tests/kqberry.mjs` is RED ON
+  PURPOSE because of it — the second such suite after `proladder`.** That file is the
+  instrument the ball-float choice was measured on, and re-run on it the ladder is cleanly
+  monotonic: **63 / 36 / 29 / 12 goals** over its eight seeded 300-second matches at
+  **992 / 988 / 984 / 980**, against a documented floor of eight; the suite's own harness
+  scores **4**. `bdamp` is the sole cause — putting 988 back turns the whole file green with
+  nothing else touched. ⚠️ **The defect is the MODE, not the setting**: the bots' stuck-ball
+  escape is deliberately off in Killer Lobsters, so a resting ball freezes the chaser for
+  good, and less float means the ball rests sooner and more often. The float was masking it.
+  Turning the escape on there is a measured dead end (5 of 8 and 7 of 8 matches then end on
+  a full hive, against a ceiling of 4). The bar is NOT moved.
+  ⚠️ **`pinCasualFeel` GAINED THE BALL**, for the reason it gained `kickRing`: `BALLS[sel.ball]`
+  sets the radius, the mass and the restitution, and Bouncy comes off the boards at 0.92
+  against Normal's 0.55 — a different game to read. `botplans` measured it as `press` falling
+  to a goal difference of **0** with every other plan still positive. It is a pin of the
+  tuning baseline, not a threshold moved; what the ladder does at the SHIPPED ball is
+  `proladder`'s job.
+  ⚠️ **FOUR CHECKS WERE ASSERTING A SUPERSEDED PRODUCT DECISION AND WERE REWRITTEN RATHER
+  THAN RE-POINTED**, each recorded in its own suite: `goalcam`'s `defaultIsVisible >= 1.4`
+  and `sideview`'s `> camNoZoom * 1.2` (both literals from the 1.8x era), `labels`'
+  *"team 0 reads RED and team 1 reads BLUE"* (two channel comparisons written against a
+  colour pair that is now a player's choice), and `botstuck`'s *"that minute was a real
+  match"* reading GOALS (one seeded 60-second match asked for one goal — the coin toss
+  `bigcourt` already records; the same four seeds score **0, 0, 0, 1** goals and
+  **27, 31, 27, 28** shots).
+  ⚠️ **AND TWO REPLACEMENTS WERE THEMSELVES VACUOUS AND WERE CAUGHT BY SABOTAGE.** Counting
+  changed pixels for "is the push visible" scored a **1.01x** push at 0.0212 against a 2%
+  floor — any zoom nudges every edge — and the plate-tint check read its reference through
+  `teamColOf`, the very function that painted the plates, so SWAPPING the two sides inside
+  it moved both terms together and passed. The reference is `sel.teamCol` now.
 - **The default is a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
   `grass`, `defaultProfile().flag` = `num1`), **and the default match is FIRST TO 3**
   (`defaultSel().length = 'g3'`), asked for. ⚠️ A goals-based default ENDS matches at
@@ -1965,27 +2043,35 @@ three lines a second time, name it.
   the equator apart. That was the "terrible texture": every pattern came out as a
   vertical smear. Baking in sin(φ) makes the linear stretch exactly right and costs
   nothing per frame.
-  ⚠️ **TWO PRINTS, one per hemisphere** (`BALL3D.prints`, `patch: 90`), and it shipped as
-  sixteen small identical ones on a regular 90° grid. That single decision caused **both**
-  halves of the second bug report. Sixteen identical marks 90° apart is a periodic lattice,
-  so between frames the eye locks onto whichever copy is nearest and reads the motion
-  backwards about as often as forwards — a filmstrip of the ball rolling right was near
-  indistinguishable from one of it rolling left. And a look's `draw` is a complete disc
-  design, so sixteen little copies is not the design you picked: the football came out as a
-  mass of small pentagons. At 90° a print spans exactly half the wrap and the whole of
-  sin(latitude), so two tile the sphere with no gap and no overlap.
-  ⚠️ **The two prints are DIFFERENT** — the second turned a quarter and mirrored — so the
-  pattern's period is a full turn rather than half of one. That moves the point where the
-  roll can start reading backwards from π/2 radians a frame out to π, which at the physical
-  rate is a ball travelling 31 units a step: the top of the range. `tests/ball3d.mjs`
-  measures it as "half a turn differs, a full turn matches".
-  ⚠️ **The design is laid in by COLUMNS at asin(x) of longitude** (`BALL3D.cols`). The strip
-  is indexed by longitude and the painter puts longitude at screen x = `r·sin(lon)`, so a
-  design laid in linearly is stretched by **π/2** across the middle of the ball — a round
-  dot rendered as a 1.46:1 oval. The asin pre-warp cancels the painter's sin at the print's
-  home orientation, leaving the design looking like itself; roll it away and the sin then
-  compresses it toward the limb, which is the real sphere behaviour. The suite measures the
-  sphere at rest against the **flat painter**, which is the thing it has to agree with.
+  ⚠️ **THE STRIP IS BUILT BY INVERSE PROJECTION, PER PIXEL — a COLUMN LOOP CANNOT DRAW A
+  PRINT ON A SPHERE, and that was the whole of "rolling ball is goofed texture wise".** The
+  bake used to place each print by walking longitude columns and stretching the look's `draw`
+  into them, with a `BALL3D.cols` asin pre-warp meant to cancel the painter's `sin`. It
+  cancels at ONE orientation and nowhere else, so a print away from its home longitude was a
+  smear, and a print straddling the seam was drawn twice. Now every texel of the strip asks
+  the opposite question: take the sphere point this texel represents, project it
+  orthographically into each print's own face, and sample that print. `look.draw` is
+  rasterised ONCE per print into a square offscreen canvas and read back as `ImageData`, and
+  the strip is one `putImageData`. The design is the design at every phase, by construction
+  — there is no orientation at which it is only approximately right, and **`BALL3D.cols` is
+  DELETED rather than left behind**, because two probes were derived from it.
+  ⚠️ **THREE PRINTS, NOT SIXTEEN AND NOT TWO** (`BALL3D.prints`, `patch: 90`). It first
+  shipped as sixteen small identical ones on a regular 90° grid, and that single decision
+  caused **both** halves of the first bug report: sixteen identical marks 90° apart is a
+  periodic lattice, so between frames the eye locks onto whichever copy is nearest and reads
+  the motion backwards about as often as forwards, and a look's `draw` is a complete disc
+  design — sixteen little copies is not the design you picked, so the football came out as a
+  mass of small pentagons. Two prints fixed the design and left the ball nearly bare through
+  the turn; three at 0, 1/3 and 2/3 of a wrap, each rotated and one mirrored, is what fills
+  it. ⚠️ **They are all DIFFERENT** — turned a quarter apiece, one mirrored — so the
+  pattern's period is a full turn rather than a third of one.
+  ⚠️ **THE CHECK IS COVERAGE THROUGH A FULL TURN, MEASURED AGAINST THE FLAT PAINTER IN THE
+  SAME RUN, and it has a CEILING as well as a floor.** `tests/ball3d.mjs` samples the black
+  panels' share of the ball's face at sixteen phases: the worst phase must not fall below
+  0.6 of what the flat painter draws — the two-print build measured **0.078 against a flat
+  0.269**, a ball that goes nearly blank as it rolls — and no phase may exceed 1.6 of it,
+  or "well covered" is satisfied by a ball painted solid black. `flatHasPattern` is the
+  control: a flat ball with no pattern at all scores zero on both sides.
   ⚠️ The **rate is ω = v/R**, off the ball's own radius, not a constant. It was 0.055
   against a radius of 10 — half the physical rate — so the ball under-turned for the ground
   it covered and read as sliding. Nothing asserted it until a sabotage of that constant
@@ -2832,6 +2918,34 @@ three lines a second time, name it.
   ball moved": at the smallest dial the reach is zero, so the ball rests against the
   player's body and the ordinary disc collision shoves it, which a velocity test scores as
   a kick and reported the reach 2.25 units LONGER than the ring.
+- **⧉ COPY SETTINGS — the ones you CHANGED, onto the clipboard** (`selDiff`,
+  `settingsText`, `settingsChangedCount`, `copyText`, `#selCopyBtn`; About card, beside
+  Export/Import). Asked for as *"a place to export current settings so I can paste it here
+  to make it the default"*, then *"have the button that does that put it into clipboard"* —
+  and the entry below already existed and was the wrong shape for that errand twice over.
+  ⚠️ **A DIFF, NOT A DUMP, and that is the whole feature.** `sel` is ~50 keys; what somebody
+  pasting into a conversation needs is the six they moved. `selDiff(cur, def)` walks
+  `defaultSel()` and keeps only what differs — recursing into nested groups so one moved
+  slider inside `feel` is one leaf and not thirteen, and the button says **how many LEAVES**,
+  which is the number a reader would count.
+  ⚠️ **AN ARRAY TRAVELS WHOLE.** `teamCol` is a PAIR and half a pair means nothing, so
+  arrays are compared and carried entire.
+  ⚠️ **A KEY THE DEFAULTS HAVE NEVER HEARD OF IS KEPT**, because that is a real difference on
+  this device — a legacy value, a hand-edited `localStorage`, or a typo in a shared settings
+  sheet.
+  ⚠️ **`copyText` IS ONE WRITER WITH AN `execCommand` FALLBACK**: `navigator.clipboard` needs
+  a SECURE CONTEXT and is simply absent on a `file://` page, which is where the downloaded
+  copy runs. It reports failure rather than pretending — the Save-clip rule.
+  ⚠️ **NOTHING PERSONAL OR CAREER-SHAPED IS IN IT** — no stats, no unlocks, no drill times.
+  That is what Export save is for, and it is a download rather than a paste.
+  ⚠️ **THE CHECK READS THE CLIPBOARD'S OWN KEY SET, NEVER `selDiff`, and a sabotage is what
+  said so**: with the shape checks reading the helper, a build that copied the WHOLE of `sel`
+  passed everything — a full dump contains the four changed values too, so *"the four are in
+  there"* says nothing at all. What separates a diff from a dump is what LANDED.
+  ⚠️ The suite serves the page over **http from a temp dir** and grants the origin clipboard
+  permission, or every run measures the fallback and never touches the path a real player
+  uses; and it presses the button by hit-testing its centre with `elementFromPoint`, never
+  `.click()`. `tests/copysettings.mjs`.
 - **A GAME SAVE, as one JSON file** (`SAVEFILE`, `buildSaveDoc`, `parseSaveDoc`,
   `applySaveDoc`, `exportSaveFile`, `pickSaveDoc`; About card). Settings including Game
   Feel, your player, your record and unlocks, custom maps, drill times, and a season or
@@ -6850,12 +6964,16 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 137 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 139 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
-⚠️ **One suite is RED ON PURPOSE**: `tests/proladder.mjs` measures the bot difficulty ladder
-at the SHIPPED default and the shipped default breaks it — see the Pro-feel entry above. A
-green run is therefore **136 green + proladder red**, and `proladder` going green means the
-steering was retuned, not that something regressed. `tests/README.md` lists what each covers and the measurement
+⚠️ **TWO suites are RED ON PURPOSE, and both measure the SHIPPED default rather than a
+tuning the AI was built against.** `tests/proladder.mjs` measures the bot difficulty ladder,
+which the Pro movement pair collapses (see the Pro-feel entry above); `tests/kqberry.mjs`
+measures how much ball float Killer Lobsters can take, and the shipped `bdamp` of 980 takes
+its football out — 4 goals over eight seeded five-minute matches against a floor of eight,
+with 988 turning the file green untouched (see the owner's-defaults entry above). A green run
+is therefore **N-2 green + those two red**, and either going green means the thing it
+describes was FIXED, not that something regressed. Neither bar may be widened. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify

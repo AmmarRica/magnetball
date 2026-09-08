@@ -228,10 +228,65 @@ const r = await p.evaluate(async ()=>{
     // the player has deliberately asked for a slow push, and that is theirs to have.
     o.outSlowerThanFastestDial = secsOut > fastest;
   }
-  // ⚠️ ...and it must actually be visible by DEFAULT, which is the thing that was
-  // wrong: the previous default was a 5% push, i.e. a setting nobody could see.
+  // ⚠️ **"THE DEFAULT PUSH MUST CLEAR 1.4x" IS A WITHDRAWN CLAIM.** It was written as
+  // `M.goalZoom() >= 1.4` when the default was 1.8x, guarding an earlier retune away from a
+  // 5% push — "a setting nobody can see". The owner has since shipped their own settings as
+  // the defaults and chosen **1.15x** deliberately, so the bar now asserts a TASTE, and it
+  // is the owner's taste to set. Two replacements were built and both were measured before
+  // this one:
+  //   (a) counting changed pixels between a resting frame and a pushed one. A 1.01x push —
+  //       the exact defect — scored **0.0212** of the sampled square against a 2% floor,
+  //       because ANY zoom nudges every edge in the picture and every nudged edge counts.
+  //       It passed on the build it exists to catch.
+  //   (b) requiring the pitch's on-screen span to grow by more than a player's drawn
+  //       diameter. Measured **111.7px against 25.4px** at the shipped 1.15x — but 1.05x,
+  //       the historical defect, grows ~37px and clears it too. A yardstick that cannot
+  //       separate the defect from the fix is not one.
+  // So what is checked here is what is left once the taste is taken out, and it is not
+  // nothing — the sabotage that killed (a) turned up a real, checkable property nobody had
+  // asserted: **the shipped default must be a value the SLIDER can actually select.**
+  // `goalZoom` steps in fives, so a default of 101 is snapped to 100 by the control — the
+  // dial reads "off", and it would jump the moment anybody touched it. That is the
+  // `KICKRING.def` lesson, and it is measured through the real `#goalZoom` input rather
+  // than off `sel`, because the snap happens in the control.
   o.defaultZoom = M.goalZoom();
-  o.defaultIsVisible = M.goalZoom() >= 1.4;
+  {
+    const z = document.getElementById('goalZoom'), d = M.defaultSel();
+    z.value = d.goalZoom; z.oninput();
+    o.dialTookDefault = M.sel.goalZoom;
+    o.defaultIsOnStep = Number(z.value) === d.goalZoom && M.sel.goalZoom === d.goalZoom;
+  }
+  // ...and it must reach the camera. Off (1.0) is a real answer — `goalZoomLabel()` reads
+  // `off` there and the camera never latches — so the pairing is measured BOTH ways in the
+  // same run: the shipped default does whatever it does, and the dial at 2.0x must do
+  // strictly more, or "it pushed" is equally true of a camera stuck at one magnification.
+  {
+    const diag = (w2) => Math.hypot(w2.bounds.halfW * 2, w2.bounds.halfL * 2);
+    const grow = (pct) => {
+      dial(pct, null);
+      M.goalCamReset();
+      const w5 = start();
+      const sc = w5.players[0]; sc.x = 0; sc.y = 0; sc.vx = sc.vy = 0;
+      M.computeCam(); const rest = diag(w5) * M.cam.s;
+      // ⚠️ CONTROL: read twice with nothing changed, the span must not move at all, or
+      // every reading here is camera drift rather than the push.
+      M.computeCam(); const drift = Math.abs(diag(w5) * M.cam.s - rest);
+      w5.ball.lastKicker = sc;
+      M.scoreGoal(w5, 0);
+      for (let i=0;i<Math.ceil(M.goalZoomSecs()*60)+10;i++){ M.step(w5); M.advanceGoalCam(w5); }
+      M.computeCam();
+      const out = { px: +(diag(w5) * M.cam.s - rest).toFixed(1), drift: +drift.toFixed(4) };
+      M.goalCamReset();
+      return out;
+    };
+    const shipped = grow(null), loud = grow(200);
+    dial(null, null);
+    o.restIsSteady   = shipped.drift < 0.01 && loud.drift < 0.01;
+    o.shippedGrewPx  = shipped.px;
+    o.loudGrewPx     = loud.px;
+    o.defaultReaches = o.defaultZoom === 1 ? shipped.px === 0 : shipped.px > 0;
+    o.dialIsLive     = loud.px > shipped.px * 1.5;
+  }
 
   // ---- the release must not DRAG the view across the pitch -----------------
   // ⚠️ `resetKickoff` teleports every body to its kickoff formation, and the camera
@@ -299,6 +354,7 @@ const L = await live.evaluate(async ()=>{
   const seen=[];
   for (let i=0;i<12;i++){ await wait(50); seen.push(M.cam.s); }
   o.peak = +(Math.max(...seen)/o.base).toFixed(3);
+  o.wantZoom = M.goalZoom();
   o.animatesUnaided = Math.max(...seen) > o.base*1.05;
 
   // ⚠️ A RESIZE MID-CELEBRATION — the exact trigger. A phone fires this on its own
@@ -323,6 +379,13 @@ const L = await live.evaluate(async ()=>{
   // lives on the path that STARTS a replay, so a probe that flipped the flag would sail past
   // it. The buffer is filled first, because the auto-replay does not fire without frames and
   // the whole trace then shows a goal with no replay in it at all.
+  // ⚠️ THE DIAL IS PINNED HIGH FOR THIS BLOCK, deliberately. What is under test is that a
+  // replay frames ITSELF and that the match comes back level — neither has anything to do
+  // with which zoom the game ships. Its control ("the goal zoomed in the first place")
+  // needs a push big enough to be unmistakable, and reading the shipped default there
+  // makes this block's control quietly weaken every time somebody retunes that default —
+  // which is exactly what a literal `> 1.3` did when the default moved to 1.15.
+  M.sel.goalZoom = 180;
   M.sel.autoReplay = true;
   M.goalCamReset();
   M.setMatchSeed(3); M.startMatch();
@@ -368,7 +431,10 @@ const L = await live.evaluate(async ()=>{
   o.afterSamples = afterReplay.length;
   // The zoom has to have HAPPENED first, or "no zoom during the replay" is true of a build
   // with the goal camera switched off entirely.
-  o.zoomedBeforeTheReplay = o.goalZoomBefore > 1.3;
+  // Two thirds of the way to the pinned dial: it really pushed in, without pinning a
+  // second number beside the one already set above.
+  o.pinnedZoom = M.goalZoom();
+  o.zoomedBeforeTheReplay = o.goalZoomBefore > 1 + (o.pinnedZoom - 1) * 0.66;
   o.replayIsOriginalSize  = o.duringReplayMax < 1.02;
   o.matchStaysOriginalSize = o.afterReplayMax < 1.02;
   // ---- ...and so does the SHAKE and the FLASH ----
@@ -396,7 +462,9 @@ await live.close();
 const fail=[];
 const ok=(c,m)=>{ if(!c) fail.push(m); };
 ok(L.animatesUnaided, `the push never moved cam.s in the running game (peak ${L.peak}x) — applyGoalCam only runs inside computeCam, and nothing calls that per frame`);
-ok(Math.abs(L.peak - 1.8) < 0.15, `the live push peaked at ${L.peak}x, not the 1.8x default`);
+ok(Math.abs(L.peak - L.wantZoom) < 0.15,
+   `the live push peaked at ${L.peak}x, not the shipped default of ${L.wantZoom}x` +
+   ' — read off goalZoom() rather than a literal, because the default has moved once already');
 ok(L.releasesAfterResize, `a resize during the celebration baked the zoom in: still ${L.settled}x of base two seconds later, with goalCam.t back at ${L.goalCamT} — this is the "stuck zoomed until I hit fullscreen" bug`);
 ok(L.sawReplay, `the auto-replay never fired (${L.afterSamples} samples after it), so the two checks below prove nothing — the rolling buffer has to have frames in it`);
 ok(L.zoomedBeforeTheReplay, `the goal never zoomed in the first place (peak ${L.goalZoomBefore}x), so "no zoom during the replay" would also be true of a build with the goal camera switched off`);
@@ -435,7 +503,18 @@ ok(r.oneMeansOff, `1.0x did not mean off (label "${r.zoomOffLabel}")`);
 ok(r.clampsWildValues, `out-of-range dial values were obeyed rather than clamped: ${JSON.stringify(r.clamped)}`);
 ok(r.outIsSlower, `the push leaves as fast as it arrives (out/in = ${r.inOutRatio}) — it reads as a twitch, not an emphasis`);
 ok(r.outSlowerThanFastestDial, `the release is quicker than the dial's quickest push: ${JSON.stringify(r.dialRange)}`);
-ok(r.defaultIsVisible, `the DEFAULT push is ${r.defaultZoom}x — a setting nobody can see is the bug this retune exists to fix`);
+ok(r.restIsSteady,
+   'the pitch span moved between two readings with nothing changed, so the push measurement ' +
+   'below is camera drift rather than the push');
+ok(r.defaultIsOnStep,
+   `the shipped default zoom ${r.defaultZoom}x is not a value the #goalZoom slider can select — ` +
+   `the control snapped it to ${r.dialTookDefault}, so the dial jumps the moment anybody touches it`);
+ok(r.defaultReaches,
+   `the shipped default is ${r.defaultZoom}x and grew the pitch on screen by ${r.shippedGrewPx}px — ` +
+   'a default that never reaches the camera is a dial that does nothing');
+ok(r.dialIsLive,
+   `2.0x grew the pitch ${r.loudGrewPx}px against the default's ${r.shippedGrewPx}px — "it pushed in" ` +
+   'is equally true of a camera stuck at one magnification, so the two are measured in the same run');
 ok(r.followsWhilePushed, 'the camera did not latch onto the scorer while pushed in');
 ok(r.dropsTheSubject, 'the camera kept following its subject into the ease-out');
 ok(r.noSnapOnRelease, `the view jumped ${r.panJump}px when the scorer was moved to their kickoff spot — the release is dragging the camera across the pitch`);

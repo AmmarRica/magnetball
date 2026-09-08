@@ -452,7 +452,11 @@ const def = await bare.evaluate(() => {
     profileFlag: M.defaultProfile().flag,
     // ⚠️ Every bot wears a NUMBER, not a country. The first-run continent lineup used to
     // dress a brand-new install in flags, which is the opposite of "players are numbered".
-    botFlags: M.world.players.filter(q => q.ctrl === 'bot').map(q => q.flag),
+    // ⚠️ `_ownFlag` — a COUNTRY ships as the team's default now, so `q.flag` is the side's
+    // dressing and the plate a body was MINTED with is stashed underneath it. The claim here
+    // is about the shirt, not about what the team wears over it.
+    botFlags: M.world.players.filter(q => q.ctrl === 'bot')
+                .map(q => q._ownFlag !== undefined ? q._ownFlag : q.flag),
   };
 });
 await bare.close();

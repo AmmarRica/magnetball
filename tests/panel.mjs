@@ -358,6 +358,10 @@ o.warmupRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === n
 // pitch a second later, while seat one's own change landed every time. A card that offers
 // seven seats and syncs one is worse than a card that offers one, because nothing on
 // screen says which of the two you are getting.
+// ⚠️ **THE PLATE IS READ THROUGH `_ownFlag`, because a COUNTRY ships as the team's
+// default now.** `applyTeamColours` wears the side's flag and stashes the body's own
+// plate; a picker's write lands underneath it, so reading `q.flag` here measured the
+// team dressing rather than whether the panel's edit crossed the channel at all.
 {
   await game.evaluate(() => { const M = window.__magnet;
     M.sel.mode = 'local'; M.sel.lobby = 'off'; M.startMatch({ lobby:false }); });
@@ -373,11 +377,13 @@ o.warmupRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === n
   const seats = () => game.evaluate(() => {
     const w = window.__magnet.world;
     const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
-    return hs.map(q => q.flag + '/' + q.name); });
+    const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    return hs.map(q => worn(q) + '/' + q.name); });
   o.guestSeatCrosses = await until(game, () => {
     const w = window.__magnet.world;
     const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
-    return !!hs[1] && hs[1].flag === 'cat' && hs[1].name === 'FROMMENU'; });
+    const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    return !!hs[1] && worn(hs[1]) === 'cat' && hs[1].name === 'FROMMENU'; });
   o.guestSeatState = await seats();
   // ⚠️ The control: seat ONE is the case that always worked, so without it "the guest
   // crossed" is passing on a build that simply re-dresses everybody.
@@ -386,11 +392,13 @@ o.warmupRanNothingLocally = await panel.evaluate(()=>window.__magnet.world === n
   o.ownerSeatCrosses = await until(game, () => {
     const w = window.__magnet.world;
     const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
-    return hs[0].flag === 'dog'; });
+    const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    return worn(hs[0]) === 'dog'; });
   o.seatsDidNotMerge = await game.evaluate(() => {
     const w = window.__magnet.world;
     const hs = w.players.filter(q => q.ctrl==='human1'||q.ctrl==='human2'||q.ctrl==='gamepad');
-    return hs[0].flag === 'dog' && hs[1].flag === 'cat'; });
+    const worn = q => q._ownFlag !== undefined ? q._ownFlag : q.flag;
+    return worn(hs[0]) === 'dog' && worn(hs[1]) === 'cat'; });
 }
 
 // --- With no game tab at all the panel still opens on the saved settings, and

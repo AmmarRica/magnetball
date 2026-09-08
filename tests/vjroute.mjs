@@ -134,12 +134,17 @@ const g = await pg.evaluate(() => {
   o.cardHidden = !!vjCard && getComputedStyle(vjCard).display === 'none';
   o.aboutHasIt = !!(document.getElementById('vjOpenBtn') || {}).closest &&
                  document.getElementById('vjOpenBtn').closest('[data-sec="about"]') !== null;
-  // ⚠️ FIRST TO 3 IS THE DEFAULT MATCH LENGTH — asked for alongside this route. The
-  // value is the LENGTHS key 'g3', and it must exist there or startMatch hands
-  // `undefined.goals` to the whistle.
+  // ⚠️ **THE DEFAULT MATCH LENGTH IS TIMED AGAIN, and this check is the reversal written
+  // down.** It read `'g3'` — first to 3, asked for alongside this route — and the owner has
+  // since shipped their own settings, where the length is the five-minute timed one. Same
+  // person, later call. What still has to hold is the half that is not taste and that broke
+  // the game when it was got wrong: the value must be a REAL `LENGTHS` key, or `startMatch`
+  // hands `undefined.goals` to the whistle on a fresh install.
   o.defLen = M.defaultSel().length;
   o.lenExists = !!M.LENGTHS[M.defaultSel().length];
-  o.lenIsFirstTo3 = (M.LENGTHS[M.defaultSel().length] || {}).goals === 3;
+  const L = M.LENGTHS[M.defaultSel().length] || {};
+  // A length is one or the other: a goal target, or a clock. Neither is a broken key.
+  o.lenIsUsable = (L.goals > 0) || (L.secs > 0);
   return o;
 });
 await pg.close();
@@ -147,8 +152,8 @@ ok('the game page keeps the signpost and never the decks', !g.vjview && g.decksB
    JSON.stringify(g));
 ok('...with the VJ card hidden and the signpost filed under About', g.cardHidden && g.aboutHasIt,
    JSON.stringify(g) + ' — a feature you cannot find is a feature that does not exist, so the one line saying where it went stays');
-ok('FIRST TO 3 IS THE DEFAULT MATCH LENGTH', g.defLen === 'g3' && g.lenExists && g.lenIsFirstTo3,
-   JSON.stringify({ len: g.defLen, exists: g.lenExists, goals3: g.lenIsFirstTo3 }) +
+ok('THE DEFAULT MATCH LENGTH IS A REAL, USABLE LENGTHS KEY', g.lenExists && g.lenIsUsable,
+   JSON.stringify({ len: g.defLen, exists: g.lenExists, usable: g.lenIsUsable }) +
    ' — and it must be a real LENGTHS key, or a fresh install hands undefined to the whistle');
 
 srv.close();

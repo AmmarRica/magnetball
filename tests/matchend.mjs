@@ -193,8 +193,12 @@ const r = await p.evaluate(async ()=>{
     // ⚠️ NOT `color`. A player's shirt is the TEAM's colour now, not the profile's, so
     // asserting the reset put `def.color` on the pitch would be asserting the opposite
     // of the rule. What resets and shows up is the cap and the face.
+    // ⚠️ ...and NOT `flag` straight either, for the same class of reason: a COUNTRY ships as
+    // the team's default, so `applyTeamColours` wears the side's flag and stashes the body's
+    // own plate on `_ownFlag`. What the reset has to reach is the plate, not the dressing.
     M.startMatch(); const me = M.world.players.find(q=>q.ctrl==='human1');
-    return me && me.cap === def.cap && me.flag === def.flag && me.eyes === def.eyes;
+    const worn = me && (me._ownFlag !== undefined ? me._ownFlag : me.flag);
+    return me && me.cap === def.cap && worn === def.flag && me.eyes === def.eyes;
   })();
   return o;
 });

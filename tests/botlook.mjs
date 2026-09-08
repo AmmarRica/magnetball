@@ -75,6 +75,16 @@ const r = await p.evaluate(async ()=>{
         for(let i=0;i<10;i++) M.step(ww); M.render(); }
   catch(e){ o.rendersClean=false; o.renderErr=e.message; }
 
+  // ⚠️ TWO COPIES OF ONE DEFAULT. `TEAMCOL_DEF` is `teamColOf`'s fallback when `sel.teamCol`
+  // is missing a slot — a partial `sel` out of an imported save, which `applySaveDoc` does
+  // not validate — and `defaultSel().teamCol` is what a fresh install gets. They mean the
+  // same thing and they are written down twice, so the second one is the one that gets
+  // missed: the shipped pair moved from red/blue to blue/yellow and nothing anywhere would
+  // have said if only one of them had.
+  o.teamColDef = M.TEAMCOL_DEF.slice();
+  o.teamColShipped = M.defaultSel().teamCol.slice();
+  o.defaultsAgree = JSON.stringify(o.teamColDef) === JSON.stringify(o.teamColShipped);
+
   M.sel.mode='1v1';
   return o;
 });
@@ -85,7 +95,11 @@ const ok = r.seats===4 && r.youKeepYourLook && r.yourShirtIsTheTeamS && r.oneSha
   r.noBotCopiesYou && r.botsDifferFromEachOther &&
   r.botFacesVary && r.botsWearNoCap && r.teamColoursSplit && r.stableAcrossRestarts &&
   r.bigLooksVary && r.demoOneFlagPerTeam && r.demoNotYourCap && r.rendersClean &&
+  r.defaultsAgree &&
   errors.length === 0;
+if(!r.defaultsAgree)
+  console.log(`  TEAMCOL_DEF ${JSON.stringify(r.teamColDef)} and defaultSel().teamCol ` +
+              `${JSON.stringify(r.teamColShipped)} are two copies of one default and they have drifted`);
 if(!ok) console.log('FAILED:', Object.entries(r).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

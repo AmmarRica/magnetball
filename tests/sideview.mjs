@@ -145,11 +145,18 @@ const all = await p.evaluate(()=>{
   M.render(); const camNoZoom = M.cam.s;
   // The goal camera latched and eased all the way in, exactly as it is when a replay
   // starts — the step loop that would ease it back out does not run during playback.
+  // ⚠️ THE DIAL IS PINNED HIGH, deliberately. What is under test is that a REPLAY frames
+  // itself; which zoom the game happens to ship has nothing to do with it. Its control
+  // ("the camera zoomed at all") was a literal `> 1.2`, written when the default was 1.8x —
+  // so the moment the owner shipped their own settings and chose 1.15x it stopped
+  // separating anything, and it would have gone on weakening on every future retune.
+  M.sel.goalZoom = 200;
   M.goalCamStart(w2, w2.players[0]); M.goalCam.t = 1;
   M.replay.active = false; M.computeCam(); const camZoomed = M.cam.s;
   M.replay.active = true;  M.computeCam(); const camInReplay = M.cam.s;
-  M.replay.active = false; M.goalCamReset();
-  o.zoomWorksAtAll   = camZoomed > camNoZoom * 1.2;
+  M.replay.active = false; M.goalCamReset(); M.sel.goalZoom = M.defaultSel().goalZoom;
+  // Most of the way to the pinned 2.0x, without pinning a second number beside it.
+  o.zoomWorksAtAll   = camZoomed > camNoZoom * 1.8;
   o.replayOwnsFraming = Math.abs(camInReplay - camNoZoom) < 0.0001;
 
   return o;

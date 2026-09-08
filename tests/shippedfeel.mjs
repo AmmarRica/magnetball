@@ -95,28 +95,48 @@ const WAS = { hitStop: 2, pdamp: 960, bdamp: 992 };
       }
       return { fires, frames };
     };
-    o.shipped = freezeRun(M.sel.hitStop);
-    o.turnedUp = freezeRun(6);
-    M.sel.hitStop = 0;
+    o.shippedHitStop = M.defaultSel().hitStop;
+    o.shipped = freezeRun(o.shippedHitStop);
+    // The control is now the dial turned OFF: "it freezes" is equally true of a build that
+    // ignores the dial entirely, and 0 is the one value that must produce nothing.
+    o.dialOff = freezeRun(0);
+    M.sel.hitStop = o.shippedHitStop;
     await wait(10);
     return o;
   });
   await p.close();
   console.log('fresh install   hitStop ' + r.hitStop + ' (was ' + WAS.hitStop + ')  ' +
               'pdamp ' + r.pdamp + ' (was ' + WAS.pdamp + ')  bdamp ' + r.bdamp + ' (was ' + WAS.bdamp + ')');
-  console.log('freeze/min      shipped ' + JSON.stringify(r.shipped) + '   dial at 6 ' + JSON.stringify(r.turnedUp));
+  console.log('freeze/min      shipped ' + JSON.stringify(r.shipped) + '   dial at 0 ' + JSON.stringify(r.dialOff));
 
-  ok('the freeze-frame ships OFF', r.hitStop === 0 && r.frames === 0 && r.liveHitStop === 0,
-     'default ' + r.hitStop + ', live ' + r.liveHitStop);
+  // ⚠️ **THE FREEZE-FRAME SHIPS ON AGAIN, AND THIS CHECK IS THE REVERSAL WRITTEN DOWN.**
+  // It read `hitStop === 0` and the entry behind it quoted the owner asking for the freeze to
+  // go — "let the game run in a smooth manner, right now it looks like it is lagging" —
+  // measured at 6 fires and 12 frozen frames a minute at the then-default of 2. The owner has
+  // since set the dial to 5 on their own device and asked for their settings to be shipped:
+  // same person, later call, which is the same way the Pro feel arrived. Measured at the new
+  // default over the same minute of real 2v2: **4 fires, 20 frozen frames** — fewer hitches
+  // than before and each one longer.
+  // ⚠️ It is pinned to `defaultSel()` rather than to a literal 5, so this says "the dial
+  // ships where the defaults say" instead of becoming a third copy of the number.
+  ok('the freeze-frame ships ON, at the shipped dial', r.hitStop === r.shippedHitStop &&
+     r.liveHitStop === r.shippedHitStop && r.shippedHitStop > 0,
+     'default ' + r.hitStop + ', live ' + r.liveHitStop + ', shipped ' + r.shippedHitStop);
   // ⚠️ The fold must not have run at all here: writing `magnetball.sel` during the
   // bootstrap makes the first-run lineup dead code on the very first frame.
   ok('a fresh install is not folded, so first-run survives', r.firstRunIntact,
      'magnetball.sel was written before anybody changed a setting');
-  ok('...and an unset dial agrees with it', r.unsetFallback === 0, 'fallback ' + r.unsetFallback);
-  ok('a whole match freezes not one frame', r.shipped.frames === 0, JSON.stringify(r.shipped));
-  // THE CONTROL. Without it, "no freeze" is equally true of a build that deleted hit stop.
-  ok('...and the dial still brings it back', r.turnedUp.fires > 0 && r.turnedUp.frames > 0,
-     JSON.stringify(r.turnedUp) + ' — this is a default that moved, not a feature removed');
+  // ⚠️ **THE `v == null` FALLBACK MUST AGREE WITH THE DEFAULT**, which is the drift this file
+  // keeps recording: two numbers for one default, and the case it bites in is the one nobody
+  // looks at — a partial `sel` out of an imported save, which `applySaveDoc` does not validate.
+  ok('...and an unset dial agrees with it', r.unsetFallback === r.shippedHitStop,
+     'fallback ' + r.unsetFallback + ' against a shipped ' + r.shippedHitStop);
+  ok('a whole match really does freeze', r.shipped.frames > 0 && r.shipped.fires > 0,
+     JSON.stringify(r.shipped) + ' — measured over a minute of real 2v2 at the shipped dial');
+  // THE CONTROL, now the other way up: "it freezes" is equally true of a build that ignores
+  // the dial, so turning it DOWN has to stop it happening at all.
+  ok('...and turning the dial off stops it', r.dialOff.fires === 0 && r.dialOff.frames === 0,
+     JSON.stringify(r.dialOff) + ' — this is a default that moved, not a freeze nailed on');
   ok('both float dials came down', r.pdamp < WAS.pdamp && r.bdamp < WAS.bdamp,
      'pdamp ' + r.pdamp + ' bdamp ' + r.bdamp);
   ok('the shipped feel IS the Pro preset', r.proSelected &&
@@ -222,14 +242,22 @@ const WAS = { hitStop: 2, pdamp: 960, bdamp: 992 };
     pdamp: window.__magnet.sel.feel.pdamp, bdamp: window.__magnet.sel.feel.bdamp,
     stamped: localStorage.getItem('magnetball.feelfold') === '1',
     written: (JSON.parse(localStorage.getItem('magnetball.sel')||'{}').feel||{}).pdamp,
+    want: window.__magnet.defaultSel(),
   }));
   await p.close();
   console.log('old install     -> hitStop ' + r.hitStop + ' pdamp ' + r.pdamp + ' bdamp ' + r.bdamp);
-  ok('an untouched old install is moved on', r.hitStop === 0 && r.pdamp === 940 && r.bdamp === 988,
-     JSON.stringify(r));
+  // ⚠️ **READ OFF `defaultSel()`, never as literals.** A fold carries a device from an OLD
+  // default to TODAY'S one, so three numbers written out here are three more copies of a
+  // default that has already moved twice — and the copy is what goes stale. The fold's own
+  // `sel.hitStop = 0` was exactly that and it is `defaultSel().hitStop` now.
+  ok('an untouched old install is moved on', r.hitStop === r.want.hitStop &&
+     r.pdamp === r.want.feel.pdamp && r.bdamp === r.want.feel.bdamp,
+     JSON.stringify({ got: { hitStop: r.hitStop, pdamp: r.pdamp, bdamp: r.bdamp },
+                      want: { hitStop: r.want.hitStop, pdamp: r.want.feel.pdamp, bdamp: r.want.feel.bdamp } }));
   // ⚠️ `accel` travels with `pdamp` or the fold ships the slower player to exactly the
   // devices that were playing happily before.
-  ok('...and the acceleration travels with the damping', r.accel === 18, 'accel ' + r.accel);
+  ok('...and the acceleration travels with the damping', r.accel === r.want.feel.accel,
+     'accel ' + r.accel + ' against a shipped ' + r.want.feel.accel);
   // ⚠️ Written to storage, not only to memory: without the save the next launch — its key
   // now stamped — would hand the old feel straight back.
   ok('...and the move is SAVED, not just in memory', r.written === 940, 'stored pdamp ' + r.written);
