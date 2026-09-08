@@ -73,8 +73,46 @@ const r = await p.evaluate(async ()=>{
       if (!M.iconSvg(ic)) missing.push([t,k,ic]);
     }
   }
+  // ⚠️ **THE TAB CHIPS DECLARE ICONS TOO, and they were not scanned — which is how the
+  // Magnet chip shipped as the one tab in Game Feel with no mark beside its label.**
+  // `iconSvg` returns '' for a name the registry does not have and `buildSubTabs` then
+  // falls back to bare text, so a typo or a new tab is a silent hole rather than an error:
+  // it renders, it is pressable, and it just looks unlike its six siblings.
+  for (const g in M.SUBTABS)
+    for (const [pane, , ic] of M.SUBTABS[g]){
+      if (!ic) continue;
+      declared.push(['SUBTABS.' + g, pane, ic]);
+      if (!M.iconSvg(ic)) missing.push(['SUBTABS.' + g, pane, ic]);
+    }
   o.declaredCount = declared.length;
   o.missing = missing;
+  // ...and it is checked on the RENDERED chip as well, because "the name resolves" says
+  // nothing about `buildSubTabs` actually asking for it.
+  // ⚠️ **EACH ROW IS MATCHED TO ITS OWN GROUP FIRST.** Pane names REPEAT across groups —
+  // `SUBTABS.feel` has a `ball` and `SUBTABS.match` has one too, `SUBTABS.options` has a
+  // `feel` — so filtering every chip on the page by one group's pane names picks up chips
+  // belonging to another row and reports them bare. The first version of this did exactly
+  // that and named a chip that has an icon.
+  { M.openSection('feel'); M.buildSubTabs();
+    const bare = [];
+    let chipsSeen = 0;
+    for (const row of document.querySelectorAll('.subtabs')){
+      const panes = [...row.querySelectorAll('[data-pane]')];
+      if (!panes.length) continue;
+      const g = Object.keys(M.SUBTABS).find(k =>
+        panes.every(c => M.SUBTABS[k].some(([pn]) => pn === c.dataset.pane)));
+      if (!g) continue;
+      for (const c of panes){
+        const ent = M.SUBTABS[g].find(([pn]) => pn === c.dataset.pane);
+        if (!ent || !ent[2]) continue;          // an entry with no icon is allowed to be text
+        chipsSeen++;
+        if (!c.querySelector('svg')) bare.push(g + '/' + c.dataset.pane);
+      }
+    }
+    o.chipsSeen = chipsSeen;
+    o.chipsBare = bare;
+    // ⚠️ Paired with a real count, or "none are bare" is true of a page with no chips on it.
+    o.chipsAllMarked = chipsSeen >= 7 && bare.length === 0; }
   // ...and the functional tables are fully converted, not half.
   o.fullyConverted = Object.keys(tables).every(t =>
     Object.keys(tables[t]).every(k => !!tables[t][k].icon));
@@ -152,6 +190,7 @@ ok(r.allDraw, `icons that draw nothing or a sliver: empty ${JSON.stringify(r.emp
 ok(r.dupes.length===0, `two icons share a path, so two different things look identical: ${JSON.stringify(r.dupes)}`);
 ok(r.baked.length===0, `icons with a baked colour instead of currentColor: ${JSON.stringify(r.baked)}`);
 ok(r.missing.length===0, `an entry declares an icon the registry does not have: ${JSON.stringify(r.missing)}`);
+ok(r.chipsAllMarked, `tab chips that ask for an icon and draw nothing: ${JSON.stringify(r.chipsBare)} of ${r.chipsSeen} — one bare chip in a row of marks reads as a broken tile, not as a style`);
 ok(r.fullyConverted, 'a functional table is only half converted — a row of drawn icons with an emoji in it looks like a bug');
 ok(r.cosmeticLeaked.length===0, `a COSMETIC table has an icon field: ${JSON.stringify(r.cosmeticLeaked)} — there the emoji is the item, and paintCap draws that exact glyph on the disc`);
 ok(r.capsStillEmoji, 'caps lost their emoji, so the thing you pick is no longer the thing that gets drawn');

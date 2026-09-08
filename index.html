@@ -5005,6 +5005,16 @@ const ICONS = {
   hat:       'M7.6 4.2h8.8v8.2H7.6Z M4 12.4h16 M4 12.4v2.2h16v-2.2 M7.6 8.6h8.8',
   wand:      'M5 19 15.6 8.4 M14.2 7 17 9.8 M18.6 3.2v3 M17.1 4.7h3 M13.6 3.6v2.2 M12.5 4.7h2.2 M19.4 12.8V15 M18.3 13.9h2.2',
   boot:      'M6.4 4h4v7.6c0 1.9 1.1 2.9 3 3.4l3.9 1.1c1.5.4 2.3 1.2 2.3 2.4V20H6.4Z M6.4 17.2h13.2 M10.4 11.6h3.2',
+  // ⚠️ A horseshoe, drawn as two arcs about ONE centre (12,11) with the tips capped, so the
+  // legs are parallel by construction rather than by two numbers agreeing. The Magnet chip
+  // was the one tab in Game Feel with no mark beside its label — `iconSvg` returns '' for a
+  // name the table does not have, and the chip then falls back to bare text.
+  magnet:    'M5 17v-6a7 7 0 0 1 14 0v6 M9 17v-6a3 3 0 0 1 6 0v6 M5 17h4 M15 17h4',
+  // ⚠️ These two were missing for as long as the Options card has existed, and nothing said
+  // so — the Display and Game Feel chips in there have been bare text beside three siblings
+  // carrying marks. Found by the icons suite once it learned to scan SUBTABS.
+  monitor:   'M3.6 5h16.8v10.6H3.6Z M9 19.4h6 M12 15.6v3.8',
+  sliders:   'M4 7.6h16 M4 12h16 M4 16.4h16 M8.6 5.6v4 M15.4 10v4 M10.6 14.4v4',
   flame:     'M12 3.2c3 3.4 5.6 5.4 5.6 9.1a5.6 5.6 0 1 1-11.2 0c0-1.8.7-3.2 1.9-4.6.3 1.4 1 2.2 2 2.5-.4-2.6.2-5 1.7-7Z',
   post:      'M6.6 5.4h10.8v13.2H6.6Z M6.6 9.2h10.8 M6.6 13h10.8 M6.6 16.4h10.8 M10.2 5.4v13.2 M13.8 5.4v13.2',
   thumbup:   'M8.4 20V10.2l4-6.2c1.3 0 2.1.9 2.1 2.2V10h4.1c1.1 0 1.9 1 1.7 2.1l-1.2 6c-.2 1.1-1 1.9-2.1 1.9Z M8.4 10.2H4.6V20h3.8Z',

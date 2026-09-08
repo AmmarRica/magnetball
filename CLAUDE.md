@@ -2487,7 +2487,24 @@ three lines a second time, name it.
   no `icon:` keeps its emoji. The result screen goes through the same path — award
   ribbons, the map vote's thumbs, Warm-up, Settings and the save toast are all drawn
   now, with the emoji as the fallback. Difficulty is drawn as a **ramp** (`tierNofM`, filled pips) rather
-  than seven unrelated pictures, generated from `DIFF`'s own length. `tests/icons.mjs`.
+  than seven unrelated pictures, generated from `DIFF`'s own length.
+  ⚠️ **THE TAB CHIPS DECLARE ICONS TOO, AND NOTHING WAS CHECKING THEM — three were
+  missing.** `iconSvg` returns `''` for a name the registry does not have and
+  `buildSubTabs` then falls back to bare text, so a typo or a new tab is a **silent** hole:
+  the chip renders, it is pressable, and it just looks unlike its siblings. `magnet`
+  arrived that way with the Magnet tab; **`monitor` and `sliders` have been missing for as
+  long as the Options card has existed**, so Display and Game Feel have been text in a row
+  of marks the whole time and nobody noticed.
+  ⚠️ **TWO CHECKS, because neither can see the other's defect.** The registry scan now
+  walks `SUBTABS` as well as the five option tables, which catches a missing entry; and the
+  RENDERED chip must carry an `<svg>`, which is the only thing that catches `buildSubTabs`
+  no longer asking. Sabotaged separately — deleting `ICONS.magnet` fails both, cutting the
+  `iconSvg` call fails only the second, and it names all **27** chips when it does.
+  ⚠️ **EACH CHIP ROW IS MATCHED TO ITS OWN GROUP FIRST, and the obvious probe reports a
+  false positive.** Pane names REPEAT across groups — `SUBTABS.feel` has a `ball` and so
+  does `SUBTABS.match`, `SUBTABS.options` has a pane called `feel` — so filtering every
+  chip on the page by one group's pane names picks up another row's chips and names one
+  bare that has an icon. That is what the first run did. `tests/icons.mjs`.
 - **Cosmetics/unlocks:** `FLAGS` (draw fns + `_fh/_fv/_bg/_cd/_nordic/_oval` helpers), `ANIMALS`,
   `TEXTS`, `EYES`, `CAPS`, with `FLAG_REQ` / `EYE_REQ` / cap `.req`.
   `isUnlocked(cat,key)` = `grantedHas || reqMet(itemReq)`. **Flags, animals and text share one
