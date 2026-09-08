@@ -5473,7 +5473,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260907.1150AM';
+const VERSION = '20260908.0210AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5489,6 +5489,13 @@ const VERSION = '20260907.1150AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260908.0210AM', title: 'The rolling ball is a ball all the way round',
+    changed: [
+      '<b>The rolling ball keeps its pattern through the whole turn.</b> Half of every rotation used to come round nearly blank with one smeared marking on it \u2014 the pattern was being squeezed into the middle of each side of the ball instead of wrapping over it.',
+      '<b>It is also sharper.</b> The pattern is drawn at the size it is shown at rather than being blown up.',
+    ],
+    fixed: 'Assorted fixes and tidying.',
+  },
   { v: '20260907.1150AM', title: 'Controllers work in Training, and twice the confetti',
     changed: [
       '<b>A controller now steers the player in Training.</b> The practice room never handed the pad a seat, so on a TV with a controller and no keyboard there was a body on the pitch that nothing could move.',
@@ -8922,15 +8929,23 @@ const BALL3D = {
   // came out as a mass of small pentagons rather than as a football.
   // At 90° a print spans exactly half the wrap and the whole of sin(latitude), so two of
   // them tile the sphere with no gap and no overlap, and the design comes back full size.
+  // ⚠️ 90 means a print IS a hemisphere, and that is now load-bearing rather than a tuning:
+  // the bake inverse-orthographic-projects the design disc onto a cap of this radius, so the
+  // disc's rim lands on the cap's edge and two caps at 90 tile the sphere exactly. Below 90
+  // the caps no longer meet and the ball carries bare ground between them, which is the
+  // defect `ballSphereTex` records — measured at 0.078 panel coverage against 0.303.
   patch: 90,      // angular radius of one printed instance, in DEGREES
-  cols: 72,       // columns the design is sliced into for the asin warp — bake-time only
   // ⚠️ The two prints are made DIFFERENT — the second turned a quarter and mirrored — so
   // the pattern's period is a full turn rather than half of one. That is what pushes the
   // point where the roll can start reading backwards from π/2 radians a frame out to π: at
   // the physical roll rate that is a ball travelling at 31 units a step, which is the top of
   // the speed range. Two identical hemispheres would alias from 15 upwards.
+  // ⚠️ **THREE, AT 120°, AND THEY OVERLAP** — see `ballSphereTex`. Two at 180° abut exactly
+  // as caps and still left the ball pale at the seam, because a look's marks sit inside the
+  // disc and its outer ring is plain, so two designs meeting rim to rim show two blank
+  // margins together. At 120° no point is more than 60° from a design's middle.
   // [longitude in turns, the look's own rotation in turns, mirrored?]
-  prints: [[0.0, 0, false], [0.5, 0.25, true]],
+  prints: [[0, 0, false], [1/3, 0.25, true], [2/3, 0.5, false]],
 };
 // ⚠️ Declared HERE, with BALL3D, and not down beside the painter that fills it.
 // `clearSwatchCache` empties this and runs from `applyTheme` during the bootstrap, so a
@@ -32983,9 +32998,37 @@ function ballSphereTex(key, spot, paper){
   // TWICE the wrap width, so a slice sampled near the seam never reads past the end.
   cv.width = TW * 2; cv.height = D;
   const cc = cv.getContext('2d');
-  const A = BALL3D.patch * Math.PI/180;
-  const PS = Math.round(D * 0.9);
-  for (const [lonTurns, rotTurns, mir] of BALL3D.prints){
+  const s = Math.sin(BALL3D.patch * Math.PI/180);
+  // ⚠️ The print is rasterised at the strip's OWN resolution rather than at 0.9·D. A print
+  // owns half the wrap, which is `TW/2` pixels across, so a 115px stamp was being blown up
+  // by 1.75× in the middle of the ball — a soft rescale of the only pattern anybody looks
+  // at, which is the defect the whole DPR entry is about wearing a different hat.
+  const PS = Math.max(8, Math.round(TW/2));
+  // ⚠️ **THE STRIP IS RESAMPLED PER PIXEL, and it used to be laid in by COLUMNS — which is
+  // only correct ON THE EQUATOR and left HALF THE SPHERE BLANK.** A design is a DISC, and
+  // the inverse orthographic projection of a disc onto a hemisphere puts the disc's RIM on
+  // the limb: screen (X, Y) with X²+Y² ≤ 1 is the sphere point (X, Y, √(1−X²−Y²)), so
+  // longitude is `atan2(X, √(1−X²−Y²))` — which depends on Y as well as X. The old bake
+  // used `asin(X)`, the Y = 0 case, for every row: a point on the disc's rim at (0.6, 0.8)
+  // belongs at the limb (90°) and was placed at 36.9°, so each print was squeezed into the
+  // middle of its own hemisphere and the ground either side of it carried nothing at all.
+  // ⚠️ **MEASURED, because "two prints tile the sphere" was written down and was false.**
+  // Black-panel coverage of the ball's face on the shipped build, through one turn: **0.303
+  // at a print's home orientation and 0.078 at the seam** — a quarter of the pattern — with
+  // the flat painter's own football at 0.311. So for half of every rotation the ball was
+  // near enough plain white with one smeared panel on it, which is what *"the rolling ball
+  // is goofed texture wise"* is. The two prints DID abut as boxes; the design inside each
+  // box is a circle, and two circles inscribed in two adjacent squares leave the corners
+  // empty.
+  // ⚠️ **PER PIXEL rather than a finer grid of `drawImage` calls**, and that is cheaper as
+  // well as exact: the inverse map is one pass over the strip (`D × 2·TW`) against the
+  // tens of thousands of slice blits a 2D grid warp would need, and it has no seams between
+  // slices and no smear where `asin` runs away at the edge of a column. `BALL3D.cols` was
+  // the old loop's column count and is DELETED with it rather than left to rot.
+  // ⚠️ `sin(latitude)` stays LINEAR in the strip's height — that is what the strip's y axis
+  // already is, and orthographic puts latitude φ at y = r·sin(φ) — so only the longitude
+  // needed fixing.
+  const stamps = BALL3D.prints.map(([lonTurns, rotTurns, mir]) => {
     // One instance of the look, baked flat. ⚠️ Per PRINT, not once for all of them: the two
     // carry different rotations and one is mirrored, which is what stops the sphere being
     // self-similar at half a turn.
@@ -32996,25 +33039,56 @@ function ballSphereTex(key, spot, paper){
     pc.fillStyle = spot; pc.strokeStyle = spot;
     look.draw(pc, PS/2, rotTurns * 2*Math.PI, paper);
     pc.restore();
-    // ⚠️ The design is laid in by COLUMNS, each at asin(x) of longitude, and that warp is
-    // what makes a print look like ITSELF when it is facing you. The strip is indexed by
-    // longitude and the painter puts longitude at screen x = r·sin(lon) — so a design laid
-    // in linearly comes out stretched by π/2 across the middle of the ball, which is why a
-    // round dot rendered as a 1.46:1 oval. Pre-warping by asin cancels the painter's sin at
-    // the print's home orientation and leaves the design undistorted; roll it away and the
-    // painter's sin then compresses it toward the limb, which is the real sphere behaviour.
-    // Vertically it stays linear, because the strip's height already IS sin(latitude) and
-    // an orthographic sphere puts latitude φ at y = r·sin(φ).
-    const hh = Math.max(1, Math.sin(A) / 2 * D);
-    const N = BALL3D.cols, cx = lonTurns * TW;
-    for (const off of [-TW, 0, TW, TW*2]) for (let i = 0; i < N; i++){
-      const f0 = i/N*2 - 1, f1 = (i+1)/N*2 - 1;         // design x, -1..1
-      const l0 = Math.asin(Math.max(-1, Math.min(1, f0 * Math.sin(A))));
-      const l1 = Math.asin(Math.max(-1, Math.min(1, f1 * Math.sin(A))));
-      const u0 = off + cx + l0/(2*Math.PI)*TW, u1 = off + cx + l1/(2*Math.PI)*TW;
-      cc.drawImage(pcv, i/N*PS, 0, PS/N, PS, u0, D/2 - hh, Math.max(0.6, u1-u0), hh*2);
+    const lon0 = lonTurns * 2*Math.PI;
+    return { c0: Math.cos(lon0), s0: Math.sin(lon0), px: pc.getImageData(0, 0, PS, PS).data };
+  });
+  // Longitude is a pure function of the strip column, so its sine and cosine are hoisted:
+  // the inner loop is then arithmetic only, over D × 2·TW pixels.
+  const W = cv.width, SIN = new Float64Array(W), COS = new Float64Array(W);
+  for (let u = 0; u < W; u++){ const a = (u + 0.5)/TW * 2*Math.PI; SIN[u] = Math.sin(a); COS[u] = Math.cos(a); }
+  const img = cc.createImageData(W, D), out = img.data;
+  for (let v = 0; v < D; v++){
+    const sy = (v + 0.5)/D * 2 - 1;                    // sin(latitude), −1..+1
+    const cl = Math.sqrt(Math.max(0, 1 - sy*sy));      // cos(latitude)
+    const Y = sy / s;                                  // the design's own y
+    if (Y < -1 || Y > 1) continue;                     // above or below every cap
+    const fy = (Y + 1)/2 * PS - 0.5;
+    const y0 = Math.max(0, Math.min(PS-1, Math.floor(fy))), y1 = Math.min(PS-1, y0+1), ty = fy - y0;
+    const row = v * W * 4;
+    for (let u = 0; u < W; u++){
+      // ⚠️ **THE CAPS OVERLAP, AND THE NEAREST CENTRE WINS.** Three hemispheres 120° apart
+      // cover every longitude with 60° to spare, so no point on the ball is ever further
+      // than 60° from some design's middle — and 60 of 90 is the inner two thirds of the
+      // disc, which is where a look puts its marks. Two caps exactly abutting is what left
+      // the ball pale at the seam even with the projection corrected: a football's panels
+      // sit inside r·0.75 and the outer ring is plain, so two designs meeting rim to rim
+      // show two blank margins side by side. Measured through a turn: **0.132 at the worst
+      // phase with two abutting caps against 0.239 with three overlapping ones**, on a flat
+      // painter that inks 0.311.
+      let best = -1, bX = 0, bd = 1e9;
+      for (let k = 0; k < stamps.length; k++){
+        const st = stamps[k];
+        // Rotate the column's longitude into this print's own frame.
+        const cz = COS[u]*st.c0 + SIN[u]*st.s0;        // cos(lon − lon0)
+        if (cz <= 0) continue;                         // the far side of this cap
+        const sx = SIN[u]*st.c0 - COS[u]*st.s0;        // sin(lon − lon0)
+        const X = cl * sx / s;
+        const d = X*X + Y*Y;
+        if (d > 1) continue;                           // outside the printed disc
+        if (d < bd){ bd = d; best = k; bX = X; }
+      }
+      if (best < 0) continue;
+      const fx = (bX + 1)/2 * PS - 0.5;
+      const x0 = Math.max(0, Math.min(PS-1, Math.floor(fx))), x1 = Math.min(PS-1, x0+1), tx = fx - x0;
+      const p = stamps[best].px;
+      const iA = (y0*PS + x0)*4, iB = (y0*PS + x1)*4, iC = (y1*PS + x0)*4, iD2 = (y1*PS + x1)*4;
+      const wA = (1-tx)*(1-ty), wB = tx*(1-ty), wC = (1-tx)*ty, wD = tx*ty;
+      const o = row + u*4;
+      for (let ch = 0; ch < 4; ch++)
+        out[o+ch] = p[iA+ch]*wA + p[iB+ch]*wB + p[iC+ch]*wC + p[iD2+ch]*wD;
     }
   }
+  cc.putImageData(img, 0, 0);
   t = { cv, TW, D };
   ballTexCache.set(ck, t);
   return t;

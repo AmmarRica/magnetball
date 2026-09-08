@@ -503,6 +503,55 @@ const r = await p.evaluate(() => {
     o.drawLeavesBallAlone = o.addedByDraw.length === 0;
   }
 
+  // ============================ THE PATTERN IS ON THE WHOLE BALL, NOT HALF OF IT ==
+  // The bug this exists for: the bake laid the design in by COLUMNS at asin(x), which is
+  // the equator's mapping applied to every row — so each print was squeezed into the middle
+  // of its own cap and the ground either side carried nothing. Measured on that build,
+  // black-panel coverage of the ball's face through one turn ran 0.303 at a print's home
+  // orientation down to 0.078 at the seam, against the flat painter's own 0.311: for half
+  // of every rotation the ball was near enough plain white with one smeared panel on it.
+  //
+  // The claim is COVERAGE ACROSS A WHOLE TURN, measured against the FLAT painter in the
+  // same run — never an absolute. What "a football's worth of black" comes to depends on
+  // the look, the palette's spot ink and the radius, so the flat ball is the only honest
+  // yardstick; and the WORST phase is what has to hold up, because a mean over sixteen
+  // phases is carried by the good ones and reads fine on a build that goes blank twice a
+  // turn.
+  //
+  // ⚠️ Paired with an UPPER bound as well. "Plenty of ink at every phase" is equally true
+  // of a build that floods the ball, and a solid black ball is not the design either.
+  {
+    const R = 70, S = 200;
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d');
+    const ink = (roll, flat) => {
+      c.setTransform(1,0,0,1,0,0);
+      c.clearRect(0,0,S,S); c.fillStyle = '#2f6b3a'; c.fillRect(0,0,S,S);
+      M.sel.ball3d = flat ? 'off' : 'on';
+      M.paintBall(c, S/2, S/2, R, 0, 'classic', null, flat ? undefined : roll, 0);
+      const d = c.getImageData(0,0,S,S).data;
+      let dark = 0, inside = 0;
+      for (let y=0;y<S;y++) for (let x=0;x<S;x++){
+        const dx = x-S/2, dy = y-S/2;
+        if (dx*dx + dy*dy > (R*0.88)*(R*0.88)) continue;   // clear of the rim
+        inside++;
+        const i = (y*S+x)*4;
+        if (d[i]+d[i+1]+d[i+2] < 300) dark++;
+      }
+      return dark/inside;
+    };
+    o.flatInk = +ink(0, true).toFixed(3);
+    const cov = [];
+    for (let k=0;k<16;k++) cov.push(ink(k/16*2*Math.PI, false));
+    o.rollInk = cov.map(v => +v.toFixed(3));
+    o.worstInk = +Math.min(...cov).toFixed(3);
+    o.bestInk  = +Math.max(...cov).toFixed(3);
+    // The worst phase must still carry most of a football, and no phase may flood the ball.
+    o.everyPhaseIsTheBall = o.worstInk > o.flatInk * 0.6 && o.bestInk < o.flatInk * 1.6;
+    // ...and the flat ball really does have a pattern, or the ratios are against nothing.
+    o.flatHasPattern = o.flatInk > 0.15;
+  }
+
   M.sel.ball3d = 'off'; M.setMatchSeed(null);
   return o;
 });
@@ -563,6 +612,11 @@ ok('the ball ROLLS IN A DRILL', r.drillBallRolls,
 ok('THE SIM IS BIT-IDENTICAL with it on and off', r.simBitIdentical, r.simSample);
 ok('...and a draw does not write to the ball', r.drawLeavesBallAlone,
    `drawing added ${JSON.stringify(r.addedByDraw)} to the ball — the roll heading must live outside the world, or a draw mutates the sim and determinism hashing breaks`);
+ok('THE PATTERN IS ON THE WHOLE BALL, at every phase of the roll', r.everyPhaseIsTheBall,
+   `worst phase inks ${r.worstInk} and best ${r.bestInk} against the flat painter's ${r.flatInk} — the bake laid the design in by COLUMNS at asin(x), which is only the equator's mapping, so each print was squeezed into the middle of its own cap: measured 0.078 at the seam against 0.303 head-on, i.e. half of every rotation showed a near-blank ball with one smeared panel. Coverage: ${JSON.stringify(r.rollInk)}`);
+ok('...and the flat ball it is measured against really has a pattern', r.flatHasPattern,
+   `${r.flatInk} — without this the ratios above are against nothing`);
+
 ok('no console errors', errors.length === 0, errors.slice(0,3).join(' | '));
 
 console.log(JSON.stringify(r, null, 1));
