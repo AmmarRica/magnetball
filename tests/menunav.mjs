@@ -104,7 +104,10 @@ const r = await p.evaluate(async ()=>{
   {
     const c = sec('feel'); c.closest('.card.collapsible').classList.remove('collapsed');
     M.showSubTab('options','feel');
-    const IDS = ['trapPick','chargePick','feelSlidersBall','feelSlidersKick','oneHandPick',
+    // ⚠️ `feelSlidersMagnet` is in here for the reason the other wrappers are: the Magnet
+    // pane's only controls are GENERATED sliders, so without its wrapper the pane never
+    // appears in `feelPanesUsed` and the chip beside it reads as a dead tab.
+    const IDS = ['trapPick','chargePick','feelSlidersBall','feelSlidersKick','feelSlidersMagnet','oneHandPick',
                  'feelSlidersPlayer','sprintPick','feelSlidersSprint','juicePick',
                  'tiltPick','popupPick','ball3dPick','hitStop','goalZoom','goalZoomSpd',
                  'autoReplayPick','sideViewPick','mspeed','debugPick'];
@@ -112,7 +115,13 @@ const r = await p.evaluate(async ()=>{
     o.feelOutsideAPane = IDS.filter(id => !document.getElementById(id).closest('.subpane'));
     // ⚠️ Outside the GAME FEEL panes specifically. Both now sit inside the Options card's
     // own `feel` pane, one level up — a different tab row, and not what this is about.
-    o.feelWholeCard = ['feelPresets','feelReset']
+    // ⚠️ **THE PRESET ROW IS GONE and this list shrank with it** — rule 10, delete a
+    // feature's check with the feature. Casual/Pro were two tiles above the chips and
+    // were removed on request (Pro is the shipped default and always was); leaving
+    // `feelPresets` in here would have gone on asserting the placement of an element
+    // that no longer exists, which `getElementById` answers `null` to and this filter
+    // then silently passes.
+    o.feelWholeCard = ['feelReset']
       .filter(id => { const e = document.getElementById(id); return e && !e.closest('.subpane[data-group="feel"]'); });
     // Each control in exactly ONE pane, so nothing is duplicated into two tabs.
     o.feelPaneOf = {};
@@ -145,7 +154,7 @@ const r = await p.evaluate(async ()=>{
     o.feelLastPaneOpened = !!c.querySelector(`.subpane[data-pane="${last.dataset.pane}"].on`);
     // ...and the whole-card controls stay put whichever tab is showing.
     o.feelWholeCardVisible = chips.every(ch => { ch.click();
-      return vis(document.getElementById('feelPresets')) && vis(document.getElementById('feelReset')); });
+      return vis(document.getElementById('feelReset')); });
     c.classList.add('collapsed');
   }
 
@@ -285,15 +294,17 @@ ok(r.navGroupCount === 3, `expected three nav groups, got ${r.navGroupCount}`);
 ok(r.feelMissing.length === 0, `Game Feel lost controls in the split: ${JSON.stringify(r.feelMissing)}`);
 ok(r.feelOutsideAPane.length === 0,
    `a Game Feel control is outside every pane: ${JSON.stringify(r.feelOutsideAPane)} — it would show on every tab, which is what the tabs exist to stop`);
-ok(r.feelWholeCard.length === 2,
-   `the preset row and the reset button must stay OUT of the panes (found ${JSON.stringify(r.feelWholeCard)}) — both act on the whole card, so filing either under one fifth of what it sets is worse than leaving it above the chips`);
+// ⚠️ **ONE, not two — the preset row is gone** (removed on request; Pro was already the
+// shipped default). Counted rather than named so the list above is the one owner.
+ok(r.feelWholeCard.length === 1,
+   `the reset button must stay OUT of the panes (found ${JSON.stringify(r.feelWholeCard)}) — it acts on the whole card, so filing it under one seventh of what it sets is worse than leaving it below the chips`);
 ok(r.feelPanesUsed === r.feelPanesDeclared,
    `the Game Feel controls sit in ${r.feelPanesUsed} but the chips declare ${r.feelPanesDeclared} — every pane has to earn its chip, and a chip with nothing behind it is a dead tab`);
 ok(r.feelRowScrolls === true || r.feelLastChipHit,
    'the chip row neither fits nor scrolls, so the last tab is unreachable');
 ok(r.feelLastChipHit, `the last Game Feel chip (${r.feelLastChipPane}) is not hit-testable at its own centre once scrolled to — five chips do not fit a phone, and a chip you cannot press hides a whole pane`);
 ok(r.feelLastPaneOpened, `pressing the last chip did not open the ${r.feelLastChipPane} pane`);
-ok(r.feelWholeCardVisible, 'the preset row or the reset button vanished on some tab');
+ok(r.feelWholeCardVisible, 'the reset button vanished on some tab');
 ok(r.everyGroupLabelled, `a nav group has no label: ${JSON.stringify(r.navLabels)}`);
 ok(r.tileCount === 11, `expected 11 nav tiles, got ${r.tileCount}`);
 ok(r.allTilesKept, `a nav tile was lost or duplicated in the regrouping:\n  got ${r.tileIds}\n  want ${r.expectedIds}`);

@@ -50,10 +50,27 @@ const r = await p.evaluate(async ()=>{
     ps.filter(q=>q.team===1).every(q=>q.color !== you.color);
 
   // Deterministic: the same match twice gives the same faces (no per-frame churn).
-  const sig = () => M.world.players.map(look).join(',');
-  M.startMatch(); await wait(120); const a1 = sig();
-  M.startMatch(); await wait(120); const a2 = sig();
+  // ⚠️ **THE CLAIM NARROWED WHEN THE COUNTRIES BECAME RANDOM, and it is split in two
+  // rather than pinned around.** This used to compare `[flag, cap, eyes]` across two
+  // UNSEEDED restarts, which quietly asserted that a bot's whole look is seed-independent.
+  // A side set to `random` is dressed off the match seed by design — a restart is a new
+  // match and gets new countries, which is the feature — so:
+  //   • everything a bot chose for ITSELF (cap, eyes) must still survive an unseeded
+  //     restart, which is the "no churn, no reshuffle" guarantee this was written for;
+  //   • the WHOLE look, country included, must survive a restart on the SAME seed, which
+  //     is what says the country is rolled once per match rather than per frame.
+  // Pinning the seed for both would have hidden a build that re-rolled the cap and eyes
+  // every restart, which is exactly what this check exists to catch.
+  const sigOwn = () => M.world.players.map(q => [q.cap, q.eyes].join('|')).join(',');
+  const sigAll = () => M.world.players.map(look).join(',');
+  M.setMatchSeed(null);
+  M.startMatch(); await wait(120); const a1 = sigOwn();
+  M.startMatch(); await wait(120); const a2 = sigOwn();
   o.stableAcrossRestarts = a1 === a2;
+  M.setMatchSeed(58); M.startMatch(); await wait(120); const b1 = sigAll();
+  M.setMatchSeed(58); M.startMatch(); await wait(120); const b2 = sigAll();
+  o.wholeLookStableOnASeed = b1 === b2;
+  M.setMatchSeed(null);
 
   // Bigger sides still don't collapse onto one look.
   M.sel.mode='4v4'; M.startMatch(); await wait(150);
@@ -75,6 +92,50 @@ const r = await p.evaluate(async ()=>{
         for(let i=0;i<10;i++) M.step(ww); M.render(); }
   catch(e){ o.rendersClean=false; o.renderErr=e.message; }
 
+  // ⚠️ **THE SHIPPED COUNTRIES ARE RANDOMISED PER MATCH.** They shipped for one build as a
+  // fixed USA-vs-Brazil pair (the owner's own settings, pasted in) and were asked back to
+  // random. `random` is a value `sel.teamFlag` can hold, resolved through `matchTeamFlag` —
+  // the ONE-MATCH layer the cup already uses, so `cupDress` still overrides it and a tie is
+  // the draw's two countries.
+  // ⚠️ Rolled off the MATCH SEED through its own generator, the `kickoffToss` idiom:
+  // `Math.random` would be safe here (this is `startMatch`, not `step`) but a seeded match
+  // has to reproduce, and a body carries `flag` and `color` into every world hash.
+  o.shippedFlags = M.defaultSel().teamFlag.slice();
+  {
+    const flagsOf = () => [0,1].map(t => { const q = M.world.players.find(x => x.team === t); return q && q.flag; });
+    const seen = new Set(), rows = [];
+    for (let i = 0; i < 6; i++){
+      M.sel.teamFlag = ['random','random']; M.sel.mode = '2v2'; M.sel.lobby = 'off';
+      M.setMatchSeed(null); M.startMatch();
+      const f = flagsOf(); rows.push(f); seen.add(f.join('/'));
+    }
+    o.randRows = rows;
+    o.randVaries = seen.size >= 4;
+    // ⚠️ Two random countries landing on the same one is a match against yourself — the
+    // same guard the attract demo's own dressing has carried since it was written.
+    o.randSidesDiffer = rows.every(f => f[0] && f[1] && f[0] !== f[1]);
+    // ⚠️ A PINNED SEED REPRODUCES. Without this the roll could be `Math.random` and every
+    // check above would still pass, while every seeded suite that hashes a world went noisy.
+    M.setMatchSeed(91); M.startMatch(); const a = flagsOf();
+    M.setMatchSeed(91); M.startMatch(); const c = flagsOf();
+    o.randSeedRepeats = a.join('/') === c.join('/');
+    M.setMatchSeed(null);
+    // ⚠️ A side set to a real country is LEFT ALONE, and the other still rolls — or
+    // "it randomises" is equally true of a build that ignores the picker entirely.
+    M.sel.teamFlag = ['england','random']; M.startMatch(); o.randMixed = flagsOf();
+    // ...and `none` is still no country at all.
+    // ⚠️ Measured against `FLAG_KEYS` rather than by eye: what must not happen is a
+    // COUNTRY appearing, and a shirt number is not one.
+    M.sel.teamFlag = ['none','none']; M.startMatch(); o.randNone = flagsOf();
+    o.randNoneStaysNone = o.randNone.every(f => !(f && f !== 'none' && M.FLAG_KEYS.indexOf(f) >= 0));
+    M.sel.teamFlag = M.defaultSel().teamFlag.slice();
+  }
+  // ⚠️ The lobby pad lights the PICK, not the country it resolved to: a side set to
+  // `random` is WEARING a country, so `teamFlagOf` would light that country's pad and
+  // leave the pad the player actually pressed dark.
+  o.randInLobbyBlock = M.LOBBY_FLAGS.indexOf('random') >= 0;
+  o.pickStaysRandom = M.teamFlagPick(0);
+
   // ⚠️ TWO COPIES OF ONE DEFAULT. `TEAMCOL_DEF` is `teamColOf`'s fallback when `sel.teamCol`
   // is missing a slot — a partial `sel` out of an imported save, which `applySaveDoc` does
   // not validate — and `defaultSel().teamCol` is what a fresh install gets. They mean the
@@ -89,14 +150,36 @@ const r = await p.evaluate(async ()=>{
   return o;
 });
 
+r.shippedIsRandom = r.shippedFlags[0] === 'random' && r.shippedFlags[1] === 'random';
+r.randMixedKept = r.randMixed && r.randMixed[0] === 'england' && r.randMixed[1] && r.randMixed[1] !== 'england';
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.seats===4 && r.youKeepYourLook && r.yourShirtIsTheTeamS && r.oneShadeASide &&
   r.noBotCopiesYou && r.botsDifferFromEachOther &&
   r.botFacesVary && r.botsWearNoCap && r.teamColoursSplit && r.stableAcrossRestarts &&
   r.bigLooksVary && r.demoOneFlagPerTeam && r.demoNotYourCap && r.rendersClean &&
-  r.defaultsAgree &&
+  r.defaultsAgree && r.randVaries && r.randSidesDiffer && r.randSeedRepeats &&
+  r.randMixedKept && r.randNoneStaysNone && r.randInLobbyBlock && r.shippedIsRandom &&
+  r.wholeLookStableOnASeed &&
   errors.length === 0;
+if(!r.wholeLookStableOnASeed)
+  console.log('  the same SEED gave two different looks — the countries are being re-rolled ' +
+              'per restart rather than per match, or something is churning the faces');
+if(!r.shippedIsRandom)
+  console.log(`  the shipped teamFlag is ${JSON.stringify(r.shippedFlags)}, not a random pair`);
+if(!r.randVaries)
+  console.log(`  six matches produced ${JSON.stringify(r.randRows)} — the countries are not being re-rolled`);
+if(!r.randSidesDiffer)
+  console.log(`  a match came up with both sides on one country: ${JSON.stringify(r.randRows)}`);
+if(!r.randSeedRepeats)
+  console.log('  a pinned seed did NOT reproduce the countries — the roll is off Math.random, ' +
+              'which makes every world hash in the repo noisy');
+if(!r.randMixedKept)
+  console.log(`  a side set to a real country was rolled over: ${JSON.stringify(r.randMixed)}`);
+if(!r.randNoneStaysNone)
+  console.log(`  'none' picked up a country: ${JSON.stringify(r.randNone)}`);
+if(!r.randInLobbyBlock)
+  console.log('  there is no RAND pad in the warm-up flag block, so the shipped default cannot be chosen back');
 if(!r.defaultsAgree)
   console.log(`  TEAMCOL_DEF ${JSON.stringify(r.teamColDef)} and defaultSel().teamCol ` +
               `${JSON.stringify(r.teamColShipped)} are two copies of one default and they have drifted`);

@@ -124,6 +124,13 @@ for (const [pads, setup, want, what] of cases){
   const p = await page(0);
   const r = await p.evaluate(() => {
     const M = window.__magnet, o = {};
+    // ⚠️ **THE TEAM FLAGS ARE PINNED OFF.** `sel.teamFlag` ships as `['random','random']`,
+    // and a side wearing a country is the ONE documented place "a person's faceplate is
+    // their own" bends — `applyTeamColours` stashes the profile's plate on `_ownFlag` and
+    // wears the country on top. So without this the probe reads the country and reports
+    // the seat's own avatar as not having been applied, which is the same class of
+    // measurement error as reading the colour (see the note below).
+    M.sel.teamFlag = ['none','none'];
     M.sel.mode = 'local'; M.startMatch();
     const w = M.world;
     const p1 = w.players.find(q => q.ctrl === 'human1');

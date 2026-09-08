@@ -363,8 +363,14 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     // Full time now eases play to a stop before the screen; loop() drives that
     // ramp off wall-clock, so finish it here rather than idling for FINAL_SLOW.
     M.endMatch(w); M.finishMatch(w);
+    // ⚠️ **FOUND BY LABEL, NEVER BY INDEX.** The result screen now offers Settings as well
+    // (it used to be pause-only), so an index-pinned probe was reading Settings as the
+    // warm-up button and CLICKING it further down — a check that has to be edited every
+    // time a button is added to the screen it watches is one nobody trusts. What is
+    // actually claimed is that both options are OFFERED, and that Restart leads.
+    const btn = (re) => M.overButtons().find(x => re.test(x.textContent));
     const labels = M.overButtons().map(x=>x.textContent);
-    r.showsBothOptions = /restart/i.test(labels[0]) && /warm/i.test(labels[1]);
+    r.showsBothOptions = !!btn(/restart/i) && !!btn(/warm/i) && /restart/i.test(labels[0]);
     r.restartIsDefault = M.overNav === 0 && M.overButtons()[0].classList.contains('navsel');
     r.statsShownToo = document.querySelectorAll('#ovStats .statsrow').length > 0;
     r.saysPlayerOneChooses = /player 1/i.test(document.getElementById('ovHint').textContent);
@@ -390,7 +396,7 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     // the restart having invented somebody. "Nobody is lost" is a claim about everyone the
     // match knew of, which is what that function is for.
     const heads = M.allBodies(M.world).filter(q => q.ctrl !== 'bot').length;
-    M.overButtons()[0].click();
+    btn(/restart/i).click();
     r.restartToRoom = M.world.state === 'warmup';
     r.restartEmptiesPitch = M.lobbyHumans(M.world).every(q => M.lobbyOutside(M.world, q));
     r.restartKeepsEveryone = M.lobbyHumans(M.world).length === heads && heads > 0;
@@ -401,7 +407,7 @@ o.lobbyCleared      = [o.oneEachSide,o.twoVsOne].every(x=>x.lobbyCleared && x.st
     r.teamsWere = teams.length > 0;
     // Warm-up: back to the lobby with everyone available again.
     M.world.state='play'; M.world.score=[1,1]; M.endMatch(M.world); M.finishMatch(M.world);
-    M.overButtons()[1].click();
+    btn(/warm/i).click();
     r.warmupOption = M.world.state === 'warmup';
     r.warmupFreesTheBench = M.world.bench.length === 0 && M.world.players.length >= 4;
     return r;

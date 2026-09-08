@@ -212,6 +212,7 @@ const r = await p.evaluate(async () => {
   //  3. RUMBLE
   // ==========================================================================
   o.rumbleDefault = M.defaultSel().rumble;
+  o.rumbleMin = M.RUMBLE.min;
   o.rumbleHasASlider = !!$('rumble');
   // ⚠️ NOT under Screen shake, and not under reduced motion — a buzz in your hands is not
   // motion on the screen. Both are asserted, because either alone passes on a build that
@@ -231,6 +232,58 @@ const r = await p.evaluate(async () => {
     try { M.padRumble(-1, 'kick', 1); M.padRumble(0, 'kick', 1); M.padRumble(9, 'goal', 1);
           M.padRumble(0, 'nosuchkind', 1); M.rumbleAll(M.world, 'wall', 1); M.rumbleGoal();
           return true; } catch(e){ return e.message; }
+  })();
+  // ⚠️ **MOVING THE DIAL BUZZES THE PAD, AND THE WIRING FOR THAT EXISTED AND PRODUCED
+  // NOTHING YOU COULD FEEL.** Asked for as "when I change controller rumble option, have
+  // it impact the controller so I get feedback". Two defects, measured on the shipped
+  // build against a fake actuator that records what it is ASKED for:
+  //   (a) one effect per `input` event — **fifteen at 16-17ms apart, every one asking for
+  //       90ms, fourteen of the fifteen cut short by the next.** `playEffect` REPLACES
+  //       rather than queues, so the pad rendered a train of 16ms stubs and never once the
+  //       pulse that was asked for.
+  //   (b) it fired the `kick` profile, whose 0.30 strong at the shipped dial of 15 is
+  //       **0.045** — under `RUMBLE.min`, the number whose own comment reads "below this
+  //       there is nothing to feel".
+  // ⚠️ Driven through the REAL `input`/`change` events on the REAL `#rumble` element, not
+  // by calling a helper: the throttle and the release rule live in the wiring, and a probe
+  // that called `padRumble` itself would prove only that padRumble works.
+  o.preview = await (async () => {
+    const el = $('rumble'); if (!el) return { no:true };
+    const got = [];
+    const act = { playEffect(kind, opt){ got.push({ t: performance.now(), ...opt }); return Promise.resolve(); } };
+    const was = navigator.getGamepads;
+    navigator.getGamepads = () => [{ index:0, id:'Probe Pad', mapping:'standard', connected:true,
+      axes:[0,0,0,0], buttons:Array.from({length:17},()=>({pressed:false,value:0})), vibrationActuator: act }];
+    M.padForgetAll && M.padForgetAll();
+    const drag = async (from, to) => {
+      got.length = 0;
+      for (let v = from; v <= to; v += 5){
+        el.value = v; el.dispatchEvent(new Event('input', { bubbles:true }));
+        await new Promise(x => setTimeout(x, 15));         // what a real drag samples at
+      }
+      el.dispatchEvent(new Event('change', { bubbles:true }));
+      await new Promise(x => setTimeout(x, 120));
+      return got.map(g => ({ dt: g.t, ms: g.duration,
+                             s: +g.strongMagnitude.toFixed(4), w: +g.weakMagnitude.toFixed(4) }));
+    };
+    const run = await drag(20, 90);
+    const gaps = run.slice(1).map((g, i) => Math.round(g.dt - run[i].dt));
+    // Dial 0 has nothing to preview.
+    el.value = 0; el.dispatchEvent(new Event('input', { bubbles:true }));
+    const atZero = await drag(0, 0);
+    // The lowest step the slider can select must still clear the table's own feel floor.
+    el.value = 5; el.dispatchEvent(new Event('input', { bubbles:true }));
+    await new Promise(x => setTimeout(x, 260));
+    got.length = 0; el.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(x => setTimeout(x, 80));
+    const atFive = got.slice();
+    navigator.getGamepads = was; M.padForgetAll && M.padForgetAll();
+    M.sel.rumble = 70; M.saveSel();
+    return { n: run.length, gaps, ms: run.length ? run[0].ms : 0,
+             firstS: run.length ? run[0].s : 0, lastS: run.length ? run[run.length-1].s : 0,
+             cutShort: gaps.filter(g => g < (run.length ? run[0].ms : 0)).length,
+             zeroFired: atZero.length,
+             lowStep: atFive.length ? +atFive[0].strongMagnitude.toFixed(4) : 0 };
   })();
   // ⚠️ RENDER-AND-FEEL ONLY: the sim may not be able to tell whether a pad is buzzing.
   // Hashed over 900 steps with the dial at both ends.
@@ -314,6 +367,28 @@ ok('...and is NOT under Screen shake', r.liveWithShakeOff && r.motionOKisFalseWi
    'a buzz in your hands is not motion on the screen — the same argument hit stop already won; the second half proves the check is not vacuous');
 ok('...with 0 as the off switch', r.zeroIsOff && r.dialReads);
 ok('no pad, no throw', r.safeWithoutHardware === true, String(r.safeWithoutHardware));
+{ const P = r.preview || {};
+  ok('moving the dial buzzes the pad at all', P.n > 0,
+     JSON.stringify(P) + ' — the feature is the feedback; nothing fired means it is not wired');
+  // ⚠️ THE LOAD-BEARING ONE. `playEffect` replaces rather than queues, so an effect
+  // started before the last one finished is the last one CUT SHORT. On the shipped build
+  // this read 14 of 15 at 16-17ms apart against a 90ms ask.
+  ok('...and no preview is cut short by the next', P.cutShort === 0,
+     `${P.cutShort} of ${P.n} previews were replaced before their ${P.ms}ms was up (gaps ` +
+     `${JSON.stringify(P.gaps)}) — what the pad renders is stubs, never the pulse it was asked for`);
+  // Paired with it, or "nothing is cut short" is equally true of a build that fires once
+  // at the start of a drag and never again however far you pull it.
+  ok('...and the drag is sampled more than once', P.n >= 2,
+     `only ${P.n} preview over a 70-step drag — you feel the value you started on and nothing after it`);
+  ok('...and it gets stronger with the dial', P.lastS > P.firstS,
+     `${P.firstS} → ${P.lastS}: the preview has to be scaled by the setting, or it says the same thing everywhere`);
+  // ⚠️ The defect this replaced, stated as a floor: the old `kick` profile came out at
+  // 0.045 at the shipped dial, under this table's own "nothing to feel" constant.
+  ok('...and the lowest step still clears the feel floor', P.lowStep >= r.rumbleMin,
+     `a 5% dial previews at ${P.lowStep} against RUMBLE.min ${r.rumbleMin} — below that the table's own ` +
+     'comment says there is nothing to feel, so the quiet end of the dial says nothing at all');
+  ok('...and zero previews nothing', P.zeroFired === 0,
+     `${P.zeroFired} effects at a dial of 0 — off has to mean off`); }
 ok('rumble cannot reach the sim', r.rumbleIsInert,
    r.hashOff + ' vs ' + r.hashFull + ' over 900 steps at 0% and 100%');
 ok('undoing a tie clears its descendants', r.undid && r.champGone, r.doneAfter);

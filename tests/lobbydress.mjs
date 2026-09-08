@@ -52,7 +52,35 @@ const boot = async (vp, orient) => {
     // ⚠️ Every key must exist in FLAGS. A missing one draws a grey square, which looks
     // like a rendering bug and is really a country nobody can identify — the rule
     // `CUP_TEAMS` already follows, and this list is drawn from it.
-    o.allReal = o.keys.filter(k => k !== 'none').every(k => !!M.FLAGS[k]);
+    // ⚠️ `random` is exempt for the same reason `none` is — neither is a country, and
+    // neither ever reaches `paintFace`: `teamFlagOf` resolves a random pick through the
+    // one-match layer before anything draws it. The exemption would be a HOLE on its own,
+    // so it is paired with `randomResolves` below, which requires the pick to come out as
+    // a real `FLAGS` key. Every other entry still has to exist outright.
+    o.allReal = o.keys.filter(k => k !== 'none' && k !== 'random').every(k => !!M.FLAGS[k]);
+    o.hasRandom = M.LOBBY_FLAGS.indexOf('random') >= 0;
+    { M.setTeamFlag(0, 'random');
+      const got = M.teamFlagOf(0);
+      o.randomResolves = !!got && got !== 'random' && !!M.FLAGS[got];
+      o.randomGot = got;
+      // ...and pressing it AGAIN must land somewhere else, or the pad reads as dead.
+      // ⚠️ Pressed STRAIGHT AGAIN, with no bounce through NONE — RAND is the one pad where
+      // the same press twice is a request rather than a no-op, and bouncing through
+      // another key first would pass on a build where it is a dead press.
+      const seen = new Set([got]);
+      for (let i = 0; i < 6; i++){ M.setTeamFlag(0, 'random'); seen.add(M.teamFlagOf(0)); }
+      o.randomVaries = seen.size > 1;
+      // ⚠️ **AND IT RE-ROLLS ONE SIDE ONLY.** Both sides ship as `random`, so a roll that
+      // ignores which side asked changes the other half's country under somebody who
+      // touched nothing. Only visible with BOTH set to random — with one side on a real
+      // country the roll skips it anyway, so a probe that pins the other side is vacuous.
+      M.sel.teamFlag = ['random', 'random'];
+      M.setMatchSeed(11); M.startMatch();
+      const other = M.teamFlagOf(1);
+      M.setTeamFlag(0, 'random');
+      o.otherHalfHeld = !!other && M.teamFlagOf(1) === other;
+      o.otherHalf = [other, M.teamFlagOf(1)];
+      M.sel.teamFlag = ['none', 'none']; M.setTeamFlag(0, 'none'); }
     o.noneIsFirst = M.LOBBY_FLAGS[0] === 'none';
     // ⚠️ DERIVED, never a literal. This read `count === 16` and went red the moment the
     // list grew a column — a check that has to be edited every time the thing it watches
@@ -99,6 +127,13 @@ const boot = async (vp, orient) => {
   // ⚠️ ...and the list is not EMPTY, or "one pad per entry" is satisfied by no pads at all.
   ok('...and there are countries in the list', r.listLen >= 8, String(r.listLen));
   ok('every flag key is real', r.allReal, r.keys.join());
+  ok('RAND is in the block and resolves to a real country',
+     r.hasRandom && r.randomResolves, JSON.stringify({ hasRandom: r.hasRandom, got: r.randomGot }) +
+     ' — the exemption above is a hole unless the pick actually comes out as a country');
+  ok('...and pressing RAND again lands somewhere else', r.randomVaries,
+     'a pad that re-rolls onto what is already showing reads as dead');
+  ok('...and re-rolling one side leaves the other alone', r.otherHalfHeld,
+     JSON.stringify(r.otherHalf) + ' — both sides ship as random, so a roll that ignores which side asked repaints a half nobody touched');
   ok('NONE leads the block', r.noneIsFirst, 'a reset is not a choice — the same rule the Cap and Eyes pickers follow');
   ok('picking a country dresses that whole side', r.wornBy0.length === 1 && r.wornBy0[0] === 'brazil', r.wornBy0.join());
   ok('...and leaves the other side alone', r.otherSideUntouched, r.wornBy1.join());
@@ -463,7 +498,9 @@ for (const [name, vp, orient] of [['flat', {width:1280,height:900}, 'v'],
     fresh(); M.setTeamFlag(0,'brazil'); const was = nameOf(M.teamColOf(0));
     M.setTeamFlag(0,'none');
     o.noneKeeps = [was, nameOf(M.teamColOf(0))];
-    o.everyCountryHasOne = M.LOBBY_FLAGS.filter(k => k !== 'none' && !M.NATION_COLS[k]);
+    // ⚠️ `random` is not a country and carries no colour of its own — what it resolves to
+    // does. Every other entry in the block still has to dress the side.
+    o.everyCountryHasOne = M.LOBBY_FLAGS.filter(k => k !== 'none' && k !== 'random' && !M.NATION_COLS[k]);
     return o;
   });
   await q.close();

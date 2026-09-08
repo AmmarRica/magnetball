@@ -146,8 +146,14 @@ o.everySliderInItsOwnPane = o.groups.want.every(([g, lab]) =>
 // and no amount of deriving can check a judgement against itself. These are the words, and
 // each must appear in its own pane and in NO other, which is what catches a slider quietly
 // moving. Ball is what the ball does; Kick is what you do to it.
-o.want = { ball:   ['max ball speed','ball stopping time','ball magnet'],
+// ⚠️ **THE MAGNET LEFT `ball` FOR A PANE OF ITS OWN**, and that is a judgement this list
+// exists to hold: the magnet is not something the BALL does, it is an assist applied to
+// the player's touch — and the one dial was quietly setting a reach and a kick bonus as
+// well, which are now their own rows beside it. `ball magnet` is therefore no longer a
+// Ball word, and `magnet strength` must not appear anywhere else.
+o.want = { ball:   ['max ball speed','ball stopping time'],
            kick:   ['kick power','trap window','kick reach'],
+           magnet: ['magnet strength','magnet reach','magnet kick bonus'],
            player: ['acceleration','player stopping time','sensitivity'],
            sprint: ['sprint length','sprint recovery','sprint speed','tired speed'] };
 o.groupedAsIntended = Object.entries(o.want).every(([g, words]) => words.every(w =>

@@ -62,14 +62,19 @@ const r = await p.evaluate(async ()=>{
   M.applyPreset('casual'); o.casualTrap = M.sel.feel.trap;
   M.applyPreset('pro');    o.proTrap = M.sel.feel.trap;
   o.presetsKeepWindow = o.casualTrap === 50 && o.proTrap === 50;
-  // The window is part of the preset: Casual reads as matched, and nudging the
-  // window alone drops it. Check the positive first or the negative is vacuous.
-  const casualLit = () => [...document.querySelectorAll('#feelPresets .opt')]
-      .some(t=>t.classList.contains('sel') && /casual/i.test(t.textContent));
+  // The window is part of the preset: Casual reads as matched, and nudging the window
+  // alone drops it. Check the positive first or the negative is vacuous.
+  // ⚠️ **MEASURED ON `presetMatches`, NOT ON A TILE — the preset ROW no longer exists.**
+  // It read `#feelPresets .opt.sel`, and the Casual/Pro tiles were removed on request. A
+  // probe for a deleted element scores `false` for ever while looking like a real
+  // regression, so it goes with the feature — but the CLAIM survives untouched, because
+  // `presetMatches` is what `magnetball.feelfold` asks about a stored feel, and a
+  // comparator that ignored the trap window would fold a device that had moved it.
+  const casualMatched = () => M.presetMatches(M.FEEL_PRESETS.casual);
   M.applyPreset('casual'); M.buildSettings();
-  o.casualLitWhenMatched = casualLit();
+  o.casualLitWhenMatched = casualMatched();
   M.sel.feel.trap = 90; M.buildSettings();
-  o.customBreaksCasualMatch = !casualLit();
+  o.customBreaksCasualMatch = !casualMatched();
 
   // --- Drills honour it too
   M.sel.feel.trap = 110; M.startDrill('straight_up'); await wait(150);

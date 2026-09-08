@@ -27,7 +27,14 @@ const r = await p.evaluate(async ()=>{
   const mean = () => { const d=inner(); let R=0,G=0,B=0,n=0;
     for(let i=0;i<d.length;i+=64){ R+=d[i]; G+=d[i+1]; B+=d[i+2]; n++; }
     return [R/n, G/n, B/n]; };
+  // ⚠️ **THE TEAM FLAGS ARE PINNED OFF, and this suite SAMPLES PIXELS.** The sample box is
+  // the inner pitch, bodies included, and the shipped `sel.teamFlag` is `['random','random']`
+  // — so every `startMatch()` dresses the two players in different countries and the
+  // signature differs for a reason that has nothing to do with the surface. That is the
+  // "a suite that samples pixels has to say what it is sampling" rule, arriving through
+  // the roster rather than the palette: it read as the pitch texture being non-deterministic.
   const show = (surf, mow) => { M.sel.pitch=surf; M.sel.field='classic'; M.sel.grass=mow||'stripes';
+    M.sel.teamFlag=['none','none'];
     M.sel.mode='1v1'; M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;
     M.computeCam(); M.render(); return { sig:sig(), mean:mean() }; };
 

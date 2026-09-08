@@ -258,6 +258,79 @@ const DESKTOP = { w:1280, h:900, mobile:false };
   await p.close();
 }
 
+// ============================================================================
+//  THE RESULT SCREEN OWNS THE PAD, AND THE SETTINGS DOCK IS ON IT
+// ============================================================================
+// Reported as "CONTROLLER IS CONTROLLING BOTH POST GAME MENU AND SETTINGS MENU. SHOULD
+// ONLY CONTROL POST GAME MENU" — and measured as exactly that: with the result screen up
+// and the side menu open, ONE push of the stick moved the menu's focus ring to Bots AND
+// stepped the result cursor Resume → Rematch, in the same frame.
+//
+// ⚠️ **IT HIDES BEHIND `matchCollapse`.** A match auto-collapses the dock and a collapsed
+// dock already returns false, so the double cursor only appears once somebody opens the
+// menu with the ‹ tab — which this block therefore does. Without that it reads
+// `drivesMenu: false` on the broken build and proves nothing.
+{
+  const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => {
+    window.__MAGNETDEBUG = true;
+    const mk = i => ({ index:i, id:'Probe Pad', mapping:'standard', connected:true,
+      axes:[0,0,0,0], buttons:Array.from({length:17},()=>({pressed:false,value:0})) });
+    window.__pads = [mk(0)];
+    navigator.getGamepads = () => window.__pads;
+  });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  await p.evaluate(() => { const d = document.getElementById('dmCollect'); if (d) d.click(); });
+  const r2 = await p.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(4); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    M.endMatch(w); M.finishMatch(w);
+    await new Promise(x => setTimeout(x, 250));
+    M.setDockCollapsed(false);                       // the ‹ tab: what a player does
+    await new Promise(x => setTimeout(x, 250));
+    o.menuVisible = !document.getElementById('setup').classList.contains('hidden');
+    o.overlayUp = document.getElementById('overlay').classList.contains('show');
+    o.state = w.state;
+    o.drivesMenu = M.padDrivesMenu();
+    const ring = () => { const e = document.querySelector('.deckfocus'); return e ? e.textContent.trim() : null; };
+    const cur  = () => [...document.querySelectorAll('#overlay .navsel')].map(x => x.id).join(',');
+    const ring0 = ring(), cur0 = cur();
+    for (let i = 0; i < 40; i++){ window.__pads[0].axes = [0, 1]; await new Promise(x => setTimeout(x, 18)); }
+    o.ringMoved = ring() !== ring0;
+    o.cursorMoved = cur() !== cur0;
+    o.cursor = cur0 + ' → ' + cur();
+    // ...and Settings is offered here now, hit-tested rather than read off a class.
+    const st = document.getElementById('ovSettings');
+    o.settingsShown = !!st && getComputedStyle(st).display !== 'none';
+    if (st){ st.scrollIntoView({ block:'center' });
+      const bx = st.getBoundingClientRect();
+      const t = document.elementFromPoint(bx.x + bx.width/2, bx.y + bx.height/2);
+      o.settingsHit = !!(t && (t === st || st.contains(t)));
+      o.settingsInCursorRow = M.overButtons().some(x => x.id === 'ovSettings'); }
+    return o;
+  });
+  if (!(r2.overlayUp && r2.menuVisible && r2.state === 'over'))
+    fails.push('the probe never reached a result screen with the menu open, so nothing below ' +
+               'is measuring the reported state: ' + JSON.stringify(r2));
+  // ⚠️ PAIRED. "The menu does not move" is equally true of a build where the pad is dead
+  // on this screen, which takes the result cursor away — the worse bug, and invisible on
+  // its own.
+  if (r2.ringMoved || r2.drivesMenu)
+    fails.push('the pad still drives the settings menu on the result screen (ring moved ' +
+               r2.ringMoved + ', padDrivesMenu ' + r2.drivesMenu + ') — two cursors on one stick');
+  if (!r2.cursorMoved)
+    fails.push('the result cursor did not move (' + r2.cursor + ') — standing the menu down must not ' +
+               'take the pad away from the screen it belongs to');
+  if (!(r2.settingsShown && r2.settingsHit && r2.settingsInCursorRow))
+    fails.push('Settings is not offered on the result screen: ' + JSON.stringify(r2) +
+               ' — asked for as a way to reach the left-hand settings from the post-game screen, ' +
+               'and it has to be pressable and walkable-to, not merely drawn');
+  await p.close();
+}
+
 await b.close();
 if (errors.length) fails.push('console/page errors: '  + errors.slice(0, 4).join(' | '));
 if (fails.length){ console.log('FAIL warmupoffer\n  ' + fails.join('\n  ')); process.exit(1); }

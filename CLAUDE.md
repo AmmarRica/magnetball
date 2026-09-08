@@ -593,6 +593,12 @@ three lines a second time, name it.
   **kickRing 140**, **chargeMs 100**, **goalZoom 115 / goalZoomSpd 5**,
   **teamCol `['#5a7de0','#d8c93a']`**, **teamFlag `['usa','brazil']`**, and in `feel`
   **kick 80, bdamp 980, sprintRefill 1500, sprintBoost 150**.
+  ⚠️ **`teamFlag` HAS SINCE BEEN TAKEN BACK OFF THE PASTE**, by the same person a batch
+  later — *"revert countries to be randomized"* — and it ships `['random','random']`. The
+  paste's value is left written above because it is what the clipboard said and because
+  the reason it was wrong is worth keeping: a snapshot of a SESSION carries the two
+  countries that session happened to be playing as, and as a default that is every match
+  on the machine wearing them (measured: 20 of 20). See the random-countries entry below.
   ⚠️ **FIVE OF THEM REVERSE A CALL THIS FILE RECORDS, and that is not a contradiction —
   it is the same person, later, choosing by hand.** *"THE FREEZE-FRAME SHIPS OFF"* becomes
   hit stop at 5; *"the default match is FIRST TO 3"* becomes a timed five; the ball float
@@ -2852,6 +2858,58 @@ three lines a second time, name it.
   the match seed through its own generator, so it takes nothing out of `w.rng`.
   The picker's tiles are **built from `BOT_PLANS`** (names and blurbs read, never copied).
   Full write-up: `docs/BOT-AI.md`.
+- **THE MAGNET HAS ITS OWN TAB, AND THE ONE DIAL WAS DOING FOUR JOBS** (`SUBTABS.feel`'s
+  `magnet` pane, `sel.magReach`, `sel.magKick`, `magReachOf`, `magKickPct`, `magKickOf`).
+  Asked for as *"add a tab for magnet and options for magnets"*.
+  ⚠️ **`sel.magnet` WAS SETTING TWO THINGS NOBODY COULD SEE.** It scaled the spring that
+  pulls the ball to your feet and the velocity match that carries it along — which is what
+  "strength" means — and it ALSO gated a hard-coded **reach of 18 units** in
+  `handleBallControl`'s grab test and a hard-coded **power bonus** in `oneShotKick` (`0.5`)
+  and `releaseTrap` (`0.7`). At full magnet a trap release was **+70% power**, which is a
+  large hidden effect for a dial labelled "Ball magnet".
+  ⚠️ **BOTH NEW DIALS DEFAULT TO THE CONSTANT THEY REPLACED** (18 units, 100%), so the
+  shipped game is unchanged until somebody turns one — and `tests/magnet.mjs` checks that
+  FIRST, because "the dial exists" is worth nothing if shipping it moved the game under
+  everybody who never opens the tab.
+  ⚠️ **ON THE WORLD, NOT READ OFF `sel`.** A party modifier and a drill both write
+  `w.magnet`, and a reach read straight from the settings would not travel with them; both
+  carry a `!= null` fallback so an older world object still behaves.
+  ⚠️ **TWO READERS, ONE DEFAULT.** The slider reads the stored PERCENT and the physics the
+  MULTIPLIER; folding them into one getter put **`1%`** under the bonus, because the number
+  a control is born at and the number the maths wants are not the same unit.
+  ⚠️ **THE MAGNET LEFT THE BALL PANE.** It is not something the ball does — it is an assist
+  applied to the player's touch — so `tests/keyfocus.mjs`' written-down grouping moved with
+  it, which is the one check that can say a slider is in the pane it BELONGS in rather than
+  the pane its own tag names.
+  ⚠️ Every pull reading in the suite is a DIFFERENCE against the same step with strength at
+  0, which is the honest control: at that setting the pull block is skipped entirely, so
+  whatever the ball does there is damping and nothing else.
+- **THERE IS NO CASUAL/PRO PRESET ROW** (`#feelPresets` and `buildFeelPresets`, deleted).
+  Asked for as *"remove the casual and pro preset options, default to pro"* — and the
+  default already WAS Pro (`defaultSel().feel` is `FEEL_PRESETS.pro`, pinned by
+  `tests/shippedfeel.mjs`), so nothing about the shipped game moved. Every number the pair
+  set is a slider a few pixels below, so nothing became unreachable; what went is a second
+  way to set thirteen of them at once, and with it the confusing state where moving any one
+  slider silently deselected both tiles.
+  ⚠️ **`FEEL_PRESETS` ITSELF STAYS, and it is no longer a picker** — which is the one place
+  the `tennis` rule ("delete rather than leave unlisted") does NOT apply, because this is
+  not a registry the pickers iterate. `pro` is the definition the shipped default must equal
+  field for field, `casual` is the tuning the AI was built against and what `pinCasualFeel`
+  mirrors, and `presetMatches` is what `magnetball.feelfold` asks about a stored feel. A
+  table that three suites and a fold read is not a stray entry.
+  ⚠️ **↺ RESET HAD TO MOVE OR IT BECAME A ONE-WAY TRIP.** `#feelReset` hard-coded
+  `accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990` with `trapOff:false` — that is
+  `FEEL_PRESETS.casual`, written out a SECOND time and never moved when the shipped feel
+  became Pro. Survivable only while the row was on the card: press ↺, land on Casual, press
+  the Pro tile back. With the row gone it is a reset you cannot return from, off the one
+  button whose whole promise is "put it back". It reads `defaultSel()` now, so there is no
+  third copy of the feel — the same fix `hitStopFrames`' null fallback needed.
+  ⚠️ **THREE SUITES REFERENCED WHAT WENT, and each was handled differently on purpose.**
+  `menunav`'s whole-card list dropped `feelPresets` (rule 10 — a `getElementById` for a
+  deleted element answers `null` and the filter then silently passes); `trapwindow`'s
+  Casual-tile probes were re-pointed at **`presetMatches`**, which keeps the claim exactly
+  — the trap window is part of the preset, and a comparator that ignored it would fold a
+  device that had moved it — while measuring it on the function the fold actually asks.
 - **Hold to kick harder (`sel.charge`, `sel.chargeMs`, `chargeOn`, `chargeSecs`,
   `chargeFrac`, `chargeMul`):** the wind-up has always been in the physics at a fixed 0.6s
   for +90% and was the one part of the kick the menu never admitted to.
@@ -3177,6 +3235,34 @@ three lines a second time, name it.
   recorded in `goalBurst` so the scoring side feels more.
   ⚠️ **Fire-and-forget and never awaited**: `playEffect` returns a promise, and a rejected
   one on a pad that has gone away is an unhandled rejection on every kick.
+  ⚠️ **MOVING THE DIAL BUZZES THE PAD, AND THE WIRING FOR THAT EXISTED AND PRODUCED
+  NOTHING YOU COULD FEEL** (`RUMBLE.preview`, `RUMBLE.previewGap`, `#rumble`'s
+  `oninput`/`onchange`). Asked for as *"when I change controller rumble option, have it
+  impact the controller so I get feedback"* — and the slider was already firing
+  `padRumble(i, 'kick', 1)` on every input event. Two defects, both measured against a
+  fake actuator that records what it is ASKED for:
+  ⚠️ **(a) `playEffect` REPLACES RATHER THAN QUEUES**, so an effect started before the last
+  one finished is the last one CUT SHORT. A drag produced **fifteen effects at 16-17ms
+  apart, every one asking for 90ms, and fourteen of the fifteen cut short** — what the pad
+  renders is a train of 16ms stubs, never once the pulse that was asked for. `previewGap`
+  (220) is longer than `preview.ms` (200), so a held drag is a series of complete taps: 2
+  effects 232ms apart, none cut short.
+  ⚠️ **(b) IT FIRED THE `kick` PROFILE**, whose 0.30 strong at the shipped dial of 15 is
+  **0.045** — under this table's own `min`, the constant whose comment reads *"below this
+  there is nothing to feel"*. A dial is a CEILING, so its sample is what it is a ceiling
+  OF: `preview` carries `scored`'s magnitudes, which is what makes it clear `min` at every
+  value the slider can select above zero (lowest step 5%, and 1.00 × 0.05 IS `min`).
+  ⚠️ **THE RELEASE REMEMBERS THE VALUE AS WELL AS THE CLOCK.** Zeroing the clock on
+  `change` alone re-fires for a value the drag had just previewed — measured 16ms apart,
+  which cuts the one you can feel short with an identical one. So `change` fires only where
+  the throttle swallowed the last step, which is most of the time.
+  ⚠️ Every CONNECTED pad, not every seated one: the person setting this is holding a
+  controller and may not be in a seat, and there may be no match at all.
+  ⚠️ `tests/history.mjs` drives the REAL `input`/`change` events on the REAL element — the
+  throttle and the release rule live in the wiring, so a probe calling `padRumble` itself
+  would prove only that `padRumble` works. Paired with *"the drag is sampled more than
+  once"*, or "nothing is cut short" is equally true of a build that fires once and never
+  again.
   ⚠️ A **no-op without hardware** — `padIndex` is -1 for touch and keyboard seats, an
   arcade panel is a virtual pad, and Safari and Firefox have no actuator. ⚠️ Render-and-
   feel only: `tests/history.mjs` hashes the world over 900 steps at 0% and 100%.
@@ -4605,6 +4691,92 @@ three lines a second time, name it.
   ⚠️ **The two borders are deliberately NOT equally loud**, so a check that looks for a
   fixed red-vs-blue hue finds the claimed half and misses the quiet one — 126 against 13.
   What has to be true of both is that the edge differs from the grass it is drawn over.
+- **THE TWO SIDES WEAR A RANDOM COUNTRY EACH, OUT OF THE BOX** (`defaultSel().teamFlag`
+  = `['random','random']`, `LOBBY_FLAGS`' `random` pad, `teamFlagPick`, `rollTeamFlags`).
+  Asked for as *"revert countries to be randomized"*, and the measurement is the report:
+  the owner's-defaults paste shipped `['usa','brazil']`, so **20 matches in a row were
+  20 × USA vs Brazil** — one pair, for ever, on a machine that ships **85** countries.
+  It reads **20 distinct pairs out of 20** now.
+  ⚠️ **`random` IS A VALUE IN THE PICKER, NOT A SEPARATE TOGGLE.** It sits beside `none`
+  at the head of each half's flag block, so a side can be pinned to a real country while
+  the other rolls — which a global "randomise countries" switch could not say at all, and
+  which is the state a cup practice or a "me as England vs whoever" match wants.
+  ⚠️ **IT IS WRITTEN INTO `matchTeamFlag`, THE ONE-MATCH LAYER, NEVER INTO `sel`.** A roll
+  stored back into the setting is the player's own choice being silently rewritten every
+  kickoff and then `saveSel()`d — and `random` would survive exactly one match before
+  becoming whatever came up first. Same argument `matchTeamCol` already records, and it
+  is the same layer, so `cupDress` running afterwards still puts the DRAW's two countries
+  on a tie.
+  ⚠️ **ROLLED OFF THE MATCH SEED THROUGH ITS OWN GENERATOR** — the `kickoffToss` idiom.
+  `Math.random` would be *safe* here (this is `startMatch`, not `step`) and the attract
+  demo's own dressing uses it; what it would cost is a seeded match no longer reproducing,
+  since several suites hash a world whose bodies carry `flag` and `color`. Its own
+  `mulberry32` rather than a draw from `w.rng`, or which countries came up would shift
+  every later bot decision.
+  ⚠️ **`nextMatchSeed()` HAS A SIDE EFFECT AND CANNOT BE CALLED TWICE.** It advances
+  `_seedTick`, so asking it again for the roll hands out a *different* seed and two
+  matches in one millisecond stop sharing bots. The existing call MOVED up above the
+  dressing rather than a second one being added — and it has to be above, because
+  `applyTeamColours` reads `teamFlagOf`, so rolling afterwards dresses the side for the
+  match AFTER this one.
+  ⚠️ **`teamFlagOf` MUST NEVER HAND `random` BACK.** It is not a `FLAGS` key, so
+  `FLAGS.random` is undefined and the plate draws as a grey square — which looks like a
+  rendering bug and is really a country nobody can identify, the rule `CUP_TEAMS` already
+  records. It resolves through the one-match layer and NOWHERE else, and falls out as "no
+  country" if it is reached before a match has rolled (between `cupEnd` clearing the layer
+  and the next `startMatch`).
+  ⚠️ **THE PICKER LIGHTS OFF `teamFlagPick`, NOT `teamFlagOf`** — a side set to `random`
+  is *wearing* a country, and the pad the player pressed is the one that has to be lit.
+  Reading the resolved value would light Peru and leave RAND dark, which reads as the
+  control having been overwritten by the game.
+  ⚠️ **THE TWO SIDES MUST DIFFER**, the guard the demo dressing already has: two random
+  draws landing on the same country is a match against itself. Measured 0 of 20.
+  ⚠️ **`stableAcrossRestarts` IN `tests/botlook.mjs` HAD TO SPLIT IN TWO**, and that is a
+  real narrowing rather than a check being nudged: the whole look is now seed-dependent, so
+  the old claim ("a bot looks the same across restarts") is false by design for the flag.
+  What survives is `sigOwn()` — cap and eyes across unseeded restarts — plus
+  `wholeLookStableOnASeed`, the flag included, on a pinned seed. `tests/botlook.mjs`.
+  ⚠️ **AND IT MADE THE FLAG PADS DEAD FOR THE WHOLE MATCH — a real defect, found by
+  `tests/demo.mjs` rather than by reasoning.** `teamFlagOf` reads the one-match layer ABOVE
+  the setting, which is what stops a roll being overwritten mid-match; it also meant that
+  once a side had rolled, walking onto NONE or onto a country wrote `sel.teamFlag` and
+  changed nothing anybody could see. Measured: a side rolled onto **`cuba`** stayed `cuba`
+  through a press of `none` AND a press of `poland`. So `setTeamFlag` clears **that side's**
+  layer entry — a hand pick outranks a roll, which is the NO DEAD CONTROLS rule and the same
+  precedence `sel` already has over the sheet. Safe against the cup, the layer's other
+  writer, because a lite lobby draws no flag pads at all.
+  ⚠️ **RAND ROLLS ON THE SPOT, AND PRESSING IT AGAIN RE-ROLLS.** Clearing alone would take
+  the country OFF until the next kickoff, which is what NONE does one pad along — two
+  controls doing the same visible thing, with the preview then disagreeing with what Start
+  fields. And RAND is **the one pad where the same press twice means something** (`setTeamFlag`'s
+  `cur[t] === key` early return is bypassed for it alone): every other pad is a choice, this
+  one is a request. ⚠️ It re-rolls **one side**, or a press on your own half repaints the
+  other half under somebody who touched nothing — both sides ship as random, so that is the
+  ordinary case and not an edge one.
+  ⚠️ **THE HAND ROLL MAY NOT USE `Math.random` OR `w.rng`**: `setTeamFlag` is reached from
+  `kbHit`, which runs inside `step()`. `flagRollSeed()` is the world's own seed plus a press
+  counter — deterministic for a pinned match, and different on every press, which is the
+  whole point of pressing it twice.
+  ⚠️ **THE ROLL DRESSES THE FACE AND NEVER THE KIT.** `NATION_COLS` has 11 rows against
+  `FLAGS`' 85, so most rolled countries have no colour of their own — and the alternative is
+  worse in both directions: rolling from the 11 coloured ones only would mean eleven
+  countries for ever, and applying `nationCol` from a roll means writing `sel.teamCol`,
+  a PERSISTED setting, at every kickoff. A hand pick still dresses the side, because that is
+  somebody choosing.
+  ⚠️ **AND EVERY PIXEL SUITE THAT SAMPLES A BODY HAD TO SAY SO.** `tests/surfaces.mjs` hashes
+  the inner pitch — bodies included — so two restarts differed for a reason that has nothing
+  to do with the surface, and it read as the pitch texture being non-deterministic
+  (`stableAcrossRestarts`, `mudStable`, `mudMoreVariedThanGrass`). `tests/seatprofiles.mjs`
+  read the country as the seat's own avatar not having been applied. Both pin
+  `sel.teamFlag = ['none','none']`: the palette rule — *a suite that samples pixels has to
+  say which palette it is sampling* — arriving through the ROSTER instead.
+  ⚠️ **`tests/lobby.mjs` STOPPED FINDING THE RESULT BUTTONS BY INDEX**, because the same
+  batch put Settings on that screen: it was reading Settings as the warm-up button and
+  CLICKING it. Found by label now — a check that has to be edited every time a button is
+  added to the screen it watches is one nobody trusts.
+  ⚠️ Four sabotages, each caught by its own check, and one of them was caught only after the
+  probe was fixed: *re-rolling both sides* passed at first because the probe pressed RAND on
+  a side already set to RAND and the early return meant **nothing ran at all**.
 - **A FLAG BLOCK BESIDE EACH HALF, and walking onto a side wears that side's country**
   ⚠️ **A COUNTRY CARRIES A COLOUR** (`NATION_COLS`, `nationCol`), so picking one dresses
   the side in it. A flag used to change only the FACES, which left a side wearing Brazil's
@@ -5848,6 +6020,44 @@ three lines a second time, name it.
   next to the locked ones, which is where you go to choose one. ⚠️ `UNL_CATS` and
   `unlockCounts` **stay** — they are what the per-picker unlock counters read, and what
   proves every `FLAGS` entry is reachable.
+- **THE RESULT SCREEN OWNS THE PAD, AND THE MENU WAS TAKING IT TOO** (`overlayOwnsPad`,
+  `padDrivesMenu`). Reported as *"CONTROLLER IS CONTROLLING BOTH POST GAME MENU AND
+  SETTINGS MENU. SHOULD ONLY CONTROL POST GAME MENU"*, and measured as exactly that: with
+  the result screen up and the side menu open, ONE push of the stick moved the menu's focus
+  ring to **Bots** and stepped the result cursor **Resume → Rematch**, in the same frame.
+  ⚠️ **THE LINE THAT CAUSED IT ONLY EVER CLAIMED THE FIX.** `padDrivesMenu`'s guard read
+  `if (w && !w.demo && w.state !== 'over') return false;` under a comment ending *"…and a
+  finished match is a result screen, which has its own cursor"* — and then fell straight
+  through to `return true` for exactly that case. The comment was right and nothing acted
+  on it, which is the shape this file keeps recording.
+  ⚠️ **IT HID BEHIND `matchCollapse`.** A match auto-collapses the dock and a collapsed
+  dock already returned false two lines up, so the double cursor only appears once somebody
+  opens the menu with the ‹ tab — the ordinary thing to do on a desktop. A probe that does
+  not open it reads `drivesMenu: false` on the broken build and proves nothing.
+  ⚠️ **THE PAUSE SCREEN IS DELIBERATELY NOT COVERED, and that is a decision rather than an
+  oversight.** `pollOverOptions` gates itself on `state === 'over'`, so paused there is no
+  second cursor to collide with: the pad drives the menu and nothing else, which is
+  coherent — you paused to change something, and `#ovSettings` is the button that says so.
+  ⚠️ **`overlayOwnsPad` asks the SAME TWO THINGS `pollOverOptions` does** — the overlay is
+  showing AND the match is over — rather than either alone. The overlay is also the pause
+  screen, and a HIDDEN overlay leaves `world.state` at `over` for as long as the menu is up
+  afterwards, so one condition on its own is wrong in both directions.
+  ⚠️ **AND SETTINGS IS ON THE RESULT SCREEN NOW** (`#ovSettings`), asked for as *"add
+  option to open left side of settings to go to it from post game menu"*. This **WITHDRAWS**
+  the note that said it was *"never over a result screen where it would just be clutter"*:
+  a result screen is where you decide what to change before the next match, which is
+  precisely when the settings dock is wanted. Same button, same `openLook()`, so there is
+  one place that knows what "open settings" means — and it is not a dead end, because
+  `openLook` goes through `dockOrFull` (which hides the overlay) into a menu that leads
+  with KICK OFF, the same next match Restart would have given. Show mode still takes it
+  away.
+  ⚠️ DOM order IS `overButtons()` order, so Settings lands second on that screen (Restart ·
+  Settings · Warm-up · Main Menu). Moving it would re-order the pause row too, and one list
+  that cannot drift is worth more than the placement.
+  ⚠️ `tests/warmupoffer.mjs` holds all three, and the THIRD is the load-bearing one: *"the
+  menu does not move"* is equally true of a build where the pad is dead on this screen —
+  which takes the result cursor away, is the worse bug, and is invisible on its own.
+  Sabotage-verified three ways, including that over-correction.
 - **THE WHOLE MENU FROM A JOYSTICK, ON EVERY MACHINE** (`padDrivesMenu`, `menuRoot`,
   `padMenuWoke`, `syncPadHint`, `pollDeckUI`, `deckFocusables`, `.deckfocus`).
   ⚠️ **EVERY LINE OF THIS EXISTED AND WAS FENCED BEHIND `isDeck()`.** So on a cabinet, on a
@@ -5884,8 +6094,8 @@ three lines a second time, name it.
   3.5), so each now shows **one `.subpane` at a time** behind a `.subtabs` chip row — `SUBTABS`
   declares the groups, `showSubTab(group, pane)` switches. Seven groups now: `match`,
   `player`, `options`, `theme`, `sound`, `feel` and `replay`.
-  ⚠️ **Game Feel is tabbed too** — Ball / Kick / Player / Sprint / Effects / Camera /
-  Advanced. Nineteen controls in one list is how the Tilt parallax toggle came to sit
+  ⚠️ **Game Feel is tabbed too** — Ball / Kick / Magnet / Player / Sprint / Effects /
+  Camera / Advanced. Nineteen controls in one list is how the Tilt parallax toggle came to sit
   *sixteenth* in it and get reported as a missing feature; the chip row is the heading now,
   which is why the three `.subhead` groups it replaced are gone rather than repeated inside
   the panes.
@@ -6964,7 +7174,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 138 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 139 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **TWO suites are RED ON PURPOSE, and both measure the SHIPPED default rather than a
 tuning the AI was built against.** `tests/proladder.mjs` measures the bot difficulty ladder,

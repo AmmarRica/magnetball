@@ -72,7 +72,12 @@ const r = await p.evaluate(async ()=>{
   const ps = M.world.players, me = ps.find(q=>q.ctrl==='human1');
   o.teamFlagCovers = !!me && me.flag === M.teamFlagOf(me.team);
   o.yourPlateIsKept = !!me && me._ownFlag === 'poland';
-  M.sel.teamFlag = ['none','none'];
+  // ⚠️ **CLEARED THROUGH `setTeamFlag`, THE WAY A FLAG PAD DOES IT** — writing
+  // `sel.teamFlag` by hand does NOT take the country off any more, because the shipped
+  // default is `random` and a rolled country lives in `matchTeamFlag`, which `teamFlagOf`
+  // reads ABOVE the setting. Driving the model instead of the real path measured a plate
+  // that was never coming back and reported the stash as broken when it is fine.
+  M.setTeamFlag(0, 'none'); M.setTeamFlag(1, 'none');
   M.applyTeamColours(M.world.players);
   o.realMatchKeepsYours = !!me && me.flag === 'poland';
   M.sel.teamFlag = M.defaultSel().teamFlag;

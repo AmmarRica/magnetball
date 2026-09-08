@@ -2242,12 +2242,21 @@
 
       <div class="subpane" data-group="options" data-sec="feel" data-pane="feel">
 
-      <!-- ⚠️ The preset row sits OUTSIDE the tabs, and the reset button at the foot does
-           too: both act on the WHOLE card, so filing a set-everything control under one
-           fifth of the things it sets would be worse than leaving it above the chips. The
-           Match card keeps KICK OFF and Warm-up outside its own tabs for the same reason. -->
-      <label class="field">Preset</label>
-      <div class="opts" id="feelPresets"></div>
+      <!-- ⚠️ **THERE IS NO PRESET ROW.** Casual and Pro were two tiles above the chips —
+           removed on request, with Pro as the shipped default, which it already was
+           (`defaultSel().feel` IS `FEEL_PRESETS.pro`). Every number the pair set is a
+           slider a few pixels below, so nothing became unreachable; what went is a second
+           way to set thirteen of them at once, and with it the confusing state where
+           moving any one slider silently deselected both tiles.
+           ⚠️ **`FEEL_PRESETS` ITSELF STAYS, and it is no longer a picker.** `pro` is the
+           definition the shipped default must equal field for field (`tests/shippedfeel`
+           and `tests/proladder` both read it through `presetMatches`), `casual` is the
+           tuning the AI was built against and is what `pinCasualFeel` mirrors, and
+           `presetMatches` is what `magnetball.feelfold` asks about a stored feel. A table
+           that three suites and a fold read is not a stray registry entry.
+           ⚠️ The reset button at the foot still sits OUTSIDE the tabs: it acts on the
+           WHOLE card, and filing a set-everything control under one seventh of the things
+           it sets would be worse than leaving it below the chips. -->
 
       <!-- ⚠️ Thirty controls, so seven things you might be here for rather than one list.
            As one list the Tilt parallax toggle sat sixteenth in it and was reported as a
@@ -2277,6 +2286,18 @@
       <input id="chargeMs" class="slider" type="range" min="100" max="2000" step="50" />
       <div class="hint always" style="text-align:left; margin-top:4px">Holding KICK winds a shot up to <b>+90%</b> power, and a ring closes round you while it does. The slider is how long you have to hold for the full amount &mdash; shorter makes every shot hard, longer makes the wind-up something you commit to. Switch it off and every kick fires at exactly its normal strength, however long the button is down, which is what you want if you hold KICK to carry the ball. Affects shots, one-touches, body checks and booting the snail.</div>
       <div id="feelSlidersKick"></div>
+      </div>
+
+      <!-- ⚠️ **THE MAGNET IS ITS OWN TAB, and the one dial was already doing four jobs.**
+           Asked for as "add a tab for magnet and options for magnets". `sel.magnet` scales
+           the spring that pulls the ball to your feet, the velocity match that carries it
+           along, the REACH at which either happens, and a power bonus on a kick — and the
+           last two were hard-coded constants nobody could see, let alone move. The two new
+           dials default to exactly those constants (18 units and 100%), so the shipped
+           game is unchanged until somebody turns one. -->
+      <div class="subpane" data-group="feel" data-pane="magnet">
+      <div id="feelSlidersMagnet"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">The magnet is the assist that keeps the ball at your feet. <b>Strength</b> is how hard it pulls and how much the ball travels with you &mdash; 0 turns the whole thing off and nothing else here does anything. <b>Reach</b> is how close the ball has to be before it grabs. <b>Kick bonus</b> is the extra power a magnet gives a shot, which is separate from the pull: turn it down for the assist without the free power. Bots get exactly the same magnet you do.</div>
       </div>
 
       <div class="subpane" data-group="feel" data-pane="player">
@@ -4381,7 +4402,10 @@ const LOBBYKB = {
 // ⚠️ Growing this list is NOT free: it is beside the pitch, and `computeCam` frames the
 // whole span, so every column costs court. Measured for this one in the commit that added
 // it — check it again before adding a fourth column.
-const LOBBY_FLAGS = ['none', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england',
+// ⚠️ **`random` SITS BESIDE `none` AND IS NOT A COUNTRY**, the same way `none` is not: the
+// two answers that are not a pick lead the block. It is the SHIPPED default for both
+// sides — see `defaultSel().teamFlag` and `rollTeamFlags`.
+const LOBBY_FLAGS = ['none', 'random', 'usa', 'mexico', 'argentina', 'france', 'croatia', 'brazil', 'england',
                      'spain', 'portugal', 'netherl', 'belgium'];
 // ⚠️ **A COUNTRY CARRIES A COLOUR, so picking one dresses the side in it.** Walking onto a
 // flag used to change only the FACES, which left a side wearing Brazil's flag in purple
@@ -4497,12 +4521,68 @@ function cupRestoreMode(){
 // ⚠️ Falls back through `FLAGS`, the standing rule for every registry lookup off `sel`:
 // the value can arrive from a hand-edited localStorage, an imported save (`applySaveDoc`
 // validates nothing) or one typo in a shared settings sheet.
+// What this side was PICKED as, raw — `none`, `random`, or a country key. The lobby's own
+// flag pads light off this rather than off `teamFlagOf`, because a side set to `random` is
+// wearing a country and the pad the player pressed is the one that has to be lit.
+function teamFlagPick(team){
+  const a = sel.teamFlag;
+  const k = Array.isArray(a) ? a[team ? 1 : 0] : null;
+  return k || 'none';
+}
 function teamFlagOf(team){
   const m = matchTeamFlag && matchTeamFlag[team ? 1 : 0];
   if (m) return (m !== 'none' && FLAGS[m]) ? m : null;
   const a = sel.teamFlag;
   const k = Array.isArray(a) ? a[team ? 1 : 0] : null;
-  return (k && k !== 'none' && FLAGS[k]) ? k : null;
+  // ⚠️ `random` resolves through `matchTeamFlag` above and NOWHERE ELSE, so reaching this
+  // line with it stored means no match has rolled yet — between `cupEnd` clearing the layer
+  // and the next `startMatch`, say. `FLAGS.random` does not exist, so it falls out as "no
+  // country", which is the safe answer: a menu preview with no flag rather than a throw.
+  return (k && k !== 'none' && k !== 'random' && FLAGS[k]) ? k : null;
+}
+// ⚠️ **THE ROLL IS OFF THE MATCH SEED, THROUGH ITS OWN GENERATOR** — the `kickoffToss`
+// idiom. `Math.random` here would be safe (this is `startMatch`, not `step`), and the
+// attract demo's own dressing uses it — but a seeded match has to reproduce, and several
+// suites hash a world whose bodies carry `flag` and `color`. Its own generator rather than
+// a draw from `w.rng`, or which countries came up would shift every later bot decision.
+// ⚠️ **THE TWO SIDES MUST DIFFER**, the same guard the demo dressing uses: two random
+// countries that land on the same one is a match against yourself.
+// ⚠️ It fills `matchTeamFlag`, the ONE-MATCH LAYER the cup already uses, so `cupDress`
+// running afterwards overwrites it and a tie is still the draw's two countries.
+// ⚠️ **`only` RE-ROLLS ONE SIDE, and it is what the RAND pad in warm-up presses.** Without
+// it a hand press on RAND would re-roll BOTH sides whenever both are set to random, which
+// changes the other half's country under somebody who touched nothing. The side being
+// re-rolled also avoids its OWN current country, or half the presses land back on what is
+// already showing and the pad reads as dead.
+function rollTeamFlags(seed, only){
+  const want = [ (only == null || only === 0) && teamFlagPick(0) === 'random',
+                 (only == null || only === 1) && teamFlagPick(1) === 'random' ];
+  if (!want[0] && !want[1]) return;
+  const pool = FLAG_KEYS.filter(k => k !== 'none');
+  if (!pool.length) return;
+  const rnd = mulberry32((seed | 0) ^ 0x1b873593);
+  const cur = matchTeamFlag ? matchTeamFlag.slice(0, 2) : [null, null];
+  const out = cur.slice(0, 2);
+  const taken = [];
+  for (const t of [0, 1]) if (!want[t] && cur[t]) taken.push(cur[t]);
+  if (only != null && cur[only]) taken.push(cur[only]);
+  for (const t of [0, 1]){
+    if (!want[t]) continue;
+    let k = pool[(rnd() * pool.length) | 0], guard = 0;
+    while (taken.indexOf(k) >= 0 && guard++ < 30) k = pool[(rnd() * pool.length) | 0];
+    taken.push(k); out[t] = k;
+  }
+  matchTeamFlag = out;
+}
+// A seed for a roll asked for BY HAND, mid-warm-up. ⚠️ **No `Math.random` and no draw from
+// `w.rng`**: `setTeamFlag` is reached from `kbHit`, which runs inside `step()`. The world's
+// own seed plus a press counter is deterministic for a pinned match and still gives a
+// different country on every press, which is the whole point of pressing it twice.
+var _flagRollTick = 0;
+function flagRollSeed(){
+  _flagRollTick++;
+  const s = (typeof world !== 'undefined' && world && world.seed != null) ? (world.seed | 0) : 0;
+  return s ^ (_flagRollTick * 0x9e3779b9);
 }
 // ⚠️ **BOTH SIDES MAY WEAR THE SAME COUNTRY, unlike the colours.** Two teams in one shade
 // is unreadable and `setTeamCol` swaps to prevent it; two teams under one flag are still
@@ -4511,9 +4591,28 @@ function teamFlagOf(team){
 function setTeamFlag(team, key){
   const cur = [ (sel.teamFlag && sel.teamFlag[0]) || 'none', (sel.teamFlag && sel.teamFlag[1]) || 'none' ];
   const t = team ? 1 : 0;
-  if (cur[t] === key) return false;
+  // ⚠️ **RAND IS THE ONE KEY WHERE PRESSING IT AGAIN MEANS SOMETHING.** Every other pad is
+  // a choice and re-pressing it is a no-op; RAND is a request, so a second press is "give
+  // me another one" — and under the plain early return it was a DEAD PRESS, the one thing
+  // this file will not have. It is also what makes the "one side only" check below able to
+  // see anything: both sides ship as random, so the probe cannot press any other key.
+  if (cur[t] === key && key !== 'random') return false;
   cur[t] = key;
   sel.teamFlag = cur;
+  // ⚠️ **A HAND PICK OUTRANKS THE ROLL, and without this line the flag pads are DEAD for
+  // the whole match.** `teamFlagOf` reads `matchTeamFlag` ABOVE `sel.teamFlag`, so once a
+  // side set to `random` has been rolled, walking onto NONE or onto a country wrote the
+  // setting and changed nothing anybody could see — measured: a side rolled onto `cuba`
+  // stayed `cuba` through a press of `none` and a press of `poland`. Only THIS side's entry
+  // is cleared, so the other half keeps the country it rolled.
+  // ⚠️ Safe against the cup, which is the other writer of that layer, because a lite lobby
+  // draws no flag pads at all (`buildLobbyKeys`) — so a tie can never reach here.
+  if (matchTeamFlag) matchTeamFlag[t] = null;
+  // ⚠️ **RAND ROLLS ON THE SPOT.** Clearing alone would take the country OFF until the next
+  // kickoff, which is what NONE does one pad along — two controls doing the same visible
+  // thing, and the preview then disagreeing with what Start fields, which is the one
+  // promise this room makes.
+  if (key === 'random') rollTeamFlags(flagRollSeed(), t);
   // ⚠️ ...and the SHIRT follows the country — see NATION_COLS.
   // ⚠️ **IT ONLY GIVES WAY TO A COUNTRY, NEVER TO A DEFAULT, and getting this wrong made
   // FRANCE PLAY IN RED.** The first version avoided whatever the other side was wearing
@@ -4524,9 +4623,15 @@ function setTeamFlag(team, key){
   // country of its own; otherwise the nation takes its true colour and `setTeamCol`'s
   // existing swap moves the default side out of the way — which lands the pair on
   // red-and-blue either way round, so it costs nothing.
-  const otherKey = cur[t ? 0 : 1];
-  const avoid = (otherKey && otherKey !== 'none') ? teamColOf(t ? 0 : 1) : null;
-  const nc = nationCol(key, avoid);
+  // ⚠️ **THE COLOUR FOLLOWS THE EFFECTIVE COUNTRY, NOT THE KEY THAT WAS PRESSED.**
+  // `NATION_COLS` has no `random` row, so keying the colour off the press left a side
+  // wearing a rolled country in whatever shade it already had — the country and the kit
+  // disagreeing about who you are, which is the whole complaint the flag block fixed.
+  // `teamFlagOf` is the one resolver, so both sides of the question are answered by it.
+  const effKey = teamFlagOf(t) || key;
+  const otherKey = teamFlagOf(t ? 0 : 1);
+  const avoid = otherKey ? teamColOf(t ? 0 : 1) : null;
+  const nc = nationCol(effKey, avoid);
   if (nc) setTeamCol(t, nc);
   return true;
 }
@@ -6757,10 +6862,20 @@ const CHANGELOG = [
 // stops either way, so nothing about the save, the presets or the physics changes — but
 // "45" told a player nothing, while "4.5" is a number you can aim at.
 function magnetLabel(v){ return (v/10).toFixed(1).replace(/\.0$/, ''); }
-function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0,
+// The two halves the magnet dial used to set invisibly. ⚠️ `!= null` rather than `||`,
+// because ZERO is a real answer for both — the same fallback idiom the friction readouts
+// and the trap window use, and for the same reason: a partial `sel` out of an imported
+// save (`applySaveDoc` validates nothing) must read as the default rather than as NaN.
+function magReachOf(){ const v = sel.magReach; return v != null ? Math.max(0, Math.min(60, v|0)) : 18; }
+// ⚠️ TWO READERS, ONE DEFAULT. The slider reads the stored PERCENT and the physics reads
+// the MULTIPLIER; folding them into one getter put `1%` under the slider, because the
+// number the control is born at and the number the maths wants are not the same unit.
+function magKickPct(){ const v = sel.magKick; return v != null ? Math.max(0, Math.min(200, v|0)) : 100; }
+function magKickOf(){ return magKickPct() / 100; }
+function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0, magReach:18, magKick:100,
             ball:'bouncy', handed:'left', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
-            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['usa','brazil'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
+            lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['random','random'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
             // Pro parking the bus, which makes the DIFFICULTY setting mean less than the
@@ -8610,7 +8725,7 @@ function applyFeel(){ if(!world || world.drillMode) return; const v=feelVals();
   // ⚠️ Every surface, not just Grass. Gated on 'normal' the sliders moved nothing at
   // all once you were on Ice or Mud.
   { const sf = surfaceFeel(v); world.pAccel = sf.accel; world.pDamp = sf.damp; }
-  world.ballCap=v.ballcap; world.kickPower=v.kick; if(world.ball) world.ball.damp=v.bdamp; world.magnet=sel.magnet;
+  world.ballCap=v.ballcap; world.kickPower=v.kick; if(world.ball) world.ball.damp=v.bdamp; world.magnet=sel.magnet; world.magReach=magReachOf(); world.magKick=magKickOf();
   world.trapOff=!!sel.trapOff; world.trapMax=v.trap; }
 const HANDED = { right:{ name:'Right', emoji:'👉' }, left:{ name:'Left', emoji:'👈' } };
 // Charge-kick: holding KICK winds up extra power (fires stronger the moment you touch the ball).
@@ -12886,8 +13001,29 @@ const rmEl = $('rumble'), rmValEl = $('rumbleVal');
 if (rmEl){
   const showRM = () => { if (rmValEl) rmValEl.textContent = rumbleOn() ? Math.round(rumbleAmt()*100)+'%' : 'off'; };
   rmEl.value = Math.round(rumbleAmt()*100); showRM();
-  rmEl.oninput = () => { sel.rumble = +rmEl.value; saveSel(); showRM();
-    for (const i of connectedGamepadIndices()) padRumble(i, 'kick', 1); };
+  // ⚠️ **THROTTLED, and then FIRED AGAIN ON RELEASE.** See `RUMBLE.previewGap`: an
+  // unthrottled preview is one effect per `input` event, each one cancelling the last, so
+  // the pad renders stubs and the player feels nothing however far they drag. The
+  // `change` handler zeroes the clock first, so the value you actually LAND on is always
+  // felt once in full — a throttle alone would swallow it whenever the drag ended inside
+  // the window, which is most of the time.
+  // ⚠️ Every CONNECTED pad, not every seated one: the person setting this is holding a
+  // controller and may not be in a seat, and there may be no match at all.
+  // ⚠️ The release remembers the VALUE as well as the clock. Zeroing the clock alone
+  // re-fires for a value the drag had just previewed — measured at 16ms apart, which cuts
+  // the one you can feel short with an identical one. So `change` fires only where it has
+  // something new to say, which is whenever the throttle swallowed the last step.
+  let rmLast = 0, rmLastV = null;
+  const previewRumble = (onRelease) => {
+    const v = +rmEl.value;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (onRelease){ if (v === rmLastV) return; }
+    else if (now - rmLast < RUMBLE.previewGap) return;
+    rmLast = now; rmLastV = v;
+    for (const i of connectedGamepadIndices()) padRumble(i, 'preview', 1);
+  };
+  rmEl.oninput = () => { sel.rumble = +rmEl.value; saveSel(); showRM(); previewRumble(false); };
+  rmEl.onchange = () => previewRumble(true);
 }
 
 // One row per name, best first. Drawn as NODES rather than innerHTML: a name is typed by
@@ -13580,7 +13716,8 @@ const SUBTABS = {
   // ⚠️ Ball is now what the BALL does and Kick is what you DO to it — trap, carry, wind-up,
   // power, and the ring that shows the wind-up. "Ball control" and "Trap window" read as
   // ball settings and are really kick settings, which is why they moved.
-  feel:   [['ball','Ball','ball'], ['kick','Kick','boot'], ['player','Player','run'],
+  feel:   [['ball','Ball','ball'], ['kick','Kick','boot'], ['magnet','Magnet','magnet'],
+           ['player','Player','run'],
            ['sprint','Sprint','bolt'], ['effects','Effects','flame'],
            ['camera','Camera','camera'], ['advanced','Advanced','gear']],
   theme:  [['bundle', '✨ Bundle']].concat(
@@ -14613,6 +14750,16 @@ function deckMenuOwnsPad(){
 // the deck's dock usually IS, so the two are the same list far more often than not.
 function menuRoot(){ return (deskDockId && $(deskDockId)) || $('setup'); }
 // True when a controller should be driving the MENU rather than a player.
+// The result screen owns the pad while it is up: `pollOverOptions` walks its buttons, so
+// anything else reading the stick in the same frame is a second cursor. ⚠️ It asks the same
+// two things that poll does — the overlay is SHOWING and the match is over — rather than
+// either alone, because the overlay is also the pause screen and a hidden overlay leaves
+// `world.state` at 'over' for as long as the menu is up afterwards.
+function overlayOwnsPad(){
+  const ov = (typeof document !== 'undefined') && document.getElementById('overlay');
+  const w = (typeof world !== 'undefined') ? world : null;
+  return !!(ov && ov.classList.contains('show') && w && w.state === 'over');
+}
 function padDrivesMenu(){
   if (deckMenuOwnsPad()) return true;               // the deck's docked menu, unchanged
   if (isDeck()) return false;                       // on a deck, only the dock counts
@@ -14621,9 +14768,22 @@ function padDrivesMenu(){
   if (!root || root.classList.contains('hidden')) return false;
   if (root.classList.contains('docked') && dockCollapsedNow()) return false;
   // ⚠️ A LIVE MATCH KEEPS THE PAD. The attract demo is not one — it is what the menu
-  // looks like — and a finished match is a result screen, which has its own cursor.
+  // looks like.
   const w = (typeof world !== 'undefined') ? world : null;
   if (w && !w.demo && w.state !== 'over') return false;
+  // ⚠️ **AND SO DOES A RESULT SCREEN, WHICH THE LINE ABOVE ONLY CLAIMED.** Its own comment
+  // used to end "...and a finished match is a result screen, which has its own cursor" —
+  // and then fell through to `return true`, so on a desktop with the side menu open ONE
+  // push of the stick moved BOTH: the menu's focus ring landed on Bots and the result
+  // cursor stepped Resume → Rematch, in the same frame. Reported as exactly that.
+  // ⚠️ It hid behind `matchCollapse`: a match auto-collapses the dock, and a collapsed
+  // dock already returns false two lines up — so the double cursor only appears once
+  // somebody opens the menu with the ‹ tab, which is the ordinary thing to do.
+  // ⚠️ **THE PAUSE SCREEN IS DELIBERATELY NOT COVERED.** `pollOverOptions` gates itself on
+  // `state === 'over'`, so paused there is no second cursor to collide with — the pad
+  // drives the menu and nothing else, which is coherent: you paused to change something,
+  // and `#ovSettings` is the button that says so.
+  if (overlayOwnsPad()) return false;
   return true;
 }
 function deckFocusables(){
@@ -14864,8 +15024,19 @@ $('repSaveBtn').onclick = (e) => {
   b.textContent = saveReplayFile() ? '✓ Saved' : '⚠ Nothing to save';
   setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2200);
 };
-$('feelReset').onclick = () => { sel.feel = { accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990, trap:50 }; sel.magnet=0; sel.sens=1.0; sel.trapOff=false;
-  sel.charge = 'on'; sel.chargeMs = CHARGE.max*1000;    // the wind-up is a feel control too
+// ⚠️ **IT RESETS TO THE SHIPPED DEFAULT, and it used to hand back CASUAL by hand.** The
+// numbers here were `accel:40, pdamp:905, ballcap:32, kick:55, bdamp:990` with
+// `trapOff:false` — `FEEL_PRESETS.casual`, written out a second time and never moved when
+// the shipped feel became Pro. That was survivable only while the preset row was on the
+// card: press ↺ and you landed on Casual, and the Pro tile was right there to press back.
+// With the row gone it is a ONE-WAY TRIP — a reset that takes you somewhere you cannot
+// return to, off a button whose whole promise is "put it back".
+// ⚠️ Read out of `defaultSel()` rather than named, so there is no third copy of the feel
+// to keep in step; that is the same fix `hitStopFrames`' null fallback needed.
+$('feelReset').onclick = () => { const d = defaultSel();
+  sel.feel = Object.assign({}, d.feel); sel.magnet = d.magnet; sel.sens = d.sens; sel.trapOff = d.trapOff;
+  sel.magReach = d.magReach; sel.magKick = d.magKick;
+  sel.charge = d.charge; sel.chargeMs = d.chargeMs;     // the wind-up is a feel control too
   saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
   if (!confirm('Reset all settings (theme, display, ball, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
@@ -14902,7 +15073,20 @@ const FEEL_SLIDERS = [
   {g:'ball', label:'Ball stopping time (friction)',
    get:()=>sel.feel.bdamp!=null?sel.feel.bdamp:990, set:v=>sel.feel.bdamp=v,
    min:970,max:998,step:2, fmt:v=>stopSecs(v/1000).toFixed(2)+'s'},
-  {g:'ball', label:'Ball magnet', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
+  // ⚠️ THE MAGNET GROUP. `Ball magnet` moved out of `ball` — it is not something the ball
+  // does, it is an assist applied to the player's touch, and it was the only magnet
+  // control in the game while quietly setting three other things as well.
+  {g:'magnet', label:'Magnet strength', get:()=>sel.magnet, set:v=>sel.magnet=v, min:0,max:100,step:5, fmt:magnetLabel},
+  // ⚠️ **BOTH DEFAULT TO THE CONSTANT THEY REPLACED**, so the shipped game is unchanged:
+  // the reach was a literal `+ 18` in `handleBallControl`'s grab test, and the kick bonus
+  // a literal `0.5` / `0.7` in `oneShotKick` and `releaseTrap`. A dial whose default is
+  // the old hard-coded number can only ever be something somebody chose.
+  // ⚠️ Both are dead while strength is 0 — the pull block is skipped and both power
+  // bonuses are gated on `w.magnet > 0` — which is why the hint says so rather than the
+  // rows being hidden: a control that vanishes is harder to find than one that explains
+  // what switches it on.
+  {g:'magnet', label:'Magnet reach', get:()=>magReachOf(), set:v=>sel.magReach=v, min:0,max:60,step:2, fmt:v=>v+'u'},
+  {g:'magnet', label:'Magnet kick bonus', get:()=>magKickPct(), set:v=>sel.magKick=v, min:0,max:200,step:10, fmt:v=>v+'%'},
   {g:'kick', label:'Trap window (carry time)', get:()=>sel.feel.trap!=null?sel.feel.trap:TRAP.max*100, set:v=>sel.feel.trap=v,
    min:15,max:150,step:5, fmt:v=>(v/100).toFixed(2)+'s'},
   // ⚠️ This is the REACH, and the ring you see while KICK is held is drawn at exactly it —
@@ -15803,7 +15987,6 @@ function buildSettings(){
     pane.appendChild(row);
     cc.appendChild(pane);
   }
-  buildFeelPresets();
   buildFeelSliders();
   buildReplayInfo();
   buildAbout();
@@ -15877,17 +16060,6 @@ function applyPreset(key){
   sel.feel={ accel:p.accel, pdamp:p.pdamp, ballcap:p.ballcap, kick:p.kick, bdamp:p.bdamp, trap:p.trap };
   saveSel(); applyFeel(); buildSettings();
 }
-function buildFeelPresets(){
-  const wrap=$('feelPresets'); wrap.innerHTML='';
-  for(const key of Object.keys(FEEL_PRESETS)){
-    const p=FEEL_PRESETS[key];
-    const el=document.createElement('div'); el.className='opt'+(presetMatches(p)?' sel':'');
-    el.innerHTML=`<span class="emoji">${p.emoji}</span><span>${p.label}</span>`+
-      `<small>${key==='pro'?'authentic · no magnet':'assisted · snappy'}</small>`;
-    el.onclick=()=>applyPreset(key);
-    wrap.appendChild(el);
-  }
-}
 // The one place that knows how a `FEEL_SLIDERS` group name becomes an element id, and
 // the one place that knows which groups exist. Read by the builder and by the suites.
 function feelSliderWrapId(g){ return 'feelSliders' + g[0].toUpperCase() + g.slice(1); }
@@ -15908,7 +16080,7 @@ function buildFeelSliders(){
     lab.appendChild(val);
     const inp=document.createElement('input'); inp.type='range'; inp.className='slider'; inp.min=s.min; inp.max=s.max; inp.step=s.step; inp.value=s.get();
     inp.oninput=()=>{ s.set(+inp.value); val.textContent=s.fmt(+inp.value); saveSel(); applyFeel();
-      if (world && !world.drillMode && world.magnet!=null) world.magnet=sel.magnet; };
+      if (world && !world.drillMode && world.magnet!=null){ world.magnet=sel.magnet; world.magReach=magReachOf(); world.magKick=magKickOf(); } };
     wrap.appendChild(lab); wrap.appendChild(inp);
   });
 }
@@ -17795,6 +17967,18 @@ function startMatch(opts){
   // stay, since they are what prove every entry in `FLAGS` is reachable from the pickers
   // and `tests/continents.mjs` checks exactly that.
 
+  // ⚠️ **THE SEED IS TAKEN HERE, ABOVE THE DRESSING, AND `nextMatchSeed()` HAS A SIDE
+  // EFFECT** — it advances `_seedTick`, so a second call is a second seed and two matches
+  // in one millisecond stop sharing bots. It used to be read a few lines further down,
+  // beside the world literal; `rollTeamFlags` needs it before the shirts go on, so the one
+  // call MOVED rather than a second one being added.
+  const seedForToss = nextMatchSeed();
+  // ⚠️ A side set to `random` is dressed in a country now, BEFORE `applyTeamColours` —
+  // that function reads `teamFlagOf`, which resolves a random pick through the one-match
+  // layer this fills, so rolling afterwards would dress the side for the match after this
+  // one. Runs for the demo too and is simply overwritten by its own dressing below.
+  rollTeamFlags(seedForToss);
+
   // The idle demo is bot vs bot, so dressing both sides in YOUR colours makes the
   // menu look like your own team playing itself. Give each side its own country.
   if (_startQuiet){
@@ -17824,7 +18008,6 @@ function startMatch(opts){
   const bp = BALLS[sel.ball] || BALLS.normal;
   const fv = feelVals();
   const sf = surfaceFeel(fv);      // your sliders, bent by the surface — see PITCH
-  const seedForToss = nextMatchSeed();
   world = {
     // Both sides read one `diff`, so the demo showcase is top tier on BOTH benches.
     field, fieldKey, mode, len, diff: _startQuiet ? DIFF[DEMO.diff] : (DIFF[sel.diff] || DIFF.normal),
@@ -17832,7 +18015,7 @@ function startMatch(opts){
     // rather than a copy of the tuning — a key survives a rename of a mode's blurb and can
     // be looked back up in `MODES`/`LENGTHS`, which is what a record has to be able to do.
     modeKey: sel.mode, lenKey: sel.length, diffKey: _startQuiet ? DEMO.diff : sel.diff,
-    magnet: sel.magnet,
+    magnet: sel.magnet, magReach: magReachOf(), magKick: magKickOf(),
     // Bot AI randomness. Picked OUTSIDE the sim (here) and stored ON the world, so a
     // match is varied but reproducible: pin the seed and every bot decision replays
     // exactly. Nothing inside step() may call Math.random.
@@ -18251,6 +18434,24 @@ const RUMBLE = {
   stop:  { ms: 140, strong: 0.85, weak: 0.45 },   // the freeze frame: a thump
   goal:  { ms: 420, strong: 0.70, weak: 0.85 },
   scored:{ ms: 420, strong: 1.00, weak: 0.90 },   // the side that put it in feels more
+  // ⚠️ **THE SLIDER'S OWN SAMPLE, and it is the LOUDEST profile on purpose.** Asked for as
+  // *"when I change controller rumble option, have it impact the controller so I get
+  // feedback"*. The wiring for that existed and produced nothing you could feel, twice
+  // over — see `RUMBLE.previewGap` below for the first half, and this is the second: it
+  // fired the `kick` profile, whose 0.30/0.55 at the shipped dial of 15 comes out at
+  // **0.045 strong** — under this table's own `min`, the number whose comment reads
+  // "below this there is nothing to feel". A dial is a CEILING, so its sample is what it
+  // is a ceiling of: the same magnitudes as `scored`, which makes the preview clear `min`
+  // at every value the slider can select above zero (the lowest step is 5%, and
+  // 1.00 × 0.05 is exactly `min`). Shorter than a goal, or a drag is one long buzz.
+  preview:{ ms: 200, strong: 1.00, weak: 0.90 },
+  // ⚠️ **AND NO TWO PREVIEWS MAY OVERLAP, because `playEffect` REPLACES rather than
+  // queues.** Measured on the shipped build by recording what a drag actually asks the
+  // actuator for: **fifteen effects at 16-17ms apart, every one of them asking for 90ms,
+  // and fourteen of the fifteen cut short by the next**. What the pad renders is a train
+  // of 16ms stubs — never once the pulse that was asked for. This gap is longer than
+  // `preview.ms`, so a held drag is a series of complete taps instead.
+  previewGap: 220,
   min:   0.05,                                    // below this there is nothing to feel
 };
 function rumbleAmt(){ const v = sel.rumble; return (v == null ? 70 : Math.max(0, Math.min(100, v|0))) / 100; }
@@ -24154,7 +24355,9 @@ function handleBallControl(w, p, ball, ballFrozen){
   // big enough to overpower it even at full strength. Bots get the same pull — no
   // free stick a human wouldn't have.
   let mag = (w.magnet||0) / 100;
-  if (mag > 0 && !ballFrozen && !p.kick && dist < sum + 18){
+  // ⚠️ Off the WORLD, not off `sel`: a party modifier and a drill both set `w.magnet`,
+  // and a reach read straight from the settings would not travel with them.
+  if (mag > 0 && !ballFrozen && !p.kick && dist < sum + (w.magReach != null ? w.magReach : 18)){
     let fx=p.faceX, fy=p.faceY; const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
     const hold = sum + 1;                       // rest just in front of the feet
     const tx = p.x + fx*hold, ty = p.y + fy*hold;
@@ -24171,7 +24374,7 @@ function oneShotKick(w, p, ball, dx, dy, dist, charged){
   let nx, ny;
   if (dist > 0.001){ nx = dx/dist; ny = dy/dist; } else { nx = p.faceX; ny = p.faceY; }
   let power = (w.kickPower||PLAYER.kick) * (charged ? chargeMul(p) : 1);
-  if (w.magnet > 0 && dist < (p.r+ball.r) + 22) power *= 1 + (w.magnet/100) * 0.5;
+  if (w.magnet > 0 && dist < (p.r+ball.r) + 22) power *= 1 + (w.magnet/100) * 0.5 * (w.magKick != null ? w.magKick : 1);
   ball.vx += nx * power + p.vx * KICK_CARRY; ball.vy += ny * power + p.vy * KICK_CARRY;
   p.kickUsed = true;
   noteKick(w, p, power, nx, ny);
@@ -24192,7 +24395,7 @@ function releaseTrap(w, p, ball){
   else { fx = p.faceX; fy = p.faceY; }
   const fl=Math.hypot(fx,fy)||1; fx/=fl; fy/=fl;
   let power = (w.kickPower||PLAYER.kick) * chargeMul(p);
-  if (w.magnet > 0) power *= 1 + (w.magnet/100) * 0.7;
+  if (w.magnet > 0) power *= 1 + (w.magnet/100) * 0.7 * (w.magKick != null ? w.magKick : 1);
   ball.vx = fx*power + p.vx; ball.vy = fy*power + p.vy;
   p.trap = false; p.trapUsed = true; p.chargeT = 0; p.trapAng = null;
   if (ball._trappedBy === p) ball._trappedBy = null;
@@ -27554,7 +27757,7 @@ function startDrill(key){
   const sf = surfaceFeel(fv);
   const dbp = BALLS[sel.ball] || BALLS.normal;
   world = {
-    field: FIELDS.classic, drillMode:true, magnet: sel.magnet,
+    field: FIELDS.classic, drillMode:true, magnet: sel.magnet, magReach: magReachOf(), magKick: magKickOf(),
     pAccel: sf.accel, pDamp: sf.damp,
     ballCap: fv.ballcap, kickPower: fv.kick, kickRange: kickRangeUnits(), trapMax: fv.trap,
     players: [ mkPlayer(0, profile.name, profile.color, profile.cap, 'human1', profile.flag, profile.eyes) ],
@@ -28418,7 +28621,10 @@ function drawLobbyPad(k, g, ox, oy, f, ink){
     // ⚠️ A SWATCH IS PAINTED IN THE COLOUR IT GIVES YOU, and the one currently worn is
     // the one that is lit — otherwise eight identical plates are eight guesses.
     const picked = k.colTeam !== undefined ? teamColOf(k.colTeam) === k.col
-                 : k.flagTeam !== undefined ? (teamFlagOf(k.flagTeam) || 'none') === k.flagKey
+                 // ⚠️ `teamFlagPick`, never `teamFlagOf`: a side set to `random` is WEARING a
+                 // country, so the resolved answer would light that country's pad and leave
+                 // the pad the player actually pressed dark.
+                 : k.flagTeam !== undefined ? teamFlagPick(k.flagTeam) === k.flagKey
                  : k.diff ? sel.diff === k.diff : false;
     const on = picked ? 1 : 0;
     ctx.fillStyle = rgba(ink, 0.08 + 0.30*Math.max(f, on*0.6));
@@ -28451,11 +28657,14 @@ function drawLobbyPad(k, g, ox, oy, f, ink){
     if (k.flagTeam !== undefined){
       const fs2 = Math.min(g.bw, g.bh) * 0.80;
       screenUpright(g.cx + ox, g.cy + oy, (cx2, cy2) => {
-        if (k.flagKey === 'none'){
+        // ⚠️ `random` gets a WORD for the reason `none` does: neither has a drawing, and a
+        // blank plate among ten flags reads as one that failed to load. FOUR characters,
+        // the same as NONE, because nothing here shrinks a label to its plate.
+        if (k.flagKey === 'none' || k.flagKey === 'random'){
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.font = `${Math.max(6, fs2*0.34)}px ${LOBBY_FONT}`;
           ctx.fillStyle = rgba(ink, 0.30 + 0.60*Math.max(f, on));
-          ctx.fillText('NONE', cx2, cy2);
+          ctx.fillText(k.flagKey === 'none' ? 'NONE' : 'RAND', cx2, cy2);
         } else {
           ctx.save();
           ctx.beginPath(); ctx.arc(cx2, cy2, fs2/2, 0, 7); ctx.clip();
@@ -33870,9 +34079,17 @@ function showOverlay(title, sub, resumable){
   { const h=$('ovHint'); if (h){ h.style.display='none'; h.textContent=''; } }
   ['ovResume','ovSettings','ovMute','ovFull','ovShowLock','ovRematch','ovMenu'].forEach(id => { const b=$(id); if (b) b.classList.remove('navsel'); });
   $('ovResume').style.display = resumable ? '' : 'none';
-  // Settings is a PAUSE option — offered where the match is already stopped, never
-  // over a result screen where it would just be clutter.
-  { const st2=$('ovSettings'); if (st2) st2.style.display = resumable ? '' : 'none'; }
+  // ⚠️ **"NEVER OVER A RESULT SCREEN WHERE IT WOULD JUST BE CLUTTER" IS WITHDRAWN.** Asked
+  // for directly — *"add option to open left side of settings to go to it from post game
+  // menu"* — and the old reasoning was thin: a result screen is where you decide what to
+  // change before the next match, which is precisely when you want the settings dock.
+  // ⚠️ It is the SAME button and the same `openLook()`, so there is one place that knows
+  // what "open settings" means; `openLook` goes through `dockOrFull`, which hides the
+  // overlay, and that is not a dead end because the menu it opens leads with KICK OFF —
+  // the same next match Restart would have given.
+  // ⚠️ Show mode still takes it away (`body.showmode #ovSettings`), which is the one place
+  // handing a stranger the settings card is the wrong answer.
+  { const st2=$('ovSettings'); if (st2) st2.style.display = ''; }
   // ⚠️ Pause only, same as Settings — over a RESULT screen it would sit between
   // Restart and Main Menu, which is the worst place to put a mode switch.
   { const sl=$('ovShowLock'); if (sl) sl.style.display = resumable ? '' : 'none'; syncShowLock(); }
@@ -34415,9 +34632,9 @@ if (window.__MAGNETDEBUG) {
     get profile(){ return profile; }, defaultProfile, get stats(){ return stats; }, FLAGS, EYES, CAPS,
     isUnlocked, unlockCounts, UNL_CATS,
     get profiles(){ return profiles; }, get editSeat(){ return editSeat; }, setEditSeat, ep, seatCount, seatProfile,
-    sectionNode, revealPath, revealNode, padDrivesMenu, padMenuWoke, menuRoot, buildSeatPick, lastSection,
+    sectionNode, revealPath, revealNode, padDrivesMenu, overlayOwnsPad, padMenuWoke, menuRoot, buildSeatPick, lastSection,
     startHoldFrac, padHoldFrac, lobbyHost, lobbyHumans, holdRingR, drawReadyMark,
-    kbHit, teamFlagOf, setTeamFlag, LOBBY_FLAGS, NATION_COLS, nationCol, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
+    kbHit, teamFlagOf, teamFlagPick, rollTeamFlags, setTeamFlag, LOBBY_FLAGS, NATION_COLS, nationCol, renderStats, buildFlagPicker, buildEyesPicker, buildCaps,
     get shake(){ return shake; }, set shake(v){ shake=v; },
     get shakeXY(){ return [shakeX, shakeY]; }, decayJuice, addShake,
     get hitStop(){ return hitStop; }, set hitStop(v){ hitStop=v; },
