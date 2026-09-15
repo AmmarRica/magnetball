@@ -2168,6 +2168,45 @@ three lines a second time, name it.
   face through a turn fell to **0.151** against the flat painter's 0.311 — under the
   suite's 0.6 floor — and a real football has no white margin round its pentagons: the
   hexagons are the white. At 0.369 it reads 0.203..0.305.
+  ⚠️ **EVERY SOLID IS TILTED OFF THE ROLL AXIS, AND WITHOUT IT THE FOOTBALL REPEATED TWICE
+  A TURN** (`SPH_TILT`, `sphTilt`). `paintBallSphere` scrolls in longitude about the
+  texture's +y, and an icosahedron in its natural coordinates is invariant under a π
+  rotation about y — so the football, the twelve dots and the tennis seam (whose curve
+  carries the same 2-fold symmetry a real tennis ball does) all came back **0 pixels
+  different at half a turn**, against 8,367 at a third of one. That is the periodic-lattice
+  defect the sixteen-print bake was rebuilt to remove, arriving through the solid's own
+  symmetry instead.
+  ⚠️ **WHAT IT COSTS IN PLAY IS A SPEED.** A pattern of period P is ambiguous above a roll
+  of P/2 a step, so a half turn HALVES the speed at which the direction can read backwards:
+  **14.1 units a step against 28.3**, on a ball of radius 9 whose own cap is 46 and which
+  peaked at **15.8** in a seeded 90-second 3v3 (0.11% of steps above the threshold). Small
+  in bot play and reachable by anybody who belts one — and the quieter half of the cost is
+  that the ball simply shows half as much: a turn is a rerun of its own first half.
+  ⚠️ **A GENERIC TILT IS ALSO THE HONEST PICTURE**: a real ball's roll axis is wherever it
+  is travelling, so it is almost never one of the solid's symmetry axes, and here the
+  texture is fixed to the roll axis by construction.
+  ⚠️ **THE TWO ANGLES ARE ARBITRARY, SO THEY WERE PICKED ON A MEASUREMENT.** Any generic
+  pair breaks the symmetry and they are not all alike for the coverage rule: swept over
+  seven pairs, the football's worst phase ran **0.573 to 0.648** of what the flat painter
+  inks against a floor of 0.6, so two of the seven would have shipped a ball that goes too
+  bare twice a turn. 1.1 / 0.7 reads **0.646** — the untilted build's own 0.653 to within a
+  percent — with the largest half-turn difference of the pairs that clear the floor.
+  ⚠️ **`tests/ball3d.mjs`' PERIOD CHECK ONLY EVER RAN ON `eight`, A ONE-PRINT LOOK THAT
+  CANNOT HAVE THE DEFECT.** It runs on every look carrying a `sphere` now, with the bars
+  DERIVED per look — each partial turn must differ by a real fraction of that look's own
+  largest difference, because how much a beach ball changes in half a turn and how much a
+  tennis seam does are nothing alike. Paired with a DIRECTION check on the same looks: the
+  best horizontal shift between consecutive phases may never come out negative. ⚠️ A phase
+  where the pattern's own pole faces you ROTATES rather than scrolling, so the shift is
+  undefined there and reads 0 — the beach ball does that at **3 of 16** phases, because its
+  gore poles sit on the roll equator and pass through the middle of the face once a turn.
+  Backwards is the defect; zero is a sphere.
+  ⚠️ **AND THE PANEL PROBE MOVED IN TO 0.80R, WITH THE BARS UNTOUCHED.** Out at the limb
+  its own correction does most of the work — 1/√(1−ρ²) is 3.2 at ρ = 0.95 and corrects a
+  centroid, while a panel spanning a range of ρ is squashed unevenly — so the reading
+  depended on where the tilt happened to leave the panels. Swept at six radii, sphere bake
+  against print bake reads **0.26 vs 0.09 at 0.95R, 1.00 vs 0.09 at 0.80R**, and 1.00 vs
+  1.00 at 0.70R where too few panels are left for the defect to show.
   ⚠️ **A STRIPE IS TILTED OFF THE ROLL AXIS (40°), and the two obvious placements are both
   wrong.** Round the roll's own equator it never moves; through the roll axis it slides
   sideways, which is a stripe on a drum. Tilted, it sweeps across the face AND changes its

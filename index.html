@@ -33557,6 +33557,34 @@ function sphCap(p, c, R){ return Math.acos(sphDot(p, c)) - R; }
 // The twelve icosahedron vertices, each with the frame its pentagon is drawn in: `e1`
 // points at a neighbouring vertex, and on a truncated icosahedron a pentagon's corners
 // point at the neighbours, so one frame orients all five. Built once, on first use.
+// ⚠️ **EVERY SOLID IS TILTED OFF THE ROLL AXIS, AND WITHOUT IT THE FOOTBALL REPEATS
+// TWICE A TURN.** `paintBallSphere` scrolls in longitude about the texture's +y, so a
+// pattern whose own symmetry puts a 2-fold axis on +y is IDENTICAL half a turn later.
+// An icosahedron in its natural coordinates does exactly that — its twelve vertices are
+// invariant under a π rotation about y — so the football, the twelve dots and the tennis
+// seam (whose curve has the same 2-fold symmetry) all came back unchanged at half a turn:
+// measured as **0 pixels different at π** against 8,367 at a third of a turn. That is the
+// periodic-lattice defect the sixteen-print bake was rebuilt to remove, arriving through
+// the solid's own symmetry instead — and `tests/ball3d.mjs`' period check only ever ran on
+// `eight`, a one-print look that cannot have it.
+// ⚠️ **A GENERIC TILT IS ALSO THE HONEST PICTURE.** A real ball's roll axis is wherever it
+// happens to be travelling, so it is almost never one of the solid's symmetry axes; here
+// the texture is fixed to the roll axis by construction, so leaving them aligned is the
+// unrealistic case.
+// ⚠️ **THE TWO ANGLES ARE ARBITRARY, SO THEY WERE PICKED ON A MEASUREMENT.** Any generic
+// pair breaks the symmetry, but they are not all alike for the coverage rule one entry
+// along: swept over seven pairs, the football's WORST phase through a turn ran 0.573 to
+// 0.648 of what the flat painter inks, against a floor of 0.6 — so two of the seven would
+// have shipped a ball that goes too bare twice a turn. This pair reads **0.646**, which is
+// the untilted build's own 0.653 to within a percent, and has the largest half-turn
+// difference of the pairs that clear the floor.
+const SPH_TILT = { a: 1.1, b: 0.7 };
+const _tCA = Math.cos(SPH_TILT.a), _tSA = Math.sin(SPH_TILT.a);
+const _tCB = Math.cos(SPH_TILT.b), _tSB = Math.sin(SPH_TILT.b);
+function sphTilt(v){
+  const x = v[0]*_tCA - v[1]*_tSA, y0 = v[0]*_tSA + v[1]*_tCA;
+  return [x, y0*_tCB - v[2]*_tSB, y0*_tSB + v[2]*_tCB];
+}
 let _icoV = null;
 function icoVerts(){
   if (_icoV) return _icoV;
@@ -33564,6 +33592,9 @@ function icoVerts(){
   for (const s of [1, -1]) for (const t of [1, -1]){
     v.push([0, s/n, t*g/n]); v.push([s/n, t*g/n, 0]); v.push([s*g/n, 0, t/n]);
   }
+  // Tilted BEFORE the per-vertex frames are derived, so `e1` still points at a real
+  // neighbour and the pentagons keep their corners toward the ones next door.
+  for (let i = 0; i < v.length; i++) v[i] = sphTilt(v[i]);
   _icoV = v.map(c => {
     let best = null, bd = -2;
     for (const o of v){ if (o === c) continue; const d = sphDot(c, o); if (d > bd){ bd = d; best = o; } }
@@ -33599,7 +33630,10 @@ function seamPts(){
   for (let i = 0; i < N; i++){
     const t = i/N * 2*Math.PI, y = Math.sin(t), z = Math.cos(t), x = 1.45 * Math.sin(2*t);
     const l = Math.hypot(x, y, z);
-    out[3*i] = x/l; out[3*i+1] = y/l; out[3*i+2] = z/l;
+    // Tilted for the reason the icosahedron is: the seam curve carries the same 2-fold
+    // symmetry a real tennis ball does, and on the roll axis that is a half-turn repeat.
+    const q = sphTilt([x/l, y/l, z/l]);
+    out[3*i] = q[0]; out[3*i+1] = q[1]; out[3*i+2] = q[2];
   }
   return (_seam = out);
 }

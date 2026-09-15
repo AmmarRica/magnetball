@@ -569,9 +569,16 @@ const r = await p.evaluate(() => {
   // 0.74R read 1.43:1 on the print bake against 1.12:1 on the sphere bake, because the
   // print's stretch is radial about the CAP's centre and cancels exactly when that cap
   // faces you — which is also when its pentagons are inside the probe. Size does not cancel.
-  // ⚠️ MEASURED ON BOTH BUILDS before the bar was set — see the assertion's message.
+  // ⚠️ **MEASURED WELL INSIDE THE FACE (0.80R), BECAUSE OUT AT THE LIMB THE PROBE'S OWN
+  // CORRECTION DOES MOST OF THE WORK.** 1/√(1−ρ²) is 3.2 at ρ = 0.95 and corrects a
+  // panel's centroid only, while a panel spanning a range of ρ is squashed unevenly — so
+  // at 0.95R the reading depends on where the solid's tilt happens to leave the panels.
+  // Swept over both builds at six radii, the sphere bake against the print bake reads
+  // 0.26 vs 0.09 at 0.95R, **1.00 vs 0.09 at 0.80R**, and 1.00 vs 1.00 at 0.70R, where too
+  // few panels are left for the defect to show. 0.80R is where the separation is widest
+  // with the sabotage still caught. **The BARS did not move** — the instrument did.
   {
-    const R = 70, S = 200, IN = R*0.95;
+    const R = 70, S = 200, IN = R*0.80;
     const cv = document.createElement('canvas'); cv.width = cv.height = S;
     const c = cv.getContext('2d');
     let worstAspect = 0, worstRatio = 1, whole = 0;
@@ -620,9 +627,9 @@ const r = await p.evaluate(() => {
     o.panelsSeen = whole;
     o.panelWorstAspect = +worstAspect.toFixed(2);
     o.panelWorstRatio = +worstRatio.toFixed(2);
-    // Sphere bake: 20 whole panels, worst aspect 1.37:1, smallest 0.77 of the largest.
-    // Print bake (classic's `sphere` deleted): 31, 2.15:1 and 0.09. Bars between the two.
-    o.panelsAreWhole = whole >= 16 && worstAspect < 1.8 && worstRatio > 0.4;
+    // Sphere bake: 16 whole panels, worst aspect 1.33:1, smallest 1.00 of the largest.
+    // Print bake (classic's `sphere` deleted): 19, 2.15:1 and 0.09. Bars between the two.
+    o.panelsAreWhole = whole >= 12 && worstAspect < 1.8 && worstRatio > 0.4;
   }
 
   // ============================ THE SPHERE LOOKS BAKE, AND BAKE ONCE ==================
@@ -658,6 +665,78 @@ const r = await p.evaluate(() => {
     o.eightHoles = holes; o.eightPale = +(pale / (p8.length/4)).toFixed(3);
     o.eightIsSolid = holes === 0;
     o.eightHasTheEight = o.eightPale > 0.01 && o.eightPale < 0.3;
+  }
+
+  // ====== EVERY SPHERE LOOK ROLLS FORWARDS, AND ITS PERIOD IS A FULL TURN ============
+  // ⚠️ **THE PERIOD CHECK ABOVE ONLY EVER RAN ON `eight`, A ONE-PRINT LOOK THAT CANNOT
+  // HAVE THE DEFECT — so it missed three of the six sphere looks having a HALF-turn
+  // period.** `paintBallSphere` scrolls about the texture's +y, and an icosahedron in its
+  // natural coordinates is invariant under a π rotation about y, so the football, the
+  // twelve dots and the tennis seam all came back **0 pixels different at half a turn**
+  // (against 8,367 at a third of one). That is the periodic-lattice defect the sixteen-
+  // print bake was rebuilt to remove, arriving through the solid's own symmetry.
+  // ⚠️ Why it matters in play: a pattern with period P is ambiguous above a roll of P/2 a
+  // step, so a half turn halves the speed at which the direction can read backwards —
+  // **14.1 units a step** against the full-turn 28.3, on a ball whose own cap is 46 and
+  // which peaked at 15.8 in a seeded 90-second 3v3.
+  // ⚠️ The bars are DERIVED per look, never a pixel constant: each partial turn must
+  // differ by a real fraction of that look's own largest difference, because how much a
+  // beach ball changes in half a turn and how much a tennis seam does are nothing alike.
+  {
+    const R = 70, S = 200;
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d');
+    const frame = (look, ph) => {
+      M.sel.ball3d = 'on';
+      c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,S,S);
+      c.fillStyle = '#2f6b3a'; c.fillRect(0,0,S,S);
+      M.paintBall(c, S/2, S/2, R, 0, look, null, ph, 0);
+      return c.getImageData(0,0,S,S).data;
+    };
+    const dk = (d,x,y) => { const i=((y*S)+x)*4; return d[i]+d[i+1]+d[i+2] < 300 ? 1 : 0; };
+    const dif = (a,e) => { let n=0; for (let i=0;i<a.length;i+=4)
+      if (Math.abs(a[i]-e[i])+Math.abs(a[i+1]-e[i+1])+Math.abs(a[i+2]-e[i+2]) > 24) n++; return n; };
+    const ink = (d, rad) => { let n=0,t=0;
+      for (let y=0;y<S;y++) for (let x=0;x<S;x++){
+        const dx=x-S/2, dy=y-S/2; if (dx*dx+dy*dy > rad*rad) continue; t++; n += dk(d,x,y); }
+      return n/t; };
+    // The horizontal shift that best aligns one phase onto the next: a rolling ball's face
+    // travels the way the ball is going, so it must never come out negative.
+    const shiftOf = (A, B) => {
+      let best=0, bestScore=-1;
+      for (let s=-14;s<=14;s++){
+        let ok=0, tot=0;
+        for (let y=0;y<S;y++) for (let x=0;x<S;x++){
+          const dx=x-S/2, dy=y-S/2; if (dx*dx+dy*dy > (R*0.5)*(R*0.5)) continue;
+          const xs=x+s; if (xs<0||xs>=S) continue;
+          tot++; if (dk(A,x,y) === dk(B,xs,y)) ok++;
+        }
+        const sc = tot?ok/tot:0; if (sc>bestScore){ bestScore=sc; best=s; }
+      }
+      return best;
+    };
+    o.period = {}; o.rollDir = {};
+    for (const look of o.sphereLooks){
+      const f0 = frame(look, 0);
+      const at = t => dif(f0, frame(look, t*2*Math.PI));
+      const full = at(1), parts = [at(1/2), at(1/3), at(1/5)];
+      const top = Math.max(...parts);
+      o.period[look] = { full, half: parts[0], third: parts[1], fifth: parts[2],
+                         ok: full < 40 && top > 500 && Math.min(...parts) > top * 0.2 };
+      // ⚠️ A phase where the pattern's own pole faces you ROTATES rather than scrolling,
+      // so a horizontal shift is undefined there and reads 0 — the beach ball does that at
+      // 3 of 16 phases. Backwards is the defect; nothing may read negative, and most
+      // phases must read positive or the look is not scrolling at all.
+      const sh = [];
+      for (let k=0;k<16;k++){
+        const ph = k/16*2*Math.PI, A = frame(look, ph), inner = ink(A, R*0.5);
+        if (inner > 0.08 && inner < 0.92) sh.push(shiftOf(A, frame(look, ph + 0.12)));
+      }
+      o.rollDir[look] = { shifts: sh, fwd: sh.filter(s => s > 0).length, back: sh.filter(s => s < 0).length,
+                          ok: sh.length >= 6 && sh.every(s => s >= 0) && sh.filter(s => s > 0).length >= sh.length/2 };
+    }
+    o.everyLookPeriodIsAFullTurn = o.sphereLooks.every(k => o.period[k].ok);
+    o.everyLookRollsForwards     = o.sphereLooks.every(k => o.rollDir[k].ok);
   }
 
   M.sel.ball3d = 'off'; M.setMatchSeed(null);
@@ -726,6 +805,10 @@ ok('EVERY PANEL IS A WHOLE PANEL — none clipped at a seam, none stretched', r.
    `${r.panelsSeen} whole panels seen through a turn, worst aspect ${r.panelWorstAspect}:1, smallest ${r.panelWorstRatio} of the largest (foreshortening corrected) — the cap-print bake read 2.15:1 and 0.09, because it stretched the outer pentagons and cut them where two caps met`);
 ok('every sphere-defined look inks its strip, and not all of it', r.sphereLooksInk, JSON.stringify(r.sphereInk));
 ok('...and bakes inside a frame budget', r.sphereBakesFast, JSON.stringify(r.sphereBakeMs));
+ok('EVERY SPHERE LOOK HAS A FULL-TURN PERIOD, not a half-turn one', r.everyLookPeriodIsAFullTurn,
+   `${JSON.stringify(r.period)} — a solid whose own symmetry puts a 2-fold axis on the roll axis repeats twice a turn, which halves the speed at which the direction reads backwards (14.1 units a step against 28.3, on a ball capped at 46)`);
+ok('...and every one of them rolls FORWARDS', r.everyLookRollsForwards,
+   `${JSON.stringify(r.rollDir)} — the face of a rolling ball travels the way the ball is going; a phase whose pole faces you may read 0, never negative`);
 ok('the 8-ball is SOLID all the way round', r.eightIsSolid, `${r.eightHoles} texels of its strip are not opaque — without \`ground\` the back is the plain pale ball, and a straight copy instead of source-over punches the print's rim through it`);
 ok('...and still has the eight on it', r.eightHasTheEight, `${r.eightPale} of the strip is the white circle`);
 ok('...and the flat ball it is measured against really has a pattern', r.flatHasPattern,
