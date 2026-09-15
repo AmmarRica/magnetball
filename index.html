@@ -33532,15 +33532,115 @@ function drawOneBall(b, x, y, r, s){
 // The Sheep is the one look drawn as a silhouette rather than a mark — see its entry for
 // why, and why the surround is held back instead of solid.
 const SHEEP = { surround: 0.62 };
+// ---------- Patterns defined ON THE SPHERE ------------------------------------
+// A look may carry `sphere(x, y, z)`: the SIGNED angular distance, in radians, from a
+// point on the unit ball to the edge of the look's ink — negative inside it. `ballSphereTex`
+// then asks it once per texel instead of projecting the flat drawing onto caps.
+// ⚠️ THIS IS WHAT MAKES THE ROLLING BALL LOOK LIKE THE THING IT IS A PICTURE OF. A look's
+// `draw` is a DISC design, and a disc wrapped onto a hemisphere is only ever right in the
+// middle: the football's outer pentagons sit at 0.78 of the disc, which the inverse
+// orthographic map stretches to twice their width radially, and where two caps meet the
+// nearest-centre rule CUTS a pentagon in half. Measured on the old bake through a turn,
+// the black panels on the face ranged from whole pentagons to slivers a quarter their
+// size, and the tennis seam broke into bars and an X at every cap seam. A pattern that is
+// defined on the sphere has no seams and no stretch, because there is no projection.
+// ⚠️ ONLY THE LOOKS THAT ARE REALLY A PATTERN ON A BALL GET ONE. A football is twelve
+// pentagons at the vertices of an icosahedron; a beach ball is six gores; a tennis ball
+// is one seam. An ampersand, a sheep or an 8 is a PICTURE, and a picture stays a print.
+// ⚠️ The roll axis is +y in this frame (`paintBallSphere` scrolls in longitude about it),
+// so a pattern's own axis is put along +x — a beach ball's poles come round to the front
+// as it rolls, which is what a rolling beach ball does, where poles on the roll axis would
+// scroll six vertical stripes sideways and read as a striped drum.
+const SPH_AA = 0.024;                  // edge softening in radians — about a texel and a half
+function sphDot(p, c){ return Math.max(-1, Math.min(1, p[0]*c[0] + p[1]*c[1] + p[2]*c[2])); }
+function sphCap(p, c, R){ return Math.acos(sphDot(p, c)) - R; }
+// The twelve icosahedron vertices, each with the frame its pentagon is drawn in: `e1`
+// points at a neighbouring vertex, and on a truncated icosahedron a pentagon's corners
+// point at the neighbours, so one frame orients all five. Built once, on first use.
+let _icoV = null;
+function icoVerts(){
+  if (_icoV) return _icoV;
+  const g = (1 + Math.sqrt(5)) / 2, n = Math.hypot(1, g), v = [];
+  for (const s of [1, -1]) for (const t of [1, -1]){
+    v.push([0, s/n, t*g/n]); v.push([s/n, t*g/n, 0]); v.push([s*g/n, 0, t/n]);
+  }
+  _icoV = v.map(c => {
+    let best = null, bd = -2;
+    for (const o of v){ if (o === c) continue; const d = sphDot(c, o); if (d > bd){ bd = d; best = o; } }
+    const k = sphDot(c, best);
+    const e = [best[0] - k*c[0], best[1] - k*c[1], best[2] - k*c[2]], l = Math.hypot(e[0], e[1], e[2]);
+    const e1 = [e[0]/l, e[1]/l, e[2]/l];
+    const e2 = [c[1]*e1[2] - c[2]*e1[1], c[2]*e1[0] - c[0]*e1[2], c[0]*e1[1] - c[1]*e1[0]];
+    return { c, e1, e2 };
+  });
+  return _icoV;
+}
+function icoNearest(p){
+  let b = null, bd = -2;
+  for (const q of icoVerts()){ const d = sphDot(p, q.c); if (d > bd){ bd = d; b = q; } }
+  return b;
+}
+// A regular spherical pentagon of circumradius R about the nearest icosahedron vertex.
+// Pentagons of this size never overlap (the vertices are 63° apart), so the nearest
+// centre is the only one a point can be inside.
+function sphPent(p, R){
+  const q = icoNearest(p), th = Math.acos(sphDot(p, q.c));
+  const ph = Math.atan2(sphDot(p, q.e2), sphDot(p, q.e1));
+  const sec = 2*Math.PI/5, a = (((ph % sec) + sec) % sec) - sec/2;   // off the nearest edge's normal
+  return th - R * Math.cos(Math.PI/5) / Math.cos(a);
+}
+// The tennis seam: longitude φ about +x with the latitude swinging as sin 2φ — two lobes
+// up and two down, which is the curve on the ball. 480 samples, built once; the distance
+// is to the nearest sample, which at 0.02 radians apart is under the edge softening.
+let _seam = null;
+function seamPts(){
+  if (_seam) return _seam;
+  const N = 480, out = new Float64Array(3*N);
+  for (let i = 0; i < N; i++){
+    const t = i/N * 2*Math.PI, y = Math.sin(t), z = Math.cos(t), x = 1.45 * Math.sin(2*t);
+    const l = Math.hypot(x, y, z);
+    out[3*i] = x/l; out[3*i+1] = y/l; out[3*i+2] = z/l;
+  }
+  return (_seam = out);
+}
+function sphSeam(p, w){
+  const S = seamPts(); let bd = -2;
+  for (let i = 0; i < S.length; i += 3){ const d = p[0]*S[i] + p[1]*S[i+1] + p[2]*S[i+2]; if (d > bd) bd = d; }
+  return Math.acos(Math.min(1, bd)) - w;
+}
+// Six gores about +x, alternate ones inked: the distance to the nearest gore edge is the
+// angle to it scaled by the radius of the circle of latitude it sits on.
+function sphGores(p, n){
+  const sec = 2*Math.PI/n, ps = Math.atan2(p[2], p[1]);
+  const k = Math.floor((((ps % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI)) / sec);
+  const a = (((ps % sec) + sec) % sec) - sec/2;                     // off the gore's middle
+  const d = (sec/2 - Math.abs(a)) * Math.sqrt(Math.max(0, 1 - p[0]*p[0]));
+  return k % 2 ? d : -d;
+}
+// A band of half-width w (radians) about the great circle whose normal is `n`.
+function sphBand(p, n, w){ return Math.abs(Math.asin(sphDot(p, n))) - w; }
+// The stripe's great circle is TILTED off the roll axis (40°). Round the roll's own equator
+// it would never move; through the roll axis it would only slide sideways, which is a
+// stripe on a drum. Tilted, it sweeps across the face AND changes its curve as it goes,
+// which is the one thing only a ball can do.
+const STRIPE_N = [Math.cos(0.7), Math.sin(0.7), 0], STRIPE_N2 = [-Math.sin(0.7), Math.cos(0.7), 0];
+
 const BALL_LOOKS = {
+  // Twelve pentagons at the icosahedron's vertices, corners toward the neighbours —
+  // the truncated icosahedron a football is, at the solid's own circumradius (0.369
+  // radians). ⚠️ Not smaller: at 0.33 the black on the face through a turn fell to 0.151
+  // against the flat painter's 0.311, under `tests/ball3d.mjs`' floor, and a real football
+  // has no white margin round its pentagons anyway — the hexagons ARE the white.
   classic: { name:'Classic', draw:(c,r,rot)=>{
     ballPent(c, 0, 0, r*0.36, -Math.PI/2 + rot); c.fill();
     for (let k=0;k<5;k++){ const a=-Math.PI/2 + k*(2*Math.PI/5) + rot;
-      ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } } },
+      ballPent(c, Math.cos(a)*r*0.78, Math.sin(a)*r*0.78, r*0.24, a+Math.PI); c.fill(); } },
+    sphere: p => sphPent(p, 0.369) },
   plain:   { name:'Plain', draw:()=>{} },
   // The ampersand, which is the only part of that wordmark with a colour in it.
   // ⚠️ system-ui, like the 8-ball look — no web font is ever required to play.
-  amp:     { name:'Ampersand', draw:(c,r,rot)=>{
+  // ⚠️ A glyph is NEVER MIRRORED on the sphere: a backwards ampersand is not an ampersand.
+  amp:     { name:'Ampersand', prints:[[0, 0, false], [1/3, 0.25, false], [2/3, 0.5, false]], draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.font = 'bold ' + Math.round(r*1.55) + 'px system-ui, sans-serif';
     c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -33621,26 +33721,36 @@ const BALL_LOOKS = {
     for (const s of [-1, 1])                                                            // ears
       { c.beginPath(); c.ellipse(r*0.52, s*r*0.41, r*0.16, r*0.10, s*0.7, 0, 2*Math.PI); c.fill(); }
     c.restore(); } },
+  // On the sphere a stripe is a band round a great circle through the roll axis, so it
+  // sweeps across the face as the ball rolls; a band round the roll's own equator would
+  // never move, and a stripe that never moves is a ball that never rolls.
   stripe:  { name:'Stripe', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.fillRect(-r, -r*0.30, r*2, r*0.60);
-    c.restore(); } },
+    c.restore(); },
+    sphere: p => sphBand(p, STRIPE_N, 0.30) },
   cross:   { name:'Cross', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.fillRect(-r, -r*0.17, r*2, r*0.34);
     c.fillRect(-r*0.17, -r, r*0.34, r*2);
-    c.restore(); } },
+    c.restore(); },
+    sphere: p => Math.min(sphBand(p, STRIPE_N, 0.17), sphBand(p, STRIPE_N2, 0.17)) },
   beach:   { name:'Beach', draw:(c,r,rot)=>{
     for (let k=0;k<6;k+=2){ const a=rot + k*(Math.PI/3);
-      c.beginPath(); c.moveTo(0,0); c.arc(0,0,r,a,a+Math.PI/3); c.closePath(); c.fill(); } } },
+      c.beginPath(); c.moveTo(0,0); c.arc(0,0,r,a,a+Math.PI/3); c.closePath(); c.fill(); } },
+    sphere: p => sphGores(p, 6) },
   tennis:  { name:'Tennis', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.lineWidth = Math.max(1, r*0.14); c.strokeStyle = c.fillStyle;
     for (const s of [-1, 1]){
       c.beginPath(); c.arc(s*r*1.15, 0, r*1.06, s>0 ? Math.PI*0.72 : -Math.PI*0.28,
                                               s>0 ? Math.PI*1.28 : Math.PI*0.28); c.stroke(); }
-    c.restore(); } },
-  eight:   { name:'8-Ball', draw:(c,r,rot)=>{
+    c.restore(); },
+    sphere: p => sphSeam(p, 0.075) },
+  // ONE eight on a solid ball: `ground` inks the whole sphere first and the single print
+  // lays the white circle over it. Three prints put three eights on a pool ball, and a
+  // mirrored one puts a backwards 8 on it.
+  eight:   { name:'8-Ball', ground:true, prints:[[0, 0, false]], draw:(c,r,rot)=>{
     c.beginPath(); c.arc(0,0,r,0,7); c.fill();                       // solid
     c.save(); c.rotate(rot);
     c.beginPath(); c.arc(0, -r*0.34, r*0.44, 0, 7);
@@ -33650,9 +33760,12 @@ const BALL_LOOKS = {
     c.textAlign='center'; c.textBaseline='middle';
     c.fillText('8', 0, -r*0.32);
     c.restore(); } },
+  // Twelve spots at the icosahedron's vertices — evenly spread, so about six face you at
+  // any phase, which is what the flat seven look like.
   dots:    { name:'Dots', draw:(c,r,rot)=>{
     for (let k=0;k<7;k++){ const a=rot + k*(2*Math.PI/7);
-      c.beginPath(); c.arc(Math.cos(a)*r*0.56, Math.sin(a)*r*0.56, r*0.19, 0, 7); c.fill(); } } },
+      c.beginPath(); c.arc(Math.cos(a)*r*0.56, Math.sin(a)*r*0.56, r*0.19, 0, 7); c.fill(); } },
+    sphere: p => sphCap(p, icoNearest(p).c, 0.20) },
   swirl:   { name:'Swirl', draw:(c,r,rot)=>{
     c.save(); c.rotate(rot);
     c.lineWidth = Math.max(1, r*0.20); c.strokeStyle = c.fillStyle; c.lineCap='round';
@@ -33732,7 +33845,15 @@ function ballSphereTex(key, spot, paper){
   // ⚠️ `sin(latitude)` stays LINEAR in the strip's height — that is what the strip's y axis
   // already is, and orthographic puts latitude φ at y = r·sin(φ) — so only the longitude
   // needed fixing.
-  const stamps = BALL3D.prints.map(([lonTurns, rotTurns, mir]) => {
+  // ⚠️ A look defined ON THE SPHERE (`look.sphere`) is asked per texel and never printed;
+  // a look that is a picture keeps the prints, and may name its own (`look.prints` — a
+  // glyph must not be mirrored, and a pool ball carries one 8) and ink the ground under
+  // them first (`look.ground`). See the notes above BALL_LOOKS.
+  const sph = look.sphere;
+  const ic = document.createElement('canvas'); ic.width = ic.height = 1;
+  const icc = ic.getContext('2d'); icc.fillStyle = spot; icc.fillRect(0, 0, 1, 1);
+  const ink = icc.getImageData(0, 0, 1, 1).data;
+  const stamps = (sph ? [] : (look.prints || BALL3D.prints)).map(([lonTurns, rotTurns, mir]) => {
     // One instance of the look, baked flat. ⚠️ Per PRINT, not once for all of them: the two
     // carry different rotations and one is mirrored, which is what stops the sphere being
     // self-similar at half a turn.
@@ -33751,14 +33872,37 @@ function ballSphereTex(key, spot, paper){
   const W = cv.width, SIN = new Float64Array(W), COS = new Float64Array(W);
   for (let u = 0; u < W; u++){ const a = (u + 0.5)/TW * 2*Math.PI; SIN[u] = Math.sin(a); COS[u] = Math.cos(a); }
   const img = cc.createImageData(W, D), out = img.data;
+  if (look.ground) for (let i = 0; i < out.length; i += 4){ out[i] = ink[0]; out[i+1] = ink[1]; out[i+2] = ink[2]; out[i+3] = 255; }
+  // Source OVER what is already there — the ground, or nothing. A straight write would
+  // punch a print's transparent margin through the ground it is meant to sit on.
+  const over = (o, r, g, b2, a) => {
+    if (a <= 0) return;
+    const f = a / 255, k = 1 - f, da = out[o+3] / 255, na = f + da * k;
+    if (na <= 0) return;
+    out[o]   = (r  * f + out[o]   * da * k) / na;
+    out[o+1] = (g  * f + out[o+1] * da * k) / na;
+    out[o+2] = (b2 * f + out[o+2] * da * k) / na;
+    out[o+3] = na * 255;
+  };
+  const pt = [0, 0, 0];
   for (let v = 0; v < D; v++){
     const sy = (v + 0.5)/D * 2 - 1;                    // sin(latitude), −1..+1
     const cl = Math.sqrt(Math.max(0, 1 - sy*sy));      // cos(latitude)
+    const row = v * W * 4;
+    if (sph){
+      // The texel's point on the unit ball: x across the face, y down it, z toward you.
+      pt[1] = sy;
+      for (let u = 0; u < W; u++){
+        pt[0] = cl * SIN[u]; pt[2] = cl * COS[u];
+        const cov = Math.max(0, Math.min(1, 0.5 - sph(pt) / SPH_AA));
+        if (cov > 0) over(row + u*4, ink[0], ink[1], ink[2], cov * 255);
+      }
+      continue;
+    }
     const Y = sy / s;                                  // the design's own y
     if (Y < -1 || Y > 1) continue;                     // above or below every cap
     const fy = (Y + 1)/2 * PS - 0.5;
     const y0 = Math.max(0, Math.min(PS-1, Math.floor(fy))), y1 = Math.min(PS-1, y0+1), ty = fy - y0;
-    const row = v * W * 4;
     for (let u = 0; u < W; u++){
       // ⚠️ **THE CAPS OVERLAP, AND THE NEAREST CENTRE WINS.** Three hemispheres 120° apart
       // cover every longitude with 60° to spare, so no point on the ball is ever further
@@ -33787,9 +33931,11 @@ function ballSphereTex(key, spot, paper){
       const p = stamps[best].px;
       const iA = (y0*PS + x0)*4, iB = (y0*PS + x1)*4, iC = (y1*PS + x0)*4, iD2 = (y1*PS + x1)*4;
       const wA = (1-tx)*(1-ty), wB = tx*(1-ty), wC = (1-tx)*ty, wD = tx*ty;
-      const o = row + u*4;
-      for (let ch = 0; ch < 4; ch++)
-        out[o+ch] = p[iA+ch]*wA + p[iB+ch]*wB + p[iC+ch]*wC + p[iD2+ch]*wD;
+      over(row + u*4,
+           p[iA]*wA   + p[iB]*wB   + p[iC]*wC   + p[iD2]*wD,
+           p[iA+1]*wA + p[iB+1]*wB + p[iC+1]*wC + p[iD2+1]*wD,
+           p[iA+2]*wA + p[iB+2]*wB + p[iC+2]*wC + p[iD2+2]*wD,
+           p[iA+3]*wA + p[iB+3]*wB + p[iC+3]*wC + p[iD2+3]*wD);
     }
   }
   cc.putImageData(img, 0, 0);

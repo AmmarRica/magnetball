@@ -2148,6 +2148,53 @@ three lines a second time, name it.
   because the cue ball look is *plain* and never exercised the spot, so every other look
   rendered as a plain white ball. Every other palette is 10.6:1+, which is why it hid.
   A readable spot is left untouched; this is a floor, not a repaint. `tests/balllook.mjs`.
+- **A PATTERN IS DEFINED ON THE SPHERE, NOT PROJECTED ONTO IT** (`look.sphere`, `SPH_AA`,
+  `sphPent`, `sphSeam`, `sphGores`, `sphBand`, `sphCap`, `icoVerts`, `icoNearest`;
+  `look.prints`, `look.ground`). Reported as *"for the ball, it looks odd on 3D still"*,
+  and it did: a look's `draw` is a DISC design, and the bake projected that disc onto three
+  overlapping caps. The inverse orthographic map stretches the football's outer pentagons
+  (at 0.78 of the disc) to twice their width radially, the nearest-centre rule CUTS a
+  pentagon wherever two caps meet, the tennis seam broke into bars and an X at every seam,
+  the beach ball split down hard vertical lines and the pool ball wore three 8s, one of
+  them backwards. **A projection of a picture cannot be fixed by tuning the projection.**
+  ⚠️ **THE LOOKS THAT ARE REALLY A PATTERN ON A BALL SAY SO ON THE SPHERE.** `sphere(x,y,z)`
+  is a signed angular distance to the ink, asked once per texel by `ballSphereTex` with
+  the texel's own point on the unit ball — so there is no seam and no stretch, because
+  there is no projection. Classic is twelve pentagons at the icosahedron's vertices with
+  their corners toward the neighbours (a truncated icosahedron), tennis is one seam curve,
+  beach is six gores, dots twelve caps, stripe and cross are great-circle bands. A picture
+  — an ampersand, a sheep, an 8, a token — stays a print, because a picture IS a picture.
+  ⚠️ **THE PENTAGONS ARE THE SOLID'S OWN SIZE, 0.369 radians.** At 0.33 the black on the
+  face through a turn fell to **0.151** against the flat painter's 0.311 — under the
+  suite's 0.6 floor — and a real football has no white margin round its pentagons: the
+  hexagons are the white. At 0.369 it reads 0.203..0.305.
+  ⚠️ **A STRIPE IS TILTED OFF THE ROLL AXIS (40°), and the two obvious placements are both
+  wrong.** Round the roll's own equator it never moves; through the roll axis it slides
+  sideways, which is a stripe on a drum. Tilted, it sweeps across the face AND changes its
+  curve as it goes, which is the one thing only a ball can do. The beach ball's poles are
+  put along +x for the same reason — they come round to the front as it rolls.
+  ⚠️ **A GLYPH IS NEVER MIRRORED** (`amp` names its own `prints`, unmirrored) and **A POOL
+  BALL CARRIES ONE 8** (`eight`: `ground` inks the whole sphere first, one print lays the
+  white circle over it). The sheep and the swirl stay on the shared prints — a mirrored
+  sheep is a sheep facing the other way — and **`tests/balllook.mjs` overrides
+  `BALL3D.prints` to build its tiled sheep**, which a per-look `prints` on the sheep
+  silently defeated: `soloBeatsTiled` went red on the first build for exactly that.
+  ⚠️ **THE TEXEL WRITES ARE SOURCE-OVER NOW**, never a straight copy — a print's transparent
+  margin would otherwise punch through the ground it is meant to sit on.
+  ⚠️ **THE CHECK IS THE SIZE OF EVERY WHOLE PANEL, FORESHORTENING CORRECTED — and a SHAPE
+  probe was tried first and could not see the defect.** Bounding-box aspect inside 0.74R
+  read 1.43:1 on the print bake against 1.12:1 on the sphere, because the print's stretch
+  is radial about the CAP's centre and cancels exactly when that cap faces you — which is
+  also when its pentagons are inside the probe. Size does not cancel: a football's twelve
+  pentagons are one size, and with each panel's area divided by √(1−ρ²) the smallest whole
+  panel over the largest reads **0.77 on the sphere bake against 0.09 on the print bake**
+  (worst aspect 1.37 against 2.15). Five sabotages, each caught: classic's `sphere`
+  deleted, the seam's half-width zeroed, the gores inked solid, the ground dropped from
+  the 8-ball and the over-composite reverted — **and the last two PASSED every check until
+  the 8-ball's strip was read directly**: without the ground the back is the plain pale
+  ball (front and back still differ, so the period check is happy), and a straight copy
+  punches the print's antialiased rim through the ground as a hairline. "Every texel of a
+  pool ball is opaque" is the check that sees both. `tests/ball3d.mjs`.
 - **The ball as a ROLLING SPHERE** (`sel.ball3d`, default **off**; `BALL3D`,
   `paintBallSphere`, `ballSphereTex`): the pattern is mapped onto a cylinder-projected
   sphere and scrolled by the roll, so the markings compress toward the limb and go over

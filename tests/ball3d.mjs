@@ -552,6 +552,114 @@ const r = await p.evaluate(() => {
     o.flatHasPattern = o.flatInk > 0.15;
   }
 
+  // ============================ EVERY PANEL IS A WHOLE PANEL ========================
+  // The report: *"for the ball, it looks odd on 3D still"*. It did, and the cause was
+  // structural rather than a tuning: a look's `draw` is a DISC design, and the bake
+  // projected that disc onto three overlapping caps — so the football's outer pentagons,
+  // at 0.78 of the disc, were stretched to twice their width radially by the inverse
+  // orthographic map, and wherever two caps met the nearest-centre rule CUT a pentagon in
+  // half. A pattern defined ON THE SPHERE (`look.sphere`) has neither, because there is
+  // no projection. Measured here as the SIZE of every black panel that sits wholly inside
+  // the face through a turn, with the limb's foreshortening taken back out: a panel whose
+  // centre is at ρ of the radius is squashed by √(1−ρ²) radially, so its area is divided
+  // by that. A football's twelve pentagons are ONE size, so every whole panel comes out
+  // the same; the print bake's were not (a centre pentagon of 0.36r and five of 0.24r,
+  // and some of them cut), so its smallest whole panel is a fraction of its largest.
+  // ⚠️ A SHAPE probe was tried first and could not see it: bounding-box aspect inside
+  // 0.74R read 1.43:1 on the print bake against 1.12:1 on the sphere bake, because the
+  // print's stretch is radial about the CAP's centre and cancels exactly when that cap
+  // faces you — which is also when its pentagons are inside the probe. Size does not cancel.
+  // ⚠️ MEASURED ON BOTH BUILDS before the bar was set — see the assertion's message.
+  {
+    const R = 70, S = 200, IN = R*0.95;
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d');
+    let worstAspect = 0, worstRatio = 1, whole = 0;
+    M.sel.ball3d = 'on';
+    for (let k=0;k<16;k++){
+      c.setTransform(1,0,0,1,0,0);
+      c.clearRect(0,0,S,S); c.fillStyle = '#2f6b3a'; c.fillRect(0,0,S,S);
+      M.paintBall(c, S/2, S/2, R, 0, 'classic', null, k/16*2*Math.PI, 0);
+      const d = c.getImageData(0,0,S,S).data;
+      const dark = new Uint8Array(S*S), lab = new Int32Array(S*S);
+      for (let y=0;y<S;y++) for (let x=0;x<S;x++){
+        const dx = x-S/2, dy = y-S/2, i = (y*S+x)*4;
+        if (dx*dx + dy*dy <= IN*IN && d[i]+d[i+1]+d[i+2] < 300) dark[y*S+x] = 1;
+      }
+      const comps = [];
+      for (let y=0;y<S;y++) for (let x=0;x<S;x++){
+        const s0 = y*S+x; if (!dark[s0] || lab[s0]) continue;
+        const id = comps.length + 1, st = [s0]; lab[s0] = id;
+        const cp = { area:0, sx:0, sy:0, x0:S, x1:0, y0:S, y1:0, edge:false };
+        while (st.length){
+          const s = st.pop(), sx = s % S, sy = (s - sx) / S;
+          cp.area++; cp.sx += sx; cp.sy += sy;
+          if (sx<cp.x0) cp.x0=sx; if (sx>cp.x1) cp.x1=sx; if (sy<cp.y0) cp.y0=sy; if (sy>cp.y1) cp.y1=sy;
+          const ddx = sx-S/2, ddy = sy-S/2; if (ddx*ddx + ddy*ddy > (IN-1.5)*(IN-1.5)) cp.edge = true;
+          for (const t of [s-1, s+1, s-S, s+S]){
+            if (t < 0 || t >= S*S) continue;
+            if (Math.abs((t % S) - sx) > 1) continue;                  // no row wrap
+            if (dark[t] && !lab[t]){ lab[t] = id; st.push(t); }
+          }
+        }
+        // Foreshortening taken back out: the panel's centre at ρ of R is squashed √(1−ρ²).
+        const rho = Math.hypot(cp.sx/cp.area - S/2, cp.sy/cp.area - S/2) / R;
+        cp.fixed = cp.area / Math.sqrt(Math.max(0.05, 1 - rho*rho));
+        comps.push(cp);
+      }
+      const inner = comps.filter(cp => !cp.edge && cp.area > 6);
+      if (!inner.length) continue;
+      const big = Math.max(...inner.map(cp => cp.fixed));
+      for (const cp of inner){
+        whole++;
+        const w = cp.x1-cp.x0+1, h = cp.y1-cp.y0+1;
+        worstAspect = Math.max(worstAspect, Math.max(w,h)/Math.min(w,h));
+        worstRatio = Math.min(worstRatio, cp.fixed/big);
+      }
+    }
+    o.panelsSeen = whole;
+    o.panelWorstAspect = +worstAspect.toFixed(2);
+    o.panelWorstRatio = +worstRatio.toFixed(2);
+    // Sphere bake: 20 whole panels, worst aspect 1.37:1, smallest 0.77 of the largest.
+    // Print bake (classic's `sphere` deleted): 31, 2.15:1 and 0.09. Bars between the two.
+    o.panelsAreWhole = whole >= 16 && worstAspect < 1.8 && worstRatio > 0.4;
+  }
+
+  // ============================ THE SPHERE LOOKS BAKE, AND BAKE ONCE ==================
+  // Every look that carries a `sphere` definition inks its strip (a definition with a sign
+  // error inks nothing, or everything), and the bake is a one-off — a sphere look is asked
+  // per texel and the tennis seam is 480 samples per texel, so it has to be cached or the
+  // first frame it is drawn on is a hitch every time the cache is cleared.
+  {
+    o.sphereLooks = M.BALL_LOOK_KEYS.filter(k => typeof M.BALL_LOOKS[k].sphere === 'function');
+    o.sphereInk = {}; o.sphereBakeMs = {};
+    for (const k of o.sphereLooks){
+      M.ballTexCache.clear();
+      const t0 = performance.now();
+      const t = M.ballSphereTex(k, '#111111', '#ffffff');
+      o.sphereBakeMs[k] = +(performance.now() - t0).toFixed(1);
+      const px = t.cv.getContext('2d').getImageData(0, 0, t.TW, t.D).data;
+      let on = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 128) on++;
+      o.sphereInk[k] = +(on / (px.length/4)).toFixed(3);
+    }
+    o.sphereLooksInk = o.sphereLooks.every(k => o.sphereInk[k] > 0.02 && o.sphereInk[k] < 0.7);
+    o.sphereBakesFast = Object.values(o.sphereBakeMs).every(ms => ms < 400);
+    // A pool ball has no hole in it: the 8-ball's `ground` inks the whole strip and its one
+    // print is laid OVER that, so every texel is opaque — and the eight is still on it.
+    // ⚠️ Both halves of that were sabotaged and passed every other check here: without
+    // the ground the back of the ball is the pale plain ball (front and back still differ,
+    // so the period check is happy), and a straight copy in place of source-over punches
+    // the print's antialiased rim through the ground as a hairline ring.
+    M.ballTexCache.clear();
+    const t8 = M.ballSphereTex('eight', '#111111', '#ffffff');
+    const p8 = t8.cv.getContext('2d').getImageData(0, 0, t8.TW, t8.D).data;
+    let holes = 0, pale = 0;
+    for (let i = 0; i < p8.length; i += 4){ if (p8[i+3] < 250) holes++; if (p8[i] > 200 && p8[i+3] > 250) pale++; }
+    o.eightHoles = holes; o.eightPale = +(pale / (p8.length/4)).toFixed(3);
+    o.eightIsSolid = holes === 0;
+    o.eightHasTheEight = o.eightPale > 0.01 && o.eightPale < 0.3;
+  }
+
   M.sel.ball3d = 'off'; M.setMatchSeed(null);
   return o;
 });
@@ -614,6 +722,12 @@ ok('...and a draw does not write to the ball', r.drawLeavesBallAlone,
    `drawing added ${JSON.stringify(r.addedByDraw)} to the ball — the roll heading must live outside the world, or a draw mutates the sim and determinism hashing breaks`);
 ok('THE PATTERN IS ON THE WHOLE BALL, at every phase of the roll', r.everyPhaseIsTheBall,
    `worst phase inks ${r.worstInk} and best ${r.bestInk} against the flat painter's ${r.flatInk} — the bake laid the design in by COLUMNS at asin(x), which is only the equator's mapping, so each print was squeezed into the middle of its own cap: measured 0.078 at the seam against 0.303 head-on, i.e. half of every rotation showed a near-blank ball with one smeared panel. Coverage: ${JSON.stringify(r.rollInk)}`);
+ok('EVERY PANEL IS A WHOLE PANEL — none clipped at a seam, none stretched', r.panelsAreWhole,
+   `${r.panelsSeen} whole panels seen through a turn, worst aspect ${r.panelWorstAspect}:1, smallest ${r.panelWorstRatio} of the largest (foreshortening corrected) — the cap-print bake read 2.15:1 and 0.09, because it stretched the outer pentagons and cut them where two caps met`);
+ok('every sphere-defined look inks its strip, and not all of it', r.sphereLooksInk, JSON.stringify(r.sphereInk));
+ok('...and bakes inside a frame budget', r.sphereBakesFast, JSON.stringify(r.sphereBakeMs));
+ok('the 8-ball is SOLID all the way round', r.eightIsSolid, `${r.eightHoles} texels of its strip are not opaque — without \`ground\` the back is the plain pale ball, and a straight copy instead of source-over punches the print's rim through it`);
+ok('...and still has the eight on it', r.eightHasTheEight, `${r.eightPale} of the strip is the white circle`);
 ok('...and the flat ball it is measured against really has a pattern', r.flatHasPattern,
    `${r.flatInk} — without this the ratios above are against nothing`);
 
