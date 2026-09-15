@@ -931,8 +931,9 @@ three lines a second time, name it.
   different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the time
   it was given, so a kick looked punchier on a slow monitor. It also meant two draws of one
   frame produced two different pictures.
-- **PITCH-SIDE ADS — hoardings down both touchlines** (`ADS`, `AD_BOARDS`, `ADSOPT`,
-  `adsOn`, `adEverySecs`, `adCustomText`, `adList`, `adSlots`, `adState`, `advanceAds`,
+- **PITCH-SIDE ADS — hoardings down both touchlines AND behind both goals** (`ADS`,
+  `AD_BOARDS`, `ADSOPT`, `adsOn`, `adEverySecs`, `adCustomText`, `adList`, `adSlots`,
+  `adSlotRects`, `adsDrawn`, `adReach`, `adReadAngle`, `adState`, `advanceAds`,
   `paintAdBoard`, `drawAds`, `buildAdBoards`; Game Feel → **Ads**; `sel.adsOn`, `sel.adEvery`,
   `sel.adOff`, `sel.adText`). Asked for as *"ads that show up like soccer ads outside the
   field, showing different things — make up company names"*, with three boards supplied by
@@ -945,24 +946,56 @@ three lines a second time, name it.
   often, the trails rule) and never inside `step()`. `tests/ads.mjs` hashes the whole world
   over 900 steps with the boards on and off, rendering every thirty; sabotaged with one
   `w.ball.vx += 0.01` inside `drawAds`, the hash moves and the check names it.
-  ⚠️ **TOUCHLINES ONLY, never the goal ends** — the net pocket, the goal box's mirror and
-  the warm-up head count all live beyond the goal line, and a board across the mouth reads as
-  a barrier in the one place the ball must go (the fence's rule). `gap` starts PAST the line,
-  so a board can never be a decoy on the court — the Bootleg-dots / Apologies!-lanes rule —
-  and the suite pins it from that side: the inner court must be **0 pixels** different with
-  the ads on, measured against the same frame with them off. Sabotaged to a negative gap it
-  reads **59,175**.
+  ⚠️ **FOUR ROWS, and "touchlines only" is WITHDRAWN** — it shipped that way and was asked
+  for *"behind the goal as well"* a batch later. The end rows stand beyond the **BACK OF THE
+  NET** (`halfL + net + gap`), never on the goal line: the pocket sits between the row and the
+  mouth, so a board there is never a barrier in the one place the ball has to go through
+  (the fence's rule), and the pocket, the goal box's mirror and the warm-up head count are
+  all untouched. `tests/ads.mjs` pins the pocket at **0 pixels** changed and the end bands
+  at **17,827 of 18,176**; an end row put on the goal line reads 11,616 in the pocket.
+  ⚠️ **`adSlotRects` IS THE ONE OWNER OF WHERE A BOARD IS** — the painter, the camera and the
+  dim all ask it. `adsDrawn(w)` is the one gate ("is there a row on this pitch") and
+  `adReach(w)` the one answer to how far out it goes.
+  ⚠️ **`gap` IS 24, UP FROM 10** — *"space all a bit out of the field"*. A waiting body stands
+  20 out and a player may step 20 past the line, so at 10 the row sat exactly where people
+  stand. `gap` starts PAST the line, so a board can never be a decoy on the court — the
+  Bootleg-dots / Apologies!-lanes rule — and the suite pins the inner court at **0 pixels**
+  different with the ads on; sabotaged to a negative gap it reads 59,175.
+  ⚠️ **THE CAMERA HOLDS THE ROWS** (`computeCam`'s `adX`). Before it did, the end rows were
+  **off the screen on a turned desktop** — the pitch fills the width there — and the
+  touchline rows were cut in half on a phone: a board nobody can see is a feature that does
+  not exist. Only what reaches past the frame's own 30-unit brim is charged, so with the ads
+  off every camera number is exactly what it was. **Measured cost 4.4% of pitch scale** on a
+  1280×800 desktop and on a 390×844 phone alike (1.350 → 1.290, 0.656 → 0.627); the switch
+  gives it back, and `ADS.gap` is the dial if that is too much.
+  ⚠️ **A BOARD A BODY STANDS OVER IS DIMMED** (`ADS.dimA` 0.22, `adState.dim`) — asked for
+  as *"if a player outside walks over any of them then dim the ad so the player is visible"*.
+  A benched body is drawn at 0.45 alpha, and over a bright board it was gone. **Eased in
+  `advanceAds`, in the STEP LOOP, toward a target computed THERE** — never in the draw (the
+  name plates' `labelT`/`labelA` rule): a draw that eased its own alpha would change its own
+  picture between two draws of one step. Circle-against-rectangle on the raw position, over
+  `allBodies` — the bench and anybody who stepped past the line. The check parks a body on
+  the NEAR end of a slot and samples the FAR half, so the body's own pixels are never in the
+  reading: **414,370 against 1,658,775** summed RGB from the surround, with a one-step value
+  of 0.83 pinning the ease and 0.22 / 1 pinning both rests.
+  ⚠️ **THE CONTROL IS THE SAME CAMERA WITH EVERY BOARD STOOD DOWN, never `adsOn = 'off'`** —
+  because the camera holds the rows, switching them off REFITS THE FRAME, every pixel on the
+  pitch moves, and the court read **88,782 changed on a perfectly good build**. An empty
+  rotation (`adOff` = every key) draws nothing and reserves exactly the same frame.
   ⚠️ **NOT IN WARM-UP OR A DRILL.** The lobby's keyboard, shirts and flags occupy exactly the
-  strip the boards use, and a drill paints its own box through `renderDrill`. A waiting body
-  mid-match stands 20 units out and simply walks over them — they are ground.
-  ⚠️ **THE WORDS TURN WITH THE PITCH, and that is right for the screen this is played on.**
-  A touchline runs along world y, so the board's length is drawn along local +x and the frame
-  rotated **+π/2**; under the layout's own quarter-turn (`cam.rot` is −π/2 on every wide
-  screen) the two cancel and every board reads left-to-right. Upright — a phone — they read
-  top-to-bottom down the sideline, which is what a hoarding seen from above does.
-  ⚠️ **SLOTS ARE DERIVED FROM THE COURT** (`adSlots`): the count comes from L against
-  `ADS.slotLen`, so Futsal gets **3** and Leviathan **34** at nearly the same length each
-  (149 against 131), never stretched ones — the `boardtrack` rule.
+  strip the boards use, and a drill paints its own box through `renderDrill`.
+  ⚠️ **THE WORDS READ LEFT-TO-RIGHT OR TOP-TO-BOTTOM, NEVER BACKWARDS** (`adReadAngle`). A
+  touchline board runs along world y (drawn along local +x, frame turned +π/2), an end board
+  along world x (no turn), and the layout's own quarter-turn (`cam.rot` is −π/2 on every wide
+  screen) lands on top — which left the end rows reading bottom-to-top on a turned pitch.
+  `adReadAngle` turns a board round when its on-screen angle would land in the back half, so
+  the touchlines read left-to-right on a desktop and top-to-bottom on a phone, and the end
+  rows the other way about — what a hoarding seen from above does. Sabotaged to `return
+  base`, the suite reads an angle of 4.712 and names it.
+  ⚠️ **SLOTS ARE DERIVED FROM THE COURT** (`adSlots`): the count comes from the row's span
+  against `ADS.slotLen`, so down a touchline Futsal gets **3** and Leviathan **34** at nearly
+  the same length each (149 against 131), never stretched ones — the `boardtrack` rule. The
+  end rows do the same off W.
   ⚠️ **ONE PAINTER FOR THE PITCH AND THE PICKER TILE** (`paintAdBoard`): a tile cannot show a
   board the touchline will not. It draws a board centred on the origin with its length along
   +x and the caller turns the frame; the fitted font is cached per (text, len, depth), because

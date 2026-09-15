@@ -46,7 +46,7 @@ const r = await p.evaluate(async () => {
       w.players.map(q => [q.x, q.y, q.vx, q.vy, q.aiState])]); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
   const runHash = (on) => { M.sel.adsOn = on ? 'on' : 'off'; M.setMatchSeed(31); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 1;
-    for (let i = 0; i < 900; i++){ M.step(w); M.advanceAds(); if (i % 30 === 0) M.render(); }
+    for (let i = 0; i < 900; i++){ M.step(w); M.advanceAds(w); if (i % 30 === 0) M.render(); }
     return hashWorld(w); };
   o.hashOn = runHash(true); o.hashOff = runHash(false);
   o.renderOnly = o.hashOn === o.hashOff;
@@ -68,20 +68,87 @@ const r = await p.evaluate(async () => {
     M.screenPt(M.wx(side * (bd.halfW + M.ADS.gap + M.ADS.depth)), M.wy(bd.halfL)),
     M.screenPt(M.wx(side * (bd.halfW + M.ADS.gap)), M.wy(bd.halfL)),
     M.screenPt(M.wx(side * (bd.halfW + M.ADS.gap + M.ADS.depth)), M.wy(-bd.halfL)) ]);
+  // ...and behind each goal: the row stands beyond the BACK of the net.
+  const endBand = (side) => { const y0 = side * (bd.halfL + bd.net + M.ADS.gap), y1 = side * (bd.halfL + bd.net + M.ADS.gap + M.ADS.depth);
+    return boxOf([ M.screenPt(M.wx(-bd.halfW), M.wy(y0)), M.screenPt(M.wx(bd.halfW), M.wy(y1)),
+                   M.screenPt(M.wx(-bd.halfW), M.wy(y1)), M.screenPt(M.wx(bd.halfW), M.wy(y0)) ]); };
+  // The net pocket itself, between the goal line and the end row: nothing may land there.
+  const pocket = (side) => { const y0 = side * (bd.halfL + 2), y1 = side * (bd.halfL + bd.net - 2), x = bd.gh * 0.9;
+    return boxOf([ M.screenPt(M.wx(-x), M.wy(y0)), M.screenPt(M.wx(x), M.wy(y1)), M.screenPt(M.wx(-x), M.wy(y1)), M.screenPt(M.wx(x), M.wy(y0)) ]); };
   const court = boxOf([
     M.screenPt(M.wx(-bd.halfW * 0.92), M.wy(-bd.halfL * 0.92)), M.screenPt(M.wx(bd.halfW * 0.92), M.wy(bd.halfL * 0.92)),
     M.screenPt(M.wx(-bd.halfW * 0.92), M.wy(bd.halfL * 0.92)), M.screenPt(M.wx(bd.halfW * 0.92), M.wy(-bd.halfL * 0.92)) ]);
-  const snap = () => ({ l: grab(band(-1)), r: grab(band(1)), c: grab(court) });
+  const snap = () => ({ l: grab(band(-1)), r: grab(band(1)), c: grab(court), t: grab(endBand(-1)), b: grab(endBand(1)), pt: grab(pocket(-1)), pb: grab(pocket(1)) });
   // ⚠️ Two renders of ONE frame with nothing changed must be identical — that is the
   // control that says the difference below is the boards and not the renderer.
   const a1 = snap(); M.render(); const a2 = snap();
-  o.sameFrameStable = diffCount(a1.l, a2.l) === 0 && diffCount(a1.c, a2.c) === 0;
-  M.sel.adsOn = 'off'; M.render(); const off = snap(); M.sel.adsOn = 'on';
+  o.sameFrameStable = diffCount(a1.l, a2.l) === 0 && diffCount(a1.c, a2.c) === 0 && diffCount(a1.t, a2.t) === 0;
+  // ⚠️ THE CONTROL IS THE SAME CAMERA WITH EVERY BOARD STOOD DOWN — never `adsOn = 'off'`,
+  // because the camera HOLDS the rows and switching them off refits the frame, so every
+  // pixel on the pitch moves and the court reads 88,782 changed on a perfectly good build.
+  // An empty rotation draws nothing and reserves exactly the same frame.
+  const standDown = (fn) => { const keep = [M.sel.adOff, M.sel.adText]; M.sel.adOff = M.AD_BOARDS.map(a => a.key); M.sel.adText = '';
+    M.render(); const out = fn(); M.sel.adOff = keep[0]; M.sel.adText = keep[1]; M.render(); return out; };
+  const off = standDown(snap);
   o.leftBandDiff = diffCount(a1.l, off.l); o.rightBandDiff = diffCount(a1.r, off.r);
   o.leftBandPx = a1.l.length / 4;
   o.inkOutsideBothTouchlines = o.leftBandDiff > o.leftBandPx * 0.25 && o.rightBandDiff > o.leftBandPx * 0.25;
+  o.topEndDiff = diffCount(a1.t, off.t); o.botEndDiff = diffCount(a1.b, off.b); o.endBandPx = a1.t.length / 4;
+  o.inkBehindBothGoals = o.topEndDiff > o.endBandPx * 0.25 && o.botEndDiff > o.endBandPx * 0.25;
+  o.pocketDiff = diffCount(a1.pt, off.pt) + diffCount(a1.pb, off.pb);
+  o.nothingInTheNet = o.pocketDiff === 0;
   o.courtDiff = diffCount(a1.c, off.c);
   o.nothingOnTheCourt = o.courtDiff === 0;
+  // The gap: a body standing 20 out (the bench ring, and a player's step past the line)
+  // does not reach the near edge of a board when it is stood beside it — the row is
+  // "spaced out of the field" by more than the 10 it shipped at.
+  o.gap = M.ADS.gap;
+  o.rowsClearTheLine = M.ADS.gap >= 20;
+
+  // ---- 3b) the frame HOLDS the rows: every board's four corners are on screen -----
+  const rects = M.adSlotRects(w);
+  const corners = (rc) => { const hx = (rc.along === 'y' ? rc.depth : rc.len) / 2, hy = (rc.along === 'y' ? rc.len : rc.depth) / 2;
+    return [[-hx,-hy],[hx,-hy],[-hx,hy],[hx,hy]].map(([dx,dy]) => M.screenPt(M.wx(rc.x + dx), M.wy(rc.y + dy))); };
+  o.rowCount = rects.length; o.fourRows = new Set(rects.map(rc => rc.id.split(':')[0])).size === 4;
+  o.offScreen = rects.filter(rc => corners(rc).some(([x, y]) => x < 0 || y < 0 || x > cv.clientWidth || y > cv.clientHeight)).map(rc => rc.id);
+  o.everyBoardOnScreen = o.offScreen.length === 0;
+  // ...and what holding them costs, as a ratio against the same camera with the ads off —
+  // the switch is what gives it back, so the control has to be measured in the same run.
+  M.sel.adsOn = 'off'; M.computeCam(); const sOff = M.cam.s; M.sel.adsOn = 'on'; M.computeCam(); M.render();
+  o.camCost = 1 - M.cam.s / sOff;
+  o.frameGrowsForTheRows = M.cam.s < sOff && o.camCost < 0.08;
+  // ...and every board's words read left-to-right or top-to-bottom on SCREEN, never
+  // upside down or bottom-to-top, whichever way the pitch is turned.
+  const norm = (a) => ((a % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI);
+  o.readAngles = [...new Set(rects.map(rc => norm(M.adReadAngle(rc.along === 'y' ? Math.PI/2 : 0) + M.cam.rot).toFixed(3)))];
+  o.wordsReadable = o.readAngles.every(a => Math.abs(+a) < 1e-3 || Math.abs(+a - Math.PI/2) < 1e-3);
+
+  // ---- 3c) a body standing over a board DIMS it -------------------------------------
+  // The body is parked at the START of a touchline slot and the FAR HALF of that slot is
+  // sampled, so the body's own pixels are never in the reading: what changes there is the
+  // board and nothing else. Eased in `advanceAds`, so it is run to rest before each frame.
+  const slot = rects.find(rc => rc.id === 's1:0');
+  const q = w.players[0], qx0 = q.x, qy0 = q.y;
+  const park = (x, y) => { q.x = x; q.y = y; q._px = x; q._py = y; for (let i = 0; i < 90; i++) M.advanceAds(w); };
+  const farHalf = boxOf([ M.screenPt(M.wx(slot.x - slot.depth/2), M.wy(slot.y + 2)), M.screenPt(M.wx(slot.x + slot.depth/2), M.wy(slot.y + slot.len/2 - 2)),
+                          M.screenPt(M.wx(slot.x - slot.depth/2), M.wy(slot.y + slot.len/2 - 2)), M.screenPt(M.wx(slot.x + slot.depth/2), M.wy(slot.y + 2)) ]);
+  const sumDiff = (a, b2) => { let n = 0; for (let i = 0; i < a.length; i += 4) n += Math.abs(a[i]-b2[i]) + Math.abs(a[i+1]-b2[i+1]) + Math.abs(a[i+2]-b2[i+2]); return n; };
+  park(slot.x, slot.y - slot.len/2 + q.r);            // standing on the board's near end
+  o.dimAfterEase = M.adState.dim.get(slot.id);
+  M.render(); const overF = grab(farHalf);
+  park(0, 0);                                          // nowhere near it
+  o.dimRestored = M.adState.dim.get(slot.id);
+  M.render(); const clearF = grab(farHalf);
+  const noneF = standDown(() => grab(farHalf));
+  o.boardVsSurround = sumDiff(clearF, noneF); o.dimmedVsSurround = sumDiff(overF, noneF);
+  o.boardIsThere = o.boardVsSurround > farHalf.W * farHalf.H * 30;
+  o.dimmedBoardFades = o.dimmedVsSurround < o.boardVsSurround * 0.45;
+  o.dimSettles = Math.abs(o.dimAfterEase - M.ADS.dimA) < 1e-6 && o.dimRestored === 1;
+  // ...and it EASES rather than snapping: one step over the board is between the two.
+  q.x = slot.x; q.y = slot.y - slot.len/2 + q.r; M.advanceAds(w);
+  o.dimOneStep = M.adState.dim.get(slot.id);
+  o.dimEases = o.dimOneStep < 1 && o.dimOneStep > M.ADS.dimA;
+  park(qx0, qy0);
 
   // ---- 4) the rollover: same picture inside a period, a different one across it ---
   M.adState.t = 0; M.render(); const t0 = snap();
@@ -182,6 +249,15 @@ ok(r.renderOnly, `the boards reach the SIM: world hash ${r.hashOn} with ads agai
 ok(r.sameFrameStable, 'two renders of one frame differ with nothing changed — the control is broken, so no diff below means anything');
 ok(r.inkOutsideBothTouchlines, `no boards outside the touchlines: left ${r.leftBandDiff}, right ${r.rightBandDiff} of ${r.leftBandPx}px differ against ads off`);
 ok(r.nothingOnTheCourt, `${r.courtDiff} court pixels changed with the ads on — a board on the pitch is a decoy`);
+ok(r.inkBehindBothGoals, `no boards behind the goals: top ${r.topEndDiff}, bottom ${r.botEndDiff} of ${r.endBandPx}px differ against ads off`);
+ok(r.nothingInTheNet, `${r.pocketDiff} net-pocket pixels changed with the ads on — the end row must stand beyond the net's back, never across the mouth`);
+ok(r.rowsClearTheLine, `the rows sit ${r.gap} units off the line — a body stands 20 out, so they are not spaced out of the field`);
+ok(r.fourRows && r.everyBoardOnScreen, `boards off the screen on a 1280×900 desktop: ${JSON.stringify(r.offScreen)} (rows ${r.rowCount})`);
+ok(r.frameGrowsForTheRows, `the camera does not hold the rows, or holding them costs too much: ${(r.camCost*100).toFixed(1)}% of pitch scale`);
+ok(r.wordsReadable, `a row's words read backwards on screen: angles ${JSON.stringify(r.readAngles)}`);
+ok(r.boardIsThere, `control: the sampled slot shows no board at all (${r.boardVsSurround})`);
+ok(r.dimmedBoardFades, `a body standing over a board does not dim it: ${r.dimmedVsSurround} against ${r.boardVsSurround} with nobody there`);
+ok(r.dimSettles && r.dimEases, `the dim does not ease and settle: one step ${r.dimOneStep}, settled ${r.dimAfterEase}, restored ${r.dimRestored}`);
 ok(r.holdsWithinPeriod, 'the boards changed before the rollover was due');
 ok(r.rollsAcrossPeriod, 'the boards did not roll over after a period — "different things" means the picture has to change');
 ok(r.sliderSetsTheClock, 'the Ads-change-every slider does not set the rollover clock');

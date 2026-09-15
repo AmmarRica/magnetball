@@ -4812,24 +4812,40 @@ const POPOPT = {
 // `loop()` beside `decayJuice()` — never in a draw (the trails rule: at 144Hz a draw-driven
 // clock rolls the boards 2.4× too often) and never inside `step()`, which is what keeps a
 // pinned seed reproducing a match with the boards on or off.
-// ⚠️ **TOUCHLINES ONLY, never the goal ends**: the net pocket, the goal box's mirror and
-// the warm-up head count all live beyond the goal line, and a board across the mouth reads
-// as a barrier in the one place the ball has to go through (the fence's rule).
-// ⚠️ **OUTSIDE THE PITCH BY CONSTRUCTION** — `gap` starts past the touchline, so a board
-// can never be a decoy on the court (the Bootleg dots / Apologies! lane squares rule). A
-// waiting body mid-match stands 20 units out and walks OVER them: they are ground.
+// ⚠️ **FOUR ROWS: both touchlines AND behind both goals** — asked for as *"have ads behind
+// the goal as well"*, which REVERSES the touchlines-only rule this shipped with. The end
+// rows stand beyond the BACK OF THE NET (`halfL + net + gap`), never on the goal line: the
+// pocket is between them and the mouth, so a board there can never read as a barrier in the
+// one place the ball has to go through (the fence's rule) — the pocket, the goal box's
+// mirror and the warm-up head count are all untouched. `adSlotRects` is the ONE owner of
+// where a board is; the painter and the dim both ask it.
+// ⚠️ **OUTSIDE THE PITCH BY CONSTRUCTION** — `gap` starts past the line, so a board can
+// never be a decoy on the court (the Bootleg dots / Apologies! lane squares rule).
+// ⚠️ **A BOARD A BODY STANDS OVER IS DIMMED** (`ADS.dimA`, `adState.dim`, eased in
+// `advanceAds`). A waiting body mid-match stands 20 units out and walks OVER them, and a
+// benched body is already drawn at 0.45 alpha — over a bright board it was gone. The dim is
+// a per-slot alpha eased in the STEP LOOP toward a target computed there, never in a draw
+// (the name plates' `labelT`/`labelA` rule): a draw that eased it would change its own
+// picture between two draws of one step.
 // ⚠️ **NOT IN WARM-UP OR A DRILL.** The lobby's keyboard, shirts and flags occupy exactly
 // this strip, and a drill paints its own box through `renderDrill`.
 // ⚠️ **EVERY NAME HERE IS INVENTED OR THE OWNER'S OWN** — the standing trademark rule.
 // The three supplied were flagged at the time: none is a third party's mark.
 const ADS = {
-  gap: 10,        // world units from the touchline to the board's near edge
+  gap: 24,        // world units from the line (or the net's back) to the board's near edge.
+                  // Was 10, asked up as "space them out a bit": a waiting body stands 20 out
+                  // and a player may step 20 past the line, so at 10 the row sat exactly
+                  // where people stand. 24 clears the touchline by most of a body.
   depth: 24,      // board depth (across), world units — a body is 30 wide
-  slotLen: 130,   // target slot length along the touchline; the count is derived from L
+  edge: 4,        // world units the camera keeps beyond a row's far side (see computeCam)
+  slotLen: 130,   // target slot length along a row; the count is derived from the row's span
   slotGap: 6,     // between slots
   every: 8,       // seconds per rollover, the default the slider is born at
   minPx: 4,       // below this font size the words are a smear — draw the board, skip them
   rim: 'rgba(0,0,0,0.38)',
+  dimA: 0.22,     // a board's alpha while a body stands over it — the surround shows through
+  dimEase: 0.22,  // per-step ease toward the dim target (~0.2s), counted in the step loop
+  dimPad: 4,      // world units of slack round a body before it counts as "over" a board
 };
 const AD_BOARDS = [
   { key:'exit3a',     text:'exit 3A the game',        bg:'#1b1b22', ink:'#ffd23f' },
@@ -4866,8 +4882,61 @@ function adList(){
   if (own) out.push({ key:'custom', text: own, bg:'#ffffff', ink:'#111111' });
   return out;
 }
-const adState = { t: 0 };
-function advanceAds(){ adState.t += STEP; }
+// `t` is the rollover clock; `dim` is one eased alpha per slot id (1 = full, `ADS.dimA` = a
+// body is over it), both advanced here and only READ by the draw.
+const adState = { t: 0, dim: new Map() };
+function advanceAds(w){
+  adState.t += STEP;
+  const rects = adSlotRects(w);
+  if (!rects){ if (adState.dim.size) adState.dim.clear(); return; }
+  const bodies = allBodies(w);
+  for (const rc of rects){
+    // Circle against the board's rectangle, in world units, on the RAW position — a step of
+    // drift is nothing to a fade, and it keeps this a pure function of the step's state.
+    const hx = (rc.along === 'y' ? rc.depth : rc.len) / 2, hy = (rc.along === 'y' ? rc.len : rc.depth) / 2;
+    let over = false;
+    for (const q of bodies){
+      const dx = Math.max(0, Math.abs(q.x - rc.x) - hx), dy = Math.max(0, Math.abs(q.y - rc.y) - hy);
+      if (dx * dx + dy * dy < (q.r + ADS.dimPad) * (q.r + ADS.dimPad)){ over = true; break; }
+    }
+    const want = over ? ADS.dimA : 1, cur = adState.dim.has(rc.id) ? adState.dim.get(rc.id) : 1;
+    const next = Math.abs(want - cur) < 0.004 ? want : cur + (want - cur) * ADS.dimEase;
+    adState.dim.set(rc.id, next);
+  }
+}
+// Every board on the pitch as a world-space rectangle: `along` is the axis its LENGTH runs
+// on (world y down a touchline, world x behind a goal). Null when there is nothing to draw.
+// ONE gate for "are there boards on this pitch" — the rects, the camera and the dim all ask it.
+function adsDrawn(w){ return adsOn() && !!w && !!w.bounds && w.state !== 'warmup' && !w.drillMode; }
+// How far beyond the line (or the net's back) the rows reach, for the camera to hold.
+function adReach(w){ return adsDrawn(w) ? ADS.gap + ADS.depth + ADS.edge : 0; }
+function adSlotRects(w){
+  if (!adsDrawn(w)) return null;
+  const b = w.bounds, out = [];
+  const side = adSlots(b.halfL * 2), end = adSlots(b.halfW * 2);
+  for (const s of [-1, 1]){
+    const x = s * (b.halfW + ADS.gap + ADS.depth / 2);
+    for (let i = 0; i < side.n; i++)
+      out.push({ id: 's' + s + ':' + i, x, y: -b.halfL + side.len / 2 + i * (side.len + ADS.slotGap), len: side.len, depth: ADS.depth, along: 'y' });
+  }
+  // Behind the goal: past the BACK of the net, so the pocket sits between the row and the mouth.
+  for (const s of [-1, 1]){
+    const y = s * (b.halfL + (b.net || 0) + ADS.gap + ADS.depth / 2);
+    for (let i = 0; i < end.n; i++)
+      out.push({ id: 'e' + s + ':' + i, x: -b.halfW + end.len / 2 + i * (end.len + ADS.slotGap), y, len: end.len, depth: ADS.depth, along: 'x' });
+  }
+  return out;
+}
+// Which way round to draw a board so its words read left-to-right or top-to-bottom on
+// SCREEN, never upside down or bottom-to-top: the board's length runs along `base` in
+// world terms, and the pitch's own quarter-turn (`cam.rot`) lands on top of that.
+function adReadAngle(base){
+  let a = base + (cam.rot || 0);
+  a = ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);   // 0..2π on screen
+  // 0 (left-to-right) and π/2 (top-to-bottom) are readable; π and 3π/2 are the same board
+  // seen from the other end, so turn it round.
+  return (a > Math.PI * 0.75 && a < Math.PI * 1.75) ? base + Math.PI : base;
+}
 // ONE painter for the pitch and the picker tile: a board of `len` × `depth` centred on
 // the origin with its length along +x, the words fitted to it. The caller rotates the
 // frame — on the pitch a touchline runs along world y.
@@ -4910,32 +4979,31 @@ function adSlots(L){
 // Every slot on both touchlines shows a different board, and the whole row rolls one
 // place every `adEverySecs()` seconds — `adState.t` is the clock, never the sim's.
 function drawAds(w){
-  if (!adsOn() || !w || !w.bounds || w.state === 'warmup' || w.drillMode) return;
+  const rects = adSlotRects(w);
+  if (!rects) return;
   const list = adList();
   if (!list.length) return;
-  const b = w.bounds, s = cam.s, L = b.halfL * 2;
-  const { n, len } = adSlots(L);
-  const depthPx = ADS.depth * s, lenPx = len * s;
+  const s = cam.s, depthPx = ADS.depth * s;
   if (depthPx < 1.5) return;
   const base = Math.floor(adState.t / adEverySecs());
-  let k = 0;
-  for (const side of [-1, 1]){
-    const xm = side * (b.halfW + ADS.gap + ADS.depth / 2);
-    for (let i = 0; i < n; i++, k++){
-      const ym = -b.halfL + len / 2 + i * (len + ADS.slotGap);
-      const ad = list[((base + k) % list.length + list.length) % list.length];
-      ctx.save();
-      ctx.translate(wx(xm), wy(ym));
-      // ⚠️ +90°: the board runs along world y, so its length is drawn along local +x and
-      // the frame turned a quarter. Upright the words read top-to-bottom down the touchline;
-      // under the layout's own quarter-turn (`cam.rot` is −π/2 turned, which is every wide
-      // screen) the two cancel and every board reads left-to-right, which is the case the
-      // game is mostly played in.
-      ctx.rotate(Math.PI / 2);
-      paintAdBoard(ctx, ad, lenPx, depthPx);
-      ctx.restore();
-    }
-  }
+  const wasA = ctx.globalAlpha;
+  rects.forEach((rc, k) => {
+    const ad = list[((base + k) % list.length + list.length) % list.length];
+    const dim = adState.dim.has(rc.id) ? adState.dim.get(rc.id) : 1;
+    ctx.save();
+    ctx.translate(wx(rc.x), wy(rc.y));
+    // A touchline board runs along world y, so its length is drawn along local +x with the
+    // frame turned a quarter; an end board runs along world x and needs no turn. Then the
+    // layout's own quarter-turn (`cam.rot` is −π/2 on every wide screen) lands on top, and
+    // `adReadAngle` turns a board round if that would leave its words reading backwards —
+    // so the touchlines read left-to-right on a turned pitch and top-to-bottom on a phone,
+    // and the end rows the other way about, which is what a hoarding seen from above does.
+    ctx.rotate(adReadAngle(rc.along === 'y' ? Math.PI / 2 : 0));
+    ctx.globalAlpha = wasA * dim;
+    paintAdBoard(ctx, ad, rc.len * s, depthPx);
+    ctx.restore();
+  });
+  ctx.globalAlpha = wasA;
 }
 // ============================================================
 //  SIDE VIEW — the showcase camera
@@ -18922,7 +18990,7 @@ function loop(t){
     advanceFx();            // ...and the sparks, for exactly the same reason
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
-    advanceAds();           // ...and the hoardings' rollover clock — render-only, step-locked
+    advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
     acc -= STEP; steps++;
   }
   // ⚠️ **HITTING THE CAP SHEDS THE SURPLUS, IT DOES NOT BANK IT.** Without this `acc`
@@ -27250,10 +27318,17 @@ function computeCam(){
   // nothing. With no keyboard the span is symmetric and every number below is exactly
   // what it was.
   const kb = world.kb && world.state === 'warmup' ? world.kb : null;
-  const topY = Math.min(-(f.L/2 + f.net), kb ? kb.T : Infinity);
-  const botY = Math.max(  f.L/2 + f.net,  kb ? kb.B : -Infinity);
-  const leftX = Math.min(-f.W/2, kb ? kb.L : Infinity);
-  const rightX = Math.max( f.W/2, kb ? kb.R : -Infinity);
+  // ⚠️ THE AD ROWS ARE HELD IN THE FRAME. They stand `adReach` beyond the line and the
+  // net's back, and the +60 below already gives each side a 30-unit brim — so only what
+  // reaches past that brim is charged, and with the ads off `adReach` is 0 and every
+  // number here is exactly what it was. Without this the end rows were off the screen on
+  // a turned desktop (the pitch fills the width there) and the touchline rows cut in half
+  // on a phone: a board you cannot see is a feature that does not exist.
+  const adX = Math.max(0, adReach(world) - 30);
+  const topY = Math.min(-(f.L/2 + f.net + adX), kb ? kb.T : Infinity);
+  const botY = Math.max(  f.L/2 + f.net + adX,  kb ? kb.B : -Infinity);
+  const leftX = Math.min(-(f.W/2 + adX), kb ? kb.L : Infinity);
+  const rightX = Math.max( f.W/2 + adX, kb ? kb.R : -Infinity);
   // ⚠️ THE COURT IS CENTRED ACROSS THE SCREEN, and the frame is fitted around it. This
   // used to centre the SPAN — the pitch plus all the warm-up furniture — and that
   // furniture is not symmetric (colour strips down one edge, a stepper in one corner),
@@ -35000,7 +35075,7 @@ if (window.__MAGNETDEBUG) {
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
     KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
-    ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
+    ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     get acc(){ return acc; }, get renderAlpha(){ return renderAlpha; }, MAX_DT, MAX_STEPS,
     QUAL, fullQuality, qualityStep, qualityPin(v){ _qualPin = v; },
