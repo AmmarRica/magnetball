@@ -2087,6 +2087,47 @@ three lines a second time, name it.
   which no palette can reach. Because slots mix freely, a field painter must fall back through
   the palette it's given (`TH.dynMark || TH.line`) or a starfield over Grass paints black on
   black. `tests/dyntheme.mjs` holds all of it by pixel sampling.
+- **THE RIBBON — a soft, wide, fading streak, and the ONE LOOK THAT OWNS THE BALL'S**
+  (`TRAIL_LOOKS.ribbon`, `paintRibbon`, `RIBBON`, `ballPts`, `look.ball`). Asked for from
+  a picture: a white ball towing a translucent ribbon as wide as itself, barely tapering,
+  fading smoothly to nothing, with blurred edges.
+  ⚠️ **A LOOK MAY NOW REPLACE THE BALL'S STREAK AND STILL MAY NEVER REMOVE IT.** The
+  slot's standing rule is that the ball keeps a streak whatever the slot says, and the
+  ask was for *"one of the trails for the ball"* — so `drawBallTrail` asks the look for
+  an optional `ball` painter and falls to the default stroke when there is none. `none`
+  has none, and `tests/traillook.mjs` pins that alongside the old check: a `none` that
+  owns an empty painter goes red twice.
+  ⚠️ **ONE STROKE PER LAYER, NEVER ONE PER SEGMENT.** Stroked segment by segment (the
+  comet's way) a path this wide and this translucent doubles its alpha at every round
+  cap — a string of beads down the middle; filled as adjacent quads it leaves an
+  antialiased hairline at every seam, forty of them down a shot. One stroke of the whole
+  path has neither, so the fade is carried by the PAINT: a radial gradient centred on
+  the head, because a canvas cannot do per-vertex alpha.
+  ⚠️ **RADIAL, NOT LINEAR ALONG THE CHORD.** The chord is degenerate the moment a ball
+  comes straight back off a wall — head over tail — and a zero-length linear gradient
+  paints nothing at all. Distance from the head is always defined, and on a straight
+  run, which is nearly every kick, it IS distance along the path.
+  ⚠️ **THE SOFT EDGE IS THREE CONCENTRIC STROKES, not `ctx.filter`** — a blur at full
+  resolution measured 2.2× the frame budget for the VJ decks. The wide layer's fade
+  runs out first (0.80 of the length) and the narrow one's last, which is also what
+  makes the ribbon TAPER without any width changing along the path.
+  ⚠️ **2.3 radii at the ball, because the outer layer is the soft edge**: what reads as
+  the ribbon is the middle stroke at 0.72 of that, one ball wide. At 2.0 it read a third
+  narrower than the ball towing it. Clamped to the path length — the streak's "never
+  wider than it is long" rule — so a crawling ball never wears a soft blob.
+  ⚠️ **In the BALL's colour (`TH.ball`), not the striker's team**, which is what the
+  picture showed and is readable on every palette by construction: the ball is.
+  ⚠️ **The picker tile shows the ball's run as well as the body's** for a look that
+  owns one — that half is the reason anybody picks it.
+  ⚠️ **MEASURED AS A DIFFERENCE AGAINST THE SAME FRAME WITH THE RECORDING EMPTIED**
+  (`resetTrails` then render), so the ball, the markings and the mown stripes cancel and
+  what is left is the streak alone. The far band is placed as a FRACTION of the streak's
+  own measured length, never a fixed distance back — a fixed 85–115 units read far/near
+  at **0.79** on a good build against the 0.6 bar, because it was sampling a third of
+  the way down a fade that runs the whole path. At 0.62–0.82 of the length it reads
+  **0.34** against the default stroke's flat **1.0**, measured in the same run. Four
+  sabotages, each caught by its own check: the door in `drawBallTrail` closed, the fade
+  flattened, `none` given a painter, the width dropped to 0.6 radii.
 - **Trail look:** `TRAIL_LOOKS` + the `trail` slot, declared **above `SLOTS`** so
   `normalizeLook()` can ask the registry rather than repeat its key list (a hard-coded copy
   was the first fix and it was a second place to keep in step; the reason a copy was

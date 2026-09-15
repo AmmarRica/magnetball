@@ -128,6 +128,70 @@ const r = await p.evaluate(()=>{
   o.streakWithNone = ballInk('none');
   o.ballKeepsStreak = o.streakWithNone >= 4 && o.streakWithNone >= o.streakWithDots - 1;
 
+  // ---- a look may OWN the ball's streak, and Ribbon does ---------------------
+  // ⚠️ The Ribbon look was asked for FROM A PICTURE of a ball towing a soft, wide,
+  // fading ribbon — so the claim is about the BALL's streak, and it is measured on the
+  // pitch as a DIFFERENCE against the same frame with the recording emptied: the ball,
+  // the markings and the mown stripes are in both renders and cancel, so what is left
+  // is the streak alone. `none` must own nothing, or the rule above (the ball keeps a
+  // streak whatever the slot says) has a door in it.
+  o.owners = o.keys.filter(k => typeof M.TRAIL_LOOKS[k].ball === 'function');
+  o.noneOwnsNothing = !M.TRAIL_LOOKS.none.ball;
+  const streakOf = (key) => {
+    M.applyBundle('classic'); M.sel.look.trail = key; M.sel.adsOn = 'off';
+    M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.setMatchSeed(11); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    w.players.forEach(q=>{ q.x=9999; q.y=9999; q.vx=0; q.vy=0; });
+    M.resetTrails();
+    w.ball.x=0; w.ball.y=-150; w.ball.vx=0; w.ball.vy=22;
+    for (let i=0;i<14;i++){ M.step(w); M.advanceTrails(w); }
+    M.computeCam();
+    const cvs = document.getElementById('game'), cc = cvs.getContext('2d');
+    const DPR = cvs.width / cvs.clientWidth;
+    const b2 = w.ball, rPx = b2.r * M.cam.s * DPR;
+    const [hx, hy] = M.screenPt(M.wx(M.ix(b2)), M.wy(M.iy(b2)));
+    // The ball travels DOWN the screen (upright pitch, world +y), so the streak is above
+    // it. The band starts 1.4r behind the ball's centre — clear of the ball itself.
+    const x0 = Math.round(hx*DPR - 3.5*rPx), W2 = Math.round(7*rPx);
+    const y1 = Math.round(hy*DPR - 1.4*rPx), y0 = Math.max(0, Math.round(hy*DPR - 34*rPx)), H2 = y1 - y0;
+    M.render();
+    const A = cc.getImageData(x0, y0, W2, H2).data;
+    M.resetTrails(); M.render();                              // same frame, no streak
+    const B = cc.getImageData(x0, y0, W2, H2).data;
+    const rows = [];                                          // per row: [inked columns, summed diff]
+    for (let y=0; y<H2; y++){
+      let n=0, sum=0;
+      for (let x=0; x<W2; x++){
+        const i=(y*W2+x)*4, d=Math.abs(A[i]-B[i])+Math.abs(A[i+1]-B[i+1])+Math.abs(A[i+2]-B[i+2]);
+        if (d > 14) n++; sum += d;
+      }
+      rows.push([n, sum]);
+    }
+    // Row H2-1 is nearest the ball. `tail` is how many rows back the streak reaches, so
+    // the far band can be placed as a FRACTION of the streak's own length — the ribbon
+    // fades over that length, and a band a fixed distance back measures a different
+    // point on the fade for every speed and every zoom.
+    let tail = 0; for (let y=0; y<H2; y++) if (rows[y][0] > 0){ tail = H2 - y; break; }
+    const band = (a, z) => {                                  // rows a..z back from the ball, in px
+      const y0b = Math.max(0, H2 - Math.round(z)), y1b = Math.min(H2, H2 - Math.round(a));
+      let s=0, wmax=0; for (let y=y0b; y<y1b; y++){ s += rows[y][1]; wmax = Math.max(wmax, rows[y][0]); }
+      return { mean: s / Math.max(1, y1b-y0b), wmax };
+    };
+    return { rPx, tail, near: band(0.2*rPx, 1.8*rPx), far: band(0.62*tail, 0.82*tail), pic: A.join(',') };
+  };
+  const rib = streakOf('ribbon'), def = streakOf('dots');
+  o.ribbon = { rPx: rib.rPx, near: rib.near, far: rib.far };
+  o.default = { near: def.near, far: def.far };
+  o.ribbonDrawsOnTheBall = rib.near.mean > 40;
+  o.ribbonDiffersFromDefault = rib.pic !== def.pic;
+  // A ball wide at the head (the outer layer is a SOFT edge, so 0.8 of a diameter is the
+  // bar) and never past the default's own width, which is 3.3 radii at this speed.
+  o.ribbonIsBallWide = rib.near.wmax >= 1.6*rib.rPx && rib.near.wmax <= 3.6*rib.rPx;
+  // ...and it FADES along its length where the default does not: far/near is the
+  // discriminator, measured on both looks in the same run.
+  o.ribbonFades = rib.far.mean < 0.6 * rib.near.mean;
+  o.defaultIsFlat = def.far.mean > 0.75 * def.near.mean;
+
   // ---- a save from before the slot existed, and a stored key that is gone --
   M.sel.look.trail = 'orbs';
   delete M.sel.look.trail;
@@ -169,6 +233,13 @@ ok(r.noSwatch.length === 0, `trail looks with no picker swatch: ${JSON.stringify
 ok(r.recorded > 20, `only ${r.recorded} dots were ever recorded — the sampling check below is comparing two empty lists`);
 ok(r.samplingIsShared, 'changing the LOOK changed what was recorded — spacing and fade belong to advanceTrails, which runs in the step loop, and the length of a tell is a read rather than a decoration');
 ok(r.ballKeepsStreak, `the ball streak weakened when the player trail was switched off (${r.streakWithNone} vs ${r.streakWithDots} samples) — the ball is the one thing everybody is tracking and no cosmetic choice may take it away`);
+ok(r.owners.indexOf('ribbon') >= 0, `no Ribbon look owns the ball's streak (owners: ${JSON.stringify(r.owners)}) — the ask was a trail for the BALL`);
+ok(r.noneOwnsNothing, '"none" carries a ball painter — the one look that must fall to the default streak has a door in it');
+ok(r.ribbonDrawsOnTheBall, `Ribbon drew nothing behind a kicked ball (band mean ${r.ribbon.near.mean.toFixed(1)}) — the look exists and the pitch never sees it`);
+ok(r.ribbonDiffersFromDefault, 'the ball streak under Ribbon is pixel-identical to the default — drawBallTrail never asked the look');
+ok(r.ribbonIsBallWide, `the ribbon at the ball is ${r.ribbon.near.wmax}px across against a ${r.ribbon.rPx.toFixed(1)}px radius — asked for as wide as the ball, and never wider than the default`);
+ok(r.ribbonFades, `the ribbon does not fade along its length: far ${r.ribbon.far.mean.toFixed(1)} against near ${r.ribbon.near.mean.toFixed(1)} — a flat stroke is the default look wearing a new name`);
+ok(r.defaultIsFlat, `the CONTROL failed: the default streak reads far ${r.default.far.mean.toFixed(1)} against near ${r.default.near.mean.toFixed(1)}, so "it fades" cannot separate the two`);
 ok(r.missingGetsDefault, 'a save from before the slot existed did not get the default');
 ok(r.unknownGetsDefault, 'a stored trail key that no longer exists was left in place');
 ok(r.bundleOwnsIt, `a bundle cannot set the slot: Abduction resolved to ${r.ufoTrail}`);

@@ -8628,6 +8628,39 @@ const TRAIL_LOOKS = {
       c.strokeStyle = rgba(col, 0.55 * b.a * (0.10 + 0.90*f));
       c.stroke();
     } } },
+  // A soft translucent RIBBON: as wide as the body at the body, barely tapering, fading
+  // to nothing along its length, with blurred edges — asked for from a picture of a
+  // white ball towing exactly that. ⚠️ **THE ONLY LOOK THAT OWNS THE BALL'S STREAK**
+  // (`ball`): the ball keeps a streak whatever the slot says, and this is the one look
+  // that gets to say what it is instead of the default. Which is the whole ask — *"one
+  // of the trails for the ball"* — so the picker tile shows the ball's run as well.
+  // ⚠️ ONE STROKE PER LAYER, NEVER ONE PER SEGMENT. A polyline stroked segment by
+  // segment (the comet's way) doubles its alpha at every round cap, and at this width
+  // and this alpha that is a string of beads down the middle of the ribbon; a fill of
+  // adjacent quads leaves an antialiased hairline at every seam instead. One stroke of
+  // the whole path has neither, so the fade rides the PAINT — a radial gradient
+  // centred on the head — rather than per-vertex alpha, which a canvas cannot do.
+  // ⚠️ RADIAL FROM THE HEAD, not linear along the chord. The chord is degenerate the
+  // moment a ball comes straight back off a wall (head over tail, and a zero-length
+  // linear gradient paints nothing at all); distance from the head is always defined,
+  // and for a straight run — nearly every kick — it is exactly distance along the path.
+  // ⚠️ SOFT EDGES ARE THREE CONCENTRIC STROKES, not `ctx.filter`: a blur at full
+  // resolution was measured at 2.2× the whole frame budget for the VJ decks. The wide
+  // layer fades out FIRST and the narrow one LAST, which is also what makes the ribbon
+  // taper without a single width ever changing along the path.
+  // ⚠️ WIDTH IS CLAMPED TO THE PATH LENGTH — the ball streak's "never wider than it is
+  // long" rule — or a crawling body wears a soft blob.
+  ribbon:{ name:'Ribbon', draw(c, pts, n, col, rr){
+    if (n < 2) return;
+    let L = 0;
+    for (let k = 1; k < n; k++) L += Math.hypot(pts[k].x - pts[k-1].x, pts[k].y - pts[k-1].y);
+    paintRibbon(c, pts, n, n - 1, Math.min(rr * 1.5, L), col, 0.72 * pts[n-1].a, L);
+  }, ball(c, pts, n, r, col, drive, lenPx){
+    // 2.3 radii, not 2.0: the outer layer is the SOFT edge, so what reads as the ribbon
+    // is the middle one — 0.72 of it, which puts the visible width at one ball. Measured
+    // at 2.0 it read a third narrower than the ball it was towed by.
+    paintRibbon(c, pts, n, 0, Math.min(r * 2.3, lenPx), col, 0.70 + 0.30 * drive, lenPx);
+  } },
   // The theme's own pairing: the flask POURS and the pixel STEPS. ⚠️ The only look
   // that reads the team, and the only reason `team` is in the signature at all.
   pnp:   { name:'Flask & pixel', perTeam:true, draw(c, pts, n, col, rr, team){
@@ -8684,6 +8717,29 @@ const TRAIL_LOOKS = {
 };
 const TRAIL_LOOK_KEYS = Object.keys(TRAIL_LOOKS);
 function trailLook(){ return TRAIL_LOOKS[sel.look.trail] || TRAIL_LOOKS.dots; }
+// The Ribbon look's one painter, for the body and for the ball: the path through
+// `pts` stroked three times at falling widths, each under its own radial fade from
+// the head at `pts[head]`. `L` is the path's length in screen pixels — the radius
+// the fade runs out over. See the look's own notes for why it is built this way.
+const RIBBON = [ [1.00, 0.46, 0.80], [0.72, 0.40, 0.92], [0.44, 0.36, 1.00] ]; // width, alpha, reach
+function paintRibbon(c, pts, n, head, W, col, A, L){
+  if (n < 2 || !(L > 0) || !(W > 0) || !(A > 0)) return;
+  const h = pts[head];
+  c.save();
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+  for (let k = 1; k < n; k++) c.lineTo(pts[k].x, pts[k].y);
+  for (const [wf, af, reach] of RIBBON){
+    const g = c.createRadialGradient(h.x, h.y, 0, h.x, h.y, L * reach);
+    g.addColorStop(0, rgba(col, A * af));
+    g.addColorStop(0.5, rgba(col, A * af * 0.62));
+    g.addColorStop(1, rgba(col, 0));
+    c.lineWidth = Math.max(1, W * wf);
+    c.strokeStyle = g;
+    c.stroke();
+  }
+  c.restore();
+}
 
 // By index, not on the player — see labelA above for why.
 const SLOTS = {
@@ -12846,6 +12902,15 @@ function buildSlotSwatch(slot, k){
     if (look.perTeam){
       run(0, TH.teamRed  || '#ff3b6b', 24, 8, 11);
       run(1, TH.teamBlue || '#4d7bff', 52, 8, 11);
+    } else if (look.ball){
+      // A look that owns the BALL's streak shows the ball's run too — that half is the
+      // reason anybody picks it, and a tile showing only the body would hide it.
+      run(0, TH.teamRed || '#ff3b6b', 20, 6, 9);
+      const bp = [], bc = TH.ball || '#fff';
+      for (let i = 0; i < 9; i++){ const t = i/8; bp.push({ x: 52 - t*44, y: 48 + Math.sin(t*2.1)*5 }); }
+      let L = 0; for (let i = 1; i < 9; i++) L += Math.hypot(bp[i].x-bp[i-1].x, bp[i].y-bp[i-1].y);
+      look.ball(c, bp, 9, 6.5, bc, 0.8, L);
+      c.beginPath(); c.arc(bp[0].x, bp[0].y, 6.5, 0, 2*Math.PI); c.fillStyle = bc; c.fill();
     } else run(0, TH.teamRed || '#ff3b6b', 44, 17, 15);
     return cvs;
   }
@@ -33280,6 +33345,7 @@ function advanceTrails(w){
 }
 
 let trailPts = [];                        // reused scratch — see TRAIL_LOOKS above
+let ballPts  = [];                        // the ball streak's, same reason
 function drawDiscTrails(w){
   // ⚠️ The first thing to go when the machine cannot keep up — see `fullQuality`. Gated
   // HERE rather than at the call site so the replay path and the live pitch agree, and so
@@ -33329,18 +33395,28 @@ function drawBallTrail(w){
   }
   if (pts.length < 2) return;
   const s = cam.s;
+  // Screen points into one reused scratch (the `trailPts` argument, one layer up),
+  // head first — both painters below read them, so they are worked out once.
+  while (ballPts.length < pts.length) ballPts.push({x:0, y:0});
+  let lenPx = 0;
+  for (let k = 0; k < pts.length; k++){
+    const t = ballPts[k]; t.x = wx(pts[k].x); t.y = wy(pts[k].y);
+    if (k) lenPx += Math.hypot(t.x - ballPts[k-1].x, t.y - ballPts[k-1].y);
+  }
+  // ⚠️ A look that OWNS the ball's streak paints it here (`TRAIL_LOOKS.ribbon` is the
+  // one that does). This stays the only door: a look may replace the streak and may
+  // never remove it, because `none` has no `ball` and so falls to the default below —
+  // the ball is the one thing everybody is tracking.
+  const own = trailLook().ball;
+  if (own){ own(ctx, ballPts, pts.length, b.r * s, TH.ball, drive, lenPx); return; }
   // Colour it for whoever struck it, like VIDEOSOCCER — the streak says who did this.
   const team = b.lastKickTeam;
   const col = team === 0 ? TH.teamRed : team === 1 ? TH.teamBlue : null;
   ctx.save();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(wx(pts[0].x), wy(pts[0].y));
-  let lenPx = 0;
-  for (let k = 1; k < pts.length; k++){
-    ctx.lineTo(wx(pts[k].x), wy(pts[k].y));
-    lenPx += Math.hypot(wx(pts[k].x) - wx(pts[k-1].x), wy(pts[k].y) - wy(pts[k-1].y));
-  }
+  ctx.moveTo(ballPts[0].x, ballPts[0].y);
+  for (let k = 1; k < pts.length; k++) ctx.lineTo(ballPts[k].x, ballPts[k].y);
   // ⚠️ **A STREAK MAY NEVER BE WIDER THAN IT IS LONG.** The width was a flat 1.7 ball
   // radii while the LENGTH is `BALL_LEN_MAX * drive` — so at a gentle pace `drive` is
   // near zero, the path is a couple of pixels long, and a 12px round-capped stroke over
@@ -34987,7 +35063,7 @@ if (window.__MAGNETDEBUG) {
     loadArcade, saveArcade, get arcade(){ return arcade; }, set arcade(v){ arcade = v; },
     spriteImg, drawDiscs, drawBall, LABEL_FADE, BALL_LOOKS, BALL_LOOK_KEYS,
     DOT_GAP, DOT_MAX, DOT_FADE, BALL_PATH, BALL_LEN_MAX, BALL_MIN_SPD,
-    TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook,
+    TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook, paintRibbon, RIBBON,
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
     BALL3D, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; },
