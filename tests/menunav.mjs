@@ -110,7 +110,7 @@ const r = await p.evaluate(async ()=>{
     const IDS = ['trapPick','chargePick','feelSlidersBall','feelSlidersKick','feelSlidersMagnet','oneHandPick',
                  'feelSlidersPlayer','sprintPick','feelSlidersSprint','juicePick',
                  'tiltPick','popupPick','ball3dPick','hitStop','goalZoom','goalZoomSpd',
-                 'autoReplayPick','sideViewPick','mspeed','debugPick'];
+                 'autoReplayPick','sideViewPick','adsPick','feelSlidersAds','adBoards','adText','mspeed','debugPick'];
     o.feelMissing = IDS.filter(id => !document.getElementById(id));
     o.feelOutsideAPane = IDS.filter(id => !document.getElementById(id).closest('.subpane'));
     // ⚠️ Outside the GAME FEEL panes specifically. Both now sit inside the Options card's

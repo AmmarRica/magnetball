@@ -83,6 +83,11 @@ const r = await p.evaluate(() => {
   o.bundleReadsBack = M.currentBundle() === 'tennis';
   o.liveLook = JSON.parse(JSON.stringify(M.sel.look));
 
+  // ⚠️ THE PITCH-SIDE ADS ARE PINNED OFF. This suite samples the SURROUND 26px past the
+  // touchline, which is exactly where a hoarding stands by default — it read Kestrel Air's
+  // pale blue ([207,230,245]) as the surround and called the palette wrong. A suite that
+  // samples pixels has to say what it is sampling, and this one samples the palette.
+  M.sel.adsOn = 'off';
   M.sel.mode = '2v2'; M.sel.kickoffRule = 'off'; M.sel.pitch = 'normal';
   M.setMatchSeed(11); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2; M.computeCam();

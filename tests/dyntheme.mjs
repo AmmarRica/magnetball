@@ -20,6 +20,18 @@ await p.waitForTimeout(600);
 
 const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  // ⚠️ THE PITCH-SIDE ADS ARE PINNED OFF FOR THE WHOLE SUITE. Every theme here is measured
+  // on pixels, and several of the probes sample the strip just OUTSIDE the touchline — the
+  // pool table's `justOutside`, Warp's `atSurround` — which is exactly where a hoarding
+  // stands by default. With them on, the cushion read [40,137,121] (a laundromat's teal)
+  // and the white surround [145,152,155]. A theme is what is under test, not the boards.
+  M.sel.adsOn = 'off';
+  // ⚠️ THE PITCH-SIDE ADS ARE PINNED OFF FOR THE WHOLE SUITE. Every theme here is measured
+  // on pixels, and several of the probes sample the strip just OUTSIDE the touchline — the
+  // pool table's `justOutside`, Warp's `atSurround` — which is exactly where a hoarding
+  // stands by default. With them on, the cushion read [40,137,121] (a laundromat's teal)
+  // and the white surround [145,152,155]. A theme is what is under test, not the boards.
+  M.sel.adsOn = 'off';
   // WARNING: THIS SUITE IS NOT ABOUT ORIENTATION, SO IT PINS ONE. sel.orient defaults to
   // auto, which now means "whichever way fills the screen" — on a wide page that turns
   // the pitch a quarter, which moves every world point on screen and rotates every seat's
@@ -1756,6 +1768,7 @@ ok(r.driftMovesWithStep, 'the star drift never moved when the field was stepped'
 // the feature working. Every block here waits for `scribChar(0)` first.
 const pen = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
+  M.sel.adsOn = 'off';   // see the top of the file: themes are under test, not hoardings
   M.sel.look.palette = 'sketch'; M.applyTheme('sketch');
   const until = async fn => { for (let i = 0; i < 80; i++){ if (fn()) return true; await new Promise(z => setTimeout(z, 50)); } return false; };
   o.spritesLoaded = await until(() => M.scribChar(0) && M.scribChar(1) && M.scribGrass());
@@ -1839,6 +1852,7 @@ const pen = await p.evaluate(async () => {
 // ---- 4. the pack MISSING: a drawn fallback, never an empty pitch ------------
 const penFB = await p.evaluate(async () => {
   const M = window.__magnet, o = {};
+  M.sel.adsOn = 'off';   // see the top of the file: themes are under test, not hoardings
   M.SCRIB.dir = 'assets/__no_such_pack__/';
   M.sel.look.palette = 'sketch'; M.applyTheme('sketch');
   await new Promise(z => setTimeout(z, 500));

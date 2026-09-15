@@ -763,6 +763,12 @@ await p.close();
     // readings saturated at exactly 49,341 and the caption's own pixels vanished into
     // them. The guard below caught it, which is what it is for. A suite that samples
     // pixels has to say which palette it is sampling.
+    // ⚠️ AND THE PITCH-SIDE ADS ARE PINNED OFF, for the same reason the palette is: the band
+    // crosses the strip outside both touchlines, a white board (The Charlotte Newspaper) is
+    // several thousand lit pixels on its own, and the boards roll over on WALL time — so two
+    // draws of one frame taken a rollover apart differed by 1,298 lit pixels with the caption
+    // held the same. What is measured here is the caption.
+    M.sel.adsOn = 'off';
     M.applyBundle('neon');
     const f = M.lastReplay.frames[Math.floor(M.lastReplay.frames.length/2)];
     const was = M.replay.controls;

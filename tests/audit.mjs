@@ -36,6 +36,8 @@ const r = await p.evaluate(async ()=>{
     magnet:'#feelSlidersBall input', sens:'#feelSlidersPlayer input', matchSpeed:'#mspeed',
     party:'#partyMods .opt', cocktailSides:'#cocktailCfgBtn', pad:'#padConfig',
     snd:'#sndMaster .opt', feel:'#feelSlidersBall input', names:'#seatNames',
+    // Pitch-side ads: the switch, the rollover clock, the per-board toggles, your own line.
+    adsOn:'#adsPick .opt', adEvery:'#feelSlidersAds input', adOff:'#adBoards .opt', adText:'#adText',
   };
   // Sub-panes hide controls with display:none, and querySelectorAll still finds
   // those — so "the node exists" stopped being the same as "you can get to it".

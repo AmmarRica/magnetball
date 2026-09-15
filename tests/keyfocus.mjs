@@ -155,7 +155,8 @@ o.want = { ball:   ['max ball speed','ball stopping time'],
            kick:   ['kick power','trap window','kick reach'],
            magnet: ['magnet strength','magnet reach','magnet kick bonus'],
            player: ['acceleration','player stopping time','sensitivity'],
-           sprint: ['sprint length','sprint recovery','sprint speed','tired speed'] };
+           sprint: ['sprint length','sprint recovery','sprint speed','tired speed'],
+           ads:    ['ads change every'] };
 o.groupedAsIntended = Object.entries(o.want).every(([g, words]) => words.every(w =>
   (o.groups.byGroup[g] || []).some(t => t.includes(w)) &&
   Object.entries(o.groups.byGroup).every(([g2, labs]) =>

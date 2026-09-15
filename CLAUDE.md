@@ -931,6 +931,72 @@ three lines a second time, name it.
   different hat: on a 144Hz screen every spark ran 2.4× fast and died in a third of the time
   it was given, so a kick looked punchier on a slow monitor. It also meant two draws of one
   frame produced two different pictures.
+- **PITCH-SIDE ADS — hoardings down both touchlines** (`ADS`, `AD_BOARDS`, `ADSOPT`,
+  `adsOn`, `adEverySecs`, `adCustomText`, `adList`, `adSlots`, `adState`, `advanceAds`,
+  `paintAdBoard`, `drawAds`, `buildAdBoards`; Game Feel → **Ads**; `sel.adsOn`, `sel.adEvery`,
+  `sel.adOff`, `sel.adText`). Asked for as *"ads that show up like soccer ads outside the
+  field, showing different things — make up company names"*, with three boards supplied by
+  name: **exit 3A the game**, **potion and pixels**, **The Charlotte Newspaper**. Eleven more
+  are invented and deliberately bland (a bakery, a tyre place, a laundromat) so none can
+  collide with a real brand — the standing trademark rule, applied at the table rather than
+  after. The three supplied were flagged at the time: none is a third party's mark.
+  ⚠️ **RENDER ONLY, and it is measured the determinism way.** `adState.t` is advanced in
+  `loop()` beside `decayJuice()` — never in a draw (144Hz would roll the boards 2.4× too
+  often, the trails rule) and never inside `step()`. `tests/ads.mjs` hashes the whole world
+  over 900 steps with the boards on and off, rendering every thirty; sabotaged with one
+  `w.ball.vx += 0.01` inside `drawAds`, the hash moves and the check names it.
+  ⚠️ **TOUCHLINES ONLY, never the goal ends** — the net pocket, the goal box's mirror and
+  the warm-up head count all live beyond the goal line, and a board across the mouth reads as
+  a barrier in the one place the ball must go (the fence's rule). `gap` starts PAST the line,
+  so a board can never be a decoy on the court — the Bootleg-dots / Apologies!-lanes rule —
+  and the suite pins it from that side: the inner court must be **0 pixels** different with
+  the ads on, measured against the same frame with them off. Sabotaged to a negative gap it
+  reads **59,175**.
+  ⚠️ **NOT IN WARM-UP OR A DRILL.** The lobby's keyboard, shirts and flags occupy exactly the
+  strip the boards use, and a drill paints its own box through `renderDrill`. A waiting body
+  mid-match stands 20 units out and simply walks over them — they are ground.
+  ⚠️ **THE WORDS TURN WITH THE PITCH, and that is right for the screen this is played on.**
+  A touchline runs along world y, so the board's length is drawn along local +x and the frame
+  rotated **+π/2**; under the layout's own quarter-turn (`cam.rot` is −π/2 on every wide
+  screen) the two cancel and every board reads left-to-right. Upright — a phone — they read
+  top-to-bottom down the sideline, which is what a hoarding seen from above does.
+  ⚠️ **SLOTS ARE DERIVED FROM THE COURT** (`adSlots`): the count comes from L against
+  `ADS.slotLen`, so Futsal gets **3** and Leviathan **34** at nearly the same length each
+  (149 against 131), never stretched ones — the `boardtrack` rule.
+  ⚠️ **ONE PAINTER FOR THE PITCH AND THE PICKER TILE** (`paintAdBoard`): a tile cannot show a
+  board the touchline will not. It draws a board centred on the origin with its length along
+  +x and the caller turns the frame; the fitted font is cached per (text, len, depth), because
+  `measureText` per board per frame is the `fitGlyph` cost this file already paid once.
+  ⚠️ **THE PICKER IS A ROW OF TOGGLES, not a pick-one row** — `buildOpts` writes
+  `sel[key] = k`, the wrong shape for "which of these are on" — and it stores the boards
+  switched **OFF** (`sel.adOff`), so a board added to the table later arrives ON and an older
+  save that never heard of it does not hide it. Read through `Array.isArray`, because
+  `applySaveDoc` validates nothing.
+  ⚠️ **YOUR OWN LINE JOINS THE END OF THE ROTATION** (`sel.adText`, 28 characters, whitespace
+  folded). It lands on the canvas through `fillText` and nowhere else, so it needs no
+  `noI18n` and cannot carry markup. The rollover clock is a `FEEL_SLIDERS` row (`g:'ads'`)
+  so it reaches the Ads pane through the same group → wrapper rule every other Game Feel dial
+  follows; `tests/keyfocus.mjs`' written-down grouping and `tests/audit.mjs`' control table
+  both name the new keys.
+  ⚠️ **THE WORDS ARE CHECKED OFF `fillText`, never off the table.** "The three are in
+  `AD_BOARDS`" is true of a build that never paints one; the suite records every string one
+  render draws, sweeps a full rotation, and requires each named board to land — and a board
+  switched off never to. Eight sabotages, each caught by its own check. `tests/ads.mjs`.
+  ⚠️ **THE BOARDS STAND IN FRONT OF WHATEVER A THEME PAINTS IN THAT STRIP**, which is what a
+  hoarding does in a stadium and is written down here because it is a consequence rather than
+  a rule: on the pool table they stand on the cushion, on Attribute Clash over the inner
+  band of the rainbow rail. They are drawn AFTER the theme on purpose — drawn before it,
+  every full-bleed surround (Bambamzone, Faceoff Orbit, Mirror Ledge, the room of Ammari)
+  would cover them completely and the switch would read as dead on ten of twenty-six
+  palettes. A per-theme opt-out is the obvious next step if that ever matters; the switch is
+  the answer today.
+  ⚠️ **AND THREE PIXEL SUITES HAD TO PIN THEM OFF.** `tests/tennis.mjs` samples the surround
+  26px past the touchline — exactly where a board now stands — and read Kestrel Air's pale
+  blue as the palette; `tests/dyntheme.mjs`' pool-cushion and Warp-surround probes read a
+  laundromat's teal and a grey; and `tests/replayfile.mjs`' caption band crosses the strip,
+  where a white board is thousands of lit pixels and the rollover moves on WALL time between
+  two draws. All three set `sel.adsOn = 'off'` with the reason beside it — the *a suite that
+  samples pixels has to say what it is sampling* rule, arriving through the surround.
 - **Floating stat text** (`FLOAT`, `floaters`, `addFloater`, `advanceFloaters`,
   `drawFloaters`, `sel.popups`): a short label over a player the instant they earn
   something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST.
@@ -7191,7 +7257,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 139 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 140 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **TWO suites are RED ON PURPOSE, and both measure the SHIPPED default rather than a
 tuning the AI was built against.** `tests/proladder.mjs` measures the bot difficulty ladder,

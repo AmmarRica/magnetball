@@ -2365,6 +2365,24 @@
       <div style="height:10px"></div>
       </div>
 
+      <!-- ⚠️ PITCH-SIDE ADS — hoardings along both touchlines, asked for as a Game Feel tab.
+           Every board is invented or the owner's own; see AD_BOARDS. The picker below is a
+           set of TOGGLES (each tile switches one board in or out), unlike every other
+           `.opts` row here, which picks exactly one — the tiles are painted by the same
+           painter the pitch uses, so a tile cannot show a board the touchline will not. -->
+      <div class="subpane" data-group="feel" data-pane="ads">
+      <label class="field">Pitch-side ads</label>
+      <div class="opts" id="adsPick"></div>
+      <div id="feelSlidersAds"></div>
+      <div style="height:10px"></div>
+      <label class="field">Boards <small id="adCount" style="color:var(--accent)"></small></label>
+      <div class="opts" id="adBoards"></div>
+      <div style="height:6px"></div>
+      <label class="field">Your own board</label>
+      <input id="adText" type="text" maxlength="28" placeholder="Anything you like" autocomplete="off" />
+      <div class="hint" style="text-align:left; margin-top:4px">Boards run down both touchlines and every one rolls over together on the timer. Tap a board to take it out of the rotation; type a line above and it joins the end of it. Nothing here touches the match &mdash; it is paint outside the pitch.</div>
+      </div>
+
       <div class="subpane" data-group="feel" data-pane="advanced">
       <label class="field">Match speed <small id="mspeedVal" style="color:var(--accent)"></small></label>
       <input id="mspeed" class="slider" type="range" min="50" max="200" step="5" />
@@ -4785,6 +4803,140 @@ const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
 };
+// ---------- Pitch-side ads ------------------------------------------------
+// Advertising boards along BOTH touchlines, outside the line, the way a stadium's LED
+// hoardings sit — each slot shows a different board and they all roll over together
+// every `sel.adEvery` seconds. Asked for as *"ads that show up like soccer ads outside
+// the field, showing different things"*, with three boards named and the rest invented.
+// ⚠️ **RENDER ONLY.** Nothing in the sim reads any of this: `adState.t` is advanced in
+// `loop()` beside `decayJuice()` — never in a draw (the trails rule: at 144Hz a draw-driven
+// clock rolls the boards 2.4× too often) and never inside `step()`, which is what keeps a
+// pinned seed reproducing a match with the boards on or off.
+// ⚠️ **TOUCHLINES ONLY, never the goal ends**: the net pocket, the goal box's mirror and
+// the warm-up head count all live beyond the goal line, and a board across the mouth reads
+// as a barrier in the one place the ball has to go through (the fence's rule).
+// ⚠️ **OUTSIDE THE PITCH BY CONSTRUCTION** — `gap` starts past the touchline, so a board
+// can never be a decoy on the court (the Bootleg dots / Apologies! lane squares rule). A
+// waiting body mid-match stands 20 units out and walks OVER them: they are ground.
+// ⚠️ **NOT IN WARM-UP OR A DRILL.** The lobby's keyboard, shirts and flags occupy exactly
+// this strip, and a drill paints its own box through `renderDrill`.
+// ⚠️ **EVERY NAME HERE IS INVENTED OR THE OWNER'S OWN** — the standing trademark rule.
+// The three supplied were flagged at the time: none is a third party's mark.
+const ADS = {
+  gap: 10,        // world units from the touchline to the board's near edge
+  depth: 24,      // board depth (across), world units — a body is 30 wide
+  slotLen: 130,   // target slot length along the touchline; the count is derived from L
+  slotGap: 6,     // between slots
+  every: 8,       // seconds per rollover, the default the slider is born at
+  minPx: 4,       // below this font size the words are a smear — draw the board, skip them
+  rim: 'rgba(0,0,0,0.38)',
+};
+const AD_BOARDS = [
+  { key:'exit3a',     text:'exit 3A the game',        bg:'#1b1b22', ink:'#ffd23f' },
+  { key:'pnp',        text:'potion and pixels',       bg:'#2a0d3d', ink:'#ff5db1' },
+  { key:'charlotte',  text:'The Charlotte Newspaper', bg:'#f4efe4', ink:'#1c1c1c' },
+  { key:'grayhaven',  text:'GRAYHAVEN TYRES',         bg:'#101820', ink:'#e8e8e8' },
+  { key:'boltbracket',text:'Bolt & Bracket Hardware', bg:'#c8451f', ink:'#fff3e0' },
+  { key:'marrow',     text:'Marrow Street Bakery',    bg:'#f7d9a8', ink:'#5a2d0c' },
+  { key:'northfold',  text:'NORTHFOLD INSURANCE',     bg:'#0e3a5f', ink:'#ffffff' },
+  { key:'kestrel',    text:'Kestrel Air',             bg:'#cfe6f5', ink:'#0b2c4a' },
+  { key:'tumble',     text:'Tumble Dry Laundromat',   bg:'#2f9e8c', ink:'#ffffff' },
+  { key:'pinecrest',  text:'Pinecrest Dental',        bg:'#ffffff', ink:'#1f7a4d' },
+  { key:'halfmoon',   text:'Halfmoon Coffee',         bg:'#3b2416', ink:'#f3d9b1' },
+  { key:'rooke',      text:'ROOKE MOTORS',            bg:'#8f0f1e', ink:'#ffe66d' },
+  { key:'sunfish',    text:'Sunfish Surf Co.',        bg:'#ff9a3c', ink:'#123a5c' },
+  { key:'lantern',    text:'Lantern Row Books',       bg:'#e9e2d0', ink:'#2b3a67' },
+];
+const ADSOPT = {
+  on:  { name:'On',  emoji:'📣', icon:'billboard' },
+  off: { name:'Off', emoji:'🚫', icon:'barrier' },
+};
+function adsOn(){ return sel.adsOn !== 'off'; }
+function adEverySecs(){ const v = +sel.adEvery; return isFinite(v) && v > 0 ? Math.max(1, Math.min(60, v)) : ADS.every; }
+// Your own board rides at the END of the rotation: a typed line lands on the canvas
+// through fillText and nowhere else, so it needs no `noI18n` and cannot carry markup.
+function adCustomText(){ return String(sel.adText || '').replace(/\s+/g, ' ').trim().slice(0, 28); }
+// What is actually on the boards: the built-ins minus the ones switched off, plus yours.
+// ⚠️ `adOff` can arrive as anything from an imported save (`applySaveDoc` validates
+// nothing), so it is read through `Array.isArray` rather than trusted.
+function adList(){
+  const off = new Set(Array.isArray(sel.adOff) ? sel.adOff : []);
+  const out = AD_BOARDS.filter(a => !off.has(a.key));
+  const own = adCustomText();
+  if (own) out.push({ key:'custom', text: own, bg:'#ffffff', ink:'#111111' });
+  return out;
+}
+const adState = { t: 0 };
+function advanceAds(){ adState.t += STEP; }
+// ONE painter for the pitch and the picker tile: a board of `len` × `depth` centred on
+// the origin with its length along +x, the words fitted to it. The caller rotates the
+// frame — on the pitch a touchline runs along world y.
+// ⚠️ The fitted font is CACHED per (text, len, depth): `measureText` per board per frame
+// is the `fitGlyph` cost this file already paid once.
+const _adFontCache = new Map();
+function paintAdBoard(c, ad, len, depth){
+  c.fillStyle = ad.bg;
+  c.beginPath(); roundRectPathOn(c, -len/2, -depth/2, len, depth, Math.min(4, depth*0.18)); c.fill();
+  c.lineWidth = Math.max(1, depth*0.06); c.strokeStyle = ADS.rim; c.stroke();
+  let px = depth * 0.52;
+  if (px < ADS.minPx) return;
+  const key = ad.key + '|' + ad.text + '|' + Math.round(len) + '|' + Math.round(depth);
+  let font = _adFontCache.get(key);
+  if (!font){
+    const fam = "'Kenney', system-ui, -apple-system, sans-serif";
+    c.font = `bold ${px}px ${fam}`;
+    const wdt = c.measureText(ad.text).width, room = len * 0.88;
+    if (wdt > room) px = Math.max(ADS.minPx, px * room / wdt);
+    font = `bold ${px.toFixed(2)}px ${fam}`;
+    if (_adFontCache.size > 400) _adFontCache.clear();
+    _adFontCache.set(key, font);
+  }
+  c.font = font; c.fillStyle = ad.ink; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(ad.text, 0, 0);
+}
+// `roundRectPath` appends to the module `ctx`; the tile painter draws on its own canvas.
+function roundRectPathOn(c, x, y, ww, hh, r){
+  c.moveTo(x+r, y); c.arcTo(x+ww, y, x+ww, y+hh, r); c.arcTo(x+ww, y+hh, x, y+hh, r);
+  c.arcTo(x, y+hh, x, y, r); c.arcTo(x, y, x+ww, y, r);
+}
+// The slots down one touchline: how many and how long, derived from the court's length so
+// Futsal gets a few and Leviathan a row, never stretched ones (the `boardtrack` rule).
+function adSlots(L){
+  const n = Math.max(1, Math.floor((L + ADS.slotGap) / (ADS.slotLen + ADS.slotGap)));
+  const len = (L - (n - 1) * ADS.slotGap) / n;
+  return { n, len };
+}
+// Drawn from `drawPitch`, inside `pitchXform`, after the turf and before the markings.
+// Every slot on both touchlines shows a different board, and the whole row rolls one
+// place every `adEverySecs()` seconds — `adState.t` is the clock, never the sim's.
+function drawAds(w){
+  if (!adsOn() || !w || !w.bounds || w.state === 'warmup' || w.drillMode) return;
+  const list = adList();
+  if (!list.length) return;
+  const b = w.bounds, s = cam.s, L = b.halfL * 2;
+  const { n, len } = adSlots(L);
+  const depthPx = ADS.depth * s, lenPx = len * s;
+  if (depthPx < 1.5) return;
+  const base = Math.floor(adState.t / adEverySecs());
+  let k = 0;
+  for (const side of [-1, 1]){
+    const xm = side * (b.halfW + ADS.gap + ADS.depth / 2);
+    for (let i = 0; i < n; i++, k++){
+      const ym = -b.halfL + len / 2 + i * (len + ADS.slotGap);
+      const ad = list[((base + k) % list.length + list.length) % list.length];
+      ctx.save();
+      ctx.translate(wx(xm), wy(ym));
+      // ⚠️ +90°: the board runs along world y, so its length is drawn along local +x and
+      // the frame turned a quarter. Upright the words read top-to-bottom down the touchline;
+      // under the layout's own quarter-turn (`cam.rot` is −π/2 turned, which is every wide
+      // screen) the two cancel and every board reads left-to-right, which is the case the
+      // game is mostly played in.
+      ctx.rotate(Math.PI / 2);
+      paintAdBoard(ctx, ad, lenPx, depthPx);
+      ctx.restore();
+    }
+  }
+}
 // ============================================================
 //  SIDE VIEW — the showcase camera
 // ============================================================
@@ -5015,6 +5167,9 @@ const ICONS = {
   // carrying marks. Found by the icons suite once it learned to scan SUBTABS.
   monitor:   'M3.6 5h16.8v10.6H3.6Z M9 19.4h6 M12 15.6v3.8',
   sliders:   'M4 7.6h16 M4 12h16 M4 16.4h16 M8.6 5.6v4 M15.4 10v4 M10.6 14.4v4',
+  // A hoarding on a post, for the Ads tab. Two lines of "copy" inside so it cannot be
+  // read as the monitor one row up, which has a stand and nothing on its screen.
+  billboard: 'M3.4 5.4h17.2v8.6H3.4Z M12 14v5.8 M8.4 19.8h7.2 M6.6 8.6h10.8 M6.6 11h6.4',
   flame:     'M12 3.2c3 3.4 5.6 5.4 5.6 9.1a5.6 5.6 0 1 1-11.2 0c0-1.8.7-3.2 1.9-4.6.3 1.4 1 2.2 2 2.5-.4-2.6.2-5 1.7-7Z',
   post:      'M6.6 5.4h10.8v13.2H6.6Z M6.6 9.2h10.8 M6.6 13h10.8 M6.6 16.4h10.8 M10.2 5.4v13.2 M13.8 5.4v13.2',
   thumbup:   'M8.4 20V10.2l4-6.2c1.3 0 2.1.9 2.1 2.2V10h4.1c1.1 0 1.9 1 1.7 2.1l-1.2 6c-.2 1.1-1 1.9-2.1 1.9Z M8.4 10.2H4.6V20h3.8Z',
@@ -6883,6 +7038,7 @@ function magReachOf(){ const v = sel.magReach; return v != null ? Math.max(0, Ma
 function magKickPct(){ const v = sel.magKick; return v != null ? Math.max(0, Math.min(200, v|0)) : 100; }
 function magKickOf(){ return magKickPct() / 100; }
 function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0, magReach:18, magKick:100,
+            adsOn:'on', adEvery:8, adOff:[], adText:'',
             ball:'bouncy', handed:'left', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', ball3d:'off', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['random','random'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
@@ -12682,6 +12838,10 @@ $('pname').value = ep().name;
 function nameEdited(){ claimSeatName(editSeat); saveProfile(); syncPush(editSeat); updatePreview(); }
 $('pname').oninput = e => { ep().name = e.target.value.slice(0,12); nameEdited(); };
 $('pname').onblur  = () => { if(!ep().name.trim()){ ep().name = editSeat ? 'P'+(editSeat+1) : 'You'; $('pname').value = ep().name; nameEdited(); } };
+// Your own pitch-side board. Saved on every keystroke like the name field; the boards
+// row is NOT rebuilt per key (it would relayout the tiles under a finger), only the count.
+{ const at = $('adText'); if (at){ at.value = sel.adText || '';
+  at.oninput = e => { sel.adText = e.target.value.slice(0, 28); saveSel(); syncAdCount(); }; } }
 
 buildSwatches();
 buildCaps();
@@ -12775,6 +12935,8 @@ function buildMatchOpts(){
   buildOpts('dropIn', DROPIN, 'dropIn');
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
+  buildOpts('adsPick', ADSOPT, 'adsOn');
+  buildAdBoards();
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
   // ⚠️ Rebuilt here rather than only at boot, and the SLIDER is re-synced with it: the
   // switch and the dial are two controls for one feature, so the dial has to grey out
@@ -13729,7 +13891,7 @@ const SUBTABS = {
   feel:   [['ball','Ball','ball'], ['kick','Kick','boot'], ['magnet','Magnet','magnet'],
            ['player','Player','run'],
            ['sprint','Sprint','bolt'], ['effects','Effects','flame'],
-           ['camera','Camera','camera'], ['advanced','Advanced','gear']],
+           ['camera','Camera','camera'], ['ads','Ads','billboard'], ['advanced','Advanced','gear']],
   theme:  [['bundle', '✨ Bundle']].concat(
             SLOT_KEYS.map(k => [k, SLOTS[k].emoji + ' ' + SLOTS[k].label])),
 };
@@ -15046,6 +15208,7 @@ $('repSaveBtn').onclick = (e) => {
 $('feelReset').onclick = () => { const d = defaultSel();
   sel.feel = Object.assign({}, d.feel); sel.magnet = d.magnet; sel.sens = d.sens; sel.trapOff = d.trapOff;
   sel.magReach = d.magReach; sel.magKick = d.magKick;
+  sel.adsOn = d.adsOn; sel.adEvery = d.adEvery; sel.adOff = d.adOff.slice(); sel.adText = d.adText;
   sel.charge = d.charge; sel.chargeMs = d.chargeMs;     // the wind-up is a feel control too
   saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
@@ -15060,6 +15223,9 @@ $('settingsReset').onclick = () => {
 // what YOU do. They used to be one undifferentiated stack of eight.
 const FEEL_SLIDERS = [
   {g:'player', label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
+  // The ads' rollover clock. In this table so it lands in the Ads pane through the same
+  // group → wrapper rule every other Game Feel dial follows, rather than a bespoke slider.
+  {g:'ads', label:'Ads change every', get:()=>adEverySecs(), set:v=>sel.adEvery=v, min:2,max:30,step:1, fmt:v=>v+'s'},
   // ⚠️ **THE FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP** — see `stopSecs`. They
   // were "Player float" and "Ball glide", reading out the raw damping coefficient, and the
   // question they answer ("how long before a player stops") was not askable of either the
@@ -16094,6 +16260,33 @@ function buildFeelSliders(){
     wrap.appendChild(lab); wrap.appendChild(inp);
   });
 }
+// The Ads pane's board picker: one tile per built-in board, painted by the pitch's own
+// painter, lit while the board is in the rotation. ⚠️ A TOGGLE row, not a pick-one row —
+// `buildOpts` writes `sel[key] = k`, which is the wrong shape for "which of these are on",
+// so this is its own builder over `sel.adOff` (the ones switched OFF, so a board added to
+// the table later arrives on, and an older save that never heard of it does not hide it).
+function buildAdBoards(){
+  const wrap = $('adBoards'); if (!wrap) return;
+  wrap.innerHTML = '';
+  const off = new Set(Array.isArray(sel.adOff) ? sel.adOff : []);
+  for (const ad of AD_BOARDS){
+    const el = document.createElement('div');
+    el.className = 'opt' + (off.has(ad.key) ? '' : ' sel');
+    const cv = uiCanvas(160, 44, 80);
+    cv.style.width = '80px'; cv.style.height = '22px'; cv.style.display = 'block';
+    const c = cv.getContext('2d'); c.save(); c.translate(80, 22); paintAdBoard(c, ad, 150, 36); c.restore();
+    el.appendChild(cv);
+    const nm = document.createElement('small'); nm.textContent = ad.text; el.appendChild(nm);
+    el.onclick = () => {
+      const s2 = new Set(Array.isArray(sel.adOff) ? sel.adOff : []);
+      if (s2.has(ad.key)) s2.delete(ad.key); else s2.add(ad.key);
+      sel.adOff = [...s2]; saveSel(); buildAdBoards();
+    };
+    wrap.appendChild(el);
+  }
+  syncAdCount();
+}
+function syncAdCount(){ const el = $('adCount'); if (el) el.textContent = adList().length + ' in rotation'; }
 // Unlock audio on the first user gesture (autoplay policy).
 ['pointerdown','touchstart','keydown'].forEach(ev=> window.addEventListener(ev, ()=>Aud.ensure(), {once:true, passive:true}));
 
@@ -18729,6 +18922,7 @@ function loop(t){
     advanceFx();            // ...and the sparks, for exactly the same reason
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
+    advanceAds();           // ...and the hoardings' rollover clock — render-only, step-locked
     acc -= STEP; steps++;
   }
   // ⚠️ **HITTING THE CAP SHEDS THE SURPLUS, IT DOES NOT BANK IT.** Without this `acc`
@@ -29300,6 +29494,9 @@ function drawPitch(w){
   drawGrass(w, L, R, T, B);   // mow pattern (stripes / vertical / check / diagonal / rings / solid)
   vjPaintVideo(L, T, R-L, B-T);
   ctx.restore();
+  // Pitch-side hoardings: ground layer, outside the line, so they sit under every body and
+  // over whatever a bleeding theme painted in the surround. Nothing on the court.
+  drawAds(w);
   // Markings are dimmed as a group so heavy video doesn't bury the pitch, floored
   // at VJ.lineFloor so they can never vanish. vjMarkA() is exactly 1 with VJ off.
   const _mA = vjMarkA();
@@ -34803,6 +35000,7 @@ if (window.__MAGNETDEBUG) {
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
     KICKRING, kickRingMul, LABEL_BALL,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
+    ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,
     get acc(){ return acc; }, get renderAlpha(){ return renderAlpha; }, MAX_DT, MAX_STEPS,
     QUAL, fullQuality, qualityStep, qualityPin(v){ _qualPin = v; },
