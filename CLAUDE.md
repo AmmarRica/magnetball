@@ -2383,15 +2383,55 @@ three lines a second time, name it.
   `step()`, which a drill never runs, so in every drill the ball's pattern was frozen
   solid however hard it was hit — a ball that has stopped being a ball. Step loop only,
   never a draw (the trails rule).
-  ⚠️ **ONE signed quantity drives BOTH looks**: `along`, the travel projected onto
-  `rollAx`. It feeds `roll` for the sphere and `rot` for the flat pattern, so the two can
-  never disagree about which way the ball is turning.
-  ⚠️ **`rollAx` is CANONICALISED** into the right half of the pitch's frame (`canonRollAx`
-  — along +x, or +y when travel is exactly sideways to that). That is what makes the sign
-  of `along` mean anything: forward along the axis is always the same direction, so a ball
-  going one way rolls positively and a ball coming back rolls negatively. Latched, and
-  re-latched only past 60° off — a real turn rather than a rebound along the same line.
-  ⚠️ **`rot` is driven by `along`, never by SPEED**, and it shipped as `sp*0.03`. `sp` is a
+  ⚠️ **THE SPHERE'S AXIS IS THE DIRECTION OF TRAVEL, EVERY STEP** (`rollAxFor`), and
+  this **REVERSES the latch that used to be written here** — *"latched, and re-latched
+  only past 60° off"*. Reported as *"ball should be rollable to all directions"*, and the
+  latch is the whole of it: a ball kept rolling about the axis it was KICKED on through
+  any change of direction short of 60°, so it visibly rolled sideways to where it was
+  going. Measured over three seeded 90-second 3v3s, the angle between the axis and travel
+  ran **15–21° mean, 58.4° worst, and more than 30° off for 21–34% of every travelling
+  step**. Tracking travel it is **exactly 0** in all three.
+  ⚠️ **THE 60° LATCH WAS REDUNDANT FOR ITS OWN STATED PURPOSE, which is why it could go.**
+  It existed so a rebound along the same line did not flip the axis — and `canonRollAx`
+  already folded θ and θ+π onto one axis, so re-taking the heading every step gave the
+  *same* axis after a straight rebound anyway. What the latch actually bought was nothing,
+  and what it cost was every turn under 60°.
+  ⚠️ **THE NEW RULE IS THE REPRESENTATIVE OF THE TRAVEL LINE NEAREST THE AXIS WE ALREADY
+  HAVE.** θ and θ+π name the same axis with opposite senses; picking the nearer one keeps
+  a straight rebound rolling *back the way it came* (only the sign of `along` flips, which
+  is the behaviour `rollUnwinds` has always pinned) and bounds how far the drawn frame can
+  swing in one step at 90°.
+  ⚠️ **WHAT IT COSTS IS A SWIVEL AT A DEFLECTION, and both sides were measured in the same
+  run.** Turning the axis onto new travel rotates the whole drawn frame by the same amount,
+  so the pattern re-orients in one frame at a bounce: **2.2–2.6% of travelling steps swing
+  more than 20°, against 0.8–1.0% on the latched build**, mean 1.3–1.5°/step against
+  0.7–0.9. That is the price of a single-axis model — a true rolling ball has a 3-DOF
+  orientation and the painter has two (axis, phase), so it cannot be represented without
+  re-baking the texture every frame. The swivel lands at the instant the ball visibly
+  changes direction, where it is masked; the old error was continuous and watchable.
+  ⚠️ **AND IT REMOVES A 180° PICTURE FLIP THE CANONICALISATION CAUSED.** Folding into the
+  right half-plane puts a discontinuity at `vx === 0` — straight up and down the pitch,
+  which is not a rare direction — so two near-identical headings either side of it gave
+  axes π apart and the drawn hemisphere changed completely. Measured as frame swing
+  **over 90°** on **0.32–0.60%** of travelling steps, worst **112–119°**; tracking travel
+  it is **0%** and can never exceed 90 by construction. ⚠️ The jump metric has to be the
+  axis as an **ANGLE**, not as a line: folding ±180° to 0 scores that flip as *no change*
+  and reports a build that flips the picture as perfectly smooth.
+  ⚠️ **`canonRollAx` STAYS, and it is now the FLAT look's alone.** The two want opposite
+  things — the sphere wants the axis to follow the ball wherever it goes, and `rot` is a
+  2D screen spin that needs a FIXED frame or "rolling right is clockwise" means nothing.
+  Under the new axis `along` comes out positive whichever way the ball is going, so
+  feeding it to `rot` makes the flat pattern turn one way for ever, which is the *original*
+  complaint. `advanceBallSpin` therefore computes two projections, not one — **this
+  REVERSES *"ONE signed quantity drives BOTH looks"***, which was true only while the
+  sphere's axis was canonical too.
+  ⚠️ **`tests/ball3d.mjs`' two `rollAx` checks were REWRITTEN rather than re-pointed.**
+  `axesCanonical` and `oppositeSameAxis` asserted the canonical sphere axis directly, and
+  that is the thing that moved. The claim they were protecting — the flat pattern's sign —
+  is measured on what is DRAWN now: the same heading reversed turns `rot` by exactly as
+  much the other way, on the diagonals as well as the axes.
+  ⚠️ **`rot` is driven by a SIGNED projection, never by SPEED**, and it shipped as
+  `sp*0.03`. `sp` is a
   magnitude, so the flat pattern turned the same way in every direction — a wheel rolling
   right reads clockwise and it stayed clockwise when the ball came back left. That was the
   whole of "the ball rotates the opposite way to where it is rolling", and it is the look

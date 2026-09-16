@@ -311,6 +311,73 @@ const r = await p.evaluate(() => {
     o.axRelatched = Math.abs(fake.ball.rollAx - outAx) > 1;
   }
 
+  // ---- ⚠️ ...AND IT ROLLS THE WAY IT IS GOING, IN EVERY DIRECTION ---------
+  // The axis used to be LATCHED and only re-taken once travel went more than 60° off it,
+  // so a ball that turned kept rolling about the axis it was kicked on. Measured over
+  // three seeded 90-second matches that was a mean error of 15-21° with a worst case of
+  // 58° and more than 30° off for 21-34% of every travelling step — the ball visibly
+  // rolling sideways to where it was going. Two halves, and the second is the one the
+  // latch failed: a FRESH ball in each direction, and a ball ALREADY rolling that turns.
+  {
+    const wrap = a => { let d = a % (2*Math.PI); if (d > Math.PI) d -= 2*Math.PI;
+                        if (d <= -Math.PI) d += 2*Math.PI; return d; };
+    const deg = a => Math.abs(wrap(a)) * 180/Math.PI;
+    // The texture scrolls along +axis as `roll` grows, so the direction the pattern
+    // actually travels is sign(Δroll) × axis. That is what has to equal the heading.
+    const scrollErr = (bo, dRoll) => {
+      const s = Math.sign(dRoll) || 1;
+      return deg(Math.atan2(s*Math.sin(bo.rollAx), s*Math.cos(bo.rollAx)) - bo.th);
+    };
+    const freshErr = [], turnErr = [];
+    for (let k = 0; k < 16; k++){
+      const th = k/16 * 2*Math.PI, vx = 6*Math.cos(th), vy = 6*Math.sin(th);
+      const f = { ball:{ x:0, y:0, vx, vy, rot:0, spin:0, r:10 } };
+      let r0 = 0;
+      for (let i=0;i<6;i++){ f.ball.vx = vx; f.ball.vy = vy; if (i===5) r0 = f.ball.roll||0;
+                             M.advanceBallSpin(f); }
+      f.ball.th = th;
+      freshErr.push(+scrollErr(f.ball, f.ball.roll - r0).toFixed(2));
+      // now the turn: a ball rolling due east, redirected onto this heading
+      const g = { ball:{ x:0, y:0, vx:6, vy:0, rot:0, spin:0, r:10 } };
+      for (let i=0;i<8;i++) M.advanceBallSpin(g);
+      let s0 = 0;
+      for (let i=0;i<6;i++){ g.ball.vx = vx; g.ball.vy = vy; if (i===5) s0 = g.ball.roll||0;
+                             M.advanceBallSpin(g); }
+      g.ball.th = th;
+      turnErr.push(+scrollErr(g.ball, g.ball.roll - s0).toFixed(2));
+    }
+    o.freshErr = freshErr; o.turnErr = turnErr;
+    o.worstFresh = Math.max(...freshErr.map(Math.abs));
+    o.worstTurn  = Math.max(...turnErr.map(Math.abs));
+    o.rollsEveryDirection = o.worstFresh < 0.5;
+    o.axisFollowsATurn    = o.worstTurn  < 0.5;
+  }
+
+  // ---- ⚠️ ...AND IT HOLDS OVER A REAL MATCH, WHICH IS WHERE IT WAS REPORTED
+  // The sweep above is 16 clean headings; a match is deflections, rebounds and shoves.
+  // On the latched build this read a worst error of 58.4° — the threshold itself.
+  {
+    M.sel.ball3d = 'on'; M.sel.mode = '3v3'; M.sel.length = '5';
+    M.setMatchSeed(11); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    const bl = w.ball;
+    let worst = 0, over30 = 0, n = 0;
+    for (let i=0;i<60*45;i++){
+      M.step(w);
+      const sp = Math.hypot(bl.vx, bl.vy);
+      if (sp < 1 || bl.rollAx == null) continue;
+      const along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
+      const e = Math.acos(Math.min(1, Math.abs(along)/sp)) * 180/Math.PI;
+      n++; if (e > worst) worst = e; if (e > 30) over30++;
+    }
+    o.matchSteps = n;
+    o.matchWorstErr = +worst.toFixed(2);
+    o.matchOver30 = +(100*over30/Math.max(1,n)).toFixed(1);
+    // Paired with "that really was a match": zero travelling steps passes everything above.
+    o.matchTravelled = n > 500;
+    o.matchStaysOnTravel = o.matchTravelled && worst < 1;
+  }
+
   // ---- ⚠️ THE RATE IS THE PHYSICAL ONE, ω = v/R ---------------------------
   // Rolling without slipping. It was a magic 0.055 against a radius of 10, so the ball turned
   // at half the rate the ground it covered called for and read as sliding rather than rolling
@@ -338,17 +405,19 @@ const r = await p.evaluate(() => {
       for (let i=0;i<10;i++){ f.ball.vx = vx; f.ball.vy = vy; M.advanceBallSpin(f); }
       return { rot:+f.ball.rot.toFixed(3), ax:+f.ball.rollAx.toFixed(3) };
     };
-    const R4 = spin(6,0), L4 = spin(-6,0), D4 = spin(0,6), U4 = spin(0,-6), Q4 = spin(-4,-4);
+    const R4 = spin(6,0), L4 = spin(-6,0), D4 = spin(0,6), U4 = spin(0,-6);
+    const Q4 = spin(-4,-4), Q5 = spin(4,4);
     o.spinRight = R4.rot; o.spinLeft = L4.rot; o.spinDown = D4.rot; o.spinUp = U4.rot;
     o.rotReverses = R4.rot > 0.3 && L4.rot < -0.3 && D4.rot > 0.3 && U4.rot < -0.3;
-    o.rotSymmetric = Math.abs(R4.rot + L4.rot) < 1e-6 && Math.abs(D4.rot + U4.rot) < 1e-6;
-    // The axis is canonical — right half-plane — which is what makes the SIGN mean anything.
-    // ⚠️ Compared with a 1e-3 slack, because these are rounded to three decimals for the
-    // failure message and cos(1.571) is already -3.7e-6. An exact test here is a test of
-    // the rounding.
+    // ⚠️ THE FLAT LOOK KEEPS ITS OWN CANONICAL FRAME, and this is what says so — the
+    // sphere's axis follows travel (above), so it is NOT in the right half-plane any more
+    // and `rollAx` can no longer carry this claim. Measured on what is DRAWN instead: the
+    // same heading reversed has to turn the pattern by exactly as much the other way, on
+    // the diagonals as well as the axes. Without the fold, `along` comes out positive
+    // whichever way the ball is going and the flat pattern turns one way for ever.
+    o.rotSymmetric = Math.abs(R4.rot + L4.rot) < 1e-6 && Math.abs(D4.rot + U4.rot) < 1e-6
+                  && Math.abs(Q4.rot + Q5.rot) < 1e-6 && Math.abs(Q5.rot) > 0.3;
     o.axes = [R4.ax, L4.ax, D4.ax, U4.ax, Q4.ax];
-    o.axesCanonical = o.axes.every(a => Math.cos(a) >= -1e-3);
-    o.oppositeSameAxis = Math.abs(R4.ax - L4.ax) < 1e-9 && Math.abs(D4.ax - U4.ax) < 1e-9;
   }
 
   // ⚠️ ...and a POSITIVE rot really is clockwise on screen. Without this half, "right gives
@@ -775,16 +844,22 @@ ok('the worst case still fits a frame', r.worstCaseFitsAFrame,
    `fourteen lobby balls cost ${r.fourteenMs}ms of a 16.6ms frame`);
 ok('the roll UNWINDS on a rebound', r.rollUnwinds,
    `axis kept: ${r.axKept}, roll went back: ${r.rollBack} — a ball bouncing straight off a wall rolls back the way it came, and taking the axis from the live velocity instead flips it 180° and jumps half a turn of texture across the face in one frame`);
-ok('...but a real change of direction re-latches the axis', r.axRelatched,
+ok('...but a real change of direction moves the axis', r.axRelatched,
    'a ball turning a corner would otherwise roll backwards for the rest of the match');
+ok('the ball rolls the way it is GOING, in every direction', r.rollsEveryDirection,
+   `worst scroll-vs-travel error over 16 headings from rest: ${r.worstFresh}° — ${JSON.stringify(r.freshErr)}`);
+ok('...and the axis FOLLOWS a turn', r.axisFollowsATurn,
+   `a ball already rolling east, redirected onto 16 headings, scrolled up to ${r.worstTurn}° off its new travel — ${JSON.stringify(r.turnErr)}. The axis used to be LATCHED and only re-taken past 60°, so anything short of that kept rolling about the axis it was kicked on`);
+ok('...over a whole match, not just clean headings', r.matchStaysOnTravel,
+   `a seeded 45-second 3v3 was worst ${r.matchWorstErr}° off travel with ${r.matchOver30}% of ${r.matchSteps} travelling steps more than 30° off — the latched build measured 58.4° and 34.1%`);
+ok('that really was a match', r.matchTravelled,
+   `only ${r.matchSteps} steps had the ball travelling, so the check above saw next to nothing`);
 ok('the roll rate is the PHYSICAL one, v/R', r.rateIsPhysical,
    `travelling 10 units gave ${r.rollPerStep10} rad on a radius-10 ball and ${r.rollPerStep20} on a radius-20 one, against 1 and 0.5 for rolling without slipping — a magic constant here was half the physical rate, so the ball under-turned for the ground it covered and read as sliding`);
 ok('the FLAT pattern reverses with direction', r.rotReverses,
    `rot after ten steps: right ${r.spinRight}, left ${r.spinLeft}, down ${r.spinDown}, up ${r.spinUp} — sel.ball3d is off by DEFAULT, so the flat look is what nearly everybody sees, and its rot was driven by SPEED, a magnitude. The pattern turned the same way whichever direction the ball went, which is the whole of "the ball rotates the opposite way to where it is rolling"`);
-ok('...by exactly as much, both ways', r.rotSymmetric,
-   `right ${r.spinRight} against left ${r.spinLeft} — a ball that goes out and comes back must arrive with its pattern where it started`);
-ok('...about a CANONICAL axis', r.axesCanonical && r.oppositeSameAxis,
-   `axes ${JSON.stringify(r.axes)} — the axis has to point into the same half-plane whichever way the ball is going, or the sign of the roll means nothing and opposite directions both come out positive`);
+ok('...by exactly as much, both ways, on the diagonals too', r.rotSymmetric,
+   `right ${r.spinRight} against left ${r.spinLeft} — a ball that goes out and comes back must arrive with its pattern where it started. The FLAT look keeps its own canonical frame; the sphere's axis follows travel now, so rollAx (${JSON.stringify(r.axes)}) can no longer carry this claim and what is DRAWN does`);
 ok('a positive rot IS clockwise on screen', r.positiveRotIsClockwise,
    `a mark turned ${r.dotTurned} rad for a rot of +0.5 — without this half, "right gives a positive rot" says nothing about which way the ball appears to turn, and the two halves together are the complaint`);
 ok('the probe dot was found at all', r.dotFound,

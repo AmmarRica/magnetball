@@ -21599,41 +21599,49 @@ function step(w){
 //          on. It has to be signed: a ball that bounces straight back off a wall rolls
 //          back the way it came, and the sphere path used to take its direction from the
 //          live heading instead — so the instant a bounce flipped that heading by 180°,
-//          half a turn of texture jumped across the ball. The axis is only re-latched when
-//          travel goes more than 60° off it, which is a genuine change of direction rather
-//          than a rebound along the same line.
-// ⚠️ The axis is CANONICALISED into the right half of the pitch's own frame — pointing
-// along +x, or along +y when travel is exactly sideways to that. That is what makes the
-// SIGN of `along` mean something: forward along the axis is always the same direction, so
-// a ball going one way rolls positively and a ball going back rolls negatively.
-// Without it `rollAx` just tracked the heading, `along` was positive whichever way the
-// ball was going, and the flat pattern turned the same way in every direction — which is
-// what "the ball rotates the opposite way to where it is rolling" was. A wheel rolling
-// right reads clockwise, and this stayed clockwise when the ball came back left.
+//          half a turn of texture jumped across the ball.
+// ⚠️ THE SPHERE'S AXIS IS THE DIRECTION OF TRAVEL, EVERY STEP — see `rollAxFor`. The
+// FLAT look keeps its own canonical frame (`canonRollAx`), because the two want opposite
+// things: the sphere wants the axis to follow the ball wherever it goes, and the flat
+// pattern wants a fixed frame so that "rolling right" is always clockwise.
+// `canonRollAx` folds a heading into the right half-plane, which is what makes the SIGN
+// of the flat pattern's turn mean anything — without it the flat look turned the same way
+// in every direction, which is what "the ball rotates the opposite way to where it is
+// rolling" was.
 function canonRollAx(vx, vy){
   if (vx < 0 || (vx === 0 && vy < 0)){ vx = -vx; vy = -vy; }
   return Math.atan2(vy, vx);
+}
+// ⚠️ THE REPRESENTATIVE OF THE TRAVEL LINE NEAREST THE AXIS WE ALREADY HAVE. A heading θ
+// and θ+π name the same roll axis with opposite senses, and picking the nearer one is
+// what keeps a straight rebound rolling back the way it came (θ→θ+π folds to the SAME
+// axis, so only the sign of `along` flips) while a real turn moves the axis onto the new
+// travel. It also bounds how far the drawn frame can swing in one step at 90°.
+function rollAxFor(ax, vx, vy){
+  const want = Math.atan2(vy, vx);
+  if (ax == null) return want;
+  let d = (want - ax) % (2*Math.PI);
+  if (d > Math.PI) d -= 2*Math.PI; else if (d <= -Math.PI) d += 2*Math.PI;
+  return Math.abs(d) > Math.PI/2 ? ax + d - Math.sign(d)*Math.PI : ax + d;
 }
 function advanceBallSpin(w){
   for (const bl of (w.extraBalls && w.extraBalls.length ? [w.ball, ...w.extraBalls] : [w.ball])){
     if (!bl) continue;
     const sp = Math.hypot(bl.vx, bl.vy);
-    let along = 0;                                // signed travel along the roll axis
+    let flat = 0;                                 // signed travel in the FLAT look's frame
     if (sp > 0.15){                               // at rest it keeps the axis it had
-      const ax = bl.rollAx;
-      const a0 = ax == null ? null : bl.vx*Math.cos(ax) + bl.vy*Math.sin(ax);
-      if (a0 == null || Math.abs(a0) < sp*0.5){   // >60° off the axis: a real turn
-        bl.rollAx = canonRollAx(bl.vx, bl.vy);
-        along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
-      } else along = a0;
+      bl.rollAx = rollAxFor(bl.rollAx, bl.vx, bl.vy);
+      const along = bl.vx*Math.cos(bl.rollAx) + bl.vy*Math.sin(bl.rollAx);
       // ⚠️ ω = v/R, the real rolling-without-slipping rate, off the ball's OWN radius. A
       // magic constant here was half the physical rate, so the ball under-turned for the
       // ground it covered and read as sliding.
       bl.roll = (bl.roll||0) + along/(bl.r || 10);
+      const ca = canonRollAx(bl.vx, bl.vy);
+      flat = bl.vx*Math.cos(ca) + bl.vy*Math.sin(ca);
     }
-    // ⚠️ `along`, never `sp`. The flat look reads `rot` as a 2D turn of the pattern and a
+    // ⚠️ `flat`, never `sp`. The flat look reads `rot` as a 2D turn of the pattern and a
     // player reads that turn as a wheel, so it has to reverse when the ball reverses.
-    bl.rot = (bl.rot||0) + (bl.spin||0) + along*0.03;   // the flat look keeps its own rate
+    bl.rot = (bl.rot||0) + (bl.spin||0) + flat*0.03;   // the flat look keeps its own rate
     bl.spin = (bl.spin||0) * 0.90;
   }
 }
