@@ -7626,7 +7626,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 140 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 142 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260821.1120AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260917.0509AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
 
 ---
 

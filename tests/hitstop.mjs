@@ -112,7 +112,11 @@ const r = await p.evaluate(async ()=>{
     M.sel.mode='1v1'; M.setMatchSeed(3); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2; M.hitStop = 0;
     w.players.forEach(q=>{ q.x=620; q.y=620; q.vx=0; q.vy=0; q.kick=false; q.ctrl='bot'; });
-    const st = w.players[0]; st.team = 0;
+    // ⚠️ The STRIKER is a person. A bot's strike is scaled to the AI's tuned kick
+    // (`botKickMul`, 6.3 a step at the shipped kick of 80), and from 320 units out that
+    // shot dies before the line — `predictsGoal` says no goal and there is nothing for the
+    // freeze to fire on. This suite is about a FIRST TOUCH, whoever makes it.
+    const st = w.players[0]; st.team = 0; st.ctrl = 'human1';
     place(w, st);
     M.handleBallControl(w, st, w.ball, false);
     return M.hitStop;
@@ -133,7 +137,7 @@ const r = await p.evaluate(async ()=>{
     M.sel.mode='1v1'; M.setMatchSeed(3); M.startMatch();
     const w=M.world; w.state='play'; w.stateT=2; M.hitStop = 0;
     w.players.forEach(q=>{ q.x=620; q.y=620; q.vx=0; q.vy=0; q.kick=false; q.ctrl='bot'; });
-    const st = w.players[0]; st.team=0;
+    const st = w.players[0]; st.team=0; st.ctrl = 'human1';   // a person, see strike()
     st.x=0; st.y=-40; st.faceX=0; st.faceY=-1;
     w.ball.x=0; w.ball.y=-40-(st.r+w.ball.r+2);
     st.trap = true; st.trapT = 0; st.chargeT = 0;
