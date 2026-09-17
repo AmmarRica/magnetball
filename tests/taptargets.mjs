@@ -316,6 +316,10 @@ const reduce = await rm.evaluate(() => {
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;
   M.addShake(9); o.shakeStaysZero = !(M.shake > 0);
+  // ⚠️ The auto-replay no longer rides `motionOK()` either (it made the Best / Every / Off
+  // picker a dead control at the shipped `juice:false`), so this is the PICKER's first-run
+  // default being checked, exactly as the zoom's is below — not the toggle standing in for it.
+  o.replayDefaultedOff = M.sel.autoReplay === false;
   o.autoReplaySuppressed = M.autoReplayReady(w) === false;
   // ...and the toggle turns it all back on, which is the half that matters.
   M.sel.juice = true;
@@ -402,8 +406,8 @@ ok('KICK OFF is above the fold in landscape', ls.aboveFold && ls.pressable,
 
 ok('a reduced-motion device starts quiet', reduce.prefers && reduce.juiceDefaultedOff && reduce.motionOff,
    JSON.stringify(reduce));
-ok('...with the effects really off', reduce.shakeStaysZero && reduce.autoReplaySuppressed,
-   JSON.stringify(reduce));
+ok('...with the effects really off', reduce.shakeStaysZero && reduce.replayDefaultedOff && reduce.autoReplaySuppressed,
+   JSON.stringify(reduce) + ' — the auto-replay is its own picker now and does not read motionOK(), so its quiet start is its own first-run default');
 ok('...including the goal zoom, which is its own dial now', reduce.zoomDefaultedOff && reduce.zoomLabelSaysOff,
    JSON.stringify(reduce) + ' — the goal camera no longer reads motionOK(), so if this default had not moved with ' +
    'it, uncoupling the two would have quietly handed a reduced-motion device a camera push it never used to get');

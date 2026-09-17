@@ -3979,6 +3979,8 @@ const STRINGS = {
   'Quarter-final': ['Cuartos de final', 'Quart de finale', 'Viertelfinale', 'Quartos de final', 'Quarti di finale'],
   'Off': ['Desactivado', 'Désactivé', 'Aus', 'Desligado', 'Off'],
   'On': ['Activado', 'Activé', 'An', 'Ligado', 'On'],
+  'Best goals': ['Mejores goles', 'Meilleurs buts', 'Beste Tore', 'Melhores golos', 'Gol migliori'],
+  'Every goal': ['Todos los goles', 'Tous les buts', 'Jedes Tor', 'Todos os golos', 'Tutti i gol'],
   'Auto': ['Automático', 'Auto', 'Automatisch', 'Automático', 'Automatico'],
   'Touch': ['Táctil', 'Tactile', 'Touch', 'Toque', 'Tocco'],
   'Everyone': ['Todos', 'Tout le monde', 'Alle', 'Todos', 'Tutti'],
@@ -13632,8 +13634,12 @@ function saveArcade(){ try { localStorage.setItem(ARCADEBK.key, JSON.stringify(a
 // Still a DEFAULT and never an override, for the reason above: the slider has to keep
 // working on exactly the devices whose owners want it back. `GOALCAM.zoomMin * 100` rather
 // than a literal 100, or the "off" position and the slider's floor could drift apart.
+// ⚠️ **AND THE AUTO-REPLAY**, for the same reason once `autoReplayReady` stopped reading
+// `motionOK()`: a replay cutting in is the whole picture moving unasked, so it is off by
+// default here and stays a three-way picker the owner can turn back on.
 try { if (prefersReducedMotion() && !localStorage.getItem('magnetball.sel')){
-        sel.juice = false; sel.goalZoom = Math.round(GOALCAM.zoomMin * 100); } } catch(e){}
+        sel.juice = false; sel.goalZoom = Math.round(GOALCAM.zoomMin * 100);
+        sel.autoReplay = false; } } catch(e){}
 // ⚠️ **AND AN EXISTING SHAKE-OFF INSTALL KEEPS WHAT IT ALREADY SEES, ONCE.** Until now the
 // shake toggle silently suppressed the push, so somebody playing with effects off has never
 // had a goal camera. Uncoupling the two would hand them a 1.8× push at every goal, unasked,
@@ -13681,6 +13687,29 @@ try {
       saveSel();
     }
     localStorage.setItem('magnetball.zoomfold', '1');
+  }
+} catch(e){}
+// AN EXISTING EFFECTS-OFF INSTALL KEEPS ITS SILENCE, ONCE (`magnetball.replayfold`). The
+// `zoomfold` argument exactly: until `autoReplayReady` stopped reading `motionOK()`, a
+// device with the shake off has never seen an auto-replay however its picker read, so
+// uncoupling the two would hand it an 18-second cut-away at every goal worth one, unasked.
+// Its picker is moved to the value that reproduces today's game — Off — where it is now
+// visible and reversible instead of silently overridden.
+// ⚠️ **THE `magnetball.sel` GUARD IS LOAD-BEARING, NOT DEFENSIVE.** Both arms below are
+// true of a FRESH install — `juice` ships false and `autoReplay` ships true — so without it
+// this fires on frame one, switches the feature off for every new player and writes
+// `magnetball.sel`, which is the key whose absence is `isFirstRun`. Unlike `zoomfold`, whose
+// old value stopped being the default, there is nothing else here that separates a played
+// device from a new one; `tests/notable.mjs` pins it from both sides.
+// ⚠️ **Only an untouched picker** — a stored `'all'` is somebody who chose it in the new
+// world and keeps it. One-shot and stamped either way, the standing fold rule.
+try {
+  if (!localStorage.getItem('magnetball.replayfold')){
+    if (localStorage.getItem('magnetball.sel') && sel.juice === false && sel.autoReplay === true){
+      sel.autoReplay = false;
+      saveSel();
+    }
+    localStorage.setItem('magnetball.replayfold', '1');
   }
 } catch(e){}
 // A DEVICE ALREADY CARRYING THE OLD FEEL IS MOVED ON, ONCE (`magnetball.feelfold`).
@@ -16288,10 +16317,15 @@ function buildSettings(){
   }
   const ar=$('autoReplayPick');
   if (ar){ ar.innerHTML='';
-    [['on','▶ On'],['off','⊘ Off']].forEach(([k,lab])=>{
-      const on=(k==='on')===(sel.autoReplay!==false);
+    // ⚠️ Three answers, and `true` is BEST. It always meant "replay every goal" and at the
+    // shipped default that was most of the match (see goalNotable), so a stored `true` now
+    // gets the goals worth watching — a person's own, a long-ranger, one off the boards, one
+    // that changed the lead — and `'all'` is the new spelling for every goal.
+    const cur = sel.autoReplay === false ? 'off' : (sel.autoReplay === 'all' ? 'all' : 'best');
+    [['best','▶ Best goals'],['all','▶ Every goal'],['off','⊘ Off']].forEach(([k,lab])=>{
+      const on = cur === k;
       const el=document.createElement('div'); el.className='opt'+(on?' sel':''); el.innerHTML=`<span>${lab}</span>`;
-      el.onclick=()=>{ sel.autoReplay=(k==='on'); saveSel(); buildSettings(); };
+      el.onclick=()=>{ sel.autoReplay = k==='off' ? false : (k==='all' ? 'all' : true); saveSel(); buildSettings(); };
       ar.appendChild(el);
     });
   }
@@ -19123,13 +19157,59 @@ const GOALHOLD = { hold: 1.8, replayAt: 3.0 };
 // answer is needed twice — once to pick how long to hold the celebration and once to decide
 // what to do when that runs out — and two copies would drift into a hold that waits for a
 // replay that never comes.
+// WHICH GOALS ARE WORTH A REPLAY. `sel.autoReplay` used to replay EVERY goal, and at the
+// shipped default that is most of the match: four seeded 5-minute 3v3s at Normal produced
+// 6 / 12 / 15 / 7 goals, and each one is a 3s hold plus 7.6s of frames at half speed —
+// about 18s off the clock per goal, so a 12-goal match spends 3.5 minutes watching replays
+// of 5 minutes of play. A tap-in by a bot at 0-7 is not what an instant replay is for.
+// ⚠️ Decided where the goal is SCORED, from what the ball already carries, never by a
+// second reading of the game afterwards — the floaters' rule. `creditScorer` clears the
+// kicker chain, so this has to be asked BEFORE it (see scoreGoal).
+// A goal is worth showing back when ANY of these holds:
+//   - a PERSON scored it (a bot's goal against you is the one you did not want to see);
+//   - it was struck from a long way out — the strike point at least `far` of the pitch
+//     length from the line it crossed;
+//   - it went in off the boards or a post since it was last kicked (`_banked`);
+//   - it changed who is winning, or levelled the match — including the first goal of
+//     every match, which is why every suite that fires one goal and expects a replay still
+//     gets one;
+//   - it decided the match (`finalGoal`, already the one goal that gets slow motion).
+// `sel.autoReplay === 'all'` puts every goal back; `false` is still off.
+// `far` is MEASURED, not picked: over the 41 goals of four seeded 5-minute 3v3s at Normal
+// the strike distances (as a fraction of the pitch length from the line crossed) ran
+// 0.03..0.26 with four outliers at 0.30, 0.34, 0.40 and 0.40 — so 0.30 is the top decile,
+// the shots a bot only rarely takes from that far and the ones worth watching again.
+const NOTABLE = { far: 0.30 };
+function goalNotable(w, b, team){
+  if (!b) return true;
+  const k = b.lastKicker;
+  if (k && k.team === team && k.ctrl !== 'bot') return true;
+  if (b._banked) return true;
+  const halfL = w.field.L/2, lineY = team === 0 ? -halfL : halfL;   // team 0 attacks the top
+  if (b.kickY != null && Math.abs(lineY - b.kickY) >= NOTABLE.far * w.field.L) return true;
+  // the score AFTER this goal, before it is written
+  const a = w.score.slice(); a[team]++;
+  const led = w.score[0] === w.score[1] ? -1 : (w.score[0] > w.score[1] ? 0 : 1);
+  const leads = a[0] === a[1] ? -1 : (a[0] > a[1] ? 0 : 1);
+  return led !== leads;
+}
 function autoReplayReady(w){
   const ending = w.goalsTarget && Math.max(w.score[0], w.score[1]) >= w.goalsTarget;
-  // ⚠️ Rides `motionOK()` too. An auto-replay is the whole picture cutting away and
-  // moving without being asked, which is squarely what a reduced-motion preference is
-  // about — and it is unskippable for its first frames. Watching one you CHOSE from the
-  // menu is untouched, because you chose it.
-  return !!(sel.autoReplay && motionOK() && !vj.on && !w.demo && !ending && !w.overtime
+  // ⚠️ `w._goalNotable` is written by scoreGoal for THIS goal. A path that reaches the goal
+  // state without writing it (older callers, a harness) reads as notable — the gate can
+  // only ever hold a replay back on a goal it has actually judged.
+  const worth = sel.autoReplay === 'all' || w._goalNotable !== false;
+  // ⚠️ **DOES NOT READ `motionOK()`, and it did — which made the whole picker a DEAD
+  // CONTROL at the shipped default.** `motionOK()` is `!!sel.juice` and `juice` ships
+  // FALSE, so on every fresh install `sel.autoReplay` could be set to Best or Every goal,
+  // the tile would light, and no replay ever fired: measured, zero auto-replays over four
+  // seeded 5-minute matches at the default, with the same four matches producing 41 under
+  // effects-on. Same shape as the goal zoom, which rode this toggle and was uncoupled for
+  // the same reason. A replay cutting in IS on-screen motion, so the reduced-motion half
+  // did not disappear — it MOVED to the first-run default beside `juice` and `goalZoom`
+  // (a default, never an override), and an existing effects-off install keeps what it
+  // sees today through `magnetball.replayfold`.
+  return !!(sel.autoReplay && worth && !vj.on && !w.demo && !ending && !w.overtime
             && !(w.party && w.party.multi) && !w._autoReplayed
             && lastReplay && lastReplay.frames && lastReplay.frames.length
             && lastReplay.players === w.players.length);
@@ -24539,6 +24619,9 @@ function noteKick(w, p, power, nx, ny){
   const b = w.ball, ms = p.ms;
   if (b.lastKicker && b.lastKicker !== p){ b.prevKicker = b.lastKicker; b.prevKickT = b.lastKickT; }
   b.lastKicker = p; b.lastKickTeam = p.team; b.lastKickT = w.matchT;
+  // Where the ball was struck from, and whether it has touched the boards since — the two
+  // facts `goalNotable` reads when this kick turns out to be a goal.
+  b.kickX = b.x; b.kickY = b.y; b._banked = false;
   ms.touches++;
   if (power > ms.hardest) ms.hardest = power;
   ballSquash(b, nx, ny, Math.min(1, power/9));
@@ -24850,7 +24933,7 @@ function collideDiscs(a, b){
   const min = a.r + b.r;
   if (dist >= min || dist === 0) return;
   // Ball off a goal post — flags a near-miss for the crowd groan.
-  if ((a.isBall && b.isPost) || (b.isBall && a.isPost)){ (a.isBall?a:b)._hitPost = true; }
+  if ((a.isBall && b.isPost) || (b.isBall && a.isPost)){ const bb = a.isBall?a:b; bb._hitPost = true; bb._banked = true; }
   const nx = dx/dist, ny = dy/dist;
   const im = a.invMass + b.invMass;
   if (im === 0) return;
@@ -24895,7 +24978,7 @@ function collideWall(d, seg){
       if (seg.isNet){
         d.vx *= 0.5; d.vy *= 0.5;           // net kills momentum
         if (-vn > 1) d._hitNet = true;
-      } else if (-vn > 1.5) d._hitWall = true;
+      } else if (-vn > 1.5){ d._hitWall = true; d._banked = true; }
     }
   }
 }
@@ -25043,6 +25126,7 @@ function creditScorer(w, b, team){
   b.lastKicker = null; b.prevKicker = null;   // reset chain for the next kickoff
 }
 function scoreGoal(w, team){
+  w._goalNotable = goalNotable(w, w.ball, team) || !!w.finalGoal;
   w.score[team]++;
   w.lastScorer = team;
   creditScorer(w, w.ball, team);
@@ -25062,6 +25146,7 @@ function scoreGoal(w, team){
   // The one goal that gets the slow motion: the one nobody plays on from.
   if (w.sudden){ w.finalGoal = true; startFireworks(w); setTimeout(()=>endMatch(w), 1400); }   // sudden death: first goal wins
   else if (w.goalsTarget && w.score[team] >= w.goalsTarget){ w.finalGoal = true; startFireworks(w); setTimeout(()=>endMatch(w), 1200); }
+  if (w.finalGoal) w._goalNotable = true;
 }
 function ball_x(w){ return w.ball.x; } function ball_y(w){ return w.ball.y; }
 
@@ -35185,7 +35270,7 @@ if (window.__MAGNETDEBUG) {
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, copyText, selDiff, settingsText, settingsChangedCount, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
-    REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
+    goalNotable, NOTABLE, REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,

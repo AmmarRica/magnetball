@@ -4052,6 +4052,34 @@ three lines a second time, name it.
   sites rather than inside `drawPitch`, which both paths share. The REPLAY label is drawn
   **outside** the rotation and placed through `screenPt` — it is UI, so it stays the right way
   up while the pitch behind it turns.
+- **ONLY THE GOALS WORTH WATCHING GET AN AUTO-REPLAY** (`NOTABLE`, `goalNotable`,
+  `w._goalNotable`, `b.kickX/kickY`, `b._banked`; `sel.autoReplay` is `true` = **Best
+  goals**, `'all'` = every goal, `false` = off; `#autoReplayPick`). `sel.autoReplay` used
+  to replay EVERY goal, and measured on four seeded 5-minute 3v3s at Normal that was
+  **41 goals and 746 seconds of replay against ~1,500 of play** — each goal is a 3s hold
+  plus 7.6s of frames at half speed. A bot's tap-in at 0-7 is not what an instant replay
+  is for. Kept: a **person's** goal, one struck from at least **`NOTABLE.far` (0.30) of
+  the pitch length** out, one that went in **off the boards or a post** since it was last
+  kicked, one that **changed the lead or levelled it** (which includes the first goal of
+  every match, so every suite that fires one goal and expects a replay still gets one),
+  and the goal that **decides** it. Same four seeds: **15 of 41 kept, 273s**.
+  ⚠️ **`far` IS MEASURED, not picked**: the 41 strike distances ran 0.03..0.26 with four
+  outliers at 0.30, 0.34, 0.40, 0.40, so 0.30 is the top decile.
+  ⚠️ **JUDGED WHERE THE GOAL IS SCORED** (`scoreGoal`), from what the ball already carries
+  — the floaters' rule — and BEFORE `creditScorer` clears the kicker chain. `kickX/kickY`
+  are written in `noteKick` and `_banked` is set by `collideWall` and the post branch of
+  `collideDiscs`, cleared on the next kick. A goal state reached without a judgement reads
+  as notable (`w._goalNotable !== false`), so the gate can only hold back a goal it saw.
+  ⚠️ **A STORED `true` NOW MEANS BEST, not every goal.** A rename only adds a spelling:
+  `'all'` is the new word for what `true` used to do, and nothing existing is re-keyed.
+  ⚠️ **AND THE GATE WAS DEAD AT THE SHIPPED DEFAULT, which no share can see.**
+  `autoReplayReady` rode `motionOK()` and `juice` ships false — see the `motionOK` entry
+  for the uncoupling, the reduced-motion first-run default and `magnetball.replayfold`.
+  ⚠️ **The control is `'all'` in the same run**: "fewer replays" is equally true of a build
+  whose replay is broken, so the same tap-in held back under Best must fire under Every.
+  And the buffer is captured per FRAME in `loop()`, never in `step()`, so that probe has to
+  run the real frame loop on the wall clock — a synchronous goal has an empty buffer on
+  every build. Ten sabotages, each caught by its own check. `tests/notable.mjs`.
 - **The auto-replay waits LONGER than the plain goal hold** (`GOALHOLD`,
   `autoReplayReady`). ⚠️ **Two waits, not one.** A replay that cuts in the moment the ball
   crosses takes the goal away from you in order to show it back, and the thing anybody wants
@@ -6082,6 +6110,16 @@ three lines a second time, name it.
   camera, confetti, fireworks, the celebration slow-mo, an auto-replay cutting in and
   fourteen animated pitches. Everything that moves for effect goes through it now, which is
   what makes the Screen shake & effects toggle mean what it says.
+  ⚠️ **TWO THINGS HAVE SINCE LEFT IT, for the same reason each time: it made their own
+  control DEAD at the shipped default.** The goal zoom first (its entry below), and then
+  the **auto-replay** — `juice` ships FALSE, so `autoReplayReady` riding `motionOK()` meant
+  the Best / Every / Off picker lit a tile and fired nothing: measured **zero replays over
+  four seeded 5-minute matches** at the default against 41 with effects on. Both are their
+  own control now; the reduced-motion half MOVED to the first-run default
+  (`sel.autoReplay = false` beside `juice` and `goalZoom`) and an existing effects-off
+  install is folded to Off once (`magnetball.replayfold`), so nobody who turned the shake
+  off is handed a cut-away unasked. ⚠️ That fold's `magnetball.sel` guard is load-bearing:
+  both its arms are true of a fresh install.
   ⚠️ It is deliberately **not** `sel.juice && !prefersReducedMotion()`: that makes the
   toggle useless on exactly the devices whose owners might want it back. The OS preference
   decides the **default**, once, on a first run (no `magnetball.sel` yet) — and the line has
