@@ -120,6 +120,16 @@ small to change a shot. So the tiers also differ in:
 - **which kicks they can even see** (a rookie only knows "boot it at the goal"; passes and
   banks unlock further up)
 
+⚠️ **A bot strikes as hard as it did at the tuning, whatever the kick slider says**
+(`botKickMul`, `BOT.kickRef`). A bot strikes on the first frame of its hold, so its kick is
+the world's kick times one step of wind-up; every number in `BOT` was measured with that at
+6.3 a step, and the shipped kick of 80 made it 9.2 — which collapsed the ladder, because a
+fast ball off a bouncy board is a lottery that no tier's decisions can win. `chargeMul`
+scales a bot's wind-up by `min(1, kickRef / kick)`: exactly 1 at or under the tuned kick,
+the tuned strike above it. `kickSkill` (0) would let the top tier past the scaling, and
+measured, that makes the ladder WORSE (+44 against +119 pooled): weaker kicks are what let
+the stronger tier's decisions decide the match.
+
 ⚠️ **Decision rate is the same for every tier.** Giving the top tiers a faster recompute made
 them score *less* — 8.30 goals/min at Hard down to 5.85 at Insane — because re-picking the
 aim more often keeps moving the strike waypoint, so the bot re-approaches instead of

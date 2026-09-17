@@ -1,11 +1,25 @@
-// ⚠️ **THIS SUITE IS RED ON PURPOSE, AND IT IS THE ONLY HONEST PLACE FOR THAT.**
+// ⚠️ **THIS SUITE WAS RED ON PURPOSE, AND IT IS GREEN NOW — read the withdrawal below.**
 //
-// `defaultSel()` ships the **Pro** preset — asked for, and a deliberate product call. Under
-// Pro's movement the bot difficulty ladder collapses: picking a harder tier stops meaning
-// anything, and in most team shapes it makes the bots WORSE. Every other bot suite in this
-// repo measures the AI at the movement it was tuned against (`pinCasualFeel` in
-// `_browser.mjs`), which is right for guarding the AI and wrong as a description of the
-// shipped game. This file is the description of the shipped game, and it fails.
+// `defaultSel()` ships the **Pro** preset — asked for, and a deliberate product call. At
+// the shipped feel the bot difficulty ladder collapsed: picking a harder tier stopped
+// meaning anything. Every other bot suite in this repo measures the AI at the tuning it
+// was built against (`pinCasualFeel` in `_browser.mjs`), which is right for guarding the
+// AI and wrong as a description of the shipped game. This file is the description of the
+// shipped game.
+//
+// ## THE CAUSE WAS THE KICK, NOT THE MOVEMENT — the paragraphs below are WITHDRAWN
+//
+// Everything under "Why, and what would fix it" blamed the Pro movement pair, and was
+// measured at the OLD Pro (accel 12 / pdamp 960 / kick 55 — the tuned kick). Isolated at
+// the CURRENT feel, one casual value put back at a time (pooled Insane over Rookie, six
+// seeds, shipped reads +30): accel 40 → +6, pdamp 905 → −46, the reach 195 → +64, the KICK
+// 55 → +119 with nothing inverting. A bot strikes on the first frame of its hold (measured:
+// one step of charge on every kick), so the shipped kick of 80 made every bot strike 9.2 a
+// step against the 6.3 the AI was tuned at, and a fast ball off a bouncy board is a
+// lottery. `botKickMul` now scales a bot's wind-up by min(1, BOT.kickRef / kick): at the
+// tuning it is exactly 1 (the casual arm below is bit-identical), above it the bot strikes
+// as it did at the tuning. Two seed sets: +119 / +106, every strategy ≥ +12.
+// The history is kept because the harness reasoning in it is right; the diagnosis was not.
 //
 // ## THE HARNESS IS `tests/botplans.mjs`', DELIBERATELY, AND THE FIRST ONE WAS TOO WEAK
 //
@@ -84,6 +98,7 @@ async function arm(casual){
     M.sel.controllers = 'off'; M.sel.autoReplay = false; M.sel.botPlan = 'standard';
     o.isPro = M.presetMatches(M.FEEL_PRESETS.pro);
     o.feel = JSON.parse(JSON.stringify(M.sel.feel));
+    { M.startMatch(); o.kick = M.world.kickPower; o.kickMul = M.botKickMul(M.world, M.world.players[0]); }
 
     // ⚠️ There is no per-team difficulty on the world — both benches read `w.diff` — so the
     // weaker side is driven by SWAPPING `w.diff` around a manual `runBot` call. Without it
@@ -155,7 +170,14 @@ ok('the harness can see a ladder at the AI\'s own tuning',
    `pooled ${cas.pooled}, inverted [${cas.inverted.join(' | ')}] — the control arm is what separates ` +
    '"the ladder is broken" from "this harness cannot measure a ladder"');
 
-// ---- the claim, at the SHIPPED feel. Red today. ----------------------------------
+// ---- the claim, at the SHIPPED feel. Green since the strike scaling. ---------------
+// ⚠️ The mechanism is pinned alongside the outcome: the scaling must be exactly 1 at the
+// tuning (or the pinned suites are measuring a different AI) and below 1 at the shipped
+// kick (or the ladder above is green for some other reason).
+ok('the strike scaling is exactly 1 at the AI\'s own tuning', cas.kickMul === 1,
+   `botKickMul reads ${cas.kickMul} at kick ${cas.kick} — the pinned suites must be bit-identical`);
+ok('...and holds a bot to the tuned kick at the shipped one', pro.kickMul < 1 && Math.abs(pro.kick * pro.kickMul - cas.kick) < 1e-9,
+   `botKickMul ${pro.kickMul} at kick ${pro.kick} — a bot's strike must be the tuned ${cas.kick}`);
 ok('THE DIFFICULTY LADDER SURVIVES THE SHIPPED DEFAULT', pro.inverted.length === 0,
    `Insane failed to beat Rookie under ${pro.inverted.length} of ${pro.plans.length} strategies ` +
    `[${pro.inverted.join(' | ')}] — the same measurement at the AI's own tuning inverts none of them`);

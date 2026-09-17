@@ -679,6 +679,59 @@ three lines a second time, name it.
   by the suite's OWN guard ("if the caption is off in both, the check below passes for the
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
+- **THE DIFFICULTY LADDER HOLDS AT THE SHIPPED FEEL, AND THE CAUSE WAS THE KICK, NOT THE
+  MOVEMENT** (`BOT.kickRef`, `BOT.kickSkill`, `botKickMul`, `p.aiS`, the bot branch of
+  `chargeMul`). **`tests/proladder.mjs` is GREEN.** This WITHDRAWS the claim in the two
+  entries below that the Pro movement pair (`accel`/`pdamp`, `botArrive` in acceleration
+  space) collapsed the ladder — it was written from reasoning, one isolation at the OLD Pro
+  numbers, and it did not survive the isolation at the shipped feel. Both entries are kept
+  under it because they record the numbers and the harness.
+  ⚠️ **THE ISOLATION, on `botplans`' harness over six seeds, putting ONE casual value back
+  at a time into the shipped feel** (pooled Insane-over-Rookie across seven strategies,
+  shipped feel reads **+30**): `accel` 40 → **+6**; `pdamp` 905 → **−46** (worse); the ball
+  Normal → +4; `ballcap` 32 → +30 (identical); `bdamp` 990 → +34; the reach 195 → +64;
+  **the kick 55 → +119 with no strategy inverting**. The movement pair put back changes
+  nothing or hurts; the kick put back restores the whole ladder. Dose response: kick 65 →
+  +107, 70 → +69.
+  ⚠️ **WHY: a bot strikes on the FIRST FRAME of its hold, and the shipped kick made that
+  strike a rocket.** Measured across 59 bot kicks, every one carried exactly one step of
+  charge — `windup` is an approach distance, the ball is in reach on the next step, and the
+  one-touch fires. At the tuning that is 5.5 × 1.15 = **6.3** units a step; at the shipped
+  kick 80 it is **9.2**. Strong kicks from BOTH sides make the strong tier score LESS (237 →
+  178 over the same matches) and concede more (118 → 148): the ball outruns anticipation
+  and rebounds off a bouncy board, which is a lottery, and a lottery is what a ladder is
+  not. The harness sees it as kick power because that is what it is.
+  ⚠️ **SO A BOT KICKS EXACTLY AS HARD AS IT DID AT THE TUNING, whatever the kick slider
+  says**: `chargeMul` multiplies a bot's wind-up by `min(1, kickRef / kick)`, with `kickRef`
+  the casual base kick every `BOT` number was measured at. Above that kick the bot's strike
+  is the tuned one; at or below it the factor is exactly 1, so **the three pinned suites
+  (`botai`/`botplans`/`botstuck`) are bit-identical** — including a trap release, which is
+  why it is a SCALE and not a cap (a cap at 7.0 was built first and clipped the casual arm's
+  10.45 trap release). A person's wind-up is untouched.
+  ⚠️ **Measured, two seed sets**: shipped +30 / +53 with one strategy inverting on each;
+  with the scaling **+119 / +106 and every strategy at +12 or better on both**. Bots held
+  to 7.0 read +89 / +97, to 6.5 +92 / +78, to 8.0 +25 / +85 — the effect is monotonic in
+  the strike and robust from 7.0 down.
+  ⚠️ **`kickSkill` IS 0, MEASURED, and letting the top tier hit harder makes it WORSE.**
+  A blend that hands Insane the world's whole kick (rookie at 6.3, Insane at 9.2) reads
+  **+44 / +77** against +119 / +106; half of it reads +96. Weaker kicks are what let the
+  strong tier's decisions decide the match, so "a stronger tier strikes harder" is the
+  intuitive tuning and the wrong one. The dial stays, at zero, with the numbers beside it.
+  ⚠️ **THE TRADE, written down for the owner**: at the shipped kick a bot now strikes at
+  6.3 while a person's one-touch leaves at 9.2 and a wound-up kick at 15.2. The bots were
+  already weaker kickers than a person who winds up; they are weaker than a person's tap
+  now too. The ladder — Insane meaning something over Rookie — is what this batch was for,
+  and it is the control a player reaches for; the human-facing strength of a tier is a
+  separate knob nobody has asked for yet.
+  ⚠️ **`p.aiS` is written in `runBot`**, not read off `w.diff` in `chargeMul`: `botplans`'
+  harness drives the weaker side by swapping `w.diff` around a manual `runBot`, so at kick
+  time `w.diff` is the OTHER tier's — a blend read there measures nothing. It is one of the
+  `ai*` scratch fields a bot may write.
+  ⚠️ **THE OLD DIAGNOSIS WAS NEVER ISOLATED AT THE FEEL IT WAS BLAMING.** "Both movement
+  numbers hurt" was measured at accel 12 / pdamp 960 / kick 55 — the OLD Pro, whose kick
+  was still the tuned one — and carried forward unchanged through two feel changes and an
+  owner's-defaults paste that moved the kick to 80. Rule 1: measure the broken thing on the
+  CURRENT build. Rule 12: this is the withdrawal.
 - **THE GAME SHIPS ON THE PRO FEEL** (`defaultSel().feel` = the `pro` preset, plus
   `trapOff:true`, `hitStop:0`, `rumble:15`, `kickRing:125` and match speed 1.00). Asked
   for: it is the setup that was being picked by hand every time, so a fresh install gets
@@ -712,9 +765,10 @@ three lines a second time, name it.
   single value to back off. **The fix is to retune the steering against the shipped
   movement, not to change the default.**
   ⚠️ **So `botai`/`botplans`/`botstuck` are PINNED to the AI's own tuning
-  (`pinCasualFeel`), and `tests/proladder.mjs` is RED ON PURPOSE.** The three guard the AI
-  — that the ladder holds at the movement it was tuned against, so a retune has something
-  to keep. `proladder` runs at whatever `defaultSel()` ships and describes the real game.
+  (`pinCasualFeel`), and `tests/proladder.mjs` WAS RED ON PURPOSE — it is green now, see
+  the strike-scaling entry above, and the pins stay.** The three guard the AI — that the
+  ladder holds at the tuning it was measured against, so a retune has something to keep.
+  `proladder` runs at whatever `defaultSel()` ships and describes the real game.
   Delete it and those three pins become exactly the papering-over that this repo's "a
   threshold raised to make a check pass is a defect report, not a fix" rule forbids.
   ⚠️ **A GOAL DIFFERENCE IS ONLY AS GOOD AS THE GOALS UNDER IT**, and getting this wrong
@@ -7574,14 +7628,13 @@ console.log(ok); await b.close();
 ```
 `tests/run.mjs` runs all 140 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
-⚠️ **TWO suites are RED ON PURPOSE, and both measure the SHIPPED default rather than a
-tuning the AI was built against.** `tests/proladder.mjs` measures the bot difficulty ladder,
-which the Pro movement pair collapses (see the Pro-feel entry above); `tests/kqberry.mjs`
-measures how much ball float Killer Lobsters can take, and the shipped `bdamp` of 980 takes
-its football out — 4 goals over eight seeded five-minute matches against a floor of eight,
-with 988 turning the file green untouched (see the owner's-defaults entry above). A green run
-is therefore **N-2 green + those two red**, and either going green means the thing it
-describes was FIXED, not that something regressed. Neither bar may be widened. `tests/README.md` lists what each covers and the measurement
+⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
+both measured the SHIPPED default rather than the tuning the AI was built against:
+`tests/proladder.mjs` (the difficulty ladder, fixed by scaling the bots' strike to the
+tuned kick — see the ladder entry above) and `tests/kqberry.mjs` (Killer Lobsters'
+football at the shipped ball float, fixed by the dead-ball re-serve — see `KQDEAD`).
+Neither bar was widened, and neither may be: each going red again means the thing it
+describes has REGRESSED. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
