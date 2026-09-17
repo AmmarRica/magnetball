@@ -2665,6 +2665,47 @@ three lines a second time, name it.
   borrows `DYN_FIELDS.pooltable.path`. ⚠️ A rect clip left pitch colour stranded in the
   cut corners of every rounded and chamfered court: outside the line, unreachable by any
   ball, and reading as playable.
+- **THE MATCH THE GAME WAS CLOSED ON COMES BACK** (`RESUME`, `resumable`, `resumeDoc`,
+  `resumeSave`, `resumeLoad`, `resumeClear`, `resumeTick`, `resumeApply`, `resumeOffer`,
+  `#resumeModal`; `magnetball.resume`). A phone call, a tab the browser threw away, a lid:
+  a five-minute match at 2-1 with a minute left was gone. Offered once at boot: same teams,
+  same score, same clock, same seed, **from a kickoff**.
+  ⚠️ **A SNAPSHOT, NOT A SERIALISED WORLD.** The world holds references (`lastKicker`,
+  `_trappedBy`, `aiMark`), a closure (`w.rng`), `buildGeometry`'s output and the table rows
+  themselves; writing all of it out is a second implementation of `startMatch`. So the doc is
+  the SETTINGS the match was started from (`RESUME.keys`), the seed, the score, the clock,
+  the roster's match stats, the hive and every extra ball's place — and `resumeApply` starts
+  the match again through `startMatch` on the same seed and lays those over it by (team,
+  ordinal). The pads deal the seats afresh, so a controller that has gone is a bot next
+  match exactly as at a restart, and one that came back drives its own body.
+  ⚠️ **FROM A KICKOFF, NOT THE FRAME — a decision, not a shortcut.** Everybody's hands are
+  off the sticks when the question is asked, so a mid-play restore is a pitch where the bots
+  move first; a kickoff is the one state built to wait for a touch.
+  ⚠️ **`w.rng` IS NOT RESTORED, and `docs/TODO.md` asked for that call to be made before
+  writing any of it.** A resumed match reproduces from its seed FROM THE RESUME — the same
+  seed re-seeds `botInit` — and is not the continuation of the original stream. Nobody can
+  see the difference and the alternative is exposing `mulberry32`'s closed-over state.
+  ⚠️ **The bots' names are NOT copied**, and an overlay for them was written and deleted:
+  `pickNames` is arithmetic off the seed, so the same seed deals the same names, and
+  sabotaging the overlay left `tests/resume.mjs` green — the rule about code a check cannot
+  reach. The suite's name check stands as a claim about the seed.
+  ⚠️ **ORDINARY MATCHES ONLY.** A cup tie, a season round, a Gauntlet run, a drill, the
+  tutorial, the demo and warm-up each have a screen that already knows how to go on.
+  ⚠️ **WRITTEN ON THE WALL CLOCK FROM `loop()` (`resumeTick`, every 5s), never in `step()`**
+  — a synchronous `localStorage` write in the sim is the `kbPress` trap — plus on
+  `visibilitychange`/`pagehide`. **The heartbeat is the half that matters on a phone**: a
+  tab the OS kills fires no `pagehide` at all. ⚠️ **Under `RESUME.minSecs` (10s) nothing is
+  kept**, so a match opened and left is not offered back; over `maxAge` (12h) it is dropped.
+  ⚠️ **CLEARED BY EVERY DELIBERATE EXIT** — `finishMatch`, `toMenu`, `restartMatch` and any
+  `startMatch` — or every launch offers the match you just finished. `resumeApply` clears it
+  too, and the next heartbeat re-writes it five seconds in.
+  ⚠️ **THE OFFER IS DOM, never over the update gate** (`!updOverdue()`), never in a panel.
+  Resume and Discard are pressed by hit-testing their centres in the suite, never `.click()`.
+  ⚠️ **A reload-driven check needs storage that SURVIVES the reload**, and every other suite's
+  init script clears it on every load — `tests/resume.mjs` latches its clear on
+  `sessionStorage`, on a phone viewport so Discard leaving NO match is checkable (a desktop
+  always has a demo world). Eleven sabotages, ten caught by their own check; the eleventh
+  is the name overlay above, which is why it is gone.
 - **Download it and play offline** (`offlinePossible`, `downloadOffline`, `#offlineBtn`,
   About card). The whole game is ONE FILE, so this is a copy of that file and nothing else —
   no installer, no runtime, no packaging step. ⚠️ It matters most on **Linux**, where Firefox
@@ -3754,6 +3795,29 @@ three lines a second time, name it.
   speed and "kickable" quietly means "weightless". `p.snailKicked` latches until KICK is
   released. Measured on Colossus: one kick moves it 22 units, **twice** a full-speed body
   check, while the same kick sends the ball 453.
+- **A DEAD BALL IN KILLER LOBSTERS IS RE-SERVED FROM THE CENTRE** (`KQDEAD`, `kqReserve`,
+  `stepKqDeadBall`, `ball.deadT`). At rest in open play for `KQDEAD.secs` (10) with nobody
+  carrying it, the ball goes back to the middle through the same function a goal already
+  re-serves through — nothing else moves, no kick, no knock, so the berries are exactly where
+  they were. **This is what gives the mode its football back at the shipped ball, and
+  `tests/kqberry.mjs` is GREEN again.**
+  ⚠️ **MEASURED FIRST, on the suite's own eight seeds**: the ball was **at rest 76-96% of
+  every match** with single rests of 195-284s, and both chasers stood at their strike
+  waypoint with a zero stick beside a ball on the touchline — the documented dead end, with
+  the escape deliberately off in this mode. Total goals **4** over the eight.
+  ⚠️ **THE CLOCK WAS SWEPT, AND THE HIVE COUNT IS A COIN TOSS AT EIGHT SEEDS.** On seeds
+  1-8: 6s → 30 goals, 2 hive wins; 8s → 27 / **6**; 10s → 42 / 1; 12s → 4. On seeds 9-16:
+  6s → 5, 8s → 3, 10s → 2, 12s → 2. Adjacent clocks swing by four wins of eight, so the
+  choice is the POOLED sixteen: **10s reads 69 goals and 3 hive wins of 16**, the most
+  football and the fewest hives of the four; the other three sit at 7, 9 and 6. That is also
+  why the mechanism is a re-serve rather than a knock: a live ball bumps berries goalward,
+  and a ball that is live 70% of the match instead of 7% is what moves the hive count at all.
+  ⚠️ **10 seconds is a BACKSTOP, not a tempo**: a person plays a resting ball long before
+  it fires, and two bots frozen beside one are the only case it exists for.
+  ⚠️ **Counted in `stepKqDeadBall`, from `step()`, in OPEN PLAY only**, and reset by a carry
+  (`_trappedBy`) — a trapped ball is being played however slowly. `kqReserve` zeroes it.
+  ⚠️ The escape stays OFF here (the `botstuck` entry): turning it on is the measured dead
+  end of 5 and 7 hive wins of 8, because the escape KICKS and a kick moves berries.
 - **Killer Lobsters berries** (`MODES.kq`, still keyed `kq`): `BERRY` + `makeBerry`/`placeBerry`/`kqBerry`/`kqHiveFull`/`stepBerries`.
   Six floaty purple bodies you shepherd into the end you ATTACK — the same end as the ball and
   the snail, so "your hive" is never the opposite way round from everything else in the mode.

@@ -813,12 +813,15 @@
     .dm-got { font-family: var(--pix); font-size: 12px; color: var(--go); margin-top: 8px; }
 
     /* Update-available screen. Same shape as the daily modal — one modal idiom, not two. */
-    #updModal {
+    #updModal, #resumeModal {
       position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
       background: rgba(2,3,8,.78); backdrop-filter: blur(3px); padding: 18px;
     }
-    #updModal.hidden { display: none; }
-    #updModal .dm-card { max-width: 380px; }
+    #updModal.hidden, #resumeModal.hidden { display: none; }
+    #updModal .dm-card, #resumeModal .dm-card { max-width: 380px; }
+    #resumeInfo { font-family: var(--pix); font-size: 14px; color: var(--accent); margin: 10px 0 4px; line-height: 1.9; }
+    #resumeModal .updrow { display: flex; gap: 8px; margin-top: 16px; }
+    #resumeModal .updrow button { flex: 1 1 0; min-height: 46px; }
     #updVers { font-family: var(--pix); font-size: 12px; color: var(--muted);
       margin: 10px 0 4px; line-height: 1.9; }
     #updVers b { color: var(--accent); font-weight: 400; }
@@ -2886,6 +2889,20 @@
     </div>
   </div>
 
+  <!-- A match the game was closed on. Offered once at boot, from the snapshot `resumeSave`
+       keeps — see RESUME. Same teams, same score, same clock, from a kickoff. -->
+  <div id="resumeModal" class="hidden">
+    <div class="dm-card">
+      <h2>Resume match?</h2>
+      <p id="resumeInfo"></p>
+      <p class="hint always" style="text-align:left">The game closed with this match running. Same teams, same score, same clock, from a kickoff.</p>
+      <div class="updrow">
+        <button class="primary" id="resumeYes" type="button">Resume</button>
+        <button class="ghost" id="resumeNo" type="button">Discard</button>
+      </div>
+    </div>
+  </div>
+
   <!-- The hard gate. No dismiss, no Later, and `updEnforce` stops the match loop as well
        as covering it — a modal you can play behind is a suggestion. -->
   <div id="updBlock" class="hidden">
@@ -3911,6 +3928,9 @@ const STRINGS = {
   'Paused': ['En pausa', 'En pause', 'Pausiert', 'Em pausa', 'In pausa'],
   '← Back': ['← Atrás', '← Retour', '← Zurück', '← Voltar', '← Indietro'],
   'Later': ['Más tarde', 'Plus tard', 'Später', 'Mais tarde', 'Più tardi'],
+  'Resume match?': ['¿Continuar el partido?', 'Reprendre le match ?', 'Spiel fortsetzen?', 'Continuar o jogo?', 'Riprendere la partita?'],
+  'Resume': ['Continuar', 'Reprendre', 'Fortsetzen', 'Continuar', 'Riprendi'],
+  'Discard': ['Descartar', 'Abandonner', 'Verwerfen', 'Descartar', 'Scarta'],
   'Got it': ['Entendido', 'Compris', 'Alles klar', 'Entendido', 'Ho capito'],
   'Update now': ['Actualizar ahora', 'Mettre à jour', 'Jetzt aktualisieren', 'Atualizar agora', 'Aggiorna ora'],
   'Start ▶': ['Empezar ▶', 'Démarrer ▶', 'Starten ▶', 'Começar ▶', 'Inizia ▶'],
@@ -4193,6 +4213,19 @@ const BERRY = {
   hue:      '#a855f7',
   hueDark:  '#6b21a8',
   hueLite:  '#d8b4fe',
+};
+// A DEAD BALL IN KILLER LOBSTERS IS RE-SERVED FROM THE CENTRE. The bots' stuck-ball escape
+// is deliberately OFF in this mode (see BOT.stuckTicks — turned on here it knocks berries
+// into the hives and 5 of 8 matches end on a full hive), so a ball that comes to rest on
+// the boards freezes both chasers beside it for the rest of the match: measured at the
+// shipped `bdamp` 980, the ball was at rest for 76-95% of eight seeded 5-minute matches
+// with single rests of 195-284s, and the football went from 63 goals at 992 to 4 at 980.
+// The re-serve touches nothing but the ball — no kick, no knock, so the berries are exactly
+// where they were — and `kqGoal` already re-serves from the centre after a goal, so it is
+// the same landing spot through the same function.
+const KQDEAD = {
+  secs:  10,     // at rest this long, in open play, and it goes back to the middle — measured, see below
+  speed: 0.3,    // world units a step; BOT.stuckMove's own "not moving"
 };
 
 // Ball presets — objective physics changes (radius / mass via invMass / bounce / damping).
@@ -9289,7 +9322,21 @@ function chargeSecs(){
 // a body check and two draws — so a switch that had to reach all six would have reached
 // five of them, and the one left behind would have kept charging invisibly.
 function chargeFrac(p){ return chargeOn() ? Math.min(1, (p.chargeT||0) / chargeSecs()) : 0; }
-function chargeMul(p){ return 1 + chargeFrac(p) * CHARGE.bonus; }
+// ⚠️ **A BOT'S STRIKE IS HELD TO THE KICK THE AI WAS TUNED AGAINST** (`botKickMul`,
+// `BOT.kickTuned`). This is the ONE place a wind-up becomes a number, so it is the one
+// place a bot's kick can be held: a bot holds KICK on the way in as a matter of APPROACH
+// (`BOT.windup`), never as a choice about power, and it strikes on the first frame of the
+// hold — measured, every bot kick carries exactly one step of charge. At the AI's own
+// tuning that is 5.5 × 1.15 = **6.3** units a step; at the shipped kick of 80 it is
+// **9.2**, and that, not the movement pair, is what collapsed the difficulty ladder at the
+// shipped feel (the isolation is in CLAUDE.md's ladder entry: the casual movement put back
+// changes nothing, the casual kick put back restores it whole). The multiplier is read off
+// the WORLD's kick, so it is exactly the ordinary one wherever the kick is at or under the
+// tuned value and only ever bites above it. A person's wind-up is untouched.
+function chargeMul(p){
+  const m = 1 + chargeFrac(p) * CHARGE.bonus;
+  return (p.ctrl === 'bot' && world && world.kickPower) ? m * botKickMul(world, p) : m;
+}
 const KICK_SLOW = 0.45;                   // accel multiplier while holding kick (Circle) — no free cruising
 // Fraction of the striker's velocity a one-shot kick carries into the ball, so a
 // running shot is more powerful and directional than a standing one (classic top-down football).
@@ -18219,6 +18266,7 @@ function startMatch(opts){
   // The two buttons that mean "play" forward to the game window instead (see `syncAct`);
   // this is the backstop for every other route in (a drill tile, a season round).
   if (PANEL) return;
+  resumeClear();      // whatever match was on offer, this one replaces it — see RESUME
   // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
   // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
   // whoever set it to clear it is what stops a cup tie's country colours leaking into
@@ -19091,6 +19139,7 @@ function loop(t){
   pollKeys();
   qualityStep();          // ...and re-ask whether this machine can afford the trimmings
   pollSeatRotate();       // SELECT turns a seat's controls a quarter turn — once per frame
+  resumeTick(dt);         // the resume snapshot's heartbeat — wall-clock, a few KB, every few seconds
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < MAX_STEPS){
@@ -21675,7 +21724,7 @@ function step(w){
   ballSounds(w);
   crowdReact(w);   // crowd swell on shots / groan on near-misses
   advanceBallSpin(w);
-  if (active) stepBerries(w);   // float bob + respawn of banked berries (never in a draw)
+  if (active){ stepBerries(w); stepKqDeadBall(w); }   // float bob, berry respawn, the dead-ball clock (never in a draw)
   repCapture(w);   // feed the rolling replay buffer
   if (w.tutorial) tutorialStep(w);
 
@@ -25312,7 +25361,12 @@ function kqGoal(w, ball, team){
   }
   // Back to the centre spot. Nothing else resets — no kickoff, players hold their
   // positions — but the ball itself re-serves from the middle like any other mode.
+  kqReserve(w, ball);
+}
+// ONE re-serve, for a goal and for a dead ball alike (KQDEAD). Nothing else resets.
+function kqReserve(w, ball){
   ball.x = 0; ball.y = 0; ball.vx = 0; ball.vy = 0; ball.spin = 0;
+  ball._trappedBy = null; ball.deadT = 0;
   // The snail lives at the centre and never moves on a reset, so nudge clear of it
   // rather than spawning inside it.
   const sn = (w.extraBalls||[]).find(b2 => b2.isSnail);
@@ -25327,10 +25381,20 @@ function kqGoal(w, ball, team){
   markPrev(w);            // don't interpolate across the re-serve
   ball._goalCd = 0.6;
 }
+// The dead-ball clock. Counted in the step loop (never a draw), in OPEN PLAY only, and
+// only while nobody is carrying it — a trapped ball is being played, however slowly.
+function stepKqDeadBall(w){
+  if (!w.mode || !w.mode.kq || w.state !== 'play') return;
+  const b = w.ball;
+  if (b._trappedBy || Math.hypot(b.vx, b.vy) >= KQDEAD.speed){ b.deadT = 0; return; }
+  b.deadT = (b.deadT || 0) + STEP;
+  if (b.deadT >= KQDEAD.secs){ kqReserve(w, b); playSfx('whistle'); }
+}
 
 // Same teams, fresh scoreline. Deliberately NOT startMatch(): that re-runs seat
 // assignment and would undo whoever picked which side in the lobby.
 function restartMatch(w){
+  resumeClear();
   w.score = [0,0]; w.overtime = false; w.forceWin = null; w.endRamp = null;
   goalCamReset();                 // a new match starts on a level camera
   clearFloaters();                // ...and with no stat labels left over from the last
@@ -25520,6 +25584,7 @@ function endMatch(w){
 function finishMatch(w){
   w.endRamp = null;
   w.state = 'over';
+  resumeClear();      // a finished match is not one to come back to — see RESUME
   if (w.demo){ startDemo(); return; }       // wallpaper: just start another one
   // ⚠️ 'all' also keeps the WHOLE MATCH, which is the point of the setting for a demo: the
   // goals on their own are a highlight reel, and the match is the thing somebody asks to see
@@ -26203,7 +26268,24 @@ const BOT = {
   // already lined up. Skill belongs in the axes that actually help.
   decideTicksAll: 5,         // 12Hz
   pressR: 150,               // only one bot presses a carrier inside this
+  // --- The base kick every number above was tuned at (FEEL_PRESETS.casual.kick / 10). A
+  // bot's kick is scaled by min(1, kickRef / kick), so above that kick a bot strikes exactly
+  // as hard as it did at the tuning and below it nothing changes — see chargeMul. Measured
+  // on the ladder harness at the shipped kick of 80 (bots at 9.2 a step without it): the
+  // stronger tier's pooled margin over seven strategies is ~+40 at 9.2, ~+70 at 8.0,
+  // +89 / +97 at 7.0 and +92 / +78 at 6.5 on two seed sets, with no strategy inverting
+  // from 7.0 down.
+  kickRef: 5.5,
+  // ...and how much of that scaling the TOP tier is let out of (0 = every tier is held to
+  // the tuned kick, 1 = the top tier keeps the world's whole kick). Measured below.
+  kickSkill: 0,
 };
+function botKickMul(w, p){
+  const kick = w.kickPower || PLAYER.kick;
+  let f = Math.min(1, BOT.kickRef / kick);
+  if (f < 1 && BOT.kickSkill > 0 && p && p.aiS != null) f += (1 - f) * p.aiS * BOT.kickSkill;
+  return f;
+}
 // ============================================================
 //  PLAYER TYPES AND TEAM STRATEGIES
 // ============================================================
@@ -26952,6 +27034,7 @@ function botUpdateSupportGrid(w, team){
 // ============================================================
 function runBot(w, p){
   const diff = w.diff;
+  p.aiS = botSkill(diff).s;     // the tier's scalar, kept on the body for botKickMul
   const ball = w.ball;
   const attackDir = p.team===0 ? -1 : 1;
   const halfL = w.field.L/2;
@@ -34764,6 +34847,7 @@ function showResult(title, sub){
 }
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
+  resumeClear();                 // walking out is a decision; the match is not offered back
   setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
   setTimeout(buildSeatPick, 0);  // the seat count changes with the match — see buildSeatPick
   // ⚠️ FIRST, before anything here can take the world away from a replay that is still
@@ -35254,6 +35338,131 @@ function updLater(){ updSeen = updFound; updFound = null; updHide(); }
 })();
 (function(){ const el=$('ver'); if(el) el.textContent = 'v'+VERSION; })();
 
+// ============================================================
+//  RESUME — the match the game was closed on comes back
+// ============================================================
+// A phone call, a tab the browser threw away, a laptop lid: a five-minute match that was
+// 2-1 with a minute left was simply gone, and "again" is a different match. What comes back
+// is the MATCH — the same teams, the same score, the same clock, the same seed — restarted
+// from a kickoff. Not the frame: everybody's hands are off the sticks by the time the
+// question is asked, so a mid-play restore is a pitch where the bots move first, and a
+// kickoff is the one state built to wait for a touch.
+// ⚠️ **A SNAPSHOT, NOT A SERIALISED WORLD.** The world holds references (`lastKicker`,
+// `_trappedBy`, `aiMark`), a closure (`w.rng`), the geometry `buildGeometry` produces and
+// the mode/field/length TABLE ROWS themselves; writing all of it out and reading it back is
+// a second implementation of `startMatch`. So the snapshot is the SETTINGS the match was
+// started from plus the numbers a person cares about, and `resumeApply` starts the match
+// again through `startMatch` on the same seed and lays those numbers over it. The pads
+// deal the seats afresh, so a controller that has gone is a bot next match, exactly as at
+// a restart, and one that came back drives its own body again.
+// ⚠️ **Ordinary matches only.** A cup tie, a season round, a Gauntlet run, a drill, the
+// tutorial and the demo each have a screen of their own that already knows how to go on.
+// ⚠️ **Written on the WALL CLOCK from `loop()`, never in `step()`** — a synchronous
+// `localStorage` write inside the sim is the trap `kbPress` records — plus on
+// `visibilitychange`/`pagehide`, which is the moment a phone actually takes the game away.
+// A few KB every `RESUME.every` seconds. ⚠️ **Cleared by every deliberate exit**: a finished
+// match, Main Menu, Restart, and any new match starting.
+const RESUME = { key: 'magnetball.resume', format: 'magnetball-resume', v: 1,
+                 every: 5,            // seconds between heartbeat writes
+                 minSecs: 10,         // a match younger than this is not worth offering back
+                 maxAge: 12 * 3600e3, // ms; older than this and it is somebody else's evening
+                 keys: ['mode','field','length','diff','ball','party','botPlan','kickoffRule','boxRule','teamCol','teamFlag'] };
+function resumable(w){
+  return !!(w && !w.demo && !w.watch && !w.drillMode && !w.tutorial && !w.train
+            && !w.cup && !w.season && !w.rogue && !w.lobby
+            && (w.state === 'play' || w.state === 'kickoff' || w.state === 'goal')
+            && (w.matchT || 0) >= RESUME.minSecs);
+}
+function resumeDoc(w){
+  const s = {}; for (const k of RESUME.keys) s[k] = sel[k];
+  return { format: RESUME.format, v: RESUME.v, at: Date.now(), ver: VERSION, sel: s,
+           seed: w.seed, score: w.score.slice(), timeLeft: w.timeLeft, matchT: w.matchT,
+           overtime: !!w.overtime, maxDeficit: (w.maxDeficit || [0,0]).slice(),
+           lastScorer: w.lastScorer, kickTeam: w.kickTeam,
+           hive: w.hive ? w.hive.slice() : null, berryT: w.berryT | 0,
+           players: w.players.map(p => ({ team: p.team, name: p.name, bot: p.ctrl === 'bot', ms: p.ms })),
+           extra: (w.extraBalls || []).map(b => ({ x: b.x, y: b.y, snail: !!b.isSnail, berry: !!b.isBerry,
+                                                    banked: b.isBerry ? !!b.banked : undefined, bankT: b.bankT })) };
+}
+function resumeSave(w){
+  if (!resumable(w)) return false;
+  try { localStorage.setItem(RESUME.key, JSON.stringify(resumeDoc(w))); return true; } catch(e){ return false; }
+}
+function resumeLoad(){
+  try {
+    const d = JSON.parse(localStorage.getItem(RESUME.key) || 'null');
+    if (!d || d.format !== RESUME.format || !Array.isArray(d.score) || !Array.isArray(d.players)) return null;
+    if (!(Date.now() - (d.at || 0) < RESUME.maxAge)) return null;
+    return d;
+  } catch(e){ return null; }
+}
+function resumeClear(){ try { localStorage.removeItem(RESUME.key); } catch(e){} }
+let _resumeAcc = 0;
+function resumeTick(dt){
+  _resumeAcc += dt;
+  if (_resumeAcc < RESUME.every) return;
+  _resumeAcc = 0;
+  if (resumable(world)) resumeSave(world);
+}
+// Same match, same score, same clock, from a kickoff. The pads deal the seats; the saved
+// roster is laid over by (team, ordinal) so everybody keeps their match stats, and the
+// snail and the berries stand where they stood. ⚠️ The bots' NAMES are not copied — they
+// come off the seed (`pickNames` is arithmetic), so the same seed deals the same names, and
+// an overlay for them was a line no check could see: sabotaged away, `tests/resume.mjs`
+// stayed green, which is the rule about code a check cannot reach.
+function resumeApply(doc){
+  if (!doc || PANEL) return false;
+  const s = doc.sel || {};
+  for (const k of RESUME.keys) if (s[k] !== undefined) sel[k] = s[k];
+  setMatchSeed(doc.seed);
+  try { startMatch({ lobby: false }); } finally { setMatchSeed(null); }
+  const w = world; if (!w) return false;
+  w.score = doc.score.slice(); w.timeLeft = doc.timeLeft; w.matchT = doc.matchT; w.overtime = !!doc.overtime;
+  w.maxDeficit = (doc.maxDeficit || [0,0]).slice(); w.lastScorer = doc.lastScorer;
+  if (doc.kickTeam != null) w.kickTeam = doc.kickTeam;
+  if (doc.hive && w.hive){ w.hive = doc.hive.slice(); w.berryT = doc.berryT | 0; }
+  const by = [[], []]; w.players.forEach(p => by[p.team].push(p));
+  const seen = [0, 0];
+  for (const sp of doc.players){
+    const p = by[sp.team][seen[sp.team]++]; if (!p) continue;
+    if (sp.ms) p.ms = Object.assign(freshMs(), sp.ms);
+  }
+  if (doc.extra && w.extraBalls){
+    doc.extra.forEach((e, i) => { const b = w.extraBalls[i]; if (!b) return;
+      b.x = e.x; b.y = e.y; b.vx = 0; b.vy = 0;
+      if (b.isBerry && e.banked != null){ b.banked = e.banked; b.bankT = e.bankT || 0; } });
+  }
+  markPrev(w);
+  updateScoreUI(); updateClock(w);
+  resumeClear();
+  return true;
+}
+function resumeInfoText(doc){
+  const m = MODES[doc.sel && doc.sel.mode], f = FIELDS[doc.sel && doc.sel.field];
+  const parts = [];
+  if (m && m.name) parts.push(m.name);
+  if (f && f.name) parts.push(f.name);
+  parts.push(doc.score[0] + ' – ' + doc.score[1]);
+  if (doc.timeLeft > 0){ const t = Math.ceil(doc.timeLeft); parts.push(Math.floor(t/60) + ':' + String(t%60).padStart(2,'0')); }
+  return parts.join(' · ');
+}
+// The offer, at boot. Never in a panel, never over the update gate.
+function resumeOffer(){
+  if (PANEL) return false;
+  const doc = resumeLoad(); if (!doc) return false;
+  const el = $('resumeModal'); if (!el) return false;
+  const info = $('resumeInfo'); if (info){ info.textContent = resumeInfoText(doc); noI18n(info); }
+  const yes = $('resumeYes'), no = $('resumeNo');
+  const close = () => el.classList.add('hidden');
+  if (yes) yes.onclick = () => { close(); resumeApply(doc); };
+  if (no)  no.onclick  = () => { close(); resumeClear(); };
+  el.classList.remove('hidden');
+  return true;
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden && resumable(world)) resumeSave(world); });
+window.addEventListener('pagehide', () => { if (resumable(world)) resumeSave(world); });
+if (!updOverdue()) resumeOffer();
+
 
 if (window.__MAGNETDEBUG) {
   window.__magnet = {
@@ -35270,6 +35479,7 @@ if (window.__MAGNETDEBUG) {
     pickReplayDoc, watchReplayFile, watchReplayFromMenu, downloadPathHint, buildReplayInfo, replayStopHint,
     mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, copyText, selDiff, settingsText, settingsChangedCount, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
+    RESUME, resumable, resumeDoc, resumeSave, resumeLoad, resumeClear, resumeApply, resumeOffer, resumeTick, resumeInfoText,
     goalNotable, NOTABLE, REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
@@ -35367,7 +35577,7 @@ if (window.__MAGNETDEBUG) {
     updatePadInfo, padKickHeld, padAnyHeld, KICK_FALLBACK, KICK_NEVER, ANY_NEVER, PAD_GRACE, padForget, padForgetAll,
     SCRIB, scribCell, scribChar, scribGrass, themeKeys,
     pollWarmupHold, selHoldFrac, warmupHoldOn, seatTurnOn, drawHoldRing, padHoldFrac, seatRotOf, bumpSeatRot, pollSeatRotate, applySeatRotation, syncSeatRotation, applyKickoffLine, kickoffLineOn, applyGoalBox, boxRuleOn, GOALBOX, BOXRULE, boxDefender, kickoffFreePass, KICKOFF_CIRCLE_R, CENTER_R, GOAL_BOX_A, KICKOFF_HARD, KICKOFF_PUSH, drawGrass, drawDebug, drawBuildTag, snailHome, kqGoal, SNAIL, checkGoal,
-    BERRY, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
+    BERRY, KQDEAD, botKickMul, kqReserve, stepKqDeadBall, makeBerry, placeBerry, kqBerry, kqHiveFull, stepBerries, drawGoal,
     resetKickoff, MODES, nearestControlBall, youTeam, yourScore, GOLF, GOLF_HOLES, golfLay, ballPlayable,
     CONTINENTS, CONTINENT_KEYS, placedFlags, isFirstRun, firstRunLineup, FIRSTRUN_KEY,
     TARGET_SPOTS, targetSpot, targetNext, targetScored, drillGoals, drawDrillGoals, drawTargetSpots,

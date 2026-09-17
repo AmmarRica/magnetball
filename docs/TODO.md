@@ -44,16 +44,16 @@ kept.
   card from the audit and fails it.
   ⚠️ CSS is half a fix, the hole `shownInShowMode` already documents: `menuSearchIndex` has
   to filter too, or the search still jumps somebody into a pane that is hidden.
-- [ ] **Resume an interrupted match.** A phone call, a locked screen or a closed tab loses
-  the match outright today. Snapshot the world on `visibilitychange`/`pagehide` and offer to
-  resume at boot. Last of the four because it is the only one that is not mostly wiring.
-  ⚠️ `w.rng` is a mulberry32 **closure**, so a snapshot cannot restore the stream. Either
-  the counter is exposed and re-seeded, or a resumed match is deliberately no longer
-  bit-reproducible from its seed — a decision to make **before** writing any of it, not
-  after.
-  ⚠️ It must not resurrect a match somebody deliberately left. `toMenu()` nulls the world,
-  so the snapshot is cleared there and at full time, or every launch offers to resume the
-  match you just finished.
+- [x] **Resume an interrupted match — done** (`RESUME`, `tests/resume.mjs`). A snapshot of
+  the settings, seed, score, clock, stats and objectives on the wall clock from `loop()`
+  and on `visibilitychange`/`pagehide`; offered at boot; the match starts again through
+  `startMatch` on the same seed, from a kickoff.
+  ⚠️ The `w.rng` call was made first, as asked: the stream is NOT restored. A resumed match
+  reproduces from its seed from the resume onward (the same seed re-seeds `botInit`) and is
+  not the continuation of the original stream. Nobody can see the difference, and the
+  alternative is exposing `mulberry32`'s closed-over state.
+  ⚠️ Cleared at full time, by Main Menu, by Restart and by any new match, so the match you
+  just finished is never offered back.
 
 ---
 
