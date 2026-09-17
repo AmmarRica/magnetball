@@ -63,7 +63,13 @@ const r = await p.evaluate(() => {
   const M = window.__magnet; const o = {};
   const dm = document.getElementById('dmCollect'); if (dm) dm.click();
 
-  o.defaultIsOff = M.defaultSel().ball3d === 'off';
+  // ⚠️ ON by default now — it shipped off while the sphere was a projection of a disc, and
+  // with the patterns defined on the sphere and an axis that follows travel it is the
+  // honest picture of the ball. Measured free (0.306ms against 0.308 a frame on a phone).
+  o.defaultIsOn = M.defaultSel().ball3d === 'on';
+  // ...and a device that stored the OLD default is moved on once, while a device that
+  // has never saved a setting is left alone (the ABSENCE of magnetball.sel is isFirstRun).
+  o.foldKey = !!localStorage.getItem('magnetball.ball3dfold');
   o.optionExists = !!document.getElementById('ball3dPick');
   o.optionTiles = document.querySelectorAll('#ball3dPick .opt').length;
 
@@ -812,7 +818,54 @@ const r = await p.evaluate(() => {
   return o;
 });
 
-ok('it is OFF by default', r.defaultIsOff);
+// ---- ⚠️ THE FOLD, driven through REAL RELOADS on a second page ----------------------
+// A device that stored `ball3d: 'off'` (the old default) is moved to today's default ONCE;
+// a device that stored it AFTER the fold key exists keeps it; and a fresh install — no
+// magnetball.sel at all — must come out of boot with no magnetball.sel, or the fold has
+// made `isFirstRun` dead code on frame one (the trap `zoomfold` records).
+// ⚠️ Sabotage-verified for the STAMP (deleted, three checks go red). The `magnetball.sel`
+// guard is NOT catchable on today's values and is recorded as such rather than claimed:
+// a fresh install starts on the new default, which is not the old one, so the branch can
+// never fire there whether the guard exists or not. It is belt-and-braces for the day the
+// default moves again — the exact case `zoomfold` was bitten by.
+r.fold = await (async () => {
+  const q = await b.newPage({ viewport: { width: 900, height: 700 } });
+  q.on('pageerror', e => errors.push(e.message));
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  const url = 'file://' + process.cwd() + '/index.html';
+  const boot = async (prep) => {
+    await q.goto(url); await q.waitForTimeout(400);
+    await q.evaluate(prep);
+    await q.goto(url); await q.waitForTimeout(700);
+    return q.evaluate(() => ({ v: window.__magnet.sel.ball3d,
+                               stamped: !!localStorage.getItem('magnetball.ball3dfold'),
+                               hasSel: !!localStorage.getItem('magnetball.sel') }));
+  };
+  const f = {};
+  // fresh install: nothing stored at all
+  const fresh = await boot(() => { localStorage.clear(); });
+  f.freshUntouched = fresh.v === 'on' && !fresh.hasSel && fresh.stamped;
+  // a played device on the old default, never folded
+  const a = await boot(() => { localStorage.clear();
+    localStorage.setItem('magnetball.sel', JSON.stringify({ ball3d: 'off', mode: '1v1' })); });
+  f.moved = a.v === 'on' && a.stamped;
+  // the same device turns it off again next month: the stamp is there, so it keeps it
+  const c = await boot(() => {
+    localStorage.setItem('magnetball.sel', JSON.stringify({ ball3d: 'off', mode: '1v1' })); });
+  f.movedTwice = c.v !== 'off';
+  f.stamped = a.stamped && c.stamped;
+  await q.close();
+  return f;
+})();
+
+ok('it is ON by default', r.defaultIsOn,
+   'the rolling sphere is the honest picture of the one object everybody is tracking, and it measured free');
+ok('the fold key is stamped at boot', r.foldKey,
+   'a device on the old default would otherwise never be moved on');
+ok('a device stored on the old default is moved on, once', r.fold.moved && r.fold.stamped && !r.fold.movedTwice,
+   JSON.stringify(r.fold));
+ok('...and a fresh install is left alone', r.fold.freshUntouched,
+   'a fold that writes magnetball.sel on a fresh install makes isFirstRun dead code on frame one');
 ok('the toggle exists with both options', r.optionExists && r.optionTiles === 2, String(r.optionTiles));
 ok('two identical paints are identical', r.paintIsPure,
    `${r.controlDiff} px differ between two identical paints — every comparison below is measuring that too`);

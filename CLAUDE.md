@@ -2234,14 +2234,27 @@ three lines a second time, name it.
   ball (front and back still differ, so the period check is happy), and a straight copy
   punches the print's antialiased rim through the ground as a hairline. "Every texel of a
   pool ball is opaque" is the check that sees both. `tests/ball3d.mjs`.
-- **The ball as a ROLLING SPHERE** (`sel.ball3d`, default **off**; `BALL3D`,
+- **The ball as a ROLLING SPHERE** (`sel.ball3d`, default **on**; `BALL3D`,
   `paintBallSphere`, `ballSphereTex`): the pattern is mapped onto a cylinder-projected
   sphere and scrolled by the roll, so the markings compress toward the limb and go over
   the horizon. The ball already had sphere *shading* — a ground shadow and a fixed
   highlight — and what read flat was the pattern being **rotated in 2D**, which is a
   spinning disc.
-  ⚠️ **A setting, not a theme**, and default off: it changes the most-watched object on
-  the pitch, so it is something you turn on rather than something that arrives.
+  ⚠️ **IT SHIPS ON NOW, and this REVERSES the "default off" written below.** It shipped
+  off while the sphere was a projection of a disc onto three caps — *"it changes the
+  most-watched object on the pitch, so it is something you turn on"* — and that caution
+  was right about THAT sphere. With the patterns defined on the sphere, a full-turn
+  period and an axis that follows travel, it is the honest picture of the thing everybody
+  is tracking, where the flat look is a 2D disc spin the file itself calls a stylisation.
+  **Measured free**: 0.306ms a frame against the flat ball's 0.308 on a 390×844 phone at
+  3v3, 0.323 against 0.358 on a 1280×800 desktop. A device that stored the old `'off'`
+  is moved on ONCE (`magnetball.ball3dfold`), the `feelfold` shape: only a device that has
+  settings, one-shot, stamped either way. ⚠️ **The stamp is sabotage-verified; the
+  `magnetball.sel` guard is NOT catchable on today's values** — `'off'` is not the new
+  default, so a fresh install can never match the branch whatever the guard says. It is
+  there for the day the default moves again, which is exactly how `zoomfold` was bitten.
+  ⚠️ **A setting, not a theme**, and it was default off: it changes the most-watched object on
+  the pitch, so it was something you turned on rather than something that arrived.
   ⚠️ The texture is **baked once per (look, ink)** and scrolled with `drawImage` — keyed
   on the ink because slots mix and the pattern is drawn in the ball's spot colour, and
   dropped in `clearSwatchCache` so cycling palettes leaves nothing behind.
