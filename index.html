@@ -5866,7 +5866,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260917.0509AM';
+const VERSION = '20260918.0703AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5882,6 +5882,15 @@ const VERSION = '20260917.0509AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260918.0703AM', title: 'Bots that sprint, pass and play like a team',
+    changed: [
+      '<b>The bots use the turbo.</b> From Normal up they sprint for a ball they are racing for, and the top tiers sprint to track back and to make runs — paying the same stamina ring you do. A rookie never touches it.',
+      '<b>They pass like footballers.</b> A pass is led into space ahead of the runner, played only when the mate will get there first, and never struck further than the ball can run — so it arrives. A passer keeps running past the mate for the return ball.',
+      '<b>No more hoofing it from your own half.</b> A shot from beyond the ball\'s reach is a pass to the other keeper, and the bots know it now.',
+      '<b>Defenders mark, keepers come out.</b> Both tighter the higher the tier, so Insane defends like Insane and Rookie leaves the door open.',
+      '<b>The tiers are further apart</b> — every one of these is a difficulty axis, so picking a harder bot means more than it did.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260917.0509AM', title: 'Pick up where you left off, and replays worth watching',
     changed: [
       '<b>A match the game was closed on comes back.</b> A call, a locked screen or a lost tab used to cost the whole match; next time you open the game it offers the same match back — same teams, same score, same clock — from a kickoff.',
@@ -9239,34 +9248,42 @@ function sprintShow(){
 }
 // ⚠️ STEP LOOP ONLY — this is a clock, so it belongs beside the physics and never in a
 // draw (the trails rule). No randomness at all, so determinism is untouched.
-// ⚠️ **BOTS DO NOT SPRINT, AND THAT REVERSES AN EARLIER CALL.** The rule used to be that
-// they carried the same ring, on the argument that "a tired human playing a side that
-// never gets tired is a handicap, not a mechanic". Measured, that argument was pointing at
-// something that was not happening: over eight seeded matches the bots spent **0.0% of
-// ticks** locked out and the ring never fell below **0.62**, because a bot holds KICK to
-// TRAP rather than to run and lets go long before the ring empties. So what they were
-// actually getting was the 1.35x boost with none of the cost — which is not the same ring,
-// it is a flat speed bonus for carrying the ball.
-// ⚠️ **And it COMPRESSED THE DIFFICULTY LADDER**, which is the one guarantee the AI is
-// built to keep. Over 36 duels a rung (3 modes x 6 seeds, both orientations), goal
-// difference for the stronger side: rookie<normal **+39 -> +14**, normal<hard **+19 -> 0**,
-// rookie<insane +57 -> +64. Adjacent tiers are what a ladder is, and Normal against Hard
-// came out dead level: a free 1.35x for holding a button every tier holds equally makes
-// raw speed matter more and decision quality matter less, so the tiers converge.
-// ⚠️ A human's own deal is still fair against a bot at a flat 1.0: 3s at 1.35 then 5s at
-// 0.75 averages **0.975** if you simply hold it down, and better than 1.0 if you spend it
-// in bursts and let it fill. It is a mechanic you can play well, not a bonus.
-// ⚠️ Read off `ctrl`, so a body a person DROPS INTO mid-match gets the ring from the goal
-// it walks on at, and a bot that takes a seat back loses it — the seat is what decides,
-// not what the body was when the match kicked off.
+// ⚠️ **BOTS SPRINT, AND THAT WITHDRAWS "BOTS DO NOT SPRINT" — the second reversal of this
+// line.** Asked for outright: *"allow them to use the turbo"*. The rule it replaces was
+// right about the bots it measured and is kept below because it is what the sprint
+// DECISION exists to answer: those bots only ever held KICK to trap, so the ring never fell
+// below 0.62, the 1.35x was free, and every tier got it equally — which compressed the
+// ladder (rookie<normal +39 → +14, normal<hard +19 → 0 over 36 duels a rung). A bot's
+// sprint is a decision now (`runBot`, `BOT.sprintFar` and friends): it holds KICK away from
+// the ball, exactly as a person does, only for a chase it can lose or a run the play needs,
+// and how well it judges that comes off the tier's own scalar — Rookie and Easy never
+// sprint, Normal sprints for the chase and runs itself tired, and the top tiers keep a
+// reserve. Measured on the ladder harness with the decision in: written up in CLAUDE.md.
+// ⚠️ A human's own deal is unchanged: 3s at 1.35 then 5s at 0.75 averages **0.975** if
+// you simply hold it down, and better than 1.0 if you spend it in bursts and let it fill.
+// It is a mechanic you can play well, not a bonus — for the bots now too.
 // ⚠️ **ONE PREDICATE**, because two places have to agree about it: this, and `integrate`'s
 // `KICK_SLOW` exemption. `KICK_SLOW` is lifted for a sprinter — with Sprint on, holding
-// KICK IS the sprint, so slowing you for it is the two features cancelling out — and it
-// was lifted on `sprintOn()` alone, which is a GLOBAL answer. That handed every bot the
-// exemption while giving them no ring, i.e. a straight buff: measured, rookie<normal still
-// fell from +39 to +23 with the ring already taken off them. Whoever does not sprint keeps
-// the deliberate walk exactly as it always was.
-function sprintsFor(p){ return sprintOn() && p && p.ctrl !== 'bot'; }
+// KICK IS the sprint, so slowing you for it is the two features cancelling out. With
+// Sprint OFF nobody sprints and everybody keeps the deliberate walk exactly as it was;
+// `tests/sprint.mjs` hashes 900 steps of an all-bot match to prove that half is bit
+// identical to the pre-Sprint game.
+function sprintsFor(p){ return sprintOn() && !!p; }
+// What a body's SPRINT BUTTON is. A person's is KICK. A bot's is its own decision
+// (`p.aiSprinting`, written by `runBot`) and deliberately NOT its KICK.
+// ⚠️ A bot holds KICK on the way in to arm a trap (`BOT.windup`) and all through a carry,
+// and every number in the AI was tuned with that hold costing `KICK_SLOW`. Letting the hold
+// BE the sprint — which is what it is for a person — made every bot carry 35% faster than
+// the AI was built for, and it inverted the ladder at the AI's own tuning: rookie<insane
+// read **−12** under the stock plan on `tests/botplans.mjs` (trapping on, where the top
+// tiers carry most), against +18 before. So a bot's sprint is the one decision, and its
+// wind-up keeps the slow, deliberate approach it was tuned to.
+// ⚠️ NOTHING HERE EXCEEDS A THUMB. A bot sprints only away from the ball
+// (`BOT.sprintNear`), which is exactly where a person holding KICK gets the same boost with
+// no other effect; what the bot gives up is the boost on its own wind-up, which a person
+// keeps. Its envelope is a subset of the thumb's, never a superset. `tests/botai.mjs`
+// still diffs the whole player object across a bot's decision.
+function sprintPressed(p){ return p.ctrl === 'bot' ? !!p.aiSprinting : !!p.kick; }
 function advanceStamina(w, p){
   if (!sprintsFor(p)){ p.stam = 1; p.spent = false; p.sprinting = false; return 1; }
   if (p.stam == null) p.stam = 1;
@@ -9276,7 +9293,7 @@ function advanceStamina(w, p){
   // ⚠️ And it composes with what KICK already does rather than fighting it: holding
   // traps and winds the shot up, releasing fires it. So a sprint ends in a kick, which
   // is the run you actually want to make.
-  const want = !!p.kick && !p.spent;
+  const want = sprintPressed(p) && !p.spent;
   p.sprinting = want;
   if (want) p.stam = Math.max(0, p.stam - STEP/sprintSecs());
   else      p.stam = Math.min(1, p.stam + STEP/sprintRefill());
@@ -22087,7 +22104,9 @@ function integrate(w, ballFrozen, playersFrozen){
       // ⚠️ KICK_SLOW is OFF while Sprint is on. That multiplier exists so you cannot
       // cruise around with kick permanently held — and with Sprint on, holding kick is
       // the sprint, so slowing you for it is the two features cancelling each other out.
-      const a = (p.kick && !sprintsFor(p) ? accel * KICK_SLOW : accel) * sp;
+      // ⚠️ ...for a PERSON. A bot's sprint is its own decision and its KICK hold is its
+      // wind-up, which keeps the slow approach it was tuned with — see `sprintPressed`.
+      const a = (p.kick && !(sprintsFor(p) && sprintPressed(p)) ? accel * KICK_SLOW : accel) * sp;
       p.vx += p.inX * a;
       p.vy += p.inY * a;
     }
@@ -26289,6 +26308,60 @@ const BOT = {
   // ...and how much of that scaling the TOP tier is let out of (0 = every tier is held to
   // the tuned kick, 1 = the top tier keeps the world's whole kick). Measured below.
   kickSkill: 0,
+
+  // --- The turbo. A bot sprints the way a person does — by holding KICK away from the
+  // ball — and pays the same ring. ⚠️ **THIS REVERSES "BOTS DO NOT SPRINT"** (see
+  // `sprintsFor`): that rule was measured against bots that only ever held KICK to trap,
+  // so the boost was free and every tier got it equally. A sprint is a DECISION here:
+  // whether to spend the ring is derived from the tier's scalar (`botSkill`), so a rookie
+  // never sprints, Normal sprints for the obvious chase and runs itself tired, and the top
+  // tiers sprint to track back and to make runs while keeping a reserve.
+  sprintFar: 130,            // a chase or a run further than this is worth the ring
+  sprintNear: 80,            // ...and the sprint is dropped inside this of the ball, so the bot
+                             // arrives at the speed its approach was tuned for (one-touch)...
+  sprintNearTrap: 180,       // ...and inside THIS with trapping on. A trap needs TAP_HOLD of
+                             // KICK near the ball, and a body arriving at sprint pace is past
+                             // it before the trap arms. Measured at the AI's own tuning
+                             // (trapping on), rookie<insane over 84 matches: released at 80 the
+                             // ladder read **0** (four plans inverted), at 140 +34, at 180 +79
+                             // with none inverted, against +96 with no sprint at all — while at
+                             // the shipped one-touch feel the same 80 WIDENS it (+119 → +138)
+  passLaneR: 34,             // a pass lane is blocked by an opponent this close to it, wider
+                             // than a shot's `laneR`: the ball takes a second to arrive and a
+                             // body a stride off the line is on it by then
+  sprintRace: 1.35,          // a chase is a race when an opponent's time to the ball is
+                             // within this factor of ours — nobody sprints for an uncontested ball
+  sprintMinStam: 0.40,       // the reserve the top tier keeps (scaled down the ladder)
+  sprintHold: 24,            // ticks a sprint decision holds, so it cannot flicker
+  sprintAt: 0.30,            // the tier scalar from which a bot sprints at all (Normal up)...
+  sprintAllAt: 0.60,         // ...and from which it also tracks back and makes runs (Hard up)
+  sprintRuns: true,          // whether "makes runs" includes sprinting FORWARD in attack, or
+                             // only tracking back — see the ladder entry in CLAUDE.md
+
+  // --- Passing and off-ball running. A pass is still the same kick aimed at a mate;
+  // what changes with the tier is WHERE it is aimed and what the passer does next.
+  passThrough: 55,           // top-tier through-ball lead, units ahead of the runner toward goal
+  passRace: 140,             // openness of a pass = how far ahead of the nearest opponent the
+                             // mate is at the arrival point, over this many units
+  reachOpen: 0.7,            // how much of a SHOT's reach penalty an open mouth forgives: a ball
+                             // arriving dead at an empty net still goes in, one arriving dead at
+                             // a keeper does not. Without it the stock plan's 2v2 (no keeper)
+                             // ladder read −4..+6 where a slow hoof into the empty net had been
+                             // Insane's best kick — see CLAUDE.md's bot-football entry
+  passReach: 0.62,           // of the ball's COAST (strike / per-step loss): a pass is free up to
+                             // here and penalised from here to the coast itself, where it is dead...
+  wReach: 0.9,               // ...by this much. Measured before it existed: the average "pass" was
+                             // struck at a mate 371 units away on a 760 pitch and the ball's median
+                             // closest approach to him was 277 — a hoof, not a pass. ⚠️ A hard cut
+                             // at 0.70 of the coast was tried first and took passing away entirely
+                             // (Insane: 2 passes in 8 minutes, and 34% of its kicks became banks,
+                             // which were not penalised) — the banks pay it on their whole path too
+  runTicks: 90,              // after a pass, the passer keeps running for this long...
+  runAhead: 110,             // ...to a spot this far goal-side of the receiver (give and go)
+  markW: 0.40,               // how tightly a defender shades onto its mark, at skill 0...
+  markWTop: 0.62,            // ...and at skill 1
+  goalieOut: 0.16,           // of the half-length a top-tier keeper comes off the line for a
+                             // ball bearing down on the box; a rookie keeper stays put
 };
 function botKickMul(w, p){
   const kick = w.kickPower || PLAYER.kick;
@@ -26455,6 +26528,25 @@ function botSkill(diff){
     // banking off the boards is an expert's option, not a universal one.
     pass:   s >= 0.30,
     bank:   s >= 0.70,
+    // The turbo. Rookie and Easy never touch it; from Normal up a bot sprints for a
+    // contested ball, and from Hard up it also tracks back and makes runs. The reserve it
+    // keeps rises with the tier, so Normal runs itself tired and Insane never does.
+    sprint:    s >= BOT.sprintAt,
+    sprintAll: s >= BOT.sprintAllAt,
+    sprintFar: BOT.sprintFar * (1.6 - 0.6*s),
+    reserve:   BOT.sprintMinStam * s,
+    // Football sense. A through ball is led into space ahead of the runner by an amount
+    // that grows with the tier; a passer keeps running after a pass from the middle tiers
+    // up; a defender marks tighter and a keeper comes off the line further the higher up
+    // the ladder you go. Every one is a monotone function of `s`, so it is still a LADDER.
+    through:   BOT.passThrough * s,
+    // How much of the ball's own momentum a bot allows for when it lines a kick up (the
+    // impulse ADDS to what the ball already carries, so a rolling ball kicked at the goal
+    // goes wide of it). A rookie kicks the ball it can see; Insane kicks the ball it will be.
+    comp:      s,
+    run:       s >= 0.45,
+    mark:      BOT.markW + (BOT.markWTop - BOT.markW) * s,
+    goalieOut: BOT.goalieOut * s,
   };
 }
 
@@ -26501,6 +26593,9 @@ function botInitPlayer(p, i){
   p.aiType = 'allround';               // re-read from the plan whenever the role changes
   p.aiLag = 0;                         // reaction delay left on the pending decision
   p.aiBerry = null;                    // the KQ berry this bot is shepherding, if any
+  p.aiSprintT = 0; p.aiSprinting = false;   // the turbo: ticks left on a sprint decision, and the button itself
+  p.aiRunT = 0; p.aiRunTo = null;      // give-and-go: ticks left running past the mate just passed to
+  p.aiKickT = -1;                      // the last kick of ours we have reacted to (ball.lastKickT)
 }
 // Every AI random draw goes through the world's stream. A bot that finds no stream
 // (a drill world, a replay stub) falls back to no noise rather than to Math.random.
@@ -26663,12 +26758,13 @@ function botTimeToBall(w, p, ball){
 //  competes with a direct shot instead of being a special case.
 // ============================================================
 // 1 when no opponent stands in the lane, falling to 0 as one closes on the line.
-function botLaneClear(w, p, ax, ay, bx, by){
+function botLaneClear(w, p, ax, ay, bx, by, R){
   let worst = 1;
+  const laneR = R != null ? R : BOT.laneR;
   for (const o of w.players){
     if (o.team === p.team) continue;
     const d = segDist(o.x, o.y, ax, ay, bx, by);
-    worst = Math.min(worst, Math.min(1, d / (BOT.laneR + o.r)));
+    worst = Math.min(worst, Math.min(1, d / (laneR + o.r)));
   }
   return worst;
 }
@@ -26741,9 +26837,9 @@ function botBankHits(seg, sx, sy, mx, my){
   return { x: p1x + d1x*t, y: p1y + d1y*t };
 }
 // Score one candidate. Everything is 0..1 so the weights mean what they say.
-function botScoreAim(w, p, ball, tx, ty, progressRef, openness, penalty){
+function botScoreAim(w, p, ball, tx, ty, progressRef, openness, penalty, laneR){
   const attackDir = p.team===0 ? -1 : 1;
-  const lane = botLaneClear(w, p, ball.x, ball.y, tx, ty);
+  const lane = botLaneClear(w, p, ball.x, ball.y, tx, ty, laneR);
   const progress = clamp(((ty - ball.y) * attackDir) / (w.field.L*0.5), -1, 1);
   const dist = Math.hypot(tx-ball.x, ty-ball.y) / Math.hypot(w.field.W, w.field.L);
   return lane*BOT.wLane + (progressRef != null ? progressRef : progress)*BOT.wProgress
@@ -26758,6 +26854,14 @@ function botPickAim(w, p, ball, mates, skill){
   const goalY = attackDir*halfL;
   const cands = [];
 
+  // The strike is one step of wind-up (`chargeMul` × `botKickMul`), so the coast is what
+  // THAT kick runs before it stops. A kick further than `passReach` of it arrives dead, and
+  // one past the coast does not arrive — shot, pass or bank alike. Free up to the mark,
+  // penalised from there to the coast itself.
+  const pw = (w.kickPower || PLAYER.kick) * (1 + Math.min(1, STEP / chargeSecs()) * CHARGE.bonus) * botKickMul(w, p);
+  const coast = pw / Math.max(0.004, 1 - (ball.damp != null ? ball.damp : 0.99));
+  const reachPen = far => clamp((far - coast*BOT.passReach) / (coast*(1 - BOT.passReach)), 0, 1) * BOT.wReach;
+
   // --- Shot at goal, aimed down the middle of the clear window.
   const ap = botAperture(w, p, ball, goalY, gh);
   const shotAng = ap.aim;                    // the middle of the biggest gap, not of the goal
@@ -26767,18 +26871,53 @@ function botPickAim(w, p, ball, mates, skill){
   // ⚠️ The type's lean is ADDED to the score, never used to remove a candidate: a
   // playmaker that cannot shoot when the goal is open is broken, not characterful. It
   // competes with lane, progress and openness, so a clear chance still wins.
+  // ⚠️ AND A SHOT PAYS THE REACH LIKE ANY OTHER KICK. The shot's progress is pinned at 1
+  // whatever the range, so measured on the shipped build it won from anywhere — Insane
+  // aimed 241 of 373 kicks at the goal on a 760 pitch whose strike coasts 315 — and a ball
+  // struck at a goal it cannot reach is a hoof to the other side's keeper, not a shot.
+  // With the range paid for, a forward pass to a mate in space is the better kick from
+  // deep, which is where the build-up comes from.
+  // ⚠️ ...EXCEPT AT AN EMPTY NET (`reachOpen`). A ball that arrives dead in front of a
+  // keeper is his; one that arrives dead at an open mouth still rolls in, so the penalty is
+  // forgiven in proportion to how open the mouth is. Measured in the 2v2 harness, which has
+  // no keeper: the stock plan's Insane-over-Rookie margin sat at −4..+6 with the full
+  // penalty, because the slow hoof into the empty net had been Insane's best kick.
   cands.push({ kind:'goal', x:shotX, y:shotY,
-    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen, ap.span < BOT.apertureMin ? 0.6 : 0)
+    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen,
+                   (ap.span < BOT.apertureMin ? 0.6 : 0) + reachPen(shotD) * (1 - BOT.reachOpen * apOpen))
        + botTypeM(p, 'shot') });
 
   // --- Kick aimed at a teammate (this IS the pass), led ahead of the runner.
+  // ⚠️ A THROUGH BALL, not a ball at the feet. The lead is the mate's own run plus a push
+  // toward goal that grows with the tier (`skill.through`, 0 for a bot that has no such
+  // idea), clamped inside the pitch — a ball led past the goal line is a goal kick.
+  // ⚠️ OPENNESS IS A RACE, never "is anybody standing near the mate". Measured on the
+  // shipped build, half of Normal's kicks were aimed at a mate and fewer than a fifth
+  // arrived: a ball played to feet with an opponent a stride away is the opponent's ball.
+  // What decides a pass is whether the MATE gets to the arrival point first, so the score
+  // is how far ahead of the nearest opponent the mate is at that point.
+  // ⚠️ AND A PASS THE BALL CANNOT REACH IS NOT A PASS. A bot's strike runs
+  // `power / (1 - damp)` units before it stops — 315 at the shipped ball — so a mate further
+  // than most of that gets a ball that arrives dead or never arrives, whoever is near him.
+  // Penalised toward the limit rather than cut off at it, so a long ball is still a
+  // candidate when it is the only one.
+  // A bank to a mate pays the reach on its whole path too, or shutting the long passes
+  // hands every one of them to the boards (measured: 34% of Insane's kicks became banks).
   if (skill.pass) for (const q of mates){
     if (q === p) continue;
-    const tx = q.x + q.vx*BOT.passLead, ty = q.y + q.vy*BOT.passLead;
+    const thru = skill.through || 0;
+    const tx = clamp(q.x + q.vx*BOT.passLead, -w.field.W/2 + ball.r + 8, w.field.W/2 - ball.r - 8);
+    const ty = clamp(q.y + q.vy*BOT.passLead + attackDir*thru, -halfL + ball.r + 8, halfL - ball.r - 8);
     let od = 1e9;
     for (const o of w.players) if (o.team !== p.team) od = Math.min(od, Math.hypot(o.x-tx, o.y-ty));
+    const md = Math.hypot(q.x-tx, q.y-ty);
+    // ⚠️ No head start: a mate and an opponent the SAME distance from the arrival point
+    // is a fifty-fifty, which is not a pass. Written as `0.5 + …` first, which scored a
+    // mate with an opponent one stride away at 0.79 and 36 of Normal's 57 passes went
+    // straight to the other side.
+    const open = clamp((od - md) / BOT.passRace, 0, 1);
     cands.push({ kind:'pass', x:tx, y:ty, who:q,
-      s: botScoreAim(w, p, ball, tx, ty, null, Math.min(1, od/140), 0) + botTypeM(p, 'pass') });
+      s: botScoreAim(w, p, ball, tx, ty, null, open, reachPen(Math.hypot(tx-ball.x, ty-ball.y)), BOT.passLaneR) + botTypeM(p, 'pass') });
   }
 
   // --- Banks off the boards, for the goal and for each mate. Same scorer, small
@@ -26794,8 +26933,14 @@ function botPickAim(w, p, ball, mates, skill){
       // The leg BEFORE the bounce has to be clear; after it, we accept the risk.
       const lane = botLaneClear(w, p, ball.x, ball.y, hit.x, hit.y);
       if (lane < 0.5) continue;
+      // ⚠️ EVERY bank pays the reach on its whole path, the goal included. The goal bank was
+      // exempted for one build ("a ball only has to cross the line") and the moment the
+      // direct shot paid the reach, Insane banked **58% of its kicks** at the shipped feel —
+      // the unpenalised hoof had simply moved to the boards. The reach is the physics and
+      // no candidate gets out of it.
+      const path = Math.hypot(hit.x-ball.x, hit.y-ball.y) + Math.hypot(base.x-hit.x, base.y-hit.y);
       cands.push({ kind:'bank', x:m.x, y:m.y, who:base.who, via:hit,
-        s: botScoreAim(w, p, ball, base.x, base.y, null, lane, BOT.wallPenalty) });
+        s: botScoreAim(w, p, ball, base.x, base.y, null, lane, BOT.wallPenalty + reachPen(path)) });
     }
   }
 
@@ -26956,9 +27101,19 @@ function botFormationSpot(w, p, phase){
 
   if (role === 'goalie'){
     // Stay on the goal line; slide across with the ball but never leave the mouth.
+    // ⚠️ ...and COME OFF IT for a ball bearing down on the box, by an amount that grows
+    // with the tier (`skill.goalieOut`): a keeper glued to the line gives every shot the
+    // whole mouth, and narrowing the angle is what a keeper is for. A rookie keeper
+    // stays put, which is one of the things that makes a rookie a rookie. Never further
+    // than the ball itself, or the keeper runs past it.
     const gh = w.field.goal/2;
+    const lineY = -attackDir * (halfL - (halfL*BOT.slotDepth.goalie));
+    const toBall = Math.hypot(ball.x, ball.y - (-attackDir*halfL));
+    const near = clamp(1 - toBall / (halfL*0.6), 0, 1);
+    const out = Math.min(botSkill(w.diff).goalieOut * halfL * near,
+                         Math.max(0, (ball.y - lineY) * attackDir - p.r - ball.r));
     return { x: clamp(ball.x*0.5, -gh*BOT.goalieSpanX, gh*BOT.goalieSpanX),
-             y: -attackDir * (halfL - (halfL*BOT.slotDepth.goalie)) };
+             y: lineY + attackDir * out };
   }
   // ⚠️ The plan's line and the type's depth MULTIPLY rather than one winning: the type
   // says where this player sits relative to its side, the plan says where the whole side
@@ -27100,25 +27255,69 @@ function runBot(w, p){
   // which made harder bots oscillate faster rather than respond sooner.
   const lagTicks = skill.lag;
 
+  // --- Intercept: aim at where the ball WILL be. Low tiers deliberately don't —
+  // that is the anticipation limit, and it is a real difficulty axis.
+  const meet = botIntercept(w, p, ball, skill.iters);
+
+  // --- GIVE AND GO. The moment a pass of ours leaves the boot, keep running — past the
+  // mate it went to, goal-side — for `runTicks`, so the return ball has somewhere to go.
+  // Detected off the ball's own kick record (a READ), never off "kick was pressed", which
+  // fires on every step of a wind-up. Middle tiers up (`skill.run`); a rookie stands and
+  // admires the pass, which is what a rookie does.
+  // ⚠️ ABOVE the re-aim, or it reads the NEXT kick's kind: on a decision tick the aim is
+  // re-picked before the record is looked at, and a pass that had just left the boot was
+  // being filed as whatever the bot now fancied — measured, a quarter of passes started
+  // no run at all.
+  if (ball.lastKicker === p && ball.lastKickT !== p.aiKickT){
+    p.aiKickT = ball.lastKickT;
+    if (skill.run && p.aiKind === 'pass' && p.aiWho && p.aiWho !== p){ p.aiRunT = BOT.runTicks; p.aiRunTo = p.aiWho; }
+  }
+
   // --- Where do we want the ball to GO? The kick impulse runs along player->ball,
   // so this is not an aim input — it decides where the bot has to STAND.
   if (recompute && p.aiState === 'approach'){
     const pick = botPickAim(w, p, ball, mates, skill);
     p.aiKind = pick.kind; p.aiAimPt.x = pick.x; p.aiAimPt.y = pick.y;
+    p.aiWho = pick.who || null;              // the mate a pass is meant for (the give-and-go reads it)
     // A bank is aimed at the MIRRORED point, which is what makes the ball arrive
     // at the real target after the bounce.
     let ax = pick.x - ball.x, ay = pick.y - ball.y;
     const al = Math.hypot(ax,ay)||1; ax/=al; ay/=al;
+    // ⚠️ THE KICK ADDS TO WHAT THE BALL ALREADY CARRIES (`ball.vx += n*power`), so a
+    // rolling ball struck straight at a target goes wide of it by however fast it was
+    // rolling. The bot therefore stands so that impulse + momentum points at the target —
+    // momentum taken at the moment of the strike, which is the ball's velocity decayed
+    // over the intercept time — by an amount that grows with the tier (`skill.comp`): a
+    // rookie kicks the ball it can see. It is still aiming by where it stands; it is just
+    // standing in the right place.
+    // ⚠️ THE CHECK THAT SEES THIS IS THE LADDER, NOT A PROTRACTOR — and it was deleted for
+    // one build on the strength of the protractor. A per-kick probe (a ball rolling at 3 a
+    // step, an Insane bot left to run in and strike, the angle between where the ball went
+    // and where it was aiming) read 30–39° with the allowance and 32–38° without: the
+    // strike commits inside `strikeEnter`'s 32° cone and the bot's own carry rides in, so
+    // one kick cannot show it. Over a match it shows plainly: the shipped-feel ladder
+    // (`sweep`, 84 matches, Insane over Rookie pooled across seven plans) reads **+137
+    // with it and +71 without** on the same seeds. `tests/proladder.mjs` is the guard.
+    // ⚠️ ONE-TOUCH ONLY (`w.trapOff`). With trapping on a bot holds KICK on the way in,
+    // traps, carries and releases along the carry — and a carried ball has no momentum of
+    // its own to cancel, so an aim rotated for it is simply rotated wrong. Measured on
+    // `botai`'s ladder at the AI's own tuning (trapping on): compensating there read
+    // rookie<normal **−6** and normal<hard **0**, against +3 / +9 without.
+    if (skill.comp > 0 && w.trapOff){
+      // The strike carries one step of wind-up (`chargeMul`), the same number `botPickAim`
+      // sizes the coast from — allow for 5.5 when the kick is 6.3 and the stance is 3° out.
+      const pw = (w.kickPower || PLAYER.kick) * (1 + Math.min(1, STEP / chargeSecs()) * CHARGE.bonus) * botKickMul(w, p);
+      const dk = Math.pow(ball.damp != null ? ball.damp : 0.99, meet.t || 0);
+      const cx = ax*pw - ball.vx*dk*skill.comp, cy = ay*pw - ball.vy*dk*skill.comp;
+      const cl = Math.hypot(cx, cy);
+      if (cl > 1e-6){ ax = cx/cl; ay = cy/cl; }
+    }
     // Aim error rotates the APPROACH ANGLE. That is how a bot aims — it can only
     // change where the impulse points by changing where it stands.
     const ca = Math.cos(p.aiAimErr), sa = Math.sin(p.aiAimErr);
     p.aiAim.x = ax*ca - ay*sa; p.aiAim.y = ax*sa + ay*ca;
   }
   let aimx = p.aiAim.x, aimy = p.aiAim.y;   // `let`: the stalemate breaker below swaps it for the wall's tangent
-
-  // --- Intercept: aim at where the ball WILL be. Low tiers deliberately don't —
-  // that is the anticipation limit, and it is a real difficulty axis.
-  const meet = botIntercept(w, p, ball, skill.iters);
 
   // --- THE strike waypoint: the spot behind the (predicted) ball a straight run
   // kicks from. It is never discarded. The old code placed it 27 units out and threw
@@ -27214,6 +27413,45 @@ function runBot(w, p){
   }
   if (p.aiLag > 0) p.aiLag--;
 
+  if (p.aiRunT > 0) p.aiRunT--;
+  if (st.phase === 'defend') p.aiRunT = 0;      // possession lost: the run is over
+
+  // --- THE TURBO. Decided at the decision rate, latched for `sprintHold` so it cannot
+  // flicker, and only ever spent in APPROACH — a strike, a carry and a trap already own
+  // the wind-up. It pays the same ring a person's does through `advanceStamina`, and it
+  // buys the same boost, only ever away from the ball (`sprintPressed` for why it is not
+  // the bot's KICK).
+  // ⚠️ TWO REASONS TO SPRINT, and which a bot can see is the tier's call (`botSkill`):
+  // the chaser sprints for a ball it is RACING for (far off, an opponent about as close —
+  // nobody sprints for an uncontested ball, and nobody sprints the last stretch, where
+  // the strike guards need the button back); from Hard up a bot also sprints to track
+  // back when possession is lost and to make the run the play is waiting for.
+  // ⚠️ THE RESERVE IS THE JUDGEMENT. `skill.reserve` is the ring level below which a bot
+  // will not start a sprint: near zero at Normal, so it runs itself tired and is locked
+  // out at the tired speed like anybody who does; 0.40 at Insane, which never empties.
+  if (recompute){
+    let want = false;
+    if (skill.sprint && sprintOn() && p.aiState === 'approach' && !p.trap && !p.spent &&
+        (p.stam == null || p.stam > skill.reserve)){
+      if (iAmChaser){
+        let theirs = 1e9;
+        for (const o of w.players) if (o.team !== p.team) theirs = Math.min(theirs, botTimeToBall(w, o, ball));
+        want = dBall > skill.sprintFar && theirs < meet.t * BOT.sprintRace;
+      } else if (skill.sprintAll){
+        const far = Math.hypot(p.aiTarget.x - p.x, p.aiTarget.y - p.y) > skill.sprintFar;
+        want = far && (st.phase === 'defend' ||
+                       (BOT.sprintRuns && st.phase === 'attack' && (p.aiRole === 'support' || p.aiRunT > 0)));
+      }
+    }
+    if (want) p.aiSprintT = BOT.sprintHold;
+  }
+  if (p.aiSprintT > 0) p.aiSprintT--;
+  // ⚠️ This is the bot's sprint button (`sprintPressed`), and it is NOT its KICK — the
+  // wind-up hold keeps `KICK_SLOW`, the approach it was tuned with. Only ever true away
+  // from the ball, which is where a thumb holding KICK gets exactly the same boost.
+  p.aiSprinting = p.aiSprintT > 0 && p.aiState === 'approach' && !p.trap &&
+                  dBall > (w.trapOff ? BOT.sprintNear : BOT.sprintNearTrap);
+
   // --- Pick the point to move to.
   let target;
   if (p.aiState === 'carry'){
@@ -27250,6 +27488,12 @@ function runBot(w, p){
     target = (lined > BOT.berryAlign && mbl < sr + BOT.berryArrive)
       ? { x: bb.x + hx*sr, y: bb.y + hy*sr }
       : { x: bb.x - hx*sr, y: bb.y - hy*sr };
+  } else if (p.aiRunT > 0 && p.aiRunTo && p.aiRole !== 'goalie'){
+    // The give-and-go run: goal-side of the mate we just played it to, on our own side of
+    // them so the return ball has a lane, until the clock or the possession runs out.
+    const q = p.aiRunTo;
+    const side = (p.x - q.x) >= 0 ? 1 : -1;
+    target = { x: q.x + side * BOT.runAhead * 0.55, y: q.y + attackDir * BOT.runAhead };
   } else if (p.aiRole === 'support' && p.aiSpot){
     // Off-ball runs happen continuously, not only on a possession change.
     target = { x: p.aiSpot.x + p.aiPosErrX, y: p.aiSpot.y + p.aiPosErrY };
@@ -27268,8 +27512,11 @@ function runBot(w, p){
           if (threat > bs){ bs = threat; mark = o; } }
         p.aiMark = mark;
       }
+      // How tightly is the tier's call (`skill.mark`): a rookie shades toward its man, an
+      // Insane defender all but stands on him.
       if (p.aiMark && st.press !== p){
-        target.x = target.x*0.6 + p.aiMark.x*0.4; target.y = target.y*0.6 + p.aiMark.y*0.4; }
+        const m = skill.mark;
+        target.x = target.x*(1-m) + p.aiMark.x*m; target.y = target.y*(1-m) + p.aiMark.y*m; }
     }
   }
 
@@ -27367,7 +27614,13 @@ function runBot(w, p){
   const ownLineY = (p.team === 0 ? 1 : -1) * (w.field.L/2);
   const inOwnMouth = Math.abs(ball.x) < w.field.goal/2 + p.r &&
                      Math.abs(ball.y - ownLineY) < w.field.net + p.r;
-  const escapeKick = stuck && !inOwnMouth && dBall < sum + kr;
+  // ⚠️ ...AND NEVER BELTED TOWARD OUR OWN GOAL. The belt fires along player→ball wherever
+  // the bot happens to have arrived from, and once a shot from deep paid the reach the bot
+  // stopped arriving from the goal side (the pick was a bank or a clear), so two of the
+  // twenty-eight resting places in `tests/botstuck.mjs`' sweep came out as own goals
+  // where there had been none. A belt with a real component toward our own line is not
+  // an escape, it is the thing the guard above exists to stop.
+  const escapeKick = stuck && !inOwnMouth && dBall < sum + kr && pby * attackDir > -0.35;
   if (p.aiState === 'carry'){
     // Release when we're facing the aim, or when the trap window is nearly spent.
     const faceAim = p.faceX*aimx + p.faceY*aimy;

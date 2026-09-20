@@ -153,34 +153,40 @@ const r = await p.evaluate(() => {
   o.looseSpeed = +topSpeed(false).toFixed(3);
   o.kickDoesNotBrake = o.heldSpeed > o.looseSpeed * 1.1;
 
-  // ---- 5. BOTS DO NOT SPRINT, and that reverses an earlier call ---------------
-  // ⚠️ The rule used to be that they carried the same ring, because "a tired human playing
-  // a side that never gets tired is a handicap". Measured, that argument was pointing at
-  // something that was not happening: bots spent 0.0% of ticks locked out and the ring
-  // never fell below 0.62, because a bot holds KICK to TRAP rather than to run. What they
-  // actually got was the 1.35x boost with none of the cost — and it COMPRESSED THE
-  // DIFFICULTY LADDER, the one guarantee the AI exists to keep. Over 36 duels a rung, goal
-  // difference for the stronger side: rookie<normal +39 -> +14, normal<hard +19 -> 0.
-  M.setMatchSeed(11); M.sel.mode = '4v4'; M.startMatch();
-  {
+  // ---- 5. BOTS SPRINT, TIER-GATED — and that WITHDRAWS "bots do not sprint" ---------
+  // ⚠️ The second reversal of this block. It used to pin that bots never touched the ring,
+  // because the bots it measured only ever held KICK to trap: the boost was free, every
+  // tier got it equally, and the ladder compressed (rookie<normal +39 -> +14). The owner
+  // then asked for the turbo outright, so a sprint is a DECISION now — a bot holds KICK
+  // away from the ball for a chase it can lose or a run the play needs, pays the same ring,
+  // and how well it judges that comes off the tier's scalar. What is pinned here is the
+  // shape of that: a NORMAL side spends the ring on deliberate sprints and a ROOKIE side
+  // never does. Measured as the body SPRINTING (the physics' own flag) further from the
+  // ball than `BOT.sprintNear` — a bot's sprint is its own decision and never its KICK
+  // hold (`sprintPressed`), so the wind-up, which every tier holds, cannot count.
+  const farHold = (diff) => {
+    M.setMatchSeed(11); M.sel.mode = '4v4'; M.sel.diff = diff; M.sel.autoReplay = false; M.startMatch();
     const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
-    let lowest = 1;
+    for (const q of w2.players) q.ctrl = 'bot';
+    let far = 0, lowest = 1, spentT = 0;
     for (let i = 0; i < 1800; i++){
       M.step(w2);
-      for (const q of w2.players) if (q.ctrl === 'bot' && q.stam != null) lowest = Math.min(lowest, q.stam);
+      for (const q of w2.players){
+        if (q.stam != null) lowest = Math.min(lowest, q.stam);
+        if (q.spent) spentT++;
+        if (q.sprinting && Math.hypot(q.x - w2.ball.x, q.y - w2.ball.y) > M.BOT.sprintNear) far++;
+        // ⚠️ ...and a bot's wind-up must NOT be a sprint: KICK held near the ball, ring untouched.
+        if (q.kick && q.sprinting) o.windupSprints = (o.windupSprints || 0) + 1;
+      }
     }
-    const bots = w2.players.filter(q => q.ctrl === 'bot');
-    o.lowestBotRing = +lowest.toFixed(3);
-    o.botsNeverTire = lowest > 0.999 && bots.every(q => !q.sprinting && !q.spent);
-    // ⚠️ And the predicate is read off `ctrl`, so a body somebody drops into mid-match gets
-    // the ring and a bot taking a seat back loses it. Checked directly, because "bots do
-    // not sprint" written as a check on the roster at kickoff would miss that entirely.
-    const one = bots[0];
-    o.botHasNoRing = M.sprintsFor(one) === false;
-    const was = one.ctrl; one.ctrl = 'gamepad';
-    o.seatDecidesIt = M.sprintsFor(one) === true;
-    one.ctrl = was;
-  }
+    return { far, lowest: +lowest.toFixed(3), spentT, ring: M.sprintsFor(w2.players[0]) };
+  };
+  o.normalBots = farHold('normal');
+  o.rookieBots = farHold('rookie');
+  o.botsSprint = o.normalBots.far > 60 && o.normalBots.lowest < 0.9 && o.normalBots.ring === true;
+  o.rookieNever = o.rookieBots.far === 0;
+  o.windupNeverSprints = !o.windupSprints;
+  M.sel.diff = 'normal';
   M.sel.sprint = 'off'; M.sel.mode = '1v1';
   return o;
 });
@@ -231,19 +237,20 @@ const dflt = await (async () => {
   return out;
 })();
 
-// ================================= a bot-only match does not know Sprint exists ==
-// ⚠️ THE LADDER IS WHAT THIS PROTECTS. `KICK_SLOW` is lifted for a sprinter — with Sprint
-// on, holding KICK IS the sprint — and it was lifted on `sprintOn()`, a GLOBAL answer, so
-// every bot got the exemption while having no ring: a straight buff, and rookie-vs-normal
-// still fell from +39 to +23 with the ring already taken off them. `sprintsFor(p)` is one
-// predicate both places read. Hashed over 900 steps of an all-bot match.
+// ================================= a bot-only match DOES know Sprint exists now ==
+// ⚠️ REVERSED. This block used to hash an all-bot match with Sprint on and off and require
+// the two to be identical — the proof that bots had no ring, which was the ladder's
+// protection at the time. Bots sprint on a tier-gated decision now (block 5), so the same
+// hash has to DIFFER: a Normal side with the turbo plays a different match from one
+// without it. The ladder's protection moved to `tests/proladder.mjs` and `tests/botplans.mjs`,
+// which measure it directly and are green with the decision in.
 const botw = await p.evaluate(() => {
   const M = window.__magnet;
   const run = () => {
-    M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
+    M.sel.mode = '4v4'; M.sel.lobby = 'off'; M.sel.autoReplay = false; M.sel.diff = 'normal';
     M.setMatchSeed(77); M.startMatch();
     const w = M.world; w.state = 'play'; w.stateT = 2;
-    for (const q of w.players) q.ctrl = 'bot';        // nobody here has a ring either way
+    for (const q of w.players) q.ctrl = 'bot';
     for (let i = 0; i < 900; i++) M.step(w);
     return w.players.map(q => `${q.x.toFixed(6)},${q.y.toFixed(6)}`).join('|') +
            `#${w.ball.x.toFixed(6)},${w.ball.y.toFixed(6)}#${w.score.join('-')}`;
@@ -251,7 +258,7 @@ const botw = await p.evaluate(() => {
   M.sel.sprint = 'off'; const off = run();
   M.sel.sprint = 'on';  const on  = run();
   M.sel.sprint = 'off';
-  return { same: off === on, on };
+  return { differs: off !== on, on };
 });
 
 // ============================================ off changes NOTHING at all ==
@@ -263,10 +270,12 @@ const botw = await p.evaluate(() => {
 // the default, which is why flipping that default did not touch this block.
 const det = await p.evaluate(() => {
   const M = window.__magnet;
-  // ⚠️ `hold` drives the HUMAN seat's KICK, and it has to, because that is now the only
-  // thing Sprint changes: bots do not sprint, so an idle match is identical either way.
-  // The first version of this block compared two idle matches and asserted they DIFFERED
-  // — true when bots carried the ring, and quietly false the moment they stopped.
+  // ⚠️ `hold` drives the HUMAN seat's KICK. The idle comparison has flipped TWICE: the
+  // first version asserted two idle matches differed (true while bots carried the ring),
+  // the second that they were identical (true while bots did not sprint), and now that
+  // bots sprint on a decision they differ again. Both halves are pinned rather than one,
+  // so the human's own ring is measured on its own: the held run has to differ from the
+  // loose one WITH the setting on, which no amount of bot sprinting can produce.
   const run = (hold) => {
     M.sel.mode = '3v3'; M.sel.lobby = 'off'; M.sel.autoReplay = false;
     M.setMatchSeed(23); M.startMatch();
@@ -285,8 +294,8 @@ const det = await p.evaluate(() => {
   M.sel.sprint = 'off'; const heldOff = run(true);
   M.sel.sprint = 'on';  const heldOn = run(true);
   M.sel.sprint = 'off';
-  return { stable: a === b2, idleSame: a === idleOn, onDiffers: heldOff !== heldOn,
-           sample: a.slice(0, 60) };
+  return { stable: a === b2, idleDiffers: a !== idleOn, onDiffers: heldOff !== heldOn,
+           humanRing: idleOn !== heldOn, sample: a.slice(0, 60) };
 });
 
 // ================================ ONE RING, AND ITS COLOUR IS THE GAUGE ==
@@ -587,21 +596,24 @@ ok('running WITHOUT holding kick costs nothing', r.joggingIsFree,
 ok('...and recovery can never be set faster than the spend', r.refillFloored,
    'a ring that refills quicker than it drains is one you never stop holding');
 
-ok('bots do NOT sprint', r.botsNeverTire,
-   `lowest bot ring over half a minute of 4v4 was ${r.lowestBotRing} — they used to carry it, ` +
-   'and since a bot holds KICK to TRAP rather than to run it never emptied: 0.0% of ticks spent, ' +
-   'so what they got was the 1.35x boost with none of the cost');
-ok('...and it is the SEAT that decides, not what the body started as', r.botHasNoRing && r.seatDecidesIt,
-   'a body somebody drops into mid-match gets the ring; a bot taking a seat back loses it');
-ok('...so a bot-only match is bit identical with Sprint on and off', botw.same,
-   `${botw.on.slice(0,44)} — the ladder is what this protects: with bots sprinting, normal-vs-hard ` +
-   'went from +19 goal difference over 36 duels to exactly 0, which is two tiers nobody can tell apart');
+ok('bots SPRINT, on a decision, and pay the ring', r.botsSprint,
+   `${JSON.stringify(r.normalBots)} — a Normal side over half a minute of 4v4 has to hold KICK away from ` +
+   'the ball (a deliberate sprint, which a wind-up never is) and spend the ring for it; this withdraws ' +
+   '"bots do not sprint", asked for as "allow them to use the turbo"');
+ok('...and a ROOKIE side never touches it', r.rookieNever,
+   `${JSON.stringify(r.rookieBots)} — the turbo is tier-gated off the same scalar as everything else, ` +
+   'and a rookie that sprints as well as Insane is the free boost that compressed the ladder last time');
+ok('...and a bot\'s WIND-UP is never a sprint', r.windupNeverSprints,
+   `${r.windupSprints || 0} ticks of KICK held while sprinting — the hold on the way in keeps KICK_SLOW, the ` +
+   'approach the AI was tuned with; letting it be the sprint inverted the ladder at the tuning (rookie<insane −12)');
+ok('...so a bot-only match plays differently with Sprint on', botw.differs,
+   `${botw.on.slice(0,44)} — this block used to assert the opposite, back when bots had no ring`);
 
 ok('with sprint off the world is unchanged', det.stable, det.sample);
-ok('...and with nobody holding KICK it is the same match either way', det.idleSame,
-   'bots do not sprint, so an untouched match cannot tell the setting apart — which is exactly what keeps the ladder where it was');
-ok('...but hold KICK and it is a different match', det.onDiffers,
-   'if switching it on changes nothing for the one seat that has a ring then nothing was wired up');
+ok('...and with nobody holding KICK it is still a different match, because the bots sprint', det.idleDiffers,
+   'bots hold KICK for a chase or a run on their own decision, so an untouched match can tell the setting apart now');
+ok('...and holding KICK on the human seat changes it further', det.onDiffers && det.humanRing,
+   'if switching it on changes nothing for the human seat then the bots\' sprints are the only thing wired up');
 
 
 ok('a slider ignores a touch on its TRACK', drag.found && drag.trackRefusedOnTouch,

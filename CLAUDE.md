@@ -296,7 +296,11 @@ three lines a second time, name it.
   (downstream of all three target sources, so one call covers them) and on `layTeam`'s
   formation marks; and `botGapAvoid` in the Layer-0 blend at `BOT.wGap`. Measured:
   pinned **0.34%** of bot-time against **4.25%** with it off, worst pin **1.7s** against
-  **6.5s**, and 6 goals against 7.
+  **6.5s**, and 6 goals against 7. ⚠️ **Re-measured after the bot-football batch: 0.32%
+  against 8.19%, worst pin 1.4s against 4.1s, 10 goals against 5.** The CONTROL moved — a
+  bot that sprints and re-aims frees itself from a face sooner even with no steering — so
+  `tests/gapfield.mjs`' worst-pin ratio went 3× → 2× with the numbers beside it; the
+  pinned-share ratio, which has the statistics behind it, is untouched at 3× and reads 25×.
   ⚠️ **The crossing test uses the BARE block; the push uses a PAD.** Backwards, a body
   standing against a face counts as *inside* the padded region, the term never switches
   off and the bot is shoved sideways along a wall it has already cleared — the same shape
@@ -679,6 +683,91 @@ three lines a second time, name it.
   by the suite's OWN guard ("if the caption is off in both, the check below passes for the
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
+- **THE BOTS USE THE TURBO, PASS INTO SPACE, MAKE RUNS, MARK AND KEEP — EACH ONE A
+  FUNCTION OF THE TIER** (`BOT.sprint*`, `passThrough`, `passRace`, `passReach`/`wReach`,
+  `passLaneR`, `runTicks`/`runAhead`, `markW`/`markWTop`, `goalieOut`; `botSkill`'s
+  `sprint`/`sprintAll`/`reserve`/`through`/`comp`/`run`/`mark`/`goalieOut`;
+  `sprintPressed`, `p.aiSprinting`, `p.aiRunT`/`aiRunTo`, `p.aiWho`; `tests/botfoot.mjs`).
+  Asked for as *"allow them to use the turbo and have them be different difficulty and
+  mimic real soccer where they play by passing and setting up plays positioning and such"*.
+  ⚠️ **MEASURED FIRST, all-bot 3v3 at the shipped feel, four two-minute matches a tier.**
+  Rookie aimed 0 kicks at a mate; Normal aimed HALF its kicks at a mate and fewer than a
+  fifth arrived — the average "pass" was struck at a mate **371** units away on a 760 pitch
+  whose strike coasts 315, and the ball's median closest approach to him was **277**;
+  Insane aimed 44% at the goal from anywhere. Sprint use 0% on every tier. After (final
+  build, same harness): Normal aims **26%** of its kicks at a mate and Insane **19%** (plus
+  17% at a bank), median closest approach to the mate **34 / 52** at Normal / Insane,
+  passes a minute 7.8 / 9.5 / 9.0 by tier against 7.4 / 8.1 / 6.4, sprint 0 / 2.7 / 11.1%
+  of bot-ticks, and nobody locked out. ⚠️ Earlier drafts of this entry quoted ~50% / ~30%
+  aimed and 15 passes a minute at Insane — those were the pre-`reachOpen` build, where the
+  reach penalty had taken the empty-net shot away and passing was filling the gap.
+  ⚠️ **"BOTS DO NOT SPRINT" IS WITHDRAWN, for the second time on that line.** The rule it
+  replaces was right about what it measured (bots only held KICK to trap, the boost was free
+  and every tier got it equally) and is kept in `sprintsFor`'s comment because it is what
+  the sprint DECISION exists to answer. A bot sprints for a ball it is RACING for (the
+  chaser, far off, an opponent about as close — `sprintRace`), and from Hard up also to
+  track back and to make runs; it keeps a reserve that rises with the tier (`reserve`, near
+  zero at Normal, 0.40 at Insane); Rookie and Easy never touch it.
+  ⚠️ **A BOT'S SPRINT IS ITS OWN DECISION AND NOT ITS KICK** (`sprintPressed`). Letting the
+  KICK hold be the sprint — which it is for a person — made every carry 35% faster than the
+  AI was tuned for and inverted the ladder AT THE TUNING: `botplans` read rookie<insane
+  **−12** under the stock plan (trapping on, where the top tiers carry most). So the wind-up
+  keeps `KICK_SLOW`, and the physics reads `p.aiSprinting`. Nothing here exceeds a thumb: a
+  bot sprints only away from the ball, where a person holding KICK gets the same boost with
+  no other effect, and gives up the boost on its own wind-up that a person keeps.
+  ⚠️ **AND IT IS DROPPED EARLIER WITH TRAPPING ON** (`sprintNearTrap` 180 against
+  `sprintNear` 80): a trap needs TAP_HOLD of KICK near the ball and a body arriving at
+  sprint pace is past it before it arms. Measured at the tuning, rookie<insane over 84
+  matches: released at 80 the ladder read **0** with four plans inverted, at 140 +34, at 180
+  **+79** with none, against +96 with no sprint at all — while at the shipped one-touch
+  feel the same 80 WIDENS it.
+  ⚠️ **A KICK PAYS THE REACH — shot, pass and bank alike.** The strike is one step of
+  wind-up, so it coasts `power / (1 − damp)` (315 at the shipped ball); a candidate is free
+  to `passReach` (0.62) of that and penalised to the coast, where it is dead. The shot's
+  progress is pinned at 1 whatever the range, so without this it won from anywhere. Three
+  things were tried and reverted on the way: a hard cut at 0.70 of the coast (Insane: **2
+  passes** in eight minutes, 34% of its kicks became banks, which were not penalised);
+  banks at the goal exempted (then **58%** of Insane's kicks became banks); and a pass
+  openness written as `0.5 + …` (a mate with an opponent one stride away scored 0.79 and 36
+  of Normal's 57 passes went straight to the other side). Openness is a RACE now — how far
+  ahead of the nearest opponent the mate is at the arrival point — and a pass's lane is
+  wider than a shot's (`passLaneR` 34: toMate 27% → 34% at Insane; 50 read 26% and 172
+  banks).
+  ⚠️ **THE MOMENTUM ALLOWANCE IN THE STANCE IS CHECKED BY THE LADDER, NOT A PROTRACTOR,
+  and it was deleted for one build on the strength of the protractor.** A per-kick probe
+  (a ball rolling at 3 a step, an Insane bot left to run in and strike) read 30–39° off the
+  aim with the allowance and 32–38° without — the strike cone (`strikeEnter`, 32°) and the
+  bot's own `KICK_CARRY` swamp one kick. Over 84 matches it is plain: **+137 with it, +71
+  without** on the same seeds. It is one-touch only: with trapping on a carried ball has no
+  momentum to cancel and compensating read rookie<normal −6 on `botai`'s ladder.
+  ⚠️ **THE GIVE-AND-GO IS DETECTED ABOVE THE RE-AIM.** Read below it, a decision tick
+  re-picked the aim before the kick record was looked at and a pass that had just left the
+  boot was filed as whatever the bot now fancied — a quarter of passes started no run.
+  ⚠️ **THE ESCAPE KICK GAINED AN OWN-GOAL GUARD** (`pby * attackDir > -0.35`): once a shot
+  from deep paid the reach the chaser stopped arriving from the goal side, and two of
+  `botstuck`'s 28 resting places came out as own goals where there had been none.
+  ⚠️ **THE STOCK PLAN WENT FLAT IN A 2v2, AND THE CAUSE WAS THE EMPTY NET** (`reachOpen`).
+  With the reach paid in full, the pooled margin was as wide as before (+97 / +127) but its
+  shape had moved: the attacking plans carried it and the STOCK plan sat at **−4..+6** in
+  the 2v2 harness, where it had read +14..+20. Every toggle was isolated on it (forward
+  sprints off, track-back off, runs off, the lane, the reach): none moved it. A 2v2 has no
+  keeper — so a slow hoof into an empty net had been Insane's best kick, and the reach
+  had taken it away while a pass it still loses ~45% of replaced it. A ball arriving dead
+  at a KEEPER is his; one arriving dead at an open mouth still rolls in, so a shot's reach
+  penalty is forgiven in proportion to the aperture. Measured, Insane over Rookie pooled
+  across seven plans, six seeds: 2v2 **+205 / +248** on two seed sets (stock plan +33 /
+  +23, every plan ≥ +20) against +119 / +106 before the batch; the shipped 3v3 **+46**
+  (every plan positive) against +10 / +23 before; at the tuning (`botplans`, trapping on)
+  **+62** with none inverted against ~+107 before. `proladder` runs six seeds now, its bar
+  untouched: at three the stock plan's sign flipped on the draw.
+  ⚠️ **What still goes wrong, written for the next session**: ~45% of bot passes reach the
+  other side (`docs/TODO.md`), and a bot strikes a rolling ball up to ~35° off its aim
+  because of the strike cone — passing arrives today because of the REACH, not accuracy.
+  ⚠️ `tests/botfoot.mjs`: nine sabotages each caught by its own check; `tests/sprint.mjs`'
+  bot block reversed for the second time (a Normal side spends the ring far from the ball,
+  a rookie never, a wind-up is never a sprint, and the all-bot hash now DIFFERS with Sprint
+  on); marking and the keeper are invisible to every 2v2 harness (no defender, no goalie),
+  so they are measured directly.
 - **THE DIFFICULTY LADDER HOLDS AT THE SHIPPED FEEL, AND THE CAUSE WAS THE KICK, NOT THE
   MOVEMENT** (`BOT.kickRef`, `BOT.kickSkill`, `botKickMul`, `p.aiS`, the bot branch of
   `chargeMul`). **`tests/proladder.mjs` is GREEN.** This WITHDRAWS the claim in the two
@@ -4945,12 +5034,14 @@ three lines a second time, name it.
   ⚠️ **`spent` IS LATCHED, and without it the feature does not exist.** "Slow while the
   ring is not full", read literally, slows you on the second frame of the first run.
   You keep full speed until the ring EMPTIES and are slow until it is FULL again.
-  ⚠️ **BOTS DO NOT SPRINT, and that REVERSES an earlier call.** They used to carry the
-  same ring, on the argument that "a tired human playing a side that never gets tired is a
-  handicap". Measured, that argument was pointing at something that was not happening: bots
-  spent **0.0% of ticks** locked out and the ring never fell below **0.62**, because a bot
-  holds KICK to **trap** rather than to run and lets go long before it empties. What they
-  actually got was the 1.35× boost with **none of the cost**.
+  ⚠️ **BOTS DO NOT SPRINT — WITHDRAWN. Bots sprint on a tier-gated DECISION now; see the
+  bot-football entry above.** What follows is kept because it is what that decision was
+  built to answer. The rule used to be that they carried the same ring, on the argument
+  that "a tired human playing a side that never gets tired is a handicap". Measured, that
+  argument was pointing at something that was not happening: bots spent **0.0% of ticks**
+  locked out and the ring never fell below **0.62**, because a bot holds KICK to **trap**
+  rather than to run and lets go long before it empties. What they actually got was the
+  1.35× boost with **none of the cost**.
   ⚠️ **And it COMPRESSED THE DIFFICULTY LADDER**, the one guarantee the AI is built to
   keep. Over 36 duels a rung (3 modes × 6 seeds, both orientations), goal difference for
   the stronger side: rookie<normal **+39 → +14**, normal<hard **+19 → 0**, rookie<insane
@@ -7626,7 +7717,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 142 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 143 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

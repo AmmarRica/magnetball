@@ -5,7 +5,20 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260917.0509AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_Current build: **v20260918.0703AM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+
+- [ ] **Bots strike a rolling ball up to ~35° off their aim.** Measured on the real path
+      (`tests/botfoot.mjs`' withdrawn stance probe): an Insane bot left to run in and strike a
+      ball rolling at 3 a step lands 30–39° off the point it was aiming at, and a momentum
+      allowance in the stance changed nothing (32–38° without). The cause is the strike cone —
+      `strikeEnter` 0.85 commits inside 32°, and the bot's own carry (`KICK_CARRY`) rides in
+      too. Tightening the cone is the AI's core approach tuning and moves the ladder; measure
+      on `botplans`/`proladder` on two seed sets before shipping any of it. Passing arrives
+      today because of the REACH, not the accuracy.
+- [ ] **Nearly half of bot passes still go to the other side** at the shipped feel
+      (`toOpp` 42–46% of kicks aimed at a mate, `passLaneR` 34). The lane test is a distance
+      off the line; a time-aware one (an opponent a stride off the line is on it before a
+      slow ball arrives) is the next thing to try, on the same instrument.
 
 ---
 

@@ -21,6 +21,14 @@
 // as it did at the tuning. Two seed sets: +119 / +106, every strategy ≥ +12.
 // The history is kept because the harness reasoning in it is right; the diagnosis was not.
 //
+// ⚠️ THE BOTS' FOOTBALL (sprint, through balls, the reach, runs — CLAUDE.md's bot-football
+// entry) then moved this reading twice. With the reach paid in full the pooled margin was
+// as wide (+97..+127 on six seeds) but the STOCK plan sat near zero in this harness's 2v2:
+// a 2v2 has no keeper, so a slow hoof into the empty net had been Insane's best kick and
+// the reach took it away. With the reach forgiven at an open mouth (`BOT.reachOpen`) it
+// reads **+205 / +248** on two six-seed sets, stock plan +33 / +23, every plan ≥ +20.
+// Hence six seeds rather than three, below.
+//
 // ## THE HARNESS IS `tests/botplans.mjs`', DELIBERATELY, AND THE FIRST ONE WAS TOO WEAK
 //
 // ⚠️ **A MEASUREMENT TRAP THAT PRODUCED A WRONG ANSWER HERE, AND THE REASON THIS FILE IS
@@ -124,9 +132,16 @@ async function arm(casual){
     };
 
     o.plans = []; o.pooled = 0; o.goals = 0; o.inverted = [];
+    // ⚠️ SIX SEEDS — `botplans`' own, so the two suites agree by construction — and it
+    // was three. At three, a plan's goal difference is six matches and its spread is about
+    // ±6, so with the ladder narrowed to +10 a plan by the bots' football (see CLAUDE.md's
+    // bot-football entry) the per-plan "not inverted" bar flipped on the seed rather than
+    // the build: the same build read standard +14 / −4 / +0 / +3 on four different three-
+    // seed draws. Doubling the matches is a HARDER bar per match for the pooled figure
+    // below, not a threshold moved — the bar itself is untouched.
     for (const plan of Object.keys(M.BOT_PLANS)){
       let gd = 0, goals = 0;
-      for (const seed of [9000, 9422, 9844]){
+      for (const seed of [9000, 9211, 9422, 9633, 9844, 10055]){
         const f = h2h('rookie', 'insane', plan, seed, 60);  // strong on team 1
         const r = h2h('insane', 'rookie', plan, seed, 60);  // strong on team 0
         gd += (f.t1 - f.t0) + (r.t0 - r.t1);                // + means the STRONG tier is ahead
@@ -161,8 +176,8 @@ ok('...and the pinned arm is NOT', !cas.isPro,
    'the control arm must actually differ, or both arms measure the same thing');
 // ⚠️ A goal difference is only as good as the goals under it. Two a match is the floor
 // below which the sign is a coin toss — the trap the header records.
-ok('both arms scored enough to read a sign', pro.goals >= 2 * 42 && cas.goals >= 2 * 42,
-   `pro ${pro.goals}, casual ${cas.goals} goals over 42 matches each — under ~2 a match the sign is noise`);
+ok('both arms scored enough to read a sign', pro.goals >= 2 * 84 && cas.goals >= 2 * 84,
+   `pro ${pro.goals}, casual ${cas.goals} goals over 84 matches each — under ~2 a match the sign is noise`);
 // ⚠️ THE HARNESS CONTROL. If this fails, the harness stopped being able to see a ladder
 // at all and the claim below means nothing either way — fix this first.
 ok('the harness can see a ladder at the AI\'s own tuning',

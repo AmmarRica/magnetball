@@ -130,6 +130,44 @@ the tuned strike above it. `kickSkill` (0) would let the top tier past the scali
 measured, that makes the ladder WORSE (+44 against +119 pooled): weaker kicks are what let
 the stronger tier's decisions decide the match.
 
+⚠️ **The football sense is on the same ladder** (`botSkill`, all monotone in `s`): whether a
+bot sprints at all (`sprint`, Normal up), whether it sprints to track back and make runs as
+well as to chase (`sprintAll`, Hard up), the ring it keeps in reserve (`reserve`, near zero
+at Normal, 0.40 at Insane), how far ahead of a runner a through ball is led (`through`),
+whether a passer keeps running after the pass (`run`), how tightly a defender shades onto its
+mark (`mark`) and how far the keeper comes off its line (`goalieOut`). Every one of them
+makes a higher tier more like a footballer and never merely faster or more accurate — the
+distinction the types table below is built on.
+
+⚠️ **A bot's sprint is its own decision, not its KICK** (`sprintPressed`, `p.aiSprinting`).
+A person sprints by holding KICK; a bot holds KICK on the way in to arm a trap and through a
+carry, and every number in `BOT` was tuned with that hold costing `KICK_SLOW`. Letting the
+hold BE the sprint made every carry 35% faster than the AI was built for and inverted the
+ladder at the tuning (rookie<insane −12 on `botplans`, trapping on, where the top tiers carry
+most). So the sprint is decided in `runBot` — the chaser for a ball it is RACING for (far off,
+an opponent about as close), the others to track back or make a run — latched for
+`sprintHold`, dropped inside `sprintNear` of the ball (or `sprintNearTrap` with trapping on:
+a body arriving at sprint pace is past the ball before a trap can arm), and never during a
+strike, a carry or a trap. Nothing here exceeds a thumb: the bot sprints only away from the
+ball, exactly where a person holding KICK gets the same boost with no other effect, and it
+gives up the boost on its own wind-up that a person keeps.
+
+⚠️ **A kick pays the reach.** A bot's strike is one step of wind-up, so it runs
+`power / (1 − damp)` before it stops — 315 at the shipped ball — and every candidate in
+`botPickAim` (shot, pass and bank alike) is penalised from `passReach` of that to the coast
+itself, where it is dead. Before this, the shot's progress was pinned at 1 whatever the range
+and Insane aimed 44% of its kicks at the goal from anywhere; "passes" were hoofs at a mate
+371 units away whose median closest approach to him was 277. With the reach paid for, a
+forward pass to a mate in space is the better kick from deep, which is where the build-up
+comes from. A pass's openness is a RACE — how far ahead of the nearest opponent the mate is
+at the arrival point — and its lane is wider than a shot's (`passLaneR`), because the ball
+takes a second to arrive.
+
+⚠️ **A momentum allowance in the stance was built and reverted**, with the numbers: rotating
+the approach to cancel a rolling ball's velocity measured 30–39° off the aim on the real path
+against 32–38° without, because the strike cone (`strikeEnter`, 32°) and the bot's own
+`KICK_CARRY` swamp it. Code a check cannot see does not ship; the lead is in `docs/TODO.md`.
+
 ⚠️ **Decision rate is the same for every tier.** Giving the top tiers a faster recompute made
 them score *less* — 8.30 goals/min at Hard down to 5.85 at Insane — because re-picking the
 aim more often keeps moving the strike waypoint, so the bot re-approaches instead of
@@ -157,8 +195,8 @@ anyone would look.
 | Sweeper | Tracks the ball hard, covers the space behind |
 | Terrier | Hounds the carrier, commits from much further out |
 
-The axes a type may bend are `depth`, `influence`, `space`, `chase`, `press`, and additive
-`shot`/`pass` aim biases.
+The axes a type may bend are `depth`, `space`, `chase`, `press`, and additive `shot`/`pass`
+aim biases (`influence` is deliberately NOT one — see `tests/botplans.mjs`).
 
 ⚠️ **There is no accuracy, reaction or speed multiplier in the table, on purpose.** That
 would be a second difficulty dial hidden inside a personality, and a "Poacher" that is simply
