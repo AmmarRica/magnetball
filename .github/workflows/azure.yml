@@ -1,0 +1,109 @@
+# Deploys online mode to Azure on every push to main: the resources (Bicep), then the
+# Functions API, then the game with an online.json pointing at the API. Needs ONE repo
+# secret, AZURE_CREDENTIALS — the JSON from `az ad sp create-for-rbac --sdk-auth`. Every
+# other key is read from Azure after Bicep has created the resources. See docs/AZURE.md.
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A second push while a deploy is running makes the first one irrelevant.
+concurrency:
+  group: azure-deploy
+  cancel-in-progress: true
+
+env:
+  RESOURCE_GROUP: magnetball-rg
+  LOCATION: westeurope          # any region; the Static Web App pins its own in main.bicep
+
+jobs:
+  infra:
+    name: Create Azure resources (Bicep)
+    runs-on: ubuntu-latest
+    outputs:
+      apiName:  ${{ steps.deploy.outputs.apiName }}
+      apiHost:  ${{ steps.deploy.outputs.apiHost }}
+      siteName: ${{ steps.deploy.outputs.siteName }}
+      siteHost: ${{ steps.deploy.outputs.siteHost }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Resource group
+        run: az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
+      - name: Deploy Bicep
+        id: deploy
+        run: |
+          out=$(az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --query properties.outputs --output json)
+          for k in apiName apiHost siteName siteHost; do
+            echo "$k=$(echo "$out" | jq -r ".$k.value")" >> "$GITHUB_OUTPUT"
+          done
+
+  api:
+    name: Deploy the Functions API
+    needs: infra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install production dependencies
+        working-directory: api
+        run: npm ci --omit=dev
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ needs.infra.outputs.apiName }}
+          package: api
+          respect-funcignore: true
+
+  site:
+    name: Deploy the game
+    needs: [infra, api]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Only the runtime files go up — tests/, docs/ and the scratch files stay behind.
+      # online.json is written here, never committed: it is the one place the game learns
+      # where the API is, and index.html stays identical on every host.
+      - name: Stage only the runtime files
+        run: |
+          mkdir dist
+          cp -r index.html sw.js manifest.json icon.svg assets menu vj settings staticwebapp.config.json dist/
+          echo "{\"api\":\"https://${{ needs.infra.outputs.apiHost }}\"}" > dist/online.json
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      # The deployment token is read at deploy time under the service principal's login and
+      # masked out of the log, so AZURE_CREDENTIALS stays the only secret in GitHub.
+      - name: Read the Static Web App deployment token
+        id: swa
+        run: |
+          token=$(az staticwebapp secrets list \
+            --name "${{ needs.infra.outputs.siteName }}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.apiKey --output tsv)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa.outputs.token }}
+          action: upload
+          app_location: dist
+          skip_app_build: true
+          skip_api_build: true
+      - name: Where it went
+        run: echo "Game at https://${{ needs.infra.outputs.siteHost }}  API at https://${{ needs.infra.outputs.apiHost }}"
