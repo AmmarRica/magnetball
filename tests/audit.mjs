@@ -30,6 +30,7 @@ const r = await p.evaluate(async ()=>{
     theme:'#themePick .opt', display:'#displayPick .opt', orient:'#orientPick .opt',
     trapOff:'#trapPick .opt', debug:'#debugPick .opt', oneHand:'#oneHandPick .opt',
     settingsPanel:'#panelPick .opt', juice:'#juicePick .opt', hitStop:'#hitStop', autoReplay:'#autoReplayPick .opt',
+    scoreStyle:'#scorePick .opt',
     // ⚠️ The standalone Ball card is gone — it held this one control and its own help text
     // admitted it was the Theme card's Ball slot. `#slot_ball` is the one place now.
     ballLook:'#slot_ball .opt',

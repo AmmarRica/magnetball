@@ -43,8 +43,19 @@ const r = await p.evaluate(async ()=>{
   // ...and it's what actually gets drawn: the disc's pixels move.
   const cv=document.getElementById('game'), c2=cv.getContext('2d');
   const DPR=cv.width/cv.clientWidth;
+  // ⚠️ **THE WHOLE DISC, NOT A 12×12 BOX AT ITS CENTRE — and the centre box made this
+  // suite fail one run in three for a reason that has nothing to do with what it claims.**
+  // The block above sets `profile.flag='poland'`, and a faceplate COVERS the middle of the
+  // disc: the body's colour is the ring and rim around it. So the centre sample showed the
+  // colour only while the flag SVG had not arrived yet (`spriteImg` returns null until it
+  // has, and the fallback draws the plain coloured body) — which made the check a race
+  // against an asset load. Measured over ten runs: the body, the nearest opponent (199.5
+  // away) and the ball (169.9) were IDENTICAL every time and `p.color` was `#ff00ff` every
+  // time, and the result still flipped 5/5. A box covering the whole body takes in the
+  // coloured ring, so it reads the thing the check is named after.
   const discPx = () => { const q=me(); const [sx,sy]=M.screenPt(M.wx(q.x), M.wy(q.y));
-    const d=c2.getImageData(Math.round(sx*DPR)-6, Math.round(sy*DPR)-6, 12, 12).data;
+    const rad=Math.max(8, Math.round(q.r*M.cam.s*1.25*DPR));
+    const d=c2.getImageData(Math.round(sx*DPR)-rad, Math.round(sy*DPR)-rad, rad*2, rad*2).data;
     let h=0; for(let i=0;i<d.length;i+=4) h=(h*31+d[i]+d[i+1]*3+d[i+2]*7)|0; return h; };
   M.computeCam(); M.render(); const pxA = discPx();
   // Snapshot an opponent BEFORE the change: "differs from your colour" would be a

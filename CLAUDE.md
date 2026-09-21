@@ -1247,6 +1247,95 @@ three lines a second time, name it.
   where a white board is thousands of lit pixels and the rollover moves on WALL time between
   two draws. All three set `sel.adsOn = 'off'` with the reason beside it — the *a suite that
   samples pixels has to say what it is sampling* rule, arriving through the surround.
+- **THE SCORE, AS BALLS BEHIND THE GOALS** (`SCOREOPT`, `PIPS`, `sel.scoreStyle`,
+  `scorePipsOn`, `pipsDrawn`, `pipNet`, `pipDepth`, `endReach`, `pipRow`, `pipSlots`,
+  `drawScorePips`, `.scorebug.pips`; Game Feel → Effects → **Score readout**;
+  `tests/scorepips.mjs`). Asked for from a picture of another game: *"instead of showing
+  a number, have circles behind both goals indicating the score. The circles show 3 empty
+  if the game is first to 3 and then they fill up with soccer balls as a team scores.
+  Circles need to be small."*
+  ⚠️ **IT SHIPS OFF — `scoreStyle` is `num`, which is the scorebug the game has always
+  had.** A toggle is what was asked for rather than a replacement, so the shipped picture
+  does not move; `tests/scorepips.mjs` asserts that FIRST, because every other block in it
+  sets the style by hand and all of them would pass on a build that shipped the wrong one.
+  That is `sprint`'s lesson, applied before it could bite.
+  ⚠️ **THE ROW LENGTH IS THE TARGET WHERE THE MATCH HAS ONE, AND THE SHIPPED LENGTH HAS
+  NONE.** `LENGTHS` is two timed entries and two goals-based ones and the default is the
+  timed `'5'`, so "three empty circles" only exists on `g3`/`g5`. A row of N empties on a
+  timed match is a readout claiming a target the rules do not have — the class of lie this
+  file spends most of its length refusing — so the count is `goalsTarget` when there is one
+  and `score + 1` when there is not: what has been scored, plus one empty for the next. At
+  0-0 that is a single ring at each end, which is what says the readout is there at all and
+  which end is whose.
+  ⚠️ **THE PIPS BELONG TO THE TEAM THAT DEFENDS THAT GOAL**, read from `teamColOf` — the
+  same call the FRAME two lines above in `drawGoal` is coloured from, so the ring round the
+  goal and the balls behind it can never name different sides. The other placement was
+  considered and rejected: putting a side's pips at the end it ATTACKS makes the ball you
+  just scored appear where it went in, which is nicer, and it puts blue pips a few pixels
+  from a red frame, which then has to be read rather than seen.
+  ⚠️ **THEY STAND AGAINST THE BACK OF THE NET AND THE END HOARDINGS MOVE OUT BY THE ROW'S
+  DEPTH — and the other way round was BUILT FIRST AND LOOKED WRONG.** Outside the boards
+  needs no change to the ads and fits in the same total band, so it was tried: rendered on
+  a turned 1280×900 desktop the row landed at the very edge of the canvas with a whole
+  hoarding between it and the goal it belongs to, which reads as one more thing in the
+  surround rather than as that goal's score. `adSlotRects`' end rows add `pipDepth(w)` and
+  are otherwise untouched, so it is still the one place that knows where a board is.
+  ⚠️ **SIZED AS A FRACTION OF THE NET'S DEPTH, never in pixels and never absolutely.**
+  `net` tracks the court (48 on Tiny, 328 on Leviathan), so one fraction draws 5-8px on
+  every court in the table where an absolute world size reads **0.9px on Leviathan** — and
+  a screen-pixel floor cannot be charged to the camera without solving for `cam.s` with
+  `cam.s`. The `TARGET_SPOTS` rule arriving through the net. **0.105 was measured as too
+  big** (9.1px beside a 12.2px ball on Classic, three quarters of the thing it is a picture
+  of); 0.082 is 7.1px, 58% of the ball.
+  ⚠️ **AND THE DECOY RULE'S USUAL INSTRUMENT IS THE WRONG ONE HERE — a withdrawn check.**
+  A ratio against the ball reads **2.99 on Leviathan on a perfectly good build**, because
+  the ball is an ABSOLUTE world size (r 10 on every court) while the pips scale with it, so
+  the two diverge by the court's whole size range. It is also the wrong RULE: that argument
+  is about things on the PITCH, and these stand beyond the net where an ad board is already
+  deeper than the ball is wide. What *"the circles need to be small"* means is a number of
+  pixels, so the bar is drawn pixels with a floor AND a ceiling — either alone is vacuous,
+  a floor being met by dinner plates and a ceiling by nothing at all.
+  ⚠️ **THE ROW MAY NEVER BE WIDER THAN THE GOAL IT BELONGS TO.** A timed match grows by one
+  slot every goal, so at ten a fixed size runs past the touchline; `pipRow` caps the radius
+  by the mouth's own width over the count, which is the `adSlots` answer (derive the size
+  from the span) rather than a slot cap, which would be a readout that stops counting.
+  ⚠️ **`pipRow` IS ONE EXPRESSION WITH TWO READERS, and the second copy is what rotted.**
+  The suite wrote the radius out again, so dropping the cap from the game left every check
+  green — it was measuring its own copy of a formula the game had stopped using. Rule 6,
+  and rule 15. It also has to be exercised at **thirteen** slots: at three, `rNet*net` is
+  under the mouth budget on every court, so a fit check taken there passes with no cap.
+  ⚠️ **FREE WITH THE BOARDS DOWN, 4.75% OF PITCH SCALE WITH THEM UP, both measured.** The
+  row reaches **24.74** world units past the net on Classic, inside the 30-unit brim the
+  `+60` in `computeCam` already gives — so `cam.s` is identical to four places with the
+  style on and off (1.3502). With the hoardings up the band is the two stacked and the cost
+  is real (1.2903 → 1.2290); `ADSOPT` is the dial, which is the same trade the boards' own
+  entry records for their 4.4%.
+  ⚠️ **THE END AXIS HAS ITS OWN REACH.** `adReach` answers for both axes and the pips exist
+  on one, so `endReach` is what the camera holds down the pitch while `adReach` stays
+  exactly what it was across it — charging the pips to the across axis would take pitch
+  scale for a row that is not there.
+  ⚠️ **MOVING THE BOARDS AND TELLING THE CAMERA ARE TWO CHANGES**, and leaving `computeCam`
+  on `adReach` passes every other check: the boards move out, the frame does not, and the
+  outermost hoarding's far corner sits **26.8px off the canvas**. Measured through
+  `screenPt`, because a board nobody can see is a feature that does not exist.
+  ⚠️ **THE DIGITS GO AND THE CLOCK STAYS**, through one class on `#scorebug` written by
+  `syncScorebug` off **`pipsDrawn`, never off `sel.scoreStyle`**. The pips stand down in
+  training, in a drill and in warm-up; hiding the digits off the setting alone takes the
+  score away on exactly those screens and leaves nothing in its place — and training's
+  `#scoreB` is that mode's practice-goal counter, so there the digits are the only readout
+  there is. One predicate, so the two can never disagree about which is up.
+  ⚠️ **A FILLED PIP IS THE SIDE'S OWN COLOUR WITH A FOOTBALL'S CENTRE PANEL ON IT**, not a
+  white ball: `TH.ball` is the COURT colour on the themes that draw the ball as a hollow
+  ring (Spaceships), where a white fill makes a filled slot and an empty one look the same.
+  The panel's ink comes from `pickTextColor`, which also takes no constant declared further
+  down the file — `BALL_SPOT_CONTRAST` sits 1,400 lines below `drawScorePips` and a
+  function reachable from a draw has no business reading one.
+  ⚠️ **MEASUREMENT TRAP in the suite**: the band has to be sampled through
+  `screenPt(wx(x), wy(y))`. `wx`/`wy` are PRE-rotation and `auto` turns the pitch on any
+  wide window, so a probe assuming screen-down is world +y measures the middle of the pitch
+  and reports no pips on a build that draws them perfectly.
+  ⚠️ Render only — the world is bit-identical over 900 steps with the style on and off.
+  Nine sabotages, each caught by its own check.
 - **Floating stat text** (`FLOAT`, `floaters`, `addFloater`, `advanceFloaters`,
   `drawFloaters`, `sel.popups`): a short label over a player the instant they earn
   something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST.
@@ -7791,7 +7880,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 144 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 145 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

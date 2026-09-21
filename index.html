@@ -1103,6 +1103,10 @@
        gets broken by a taste change; the size does most of the work here anyway. */
     .scorebug .tm { font-size: 11px; color: var(--overlay-ink); opacity: 0.72;
                     min-width: 44px; text-align:center; letter-spacing: .5px; }
+    /* The Balls score readout puts the score behind the goals, so the digits come out of
+       the bar — the clock stays, because it is the one thing the pips cannot say. The
+       class is written by `syncScorebug` off `pipsDrawn`, never off the setting alone. */
+    .scorebug.pips .sc { display: none; }
     /* ⚠️ 44px, up from 40. They sit next to a live ball, which is the one place a
        near-miss costs you something — a mis-tap here is a tap on the pitch. */
     /* ⚠️ **THE HUD MARKS ARE DRAWN, NOT TYPED.** Mute shipped as `🔊` and rendered as a
@@ -2350,6 +2354,10 @@
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
       <div style="height:10px"></div>
+      <label class="field">Score readout</label>
+      <div class="opts" id="scorePick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px"><b>Balls</b> puts the score on the pitch instead of in the bar at the top: a short row of small circles standing behind each goal, in that goal's own team colour, filling with a ball as that side scores. On <b>first to 3</b> or <b>first to 5</b> the row is the target, so you can see how close the match is without reading a number. A timed match has no target, so the row is what has been scored plus one empty circle for the next one. The clock stays where it is either way. <b>Numbers</b> is the scorebug the game has always had.</div>
+      <div style="height:10px"></div>
       <label class="field">Ball rolls in 3D</label>
       <div class="opts" id="ball3dPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Maps the ball's pattern onto a sphere and rolls it along the way the ball is travelling, so the markings compress at the edge and go over the horizon instead of spinning flat. Render only — it never changes how the ball moves or bounces. Works with whichever ball look you have picked.</div>
@@ -2999,6 +3007,7 @@
    Languages                   "LANGUAGES"
    Match history               "MATCH HISTORY — one row per match"
    Controller rumble           "CONTROLLER RUMBLE"
+   Score as balls behind goals "The score, as balls behind each goal"
    Keep whole matches          "KEEP THE LAST FEW WHOLE MATCHES"
    Tournament (bracket)        "TOURNAMENT — a single-elimination"
    Gauntlet (roguelike)        "ROGUELIKE / GAUNTLET — a run"
@@ -4856,6 +4865,122 @@ const POPOPT = {
   on:  { name:'Show',  emoji:'💬', icon:'chat' },
   off: { name:'Hidden', emoji:'🚫', icon:'barrier' },
 };
+// ---------- The score, as balls behind each goal --------------------------
+// A second way to read the score: a short row of small circles standing behind each
+// goal, in that goal's own team colour, empty to start with and filling with a ball
+// as that side scores. Asked for from a picture of another game that does it, with
+// "the circles show 3 empty if the game is first to 3" and "circles need to be small".
+//
+// ⚠️ **THE ROW LENGTH IS THE TARGET WHERE THE MATCH HAS ONE, AND THE SHIPPED DEFAULT
+// HAS NONE.** `LENGTHS` is two timed entries and two goals-based ones, and the shipped
+// length is the timed `'5'` — so "three empty circles" only exists on `g3`/`g5`. A row
+// of N empties on a timed match would be a readout claiming a target the rules do not
+// have, which is the class of lie this file spends most of its length refusing. So the
+// slot count is `goalsTarget` when there is one and `score + 1` when there is not: the
+// balls already scored, plus one empty for the next. At 0-0 that is a single ring at
+// each end, which is what says the readout is there at all and which end is whose.
+// ⚠️ **THE PIPS BELONG TO THE TEAM THAT DEFENDS THAT GOAL**, read from `teamColOf`, the
+// same call the FRAME two lines above is coloured from — so the ring round the goal and
+// the balls standing behind it can never name different sides. The other placement was
+// considered and rejected: putting a side's pips at the end it ATTACKS makes the ball
+// you just scored appear where it went in, which is nicer, but it puts blue pips a few
+// pixels from a red frame and the pair then has to be read rather than seen.
+// ⚠️ **THEY STAND AGAINST THE BACK OF THE NET AND THE END HOARDINGS MOVE OUT BY THE
+// ROW'S DEPTH — and the other way round was BUILT FIRST AND LOOKED WRONG.** Putting them
+// outside the boards needs no change to the ads and fits in the same total band, so it
+// was tried: rendered on a turned 1280×900 desktop, the row landed at the very edge of
+// the canvas with a whole hoarding between it and the goal it belongs to, which reads as
+// one more thing in the surround rather than as that goal's score. The boards give up
+// 21 world units instead. Nothing else about them moves, and `adSlotRects` is still the
+// one place that knows where a board is.
+// ⚠️ **SO THE END AXIS HAS ITS OWN REACH.** `adReach` answers for both axes and the pips
+// exist on one of them, so `endReach` is what the camera holds down the pitch and
+// `adReach` stays exactly what it was across it — charging the pips to the across axis
+// would take pitch scale for a row that is not there.
+// ⚠️ **SIZED AS A FRACTION OF THE NET'S DEPTH, never in pixels and never absolutely.**
+// `net` tracks the court (48 on Tiny, 328 on Leviathan), so one fraction gives a pip of
+// 6-8 rendered pixels on every court in the table — where an absolute world size reads
+// 0.9px on Leviathan and a screen-pixel floor cannot be charged to the camera without
+// solving for `cam.s` with `cam.s`. The `TARGET_SPOTS` rule, arriving through the net.
+// ⚠️ **AND THE ROW MAY NEVER BE WIDER THAN THE GOAL IT BELONGS TO.** A timed match has
+// no target, so the row grows by one every goal; at nine or ten goals a fixed pip size
+// runs past the touchline. The radius is therefore capped by the mouth's own width
+// divided by the count, so the row shrinks to fit instead of growing off the pitch —
+// the `adSlots` rule (derive the size from the span) rather than a slot cap, which
+// would be a readout that stops counting.
+const SCOREOPT = {
+  num:  { name:'Numbers', emoji:'🔢', icon:'clipboard' },
+  pips: { name:'Balls',   emoji:'⚽', icon:'ball' },
+};
+const PIPS = {
+  // ⚠️ **MEASURED AGAINST THE BALL, because "the circles need to be small" is a ratio
+  // rather than a pixel count.** At 0.105 a pip drew 9.1px beside a 12.2px ball on
+  // Classic — three quarters of the thing it is a picture of, which is a decoy argument
+  // waiting to happen even out in the surround. 0.082 draws 7.1px, 58% of the ball, and
+  // holds at 6-8px on every court in the table (Tiny 8.2, Leviathan 6.2) because the net
+  // scales with the court and `cam.s` scales back the other way.
+  rNet:   0.082,  // pip radius, as a fraction of the net's depth
+  gapNet: 0.16,   // clearance from whatever it stands behind (the net's back, or the ads)
+  spread: 0.42,   // space between pips, as a fraction of the diameter
+  ringW:  0.26,   // empty ring's stroke, as a fraction of the drawn radius
+  emptyA: 0.55,   // an empty slot is quieter than a filled one
+  pentPx: 3.2,    // below this drawn radius a pentagon is a smudge — leave the disc plain
+  minPx:  1.0,    // below this the whole row is a smear; draw nothing rather than a blur
+  edge:   4,      // world units kept beyond the row's far side — `ADS.edge`'s job, and
+                  // without it the camera framed the row's outer edge EXACTLY and the
+                  // last pip's antialiasing was the canvas border.
+};
+function scorePipsOn(){ return sel.scoreStyle === 'pips'; }
+// ONE gate for "does this world carry pips": the draw, the camera and the scorebug all
+// ask it, so the numbers can never be hidden on a screen the pips are not drawn on.
+// ⚠️ Training is excluded because `#scoreB` is that mode's practice-goal counter rather
+// than a score, and warm-up because that end of the pitch is the lobby's keyboard and
+// dressing blocks — the same two exclusions the ad rows make.
+function pipsDrawn(w){
+  return scorePipsOn() && !!w && !!w.bounds && !!w.score && w.state !== 'warmup'
+      && !w.drillMode && !w.train;
+}
+function pipNet(w){ return (w.bounds && w.bounds.net) || (w.field && w.field.net) || 0; }
+// The band the row occupies past the back of the net. ⚠️ ONE OWNER: the draw places the
+// row inside it, `adSlotRects` starts the end hoardings after it, and the camera holds
+// it — three readers, so a board can never be moved out by a different amount from the
+// one the pips actually take. Computed from the UNCAPPED radius, so it is an upper bound
+// whatever the score is; the mouth cap can only ever make the real row narrower.
+function pipDepth(w){
+  if (!pipsDrawn(w)) return 0;
+  const net = pipNet(w);
+  return PIPS.gapNet*net + 2*PIPS.rNet*net + PIPS.edge;
+}
+// How far past the back of the net the whole END furniture reaches, for the camera. The
+// pips are innermost and the boards stand outside them, so it is simply the two summed —
+// and each term is already zero when its own feature is down.
+function endReach(w){ return adReach(w) + pipDepth(w); }
+// The whole row as numbers. ⚠️ ONE EXPRESSION, because the painter and
+// `tests/scorepips.mjs` both need it and the second copy is the one that stops matching:
+// written out again in the suite, dropping the mouth cap from the game left every check
+// green, because the suite was re-deriving the width the game was no longer using.
+// ⚠️ `r` is capped so the row can never be wider than the goal it belongs to. A timed
+// match has no target, so the count grows by one every goal; at ten or more a fixed size
+// runs the row past the touchline, and shrinking to fit is the `adSlots` answer — derive
+// the size from the span — rather than a slot cap, which is a readout that stops
+// counting. `pipDepth` deliberately uses the UNCAPPED radius, so it stays an upper bound
+// whatever the score and the boards never have to move twice.
+function pipRow(w, team){
+  const b = w.bounds, net = pipNet(w);
+  const n = pipSlots(w, team);
+  const r = Math.min(PIPS.rNet*net, (b.gh*2) / (n * 2 * (1 + PIPS.spread)));
+  const pitch = 2*r*(1 + PIPS.spread);
+  return { n, r, pitch, width: n*pitch, out: PIPS.gapNet*net + r };
+}
+// Slots behind the goal team `team` defends. See the header: the target where the match
+// has one, otherwise what has been scored plus one empty for the next.
+// ⚠️ `Math.max(t, sc)` rather than a bare `t`: nothing should be able to score past the
+// target (`checkGoal` ends the match at it), but a readout that could silently drop a
+// goal if something ever did is not one worth having.
+function pipSlots(w, team){
+  const t = w.goalsTarget|0, sc = (w.score && w.score[team])|0;
+  return t > 0 ? Math.max(t, sc) : Math.max(1, sc + 1);
+}
 // ---------- Pitch-side ads ------------------------------------------------
 // Advertising boards along BOTH touchlines, outside the line, the way a stadium's LED
 // hoardings sit — each slot shows a different board and they all roll over together
@@ -4972,9 +5097,11 @@ function adSlotRects(w){
     for (let i = 0; i < side.n; i++)
       out.push({ id: 's' + s + ':' + i, x, y: -b.halfL + side.len / 2 + i * (side.len + ADS.slotGap), len: side.len, depth: ADS.depth, along: 'y' });
   }
-  // Behind the goal: past the BACK of the net, so the pocket sits between the row and the mouth.
+  // Behind the goal: past the BACK of the net, so the pocket sits between the row and the
+  // mouth — and past the score pips too, when the Balls readout is up. `pipDepth` is 0
+  // otherwise, so an ordinary match's boards are exactly where they have always been.
   for (const s of [-1, 1]){
-    const y = s * (b.halfL + (b.net || 0) + ADS.gap + ADS.depth / 2);
+    const y = s * (b.halfL + (b.net || 0) + pipDepth(w) + ADS.gap + ADS.depth / 2);
     for (let i = 0; i < end.n; i++)
       out.push({ id: 'e' + s + ':' + i, x: -b.halfW + end.len / 2 + i * (end.len + ADS.slotGap), y, len: end.len, depth: ADS.depth, along: 'x' });
   }
@@ -5884,7 +6011,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260921.0345PM';
+const VERSION = '20260921.0910PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5900,6 +6027,13 @@ const VERSION = '20260921.0345PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260921.0910PM', title: 'The score, as balls behind the goals',
+    changed: [
+      '<b>A second way to read the score.</b> Under Game Feel &rarr; Effects, <i>Score readout</i> switches from the numbers at the top to a short row of small circles standing behind each goal, in that goal\'s own team colour, filling with a ball as that side scores.',
+      '<b>On first to 3 or first to 5 the row is the target</b>, so you can see how close the match is without reading a number. A timed match has no target, so the row is what has been scored plus one empty circle for the next.',
+      '<b>The clock stays where it is</b>, and the numbers come straight back if you prefer them &mdash; the game still ships with them.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260921.0345PM', title: 'A match hosted by a third party',
     changed: [
       '<b>Play somebody online, with the match run in the middle.</b> Type a four-letter room code under Match &rarr; Game &rarr; Online, share it, and the first two people to join play each other on the match server: the whole match runs in one place neither player owns, so when one connection lags it cannot decide the result.',
@@ -7187,7 +7321,7 @@ function magKickOf(){ return magKickPct() / 100; }
 function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0, magReach:18, magKick:100,
             adsOn:'on', adEvery:8, adOff:[], adText:'',
             ball:'bouncy', handed:'left', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
-            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', ball3d:'on', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
+            trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', scoreStyle:'num', ball3d:'on', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['random','random'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
             // ⚠️ 'balanced', NOT 'auto'. Mixed is the more interesting default and it is the
             // wrong one: with a plan dealt per side, a Rookie playing High press can beat a
@@ -12348,6 +12482,10 @@ function buildOpts(containerId, obj, key, extra){
       // The operator screen's headline says whether the machine is taking money, so a
       // change of mode has to redraw it — the tiles rebuild themselves, the rest doesn't.
       if (key==='arcadePlay') syncArcade();
+      // The two score styles are one readout with two homes, so turning the pips on has
+      // to take the numbers out of the scorebug in the same tap — otherwise the score is
+      // on the screen twice until something else happens to call syncScorebug.
+      if (key==='scoreStyle') syncScorebug();
     };
     wrap.appendChild(el);
   });
@@ -13169,6 +13307,7 @@ function buildMatchOpts(){
   buildOpts('dropIn', DROPIN, 'dropIn');
   buildOpts('tiltPick', TILTOPT, 'tilt');
   buildOpts('popupPick', POPOPT, 'popups');
+  buildOpts('scorePick', SCOREOPT, 'scoreStyle');
   buildOpts('adsPick', ADSOPT, 'adsOn');
   buildAdBoards();
   buildOpts('ball3dPick', BALL3DOPT, 'ball3d');
@@ -28103,8 +28242,15 @@ function computeCam(){
   // a turned desktop (the pitch fills the width there) and the touchline rows cut in half
   // on a phone: a board you cannot see is a feature that does not exist.
   const adX = Math.max(0, adReach(world) - 30);
-  const topY = Math.min(-(f.L/2 + f.net + adX), kb ? kb.T : Infinity);
-  const botY = Math.max(  f.L/2 + f.net + adX,  kb ? kb.B : -Infinity);
+  // ⚠️ THE SCORE PIPS ARE HELD TOO, AND ONLY ON THE END AXIS. They stand behind the
+  // goals and nowhere else, so charging them to the across axis as well would take pitch
+  // scale for a row that is not there. At the shipped constants with the ads off the row
+  // reaches 23 world units past the net on Classic, inside the 30-unit brim the +60 below
+  // already gives — so the Balls readout costs the pitch exactly nothing until the court
+  // is big enough (or the boards are up) to push it past that. `tests/scorepips.mjs`.
+  const pipY = Math.max(0, endReach(world) - 30);
+  const topY = Math.min(-(f.L/2 + f.net + pipY), kb ? kb.T : Infinity);
+  const botY = Math.max(  f.L/2 + f.net + pipY,  kb ? kb.B : -Infinity);
   const leftX = Math.min(-(f.W/2 + adX), kb ? kb.L : Infinity);
   const rightX = Math.max( f.W/2 + adX, kb ? kb.R : -Infinity);
   // ⚠️ THE COURT IS CENTRED ACROSS THE SCREEN, and the frame is fitted around it. This
@@ -33489,6 +33635,53 @@ function drawGoal(w, sign){
     ctx.fillStyle = TH.post; ctx.fill();
     ctx.lineWidth=Math.max(1,1.5*s); ctx.strokeStyle=col; ctx.stroke();
   }
+  // The score, as balls: a row of small circles standing behind this goal, in this
+  // goal's own colour, one per slot, filled for each goal this side has scored. See the
+  // PIPS header for why the count is what it is and why the row lives out here.
+  if (pipsDrawn(w)) drawScorePips(w, sign, ny, col);
+}
+// ⚠️ Its own function rather than eight more lines inside `drawGoal`, because
+// `tests/scorepips.mjs` measures the row as a DIFFERENCE against the same frame with it
+// stood down — a goal already has a frame, a mesh and two posts within a few pixels of
+// where the pips go, so an absolute ink count in that band reads well above zero on a
+// build that draws no pips at all.
+function drawScorePips(w, sign, ny, col){
+  const s = cam.s;
+  const team = sign < 0 ? 1 : 0;
+  const row = pipRow(w, team);
+  const n = row.n, hit = (w.score && w.score[team])|0;
+  const r = row.r * s;
+  if (!(r >= PIPS.minPx)) return;         // a smear says less than nothing; draw none
+  const pitch = row.pitch * s;
+  // Against the back of the net. The end hoardings start after `pipDepth`, so the row is
+  // between the goal and the boards rather than outside them — see the PIPS header.
+  const cy = wy(ny + sign*row.out), x0 = wx(0) - (n - 1)*pitch/2;
+  const ringW = Math.max(1, r*PIPS.ringW);
+  // ⚠️ `pickTextColor`, not `ballSpotInk`: the panel sits on the TEAM's colour here, not
+  // on the ball's, and a team colour is whatever eight swatches and a country picker can
+  // between them produce. It also takes no constant declared further down the file, which
+  // a function reachable from a draw has no business reading.
+  const spot = pickTextColor(rgbToHex(col));
+  for (let i=0;i<n;i++){
+    const cx = x0 + i*pitch;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2*Math.PI);
+    if (i < hit){
+      // A ball went in here. Filled in the side's own colour with a football's centre
+      // panel on it, rather than a white ball: the ink has to read on every palette, and
+      // `TH.ball` is the COURT colour on the themes that draw the ball as a hollow ring
+      // (Spaceships), where a white fill would make a filled slot and an empty one look
+      // the same. The panel is dropped below `pentPx`, where it is a smudge.
+      ctx.fillStyle = col; ctx.fill();
+      if (r >= PIPS.pentPx){
+        ballPent(ctx, cx, cy, r*0.46, -Math.PI/2);
+        ctx.fillStyle = spot; ctx.fill();
+      }
+    } else {
+      ctx.globalAlpha = PIPS.emptyA;
+      ctx.lineWidth = ringW; ctx.strokeStyle = col; ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
 }
 
 // Debounced rebuild of the faceplate pickers once async art lands — 80+ flag SVGs
@@ -35265,6 +35458,12 @@ function dot(x,y,r,c){ ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.fillStyl
 function syncScorebug(){
   const el = $('scorebug'); if (!el) return;
   el.style.display = (world && world.state === 'warmup') ? 'none' : '';
+  // ⚠️ **THE CLASS ASKS `pipsDrawn`, NEVER `sel.scoreStyle`.** The pips stand down in
+  // training, in a drill and in warm-up; hiding the digits off the setting alone would
+  // take the score away on exactly those screens and leave nothing in its place — and
+  // training's `#scoreB` is its practice-goal counter, so there the digits are the only
+  // readout there is. One predicate, so the two can never disagree about which is up.
+  el.classList.toggle('pips', pipsDrawn(world));
 }
 function updateScoreUI(){
   if (!world) return;
@@ -36061,7 +36260,8 @@ if (window.__MAGNETDEBUG) {
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
-    syncScorebug, toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
+    syncScorebug, PIPS, SCOREOPT, scorePipsOn, pipsDrawn, pipDepth, endReach, pipRow, pipSlots, drawScorePips,
+    toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock, resultSecs, resultGoesToDemo,
     pollLobbyPads, stepWarmup, stepLobbyKeys,
     lobbyStartVisible, syncLobbyStartBtn, onLobbyStartPress,
