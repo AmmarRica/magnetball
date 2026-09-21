@@ -13,6 +13,6 @@
 Thumbs.db
 node_modules/
 
-# Azure Functions API (api/) — its own node_modules and the local secrets file
-api/node_modules/
-api/local.settings.json
+# Azure Functions API (server/) — its own node_modules and the local secrets file
+server/node_modules/
+server/local.settings.json

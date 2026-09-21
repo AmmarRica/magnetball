@@ -9,6 +9,13 @@ no package manager, and no runtime dependencies**. `sw.js`, `manifest.json`, `ic
 `assets/`, `menu/index.html` and `vj/index.html` are the only other runtime files —
 plus `settings/index.html`, which is a three-line redirect to `../menu/`.
 
+**Two folders are NOT the game and never ship to the page**: `infrastructure/` (the Bicep
+that creates the Azure resources for online mode, with `infrastructure/docs/` holding the
+setup instructions and what each resource is) and `server/` (the Functions API that is hosted
+there, with `server/docs/API.md` describing every route). `.github/workflows/azure.yml`
+deploys both on a push to `main`. `server/` has its own `package.json` and lockfile; the repo
+ROOT still has none, and the dependency-free rule below is about what the browser loads.
+
 **The routes are `/`, `/menu/` and `/vj/`, and there are only three.** `/` is the game
 AND the menu (the accordion behind KICK OFF), which is why there is no separate menu
 route to add. `/menu/` and `/vj/` are stubs that fetch this one `index.html`, inject

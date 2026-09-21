@@ -1,7 +1,7 @@
-// infra/main.bicep — every Azure resource online mode needs, deployed into one resource group.
+// infrastructure/main.bicep — every Azure resource online mode needs, deployed into one resource group.
 // Storage (Table rows + Blob replays), Web PubSub (the real-time relay), a Functions API on the
 // Consumption plan, and a Static Web App that serves index.html. Every service is on its free
-// or consumption tier. See docs/AZURE.md for the walkthrough.
+// or consumption tier. See infrastructure/docs/SETUP.md for the walkthrough.
 @description('Short lowercase name used as a prefix for every resource, e.g. magnetball')
 @minLength(3)
 @maxLength(14)

@@ -2,7 +2,7 @@
   "name": "magnetball-api",
   "version": "1.0.0",
   "private": true,
-  "description": "Magnetball online API: leaderboard, replay store and Web PubSub room tokens. Nothing here is ever served to the page — the game itself stays dependency-free.",
+  "description": "Magnetball online API: leaderboard, replay store and Web PubSub room tokens. Nothing here is ever served to the page — the game itself stays dependency-free. See server/docs/API.md.",
   "main": "src/*.js",
   "engines": { "node": ">=20" },
   "scripts": {
