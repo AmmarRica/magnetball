@@ -1,0 +1,17 @@
+{
+  "name": "magnetball-match",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The dedicated match server: runs index.html in a headless browser and hosts a match between two players over Web PubSub. Never served to the page. See server/docs/MATCH-SERVER.md.",
+  "type": "module",
+  "main": "matchServer.mjs",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node matchServer.mjs",
+    "relay": "node relay.mjs"
+  },
+  "dependencies": {
+    "@azure/web-pubsub": "^1.1.3",
+    "playwright": "1.56.1"
+  }
+}

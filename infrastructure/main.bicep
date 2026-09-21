@@ -13,6 +13,12 @@ param location string = resourceGroup().location
 @description('GitHub repository the Static Web App deploys from, owner/repo')
 param repo string
 
+@description('Container image of the match server, e.g. ghcr.io/owner/magnetball-match:sha. Empty = no match server.')
+param matchImage string = ''
+
+@description('Snapshots a second the match server sends each player')
+param matchSnapHz int = 20
+
 var suffix = uniqueString(resourceGroup().id)          // stable per resource group
 var storageName = toLower('${appName}${suffix}')        // storage names: 3-24 chars, lowercase, no dashes
 
@@ -126,9 +132,65 @@ resource site 'Microsoft.Web/staticSites@2023-12-01' = {
   }
 }
 
-// 5. What the workflow needs afterwards. Never output a key.
+// 5. The dedicated match server: one container running index.html in a headless browser
+//    (server/match). Container Apps on the consumption plan, scaled to ZERO between
+//    matches — the first `POST /match` wakes it — and to one replica at most, because a
+//    room lives in one process's memory. The players' browsers keep it awake with a
+//    heartbeat request every 30s while a match runs. Only created when an image is named,
+//    so the first deploy (before the workflow has pushed one) does not fail on a pull.
+resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (matchImage != '') {
+  name: '${appName}-logs'
+  location: location
+  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30 }
+}
+resource matchEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (matchImage != '') {
+  name: '${appName}-match-env'
+  location: location
+  properties: {
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logs!.properties.customerId
+        #disable-next-line BCP422
+        sharedKey: logs!.listKeys().primarySharedKey
+      }
+    }
+  }
+}
+resource matchApp 'Microsoft.App/containerApps@2024-03-01' = if (matchImage != '') {
+  name: '${appName}-match'
+  location: location
+  properties: {
+    managedEnvironmentId: matchEnv.id
+    configuration: {
+      ingress: { external: true, targetPort: 8080, transport: 'auto', allowInsecure: false }
+      secrets: [ { name: 'pubsub-conn', value: pubsub.listKeys().primaryConnectionString } ]
+    }
+    template: {
+      containers: [ {
+        name: 'match'
+        image: matchImage
+        resources: { cpu: json('1.0'), memory: '2Gi' }   // one headless Chromium per match
+        env: [
+          { name: 'PORT', value: '8080' }
+          { name: 'WEBPUBSUB_CONNECTION', secretRef: 'pubsub-conn' }
+          { name: 'WEBPUBSUB_HUB', value: hub.name }
+          { name: 'SNAP_HZ', value: string(matchSnapHz) }
+        ]
+      } ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+        rules: [ { name: 'http', http: { metadata: { concurrentRequests: '20' } } } ]
+      }
+    }
+  }
+}
+
+// 6. What the workflow needs afterwards. Never output a key.
 output apiHost string = api.properties.defaultHostName
 output siteHost string = site.properties.defaultHostname
 output apiName string = api.name
 output siteName string = site.name
 output pubsubHost string = pubsub.properties.hostName
+output matchHost string = matchImage != '' ? matchApp!.properties.configuration.ingress.fqdn : ''

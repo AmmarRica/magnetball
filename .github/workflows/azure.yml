@@ -1,7 +1,8 @@
-# Deploys online mode to Azure on every push to main: the resources (Bicep), then the
-# Functions API, then the game with an online.json pointing at the API. Needs ONE repo
-# secret, AZURE_CREDENTIALS — the JSON from `az ad sp create-for-rbac --sdk-auth`. Every
-# other key is read from Azure after Bicep has created the resources. See infrastructure/docs/SETUP.md.
+# Deploys online mode to Azure on every push to main: the match server's container image
+# (to GitHub's registry), the resources (Bicep), then the Functions API, then the game with
+# an online.json pointing at the API and the match server. Needs ONE repo secret,
+# AZURE_CREDENTIALS — the JSON from `az ad sp create-for-rbac --sdk-auth`. Every other key
+# is read from Azure after Bicep has created the resources. See infrastructure/docs/SETUP.md.
 name: Deploy to Azure
 
 on:
@@ -11,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  packages: write        # the match server image goes to ghcr.io/<owner>/magnetball-match
 
 # A second push while a deploy is running makes the first one irrelevant.
 concurrency:
@@ -22,14 +24,41 @@ env:
   LOCATION: westeurope          # any region; the Static Web App pins its own in main.bicep
 
 jobs:
-  infra:
-    name: Create Azure resources (Bicep)
+  image:
+    name: Build the match server image
     runs-on: ubuntu-latest
     outputs:
-      apiName:  ${{ steps.deploy.outputs.apiName }}
-      apiHost:  ${{ steps.deploy.outputs.apiHost }}
-      siteName: ${{ steps.deploy.outputs.siteName }}
-      siteHost: ${{ steps.deploy.outputs.siteHost }}
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      # ghcr.io wants a lowercase path; a GitHub owner need not be.
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-match:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/match/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}
+            ghcr.io/${{ github.repository_owner }}/magnetball-match:latest
+
+  infra:
+    name: Create Azure resources (Bicep)
+    needs: image
+    runs-on: ubuntu-latest
+    outputs:
+      apiName:   ${{ steps.deploy.outputs.apiName }}
+      apiHost:   ${{ steps.deploy.outputs.apiHost }}
+      siteName:  ${{ steps.deploy.outputs.siteName }}
+      siteHost:  ${{ steps.deploy.outputs.siteHost }}
+      matchHost: ${{ steps.deploy.outputs.matchHost }}
     steps:
       - uses: actions/checkout@v4
       - uses: azure/login@v2
@@ -44,8 +73,9 @@ jobs:
             --resource-group "$RESOURCE_GROUP" \
             --template-file infrastructure/main.bicep \
             --parameters infrastructure/main.bicepparam \
+            --parameters matchImage="${{ needs.image.outputs.image }}" \
             --query properties.outputs --output json)
-          for k in apiName apiHost siteName siteHost; do
+          for k in apiName apiHost siteName siteHost matchHost; do
             echo "$k=$(echo "$out" | jq -r ".$k.value")" >> "$GITHUB_OUTPUT"
           done
 
@@ -78,12 +108,18 @@ jobs:
       - uses: actions/checkout@v4
       # Only the runtime files go up — tests/, docs/ and the scratch files stay behind.
       # online.json is written here, never committed: it is the one place the game learns
-      # where the API is, and index.html stays identical on every host.
+      # where the API and the match server are, and index.html stays identical on every host.
       - name: Stage only the runtime files
         run: |
           mkdir dist
           cp -r index.html sw.js manifest.json icon.svg assets menu vj settings staticwebapp.config.json dist/
-          echo "{\"api\":\"https://${{ needs.infra.outputs.apiHost }}\"}" > dist/online.json
+          match="${{ needs.infra.outputs.matchHost }}"
+          if [ -n "$match" ]; then
+            echo "{\"api\":\"https://${{ needs.infra.outputs.apiHost }}\",\"match\":\"https://$match\"}" > dist/online.json
+          else
+            echo "{\"api\":\"https://${{ needs.infra.outputs.apiHost }}\"}" > dist/online.json
+          fi
+          cat dist/online.json
       - uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -106,4 +142,4 @@ jobs:
           skip_app_build: true
           skip_api_build: true
       - name: Where it went
-        run: echo "Game at https://${{ needs.infra.outputs.siteHost }}  API at https://${{ needs.infra.outputs.apiHost }}"
+        run: echo "Game at https://${{ needs.infra.outputs.siteHost }}  API at https://${{ needs.infra.outputs.apiHost }}  Match server at https://${{ needs.infra.outputs.matchHost }}"

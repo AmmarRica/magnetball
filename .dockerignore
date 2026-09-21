@@ -1,0 +1,15 @@
+# The match server image is built from the repo root (server/match/Dockerfile) and copies
+# only the game's runtime files and server/match; nothing else needs to reach the daemon.
+.git
+.github
+tests
+docs
+infrastructure
+menu
+vj
+settings
+server/node_modules
+server/match/node_modules
+server/src
+server/docs
+*.md

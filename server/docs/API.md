@@ -119,11 +119,16 @@ When it is right the console lists `scoresGet`, `scoresPost`, `replayPost`, `rep
 folder, then `Azure/functions-action` publishes it to the Function App the Bicep created.
 `package-lock.json` is committed so that `npm ci` is reproducible; `node_modules/` is not.
 
+## The match server is separate
+
+`server/match/` is not a Function: it is a container running the game itself, and it has
+its own document, `MATCH-SERVER.md`. `.funcignore` keeps it out of the Functions deploy.
+The two meet at `/api/room-token`, which is how a player gets onto the hub the match
+server broadcasts on.
+
 ## Not built yet
 
-- The game-side wiring: read `./online.json` at boot, point `lbLoad`/`lbSubmit` here when
-  it is set, and a `roomJoin`/`roomSend`/`roomLeave` trio over the WebSocket. About sixty
-  lines using only `fetch` and `WebSocket`.
-- What travels over the socket. Host-runs-the-match, with the guest sending its pad every
-  step and the host sending a world snapshot 20 times a second, is the one to build first.
+- Pointing `lbLoad`/`lbSubmit` at `/api/scores` when `online.json` names the API. The
+  game reads `online.json` at boot now (`onlineLoad` in `index.html`) and uses it for the
+  match server; the leaderboard still goes to the Google Sheet.
 - Listing and deleting replays, and any rate limiting on the POST routes.

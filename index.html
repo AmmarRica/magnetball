@@ -198,6 +198,11 @@
       padding: 13px 13px; font-family: var(--pix); font-size: 13px; outline: none;
     }
     input[type=text]:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 16px rgba(33,230,255,.35); }
+    /* The online row: a four-letter code beside its button, the code in capitals because
+       that is what a room code is. Hidden as a whole until a match server is configured. */
+    .netrow { display: flex; gap: 8px; align-items: center; }
+    .netrow input[type=text] { width: 7em; text-transform: uppercase; letter-spacing: .12em; }
+    .netrow .ghost.mini { min-height: 44px; padding: 5px 14px; }
     textarea {
       width: 100%; background: var(--field); color: var(--text);
       border: 1px solid var(--edge); border-radius: 8px; resize: vertical;
@@ -1883,6 +1888,18 @@
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
+      <!-- ⚠️ SHOWN ONLY WHEN A MATCH SERVER IS CONFIGURED (`online.json` names one). Without
+           one this row is hidden outright, never disabled: a room-code box that cannot join
+           anything is the dead control the Online card was deleted for. See `NET`. -->
+      <div id="onlineRow" class="hidden">
+        <div style="height:14px"></div>
+        <label class="field">Online</label>
+        <div class="netrow">
+          <input id="netRoom" type="text" maxlength="4" placeholder="ROOM" autocomplete="off" spellcheck="false" />
+          <button id="netPlayBtn" class="ghost mini" type="button">Play online</button>
+        </div>
+        <div class="hint">Type a four-letter room code and share it. The first two people who join it play each other on the match server, which runs the whole match in one place &mdash; so neither player's connection decides what happens. The match uses the settings of whoever joined first, and starts the moment the second player arrives.</div>
+      </div>
       </div>
 
       <!-- ⚠️ **MODES IS A MATCH TAB, NOT A CARD.** Season, Tournament, Gauntlet, Drills and
@@ -2971,6 +2988,7 @@
    Audio (synthesised)         "AUDIO — everything synthesised"
    Progression + rank          "Stats & rank (ELO"
    VJ mode                     "VJ MODE — two video decks"
+   Online / match server       "ONLINE — a match hosted by a THIRD PARTY"
    Setup UI                    "SETUP UI"
    Menu search                 "Menu search ---"
    Progressive help            "Progressive disclosure for help text ---"
@@ -5866,7 +5884,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260918.0703AM';
+const VERSION = '20260921.0345PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -5882,6 +5900,13 @@ const VERSION = '20260918.0703AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260921.0345PM', title: 'A match hosted by a third party',
+    changed: [
+      '<b>Play somebody online, with the match run in the middle.</b> Type a four-letter room code under Match &rarr; Game &rarr; Online, share it, and the first two people to join play each other on the match server: the whole match runs in one place neither player owns, so when one connection lags it cannot decide the result.',
+      '<b>The settings of whoever joined first are what is played</b>, and yours come back the moment you leave.',
+      '<b>Only where a match server has been set up.</b> Without one the row is not there at all, and everything else is exactly what it was.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260918.0703AM', title: 'Bots that sprint, pass and play like a team',
     changed: [
       '<b>The bots use the turbo.</b> From Normal up they sprint for a ball they are racing for, and the top tiers sprint to track back and to make runs — paying the same stamina ring you do. A rookie never touches it.',
@@ -17572,6 +17597,226 @@ const LB_FAKE = [
 let lbCache = null;    // { live:bool, rows:[{n,rp,f,eyes,color}] }
 let lbBusy  = false;
 
+// ============================================================
+//  ONLINE — a match hosted by a THIRD PARTY, and the thin client that plays it
+// ============================================================
+// `online.json` sits beside `index.html` on a deploy (the workflow writes it; it is never
+// committed) and names the two servers: `api`, the Functions API that mints a room token,
+// and `match`, the dedicated match server. With neither the game is exactly what it was —
+// the Online row in the Match card is hidden, not disabled.
+// ⚠️ **THE MATCH SERVER RUNS THIS SAME FILE.** `server/match/matchServer.mjs` loads
+// `index.html` into a headless browser with two virtual controllers, so the physics, the
+// rules, the clock and the bots are the shipped ones, run once, in one place neither
+// player owns. That is the answer to "one of us is lagging and I am not sure who": the
+// match happens on the server and both players are drawn what they are told.
+// ⚠️ **THE CLIENT SIMULATES NOTHING.** While `NET.remote` is set, `loop()` calls `netStep`
+// in place of `step`: it interpolates the two snapshots either side of "now minus a short
+// delay" into the world's bodies and sends this seat's stick. `w.aiTick` — which `step`
+// increments every step — therefore stays at zero on a client for the whole match, and
+// `tests/netmatch.mjs` reads exactly that. Everything else in the loop (trails, sparks,
+// the goal camera, the name plates) runs as it always did, because it only ever read
+// positions.
+// ⚠️ **NO PREDICTION, ON PURPOSE.** Your own body moves when the server says it has, about
+// one snapshot interval plus half a round trip after you pushed the stick. Predicting it
+// locally is what makes a laggy match look fine for one player and rubber-band for the
+// other — the exact unfairness a neutral host exists to remove.
+// ⚠️ **THE SETTINGS TRAVEL AS `RESUME.keys`**, the same whitelist a resumed match is
+// started from: the first joiner's mode, pitch, length, difficulty, ball, party set and
+// team dressing, applied over `sel` for the match and PUT BACK by `netLeave` — the
+// opponent's choices are not your settings.
+// ⚠️ Two groups per room on the hub: `<ROOM>` carries the server's start / snapshots /
+// full-time messages to both players, `<ROOM>.in` carries each player's stick to the
+// server and to nobody else, so an input is never delivered to the other player (on the
+// hub's Free tier every message counts).
+const ONLINE = { api: '', match: '', loaded: false };
+const NET = { remote: false, joining: false, ws: null, room: '', seat: -1, userId: '', status: 'off',
+              snaps: [], hz: 20, delay: 75, me: null, lastSent: null, sentAt: 0, selWas: null,
+              minMs: 33, keepMs: 500, beatMs: 30000, beatAt: 0 };
+function onlineLoad(){
+  const take = (o) => { if (!o) return;
+    if (/^https?:\/\//.test(o.api || '')) ONLINE.api = String(o.api).replace(/\/+$/, '');
+    if (/^https?:\/\//.test(o.match || '')) ONLINE.match = String(o.match).replace(/\/+$/, ''); };
+  // A harness names the servers before load, the way `__MAGNETPANEL` names the route.
+  if (window.__MAGNETONLINE){ take(window.__MAGNETONLINE); ONLINE.loaded = true; syncOnlineUI(); return Promise.resolve(); }
+  if (PANEL || !/^https?:$/.test(location.protocol)){ ONLINE.loaded = true; syncOnlineUI(); return Promise.resolve(); }
+  return fetch('./online.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(take)
+    .catch(() => {}).then(() => { ONLINE.loaded = true; syncOnlineUI(); });
+}
+function syncOnlineUI(){
+  const row = $('onlineRow'); if (!row) return;
+  row.classList.toggle('hidden', !(ONLINE.api && ONLINE.match));
+}
+const netCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+function netSelDoc(){ const s = {}; for (const k of RESUME.keys) s[k] = sel[k]; return s; }
+// Join (or open) a room. Resolves true once this seat is taken — the match itself starts
+// when the server says so, which is when the second player arrives.
+async function netPlay(codeIn){
+  const code = netCode(codeIn);
+  if (!ONLINE.api || !ONLINE.match){ toast('No match server is set up', 'err'); return false; }
+  if (code.length !== 4){ toast('A room code is four letters', 'err'); return false; }
+  netLeave();
+  NET.room = code; NET.status = 'token';
+  try {
+    const name = (profile.name || 'You').slice(0, 12);
+    const tr = await fetch(ONLINE.api + '/api/room-token?room=' + code + '&name=' + encodeURIComponent(name), { cache: 'no-store' });
+    if (!tr.ok) throw new Error('token ' + tr.status);
+    const tok = await tr.json();
+    NET.userId = tok.userId || name;
+    await netOpen(tok.url, code);
+    NET.status = 'seat';
+    const mr = await fetch(ONLINE.match + '/match', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ room: code, name, userId: NET.userId, sel: netSelDoc() }) });
+    const mj = await mr.json().catch(() => ({}));
+    if (!mr.ok) throw new Error(mj.error || ('match ' + mr.status));
+    NET.seat = mj.seat | 0;
+    if (mj.start) netStart(mj.start);
+    else { NET.status = 'waiting'; toast('Room ' + code + ' — waiting for the other player', '', 'globe'); }
+    return true;
+  } catch (e){
+    netLeave(); NET.status = 'error';
+    toast('Could not join: ' + (e && e.message || e), 'err');
+    return false;
+  }
+}
+function netOpen(url, room){
+  return new Promise((res, rej) => {
+    let ws;
+    try { ws = new WebSocket(url, 'json.webpubsub.azure.v1'); } catch (e){ rej(e); return; }
+    NET.ws = ws;
+    ws.onopen = () => { ws.send(JSON.stringify({ type: 'joinGroup', group: room, ackId: 1 })); res(); };
+    ws.onerror = () => rej(new Error('socket refused'));
+    ws.onclose = () => { if (NET.ws !== ws) return; NET.ws = null;
+      if (NET.status === 'live' || NET.status === 'waiting'){ NET.status = 'lost'; toast('Connection to the match server lost', 'err'); } };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+      if (m.type === 'message' && m.from === 'group' && m.data) netOnMsg(typeof m.data === 'string' ? JSON.parse(m.data) : m.data);
+    };
+  });
+}
+function netOnMsg(d){
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'lobby'){ if (NET.status === 'waiting' && Array.isArray(d.seats) && d.seats.every(Boolean)) NET.status = 'starting'; }
+  else if (d.t === 'start'){ if (!NET.remote) netStart(d); }
+  else if (d.t === 'snap'){ if (NET.remote){ d.at = performance.now(); NET.snaps.push(d); if (NET.snaps.length > 40) NET.snaps.shift(); } }
+  else if (d.t === 'over') netOver(d);
+}
+// The server's start document: build the same match here, dress it with the server's
+// roster, and hand this seat's body to whatever this machine drives with.
+function netStart(d){
+  if (!d || !Array.isArray(d.roster) || !Array.isArray(d.seats)) return;
+  NET.selWas = {};
+  for (const k of RESUME.keys){ NET.selWas[k] = sel[k]; if (d.sel && d.sel[k] !== undefined) sel[k] = d.sel[k]; }
+  setMatchSeed(d.seed); NET.joining = true;
+  try { startMatch({ lobby: false }); } finally { setMatchSeed(null); NET.joining = false; }
+  const w = world; if (!w) return;
+  if (w.players.length !== d.roster.length)
+    w.players = d.roster.map(r => mkPlayer(r.team, r.name, r.color, r.cap, 'bot', r.flag, r.eyes));
+  d.roster.forEach((r, i) => { const p = w.players[i];
+    Object.assign(p, { team: r.team, name: r.name, color: r.color, cap: r.cap, flag: r.flag, eyes: r.eyes,
+                       r: r.r || p.r, ctrl: 'bot', padIndex: -1 }); p._subTo = null; });
+  const mine = w.players[d.seats[NET.seat]] || null;
+  if (mine){
+    const gp = padsTakeSeats() ? connectedGamepadIndices() : [];
+    if (gp.length){ mine.ctrl = 'gamepad'; mine.padIndex = gp[0]; mine._padId = padIdOf(gp[0]); }
+    else mine.ctrl = 'human1';
+  }
+  syncSeatRotation(w);
+  w.goalCamP = null;
+  NET.me = mine; NET.snaps = []; NET.hz = d.hz || 20; NET.delay = 1500 / NET.hz;
+  NET.lastSent = null; NET.sentAt = 0; NET.remote = true; NET.status = 'live';
+  updateScoreUI(); updateClock(w);
+}
+// One fixed step of the thin client: the world is what the server said, blended between
+// the two snapshots around "now minus NET.delay", and this seat's stick goes out.
+function netStep(w){
+  markPrev(w);
+  const s = NET.snaps;
+  if (s.length){
+    const tgt = performance.now() - NET.delay;
+    let a = s[0], b = s[0];
+    for (let i = 0; i < s.length; i++){ if (s[i].at <= tgt){ a = s[i]; b = s[i + 1] || s[i]; } else break; }
+    const span = b.at - a.at, f = span > 0 ? Math.max(0, Math.min(1, (tgt - a.at) / span)) : 1;
+    netApply(w, a, b, f);
+    const ia = s.indexOf(a); if (ia > 0) s.splice(0, ia);
+  }
+  netSend(w);
+  // A heartbeat to the match server's HTTP side. The server is a container that scales
+  // to ZERO on the absence of HTTP traffic (its own socket to the hub does not count), so
+  // without this a five-minute match would be cut off by the platform mid-way.
+  const now = performance.now();
+  if (now - (NET.beatAt || 0) > NET.beatMs){ NET.beatAt = now;
+    if (ONLINE.match && NET.room) fetch(ONLINE.match + '/match/' + NET.room, { cache: 'no-store' }).catch(() => {}); }
+}
+function netApply(w, a, b, f){
+  const L = (x, y) => x + (y - x) * f, near = f < 0.5 ? a : b;
+  w.ball.x = L(a.f[0], b.f[0]); w.ball.y = L(a.f[1], b.f[1]);
+  w.ball.vx = w.ball.x - (w.ball._px == null ? w.ball.x : w.ball._px);
+  w.ball.vy = w.ball.y - (w.ball._py == null ? w.ball.y : w.ball._py);
+  for (let i = 0; i < w.players.length; i++){
+    const o = 2 + i * 6; if (o + 5 >= a.f.length || o + 5 >= b.f.length) break;
+    const p = w.players[i];
+    p.x = L(a.f[o], b.f[o]); p.y = L(a.f[o + 1], b.f[o + 1]);
+    p.vx = p.x - (p._px == null ? p.x : p._px); p.vy = p.y - (p._py == null ? p.y : p._py);
+    p.gait = (p.gait || 0) + Math.hypot(p.vx, p.vy);
+    p.kick = !!near.f[o + 2];
+    const fx = L(a.f[o + 3], b.f[o + 3]), fy = L(a.f[o + 4], b.f[o + 4]), fm = Math.hypot(fx, fy);
+    if (fm > 0.01){ p.faceX = fx / fm; p.faceY = fy / fm; }
+    p.chargeT = L(a.f[o + 5], b.f[o + 5]);
+  }
+  if (w.extraBalls && b.ex) b.ex.forEach((e, i) => { const x = w.extraBalls[i]; if (!x) return;
+    const ea = a.ex && a.ex[i] || e; x.x = L(ea[0], e[0]); x.y = L(ea[1], e[1]); });
+  // Score, clock and state read off the newer snapshot. A goal is celebrated here, where
+  // the score is seen to move — banner, crowd, shake — through the same calls scoreGoal
+  // makes. `over` is deliberately NOT copied: the server's `over` message ends the match
+  // through `endMatch`, and that function returns early on a world already in that state.
+  for (let t = 0; t < 2; t++) if (b.sc[t] > w.score[t]){
+    w.score = b.sc.slice(); updateScoreUI();
+    playSfx('crowd'); showBanner('GOAL!', t === 0 ? 'var(--red)' : 'var(--cyan)'); goalBurst(w, t);
+  }
+  if (b.sc[0] !== w.score[0] || b.sc[1] !== w.score[1]){ w.score = b.sc.slice(); updateScoreUI(); }
+  if (b.st !== 'over' && b.st !== w.state){ w.state = b.st; w.stateT = 0; }
+  const clkWas = Math.ceil(w.timeLeft || 0);
+  w.timeLeft = b.clk; w.overtime = !!b.ot; w.matchT = b.ms || 0;
+  if (Math.ceil(w.timeLeft) !== clkWas || w.overtime) updateClock(w);
+  advanceBallSpin(w);
+}
+// This seat's stick, at most NET.minMs apart and at least every NET.keepMs so a quiet
+// stick is still a live one.
+function netSend(w){
+  const me = NET.me, ws = NET.ws;
+  if (!me || !ws || ws.readyState !== 1) return;
+  const menu = padDrivesMenu();
+  const pad = me.ctrl === 'gamepad' ? mergePads(gamepadPad(me.padIndex), pads.p1) : pads.p1;
+  applyHumanInput(me, menu ? null : pad);
+  const x = +me.inX.toFixed(2), y = +me.inY.toFixed(2), k = !!me.kick;
+  const now = performance.now(), last = NET.lastSent;
+  const changed = !last || last.x !== x || last.y !== y || last.k !== k;
+  if (now - NET.sentAt < (changed ? NET.minMs : NET.keepMs)) return;
+  NET.lastSent = { x, y, k }; NET.sentAt = now;
+  try { ws.send(JSON.stringify({ type: 'sendToGroup', group: NET.room + '.in', dataType: 'json', noEcho: true,
+                                 data: { t: 'in', s: NET.seat, x, y, k } })); } catch (_) {}
+}
+function netOver(d){
+  const w = world; if (!w || !NET.remote) return;
+  if (d && Array.isArray(d.sc)){ w.score = d.sc.slice(); updateScoreUI(); }
+  NET.status = 'over';
+  endMatch(w);          // the wind-down and the result screen follow on the wall clock
+}
+// Out of the room: the socket, the seat and the borrowed settings all go. Called by every
+// way a new local match starts and by the menu, so a hosted match cannot outlive itself.
+function netLeave(){
+  const ws = NET.ws; NET.ws = null;
+  if (ws){ try { ws.onclose = null; ws.close(); } catch (_) {} }
+  if (NET.selWas){ for (const k in NET.selWas) sel[k] = NET.selWas[k]; NET.selWas = null; }
+  NET.remote = false; NET.me = null; NET.snaps = []; NET.room = ''; NET.seat = -1; NET.status = 'off';
+}
+(function(){
+  const btn = $('netPlayBtn'), inp = $('netRoom');
+  if (inp) noI18n(inp);
+  if (btn) btn.onclick = () => netPlay(inp ? inp.value : '');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') netPlay(inp.value); });
+})();
+
 // Coerce/clean rows from any source into the shape the board renders.
 function lbNormalize(rows){
   return (rows||[]).filter(r=>r && (r.n!=null && String(r.n).trim())).map(r=>({
@@ -18293,6 +18538,9 @@ function startMatch(opts){
   // The two buttons that mean "play" forward to the game window instead (see `syncAct`);
   // this is the backstop for every other route in (a drill tile, a season round).
   if (PANEL) return;
+  // A new local match ends a hosted one — and gives the borrowed settings back BEFORE
+  // they are read below. `netStart` itself comes through here with `joining` raised.
+  if (NET.remote && !NET.joining) netLeave();
   resumeClear();      // whatever match was on offer, this one replaces it — see RESUME
   // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
   // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
@@ -18342,7 +18590,9 @@ function startMatch(opts){
   // cannot, and what a passer-by sees on the table should be the match they would get.
   if (sel.display === 'cocktail' && !mode.train && !mode.twoP)
     per = Math.max(per, COCKTAIL.per);
-  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet){
+  // ...and not for a hosted match, whose size is the server's: a pad plugged in here must
+  // not grow a roster the snapshots do not carry.
+  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet && !NET.joining){
     const np = connectedGamepadIndices().length;
     if (np > 0) per = Math.max(per, Math.min(LOBBY.maxPerSide,
                                              sel.coop === 'on' ? np : Math.ceil(np/2)));
@@ -19170,7 +19420,9 @@ function loop(t){
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < MAX_STEPS){
-    step(world);
+    // A hosted match is stepped on the server; here the world is what the server said
+    // (see NET). Everything below only ever reads positions, so it runs either way.
+    if (NET.remote) netStep(world); else step(world);
     advanceTrails(world);   // motion tells follow the sim, not the refresh rate
     if (motionOK()) advanceDynField();   // ...and so does an animated theme's field, when
                                         // motion is wanted: fourteen of them drift, scroll
@@ -19179,7 +19431,8 @@ function loop(t){
                                         // (they still PAINT, they just hold still)
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
-    pollDropIn(world);      // a pad pressing a button takes over a bot — see pollDropIn
+    if (!NET.remote) pollDropIn(world);   // a pad pressing a button takes over a bot — see pollDropIn
+                                          // (never in a hosted match: the seats are the server's)
     advanceFloaters();      // stat labels age with the sim, never with the refresh rate
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
     advanceFx();            // ...and the sparks, for exactly the same reason
@@ -25423,6 +25676,7 @@ function stepKqDeadBall(w){
 // Same teams, fresh scoreline. Deliberately NOT startMatch(): that re-runs seat
 // assignment and would undo whoever picked which side in the lobby.
 function restartMatch(w){
+  if (NET.remote) netLeave();     // "again" is a local match from here; the room is left
   resumeClear();
   w.score = [0,0]; w.overtime = false; w.forceWin = null; w.endRamp = null;
   goalCamReset();                 // a new match starts on a level camera
@@ -35110,6 +35364,7 @@ function showResult(title, sub){
 }
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
+  netLeave();                    // ...and a hosted match is left, socket and borrowed settings both
   resumeClear();                 // walking out is a decision; the match is not offered back
   setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
   setTimeout(buildSeatPick, 0);  // the seat count changes with the match — see buildSeatPick
@@ -35595,6 +35850,7 @@ function updLater(){ updSeen = updFound; updFound = null; updHide(); }
   // every suite here runs, so it was invisible until one was written.
   updEnforce();
   setTimeout(() => { if (!updEnforce()) newsMaybeShow(); }, 400);
+  onlineLoad();     // where the servers are, if this deploy has any — see ONLINE
   if (!updPossible()) return;
   setTimeout(() => updCheck(), UPD.bootDelay * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updCheck(); });
@@ -35632,7 +35888,7 @@ const RESUME = { key: 'magnetball.resume', format: 'magnetball-resume', v: 1,
                  keys: ['mode','field','length','diff','ball','party','botPlan','kickoffRule','boxRule','teamCol','teamFlag'] };
 function resumable(w){
   return !!(w && !w.demo && !w.watch && !w.drillMode && !w.tutorial && !w.train
-            && !w.cup && !w.season && !w.rogue && !w.lobby
+            && !w.cup && !w.season && !w.rogue && !w.lobby && !NET.remote   // a hosted match lives on the server
             && (w.state === 'play' || w.state === 'kickoff' || w.state === 'goal')
             && (w.matchT || 0) >= RESUME.minSecs);
 }
@@ -35743,6 +35999,7 @@ if (window.__MAGNETDEBUG) {
     mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, copyText, selDiff, settingsText, settingsChangedCount, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     RESUME, resumable, resumeDoc, resumeSave, resumeLoad, resumeClear, resumeApply, resumeOffer, resumeTick, resumeInfoText,
+    ONLINE, NET, onlineLoad, syncOnlineUI, netPlay, netLeave, netStart, netStep, netOnMsg, netSelDoc,
     goalNotable, NOTABLE, REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,

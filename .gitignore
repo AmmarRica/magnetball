@@ -16,3 +16,4 @@ node_modules/
 # Azure Functions API (server/) — its own node_modules and the local secrets file
 server/node_modules/
 server/local.settings.json
+server/match/node_modules/

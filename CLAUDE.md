@@ -12,9 +12,11 @@ plus `settings/index.html`, which is a three-line redirect to `../menu/`.
 **Two folders are NOT the game and never ship to the page**: `infrastructure/` (the Bicep
 that creates the Azure resources for online mode, with `infrastructure/docs/` holding the
 setup instructions and what each resource is) and `server/` (the Functions API that is hosted
-there, with `server/docs/API.md` describing every route). `.github/workflows/azure.yml`
-deploys both on a push to `main`. `server/` has its own `package.json` and lockfile; the repo
-ROOT still has none, and the dependency-free rule below is about what the browser loads.
+there, with `server/docs/API.md` describing every route, and `server/match/`, the dedicated
+match server, described in `server/docs/MATCH-SERVER.md`). `.github/workflows/azure.yml`
+deploys all of it on a push to `main`. `server/` and `server/match/` each have their own
+`package.json` and lockfile; the repo ROOT still has none, and the dependency-free rule
+below is about what the browser loads.
 
 **The routes are `/`, `/menu/` and `/vj/`, and there are only three.** `/` is the game
 AND the menu (the accordion behind KICK OFF), which is why there is no separate menu
@@ -134,6 +136,71 @@ covering half the card. One owner, many readers. If you find yourself writing th
 three lines a second time, name it.
 
 ## Architecture (all in `index.html`)
+- **A MATCH HOSTED BY A THIRD PARTY** (`ONLINE`, `NET`, `onlineLoad`, `netPlay`, `netStart`,
+  `netStep`, `netApply`, `netSend`, `netOver`, `netLeave`, `#onlineRow`;
+  `server/match/matchServer.mjs`, `server/match/relay.mjs`; `tests/netmatch.mjs`). Asked
+  for as *"a dedicated server so a 3rd party can host a match between two players in case
+  there is lag and I am not sure who"*.
+  ⚠️ **THE SERVER RUNS THIS FILE.** `matchServer.mjs` loads `index.html` into a headless
+  Chromium exactly as the suites do, plugs in two virtual controllers (the `fourpads` stub),
+  pins `controllers:'on' lobby:'off' autoReplay:false orient:'v' matchSpeed:1 hitStop:0`,
+  applies the first joiner's `RESUME.keys` and calls the real `startMatch`. The page's own
+  rAF loop steps the match; the players' sticks are written into the virtual pads once a
+  frame; `window.__netSnap` reads the world out at `SNAP_HZ` (20). There is no second copy
+  of the physics or a rule anywhere, which is the whole design: the price is a browser per
+  match (~150–300MB), and that is why it is a container and not a Function.
+  ⚠️ **THE CLIENT SIMULATES NOTHING.** `loop()` calls `netStep` in place of `step` while
+  `NET.remote` is set: it lerps the two snapshots either side of *now − 1.5 intervals* into
+  the bodies (positions, kick, facing, chargeT, the ball, the extras), reads score / clock /
+  state off the newer one, and sends this seat's stick. `w.aiTick` — which `step` increments
+  every step — therefore stays at **0** on a client for the whole match, and that is what
+  `tests/netmatch.mjs` reads; the pair beside it is the client's bodies still moving.
+  Everything else in the loop (trails, sparks, goal camera, name plates, `advanceBallSpin`
+  fed from position deltas) runs as it did, because it only ever read positions.
+  ⚠️ **NO PREDICTION, ON PURPOSE.** Your body moves when the server says it has, about one
+  snapshot interval plus half a round trip after the push. Predicting locally is what makes
+  a laggy match look fine for one player and rubber-band for the other — the exact
+  unfairness a neutral host exists to remove.
+  ⚠️ **`over` IS NOT COPIED FROM A SNAPSHOT.** The server's `over` message ends the match
+  through `endMatch`, which returns early on a world already in that state — so a snapshot
+  carrying `st:'over'` a frame earlier would leave `endRamp` unset and the result screen
+  never shown. `netApply` skips that one state.
+  ⚠️ **THE SETTINGS TRAVEL AS `RESUME.keys` AND ARE GIVEN BACK.** The first joiner's mode,
+  pitch, length, difficulty, ball, party set and dressing are applied over `sel` for the
+  match and restored by `netLeave` — the opponent's choices are not your settings.
+  `netLeave` is called by every way a new local match starts (`startMatch` unless
+  `NET.joining`, `restartMatch`) and by `toMenu`; `resumable` answers false, or the next
+  launch would offer a server's match back as a local one. `startMatch` skips the pad raise
+  under `NET.joining`: a pad plugged into the client must not grow a roster the snapshots
+  do not carry.
+  ⚠️ **TWO GROUPS A ROOM ON THE HUB**: `<ROOM>` carries the server's `lobby`/`start`/`snap`/
+  `over` to both players; `<ROOM>.in` carries each stick to the server and to nobody else,
+  because on Web PubSub's Free tier every DELIVERED message counts — 20,000 a day is about
+  eight minutes of two-player play at 20Hz. The server listens on `.in` only and sends with
+  `noEcho`. `relay.mjs` speaks that same subset of `json.webpubsub.azure.v1` over a
+  dependency-free RFC 6455 server, plus `/api/room-token`, so the client path is identical
+  against Azure and against localhost.
+  ⚠️ **THE ROW IS HIDDEN, NEVER DISABLED**, until `online.json` names BOTH an `api` and a
+  `match` — a room-code box that cannot join anything is the dead control the Online card
+  was deleted for. `onlineLoad` reads it only on an `http(s)` page; a harness names the
+  servers with `window.__MAGNETONLINE` before load, the `__MAGNETPANEL` idiom.
+  ⚠️ **THE CONTAINER SCALES TO ZERO, AND THE CLIENT'S HEARTBEAT IS WHAT KEEPS IT UP.**
+  Container Apps scales on HTTP traffic and the server's own socket to the hub does not
+  count, so a five-minute match would be cut off mid-way; `netStep` fetches
+  `GET /match/<ROOM>` every 30s. `maxReplicas` is 1 because a room is one process's
+  memory; the Bicep creates the app only when `matchImage` is passed, so a first deploy
+  with no image still succeeds.
+  ⚠️ **MEASURED in `tests/netmatch.mjs`**, which spawns the real relay and the real server
+  and drives two pages through the real `netPlay`: the server's tick grows ~60/s while both
+  clients read 0; ArrowRight on A moves seat A's body **136 units** on the server against
+  **2.2** for seat B (its own coast — *nobody else's* is a ratio, not zero); a dropped
+  player's picture freezes while the server plays on. Four sabotages, each caught by its
+  own check. It runs alone after the pool, `updatecheck`'s case.
+  ⚠️ **NOT BUILT, written down**: reconnecting a dropped player by itself (the server hands
+  the seat and the `start` document back on a second `POST /match`, the client does not yet
+  ask); more than two people (`CFG.seats` plus pads); spectators; matchmaking beyond a room
+  code shared out of band; and `lbLoad`/`lbSubmit` still go to the Google Sheet even when
+  `online.json` names the API.
 - **Loop:** `loop(t)` → fixed-timestep accumulator calling `step(w)` at `STEP = 1/60`, then
   `render()` with `renderAlpha = acc/STEP` so `ix(e)`/`iy(e)` interpolate between steps.
   Juice: `shake`, `hitStop`, goal `slow`-mo.
@@ -7724,7 +7791,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 143 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 144 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

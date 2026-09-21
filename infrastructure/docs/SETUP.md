@@ -40,9 +40,12 @@ nothing waits on it.
 az provider register --namespace Microsoft.Web
 az provider register --namespace Microsoft.SignalRService
 az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
 ```
 
-Web PubSub lives under the SignalRService namespace, which is why that name appears.
+Web PubSub lives under the SignalRService namespace, which is why that name appears. The
+last two are for the match server's container and its logs.
 
 ## 4. Create the identity GitHub deploys as
 
@@ -70,17 +73,25 @@ to the repo or to a log.
 
 Merge the branch carrying `infrastructure/`, `server/` and the workflow into `main`, or press
 **Run workflow** on *Deploy to Azure* under the repo's **Actions** tab. The first run takes
-about four minutes, in three jobs:
+about six minutes, in four jobs:
 
-1. **Create Azure resources (Bicep)** creates the resource group `magnetball-rg` and every
-   resource in `infrastructure/main.bicep`.
-2. **Deploy the Functions API** installs `server/`'s dependencies and publishes it.
-3. **Deploy the game** uploads `index.html` and the runtime files with an `online.json`
-   beside them naming the API, and prints the two addresses at the end:
+1. **Build the match server image** builds `server/match/Dockerfile` and pushes it to
+   GitHub's container registry as `ghcr.io/<you>/magnetball-match`. Needs no Azure login.
+2. **Create Azure resources (Bicep)** creates the resource group `magnetball-rg` and every
+   resource in `infrastructure/main.bicep`, the match server's container included.
+3. **Deploy the Functions API** installs `server/`'s dependencies and publishes it.
+4. **Deploy the game** uploads `index.html` and the runtime files with an `online.json`
+   beside them naming the API and the match server, and prints the addresses at the end:
 
 ```
-Game at https://magnetball-site.azurestaticapps.net  API at https://magnetball-api.azurewebsites.net
+Game at https://magnetball-site.azurestaticapps.net  API at https://magnetball-api.azurewebsites.net  Match server at https://magnetball-match.<region>.azurecontainerapps.io
 ```
+
+⚠️ **Once, after the first run: make the image public.** Azure pulls it anonymously. On
+GitHub, your profile → **Packages** → `magnetball-match` → **Package settings** → **Change
+visibility** → Public. Then re-run the workflow (or wait for the next push). Until then the
+container shows a pull error in the portal and *Play online* in the game fails with *could
+not join*. See `server/docs/MATCH-SERVER.md` for the private-registry alternative.
 
 Re-running with nothing changed reports every resource unchanged and finishes in about a
 minute, which is what makes it safe to run on every push.
@@ -96,6 +107,8 @@ In this order, so a failure points at one thing.
 | Room token | open `https://magnetball-api.azurewebsites.net/api/room-token?room=ABCD` | JSON with a `wss://` URL |
 | Site | open `https://magnetball-site.azurestaticapps.net` and `/online.json` | the game boots; the JSON names the API |
 | CORS | on the site, in the browser console: `fetch('/online.json').then(r=>r.json()).then(o=>fetch(o.api+'/api/scores'))` | 200, no CORS error |
+| Match server | open `https://magnetball-match.<region>.azurecontainerapps.io/health` (the address the workflow printed) | `{"ok":true,...}` after a cold start of 10–20 s |
+| A hosted match | on the site, **Match → Game → Online**: type `ABCD`, *Play online*, on two devices | the second one to press starts the match on both |
 
 The first API call after a quiet spell can take two to three seconds: the Consumption plan
 cold-starts. That is a delay, not an error.
@@ -126,6 +139,10 @@ cold-starts. That is a delay, not an error.
 | Game shows the offline sample leaderboard on the site | `online.json` missing or its `api` value is not `https://` | open `/online.json` in the browser; if 404 the *Deploy the game* job's staging step did not write it |
 | WebSocket closes at once with code 1008 | the token's roles do not cover the group | join the group under the exact `room` value the token response returns |
 | Web PubSub refuses connections after a busy evening | the Free tier's 20,000 messages a day is spent | wait for the daily reset or move `sku` to `Standard_S1` in `main.bicep` |
+| Container App: `UNAUTHORIZED` or `manifest unknown` pulling the image | the GitHub package is private | make `magnetball-match` public under your GitHub Packages, then re-run |
+| *Play online* says *could not join* | the match server is down or cold, or `online.json` has no `match` entry | open `/online.json` on the site, then the `/health` address in it; the first request after idle takes 10–20 s |
+| A hosted match stops dead after five minutes | the container scaled to zero mid-match | the game sends a heartbeat every 30 s; check the browser can reach the match server's address (a blocked `GET /match/ABCD` is the usual cause) |
+| `The subscription is not registered to use namespace 'Microsoft.App'` | step 3's last two lines were skipped | run them, wait a minute, re-run |
 | Static Web App deploy: `The content server has rejected the request` | `app_location` has no `index.html`, or `skip_app_build` is missing | confirm `dist/index.html` exists in the log and keep `skip_app_build: true` |
 
 For anything else, the two log sources are the Actions run for deployment and Application

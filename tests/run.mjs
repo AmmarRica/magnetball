@@ -49,7 +49,9 @@ const filter = process.argv[2] || '';
 // frames when they ARRIVE, which is exactly why the offline encoder exists. Three browsers
 // sharing the machine make a recording come up short, so it went red in a busy pool and
 // passed alone every time.
-const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape']);
+// `netmatch` spawns two servers and a third browser and waits on them with finite timeouts;
+// it is `updatecheck`'s case exactly.
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape', 'netmatch']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper

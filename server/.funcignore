@@ -1,0 +1,6 @@
+# Not part of the Functions app: the match server is its own container (server/match) and
+# the docs are for people. Azure/functions-action honours this with respect-funcignore.
+match/
+docs/
+*.md
+local.settings.json
