@@ -310,6 +310,10 @@
       cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
     #lobbyStartBtn:active { transform: translateX(-50%) translateY(1px); }
     #lobbyStartBtn.hidden { display: none; }
+    /* ⚠️ There is NO generic `.hidden` rule in this stylesheet — every user of that class
+       carries its own, and a row without one is a row that still renders. Measured: a bare
+       `<div class="hidden">` computes `display: block` here. */
+    #scoreStyleRow.hidden { display: none; }
     /* ⚠️ **THE 70px ABOVE IS A THUMBSTICK ALLOWANCE, AND A DESKTOP WAS PAYING IT.** That
        `calc(70px + 78px)` lifts the button clear of the on-screen joystick, which only
        exists on a touch layout — but `computeCam` reserves the whole band under the pitch
@@ -2354,9 +2358,13 @@
       <div class="opts" id="popupPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">A short label over a player the moment they earn something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST. It rises and fades in about a second. Touches are deliberately left out: everybody has them, so a label on every touch would be a permanent smear of text telling you nothing.</div>
       <div style="height:10px"></div>
+      <!-- ⚠️ NOT ON A PHONE, and the row is HIDDEN rather than disabled — a control that
+           cannot do anything is worse than one that is not there. See scoreStyleOffered. -->
+      <div id="scoreStyleRow">
       <label class="field">Score readout</label>
       <div class="opts" id="scorePick"></div>
-      <div class="hint" style="text-align:left; margin-top:4px"><b>Balls</b> puts the score on the pitch instead of in the bar at the top: a short row of small circles standing behind each goal, in that goal's own team colour, filling with a ball as that side scores. On <b>first to 3</b> or <b>first to 5</b> the row is the target, so you can see how close the match is without reading a number. A timed match has no target, so the row is what has been scored plus one empty circle for the next one. The clock stays where it is either way. <b>Numbers</b> is the scorebug the game has always had.</div>
+      <div class="hint" style="text-align:left; margin-top:4px"><b>Balls</b> puts the score on the pitch instead of in the bar at the top: a short row of small circles standing behind each goal, in that goal's own team colour, filling with a ball as that side scores. On <b>first to 3</b> or <b>first to 5</b> the row is the target, so you can see how close the match is without reading a number. A timed match has no target, so the row is what has been scored plus one empty circle for the next one. The clock stays where it is either way. <b>Numbers</b> is the scorebug the game has always had. Not offered on a phone: the whole pitch has to fit on a small screen, so the circles would be a few pixels across.</div>
+      </div>
       <div style="height:10px"></div>
       <label class="field">Ball rolls in 3D</label>
       <div class="opts" id="ball3dPick"></div>
@@ -3282,6 +3290,16 @@ let maps = {};                        // key → field, exactly the shape of a F
 // uses, so "desktop" means one thing in this file. Checked live rather than at boot,
 // because a window can be resized into and out of it.
 function mapsPossible(){ return isDesktop(); }
+// ⚠️ **THE SCORE-READOUT PICKER IS HIDDEN ON A PHONE, the same call and the same shape.**
+// `pipsDrawn` stands the pips down there, so the tile would set a value nothing acts on —
+// the NO DEAD CONTROLS rule, which is exactly why this is a hide rather than a toggle that
+// silently means nothing. Answered LIVE off `isTouchLayout()` and re-asked on resize, or a
+// window dragged narrow keeps a control it can no longer honour.
+function scoreStyleOffered(){ return !isTouchLayout(); }
+function syncScoreStyleRow(){
+  const r = $('scoreStyleRow');
+  if (r) r.classList.toggle('hidden', !scoreStyleOffered());
+}
 // ⚠️ Re-answered on every rebuild AND on resize, never decided once at boot — `isDesktop`
 // reads the window, so rotating a tablet or dragging a window narrow changes the answer,
 // and a row that was right at boot is the wrong row for the rest of the session.
@@ -4936,9 +4954,23 @@ function scorePipsOn(){ return sel.scoreStyle === 'pips'; }
 // ⚠️ Training is excluded because `#scoreB` is that mode's practice-goal counter rather
 // than a score, and warm-up because that end of the pitch is the lobby's keyboard and
 // dressing blocks — the same two exclusions the ad rows make.
+// ⚠️ **NOT ON A PHONE**, asked for — and measured before it was done: on a 390×844
+// handset a pip on Classic is drawn at **3.44 CSS px** with a 1.6px pentagon inside it,
+// against **7.1px** on the same court on a desktop, because `cam.s` is 0.656 there
+// against 1.350. Small was the ask; a smear is not the same thing, and the row is
+// standing behind a goal rather than in the bar at the top, so there is nothing to lean
+// in and read. The scorebug's digits are legible at any size, which is why they are the
+// right readout on the screen where the pitch is smallest.
+// ⚠️ **ONE PREDICATE IS THE WHOLE STAND-DOWN.** The digits come back (`syncScorebug`
+// toggles `.pips` off this), `pipDepth` falls to 0 so the end hoardings stay exactly
+// where they were, and `endReach` falls back to `adReach` so the camera is untouched —
+// three consequences, none of them a second branch somebody has to keep right.
+// ⚠️ `isTouchLayout()` rather than a width, because that is what the file already means
+// by "a phone": it is `viewMode() === 'mobile'`, so a cocktail table, an arcade cabinet
+// and a Steam Deck — all of them touch-capable, none of them a handset — keep the pips.
 function pipsDrawn(w){
-  return scorePipsOn() && !!w && !!w.bounds && !!w.score && w.state !== 'warmup'
-      && !w.drillMode && !w.train;
+  return scorePipsOn() && !isTouchLayout() && !!w && !!w.bounds && !!w.score
+      && w.state !== 'warmup' && !w.drillMode && !w.train;
 }
 function pipNet(w){ return (w.bounds && w.bounds.net) || (w.field && w.field.net) || 0; }
 // The band the row occupies past the back of the net. ⚠️ ONE OWNER: the draw places the
@@ -6011,7 +6043,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260921.0910PM';
+const VERSION = '20260921.1040PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6027,11 +6059,12 @@ const VERSION = '20260921.0910PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
-  { v: '20260921.0910PM', title: 'The score, as balls behind the goals',
+  { v: '20260921.1040PM', title: 'The score, as balls behind the goals',
     changed: [
       '<b>A second way to read the score.</b> Under Game Feel &rarr; Effects, <i>Score readout</i> switches from the numbers at the top to a short row of small circles standing behind each goal, in that goal\'s own team colour, filling with a ball as that side scores.',
       '<b>On first to 3 or first to 5 the row is the target</b>, so you can see how close the match is without reading a number. A timed match has no target, so the row is what has been scored plus one empty circle for the next.',
       '<b>The clock stays where it is</b>, and the numbers come straight back if you prefer them &mdash; the game still ships with them.',
+      '<b>Not on a phone.</b> The whole pitch has to fit on a small screen, so the circles would come out a few pixels across &mdash; the numbers are what you get there, and the setting is not offered.',
     ],
     fixed: 'Assorted fixes and tidying.' },
   { v: '20260921.0345PM', title: 'A match hosted by a third party',
@@ -14240,6 +14273,7 @@ function updatePadInfo(){
   // `buildSeatPick`'s own note.
   buildSeatPick();
   syncMapMakerRow();          // desktop-only, and the window can change under us
+  syncScoreStyleRow();        // not on a phone, same reason
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 // ⚠️ A REAL disconnect skips the grace window — the browser is telling us outright, so
@@ -14929,7 +14963,7 @@ syncSticky();
 // ⚠️ Warm-up's visibility rides along: `viewMode()` reads the window, so a phone
 // turned landscape — or a browser window dragged past the desktop breakpoint —
 // changes whether warming up has anything to do.
-window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); syncMapMakerRow(); });
+window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); syncMapMakerRow(); syncScoreStyleRow(); });
 
 // ---- Add to home screen ----------------------------------------------------
 // ⚠️ The button only exists while the browser is actually offering an install. There
@@ -36261,6 +36295,7 @@ if (window.__MAGNETDEBUG) {
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
     syncScorebug, PIPS, SCOREOPT, scorePipsOn, pipsDrawn, pipDepth, endReach, pipRow, pipSlots, drawScorePips,
+    scoreStyleOffered, syncScoreStyleRow,
     toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock, resultSecs, resultGoesToDemo,
     pollLobbyPads, stepWarmup, stepLobbyKeys,

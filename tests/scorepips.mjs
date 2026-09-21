@@ -61,6 +61,11 @@ const r = await p.evaluate(() => {
   // ---- 1. the shipped default ---------------------------------------------
   o.defaultStyle = M.defaultSel().scoreStyle;
   o.tiles = document.querySelectorAll('#scorePick .opt').length;
+  // ⚠️ The ROW's own display, not the tile count — the tiles are built whether or not the
+  // row is shown, so a build that hid the picker everywhere would leave a tile count of 2
+  // and the "hidden on a phone" pairing in block 6 would pass on the toggle being
+  // unreachable. Caught by sabotage.
+  o.pickerShown = getComputedStyle(document.getElementById('scoreStyleRow')).display !== 'none';
 
   // A frozen match: nothing moves behind a pixel reading, and no bot can wander into
   // the band being sampled. `ctrl:'none'` plus a parked ball is `tests/floaters.mjs`'
@@ -258,9 +263,101 @@ const r = await p.evaluate(() => {
   return o;
 });
 
+// ---- 6. NOT ON A PHONE ----------------------------------------------------------
+// Asked for after the feature shipped: "don't apply this method of score showing on
+// mobile". The reason is a measurement rather than a preference — on a 390×844 handset
+// `cam.s` is 0.656 against a desktop's 1.350, so a pip on Classic is drawn at 3.44px with
+// a 1.6px pentagon inside it, against 7.09px. Small was the ask; a smear is not.
+//
+// ⚠️ **THE CONTROL IS THE DESKTOP PAGE ABOVE, IN THE SAME RUN.** "No pips on a phone" is
+// equally true of a build that draws none anywhere, which is the whole feature deleted —
+// so every claim here is paired with the desktop numbers, and a sabotage that makes
+// `pipsDrawn` answer false everywhere reddens block 2 rather than this one.
+//
+// ⚠️ **AND THE PICKER IS CHECKED SEPARATELY FROM THE DRAW.** They are two changes: a build
+// that stands the pips down and leaves the tile pressable is a dead control, and a build
+// that hides the tile and still draws them is worse. Sabotaging either alone reddens only
+// its own check.
+const mp = await b.newPage({ viewport:{ width:390, height:844 }, deviceScaleFactor:3,
+                             hasTouch:true, isMobile:true });
+mp.on('pageerror', e => errors.push('phone: ' + e.message));
+mp.on('console', m => { if (m.type()==='error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) errors.push('phone: ' + m.text()); });
+await mp.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear();
+  localStorage.setItem('magnetball.firstrun','1'); });
+await mp.goto('file://' + process.cwd() + '/index.html');
+await mp.waitForTimeout(900);
+
+const ph = await mp.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const dm = document.getElementById('dmCollect'); if (dm) dm.click();
+  const cv = document.getElementById('game'), c2 = cv.getContext('2d');
+  const DPR = Math.max(1, cv.width / cv.clientWidth);
+
+  o.viewMode = M.viewMode();
+  o.isTouch = M.isTouchLayout();
+
+  // The picker row, read at boot with nothing called by hand — the wiring, not the helper.
+  const row = document.getElementById('scoreStyleRow');
+  o.pickerHidden = !!row && getComputedStyle(row).display === 'none';
+  o.offered = M.scoreStyleOffered();
+
+  const stage = (over) => {
+    M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.juice = false; M.sel.adsOn = 'off';
+    M.sel.length = 'g3'; M.sel.field = 'classic'; M.sel.kickoffRule = 'off';
+    M.sel.popups = 'off'; M.sel.scoreStyle = 'pips';
+    Object.assign(M.sel, over || {});
+    M.setMatchSeed(11); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    for (const q of w.players){ q.x = 0; q.y = 0; q.vx = q.vy = 0; q.ctrl = 'none'; }
+    w.ball.x = 0; w.ball.y = 0; w.ball.vx = w.ball.vy = 0;
+    M.juiceReset(); M.computeCam();
+    return w;
+  };
+  const frame = () => { M.computeCam(); M.render();
+                        return c2.getImageData(0, 0, cv.width, cv.height).data; };
+  const diff = (a, ref) => { let n = 0;
+    for (let i = 0; i < a.length; i += 4)
+      if (Math.abs(a[i]-ref[i]) + Math.abs(a[i+1]-ref[i+1]) + Math.abs(a[i+2]-ref[i+2]) > 24) n++;
+    return n; };
+
+  {
+    const w = stage();
+    o.pipsDrawn = M.pipsDrawn(w);
+    o.depth = +M.pipDepth(w).toFixed(2);
+    // What the row WOULD have drawn at, for the record: `pipRow` is pure arithmetic and
+    // answers whether or not anything is painted, which is what makes it quotable.
+    o.wouldBePipPx = +(M.pipRow(w, 0).r * M.cam.s).toFixed(2);
+    M.syncScorebug();
+    o.digitsShown = getComputedStyle(document.getElementById('scoreR')).display !== 'none';
+    o.bugHasPipsClass = document.getElementById('scorebug').classList.contains('pips');
+    // Nothing is painted anywhere: the WHOLE frame, not a band — with the pips stood down
+    // there is no band to aim at, and a whole-frame diff cannot miss a row drawn somewhere
+    // a band probe was not looking.
+    w.score[0] = 3; w.score[1] = 2;
+    M.sel.scoreStyle = 'num';  const off = frame();
+    M.sel.scoreStyle = 'pips'; const on  = frame();
+    o.frameUnchanged = diff(on, off);
+  }
+  // The camera and the hoardings are untouched, which is the whole point of the stand-down
+  // living in one predicate: `pipDepth` falls to 0, so neither has a second branch.
+  {
+    stage({ adsOn:'on' });
+    M.sel.scoreStyle = 'num';  M.computeCam(); const camNum = M.cam.s;
+    const endNum = M.adSlotRects(M.world).filter(q => q.along === 'x')
+                    .reduce((a, q) => Math.max(a, Math.abs(q.y)), 0);
+    M.sel.scoreStyle = 'pips'; M.computeCam(); const camPip = M.cam.s;
+    const endPip = M.adSlotRects(M.world).filter(q => q.along === 'x')
+                    .reduce((a, q) => Math.max(a, Math.abs(q.y)), 0);
+    o.camNum = +camNum.toFixed(4); o.camPips = +camPip.toFixed(4);
+    o.endBoardsMoved = +(endPip - endNum).toFixed(2);
+  }
+  return o;
+});
+
 await b.close();
 
 console.log(JSON.stringify(r, null, 1));
+console.log('PHONE:', JSON.stringify(ph, null, 1));
 
 // 1 — the shipped game is unchanged, and this is asserted before anything else because
 //     every block above set the style by hand and would pass on a wrong default.
@@ -352,6 +449,30 @@ ok(r.boardMarginPips > 0,
 // render only
 ok(r.hashNum === r.hashPips,
    `the score readout changed the match: ${r.hashNum} vs ${r.hashPips}`);
+
+// 6 — not on a phone. Each of these is paired with the desktop page's own numbers above,
+//     which is what stops "no pips here" being satisfied by the feature being deleted.
+ok(ph.viewMode === 'mobile' && ph.isTouch,
+   `the phone context is not a phone layout (${ph.viewMode}) — the rest of this block is vacuous`);
+ok(!ph.pipsDrawn,
+   `the Balls readout is still drawn on a phone, where a pip comes out ${ph.wouldBePipPx}px across ` +
+   `against ${r.smallest.pipPx}-${r.biggest.pipPx}px on a desktop`);
+ok(ph.digitsShown && !ph.bugHasPipsClass,
+   `a phone lost its scorebug digits (shown ${ph.digitsShown}, .pips ${ph.bugHasPipsClass}) — ` +
+   `standing the row down has to give the numbers back, or there is no score on screen at all`);
+ok(ph.frameUnchanged === 0,
+   `${ph.frameUnchanged} pixels differ between the two readouts on a phone — something is ` +
+   `still being painted`);
+ok(ph.depth === 0 && ph.endBoardsMoved === 0 && ph.camNum === ph.camPips,
+   `the phone still pays for a row it does not draw: depth ${ph.depth}, boards moved ` +
+   `${ph.endBoardsMoved}, camera ${ph.camNum} → ${ph.camPips}`);
+ok(ph.pickerHidden && !ph.offered,
+   `the Score readout picker is still on the menu on a phone (display shown: ${!ph.pickerHidden}) — ` +
+   `a tile that sets a value nothing acts on is a dead control`);
+// The other half of that pairing: it must still be THERE on a desktop, or "hidden on a
+// phone" is satisfied by a build that hid it everywhere and the toggle is unreachable.
+ok(r.pickerShown,
+   'the Score readout picker is hidden on a desktop too — the toggle is unreachable');
 
 console.log('COST: with the boards up the Balls readout costs ' + r.adsCostPct +
             '% of pitch scale (' + r.camAdsNum + ' → ' + r.camAdsPips + '); with them down, nothing.');

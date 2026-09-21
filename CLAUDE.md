@@ -1334,8 +1334,41 @@ three lines a second time, name it.
   `screenPt(wx(x), wy(y))`. `wx`/`wy` are PRE-rotation and `auto` turns the pitch on any
   wide window, so a probe assuming screen-down is world +y measures the middle of the pitch
   and reports no pips on a build that draws them perfectly.
+  ⚠️ **NOT ON A PHONE** (`isTouchLayout()` inside `pipsDrawn`, `scoreStyleOffered`,
+  `syncScoreStyleRow`, `#scoreStyleRow`), asked for a batch later as *"don't apply this
+  method of score showing on mobile"* — **and it is a measurement rather than a taste
+  call.** On a 390×844 handset `cam.s` is **0.656** against a desktop's 1.350, so a pip on
+  Classic is drawn at **3.44px with a 1.6px pentagon inside it**, against **7.09px**. Small
+  was the ask; a smear is not the same thing, and the row stands behind a goal rather than
+  in the bar at the top, so there is nothing to lean in and read. The digits are legible at
+  any size, which is what makes them the right readout on the screen where the pitch is
+  smallest.
+  ⚠️ **ONE PREDICATE IS THE WHOLE STAND-DOWN, and that is the payoff for `pipsDrawn` being
+  the one gate.** The digits come back (`syncScorebug` toggles `.pips` off it), `pipDepth`
+  falls to 0 so the end hoardings stay exactly where they were, and `endReach` falls back
+  to `adReach` so the camera is untouched — measured on a phone as **depth 0, boards moved
+  0, `cam.s` 0.627 either way**. Three consequences, no second branch to keep right.
+  ⚠️ **`isTouchLayout()` rather than a width**, because that is already what this file means
+  by "a phone": `viewMode() === 'mobile'`, so a cocktail table, an arcade cabinet and a
+  Steam Deck — all touch-capable, none of them a handset — keep the pips.
+  ⚠️ **THE PICKER IS HIDDEN THERE, NOT LEFT LIVE** (`mapsPossible`'s shape, re-answered on
+  `resize`): a tile that sets a value nothing acts on is the dead control this file refuses.
+  It is a SEPARATE change from the draw and is sabotaged separately — a build that stands
+  the pips down and leaves the tile pressable, and a build that hides the tile and still
+  draws them, are different defects and neither check sees the other's.
+  ⚠️ **THERE IS NO GENERIC `.hidden` RULE IN THIS STYLESHEET, and finding that out is why
+  `#scoreStyleRow.hidden` carries its own.** Measured: a bare `<div class="hidden">`
+  appended to the page computes `display: block`. Every other user of that class has an
+  id rule of its own; `menuSearchIndex`'s `closest('.hidden')` is a separate mechanism and
+  does not lay anything out. Deleting the rule is a caught sabotage.
+  ⚠️ **THE CONTROL IS THE DESKTOP PAGE, IN THE SAME RUN.** *"No pips on a phone"* is equally
+  true of a build that draws none anywhere — which is the feature deleted — so the phone
+  block is paired with the desktop numbers, and a `pipsDrawn` that always answers false
+  reddens the draw block rather than the phone one. Same for the picker: *"hidden on a
+  phone"* is paired with it being SHOWN on a desktop, read off the ROW's own computed
+  display and never the tile count, which is built either way.
   ⚠️ Render only — the world is bit-identical over 900 steps with the style on and off.
-  Nine sabotages, each caught by its own check.
+  Fourteen sabotages, each caught by its own check.
 - **Floating stat text** (`FLOAT`, `floaters`, `addFloater`, `advanceFloaters`,
   `drawFloaters`, `sel.popups`): a short label over a player the instant they earn
   something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST.
