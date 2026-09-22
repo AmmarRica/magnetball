@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260922.0740PM';
+const VERSION = '20260922.0925PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,12 @@ const VERSION = '20260922.0740PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260922.0925PM', title: 'The Sunday League players run properly',
+    changed: [
+      '<b>The footballers now swing their legs front to back under the body</b> rather than trailing them behind, which read as swimming. A foot reaches out in front, passes under the shirt and comes out behind, and the arms swing the other way like they do when you run.',
+      '<b>The stride is smooth instead of two frames.</b> It still speeds up and slows down with how fast the player is moving, and a player standing still holds a stance rather than being caught mid-step.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260922.0740PM', title: 'Everything in the Theme card reads A\u2013Z',
     changed: [
       '<b>Every picker in the Theme card is now in alphabetical order.</b> The themes already were; the field, player, ball, trail and sound rows were in whatever order they happened to be added in, so finding one meant scanning the whole row.',
@@ -33714,22 +33720,56 @@ DISC_SKINS.sleeve = {
 // measured a lightness gap of 1.13**, which is nothing: `#e86a17` is luminance 0.267 and
 // `#3d9ae0` is 0.31. Faithful and unreadable to a colour-blind player, so the two kits
 // taken are the ones in the picture that ARE far apart.
-// ⚠️ **THE STRIDE IS `legFrame`, THE EXISTING DISTANCE-DRIVEN GAIT.** Never a clock —
-// anything advanced in a draw runs 2.4x fast on a 144Hz screen — and the arms COUNTER-
-// swing the legs, which is what running does and what stops four limbs reading as a star
-// jump. Frame 0 is the rest pose and the swing is scaled back to a stance while the
-// player is under `GAIT.minSpd`, so a standing footballer is not caught mid-stride.
+// ⚠️ **THE STRIDE IS `gaitSwing`, A CONTINUOUS PHASE OF THE EXISTING DISTANCE-DRIVEN
+// GAIT.** Never a clock — anything advanced in a draw runs 2.4x fast on a 144Hz screen —
+// and the arms COUNTER-swing the legs, which is what running does and what stops four
+// limbs reading as a star jump. At rest it is a fixed stance rather than the phase frozen
+// wherever it stopped, so a standing footballer is not caught mid-stride.
 const FOOTBALLER = {
   torsoA: 0.74, torsoB: 0.88,      // the shirt from above: wider ACROSS than along
   headR:  0.50, headAt: 0.05,      // the top of the head, the biggest single shape
   hairR:  0.84, hairBack: 0.12,    // ...hair over it, leaving a crescent of face in front
   shortsAt: -0.62, shortsA: 0.28, shortsB: 0.52,
-  arm: { at:[ 0.18,  0.50], to:[ 0.54, 1.06], w: 0.22 },
-  leg: { at:[-0.24,  0.32], to:[-0.76, 0.76], w: 0.26 },
+  // ⚠️ **A LIMB SWINGS FORE-AND-AFT ABOUT ITS OWN JOINT, and the first build had both
+  // limbs PARKED — reported as the players looking like they were swimming.** Measured on
+  // that build, facing +x, the boot's centroid along the facing axis: **-0.55r and
+  // -1.01r**, the two feet swapping between those two places and NOTHING else. The foot
+  // was never once in front of the body, one foot's whole travel was **0.46r**, and both
+  // feet were splayed to 0.76r across — while the hands sat permanently in FRONT at +0.54
+  // and flung out to 1.06. Arms forward, legs back, neither moving through the body: a
+  // breaststroke. Measured on the same probe now: the foot runs **-1.09 .. +0.57** about a
+  // hip at -0.28 and the hand **-0.16 .. +0.62**, correlation between the two **-0.997**.
+  // ⚠️ **THE SHIRT IS DRAWN OVER THE LIMBS, so passing under the torso is OCCLUSION and
+  // that is what "under the player" MEANS here** — the leg is hidden where it crosses the
+  // shirt and emerges behind. It is also the trap: the two legs are half a cycle apart, so
+  // they tuck TOGETHER, and arms counter-swinging the legs tuck on the same phase. All
+  // four limbs hidden at once is a bare oval twice a stride.
+  // ⚠️ **WHICH IS WHY THE HAND IS HELD AT 1.20 ACROSS AND THE FOOT AT 0.62.** The shirt is
+  // an ellipse 0.74 along by 0.88 across, so a hand outside 0.88 clears it at EVERY phase
+  // and the arms carry the figure's reach through the moment the legs are under the body.
+  // The legs are free to sweep under because the arms are not. Measured over a whole cycle
+  // in `tests/footballers.mjs`: the figure reaches 1.34..1.49r at every phase, never once
+  // falling back to the shirt's own 0.88.
+  hip:  [-0.28, 0.36], foot: 0.62, legSwing: 0.80, legW: 0.26,
+  sh:   [ 0.24, 0.54], hand: 1.20, armSwing: 0.45, armW: 0.22,
   bootR: 0.19,
-  swing: 0.24,        // how far a limb travels between the two frames
-  stand: 0.38,        // ...and how much of that is left when nobody is running
+  stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
 };
+// ⚠️ **THE STRIDE IS A CONTINUOUS PHASE, NOT TWO FRAMES** — asked for as more frames of
+// animation, and a phase is every frame rather than a bigger number of them. Driven by
+// `p.gait`, the DISTANCE travelled, exactly as `legFrame` is: never a clock, because
+// anything advanced in a draw runs 2.4x fast on a 144Hz screen. The period is `2 *
+// GAIT.stride`, which is `legFrame`'s own full cycle, so the CADENCE is unchanged and
+// only the smoothness is new.
+// ⚠️ **`legFrame` IS UNTOUCHED.** The creature skins are built on its two frames and
+// `tests/discskins.mjs` pins its claims — rest is frame 0, a draw must not advance it.
+// This is a second reader of the same `p.gait`, not a change to the first.
+// ⚠️ **AT REST IT IS A FIXED STANCE, never the phase frozen wherever it stopped**, or a
+// player who stops mid-stride is left standing with one leg stretched out behind.
+function gaitSwing(p){
+  if (Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd) return FOOTBALLER.stand;
+  return Math.sin((p.gait || 0) / GAIT.stride * Math.PI);
+}
 // Four people rather than one, so a side does not read as eight clones. The hair and skin
 // tones are the picture's own, sampled off it. ⚠️ Chosen by a HASH OF THE NAME, never
 // rolled: a paint has to give the same picture twice for one step, and `Math.random` is
@@ -33765,23 +33805,26 @@ DISC_SKINS.footballers = {
     // is a choice about the look rather than a contrast maximum.
     const trim = relLum(col) > 0.5 ? (TH.discRim || '#151515') : '#ffffff';
     const [hair, skin] = kitPerson(p);
-    const fr = legFrame(p);
-    const moving = Math.hypot(p.vx || 0, p.vy || 0) >= GAIT.minSpd;
-    const sw = F.swing * (moving ? 1 : F.stand);
+    const s = gaitSwing(p);
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
-    // --- limbs first, so the shirt sits over where they meet the shoulder -----------
+    // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
+    //     under the body, and it is the whole of what makes this read from above -------
     for (const sgn of [-1, 1]){
-      const fwd = ((fr + (sgn > 0 ? 0 : 1)) & 1) ? sw : -sw;
-      const A = pt(F.leg.at[0], F.leg.at[1]*sgn);
-      const B = pt(F.leg.to[0] + fwd, F.leg.to[1]*sgn);
-      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.leg.w);
+      const sw = s * sgn;                                  // the two sides are half a cycle apart
+      // The foot travels along the facing axis about a hip that does not move, so the leg
+      // points forward, shortens as it passes under the shirt, and points back again.
+      const A = pt(F.hip[0], F.hip[1]*sgn);
+      const B = pt(F.hip[0] + F.legSwing*sw, F.foot*sgn);
+      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.legW);
       c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
       c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
       c.fillStyle = ink; c.fill();
-      const S = pt(F.arm.at[0], F.arm.at[1]*sgn);
-      const H = pt(F.arm.to[0] - fwd, F.arm.to[1]*sgn);   // ...counter-swung
-      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.arm.w);
+      // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
+      // running does and what stops four limbs reading as a star jump.
+      const S = pt(F.sh[0], F.sh[1]*sgn);
+      const H = pt(F.sh[0] - F.armSwing*sw, F.hand*sgn);
+      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.armW);
       c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
     }
     // --- shorts, shirt, head --------------------------------------------------------
@@ -36659,7 +36702,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

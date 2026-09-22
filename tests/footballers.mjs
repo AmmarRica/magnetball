@@ -17,10 +17,11 @@
 // must not advance it, frame 0 is the rest pose, faster travel means faster legs). One
 // owner, many readers — a second copy is the one that rots.
 //
-// ⚠️ Measurement traps, both hit while writing this. The pixels have to be classified
-// against the flat backdrop the figure is painted on, not against an absolute — and the
-// two frames of the walk differ ONLY in the limbs, so a whole-frame diff that finds
-// nothing inside the torso is the claim rather than a weakness.
+// ⚠️ Measurement traps. The pixels have to be classified against the flat backdrop the
+// figure is painted on, not against an absolute; the two ends of the stride differ ONLY in
+// the limbs, so a whole-frame diff that finds nothing inside the torso is the claim rather
+// than a weakness; and the two limb probes each produced a false reading before they were
+// right — see the notes on `boot` below.
 import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:900,height:900} });
@@ -51,58 +52,129 @@ const r = await p.evaluate(async ()=>{
   };
   const near = (d,i,col,tol) => Math.abs(d[i]-col[0])+Math.abs(d[i+1]-col[1])+Math.abs(d[i+2]-col[2]) <= tol;
   const hex = (h) => [1,3,5].map(k=>parseInt(h.substr(k,2),16));
-  // Farthest painted pixel from the centre, over whatever "painted" is asked for.
-  const reach = (d, pick) => {
-    let m = 0, n = 0;
+  // Farthest painted pixel from the centre and the centroid ALONG the facing axis, over
+  // whatever "painted" is asked for. Facing is +x here, so `ax` is along and `ay` across.
+  const scan = (d, pick) => {
+    let m = 0, n = 0, sx = 0;
     for (let i=0;i<d.length;i+=4){
-      if (!pick(d,i)) continue;
-      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
-      m = Math.max(m, Math.hypot(ax, ay)); n++;
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY, rad = Math.hypot(ax,ay);
+      if (!pick(d,i,ax,ay,rad)) continue;
+      m = Math.max(m, rad); sx += ax; n++;
     }
-    return { reach:+m.toFixed(1), n };
+    return { reach:+(m/R).toFixed(3), along: n ? +(sx/n/R).toFixed(3) : null, n };
   };
   const anyInk = (d,i) => !near(d,i,BG,40);
+  const fnv = (d) => { let h=2166136261; for (let i=0;i<d.length;i+=4){ h ^= d[i]; h = Math.imul(h,16777619); h ^= d[i+1]; h = Math.imul(h,16777619); h ^= d[i+2]; h = Math.imul(h,16777619); } return h>>>0; };
+  const moved = (a2,b2,keep) => {
+    let n = 0;
+    for (let i=0;i<a2.length;i+=4){
+      const diff = Math.abs(a2[i]-b2[i])+Math.abs(a2[i+1]-b2[i+1])+Math.abs(a2[i+2]-b2[i+2]);
+      if (diff <= 24) continue;
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      if (keep(Math.hypot(ax,ay))) n++;
+    }
+    return n;
+  };
+  const corr = (u,v) => {
+    const mu = u.reduce((s2,x2)=>s2+x2,0)/u.length, mv = v.reduce((s2,x2)=>s2+x2,0)/v.length;
+    let num=0, du=0, dv=0;
+    for (let i=0;i<u.length;i++){ const a2=u[i]-mu, b2=v[i]-mv; num+=a2*b2; du+=a2*a2; dv+=b2*b2; }
+    return +(num/Math.sqrt(du*dv || 1)).toFixed(3);
+  };
 
-  // ---- 1. the body is inside the ring and the limbs are not --------------------
+  // ---- 1. the stride, sampled right round the cycle ---------------------------
+  // ⚠️ **THE OLD BLOCK COMPARED `gait:0` AGAINST `gait:GAIT.stride`, AND ON A CONTINUOUS
+  // PHASE THOSE ARE BOTH ZERO-CROSSINGS** — sin(0) and sin(pi) — so the two "walk frames"
+  // became the SAME PICTURE and every check hung off them went vacuous. It is measured
+  // right round the cycle now, which is also the only way to say a foot goes in front AND
+  // behind rather than merely moving.
   const homeCol = M.TH.teamRed, awayCol = M.TH.teamBlue;
-  const walk0 = paint({ vx:3, gait:0 });
-  const figure = reach(walk0, anyInk);
-  const shirt  = reach(walk0, (d,i)=>near(d,i,hex(homeCol),48));
-  o.figureReach = figure.reach;      o.shirtReach = shirt.reach;
-  o.shirtPixels = shirt.n;
-  o.figureOverR = +(figure.reach / R).toFixed(3);
-  o.shirtOverR  = +(shirt.reach  / R).toFixed(3);
-  o.shirtInsideTheRing  = shirt.n > 400 && shirt.reach <= R;
-  o.limbsCrossTheRing   = figure.reach >= R * 1.15;
-  o.limbsAreLimbs       = figure.reach <= R * 1.60;      // ...and not a bigger body
-  o.limbsClearTheShirt  = figure.reach >= shirt.reach * 1.25;
+  const ink = hex(M.TH.discRim || '#151515');
+  const skinCol = hex(M.kitPerson({ name:'Mike' })[1]);
+  const PH = 12, CYCLE = 2 * M.GAIT.stride;
+  const frames = [];
+  for (let k=0;k<PH;k++) frames.push(paint({ vx:3, gait: k*CYCLE/PH }));
 
-  // ---- 2. the walk: two frames, and they differ ONLY outside the torso ---------
-  const a0 = paint({ vx:3, gait:0 });
-  const a1 = paint({ vx:3, gait:M.GAIT.stride });
-  let movedOut = 0, movedIn = 0;
-  for (let i=0;i<a0.length;i+=4){
-    const diff = Math.abs(a0[i]-a1[i])+Math.abs(a0[i+1]-a1[i+1])+Math.abs(a0[i+2]-a1[i+2]);
-    if (diff <= 24) continue;
-    const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY, rad = Math.hypot(ax,ay);
-    if (rad > R*0.80) movedOut++; else if (rad < R*0.55) movedIn++;
+  // ⚠️ ONE SIDE ONLY. The two legs are half a cycle apart, so the pair's centroid barely
+  // moves and the UNION of both limbs is symmetric under the swap — measured on the
+  // reported build as `lo -0.93, hi 0.87` at every single phase, a probe that could not
+  // see the defect at all. Facing +x puts `sgn:+1` in the lower half (`ay > 0`).
+  // ⚠️ THE BOOT IS ISOLATED BY HOW FAR ACROSS IT IS, NEVER BY RADIUS FROM THE CENTRE, and
+  // a radius filter is what got written first: the boot sits 0.62r across, so at the phase
+  // where it is directly beside the body its radius is 0.68r, a `rad > 0.80r` cut kept only
+  // the outer rim of it — and at the next phase it lost the boot ENTIRELY and the probe
+  // reported a fabricated 0 for the centroid. Across it is the hair that has to be
+  // excluded (the same ink on one of the four people), and the hair reaches 0.42r across
+  // against a boot spanning 0.43..0.81r.
+  const boot = (d,i,ax,ay,rad) => ay > R*0.45 && near(d,i,ink,40);
+  // ...and the hand by being further ACROSS than any part of a leg can reach (foot 0.62
+  // plus half the leg's width is 0.75r, against a hand held at 1.20r).
+  const hand = (d,i,ax,ay,rad) => ay > R*0.95 && near(d,i,skinCol,40);
+  const footAlong = [], handAlong = [], handPix = [], bootPix = [], figR = [], shirtR = [];
+  for (const f of frames){
+    const bt = scan(f, boot), hd = scan(f, hand);
+    footAlong.push(bt.along); handAlong.push(hd.along);
+    handPix.push(hd.n); bootPix.push(bt.n);
+    figR.push(scan(f, anyInk).reach);
+    shirtR.push(scan(f, (d,i)=>near(d,i,hex(homeCol),48)).reach);
   }
-  o.framesDifferOutside = movedOut;
-  o.framesSameInside    = movedIn;
-  o.limbsAnimate        = movedOut > 300;
-  o.torsoHoldsStill     = movedIn < 40;
-  // ⚠️ Frame 0 is the rest pose AND the swing is scaled back below GAIT.minSpd, so a
-  // standing player is not caught mid-stride. Measured as the picture itself: how far the
-  // walking frame is from the standing one at the same frame number.
+  // ⚠️ **A PHASE WHERE THE BOOT IS NOWHERE TO BE FOUND IS THE FEATURE, NOT A HOLE IN THE
+  // PROBE — and it was read as a hole first.** The limbs are painted BEFORE the shirt, so
+  // a foot swung level with the hip sits under an ellipse 0.88r across and is covered
+  // completely: that occlusion is the whole of what "under the player" means here. The
+  // pair is what says so — the boot has to be plainly there at some phase and plainly gone
+  // at another. The reported build could satisfy neither: its foot was pinned behind the
+  // body at 0.76r across, where the shirt does not reach at all.
+  o.bootPixels = bootPix;
+  // A whole boot is ~370 pixels at this radius, so 250 is plainly there and 20 is gone.
+  o.footPassesUnderTheShirt = bootPix.some(n => n < 20) && bootPix.some(n => n > 250);
+  o.footAlong  = footAlong;
+  o.handAlong  = handAlong;
+  const seen = footAlong.map((v,i2)=>[v,i2]).filter(([v])=>v != null);
+  o.footFront  = Math.max(...seen.map(([v])=>v));
+  o.footBack   = Math.min(...seen.map(([v])=>v));
+  o.footTravel = +(o.footFront - o.footBack).toFixed(3);
+  o.handFront  = Math.max(...handAlong);   o.handBack = Math.min(...handAlong);
+  o.handTravel = +(o.handFront - o.handBack).toFixed(3);
+  // ...paired over the phases where BOTH were measurable, or a null foot pulls the
+  // correlation toward whatever a fabricated value happens to be.
+  o.legArmCorr = corr(seen.map(([v])=>v), seen.map(([,i2])=>handAlong[i2]));
+  o.handPixelsMin = Math.min(...handPix);
+  o.poses = new Set(frames.map(fnv)).size;
+  o.footSwingsThroughTheBody = o.footFront > 0.15 && o.footBack < -0.50;
+  o.handSwingsForeAndAft     = o.handTravel > 0.30;
+  o.armsCounterSwingTheLegs  = o.legArmCorr < -0.90;
+  o.armsAlwaysVisible        = o.handPixelsMin > 30;
+  o.manyFrames               = o.poses >= 6;
+
+  // ---- 2. the ring exception, held at EVERY phase ------------------------------
+  const shirtPx = scan(frames[0], (d,i)=>near(d,i,hex(homeCol),48));
+  o.shirtPixels = shirtPx.n;
+  o.figureReachMin = Math.min(...figR);  o.figureReachMax = Math.max(...figR);
+  o.shirtReachMax  = Math.max(...shirtR);
+  o.shirtInsideTheRing  = shirtPx.n > 400 && o.shirtReachMax <= 1.0;
+  o.limbsCrossTheRing   = o.figureReachMin >= 1.15;      // at the WORST phase, not the best
+  o.limbsAreLimbs       = o.figureReachMax <= 1.60;      // ...and not a bigger body
+  o.limbsClearTheShirt  = o.figureReachMin >= o.shirtReachMax * 1.25;
+
+  // ---- 3. the swing goes UNDER the torso, which is the shirt occluding it ------
+  // The two opposite peaks of the phase (`sin` at +1 and -1), a quarter and three quarters
+  // of the way round: the limbs are at opposite ends of their travel and the shirt, the
+  // head and the shorts are the same picture in both.
+  const a0 = frames[Math.round(PH*0.25)], a1 = frames[Math.round(PH*0.75)];
+  o.framesDifferOutside = moved(a0, a1, rad => rad > R*0.80);
+  o.framesSameInside    = moved(a0, a1, rad => rad < R*0.55);
+  o.limbsAnimate        = o.framesDifferOutside > 300;
+  o.torsoHoldsStill     = o.framesSameInside < 40;
+
+  // ⚠️ AT REST IT IS A FIXED STANCE, never the phase frozen wherever the player stopped —
+  // or somebody who stops mid-stride is left standing with a leg stretched out behind.
   const stand = paint({ vx:0, gait:0 });
-  let strideMoved = 0;
-  for (let i=0;i<stand.length;i+=4){
-    const diff = Math.abs(stand[i]-a0[i])+Math.abs(stand[i+1]-a0[i+1])+Math.abs(stand[i+2]-a0[i+2]);
-    if (diff > 24) strideMoved++;
-  }
-  o.standIsCalmer = strideMoved > 120;
+  o.restIsAFixedStance = fnv(stand) === fnv(paint({ vx:0, gait: CYCLE*0.37 }));
+  o.standMoved   = moved(stand, a0, () => true);
+  o.standIsCalmer = o.standMoved > 120;
 
-  // ---- 3. the sides: measured, because the silhouette rule cannot be met -------
+  // ---- 4. the sides: measured, because the silhouette rule cannot be met -------
   // Both sides are footballers, so the LIGHTNESS GAP is the instrument, the way it is
   // for Sketchbook's counters. The bar is set above Sketchbook's own widest pair (1.87),
   // because a pair no wider than that one buys nothing a colour-blind player can use.
@@ -111,17 +183,15 @@ const r = await p.evaluate(async ()=>{
   o.kitLums = [ +lum(homeCol).toFixed(3), +lum(awayCol).toFixed(3) ];
   o.lightGap = +(((Math.max(...o.kitLums)+0.05)/(Math.min(...o.kitLums)+0.05))).toFixed(2);
   o.sidesFarApartInLightness = o.lightGap > 1.87;
-  const away = paint({ team:1, vx:3, gait:0 });
-  let sideDiff = 0;
-  for (let i=0;i<a0.length;i+=4){
-    if (Math.abs(a0[i]-away[i])+Math.abs(a0[i+1]-away[i+1])+Math.abs(a0[i+2]-away[i+2]) > 24) sideDiff++;
-  }
-  o.sidesDifferOnScreen = sideDiff > 1500;
+  // ...at the SAME phase as the home frame it is compared against, or the limbs move
+  // between the two pictures and a build whose two kits are identical still scores.
+  const away = paint({ team:1, vx:3, gait: Math.round(PH*0.25)*CYCLE/PH });
+  o.sidesDifferOnScreen = moved(a0, away, () => true) > 1500;
   // ...and the shirt really is the TEAM colour, so a palette swap recolours it.
-  o.awayShirtPixels = reach(away, (d,i)=>near(d,i,hex(awayCol),48)).n;
+  o.awayShirtPixels = scan(away, (d,i)=>near(d,i,hex(awayCol),48)).n;
   o.shirtIsTheTeamColour = o.shirtPixels > 400 && o.awayShirtPixels > 400;
 
-  // ---- 4. the kit trim is WHITE on a dark kit, dark on a pale one --------------
+  // ---- 5. the kit trim is WHITE on a dark kit, dark on a pale one --------------
   // ⚠️ This is a real defect caught by a render rather than by reasoning: the first build
   // used `pickTextColor`, which takes whichever ink has the higher CONTRAST — and that is
   // the dark one on BOTH of this theme's kits, so the picture's white shorts came out
@@ -137,7 +207,7 @@ const r = await p.evaluate(async ()=>{
   o.trimIsLightOnADarkKit = mean(o.trimOnDarkKit) > 200;
   o.trimIsDarkOnAPaleKit  = mean(o.trimOnPaleKit) < 90;
 
-  // ---- 5. four people, chosen by a hash, never rolled --------------------------
+  // ---- 6. four people, chosen by a hash, never rolled --------------------------
   const sig = (name)=> paint({ name, vx:3 }).join(',');
   o.sameNameSamePicture = sig('Mike') === sig('Mike');
   const looks = new Set(['Mike','vape','salt','bolt','jake','moon','cat','dog'].map(sig));
@@ -148,11 +218,11 @@ const r = await p.evaluate(async ()=>{
   o.noRandomInThePaint = !/Math\s*\.\s*random/.test(String(M.DISC_SKINS.footballers.paint) +
                                                     String(M.kitPerson));
 
-  // ---- 6. the body turns to face travel ---------------------------------------
+  // ---- 7. the body turns to face travel ---------------------------------------
   const facing = (fx, fy) => paint({ faceX:fx, faceY:fy, vx:3 }).join(',');
   o.turnsToFaceTravel = facing(1,0) !== facing(0,1);
 
-  // ---- 7. the theme ------------------------------------------------------------
+  // ---- 8. the theme ------------------------------------------------------------
   o.isBundle = !!M.bundleSlots('kickabout');
   M.applyBundle('kickabout');
   o.slots = JSON.stringify(M.liveSlots());
@@ -168,7 +238,7 @@ const r = await p.evaluate(async ()=>{
   o.reusesClassicBall = bs.ball === 'classic';
   o.themeNamed = M.THEMES.kickabout.name;
 
-  // ---- 8. render only, and it plays -------------------------------------------
+  // ---- 9. render only, and it plays -------------------------------------------
   // ⚠️ **THE CONTROL IS THE SAME THEME WITH THE SKIN STOOD DOWN, and `applyBundle` for the
   // other arm was VACUOUS — caught by a sabotage passing.** There is no `classic` theme
   // key (the default palette is `grass`), so `applyBundle('classic')` is a silent no-op
@@ -205,20 +275,34 @@ const r = await p.evaluate(async ()=>{
 
 const fail=[];
 const ok=(c2,m)=>{ if(!c2) fail.push(m); };
+ok(r.footPassesUnderTheShirt,
+  `the boot is either always visible or never (${JSON.stringify(r.bootPixels)} pixels by phase) — the limbs are painted under the shirt so that a foot level with the hip is COVERED by it, and that occlusion is the whole of "swing under the player". A foot pinned out behind the body, which is what was reported, is never covered at all`);
+ok(r.footSwingsThroughTheBody,
+  `one foot's centroid runs ${r.footBack}..${r.footFront}r along the facing axis over a whole cycle (${JSON.stringify(r.footAlong)}) — it has to reach in FRONT of the body and behind it, passing under the shirt on the way. Parked behind at both ends is what was reported as the players swimming, and on that build it measured -1.01..-0.55`);
+ok(r.handSwingsForeAndAft,
+  `the hand travels ${r.handTravel}r over a cycle (${JSON.stringify(r.handAlong)}) — the arms swing fore-and-aft too, they are not held out in front`);
+ok(r.armsCounterSwingTheLegs,
+  `the foot and the hand on the SAME side move together (correlation ${r.legArmCorr}) — the arms counter-swing the legs, which is what running does and what stops four limbs reading as a star jump`);
+ok(r.armsAlwaysVisible,
+  `at some phase the hand all but disappears (${r.handPixelsMin} pixels at its worst) — the legs are free to sweep under the shirt only because the ARMS are held wide enough to clear it at every phase, or all four limbs tuck at once and the figure is a bare oval twice a stride`);
+ok(r.manyFrames,
+  `only ${r.poses} distinct pictures over a whole stride — "add more frames of animation" was the ask, and the two-frame build scored 2`);
 ok(r.shirtInsideTheRing,
-  `the SHIRT crosses the guide ring: reach ${r.shirtReach} of ${r.shirtOverR}r over ${r.shirtPixels} pixels — the body has to stay inside the circle it collides with, which is the half of the exception that was NOT granted`);
+  `the SHIRT crosses the guide ring: ${r.shirtReachMax}r at its worst phase over ${r.shirtPixels} pixels — the body has to stay inside the circle it collides with, which is the half of the exception that was NOT granted`);
 ok(r.limbsCrossTheRing,
-  `nothing reaches past the guide ring: the whole figure is ${r.figureOverR}r — "legs can go out" was the ask, and a figure that stops at the ring has no limbs on it`);
+  `at some phase nothing reaches past the guide ring: the figure falls to ${r.figureReachMin}r — "legs can go out" was the ask, and it has to hold right round the cycle rather than at one lucky pose`);
 ok(r.limbsAreLimbs,
-  `the figure reaches ${r.figureOverR}r — past the ceiling, which is a body drawn bigger than the thing it collides with rather than limbs sticking out of one`);
+  `the figure reaches ${r.figureReachMax}r — past the ceiling, which is a body drawn bigger than the thing it collides with rather than limbs sticking out of one`);
 ok(r.limbsClearTheShirt,
-  `the limbs barely clear the shirt: figure ${r.figureOverR}r against shirt ${r.shirtOverR}r`);
+  `the limbs barely clear the shirt: figure ${r.figureReachMin}r at its worst against shirt ${r.shirtReachMax}r`);
 ok(r.limbsAnimate,
-  `the two walk frames are the same picture outside the torso (${r.framesDifferOutside} pixels moved) — the legs do not swing`);
+  `the two opposite peaks of the stride are the same picture outside the torso (${r.framesDifferOutside} pixels moved) — the legs do not swing`);
 ok(r.torsoHoldsStill,
-  `${r.framesSameInside} pixels inside the torso changed between the two walk frames — the head and shirt must hold still while only the limbs swing`);
+  `${r.framesSameInside} pixels inside the torso changed between the two peaks of the stride — the head and shirt must hold still while only the limbs swing under them`);
+ok(r.restIsAFixedStance,
+  'a standing player draws a different pose at a different `gait` — at rest it must be a FIXED stance, or somebody who stops mid-stride is left with a leg stretched out behind');
 ok(r.standIsCalmer,
-  `a standing player and a walking one draw the same pose (${r.framesSameInside}) — the stride is not scaled back below GAIT.minSpd`);
+  `a standing player and a walking one draw the same pose (${r.standMoved} pixels apart) — the stride is not scaled back below GAIT.minSpd`);
 ok(r.sidesFarApartInLightness,
   `the two kits are ${r.lightGap} apart in lightness (${JSON.stringify(r.kits)} = ${JSON.stringify(r.kitLums)}) — both sides are footballers, so the silhouette rule cannot be met and this gap is the only thing a colour-blind player has. Sketchbook's widest pair is 1.87 and that is the bar`);
 ok(r.sidesDifferOnScreen, 'the two sides render identically');

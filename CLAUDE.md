@@ -2538,13 +2538,44 @@ three lines a second time, name it.
   blue side and black on the yellow. What is wanted is white unless the kit is genuinely
   pale, which is a choice about the look rather than a contrast maximum: `relLum(col) >
   0.5`. Caught by rendering it, not by reasoning.
-  ⚠️ **THE STRIDE IS `legFrame`, the existing distance-driven gait** — never a clock, the
-  standing rule — and the **ARMS COUNTER-SWING the legs**, which is what running does and
-  what stops four limbs reading as a star jump. Frame 0 is the rest pose and the swing is
-  scaled back to a stance below `GAIT.minSpd`, so a standing footballer is not caught
-  mid-stride. `tests/discskins.mjs` already owns the gait's generic claims (a draw must
-  not advance it, rest is frame 0, faster travel means faster legs) and they are **not**
-  repeated in the new suite.
+  ⚠️ **A LIMB SWINGS FORE-AND-AFT ABOUT ITS OWN JOINT, AND THE FIRST BUILD HAD ALL FOUR
+  PARKED — reported as the players looking like they were swimming.** Measured on that
+  build, facing +x, the boot's centroid along the facing axis: **−1.01 and −0.55**, the two
+  feet swapping between those two places and nothing else. The foot was never once in front
+  of the body, one foot's whole travel was **0.46r**, and the hands sat permanently in
+  FRONT at +0.54. Arms forward, legs back, neither moving through the body: a breaststroke.
+  The foot now runs **−1.09 .. +0.57** about a hip at −0.28 and the hand **−0.16 .. +0.62**.
+  ⚠️ **THE SHIRT IS DRAWN OVER THE LIMBS, SO PASSING UNDER THE TORSO IS OCCLUSION — and
+  that is what "under the player" MEANS here.** The leg is hidden where it crosses the
+  shirt and emerges behind, so the check is a PAIR: the boot is plainly there at some phase
+  (367 pixels) and plainly gone at another (0). Neither half is true of the reported build,
+  whose foot sat 0.76r across, where the shirt does not reach at all.
+  ⚠️ **WHICH IS ALSO THE TRAP: all four limbs tuck AT ONCE.** The two legs are half a cycle
+  apart, so they tuck together, and arms counter-swinging the legs tuck on the same phase —
+  a bare oval twice a stride. The hand is therefore held at **1.20r across**, outside the
+  shirt's own 0.88, so the arms carry the figure's reach through the moment the legs are
+  under the body. Measured: the figure reaches **1.34..1.49r at every phase**, and pulling
+  the hand in to 0.70 drops it under the 1.15 floor.
+  ⚠️ **THE STRIDE IS A CONTINUOUS PHASE (`gaitSwing`), NOT TWO FRAMES** — asked for as more
+  frames of animation, and a phase is EVERY frame rather than a bigger number of them. It
+  is `sin(p.gait / GAIT.stride * π)`: the same distance-driven `p.gait` `legFrame` reads,
+  never a clock, with a period of `2 * GAIT.stride` so the CADENCE is unchanged and only
+  the smoothness is new. Twelve samples round a cycle draw **7 distinct pictures** against
+  the two-frame build's 2.
+  ⚠️ **`legFrame` IS UNTOUCHED AND IS STILL THE OWNER OF THE GENERIC CLAIMS.** The creature
+  skins are built on its two frames and `tests/discskins.mjs` pins them (a draw must not
+  advance it, rest is frame 0, faster travel means faster legs) — this is a second reader
+  of the same `p.gait`, not a change to the first, and those claims are **not** repeated in
+  the footballers' own suite.
+  ⚠️ **AT REST IT IS A FIXED STANCE, never the phase frozen wherever the player stopped**,
+  or somebody who stops mid-stride is left standing with a leg stretched out behind.
+  ⚠️ **THE BOOT IS ISOLATED BY HOW FAR ACROSS IT IS, NEVER BY RADIUS FROM THE CENTRE**, and
+  a radius filter is what got written first: at the phase where the boot is level with the
+  hip its radius is 0.68r, so a `rad > 0.80r` cut kept only its outer rim and at the next
+  phase lost it entirely — and the probe then reported a **fabricated 0** for the centroid.
+  Equally, the UNION of both limbs is symmetric under the half-cycle swap and read `lo
+  −0.93, hi 0.87` at every single phase on the broken build: **one side only**.
+  ⚠️ **Thirteen sabotages, each caught by its own check.** `tests/footballers.mjs`.
   ⚠️ **FOUR PEOPLE, CHOSEN BY A HASH OF THE NAME, never rolled**: a paint has to give the
   same picture twice for one step. The hair and skin tones are the picture's own.
   ⚠️ **A PALETTE AND A LOOK, with no `DYN_FIELDS` painter and no `pitch`** — the same
