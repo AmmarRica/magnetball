@@ -340,16 +340,21 @@ const ph = await mp.evaluate(() => {
   }
   // The camera and the hoardings are untouched, which is the whole point of the stand-down
   // living in one predicate: `pipDepth` falls to 0, so neither has a second branch.
+  // ⚠️ **AND THE HOARDINGS ARE NOT THERE EITHER ANY MORE**, which is why `adSlotRects` is
+  // read through `|| []`: the ads were stood down on a phone in the same batch as this
+  // (their words fit at 6.1px there, and sideways at none at all), so the end rows this
+  // block was written to watch do not exist. The claim narrows honestly rather than being
+  // deleted — with no rows to move, "the boards did not move" is still true and the CAMERA
+  // check is the half that carries the weight.
   {
     stage({ adsOn:'on' });
-    M.sel.scoreStyle = 'num';  M.computeCam(); const camNum = M.cam.s;
-    const endNum = M.adSlotRects(M.world).filter(q => q.along === 'x')
-                    .reduce((a, q) => Math.max(a, Math.abs(q.y)), 0);
-    M.sel.scoreStyle = 'pips'; M.computeCam(); const camPip = M.cam.s;
-    const endPip = M.adSlotRects(M.world).filter(q => q.along === 'x')
-                    .reduce((a, q) => Math.max(a, Math.abs(q.y)), 0);
+    const endRow = () => (M.adSlotRects(M.world) || []).filter(q => q.along === 'x')
+                           .reduce((a, q) => Math.max(a, Math.abs(q.y)), 0);
+    M.sel.scoreStyle = 'num';  M.computeCam(); const camNum = M.cam.s; const endNum = endRow();
+    M.sel.scoreStyle = 'pips'; M.computeCam(); const camPip = M.cam.s; const endPip = endRow();
     o.camNum = +camNum.toFixed(4); o.camPips = +camPip.toFixed(4);
     o.endBoardsMoved = +(endPip - endNum).toFixed(2);
+    o.adRowsOnPhone = (M.adSlotRects(M.world) || []).length;
   }
   return o;
 });

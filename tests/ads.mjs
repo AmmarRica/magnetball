@@ -106,7 +106,18 @@ const r = await p.evaluate(async () => {
   o.rowsClearTheLine = M.ADS.gap >= 20;
 
   // ---- 3b) the frame HOLDS the rows: every board's four corners are on screen -----
-  const rects = M.adSlotRects(w);
+  // ⚠️ GUARDED, because the over-correction is a real sabotage and it used to THROW here
+  // rather than name itself: an `adsDrawn` that answers false everywhere — the whole
+  // feature deleted, which is what the phone block's claims are paired against — returns
+  // null from `adSlotRects`, and `rects.length` then takes the suite out with a stack
+  // trace instead of a finding. A `FAIL`-only output filter hides that entirely.
+  const rects = M.adSlotRects(w) || [];
+  o.rectsOnDesktop = rects.length;
+  // ...and BAIL, named, rather than indexing into an empty list for the next two hundred
+  // lines. Everything below assumes there are boards on a desktop, which is the premise the
+  // phone block is paired against; when it is false the honest report is that one sentence
+  // plus whatever the band diffs above already said, not a stack trace from line 112.
+  if (!o.rectsOnDesktop) return o;
   const corners = (rc) => { const hx = (rc.along === 'y' ? rc.depth : rc.len) / 2, hy = (rc.along === 'y' ? rc.len : rc.depth) / 2;
     return [[-hx,-hy],[hx,-hy],[-hx,hy],[hx,hy]].map(([dx,dy]) => M.screenPt(M.wx(rc.x + dx), M.wy(rc.y + dy))); };
   o.rowCount = rects.length; o.fourRows = new Set(rects.map(rc => rc.id.split(':')[0])).size === 4;
@@ -235,9 +246,162 @@ const r = await p.evaluate(async () => {
   o.switchOff = M.sel.adsOn === 'off' && !M.adsOn();
   // ↺ puts the shipped set back
   document.getElementById('feelReset').click();
-  o.resetRestores = M.sel.adsOn === 'on' && M.sel.adEvery === 8 && M.sel.adOff.length === 0 && M.sel.adText === '';
+  // ⚠️ READ OFF `defaultSel()`, never the literal 8 it used to be. A second copy of a
+  // default is a check that has to be edited every time the thing it watches moves — and
+  // it went red the moment the rollover was slowed, which is the whole of the lesson.
+  o.resetRestores = M.sel.adsOn === 'on' && M.sel.adEvery === M.defaultSel().adEvery
+                 && M.sel.adOff.length === 0 && M.sel.adText === '';
+
+  // ---- the rollover clock -------------------------------------------------------
+  // Reported as the boards rotating too fast. What makes it a finding rather than taste
+  // is that EVERY board turns over on the same frame, so one rollover repaints the whole
+  // surround — measured below — and at the old 8s a five-minute match did that 37 times.
+  o.everyDefault = M.defaultSel().adEvery;
+  o.everyConst = M.ADS.every;
+  // ⚠️ ONE OWNER. `defaultSel().adEvery` used to be the literal 8 beside `ADS.every`'s 8 —
+  // two copies of one number, which is the drift this file keeps recording (`hitStopFrames`'
+  // hard-coded 0 against a default of 5). Pinned equal so it cannot happen again.
+  o.everyOneOwner = o.everyDefault === o.everyConst;
+  o.rolloversPer5min = Math.floor(300 / o.everyDefault);
+  // ⚠️ **THE SLIDER MUST REACH EVERYTHING `adEverySecs()` WILL HONOUR.** That function has
+  // always clamped to 60 and the control offered 30, so the top half of somebody's own
+  // range was unreachable — a control that silently refuses a value it would accept. The
+  // ceiling is DISCOVERED by pushing a huge number through, never written out here.
+  const wasEvery = M.sel.adEvery;
+  // ⚠️ The floor has to be probed with a small POSITIVE value. `-1` fails `adEverySecs`'
+  // `isFinite(v) && v > 0` gate and falls back to `ADS.every`, so it reads 20 and the check
+  // below then compares the slider's minimum against the DEFAULT — which is a probe bug
+  // that reports a perfectly good control as offering too little.
+  M.sel.adEvery = 9999; o.clampCeiling = M.adEverySecs();
+  M.sel.adEvery = 0.5;  o.clampFloor = M.adEverySecs();
+  const sl = document.querySelector('#feelSlidersAds input[type=range]');
+  o.sliderMax = sl ? +sl.max : null; o.sliderMin = sl ? +sl.min : null;
+  M.sel.adEvery = o.sliderMax; o.maxHonoured = M.adEverySecs() === o.sliderMax;
+  o.sliderCoversRange = o.sliderMax === o.clampCeiling;
+  M.sel.adEvery = wasEvery;
+
+  // ---- one rollover repaints the whole surround (the number behind the ask) -------
+  M.sel.adsOn = 'on'; M.sel.adEvery = M.defaultSel().adEvery; M.sel.scoreStyle = 'num';
+  M.setMatchSeed(31); M.startMatch();
+  const rw = M.world; rw.state = 'play'; rw.stateT = 2;
+  for (const q of rw.players){ q.x = 0; q.y = 0; q.vx = q.vy = 0; q.ctrl = 'none'; }
+  rw.ball.x = 0; rw.ball.y = 0; rw.ball.vx = rw.ball.vy = 0;
+  M.juiceReset();
+  const shot = () => { M.computeCam(); M.render(); return c2.getImageData(0, 0, cv.width, cv.height).data; };
+  const px = (A, B) => { let n = 0; for (let i = 0; i < A.length; i += 4)
+    if (Math.abs(A[i]-B[i]) + Math.abs(A[i+1]-B[i+1]) + Math.abs(A[i+2]-B[i+2]) > 24) n++; return n; };
+  M.adState.t = 0; const f0 = shot();
+  M.adState.t = M.adEverySecs(); const f1 = shot();
+  o.rolloverPx = px(f0, f1);
+  o.framePx = (cv.width * cv.height);
+  o.boardsOnScreen = (M.adSlotRects(rw) || []).length;
   return o;
 });
+
+// ---- NOT ON A PHONE ------------------------------------------------------------
+// Asked for as "disable them for mobile", and the reason is a measurement: a board's text
+// starts at `depth * 0.52` of the DRAWN depth, so it shrinks with `cam.s`. On a 390×844
+// handset the slot is 92.3 × 15px and the words fit at 6.1–7.8px against a desktop's
+// 12.6–16.1; turned sideways the slot is 45.5 × 7.4 and the starting size is 3.85, under
+// `ADS.minPx`, so `paintAdBoard` returns before `fillText` and every board is a blank
+// coloured rectangle. All of it costing 4.44% of pitch scale.
+//
+// ⚠️ **THE CONTROL IS THE DESKTOP PAGE ABOVE, IN THE SAME RUN.** "No boards on a phone" is
+// equally true of a build that paints none anywhere — the whole feature deleted — so a
+// sabotage of `adsDrawn` that always answers false reddens the desktop blocks instead.
+//
+// ⚠️ **AND THE PANE IS A SEPARATE CHANGE, sabotaged separately.** A build that stands the
+// boards down and leaves the controls pressable is the dead control this repo refuses; one
+// that hides the controls and still paints boards is worse. Neither check sees the other's
+// defect. The pane and its CHIP stay either way — an empty tab behind a chip is worse than
+// both, so a sentence takes the controls' place.
+const mp = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3,
+                             hasTouch: true, isMobile: true });
+mp.on('pageerror', e => errors.push('phone: ' + e.message));
+mp.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load/.test(m.text())) errors.push('phone: ' + m.text()); });
+await mp.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+await mp.goto('file://' + process.cwd() + '/index.html');
+await mp.waitForTimeout(800);
+
+const ph = await mp.evaluate(() => {
+  const M = window.__magnet, o = {};
+  const dm = document.getElementById('dmCollect'); if (dm) dm.click();
+  const cv = document.getElementById('game'), c2 = cv.getContext('2d');
+  o.viewMode = M.viewMode();
+  // The pane, read at boot with nothing called by hand — the wiring, not the helper.
+  const row = document.getElementById('adsRow'), note = document.getElementById('adsPhoneNote');
+  o.controlsHidden = !!row && getComputedStyle(row).display === 'none';
+  o.noteShown = !!note && getComputedStyle(note).display !== 'none';
+  o.offered = M.adsOffered();
+  // ⚠️ `display !== 'none'` IS NOT ENOUGH FOR THE NOTE, because `buildHintToggles` walks
+  // every `.hint` and folds it behind an info toggle on its label — a folded one is still
+  // `display: block` with no height, so the check would pass on a pane that says nothing.
+  // Open the pane for real and measure what is on the screen. (Measured: 115 x 312px.)
+  M.openSection('feel'); if (M.showSubTab) M.showSubTab('feel', 'ads');
+  const nb = note ? note.getBoundingClientRect() : { height: 0, width: 0 };
+  o.noteHeight = Math.round(nb.height); o.noteWidth = Math.round(nb.width);
+  o.noteReadable = o.noteHeight > 20 && o.noteWidth > 100;
+  o.controlsStillHidden = !!row && row.getBoundingClientRect().height === 0;
+  // ...and the chip and the pane are still THERE, or a tab vanished from the card.
+  o.chipExists = [...document.querySelectorAll('.subtabs[data-tabs="feel"] .subchip')]
+                   .some(c => c.dataset.pane === 'ads');
+
+  M.sel.look.palette = 'grass'; M.sel.mode = '2v2'; M.sel.lobby = 'off'; M.sel.juice = false;
+  M.sel.length = '5'; M.sel.field = 'classic'; M.sel.adsOn = 'on'; M.sel.scoreStyle = 'num';
+  M.setMatchSeed(31); M.startMatch();
+  const w = M.world; w.state = 'play'; w.stateT = 2;
+  for (const q of w.players){ q.x = 0; q.y = 0; q.vx = q.vy = 0; q.ctrl = 'none'; }
+  w.ball.x = 0; w.ball.y = 0; w.ball.vx = w.ball.vy = 0;
+  M.juiceReset(); M.computeCam();
+  o.adsDrawn = M.adsDrawn(w);
+  o.rects = (M.adSlotRects(w) || []).length;
+  o.reach = M.adReach(w);
+  // Nothing is painted ANYWHERE: the whole frame, not a band — with the rows stood down
+  // there is no band to aim at, and a whole-frame diff cannot miss a board drawn somewhere
+  // a band probe was not looking.
+  const shot = () => { M.computeCam(); M.render(); return c2.getImageData(0, 0, cv.width, cv.height).data; };
+  const px = (A, B) => { let n = 0; for (let i = 0; i < A.length; i += 4)
+    if (Math.abs(A[i]-B[i]) + Math.abs(A[i+1]-B[i+1]) + Math.abs(A[i+2]-B[i+2]) > 24) n++; return n; };
+  M.sel.adsOn = 'off'; M.computeCam(); const camOff = M.cam.s; const off = shot();
+  M.sel.adsOn = 'on';  M.computeCam(); const camOn  = M.cam.s; const on  = shot();
+  o.frameUnchanged = px(on, off);
+  o.camOff = +camOff.toFixed(4); o.camOn = +camOn.toFixed(4);
+  // ...and the pitch scale the rows used to cost is GIVEN BACK, not merely unchanged: the
+  // number to beat is what the same phone measured with the rows up (0.627 against 0.6561).
+  o.scaleBack = camOn === camOff;
+  return o;
+});
+await mp.close();
+
+// ---- A DEVICE STILL ON THE EIGHT-SECOND ROLLOVER IS MOVED ON, ONCE ---------------
+// `magnetball.adfold`. A factory default only ever meets a fresh install, so without this
+// the change reaches nobody who has ever opened the menu — which includes the person who
+// reported it. Three cases, the `zoomfold` set: it fires on the old value, it leaves a
+// DELIBERATE value alone, and it is one-shot.
+const foldCase = async (sel, stamp) => {
+  const c = await b.newContext();
+  const fp = await c.newPage();
+  fp.on('pageerror', e => errors.push('fold: ' + e.message));
+  await fp.addInitScript(([s, st]) => {
+    window.__MAGNETDEBUG = true;
+    localStorage.clear();
+    localStorage.setItem('magnetball.sel', s);
+    if (st) localStorage.setItem('magnetball.adfold', '1');
+  }, [JSON.stringify(sel), stamp]);
+  await fp.goto('file://' + process.cwd() + '/index.html');
+  await fp.waitForTimeout(700);
+  const got = await fp.evaluate(() => ({
+    every: window.__magnet.sel.adEvery,
+    stamped: !!localStorage.getItem('magnetball.adfold'),
+  }));
+  await c.close();
+  return got;
+};
+const fold = {
+  old:        await foldCase({ adEvery: 8 },  false),   // the old default → moves
+  deliberate: await foldCase({ adEvery: 9 },  false),   // somebody's own number → left
+  already:    await foldCase({ adEvery: 8 },  true),    // stamped → never again
+};
 
 const fail = [];
 const ok = (c, m) => { if (!c) fail.push(m); };
@@ -277,9 +441,68 @@ ok(r.tileToggledOff && r.tileUnlit && r.tileToggledBack, 'pressing a board tile 
 ok(r.typedStored && r.typedSaved, `typing your own board did not store it: ${r.typedStored} / ${r.typedSaved}`);
 ok(r.switchOff, 'the On/Off tiles do not switch the ads');
 ok(r.resetRestores, '↺ did not give the shipped ads back');
+
+// the rollover clock
+ok(r.everyOneOwner,
+   `the shipped rollover and ADS.every are two different numbers (${r.everyDefault} vs ` +
+   `${r.everyConst}) — one owner, or they drift the way hitStopFrames' fallback did`);
+ok(r.sliderCoversRange && r.maxHonoured,
+   `the Ads-change-every slider tops out at ${r.sliderMax}s while adEverySecs() honours up ` +
+   `to ${r.clampCeiling}s — the control refuses a value the code would take`);
+ok(r.sliderMin >= r.clampFloor,
+   `the slider offers ${r.sliderMin}s, below the ${r.clampFloor}s floor adEverySecs() clamps to`);
+// ⚠️ NOT a bar on taste. What is pinned is that ONE rollover repaints most of the surround,
+// which is what makes the interval the thing worth slowing — and the interval is then read
+// back as rollovers per five-minute match so the number is in the output rather than in a
+// comment somebody has to trust. 8s was 37 of these a match; 20s is 15.
+ok(r.rolloverPx > r.framePx * 0.02,
+   `one rollover changed only ${r.rolloverPx} of ${r.framePx} pixels — if the boards barely ` +
+   `move the picture, the interval is not what anybody is reacting to and this check is wrong`);
+ok(r.boardsOnScreen >= 8 && r.rolloversPer5min <= 20,
+   `${r.boardsOnScreen} boards all turn over together ${r.rolloversPer5min} times in a ` +
+   `five-minute match at the shipped ${r.everyDefault}s`);
+
+// not on a phone, each claim paired with the desktop page above
+ok(ph.viewMode === 'mobile', `the phone context is not a phone layout (${ph.viewMode}) — the rest is vacuous`);
+ok(!ph.adsDrawn && ph.rects === 0,
+   `hoardings are still drawn on a phone (${ph.rects} boards), where a board's words fit at ` +
+   `6.1–7.8px against ${r.boardsOnScreen ? '12.6–16.1px' : '—'} on a desktop`);
+ok(ph.frameUnchanged === 0,
+   `${ph.frameUnchanged} pixels differ between ads on and off on a phone — something is still painted`);
+ok(ph.reach === 0 && ph.scaleBack,
+   `the phone still pays for rows it does not draw: reach ${ph.reach}, camera ${ph.camOff} → ${ph.camOn}`);
+ok(ph.controlsHidden && !ph.offered && ph.controlsStillHidden,
+   `the Ads controls are still on the menu on a phone (${ph.controlsStillHidden ? '' : 'the row renders ' })— ` +
+   `a tile that sets a value nothing acts on is a dead control`);
+ok(ph.noteReadable,
+   `the phone note is ${ph.noteHeight}x${ph.noteWidth}px with the pane open — a hint folded ` +
+   `behind an info toggle is still display:block, so the pane would say nothing`);
+ok(ph.noteShown && ph.chipExists,
+   `the Ads pane on a phone says nothing (note ${ph.noteShown}) or lost its chip ` +
+   `(${ph.chipExists}) — relabel rather than hide, or somebody hunts for a setting that vanished`);
+// The other half of both pairings: a desktop must still HAVE the boards and the controls,
+// or "hidden on a phone" is satisfied by a build that hid them everywhere.
+ok(r.rectsOnDesktop > 0 && r.fourRows && r.paneShown && r.sliderInPane,
+   `the boards or their controls are gone on a desktop too (${r.rectsOnDesktop} boards) — ` +
+   `"none on a phone" must not be satisfied by the feature being deleted`);
+
+// the fold
+ok(fold.old.every === r.everyDefault && fold.old.stamped,
+   `a device on the old 8s rollover was not moved on: ${fold.old.every}s, stamped ${fold.old.stamped}`);
+ok(fold.deliberate.every === 9,
+   `the fold overwrote a rollover somebody chose (9s → ${fold.deliberate.every}s)`);
+ok(fold.already.every === 8,
+   `the fold ran twice — a stamped device was moved from 8s to ${fold.already.every}s, so ` +
+   `setting it back by hand would be undone every morning`);
+
 ok(errors.length === 0, 'console errors: ' + errors.slice(0, 3).join(' | '));
 
 console.log(JSON.stringify(r, null, 1));
+console.log('PHONE:', JSON.stringify(ph, null, 1));
+console.log('FOLD:', JSON.stringify(fold));
+console.log('ROLLOVER: ' + r.boardsOnScreen + ' boards turn over together every ' + r.everyDefault +
+  's (' + r.rolloversPer5min + ' times in a five-minute match), repainting ' + r.rolloverPx +
+  ' of ' + r.framePx + ' pixels each time.');
 await b.close();
 if (fail.length){ console.error('\nFAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('\nads OK');

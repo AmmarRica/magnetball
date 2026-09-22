@@ -1240,6 +1240,67 @@ three lines a second time, name it.
   would cover them completely and the switch would read as dead on ten of twenty-six
   palettes. A per-theme opt-out is the obvious next step if that ever matters; the switch is
   the answer today.
+  ⚠️ **THE ROLLOVER IS 20 SECONDS AND IT WAS 8** (`ADS.every`), reported as the boards
+  rotating too fast — **and what makes that a finding rather than taste is that EVERY
+  BOARD TURNS OVER ON THE SAME FRAME.** Measured on Classic: **16 boards on screen** (ten
+  down the two touchlines, six behind the goals), so one rollover repaints the whole
+  surround — **94,794 of 1,152,000 pixels on a 1280x900 desktop, 8.2% of the frame**, and
+  198,400 of 2,962,440 on a phone. At 8s a five-minute match did that **37 times**; at 20
+  it is **15**.
+  ⚠️ **THE SIMULTANEITY IS LEFT ALONE DELIBERATELY, and the number is written down so it
+  can be revisited.** Staggering the slots so one turns at a time is a different picture
+  and nobody asked for it — the ask was the speed. Rule 8.
+  ⚠️ **`defaultSel().adEvery` IS `ADS.every` NOW, and it was a second literal 8.** Two
+  copies of one default is the drift this file keeps recording (`hitStopFrames`' hard-coded
+  `0` against a shipped 5), and `tests/ads.mjs` pins the two equal. Safe because `ADS` is
+  declared above `defaultSel` and nothing calls `defaultSel()` before it — checked, not
+  assumed, because that is the twenty-second TDZ bite waiting to happen.
+  ⚠️ **THE SLIDER'S MAX WENT 30 -> 60, WHICH IS A DEAD RANGE RATHER THAN A TASTE CHANGE.**
+  `adEverySecs()` has ALWAYS clamped to `Math.min(60, v)`, so the control offered half of
+  what the code would honour and the top of somebody's own range was unreachable. The
+  suite DISCOVERS the ceiling by pushing a huge value through rather than writing 60 out
+  again. ⚠️ Its floor probe has to use a small POSITIVE value: `-1` fails the
+  `isFinite(v) && v > 0` gate and falls back to `ADS.every`, so the check then compares the
+  slider's minimum against the DEFAULT and reports a good control as offering too little.
+  ⚠️ **A DEVICE STILL ON THE EIGHT-SECOND ROLLOVER IS MOVED ON, ONCE**
+  (`magnetball.adfold`) — a factory default only ever meets a fresh install, so without it
+  the change reaches nobody who has opened the menu, which includes the person who
+  reported it. `feelfold`'s argument and `feelfold`'s rules: only a device that already HAS
+  settings, only the exact old value of 8 (a 9 is somebody's choice), one-shot, stamped
+  either way. ⚠️ The `magnetball.sel` guard is **not catchable on today's values** — 8 is
+  no longer the default, so a fresh install can never match — and is there for the day the
+  default moves again, which is exactly how `zoomfold` was bitten.
+  ⚠️ **NOT ON A PHONE** (`isTouchLayout()` inside `adsDrawn`, `adsOffered`, `syncAdsRow`,
+  `#adsRow`, `#adsPhoneNote`), asked for as *"disable them for mobile"* — **and the
+  measurement is what makes it a defect rather than a preference.** A board's text starts
+  at `depth * 0.52` of the DRAWN depth, so it shrinks with `cam.s`: on a 390x844 handset
+  the slot is **92.3 x 15px** and the fourteen boards fit their words at **6.1 to 7.8px**,
+  against **12.6 to 16.1px** on a 1280x900 desktop. Turn the same phone sideways and the
+  slot collapses to **45.5 x 7.4px**, which puts the starting size at **3.85 — under
+  `ADS.minPx`** — so `paintAdBoard` returns before `fillText` and **all fourteen boards
+  draw as blank coloured rectangles with no words on them at all**. And they are not free:
+  the camera holds the rows at **4.44% of pitch scale**, measured in both orientations.
+  Paying a twenty-fifth of the court for text nobody can read, or for no text whatever, is
+  the trade this removes.
+  ⚠️ **ONE PREDICATE AND EVERYTHING FOLLOWS** — `adSlotRects` returns null so nothing is
+  painted, `adReach` falls to 0 so `computeCam` gives the scale straight back (measured
+  0.627 -> 0.6561 on a phone, identical to ads-off), and `advanceAds` clears the dim map on
+  its first step. No second branch to keep right. ⚠️ `isTouchLayout()` rather than a width,
+  the `pipsDrawn` call: a cocktail table, an arcade cabinet and a Steam Deck keep theirs.
+  ⚠️ **THE PANE AND ITS CHIP STAY AND SAY WHY, which is where this differs from the score
+  pips.** That is one row inside a shared pane, so hiding it leaves Effects standing; the
+  ads are a whole TAB, and a chip leading to an empty pane is worse than either state. So
+  the controls go and a sentence takes their place — `downloadOffline`'s rule, relabel
+  rather than hide. `.hidden` is also what `menuSearchIndex` reads, so the search stops
+  offering them there too.
+  ⚠️ **THE OVER-CORRECTION USED TO THROW RATHER THAN NAME ITSELF, and that is a check
+  defect.** `adsDrawn` answering false everywhere — the feature deleted, which is what the
+  phone block is paired against — returns null from `adSlotRects`, and the suite took a
+  stack trace at `rects.length` instead of reporting a finding. It reads `|| []` and BAILS
+  on `rectsOnDesktop === 0` now, so the failure is a sentence. A `FAIL`-only output filter
+  hides a throw entirely — the same trap `tests/dropin.mjs` records.
+  ⚠️ **Nine sabotages, each caught by its own check**, including the over-correction and
+  all three fold cases.
   ⚠️ **AND THREE PIXEL SUITES HAD TO PIN THEM OFF.** `tests/tennis.mjs` samples the surround
   26px past the touchline — exactly where a board now stands — and read Kestrel Air's pale
   blue as the palette; `tests/dyntheme.mjs`' pool-cushion and Warp-surround probes read a

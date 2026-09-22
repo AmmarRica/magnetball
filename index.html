@@ -314,6 +314,7 @@
        carries its own, and a row without one is a row that still renders. Measured: a bare
        `<div class="hidden">` computes `display: block` here. */
     #scoreStyleRow.hidden { display: none; }
+    #adsRow.hidden, #adsPhoneNote.hidden { display: none; }
     /* ⚠️ **THE 70px ABOVE IS A THUMBSTICK ALLOWANCE, AND A DESKTOP WAS PAYING IT.** That
        `calc(70px + 78px)` lifts the button clear of the on-screen joystick, which only
        exists on a touch layout — but `computeCam` reserves the whole band under the pitch
@@ -2407,6 +2408,13 @@
            `.opts` row here, which picks exactly one — the tiles are painted by the same
            painter the pitch uses, so a tile cannot show a board the touchline will not. -->
       <div class="subpane" data-group="feel" data-pane="ads">
+      <!-- ⚠️ NOT ON A PHONE, and the controls are HIDDEN rather than left pressable — a
+           tile that sets a value nothing acts on is a dead control. The chip and the pane
+           STAY and say why: relabel rather than hide, so nobody hunts for a setting that
+           vanished. `.hidden` is also what `menuSearchIndex` reads, so the search stops
+           offering these on a phone too. See adsOffered. -->
+      <div id="adsPhoneNote" class="hint" style="text-align:left">Pitch-side ads are off on a phone. The whole pitch has to fit on a small screen, so a hoarding comes out about 90&times;15 pixels with its words at 6px &mdash; and turned sideways there is no room for words at all. They are back on a tablet, a desktop, a cabinet or a TV.</div>
+      <div id="adsRow">
       <label class="field">Pitch-side ads</label>
       <div class="opts" id="adsPick"></div>
       <div id="feelSlidersAds"></div>
@@ -2416,7 +2424,8 @@
       <div style="height:6px"></div>
       <label class="field">Your own board</label>
       <input id="adText" type="text" maxlength="28" placeholder="Anything you like" autocomplete="off" />
-      <div class="hint" style="text-align:left; margin-top:4px">Boards run down both touchlines and every one rolls over together on the timer. Tap a board to take it out of the rotation; type a line above and it joins the end of it. Nothing here touches the match &mdash; it is paint outside the pitch.</div>
+      <div class="hint" style="text-align:left; margin-top:4px">Boards run down both touchlines and behind both goals, and every one rolls over together on the timer. Tap a board to take it out of the rotation; type a line above and it joins the end of it. Nothing here touches the match &mdash; it is paint outside the pitch.</div>
+      </div>
       </div>
 
       <div class="subpane" data-group="feel" data-pane="advanced">
@@ -3299,6 +3308,17 @@ function scoreStyleOffered(){ return !isTouchLayout(); }
 function syncScoreStyleRow(){
   const r = $('scoreStyleRow');
   if (r) r.classList.toggle('hidden', !scoreStyleOffered());
+}
+// ⚠️ **THE ADS PANE IS THE SAME CALL, with one difference: the pane STAYS and explains
+// itself.** The score readout is one row inside a shared pane, so hiding it leaves the rest
+// of Effects standing; the ads are a whole tab, and a chip leading to an empty pane is
+// worse than either state. So the controls go and a sentence takes their place —
+// `downloadOffline`'s rule (relabel rather than hide, and never claim what you cannot do).
+function adsOffered(){ return !isTouchLayout(); }
+function syncAdsRow(){
+  const on = adsOffered(), r = $('adsRow'), note = $('adsPhoneNote');
+  if (r) r.classList.toggle('hidden', !on);
+  if (note) note.classList.toggle('hidden', on);
 }
 // ⚠️ Re-answered on every rebuild AND on resize, never decided once at boot — `isDesktop`
 // reads the window, so rotating a tablet or dragging a window narrow changes the answer,
@@ -5050,7 +5070,17 @@ const ADS = {
   edge: 4,        // world units the camera keeps beyond a row's far side (see computeCam)
   slotLen: 130,   // target slot length along a row; the count is derived from the row's span
   slotGap: 6,     // between slots
-  every: 8,       // seconds per rollover, the default the slider is born at
+  every: 20,      // seconds per rollover, the default the slider is born at.
+                  // ⚠️ WAS 8, reported as rotating too fast — and the number that makes
+                  // that a finding rather than taste is that EVERY board turns over on the
+                  // same frame. Measured on Classic: 16 boards on screen (10 down the two
+                  // touchlines, 6 behind the goals), so one rollover repaints the whole
+                  // surround — 94,794 of 1,152,000 pixels on a 1280x900 desktop (8.2% of
+                  // the frame) and 198,400 of 2,962,440 on a 390x844 phone — and at 8s a
+                  // five-minute match does that 37 times. At 20 it is 15.
+                  // ⚠️ The SIMULTANEITY is left alone deliberately: the ask was the speed,
+                  // and staggering the slots so one turns at a time is a different picture
+                  // nobody asked for. The number is written down here so it can be.
   minPx: 4,       // below this font size the words are a smear — draw the board, skip them
   rim: 'rgba(0,0,0,0.38)',
   dimA: 0.22,     // a board's alpha while a body stands over it — the surround shows through
@@ -5117,7 +5147,25 @@ function advanceAds(w){
 // Every board on the pitch as a world-space rectangle: `along` is the axis its LENGTH runs
 // on (world y down a touchline, world x behind a goal). Null when there is nothing to draw.
 // ONE gate for "are there boards on this pitch" — the rects, the camera and the dim all ask it.
-function adsDrawn(w){ return adsOn() && !!w && !!w.bounds && w.state !== 'warmup' && !w.drillMode; }
+// ⚠️ **NOT ON A PHONE**, asked for — and the measurement is what makes it a defect rather
+// than a preference. A board is `ADS.depth` (24) world units deep and the text starts at
+// `depth * 0.52` of the DRAWN depth, so it shrinks with `cam.s`: on a 390x844 handset the
+// slot is **92.3 x 15px** and the fourteen boards fit their words at **6.1 to 7.8px**,
+// against **12.6 to 16.1px** on a 1280x900 desktop. Turn the same phone sideways and the
+// slot collapses to **45.5 x 7.4px**, which puts the starting size at 3.85 — under
+// `ADS.minPx` — so `paintAdBoard` returns before `fillText` and **all fourteen boards draw
+// as blank coloured rectangles with no words on them at all**. And they are not free: the
+// camera holds the rows, measured at **4.44% of pitch scale** on a phone in both
+// orientations. Paying a twenty-fifth of the court for text nobody can read, or for no
+// text whatever, is the trade this removes.
+// ⚠️ **ONE PREDICATE, and everything follows** — `adSlotRects` returns null so nothing is
+// painted, `adReach` falls to 0 so `computeCam` gives the pitch scale straight back, and
+// `advanceAds` clears the dim map on its first step. No second branch to keep right.
+// ⚠️ `isTouchLayout()` rather than a width, the `pipsDrawn` call: it is `viewMode() ===
+// 'mobile'`, so a cocktail table, an arcade cabinet and a Steam Deck keep their hoardings.
+function adsDrawn(w){
+  return adsOn() && !isTouchLayout() && !!w && !!w.bounds && w.state !== 'warmup' && !w.drillMode;
+}
 // How far beyond the line (or the net's back) the rows reach, for the camera to hold.
 function adReach(w){ return adsDrawn(w) ? ADS.gap + ADS.depth + ADS.edge : 0; }
 function adSlotRects(w){
@@ -6043,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260921.1040PM';
+const VERSION = '20260922.0115PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6059,6 +6107,12 @@ const VERSION = '20260921.1040PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260922.0115PM', title: 'The pitch-side ads calm down',
+    changed: [
+      '<b>The boards change half as often.</b> Every hoarding on the pitch turns over at the same moment, so the whole surround repaints at once &mdash; at the old eight seconds a five-minute match did that 37 times. It is twenty seconds now, and the slider under Game Feel &rarr; Ads goes up to a full minute if you want them quieter still.',
+      '<b>No hoardings on a phone.</b> The whole pitch has to fit on a small screen, so a board came out about 90&times;15 pixels with its words at 6px &mdash; and turned sideways there was no room for words at all, just coloured rectangles. They cost a bit of the court to fit in, and that goes back to the pitch. Tablets, desktops, cabinets and TVs are unchanged.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260921.1040PM', title: 'The score, as balls behind the goals',
     changed: [
       '<b>A second way to read the score.</b> Under Game Feel &rarr; Effects, <i>Score readout</i> switches from the numbers at the top to a short row of small circles standing behind each goal, in that goal\'s own team colour, filling with a ball as that side scores.',
@@ -7352,7 +7406,7 @@ function magReachOf(){ const v = sel.magReach; return v != null ? Math.max(0, Ma
 function magKickPct(){ const v = sel.magKick; return v != null ? Math.max(0, Math.min(200, v|0)) : 100; }
 function magKickOf(){ return magKickPct() / 100; }
 function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', length:'5', controllers:'on', seatRot:{}, coop:'off', dropIn:'on', tilt:'on', showMode:false, magnet:0, magReach:18, magKick:100,
-            adsOn:'on', adEvery:8, adOff:[], adText:'',
+            adsOn:'on', adEvery:ADS.every, adOff:[], adText:'',
             ball:'bouncy', handed:'left', sens:1.0, pitch:'normal', grass:'stripes', kickoffRule:'on', boxRule:'on', orient:'auto', spectate:'play', cb:'off',
             trapOff:true, oneHand:false, sprint:'on', settingsPanel:'inline', names:'', juice:false, hitStop:5, rumble:15, kickRing:140, popups:'on', scoreStyle:'num', ball3d:'on', sideView:'off', touchDigital:'on', autoReplay:true, debug:false, matchSpeed:1, dockCollapsed:false,
             lang:'auto', display:'auto', cocktailSides:{}, lobby:'on', teamCol:['#5a7de0','#d8c93a'], teamFlag:['random','random'], kickPush:'off', arcadePlay:'free', autoRec:'off', keepMatches:'5',
@@ -14073,6 +14127,27 @@ try {
     localStorage.setItem('magnetball.ball3dfold', '1');
   }
 } catch(e){}
+// A DEVICE STILL ON THE EIGHT-SECOND AD ROLLOVER IS MOVED ON, ONCE
+// (`magnetball.adfold`). Reported as the boards rotating too fast, and a factory default
+// only ever meets a fresh install — so without this the change reaches nobody who has ever
+// opened the menu, which includes the person who reported it. The `feelfold` argument.
+// ⚠️ **ONLY AN UNTOUCHED VALUE MOVES**: exactly the old default of 8, never a number
+// somebody dragged the slider to. 9 or 7 is a choice and folding it would be a setting
+// changing behind their back.
+// ⚠️ **THE `magnetball.sel` GUARD IS NOT CATCHABLE ON TODAY'S VALUES and is there anyway**,
+// which is exactly what the `ball3dfold` entry records: 8 is no longer the default, so a
+// fresh install can never match the branch whatever the guard says. It is for the day the
+// default moves again — which is how `zoomfold` was bitten.
+// ⚠️ One-shot and stamped either way, so somebody who sets 8 back next month keeps it.
+try {
+  if (!localStorage.getItem('magnetball.adfold')){
+    if (localStorage.getItem('magnetball.sel') && +sel.adEvery === 8){
+      sel.adEvery = defaultSel().adEvery;
+      saveSel();
+    }
+    localStorage.setItem('magnetball.adfold', '1');
+  }
+} catch(e){}
 loadArcade();
 // ⚠️ Here and not with `loadSel()`: `applyMaps` reads `sel.field` (so the save must
 // already be in) and `mapClean` clamps against `POST`, which is declared below the map
@@ -14274,6 +14349,7 @@ function updatePadInfo(){
   buildSeatPick();
   syncMapMakerRow();          // desktop-only, and the window can change under us
   syncScoreStyleRow();        // not on a phone, same reason
+  syncAdsRow();               // and the ads pane, same call
 }
 window.addEventListener('gamepadconnected', updatePadInfo);
 // ⚠️ A REAL disconnect skips the grace window — the browser is telling us outright, so
@@ -14963,7 +15039,7 @@ syncSticky();
 // ⚠️ Warm-up's visibility rides along: `viewMode()` reads the window, so a phone
 // turned landscape — or a browser window dragged past the desktop breakpoint —
 // changes whether warming up has anything to do.
-window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); syncMapMakerRow(); syncScoreStyleRow(); });
+window.addEventListener('resize', () => { syncSticky(); syncWarmupOffer(); syncMapMakerRow(); syncScoreStyleRow(); syncAdsRow(); });
 
 // ---- Add to home screen ----------------------------------------------------
 // ⚠️ The button only exists while the browser is actually offering an install. There
@@ -15679,7 +15755,9 @@ const FEEL_SLIDERS = [
   {g:'player', label:'Player acceleration', get:()=>sel.feel.accel, set:v=>sel.feel.accel=v, min:10,max:90,step:2, fmt:v=>(v/100).toFixed(2)},
   // The ads' rollover clock. In this table so it lands in the Ads pane through the same
   // group → wrapper rule every other Game Feel dial follows, rather than a bespoke slider.
-  {g:'ads', label:'Ads change every', get:()=>adEverySecs(), set:v=>sel.adEvery=v, min:2,max:30,step:1, fmt:v=>v+'s'},
+  // ⚠️ `max` is 60 because `adEverySecs()` has ALWAYS clamped to 60 — the control offered
+  // half of what the code would honour, so the top of somebody's own range was unreachable.
+  {g:'ads', label:'Ads change every', get:()=>adEverySecs(), set:v=>sel.adEvery=v, min:2,max:60,step:1, fmt:v=>v+'s'},
   // ⚠️ **THE FRICTION DIALS SAY HOW LONG SOMETHING TAKES TO STOP** — see `stopSecs`. They
   // were "Player float" and "Ball glide", reading out the raw damping coefficient, and the
   // question they answer ("how long before a player stops") was not askable of either the
@@ -36295,7 +36373,7 @@ if (window.__MAGNETDEBUG) {
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,
     syncScorebug, PIPS, SCOREOPT, scorePipsOn, pipsDrawn, pipDepth, endReach, pipRow, pipSlots, drawScorePips,
-    scoreStyleOffered, syncScoreStyleRow,
+    scoreStyleOffered, syncScoreStyleRow, adsOffered, syncAdsRow,
     toggleMute, muteOn, syncMuteUI, buildSndMaster, HUDPEEK, hudPeekAt, syncRecordCard, lobbyHumans, lobbyHost, lobbySideOf, lobbyOutside, lobbyStart, lobbyPlan,
     LOBBY_WALK, stepLobbyBots, lobbySpotFor, benchSlots, AUTO, stepLobbyClock, stepResultClock, resultSecs, resultGoesToDemo,
     pollLobbyPads, stepWarmup, stepLobbyKeys,
