@@ -31,10 +31,17 @@ jobs:
       image: ${{ steps.name.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-      # ghcr.io wants a lowercase path; a GitHub owner need not be.
+      # ghcr.io REFUSES a path with a capital in it ("repository name must be
+      # lowercase"), and a GitHub owner need not be lowercase — AmmarRica is not.
+      # ⚠️ BOTH TAGS COME OFF ONE LOWERCASED PATH. The sha tag was folded here and
+      # the `latest` tag was written out again from `github.repository_owner`, which
+      # is the owner VERBATIM — so the build failed on the second tag with the first
+      # one perfectly well formed. One `repo` output, two tags hung off it.
       - name: Image name
         id: name
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-match:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "repo=ghcr.io/${GITHUB_REPOSITORY,,}-match" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-match:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -47,7 +54,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.name.outputs.image }}
-            ghcr.io/${{ github.repository_owner }}/magnetball-match:latest
+            ${{ steps.name.outputs.repo }}:latest
 
   infra:
     name: Create Azure resources (Bicep)

@@ -76,7 +76,9 @@ Merge the branch carrying `infrastructure/`, `server/` and the workflow into `ma
 about six minutes, in four jobs:
 
 1. **Build the match server image** builds `server/match/Dockerfile` and pushes it to
-   GitHub's container registry as `ghcr.io/<you>/magnetball-match`. Needs no Azure login.
+   GitHub's container registry as `ghcr.io/<you>/magnetball-match`, **all lowercase** —
+   ghcr refuses a path with a capital in it, so the workflow folds your owner name down
+   whatever case you spell it in. Needs no Azure login.
 2. **Create Azure resources (Bicep)** creates the resource group `magnetball-rg` and every
    resource in `infrastructure/main.bicep`, the match server's container included.
 3. **Deploy the Functions API** installs `server/`'s dependencies and publishes it.
