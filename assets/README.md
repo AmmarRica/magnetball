@@ -29,6 +29,21 @@ Credit: the pack is Kenney's **Scribble Dungeons** (CC0 — free to use, credit 
 not required). The THEME's name is ours; naming our content after somebody else's title is
 the one thing the project's standing rule asks us not to do.
 
+### The pack that could not be one, and why it is worth writing down
+
+**Sunday League** was asked for from Kenney's own top-down sports sample, with *"I already
+have the Kenney pack"* — and it is **drawn**, not sprited. That is a measurement rather
+than a preference, taken on the files in `Kenney/kenney_sports-pack`: its top-down art is
+**19 × 13 pixel** PNGs, four per kit colour, and every one of them is **head and shoulders
+only**. There is not a single arm, leg or boot anywhere in the pack, in the PNGs or in
+`Vector/charactersEquipment.svg` — the limbs in the sample picture belong to that
+picture's own composition. So both halves of the ask were out of reach of the files: there
+were no limbs to draw, and the four frames per colour are four hair-and-skin variations
+rather than walk frames, so a sprite body could not have been animated at all. A drawn one
+also carries the **team colour**, which a fixed blue PNG cannot.
+
+Credit: the pack is Kenney's **Sports Pack** (CC0). The theme's name is ours.
+
 **Otherwise the ball and the players are not sprites and are not meant to be.** Both are
 drawn on the canvas — see `BALL_LOOKS` and `paintFace()` in `index.html`. A disc is
 9–15 px across in play; a bitmap at that size is mush, while a path stays crisp at

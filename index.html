@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260922.0115PM';
+const VERSION = '20260922.0510PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,14 @@ const VERSION = '20260922.0115PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260922.0510PM', title: 'Sunday League',
+    changed: [
+      '<b>A new theme: little footballers, seen from above.</b> A bright mown pitch, white lines, a white ball with black panels, and players with a head, a shirt and arms and legs sticking out of it &mdash; blue against yellow. Pick it under Theme &rarr; Bundle.',
+      '<b>They run.</b> The legs swing and the arms swing the other way, driven by how far a player has actually travelled, so the stride speeds up when they do and settles into a stance when they stop.',
+      '<b>The shirt stays inside the circle you collide with</b> and only the limbs reach past it, so what you can and cannot reach is still exactly the ring around each player.',
+      '<b>Four different people a side</b>, so a team is not eight copies of one player &mdash; each one keeps the same hair for the whole match.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260922.0115PM', title: 'The pitch-side ads calm down',
     changed: [
       '<b>The boards change half as often.</b> Every hoarding on the pitch turns over at the same moment, so the whole surround repaints at once &mdash; at the old eight seconds a five-minute match did that 37 times. It is twenty seconds now, and the slider under Game Feel &rarr; Ads goes up to a full minute if you want them quieter still.',
@@ -7632,6 +7640,62 @@ const THEMES = {
       // `TH.dynMark || TH.line`. Without these a starfield over Tennis paints blind.
       dynMark:'#fefff3', dynAlt:'#993300' },
   },
+  // SUNDAY LEAGUE — a bright mown pitch with little footballers on it.
+  // ⚠️ **THE NAME IS OURS.** The look was asked for from Kenney's own top-down sports
+  // sample (CC0, credit welcome and not required; Kenney is credited in
+  // `assets/README.md`), and the theme is not named after the pack. That is the `sketch`,
+  // `clash` and `ledge` precedent — the look as an idea, with a name of our own — and the
+  // key is generic so the shown name can change for free, with no fold and no migration.
+  // ⚠️ **THE COLOURS ARE MEASURED OFF THE PICTURE, not picked.** The two mown greens are
+  // its two commonest pixels (`#2ecc71` at 187,676 and `#31d978` at 186,810 of 918x515),
+  // the markings are its `#ffffff` (11,223), the ball is white with a black panel, and
+  // and the two kits are its keeper yellow against a deepened version of its blue — see
+  // the lightness-gap note on `DISC_SKINS.footballers` for why the two OUTFIELD kits
+  // (orange against blue) could not be the pair.
+  // ⚠️ **STRIPED, unlike Tennis and Mirror Ledge.** Those two are flat because a tennis
+  // court and a rooftop have no mow; this is a football pitch and the mow is half of what
+  // the picture IS, so `stripeA !== stripeB` and `drawPitch` does it for free — no
+  // `DYN_FIELDS` painter, the same shape `tennis` and `tactics` have.
+  // ⚠️ **ONE JOB EACH** (the `tennis` rule): court and mow are the two greens, markings
+  // and the BALL are white, the two sides are orange and blue — a hue pair AND a
+  // lightness pair, which is what survives protanopia — and black is the outline, the
+  // boots and the ball's panels. Nothing on the pitch is drawn in a second green, so a
+  // body is never the colour of the grass it is standing on.
+  kickabout: {
+    name: 'Sunday League', emoji: '⚽',
+    ui: { scan:false,
+      grad:'radial-gradient(120% 90% at 50% -12%, #1a6b41 0%, #0f4a2c 55%, #08301e 100%)',
+      bg:'#08301e', panel:'rgba(255,255,255,0.08)', edge:'#1a6b41', text:'#f4fff8', muted:'#a9d5bd',
+      // ⚠️ The greens here are a step LIGHTER than the pitch's `#31d978`, and that is a
+      // contrast floor rather than taste: as menu text on the selected tile's `#2d5a4e`
+      // the pitch green measured **4.22:1**, under the 4.5 `tests/contrast.mjs` holds
+      // every label to. The PITCH keeps the picture's own greens exactly.
+      red:'#ff8a42', blue:'#6cbcf0', cyan:'#5ee39a', magenta:'#ff8a42', green:'#5ee39a',
+      yellow:'#ffd34d', accent:'#5ee39a', go:'#5ee39a', field:'#5ee39a', onAccent:'#08301e' },
+    // ⚠️ **THE TWO GREENS ARE A STEP DARKER THAN THE PICTURE'S, AND THAT IS THIS FILE'S
+    // OWN MARKINGS FLOOR rather than taste.** Its `#2ecc71` puts WHITE lines at **2.10:1**,
+    // under the **2.5** `paintedPitch` uses to decide a marking has vanished into the court
+    // — so the shipped palette would have been repainted by the floor that is supposed to
+    // fire only on a colour somebody CHOSE, which `tests/courtcolour.mjs` catches. At
+    // `#23ae5b` white reads **2.89:1**. Same trade Mirror Ledge records for its teal.
+    pitch: { glow:false, fieldBg:'#175c38', court:'#23ae5b', stripeA:'#23ae5b', stripeB:'#27b863',
+      netPocket:'rgba(8,48,30,0.26)', line:'#ffffff', centerDot:'#ffffff',
+      netMesh:'rgba(255,255,255,0.55)', // ⚠️ **BLUE IS TEAM 0 AND YELLOW IS TEAM 1, in that order, because `drawGoal` colours
+      // the FRAME from `teamColOf` — which reads `sel.teamCol`, whose shipped pair is blue
+      // then yellow. Written the other way round the left-hand goal came out yellow with
+      // blue shirts standing in it, which is the one thing on the pitch that has to agree.
+      post:'#ffffff', teamRed:'#2f7fd0', teamBlue:'#f7c81e',
+      discRim:'#151515', kickRing:'#ffffff', kickText:'#08301e', cbRing:'#ffffff',
+      eyeWhite:'#ffffff', eyePupil:'#151515', nameBg:'#151515', nameText:'#f4fff8',
+      shadow:'rgba(8,40,24,0.22)', ballRim:'#151515', ball:'#ffffff', ballSpot:'#151515',
+      trailRGB:'255,255,255',
+      obstacle:'#e86a17', good:'#f7c81e', warn:'#e86a17', dim:'#7fae94', cone:'#e86a17',
+      // The HUD floats over the SURROUND, which is the darker green apron, so it goes
+      // light — the same exception Tennis, Warp and Bambamzone make for the same reason.
+      hudText:'#f4fff8', hudSub:'#bfe3cf', accent:'#ffffff', padRing:'rgba(255,255,255,0.55)',
+      // ⚠️ Kept even though this palette ships no field painter of its own: SLOTS MIX.
+      dynMark:'#ffffff', dynAlt:'#175c38' },
+  },
   // MIRROR LEDGE — a white rooftop hung over a drop, with the way on painted in red.
   // ⚠️ **THE NAME IS OURS TO CHANGE; THE LOOK IT TAKES AFTER IS NOT OURS AT ALL.** The
   // palette arrived as a swatch and it is the signature of a first-person parkour game:
@@ -9118,6 +9182,15 @@ const THEME_BUNDLES = {
   // painted penalty boxes were decoration nothing in the game reads, and they doubled up
   // with the goal box `drawPitch` already draws at each end.
   tactics:   { discs:'counter',   ball:'classic', sfx:'classic' },
+  // ⚠️ **NO `field`**, and that is the whole reason this theme is small: the mow the
+  // picture is half made of is `stripeA`/`stripeB`, which `drawPitch` already paints, so
+  // a `DYN_FIELDS` painter would be a second implementation of the pitch surface. Same
+  // shape `tennis` and `tactics` have — a palette and a look, with `drawPitch` owning
+  // the ground. ⚠️ `ball: 'classic'` REUSED: the panelled white football this wants is
+  // already in the registry, and adding a second copy of it is the mistake the withdrawn
+  // `seam` look made against `BALL_LOOKS.tennis`. ⚠️ **No `pitch`**: a Sunday league is a
+  // treatment that works on any rectangle.
+  kickabout: { discs:'footballers', ball:'classic', sfx:'classic' },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
@@ -33566,6 +33639,138 @@ DISC_SKINS.sleeve = {
     c.restore();
   },
 };
+// ============================================================
+//  SUNDAY LEAGUE — footballers seen from directly above
+// ============================================================
+// Asked for from a picture of Kenney's own top-down sports sample: little players with a
+// head, a shirt and limbs sticking out, *"body inside the circle but legs can go out"*,
+// animated, as one of the themes.
+// ⚠️ **DRAWN, NOT SPRITED — AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE.** The pack
+// is here (`assets/Kenney/kenney_sports-pack`) and it cannot do this. Its top-down art is
+// **19 x 13 pixel** PNGs, four per kit colour, and every one of them is **head and
+// shoulders ONLY** — there is not a single arm, leg or boot anywhere in the pack, in the
+// PNGs or in `Vector/charactersEquipment.svg`. The limbs in the sample picture belong to
+// that picture's own composition. So both halves of the ask are out of reach of the
+// files: there are no limbs to draw, and the four frames per colour are four HAIR AND
+// SKIN variations rather than walk frames, so a sprite body could not be animated at all.
+// A drawn one also carries the TEAM colour (a fixed blue PNG cannot) and stays crisp at
+// the 9-15px a body is really drawn at — which is the rule `assets/README.md` states and
+// `sketch` is the one documented exception to.
+// ⚠️ **THE LIMBS CROSS THE GUIDE RING ON PURPOSE, and that is an exception the owner
+// granted in the ask itself.** The standing rule is that a skin may not cross the ring,
+// because the ring is the circle that collides and the VideoSoccer arrowhead shipped a
+// third bigger than its own collider. What keeps that lesson intact here is that the
+// **SHIRT** — the body — stays inside `r` and the ring lands on the shoulders, so the
+// ring still reads as the player. Only the arms and legs reach past it, and a limb
+// sticking out of a circle reads as a limb rather than as a bigger body. Measured: the
+// shirt spans 1.92r of a 2r circle and the whole figure 2.7r.
+// ⚠️ **THE SILHOUETTE RULE CANNOT BE MET AND THE PAIR IS MEASURED INSTEAD.** Both sides
+// are footballers, because that is the art that was asked for — so hue and lightness are
+// all there is, and this is the third deliberate exception in the file after Abduction's
+// two saucers and Sketchbook's counters. What replaces it is Sketchbook's own instrument,
+// the LIGHTNESS GAP, and this pair is the widest in the file: **2.62** for the picture's
+// keeper yellow against a deep blue, against Sketchbook's widest of 1.87 and its shipped
+// 1.87. Blue-against-yellow is also the one hue pair no type of colour blindness
+// flattens, which is the half a lightness reading cannot say.
+// ⚠️ **AND A HOOPED AWAY SHIRT WAS BUILT FIRST AND CUT.** Two bands across the away
+// torso, clipped to it — `DISC_SKINS.counter`'s instrument, so a scan along one body
+// alternates and along the other does not. It does not work here and the reason is
+// geometric rather than a matter of tuning: seen from above the shirt is an ANNULUS
+// around the head, the head is half the body across, and every band wide enough to read
+// at 12px lands under it. Rendered at r 70 the two hoops showed as slivers; at r 12 they
+// were gone. The picture's own kits are plain, which is the other half of why.
+// ⚠️ **THE FIRST PAIR WAS ORANGE AGAINST BLUE — the picture's two outfield kits — and it
+// measured a lightness gap of 1.13**, which is nothing: `#e86a17` is luminance 0.267 and
+// `#3d9ae0` is 0.31. Faithful and unreadable to a colour-blind player, so the two kits
+// taken are the ones in the picture that ARE far apart.
+// ⚠️ **THE STRIDE IS `legFrame`, THE EXISTING DISTANCE-DRIVEN GAIT.** Never a clock —
+// anything advanced in a draw runs 2.4x fast on a 144Hz screen — and the arms COUNTER-
+// swing the legs, which is what running does and what stops four limbs reading as a star
+// jump. Frame 0 is the rest pose and the swing is scaled back to a stance while the
+// player is under `GAIT.minSpd`, so a standing footballer is not caught mid-stride.
+const FOOTBALLER = {
+  torsoA: 0.74, torsoB: 0.88,      // the shirt from above: wider ACROSS than along
+  headR:  0.50, headAt: 0.05,      // the top of the head, the biggest single shape
+  hairR:  0.84, hairBack: 0.12,    // ...hair over it, leaving a crescent of face in front
+  shortsAt: -0.62, shortsA: 0.28, shortsB: 0.52,
+  arm: { at:[ 0.18,  0.50], to:[ 0.54, 1.06], w: 0.22 },
+  leg: { at:[-0.24,  0.32], to:[-0.76, 0.76], w: 0.26 },
+  bootR: 0.19,
+  swing: 0.24,        // how far a limb travels between the two frames
+  stand: 0.38,        // ...and how much of that is left when nobody is running
+};
+// Four people rather than one, so a side does not read as eight clones. The hair and skin
+// tones are the picture's own, sampled off it. ⚠️ Chosen by a HASH OF THE NAME, never
+// rolled: a paint has to give the same picture twice for one step, and `Math.random` is
+// out of bounds anywhere a step can reach in any case.
+const KIT_PEOPLE = [
+  ['#5b4632', '#ffe0b1'],
+  ['#151515', '#c98d5e'],
+  ['#bb8044', '#ffe0b1'],
+  ['#3a2a1e', '#a46c46'],
+];
+function kitPerson(p){
+  const s = String((p && p.name) || '');
+  let h = 5381;
+  for (let i=0;i<s.length;i++) h = ((h*33) ^ s.charCodeAt(i)) | 0;
+  return KIT_PEOPLE[Math.abs(h) % KIT_PEOPLE.length];
+}
+DISC_SKINS.footballers = {
+  name: 'Footballers',
+  paint(c, p, x, y, r, w){
+    const F = FOOTBALLER;
+    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
+    const px = -uy, py = ux;
+    const pt = (a, b) => [x + ux*a*r + px*b*r, y + uy*a*r + py*b*r];
+    const col  = p.team === 0 ? (TH.teamRed || '#e86a17') : (TH.teamBlue || '#3d9ae0');
+    const ink  = TH.discRim || '#151515';
+    // ⚠️ The kit trim is picked AGAINST the shirt rather than being a palette key of its
+    // own: slots mix, so this skin can be worn over any of the twenty-seven palettes and
+    // a hard-coded white short would vanish on a pale one.
+    // ⚠️ **A THRESHOLD, NOT `pickTextColor`, and that WAS the first build.** That helper
+    // takes whichever ink has the higher contrast, which on BOTH of this theme's kits is
+    // the dark one — so the picture's white shorts came out black on the orange side and
+    // black on the blue. What is wanted is white unless the kit is genuinely pale, which
+    // is a choice about the look rather than a contrast maximum.
+    const trim = relLum(col) > 0.5 ? (TH.discRim || '#151515') : '#ffffff';
+    const [hair, skin] = kitPerson(p);
+    const fr = legFrame(p);
+    const moving = Math.hypot(p.vx || 0, p.vy || 0) >= GAIT.minSpd;
+    const sw = F.swing * (moving ? 1 : F.stand);
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    // --- limbs first, so the shirt sits over where they meet the shoulder -----------
+    for (const sgn of [-1, 1]){
+      const fwd = ((fr + (sgn > 0 ? 0 : 1)) & 1) ? sw : -sw;
+      const A = pt(F.leg.at[0], F.leg.at[1]*sgn);
+      const B = pt(F.leg.to[0] + fwd, F.leg.to[1]*sgn);
+      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.leg.w);
+      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+      c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
+      c.fillStyle = ink; c.fill();
+      const S = pt(F.arm.at[0], F.arm.at[1]*sgn);
+      const H = pt(F.arm.to[0] - fwd, F.arm.to[1]*sgn);   // ...counter-swung
+      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.arm.w);
+      c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
+    }
+    // --- shorts, shirt, head --------------------------------------------------------
+    c.save();
+    c.translate(x, y); c.rotate(Math.atan2(uy, ux));
+    c.beginPath();
+    c.ellipse(F.shortsAt*r, 0, F.shortsA*r, F.shortsB*r, 0, 0, 2*Math.PI);
+    c.fillStyle = trim; c.fill();
+    c.beginPath();
+    c.ellipse(0, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
+    c.fillStyle = col; c.fill();
+    c.beginPath(); c.arc(F.headAt*r, 0, F.headR*r, 0, 2*Math.PI);
+    c.fillStyle = skin; c.fill();
+    c.beginPath();
+    c.arc((F.headAt - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
+    c.fillStyle = hair; c.fill();
+    c.restore();
+    c.restore();
+  },
+};
 function seaPair(name, t0, t1){
   return {
     name,
@@ -36423,7 +36628,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

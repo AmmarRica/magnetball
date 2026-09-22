@@ -2449,6 +2449,94 @@ three lines a second time, name it.
   adding to it — the withdrawn `seam` ball look was a duplicate of `tennis` nobody noticed
   for a whole build. ⚠️ **No `pitch`**: a rooftop is a treatment that works on any
   rectangle.
+  `kickabout` (shown as **Sunday League**) = a bright mown pitch with little footballers
+  on it: a head from above, a shirt, and arms and legs sticking out of the circle. Asked
+  for from a picture of Kenney's own top-down sports sample — *"have the players look like
+  the players in this pic. Body inside the circle but legs can go out. Make it animated.
+  Set this as one of the themes"* — with *"I already have the Kenney pack"*.
+  ⚠️ **DRAWN, NOT SPRITED, AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE — the pack
+  IS here and it cannot do this.** `assets/Kenney/kenney_sports-pack`'s top-down art is
+  **19 × 13 pixel** PNGs, four per kit colour, and every one of them is **head and
+  shoulders ONLY**: there is not a single arm, leg or boot anywhere in the pack, in the
+  PNGs or in `Vector/charactersEquipment.svg` (rendered and checked, not assumed). The
+  limbs in the sample picture belong to that picture's own composition. So **both halves
+  of the ask are out of reach of the files** — there are no limbs to draw, and the four
+  frames per colour are four HAIR AND SKIN variations rather than walk frames, so a sprite
+  body could not be animated at all. A drawn one also carries the TEAM colour, which a
+  fixed blue PNG cannot, and stays crisp at the 9–15px a body is really drawn at. This is
+  the rule `assets/README.md` states and `sketch` is the one documented exception to;
+  `sketch` stays the exception.
+  ⚠️ **THE LIMBS CROSS THE GUIDE RING, AND THAT IS AN EXCEPTION THE OWNER GRANTED IN THE
+  ASK ITSELF.** The standing rule is that a skin may not cross it — *"the guide ring is
+  the one thing a skin may not cross"* — because the ring is the circle that collides and
+  the VideoSoccer arrowhead shipped a third bigger than its own collider. What keeps that
+  lesson intact is that the **SHIRT** stays inside `r` and the ring lands on the
+  shoulders, so the ring still reads as the player and a limb sticking out of a circle
+  reads as a limb rather than as a bigger body. Measured: shirt **0.88r**, whole figure
+  **1.45r**. ⚠️ **THREE CHECKS, NOT ONE, and each passes on a build that breaks the
+  others**: the shirt inside the ring, the figure past it, and a **CEILING** at 1.6r so
+  *"legs can go out"* cannot drift into a body drawn bigger than its collider.
+  `tests/discskins.mjs`' own `bothInsideTheRing` is scoped to `crablobster` and is
+  untouched — this is a narrowing of the rule for one skin, written down, not a deletion.
+  ⚠️ **THE SILHOUETTE RULE CANNOT BE MET AND THE PAIR IS MEASURED INSTEAD — the third
+  deliberate exception in the file**, after Abduction's two saucers and Sketchbook's
+  counters, and for the same reason: both sides are footballers because that is the art
+  that was asked for. The replacement instrument is Sketchbook's own, the LIGHTNESS GAP,
+  and this pair is the widest in the file: **2.62** (`#2f7fd0` at luminance 0.203 against
+  `#f7c81e` at 0.612) against Sketchbook's widest of 1.87. Blue-against-yellow is also the
+  one hue pair no type of colour blindness flattens, which is the half a lightness reading
+  cannot say.
+  ⚠️ **THE FIRST PAIR WAS THE PICTURE'S TWO OUTFIELD KITS AND MEASURED 1.13** — orange
+  `#e86a17` at 0.267 against blue `#3d9ae0` at 0.31. Faithful, and unreadable to a
+  colour-blind player. The two kits taken are the ones in the picture that ARE far apart.
+  ⚠️ **A HOOPED AWAY SHIRT WAS BUILT FIRST AND CUT**, and the reason is geometric rather
+  than tuning: seen from above the shirt is an ANNULUS around the head, the head is half
+  the body across, and every band wide enough to read at 12px lands under it. At r 70 the
+  two hoops were slivers; at r 12 they were gone. The picture's own kits are plain.
+  ⚠️ **BLUE IS TEAM 0 AND YELLOW IS TEAM 1, in that order**, because `drawGoal` colours
+  the FRAME from `teamColOf`, which reads `sel.teamCol`, whose shipped pair is blue then
+  yellow. Written the other way round the left-hand goal came out yellow with blue shirts
+  standing in it — two answers to *"whose end is this"*, which is the one thing on the
+  pitch that has to agree.
+  ⚠️ **THE TRIM IS A THRESHOLD, NOT `pickTextColor`, and `pickTextColor` WAS the first
+  build.** That helper takes whichever ink has the higher CONTRAST, which on **both** of
+  this theme's kits is the dark one — so the picture's white shorts came out black on the
+  blue side and black on the yellow. What is wanted is white unless the kit is genuinely
+  pale, which is a choice about the look rather than a contrast maximum: `relLum(col) >
+  0.5`. Caught by rendering it, not by reasoning.
+  ⚠️ **THE STRIDE IS `legFrame`, the existing distance-driven gait** — never a clock, the
+  standing rule — and the **ARMS COUNTER-SWING the legs**, which is what running does and
+  what stops four limbs reading as a star jump. Frame 0 is the rest pose and the swing is
+  scaled back to a stance below `GAIT.minSpd`, so a standing footballer is not caught
+  mid-stride. `tests/discskins.mjs` already owns the gait's generic claims (a draw must
+  not advance it, rest is frame 0, faster travel means faster legs) and they are **not**
+  repeated in the new suite.
+  ⚠️ **FOUR PEOPLE, CHOSEN BY A HASH OF THE NAME, never rolled**: a paint has to give the
+  same picture twice for one step. The hair and skin tones are the picture's own.
+  ⚠️ **A PALETTE AND A LOOK, with no `DYN_FIELDS` painter and no `pitch`** — the same
+  shape `tennis` and `tactics` have. The mow the picture is half made of is
+  `stripeA`/`stripeB`, which `drawPitch` already paints, so a painter would be a second
+  implementation of the pitch surface; `ball: 'classic'` is REUSED, because the panelled
+  white football is already in the registry. Unlike Tennis and Mirror Ledge the court IS
+  striped: those two are flat because a tennis court and a rooftop have no mow.
+  ⚠️ **THE COLOURS ARE MEASURED OFF THE PICTURE.** The two greens are its two commonest
+  pixels (`#2ecc71` at 187,676 and `#31d978` at 186,810 of 918 × 515) and the markings its
+  `#ffffff` (11,223). ⚠️ The MENU greens are a step lighter than the pitch ones, and that
+  is a contrast floor: the pitch green on the selected tile's `#2d5a4e` measured
+  **4.22:1**, under the 4.5 `tests/contrast.mjs` holds every label to.
+  ⚠️ **THE NAME IS OURS.** Kenney's Sports Pack is CC0 (credit welcome, not required) and
+  Kenney is credited in `assets/README.md`; the theme is not named after it, and the key
+  is generic so the shown name can change for free. The `sketch` / `clash` / `ledge`
+  precedent.
+  ⚠️ **`applyBundle('classic')` IS A SILENT NO-OP — there is no `classic` theme key** (the
+  default palette is `grass`), and it made this suite's render-only check **vacuous**: both
+  arms ran with `look.discs` still `footballers`, so the theme was compared against itself
+  and a `p.vx += 0.01` inside the paint sailed through. The control writes `sel.look.discs`
+  directly now. Several other suites use that call as a last-line cleanup, where it is
+  harmless; nothing else was changed. **Fourteen sabotages, each caught by its own check**,
+  three of which were caught only after the SABOTAGE was fixed (one shortened the arms and
+  left the legs, one moved the head by an amount that did not depend on the frame, and one
+  was too small to see). `tests/footballers.mjs`.
   `tennis` = the five supplied colours on an ORDINARY football pitch — a blue court, a
   green surround, white markings, a clay team against a white one and an acid-yellow
   ball. ⚠️ **A palette and nothing else, and that is the whole point of the entry.** It
@@ -7974,7 +8062,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 145 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 146 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:
