@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260922.0510PM';
+const VERSION = '20260922.0740PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,12 @@ const VERSION = '20260922.0510PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260922.0740PM', title: 'Everything in the Theme card reads A\u2013Z',
+    changed: [
+      '<b>Every picker in the Theme card is now in alphabetical order.</b> The themes already were; the field, player, ball, trail and sound rows were in whatever order they happened to be added in, so finding one meant scanning the whole row.',
+      '<b>The &ldquo;none&rdquo; tile stays first</b> in every row that has one &mdash; Plain, Your look, None. It is a reset rather than a choice, so it is not filed under N.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260922.0510PM', title: 'Sunday League',
     changed: [
       '<b>A new theme: little footballers, seen from above.</b> A bright mown pitch, white lines, a white ball with black panels, and players with a head, a shirt and arms and legs sticking out of it &mdash; blue against yellow. Pick it under Theme &rarr; Bundle.',
@@ -9238,6 +9244,31 @@ function themeKeys(){
     String(THEMES[a].name).localeCompare(String(THEMES[b].name), undefined, { sensitivity: 'base' }));
 }
 function bundleKeys(){ return themeKeys(); }
+// ⚠️ **AND SO DOES EVERY OTHER SLOT PICKER, BY THE NAME ON THE TILE.** The rule above only
+// ever reached the palette: the other five rows came out in DECLARATION order, so the
+// Players row read *Your look · Scribbles · Counters · Mono discs · … · Footballers · Crab
+// vs Lobster · … · Arrowheads* — twenty-one tiles in the order somebody happened to add
+// them, which is a list you scan rather than one you look in. Measured before touching it:
+// palette sorted, and **field, discs, ball, trail and sfx all unsorted**.
+// ⚠️ **BY THE NAME THE SLOT REPORTS, NEVER THE KEY** — the `themeKeys` argument, and it
+// bites harder here: `ufo` is *Saucers*, `pnp` is *Flask vs pixel*, `vector` is *Vector
+// ships*. Sorting keys would be a shuffle to the only person who reads it.
+// ⚠️ **`none` IS PINNED FIRST, never alphabetised.** It is a reset rather than a choice —
+// the rule the Cap and Eyes pickers already follow — and Field and Players put it there by
+// construction while the Trail slot had **None LAST**. All three read the same way now.
+// ⚠️ **ONE OWNER, and today ONE reader.** `buildSlotPicker` is the only place order is
+// seen; `setSlot` and `currentBundle`'s label both ask `keys()` for MEMBERSHIP and could
+// not care less what order it comes in. Anything that ever lists a slot asks here rather
+// than growing a second order.
+// ⚠️ **ORDER IS PRESENTATION ONLY**, exactly as for the themes: nothing is stored by
+// position, `sel.look` holds keys, and no save refers to an index.
+function slotTileOrder(slot){
+  const S = SLOTS[slot]; if (!S) return [];
+  const keys = S.keys();
+  return keys.filter(k => k === 'none').concat(
+    keys.filter(k => k !== 'none').sort((a, b) =>
+      String(S.name(a)).localeCompare(String(S.name(b)), undefined, { sensitivity: 'base' })));
+}
 // Names and emoji live in THEMES and are read from there, never copied.
 // ⚠️ **SLOTS ONLY — `pitch` is deliberately NOT in here.** The pitch is something a bundle
 // DOES, never part of what a bundle IS: `currentBundle()` matches the live slots against
@@ -13232,7 +13263,7 @@ function buildSlotPicker(slot, host){
   const S = SLOTS[slot]; if (!host || !S) return;
   host.innerHTML = '';
   const cur = S.get();
-  for (const k of S.keys()){
+  for (const k of slotTileOrder(slot)){
     const el = document.createElement('div');
     el.className = 'opt' + (cur===k ? ' sel' : '');
     el.dataset.slot = slot; el.dataset.key = k;
@@ -36640,7 +36671,7 @@ if (window.__MAGNETDEBUG) {
     vjPresetSave, vjPresetApply, vjPresets, vjPresetDelete, vjBuildPanel, vjPanelRender,
     vjDeckAudio, vjDeckVideo, get vjView(){ return vjView; }, set vjView(v){ vjView=v; },
     vjCueDevice, vjDevices, vjKey, vjPush, VJ_CMDS,
-    bundleKeys, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
+    bundleKeys, slotTileOrder, bundleSlots, currentBundle, bundleName, applyBundle, setSlot,
     bundlePitch, selectField, paintedPitch, courtCol, surroundCol, lookHex,
     liveSlots, applySlots, drawSlotsSwatch,
     sfxSetKey, applySfxSet, sfxCatKeys, normalizeLook, buildSlotPicker, slotSwatch,

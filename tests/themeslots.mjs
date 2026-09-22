@@ -121,25 +121,40 @@ const r = await p.evaluate(async ()=>{
   // regression, and `#slot_ball` still has to drive the slot on its own.
   M.applyBundle('neon');
   M.buildSettings();
-  const ballTiles = sel => [...document.querySelectorAll(sel + ' .opt')];
-  const idx = M.BALL_LOOK_KEYS.indexOf('eight');
-  ballTiles('#slot_ball')[idx].click(); await wait(80);
+  // ⚠️ **A TILE IS FOUND BY THE NAME ON IT, NEVER BY AN INDEX INTO THE REGISTRY.** These
+  // three lines were `keys.indexOf(k)` into the rendered row, which was only ever true
+  // while a picker drew in DECLARATION order — the moment the rows were alphabetised they
+  // clicked whichever look happened to land in that slot and all three checks went red on
+  // a perfectly good build. Pressing the tile that says "8-Ball" is also what a person
+  // does, and it is the one lookup no future ordering can invalidate.
+  // ⚠️ **THE LABEL IS THE `<span>`, NOT `textContent`** — a sound tile carries a
+  // "tap to hear" hint under its name, so the whole tile reads "Spacetap to hear" and an
+  // exact match on it finds nothing at all.
+  const tileFor = (sel, slot, key) => {
+    const want = M.SLOTS[slot].name(key);
+    return [...document.querySelectorAll(sel + ' .opt')].find(el => {
+      const lab = el.querySelector('span') || el;
+      return lab.textContent.replace(/^[^\p{L}\p{N}]+/u, '').trim() === want;
+    });
+  };
+  // ⚠️ **AND THE TILE IS LOOKED UP AGAIN AFTER THE PRESS.** Picking rebuilds the row, so
+  // the node that was clicked is detached and never gains `.sel` however well the pick
+  // worked — held across the click it reports a working picker as broken.
+  tileFor('#slot_ball', 'ball', 'eight').click(); await wait(80);
   o.themeCardWrites = M.SLOTS.ball.get() === 'eight';
-  o.themeCardMarks = ballTiles('#slot_ball')[idx].classList.contains('sel');
+  o.themeCardMarks = tileFor('#slot_ball', 'ball', 'eight').classList.contains('sel');
   o.noDuplicateBallCard = !document.getElementById('ballLookPick') &&
                           !document.querySelector('.card[data-sec="ball"]');
   // ...and the other way round, on the slot that IS still shown twice: Sound. The Sound
   // card owns the categories one at a time and the Theme card shows the set, so this is
   // the pairing that still has to stay in step.
-  const sfxKeys = Object.keys(M.SFX_SETS), si = sfxKeys.indexOf('space');
-  ballTiles('#sfxSetPick')[si].click(); await wait(80);
+  tileFor('#sfxSetPick', 'sfx', 'space').click(); await wait(80);
   o.sndCardWrites = M.sfxSetKey() === 'space';
-  o.sfxSlotFollowed = ballTiles('#slot_sfx')[si].classList.contains('sel');
+  o.sfxSlotFollowed = tileFor('#slot_sfx', 'sfx', 'space').classList.contains('sel');
   // ...and back the other way, so neither card is merely a mirror of the other.
-  const si2 = sfxKeys.indexOf('pinball');
-  ballTiles('#slot_sfx')[si2].click(); await wait(80);
+  tileFor('#slot_sfx', 'sfx', 'pinball').click(); await wait(80);
   o.sfxSlotWrites = M.sfxSetKey() === 'pinball';
-  o.sndCardFollowed = ballTiles('#sfxSetPick')[si2].classList.contains('sel');
+  o.sndCardFollowed = tileFor('#sfxSetPick', 'sfx', 'pinball').classList.contains('sel');
 
   // ---- every option in every slot renders without throwing ------------------
   // Including the mixes a bundle would never produce — that's the whole point of
@@ -296,6 +311,56 @@ ok(order.customLast,
    `Custom is not last in the bundle row (${order.bundle[order.bundle.length-1]}) — it is derived from your live slots rather than a theme, so it does not get alphabetised into the middle`);
 ok(bundleThemes[0] !== order.declFirst || order.themeCount === 1,
    `the row still leads with the first entry in THEMES ("${order.declFirst}"), so nothing was actually sorted`);
+
+// ---- ...and so does EVERY OTHER SLOT PICKER ----------------------------------------
+// ⚠️ The rule above only ever reached the PALETTE. Measured before the fix: field, discs,
+// ball, trail and sfx all came out in declaration order, so the Players row read *Your look
+// · Scribbles · Counters · Mono discs · … · Footballers · Crab vs Lobster · … · Arrowheads*.
+// ⚠️ **`none` IS PINNED FIRST and is not alphabetised** — a reset is not a choice, the rule
+// the Cap and Eyes pickers already follow. Field and Players put it there by construction;
+// the Trail slot had **None LAST** until this.
+// ⚠️ **MEASURED ON THE RENDERED TILES**, never on `slotTileOrder` — a helper that returns a
+// sorted array proves a helper exists, and `buildSlotPicker` is what has to ask it.
+// ⚠️ **AND THE CONTROL IS THAT THE REGISTRIES ARE NOT ALREADY ALPHABETICAL.** `az()` on the
+// rendered row is vacuous on a slot whose declaration order happens to be sorted, so the
+// raw `keys()` order is read too and at least one slot must be out of order in it — or
+// this whole block passes on a build that never sorts anything.
+const slotOrder = await p.evaluate(() => {
+  const M = window.__magnet, o = { rows: {}, raw: {}, none: {} };
+  M.openLook('theme');
+  const nameOf = el => {
+    const lab = el.querySelector('span,.lbl,div:last-child');
+    return (lab ? lab.textContent : el.textContent).replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  };
+  for (const slot of M.SLOT_KEYS){
+    const pane = document.querySelector(`.subpane[data-pane="${slot}"]`);
+    o.rows[slot] = pane ? [...pane.querySelectorAll('.opt')].map(nameOf) : [];
+    const keys = M.SLOTS[slot].keys();
+    o.raw[slot] = keys.map(k => M.SLOTS[slot].name(k));
+    o.none[slot] = keys.includes('none') ? M.SLOTS[slot].name('none') : null;
+  }
+  return o;
+});
+const azRows = {}, rawAz = {};
+for (const slot of Object.keys(slotOrder.rows)){
+  const row = slotOrder.rows[slot], pin = slotOrder.none[slot];
+  const tail = (pin && row[0] === pin) ? row.slice(1) : row;
+  azRows[slot] = row.length >= 2 && az(tail);
+  // ⚠️ **THE CONTROL HAS TO DROP `none` TOO, AND IT DID NOT — caught by a sabotage
+  // PASSING.** Read raw, the Field registry leads with "Plain" against "Attribute grid",
+  // so `az` answered false because of the PIN rather than because the declaration order is
+  // unsorted — and the control then held even when the raw list was replaced by the sorted
+  // rendered row, which is exactly the vacuity it exists to rule out.
+  rawAz[slot] = az(slotOrder.raw[slot].filter(n => n !== pin));
+  ok(row.length >= 2,
+     `the ${slot} picker rendered ${row.length} tiles — the order check below cannot see anything`);
+  ok(azRows[slot],
+     `the ${slot} picker is not A-Z by the name on the tile: ${row.join(' | ')}`);
+  if (pin) ok(row[0] === pin,
+     `the ${slot} picker does not lead with "${pin}" — a reset is not a choice and is never alphabetised: ${row.join(' | ')}`);
+}
+ok(Object.values(rawAz).some(v => !v),
+   'every registry happens to be declared in alphabetical order, so the A-Z checks above prove nothing — pick a different control');
 
 
 console.log(JSON.stringify({ r, order }, null, 1));

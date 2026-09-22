@@ -122,11 +122,21 @@ const r = await p.evaluate(async ()=>{
   M.applyBundle('neon');
 
   // ---- Picking one sticks, persists, and reaches the pitch
-  const pick = M.BALL_LOOK_KEYS.indexOf('eight');
-  tiles[pick].click(); await wait(60);
+  // ⚠️ **THE TILE IS FOUND BY THE NAME ON IT, NEVER BY AN INDEX INTO `BALL_LOOK_KEYS`.**
+  // That held only while the picker drew in DECLARATION order; alphabetised, the index
+  // clicked whatever look happened to land there. And `pickMarksTile` was passing for the
+  // wrong reason either way — clicking tile N and then asking tile N whether it is marked
+  // is self-consistent whichever look it is. It has to be the tile for the look we asked
+  // for, looked up again after the press because picking rebuilds the row.
+  const tileFor = key => {
+    const want = M.SLOTS.ball.name(key);
+    return [...document.querySelectorAll('#slot_ball .opt')].find(el =>
+      (el.querySelector('span') || el).textContent.replace(/^[^\p{L}\p{N}]+/u,'').trim() === want);
+  };
+  tileFor('eight').click(); await wait(60);
   o.pickWrites = M.sel.look.ball === 'eight';
   o.pickPersists = (JSON.parse(localStorage.getItem('magnetball.sel')||'{}')).look.ball === 'eight';
-  o.pickMarksTile = [...document.querySelectorAll('#slot_ball .opt')][pick].classList.contains('sel');
+  o.pickMarksTile = tileFor('eight').classList.contains('sel');
   return o;
 });
 

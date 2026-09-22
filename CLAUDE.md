@@ -1884,6 +1884,40 @@ three lines a second time, name it.
   returning a sorted array proves only that a helper exists; and it **strips the leading
   emoji** first, or it sorts by the codepoint of the picture and calls a perfectly
   alphabetical row unsorted (which the first run did). `tests/themeslots.mjs`.
+- **AND SO DOES EVERY OTHER SLOT PICKER** (`slotTileOrder`, read by `buildSlotPicker`).
+  The rule above only ever reached the **palette**, because that slot's `keys()` IS
+  `themeKeys()`. Measured before touching anything: palette sorted, and **field, discs,
+  ball, trail and sfx all in declaration order** — the Players row read *Your look ·
+  Scribbles · Counters · Mono discs · … · Footballers (17th) · Crab vs Lobster · … ·
+  Arrowheads*, twenty-one tiles in the order somebody happened to add them. Footballers is
+  9th now.
+  ⚠️ **BY THE NAME THE SLOT REPORTS, NEVER THE KEY** — the same argument, and it bites
+  harder here: `ufo` is *Saucers*, `pnp` is *Flask vs pixel*, `vector` is *Vector ships*.
+  ⚠️ **`none` IS PINNED FIRST, never alphabetised** — a reset is not a choice, the rule the
+  Cap and Eyes pickers already follow. Field and Players put it there by construction
+  (*Plain*, *Your look*); the **Trail slot had None LAST** until this.
+  ⚠️ **ONE OWNER, ONE READER.** `buildSlotPicker` is the only place order is seen; `setSlot`
+  and `currentBundle` ask `keys()` for MEMBERSHIP and cannot care what order it comes in.
+  ⚠️ **ORDER IS PRESENTATION ONLY**, exactly as for the themes — `sel.look` holds keys and
+  no save refers to an index.
+  ⚠️ **IT BROKE FOUR CHECKS THAT CLICKED A TILE BY ITS INDEX INTO THE REGISTRY**
+  (`themeslots`' three card-pairing probes and `balllook`'s pick block), which was only ever
+  true while a picker drew in declaration order. They look a tile up **by the name on it**
+  now — which is also what a person does, and is the one lookup no future ordering can
+  invalidate. ⚠️ **The label is the `<span>`, not `textContent`**: a sound tile carries a
+  *tap to hear* hint, so the whole tile reads `Spacetap to hear` and an exact match finds
+  nothing. ⚠️ **And the tile is looked up AGAIN after the press** — picking rebuilds the
+  row, so the node that was clicked is detached and never gains `.sel` however well the pick
+  worked. ⚠️ `balllook`'s `pickMarksTile` was **passing for the wrong reason** either way:
+  clicking tile N and then asking tile N whether it is marked is self-consistent whichever
+  look it is.
+  ⚠️ **THE NON-VACUITY CONTROL HAD TO DROP `none` TOO, and a sabotage PASSING is what said
+  so.** `az()` on a rendered row proves nothing if the registry happens to be declared
+  alphabetically, so the raw `keys()` order is read as well and at least one slot must be
+  out of order in it — but read raw, Field leads with *Plain* against *Attribute grid*, so
+  the control answered "unsorted" because of the **pin** rather than the declaration order,
+  and it went on holding when the raw list was replaced by the sorted rendered row. Three
+  sabotages, each caught by its own check. `tests/themeslots.mjs`.
 - **Themes are a COLLECTION of slots**, not one key. `SLOTS` declares six — `palette`
   (page + pitch colours, a `THEMES` key), `field` (a `DYN_FIELDS` key or `none`), `discs`
   (a `DISC_SKINS` key or `none`), `ball` (a `BALL_LOOKS` key), `trail` (a `TRAIL_LOOKS` key)
