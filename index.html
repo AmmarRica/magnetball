@@ -315,6 +315,14 @@
        `<div class="hidden">` computes `display: block` here. */
     #scoreStyleRow.hidden { display: none; }
     #adsRow.hidden, #adsPhoneNote.hidden { display: none; }
+    /* ⚠️ **AND #onlineRow HAD NO RULE AT ALL, so it was never hidden — the exact defect the
+       note above records, shipped.** `syncOnlineUI` has always set this class when
+       `online.json` names no match server, and measured on the shipped build with
+       `api:''` / `match:''` the row read class "hidden" and `display: block`, occupying
+       305 x 87px: a four-letter room-code box and a Play online button that could not join
+       anything, which is the dead control the old Online card was DELETED for. Found by
+       adding the direct-play block beside it. */
+    #onlineRow.hidden, #hostedOnline.hidden, #directOnline.hidden { display: none; }
     /* ⚠️ **THE 70px ABOVE IS A THUMBSTICK ALLOWANCE, AND A DESKTOP WAS PAYING IT.** That
        `calc(70px + 78px)` lifts the button clear of the on-screen joystick, which only
        exists on a touch layout — but `computeCam` reserves the whole band under the pitch
@@ -1897,17 +1905,41 @@
       <div style="height:14px"></div>
       <label class="field">Match length</label>
       <div class="opts" id="lengths"></div>
-      <!-- ⚠️ SHOWN ONLY WHEN A MATCH SERVER IS CONFIGURED (`online.json` names one). Without
-           one this row is hidden outright, never disabled: a room-code box that cannot join
-           anything is the dead control the Online card was deleted for. See `NET`. -->
+      <!-- ⚠️ TWO WAYS TO PLAY ONLINE, ONE ROW, because it is one question — "play somebody
+           who is not in the room" — and splitting it across two cards is the second door
+           onto one room that deleted the standalone Ball card.
+           ⚠️ HOSTED is shown ONLY when a match server is configured (`online.json` names
+           one): a room-code box that cannot join anything is the dead control the old
+           Online card was deleted for. See `NET`.
+           ⚠️ DIRECT is always offered, and that is NOT the same rule bent. A relay-address
+           box is not a box that cannot join anything — it joins whatever you point it at,
+           and `server/lockstep/relay.mjs` is one file anybody can run. See `LOCK`. -->
       <div id="onlineRow" class="hidden">
         <div style="height:14px"></div>
         <label class="field">Online</label>
-        <div class="netrow">
-          <input id="netRoom" type="text" maxlength="4" placeholder="ROOM" autocomplete="off" spellcheck="false" />
-          <button id="netPlayBtn" class="ghost mini" type="button">Play online</button>
+        <div id="hostedOnline" class="hidden">
+          <div class="netrow">
+            <input id="netRoom" type="text" maxlength="4" placeholder="ROOM" autocomplete="off" spellcheck="false" />
+            <button id="netPlayBtn" class="ghost mini" type="button">Play online</button>
+          </div>
+          <div class="hint">Type a four-letter room code and share it. The first two people who join it play each other on the match server, which runs the whole match in one place &mdash; so neither player's connection decides what happens. The match uses the settings of whoever joined first, and starts the moment the second player arrives.</div>
+          <div style="height:14px"></div>
         </div>
-        <div class="hint">Type a four-letter room code and share it. The first two people who join it play each other on the match server, which runs the whole match in one place &mdash; so neither player's connection decides what happens. The match uses the settings of whoever joined first, and starts the moment the second player arrives.</div>
+        <div id="directOnline">
+          <label class="field">Direct connection</label>
+          <input id="lockUrl" type="text" data-noi18n autocomplete="off" spellcheck="false" placeholder="ws://localhost:9977" aria-label="Relay server address">
+          <div class="netrow">
+            <input id="lockCode" type="text" data-noi18n maxlength="5" placeholder="ABCDE" autocomplete="off" spellcheck="false" style="text-transform:uppercase" aria-label="Room code" />
+            <button id="lockJoinBtn" class="ghost mini" type="button">Join</button>
+          </div>
+          <div style="height:8px"></div>
+          <button class="ghost" id="lockHostBtn" type="button">Host a match</button>
+          <button class="ghost" id="lockLeaveBtn" type="button" style="display:none">Leave</button>
+          <!-- ⚠️ A STATUS READOUT borrowing .hint styling, not help — in HINT_SKIP like
+               #recLine, or the fold pass hangs an ⓘ over live session state. -->
+          <div id="lockStatus" class="hint" data-noi18n style="text-align:left">Not connected.</div>
+          <div class="hint">No match server needed &mdash; only a <b>relay</b>, one small file (<b>server/lockstep/relay.mjs</b>) anyone can run with Node on a home machine or a free cloud box. It just introduces the two players and passes their inputs along; the match itself runs on both devices. Hosting gives you a five-letter code; the other player types it in and the match starts by itself &mdash; 1v1, on the host's settings. Because both devices simulate it, the match advances at the pace of the <b>slower connection</b>, and both should be on the same browser (two phones on Chrome, say) or they can drift apart and the session ends with a sync warning. If the other player disconnects, a bot takes their seat. From an https page the address must be <b>wss://</b>; plain <b>ws://</b> works for localhost and for a saved offline copy.</div>
+        </div>
       </div>
       </div>
 
@@ -2474,7 +2506,11 @@
            hundred lines up to justify deleting the old Ball card. "Is there online?" is still a
            real question, so the answer survives verbatim; only the box round it is gone. -->
       <label class="field">Is there online play?</label>
-      <div class="hint always" style="text-align:left">There is no online play. Every mode here is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. If you want to play somebody who is not in the room, the closest thing is a <b>saved replay</b>: they re-render at full quality on any device and are about 25KB, so a match is something you can send.</div>
+      <!-- ⚠️ THIS READ "There is no online play" LONG AFTER THERE WAS. The hosted match
+           server shipped and nothing updated the one place a player goes to ask. Two ways
+           now, both under Match &rarr; Game &rarr; Online, and the answer names the trade
+           rather than just saying yes: see NET and LOCK. -->
+      <div class="hint always" style="text-align:left">Yes, two ways &mdash; both under <b>Match &rarr; Online</b>. A <b>hosted</b> 1v1 runs the whole match on a neutral server, so neither player's connection decides what happens; it needs a match server, so it only appears where one is set up. A <b>direct</b> 1v1 needs no server at all, just a small <b>relay</b> anybody can run, and the match runs on both devices &mdash; free, but it moves at the pace of the slower connection. Everything else is local: against the bots, or with other people on the same screen &mdash; up to four with controllers, or two thumbs on one phone. A <b>saved replay</b> is still the way to show somebody a match afterwards: they re-render at full quality on any device and are about 25KB.</div>
       <div style="height:14px"></div>
       <!-- ⚠️ THE WHOLE GAME IS ONE FILE, so "download it" is literally that rather than an
            installer, a package or a runtime. It matters most on Linux, where Firefox has no
@@ -3014,6 +3050,7 @@
    Progression + rank          "Stats & rank (ELO"
    VJ mode                     "VJ MODE — two video decks"
    Online / match server       "ONLINE — a match hosted by a THIRD PARTY"
+   Online / direct lockstep    "LOCK — online 1v1 by DETERMINISTIC LOCKSTEP"
    Setup UI                    "SETUP UI"
    Menu search                 "Menu search ---"
    Progressive help            "Progressive disclosure for help text ---"
@@ -6091,7 +6128,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0415PM';
+const VERSION = '20260923.0430PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6144,16 @@ const VERSION = '20260923.0415PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0430PM', title: 'Play online with no server at all',
+    changed: [
+      '<b>A second way to play online: a direct 1v1 that needs no match server.</b> One small relay file — anybody can run it on a home machine — introduces the two of you, and the match runs on both devices.',
+      'Host a match for a five-letter code, or type somebody else\'s in. The match uses the host\'s settings and starts by itself.',
+      '<b>Free, with one honest catch</b>: the match moves at the pace of the slower connection. The hosted option is still there where you want a neutral server to decide.',
+      'If the other player drops out, a bot takes their seat and your match carries on.',
+      '<b>The Online controls were on screen even with nothing to connect to.</b> The room-code box now appears only when there is a match server to reach.',
+      'And the About card stopped saying there is no online play.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260923.0415PM', title: 'The players run in a replay, at a pace you can follow',
     changed: [
       '<b>Replays animate the players now.</b> Legs, arms and the creature skins all held a single frozen pose from kickoff to whistle, however far anybody ran.',
@@ -10714,7 +10761,9 @@ const DIFF_RATING = { rookie:700, easy:900, normal:1100, hard:1300, pro:1500, el
 // Falls back to 0 — the pre-lobby answer — so nothing changes for a match with no
 // human in it at all (the attract demo, a spectated match).
 function youTeam(w){
-  const find = list => (list || []).find(q => q.ctrl === 'human1');
+  // ⚠️ `lockLocal` is direct online's marker for "this body is yours on THIS machine" —
+  // both seats are `ctrl:'lock'` there, so the ctrl alone cannot say which side you are.
+  const find = list => (list || []).find(q => q.ctrl === 'human1' || q.lockLocal);
   const me = find(w && w.players) || find(w && w.bench);
   return me ? (me.team === 1 ? 1 : 0) : 0;
 }
@@ -14743,7 +14792,10 @@ function buildSubTabs(){
 // ⚠️ A hint with no label before it is a NOTE, not help for a control (the panel
 // status line, the record readout). Those are left exactly as they are — attaching a
 // toggle to the nearest label above would fold text that belongs to nothing.
-const HINT_SKIP = new Set(['recLine']);      // a data readout that borrows .hint styling
+// Data readouts that borrow .hint styling but are not help: the record line, and the
+// direct-online session's status ("Waiting for an opponent — room code: …"). Folding
+// either behind an ⓘ would hide the thing it exists to show.
+const HINT_SKIP = new Set(['recLine', 'lockStatus']);
 function buildHintToggles(root){
   const scope = root || document;
   for (const h of scope.querySelectorAll('.hint')){
@@ -18030,9 +18082,19 @@ function onlineLoad(){
   return fetch('./online.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(take)
     .catch(() => {}).then(() => { ONLINE.loaded = true; syncOnlineUI(); });
 }
+// ⚠️ TWO GATES, NOT ONE, because the row now carries two independent ways to play online
+// and they are available under different conditions. Hosted needs `online.json`; direct
+// needs only a relay address the player types, so it is offered wherever a socket can be
+// opened at all. The ROW is up when EITHER is, or the label sits over nothing.
+// ⚠️ `directOnlineOffered()` is the one predicate, so the row, the block and the search
+// index cannot disagree about whether direct play is on the table.
+function directOnlineOffered(){ return !PANEL; }
 function syncOnlineUI(){
-  const row = $('onlineRow'); if (!row) return;
-  row.classList.toggle('hidden', !(ONLINE.api && ONLINE.match));
+  const row = $('onlineRow'), hosted = $('hostedOnline'), direct = $('directOnline');
+  const hostedOn = !!(ONLINE.api && ONLINE.match), directOn = directOnlineOffered();
+  if (hosted) hosted.classList.toggle('hidden', !hostedOn);
+  if (direct) direct.classList.toggle('hidden', !directOn);
+  if (row) row.classList.toggle('hidden', !(hostedOn || directOn));
 }
 const netCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
 function netSelDoc(){ const s = {}; for (const k of RESUME.keys) s[k] = sel[k]; return s; }
@@ -18043,6 +18105,9 @@ async function netPlay(codeIn){
   if (!ONLINE.api || !ONLINE.match){ toast('No match server is set up', 'err'); return false; }
   if (code.length !== 4){ toast('A room code is four letters', 'err'); return false; }
   netLeave();
+  // ⚠️ The two online paths are mutually exclusive — see LOCK. One of the two stops the
+  // other at each door, and this is the hosted door.
+  lockStop('Left the direct session for a hosted match.');
   NET.room = code; NET.status = 'token';
   try {
     const name = (profile.name || 'You').slice(0, 12);
@@ -18929,6 +18994,12 @@ function startMatch(opts){
   // A new local match ends a hosted one — and gives the borrowed settings back BEFORE
   // they are read below. `netStart` itself comes through here with `joining` raised.
   if (NET.remote && !NET.joining) netLeave();
+  // ...and it ends a DIRECT one, for the same reason wearing the other hat: the lockstep
+  // gate would otherwise wait forever on a world it no longer owns. `lockBegin`'s own
+  // startMatch is exempt (`lock._begin`), and so is the attract demo (`_startQuiet`) —
+  // hosting a room IS sitting on the menu waiting, and a demo kicking you out of the room
+  // you are waiting in would make hosting impossible on any desktop. See LOCK.
+  lockGuardStart();
   resumeClear();      // whatever match was on offer, this one replaces it — see RESUME
   // ⚠️ A MATCH STARTS IN THE PLAYER'S OWN COLOURS. `matchTeamCol` is the tournament's
   // one-match override (see `teamColOf`), and clearing it HERE rather than trusting
@@ -18980,7 +19051,10 @@ function startMatch(opts){
     per = Math.max(per, COCKTAIL.per);
   // ...and not for a hosted match, whose size is the server's: a pad plugged in here must
   // not grow a roster the snapshots do not carry.
-  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet && !NET.joining){
+  // ...nor for a DIRECT one, whose size must come out the same on both machines: the
+  // roster can never grow to fit whatever pads happen to be plugged into one of them.
+  // The seats are re-dressed to ctrl:'lock' the moment this returns (`lockDress`).
+  if (padsTakeSeats() && !mode.train && !mode.twoP && !_startQuiet && !NET.joining && !lock._begin){
     const np = connectedGamepadIndices().length;
     if (np > 0) per = Math.max(per, Math.min(LOBBY.maxPerSide,
                                              sel.coop === 'on' ? np : Math.ceil(np/2)));
@@ -19808,6 +19882,15 @@ function loop(t){
   acc += dt * slow * (sel.matchSpeed || 1);   // player-set match speed (0.5×–2×)
   let steps = 0;
   while (acc >= STEP && steps < MAX_STEPS){
+    // ⚠️ **DIRECT ONLINE'S LOCKSTEP GATE — see LOCK.** A frame may only step once BOTH
+    // seats' inputs for it are buffered; blocked, the sim WAITS (capped so a long stall
+    // does not bank a burst of catch-up steps) and everything below waits with it, because
+    // all of it is advanced per-step on purpose. Never both branches: `NET.remote` is a
+    // hosted match, which simulates nothing here, and the two are mutually exclusive.
+    if (lock.playing){
+      if (!lockCanStep(world)){ lockStalled(dt); acc = Math.min(acc, 0.25); break; }
+      lockBeforeStep(world);
+    }
     // A hosted match is stepped on the server; here the world is what the server said
     // (see NET). Everything below only ever reads positions, so it runs either way.
     if (NET.remote) netStep(world); else step(world);
@@ -19819,7 +19902,9 @@ function loop(t){
                                         // (they still PAINT, they just hold still)
     decayJuice();
     advanceGoalCam(world);  // ...and the goal push-in, for the very same reason
-    if (!NET.remote) pollDropIn(world);   // a pad pressing a button takes over a bot — see pollDropIn
+    // ⚠️ ...and never in a DIRECT one either: drop-in reads LOCAL hardware and rewrites
+    // the roster, which is the one thing two lockstepped machines can never do apart.
+    if (!NET.remote && !lock.playing) pollDropIn(world);   // a pad pressing a button takes over a bot — see pollDropIn
                                           // (never in a hosted match: the seats are the server's)
     advanceFloaters();      // stat labels age with the sim, never with the refresh rate
     advanceTilt();          // phone parallax: a per-step decay, so never in a draw
@@ -19827,6 +19912,7 @@ function loop(t){
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
     advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
+    if (lock.playing) lockAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
   }
   // ⚠️ **HITTING THE CAP SHEDS THE SURPLUS, IT DOES NOT BANK IT.** Without this `acc`
@@ -19926,7 +20012,12 @@ function autoReplayReady(w){
   // did not disappear — it MOVED to the first-run default beside `juice` and `goalZoom`
   // (a default, never an override), and an existing effects-off install keeps what it
   // sees today through `magnetball.replayfold`.
+  // ⚠️ ...and never in a DIRECT online match: `playReplay` parks `loop()` for seconds at a
+  // wall-clock length the other machine cannot see, and `resetKickoff` then fires from a
+  // `.then()` BETWEEN steps here while it fired INSIDE a step there — two different worlds
+  // by kickoff. A hosted match is already exempt: its replays are the server's business.
   return !!(sel.autoReplay && worth && !vj.on && !w.demo && !ending && !w.overtime
+            && !lock.playing
             && !(w.party && w.party.multi) && !w._autoReplayed
             && lastReplay && lastReplay.frames && lastReplay.frames.length
             && lastReplay.players === w.players.length);
@@ -22441,6 +22532,10 @@ function step(w){
       else if (p.ctrl==='gamepad') applyHumanInput(p, menu ? null :
         (p === firstHumanSeat(w) ? mergePads(gamepadPad(p.padIndex), pads.p1)
                                  : gamepadPad(p.padIndex)));
+      // ⚠️ DIRECT ONLINE SEATS — yours included — read the frame-indexed wire buffer, never
+      // a live pad: a local seat applied live would act `LOCK.delay` frames earlier here
+      // than on the opponent's machine, and the sims part on the first touch. See LOCK.
+      else if (p.ctrl==='lock') lockApplySeat(w, p);
       // Waiting bots don't play — they're stood off the touchline until the whistle.
       // ⚠️ `_subTo` suppresses the AI while a bot walks on through the gate — walkTo sets
       // the position directly, so a thinking bot would fight it and jitter on the touchline.
@@ -35856,6 +35951,393 @@ function drawFx(){
 }
 
 // ============================================================
+//  LOCK — online 1v1 by DETERMINISTIC LOCKSTEP, peer to peer through a dumb relay
+// ============================================================
+// ⚠️ **THIS IS THE SECOND WAY TO PLAY ONLINE AND IT IS NOT THE ONE ABOVE.** `NET`/`ONLINE`
+// is a match HOSTED by a third party: the server runs this same file and both players are
+// thin clients who simulate nothing. This one is the opposite trade — nobody hosts, both
+// machines run the whole sim, and only INPUTS cross the wire (~3 bytes a frame). Which to
+// reach for is a real choice and the Online row states it:
+//   · Hosted  — needs a match server (a container, ~150-300MB a room). Neither player's
+//               connection decides anything, which is the answer to "there is lag and I am
+//               not sure who". Costs money to run.
+//   · Direct  — needs only `server/lockstep/relay.mjs`, one file anyone can run. Free, and
+//               it stalls at the pace of the WORSE connection, because a lockstep frame
+//               cannot advance until both seats' inputs for it are in.
+// ⚠️ **THE TWO ARE MUTUALLY EXCLUSIVE AND THE CODE SAYS SO IN ONE PLACE EACH**: `netPlay`
+// stops a lockstep session before it opens a hosted one, `lockConnect` leaves a hosted
+// match before it opens a socket, and `loop()` can only ever be in one of the two branches
+// because `NET.remote` and `lock.playing` are never both set.
+// ⚠️ **THE NAMES ARE DELIBERATELY UNALIKE.** `NET`/`net*` is the hosted client and
+// `LOCK`/`lock*` is this one; `server/match/relay.mjs` and `server/lockstep/relay.mjs`
+// speak different protocols. Two systems answering one question is exactly where a shared
+// prefix rots into one being edited for the other.
+//
+// The relay introduces two browsers by room code and passes their messages along
+// verbatim; it never simulates. Seed the same match, feed the same inputs at the same
+// frames, get the same match — which is what the determinism audit's same-engine
+// guarantee buys. Cross-ENGINE (Chrome vs Safari) floats can drift, which is the parked
+// fixed-point work, so a hash of the world is exchanged every second and a mismatch ends
+// the session honestly rather than letting two players watch two different matches.
+//
+// ⚠️ **BOTH SEATS ARE `ctrl:'lock'`, INCLUDING YOUR OWN, and that is the whole trick.**
+// Your input is sampled, quantised to the wire format, delayed `LOCK.delay` frames and
+// applied FROM THE BUFFER — exactly the path the opponent's copy of you runs. A local seat
+// applied live would act `LOCK.delay` frames earlier here than there, and the sims part on
+// the first touch. Everything device-local (keyboard/pad merge, one-hand kick, touch
+// snapping) resolves on the SAMPLING side, before quantisation, so none of it has to match
+// across machines.
+//
+// ⚠️ **THE HOST'S SETTINGS ARE THE MATCH.** `step()` reads `sel` live (charge, sprint, the
+// feel sliders), so the sim-relevant keys are copied from the host's `sel` over the
+// joiner's for the duration and RESTORED at `lockStop` — never written through `saveSel()`,
+// which is also why the relay address lives in `magnetball.lockstep` and not in `sel`.
+// `LOCK_SEL_KEYS` is the list; a sim-read `sel` key missing from it is a desync the hash
+// check catches in one second flat, which is what the hash check is FOR.
+//
+// ⚠️ Gating lives in `loop()`: a frame may only step once BOTH seats' inputs for it are
+// buffered (frames 0..delay-1 are prefilled neutral, so there is no starting deadlock).
+// Auto-replay, drop-in and subs stand down while playing: each fires off wall-clock or
+// local hardware, which is exactly what a lockstep sim cannot contain.
+const LOCK = {
+  delay: 3,        // input latency in frames (50ms) — the price of never predicting
+  hashEvery: 60,   // world-hash exchange cadence, in frames
+  stallBanner: 2.5,// seconds blocked before the WAITING banner shows
+  keep: 240,       // input frames kept behind the play head before pruning
+};
+// ⚠️ NOT `RESUME.keys`, which the hosted path travels on. That list is what a match is
+// STARTED from; this one is what the sim READS, and the two are not the same question —
+// a key the sim reads and this list omits is a desync, where `RESUME.keys` may safely
+// carry dressing. They overlap heavily and are still separate on purpose.
+const LOCK_SEL_KEYS = ['mode','field','length','ball','diff','magnet','pitch','kickoffRule',
+  'boxRule','trapOff','sprint','charge','chargeMs','kickRing','kickPush','matchSpeed',
+  'botPlan','party','feel','spectate','magReach','magKick','hitStop'];
+const LOCKSTORE = 'magnetball.lockstep';
+const lock = {
+  ws:null, on:false, hosting:false, playing:false, room:'', slot:0, delay:LOCK.delay,
+  inbuf:null, myHash:null, theirHash:null, selWas:null, desynced:false,
+  stallT:0, stallShown:false, _begin:false,
+  // The scratch body the local pad is resolved onto — applyHumanInput needs somewhere to
+  // keep one-hand-kick state, and it must not be a real player.
+  scratch:{ rotQuarter:0, inX:0, inY:0, kick:false, faceX:0, faceY:-1 },
+};
+function lockStatus(msg){ const el = $('lockStatus'); if (el) el.textContent = msg; }
+function syncLockUI(){
+  const host = $('lockHostBtn'), join = $('lockJoinBtn'), leave = $('lockLeaveBtn');
+  if (host) host.disabled = lock.on;
+  if (join) join.disabled = lock.on;
+  if (leave) leave.style.display = lock.on ? '' : 'none';
+}
+function lockFlag(){ return profile.flag === 'photo' ? 'none' : (profile.flag || 'none'); }
+function lockSend(m){
+  if (lock.ws && lock.ws.readyState === 1){ try { lock.ws.send(JSON.stringify(m)); } catch (e) {} }
+}
+// ws:// unless the address says otherwise; a bare host gets the scheme the page needs.
+function lockNormUrl(v){
+  v = String(v || '').trim();
+  if (!v) return '';
+  if (!/^wss?:\/\//i.test(v)) v = (location.protocol === 'https:' ? 'wss://' : 'ws://') + v;
+  return v;
+}
+function loadLock(){ try { return JSON.parse(localStorage.getItem(LOCKSTORE) || '{}') || {}; } catch (e) { return {}; } }
+function saveLock(o){ try { localStorage.setItem(LOCKSTORE, JSON.stringify(o)); } catch (e) {} }
+
+function lockConnect(url, hello){
+  lockStop(null);                      // one session at a time, cleanly
+  // ⚠️ A hosted match and a lockstep session cannot both be live: `loop()` would be asked
+  // to replay the server's snapshots AND gate on peer inputs for the same world.
+  if (NET.remote) netLeave();
+  let ws;
+  try { ws = new WebSocket(url); } catch (e) { lockStatus('Bad server address.'); return; }
+  lock.ws = ws; lock.on = true; lock.desynced = false;
+  lockStatus('Connecting…'); syncLockUI();
+  ws.onopen = () => { lockSend(hello); };
+  ws.onmessage = lockOnMsg;
+  ws.onerror = () => {};               // onclose always follows and carries the story
+  ws.onclose = () => {
+    if (lock.ws !== ws) return;        // an old socket closing after lockStop replaced it
+    if (lock.playing) lockPeerGone();
+    else { lock.ws = null; lock.on = false; lock.hosting = false; lock.room = '';
+           lockStatus('Disconnected.'); syncLockUI(); }
+  };
+}
+function lockHost(url){
+  if (PANEL){ lockStatus('Open this from the game window.'); return; }
+  lock.hosting = true; lock.slot = 0;
+  lockConnect(url, { t:'hello', v:1 });
+  lock.hosting = true;                 // lockStop inside lockConnect cleared it
+}
+function lockJoin(url, code){
+  if (PANEL){ lockStatus('Open this from the game window.'); return; }
+  code = String(code || '').toUpperCase().trim();
+  if (!code){ lockStatus('Type the room code first.'); return; }
+  lock.slot = 1;
+  lockConnect(url, { t:'hello', v:1, room: code });
+  lock.slot = 1;
+}
+function lockOnMsg(ev){
+  let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+  switch (m.t){
+    case 'room':
+      lock.room = m.code;
+      lockStatus('Waiting for an opponent — room code: ' + m.code);
+      break;
+    case 'joined':
+      lock.room = m.room;
+      lockStatus('Joined ' + m.room + ' — waiting for the host…');
+      lockSend({ t:'meta', name: (profile.name || 'P2').slice(0, 12), flag: lockFlag() });
+      break;
+    case 'peer': break;                // the joiner speaks first (meta), so nothing to do yet
+    case 'meta':
+      // Host: the opponent introduced themselves — deal the match. The start message
+      // carries everything the joiner needs to build the identical world: the seed and
+      // the sim-relevant slice of the host's settings.
+      if (lock.hosting && !lock.playing){
+        const start = { t:'start', seed: nextMatchSeed(), delay: LOCK.delay, cfg: lockCfg(),
+                        names: [(profile.name || 'P1').slice(0, 12), String(m.name || 'P2').slice(0, 12)],
+                        flags: [lockFlag(), m.flag || 'none'] };
+        lockSend(start);
+        lockBegin(start);
+      }
+      break;
+    case 'start': if (!lock.hosting && !lock.playing){ lock.slot = 1; lockBegin(m); } break;
+    case 'i': lockRecvInput(m); break;
+    case 'h': lockRecvHash(m); break;
+    case 'gone': if (lock.playing) lockPeerGone();
+                 else if (lock.hosting) lockStatus('Opponent left — room code: ' + lock.room);
+                 break;
+    case 'err': lockStatus('Server: ' + String(m.why || 'error')); lockStop(null); break;
+  }
+}
+// The sim-relevant slice of the host's settings. Deep-copied through JSON because
+// `party` and `feel` are objects and the joiner must not share references into them.
+function lockCfg(){
+  const cfg = {};
+  for (const k of LOCK_SEL_KEYS) cfg[k] = JSON.parse(JSON.stringify(sel[k] ?? null));
+  cfg.mode = '1v1'; cfg.spectate = 'play';   // one body a side, and nobody watches from the bench
+  return cfg;
+}
+function lockBegin(m){
+  lock._begin = true;
+  try {
+    lock.selWas = {};
+    for (const k of LOCK_SEL_KEYS){
+      lock.selWas[k] = JSON.parse(JSON.stringify(sel[k] ?? null));
+      if (m.cfg && k in m.cfg) sel[k] = JSON.parse(JSON.stringify(m.cfg[k]));
+    }
+    lock.delay = Math.max(1, Math.min(12, (m.delay | 0) || LOCK.delay));
+    // ⚠️ Pinned for THIS start only. `_forcedSeed` is sticky until cleared, and left set it
+    // would deal the same bots to every offline match after this one.
+    setMatchSeed(m.seed >>> 0);
+    startMatch({ lobby: false });
+    setMatchSeed(null);
+    lockDress(m);
+    world.lockFrame = 0;
+    lock.inbuf = [new Map(), new Map()];
+    for (let i = 0; i < lock.delay; i++){ lock.inbuf[0].set(i, [0,0,0]); lock.inbuf[1].set(i, [0,0,0]); }
+    lock.myHash = new Map(); lock.theirHash = new Map();
+    lock.playing = true; lock.stallT = 0; lock.stallShown = false;
+    lock.scratch = { rotQuarter:0, inX:0, inY:0, kick:false, faceX:0, faceY:-1 };
+    lockStatus('Playing — room ' + lock.room);
+    syncLockUI();
+  } finally { lock._begin = false; }
+}
+// Both machines built the same 1v1 (host profile differences are cosmetic — mkPlayer's
+// physics fields ignore the profile) and now dress it identically: team 0 is the host,
+// team 1 the joiner, both seats fed from the wire. `lockLocal` marks which body is YOURS
+// on this machine — read by `youTeam` and the touch controls, never by the sim.
+function lockDress(m){
+  const w = world; if (!w) return;
+  const seats = [w.players.find(p => p.team === 0), w.players.find(p => p.team === 1)];
+  seats.forEach((p, slot) => {
+    if (!p) return;
+    p.ctrl = 'lock'; p.lockSlot = slot; p.lockLocal = (slot === lock.slot); p.padIndex = -1;
+    if (m.names && m.names[slot]) p.name = String(m.names[slot]).slice(0, 12);
+    // 'photo' is a data URL on somebody else's device — it cannot travel, so it never
+    // arrives (lockFlag folds it to 'none' on the way out) and is refused on the way in.
+    if (m.flags && m.flags[slot] && m.flags[slot] !== 'photo') p.flag = m.flags[slot];
+  });
+  syncSeatRotation(w);
+}
+// Resolve the local pad exactly as an offline seat would — keyboard merged with the first
+// controller merged with touch — then quantise. int8 per axis: both machines divide the
+// same integer by 127, so the floats they apply are bit-identical.
+function lockSample(){
+  let pad = null;
+  if (!deckMenuOwnsPad()){
+    const gp = connectedGamepadIndices();
+    pad = mergePads(gp.length ? gamepadPad(gp[0]) : null, pads.p1);
+  }
+  // ⚠️ **THE SEAT'S QUARTER-TURN HAS TO BE ON THE SCRATCH BODY, and it shipped as a hard
+  // ZERO.** `applyHumanInput` reads `p.rotQuarter` — that is where SELECT's quarter-turn and
+  // a cocktail seat's rotation are applied — so a scratch body pinned at 0 threw both away
+  // and a player who had turned their controls found the one room that ignored it. It is
+  // device-local by construction: the rotation resolves BEFORE quantisation, so what
+  // travels is world-space input and the two machines cannot disagree about it.
+  // ⚠️ AND THE LAYOUT'S TURN IS THE BIG HALF, not cocktail. `applySeatRotation` gives every
+  // non-bot a base of `pitchHorizontal() ? 1 : 0`, and `auto` turns the pitch on ANY wide
+  // screen — so a scratch pinned at 0 handed a direct-online player a stick a quarter turn
+  // off what they were looking at, on a desktop, which is the ordinary case. That is the
+  // same defect `syncSeatRotation` records for a body waiting on the touchline, arriving
+  // through the wire instead. `lockDress` calls `syncSeatRotation`, so the local body's
+  // `rotQuarter` is right; this is what reads it.
+  // ⚠️ SELECT's own per-pad quarter-turn is added HERE rather than through
+  // `applySeatRotation`, which only adds it for `ctrl === 'gamepad'` — a lock seat has
+  // `padIndex = -1` and is not bound to a pad at all, so the rotation that applies is the
+  // one belonging to the pad actually being SAMPLED.
+  const me = world && world.players ? world.players.find(q => q.lockLocal) : null;
+  const gp2 = pad ? connectedGamepadIndices() : [];
+  lock.scratch.rotQuarter = (((me && me.rotQuarter) || 0)
+                             + (gp2.length ? seatRotOf(gp2[0]) : 0)) % 4;
+  applyHumanInput(lock.scratch, pad);
+  const q = v => Math.max(-127, Math.min(127, Math.round((v || 0) * 127)));
+  return [q(lock.scratch.inX), q(lock.scratch.inY), lock.scratch.kick ? 1 : 0];
+}
+// The step loop's input branch for a lockstep seat — the exact shape applyHumanInput
+// produces, computed from the wire integers so both machines cannot disagree.
+function lockApplySeat(w, p){
+  const rec = lock.inbuf && lock.inbuf[p.lockSlot] ? lock.inbuf[p.lockSlot].get(w.lockFrame) : null;
+  let qx = rec ? rec[0] / 127 : 0, qy = rec ? rec[1] / 127 : 0;
+  const m = Math.hypot(qx, qy);
+  if (m > 1){ qx /= m; qy /= m; }      // a rounded diagonal can poke a hair over 1
+  if (m > 0.001){ p.inX = qx; p.inY = qy; p.faceX = qx / m; p.faceY = qy / m; }
+  else { p.inX = 0; p.inY = 0; }
+  p.kick = !!(rec && rec[2]);
+}
+const LOCK_Z = [0, 0, 0];
+function lockCanStep(w){
+  if (!lock.playing) return true;
+  if (w.state === 'over') return true;   // the whistle has gone — each machine winds down alone
+  const f = w.lockFrame | 0;
+  return lock.inbuf[0].has(f) && lock.inbuf[1].has(f);
+}
+function lockBeforeStep(w){
+  const f = w.lockFrame | 0, sf = f + lock.delay;
+  const mine = lock.inbuf[lock.slot];
+  if (!mine.has(sf)){
+    mine.set(sf, lockSample());
+    // Three frames per packet: the transport is TCP so nothing is lost, but a packet that
+    // arrives late is covered by the next one arriving with its tail.
+    lockSend({ t:'i', f: sf, d: [mine.get(sf - 2) || LOCK_Z, mine.get(sf - 1) || LOCK_Z, mine.get(sf)] });
+  }
+  if (lock.stallT > 0){ lock.stallT = 0; lock.stallShown = false; }
+}
+function lockAfterStep(w){
+  const f = w.lockFrame | 0;
+  w.lockFrame = f + 1;
+  if (f % LOCK.hashEvery === 0){
+    const h = lockHashWorld(w);
+    lock.myHash.set(f, h);
+    lockHashCheck(f);
+    lockSend({ t:'h', f, h });
+    for (const buf of lock.inbuf) for (const k of buf.keys()) if (k < f - LOCK.keep) buf.delete(k);
+    for (const map of [lock.myHash, lock.theirHash]) for (const k of map.keys()) if (k < f - LOCK.keep * 4) map.delete(k);
+  }
+  if (w.state === 'over' && lock.playing) lockStop('Match finished — host or join again for a rematch.');
+}
+function lockStalled(dt){
+  lock.stallT += dt;
+  if (lock.stallT > LOCK.stallBanner && !lock.stallShown){
+    lock.stallShown = true;
+    showBanner('WAITING FOR OPPONENT…', 'var(--accent)');
+  }
+}
+function lockRecvInput(m){
+  if (!lock.playing || !lock.inbuf) return;
+  const theirs = lock.inbuf[lock.slot === 0 ? 1 : 0];
+  const base = (m.f | 0) - 2, d = m.d || [];
+  for (let j = 0; j < d.length; j++){
+    const f = base + j, r = d[j];
+    // A frame's inputs never change once sent, so first write wins and a redundant copy
+    // is simply ignored.
+    if (f >= 0 && !theirs.has(f) && Array.isArray(r)) theirs.set(f, [r[0] | 0, r[1] | 0, r[2] ? 1 : 0]);
+  }
+}
+function lockRecvHash(m){
+  if (!lock.playing || !lock.theirHash) return;
+  lock.theirHash.set(m.f | 0, m.h >>> 0);
+  lockHashCheck(m.f | 0);
+}
+function lockHashCheck(f){
+  const a = lock.myHash && lock.myHash.get(f), b = lock.theirHash && lock.theirHash.get(f);
+  if (a == null || b == null || a === b) return;
+  lock.desynced = true;
+  showBanner('SYNC LOST', 'var(--accent)');
+  lockPeerGone('Out of sync — the sims drifted apart (different browsers?). A bot took over.');
+}
+// FNV-1a over the exact float bits of everything the sim owns. Positions and velocities
+// alone would eventually expose any divergence; inputs and timers make it expose within a
+// frame or two of the cause.
+const _lhBuf = new ArrayBuffer(8), _lhF = new Float64Array(_lhBuf), _lhU = new Uint32Array(_lhBuf);
+function lockHashWorld(w){
+  let h = 0x811c9dc5 >>> 0;
+  const mixU = u => { h = Math.imul(h ^ (u >>> 0), 16777619) >>> 0; };
+  const mixF = v => { _lhF[0] = v || 0; mixU(_lhU[0]); mixU(_lhU[1]); };
+  mixU(w.score[0]); mixU(w.score[1]);
+  mixU(w.state === 'play' ? 1 : w.state === 'kickoff' ? 2 : w.state === 'goal' ? 3 : 4);
+  mixF(w.stateT); mixF(w.timeLeft);
+  const balls = [w.ball].concat(w.extraBalls || []);
+  for (const b of balls){ mixF(b.x); mixF(b.y); mixF(b.vx); mixF(b.vy); }
+  for (const p of w.players){
+    mixF(p.x); mixF(p.y); mixF(p.vx); mixF(p.vy);
+    mixF(p.chargeT); mixF(p.trapT); mixU(p.kick ? 1 : 0); mixU(p.trap ? 1 : 0);
+  }
+  return h >>> 0;
+}
+// The opponent is gone (socket dropped, or the sims drifted): their body becomes a bot IN
+// PLACE — botInit already ran for every seat, so it thinks from the next step — and your
+// own seat goes back to ordinary local control, so the match stays playable.
+function lockPeerGone(msg){
+  const w = world;
+  if (w && w.players){
+    const gp = connectedGamepadIndices();
+    for (const p of w.players){
+      if (p.ctrl !== 'lock') continue;
+      if (p.lockLocal){
+        if (gp.length){ p.ctrl = 'gamepad'; p.padIndex = gp[0]; }
+        else p.ctrl = 'human1';
+      } else p.ctrl = 'bot';
+    }
+  }
+  if (lock.playing) showBanner('OPPONENT LEFT', 'var(--accent)');
+  lockStop(msg || 'Opponent left — a bot took their seat.');
+}
+function lockStop(msg){
+  if (lock.ws){ const ws = lock.ws; lock.ws = null; ws.onclose = null; try { ws.close(); } catch (e) {} }
+  lock.on = false; lock.hosting = false; lock.playing = false; lock.room = '';
+  lock.inbuf = null;
+  // ⚠️ The joiner gets their own settings back — and they were NEVER saved, so a crash
+  // mid-match costs nothing: the overrides only ever lived in memory.
+  if (lock.selWas){ for (const k in lock.selWas) sel[k] = lock.selWas[k]; lock.selWas = null; }
+  if (msg) lockStatus(msg);
+  syncLockUI();
+}
+// Starting any other match while a session is live abandons the session — the alternative
+// is a lockstep gate waiting forever on a world it no longer owns. `_begin` exempts the
+// one `startMatch` that `lockBegin` itself makes.
+// ⚠️ The attract DEMO is exempt too: it starts itself whenever the menu goes idle, and
+// hosting a room IS sitting on the menu waiting — a demo kicking you out of the room you
+// are waiting in would make hosting impossible on any desktop.
+function lockGuardStart(){
+  if (_startQuiet) return;
+  if ((lock.playing || lock.on) && !lock._begin) lockStop('Left the online session.');
+}
+function lockInit(){
+  const stored = loadLock();
+  const url = $('lockUrl'), code = $('lockCode');
+  if (url){
+    url.value = stored.url || '';
+    url.addEventListener('change', () => saveLock({ url: url.value.trim() }));
+  }
+  const addr = () => { const v = lockNormUrl(url ? url.value : ''); if (url && v){ url.value = v; saveLock({ url: v }); } return v; };
+  const host = $('lockHostBtn'), join = $('lockJoinBtn'), leave = $('lockLeaveBtn');
+  if (host) host.onclick = () => { const v = addr(); if (!v){ lockStatus('Type the relay server address first.'); return; } lockHost(v); };
+  if (join) join.onclick = () => { const v = addr(); if (!v){ lockStatus('Type the relay server address first.'); return; } lockJoin(v, code ? code.value : ''); };
+  if (leave) leave.onclick = () => { if (lock.playing) lockPeerGone('Left the match.'); else lockStop('Left.'); };
+  syncLockUI();
+}
+
+// ============================================================
 //  TOUCH CONTROLS (dual thumb, multi-touch)
 // ============================================================
 // pads.p1 = { active, id, cx, cy, dx, dy, kick, kickId, invert }
@@ -36078,7 +36560,9 @@ function drawControls(){
   if (!running || (world && world.state==='over')) return;
   // Only show touch controls for seats actually driven by touch — a gamepad
   // player (or a fully-controller match) gets no on-screen thumbstick.
-  const hasP1 = world && world.players.some(p=>p.ctrl==='human1');
+  // ...and the direct-online seat you drive from this device wants its thumbstick too —
+  // the pad still feeds the sim, it just goes through the wire buffer first (see LOCK).
+  const hasP1 = world && world.players.some(p=>p.ctrl==='human1' || p.lockLocal);
   const hasP2 = world && world.players.some(p=>p.ctrl==='human2');
   // (the keyboard is polled once per frame in loop() — see the note there)
   // Desktop / cocktail: no touchscreen, so hide the on-screen thumbsticks entirely.
@@ -36304,6 +36788,13 @@ function showResult(title, sub){
 function hideOverlay(){ $('overlay').classList.remove('show'); }
 function toMenu(){
   netLeave();                    // ...and a hosted match is left, socket and borrowed settings both
+  // ⚠️ ...and a DIRECT one through `lockPeerGone`, not `lockStop`. On a desktop the match
+  // keeps playing behind the dock, and a world left holding `ctrl:'lock'` seats with
+  // `lock.inbuf` already null reads a null record for both bodies every step — two players
+  // frozen on a pitch that is otherwise running. `lockPeerGone` hands the seats back to
+  // local control and a bot, which is exactly what leaving means. The socket closing is
+  // what tells the opponent.
+  if (lock.playing) lockPeerGone('Left the online match.'); else lockStop(null);
   resumeClear();                 // walking out is a decision; the match is not offered back
   setTimeout(updMaybeShow, 0);   // a build found mid-match surfaces here — see updMaybeShow
   setTimeout(buildSeatPick, 0);  // the seat count changes with the match — see buildSeatPick
@@ -36790,6 +37281,7 @@ function updLater(){ updSeen = updFound; updFound = null; updHide(); }
   updEnforce();
   setTimeout(() => { if (!updEnforce()) newsMaybeShow(); }, 400);
   onlineLoad();     // where the servers are, if this deploy has any — see ONLINE
+  lockInit();       // ...and the direct-play controls, which need no server at all — see LOCK
   if (!updPossible()) return;
   setTimeout(() => updCheck(), UPD.bootDelay * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updCheck(); });
@@ -36828,6 +37320,7 @@ const RESUME = { key: 'magnetball.resume', format: 'magnetball-resume', v: 1,
 function resumable(w){
   return !!(w && !w.demo && !w.watch && !w.drillMode && !w.tutorial && !w.train
             && !w.cup && !w.season && !w.rogue && !w.lobby && !NET.remote   // a hosted match lives on the server
+            && !lock.playing    // ...and a direct one is half somebody else's, so it cannot be resumed alone
             && (w.state === 'play' || w.state === 'kickoff' || w.state === 'goal')
             && (w.matchT || 0) >= RESUME.minSecs);
 }
@@ -36938,7 +37431,10 @@ if (window.__MAGNETDEBUG) {
     mp4Remux, mp4Fixup, CLIPFIT, clipFrameSize, clipFramePlan, repClipMirror, clipBlit,
     CHANGELOG, buildNews, newsShow, aboutReport, copyAbout, copyText, selDiff, settingsText, settingsChangedCount, offlinePossible, downloadOffline, AUTORECOPT, autoRecOn, autoRecName, repLibRename, fillRepPane, newsHide, newsMaybeShow, releaseBlock, NEWS_KEY, buildAbout,
     RESUME, resumable, resumeDoc, resumeSave, resumeLoad, resumeClear, resumeApply, resumeOffer, resumeTick, resumeInfoText,
-    ONLINE, NET, onlineLoad, syncOnlineUI, netPlay, netLeave, netStart, netStep, netOnMsg, netSelDoc,
+    ONLINE, NET, onlineLoad, syncOnlineUI, directOnlineOffered, netPlay, netLeave, netStart, netStep, netOnMsg, netSelDoc,
+    LOCK, LOCK_SEL_KEYS, LOCKSTORE, get lock(){ return lock; }, lockHost, lockJoin, lockStop, lockStatus,
+    lockHashWorld, lockSample, lockApplySeat, lockCanStep, lockBeforeStep, lockAfterStep, lockCfg,
+    lockBegin, lockDress, lockPeerGone, lockGuardStart, lockNormUrl, lockInit, syncLockUI, lockOnMsg,
     goalNotable, NOTABLE, REP_TAIL, REP_TAIL_F, REP_MAX, REP_SECONDS, REP_LEAD, repSecs, repMaxFrames, syncRepSecs, REP_SPEEDS, repTogglePause, repCtlShow, repCtlHide,
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,

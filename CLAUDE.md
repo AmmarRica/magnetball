@@ -201,6 +201,126 @@ three lines a second time, name it.
   ask); more than two people (`CFG.seats` plus pads); spectators; matchmaking beyond a room
   code shared out of band; and `lbLoad`/`lbSubmit` still go to the Google Sheet even when
   `online.json` names the API.
+- **AND THE OTHER WAY TO PLAY ONLINE: DIRECT 1v1 BY DETERMINISTIC LOCKSTEP, PEER TO PEER**
+  (`LOCK`, `lock`, `LOCK_SEL_KEYS`, `lockHost`, `lockJoin`, `lockBegin`, `lockDress`,
+  `lockSample`, `lockApplySeat`, `lockCanStep`, `lockBeforeStep`, `lockAfterStep`,
+  `lockHashWorld`, `lockPeerGone`, `lockStop`, `lockGuardStart`, `#directOnline`;
+  `server/lockstep/relay.mjs`, `server/docs/LOCKSTEP.md`, `tests/netlock.mjs`).
+  ⚠️ **THERE ARE TWO ONLINE PATHS NOW AND THAT IS THE POINT, NOT AN ACCIDENT.** This one
+  arrived as a month-old branch built BEFORE the hosted server and was merged on request
+  rather than merged by default — the honest reading of the two is a TRADE, and the Online
+  row states it: **hosted** costs a container (~150–300MB a room) and nobody's connection
+  decides anything, which is the answer to *"there is lag and I am not sure who"*;
+  **direct** costs one file anybody can run and advances at the pace of the WORSE
+  connection, because a lockstep frame cannot start until both seats' inputs for it are in.
+  ⚠️ **THE NAMES ARE DELIBERATELY UNALIKE**: `NET`/`net*` is the hosted thin client,
+  `LOCK`/`lock*` is this. Two systems answering one question is exactly where a shared
+  prefix rots into one being edited for the other, and the incoming branch used `NET` and
+  `netSend` for its own meanings — every symbol was renamed rather than merged over.
+  `server/match/relay.mjs` (a Web PubSub stand-in) and `server/lockstep/relay.mjs` (a room
+  code and a verbatim forward) are two different protocols and say so in their headers.
+  ⚠️ **NEVER BOTH AT ONCE, AND EACH DOOR CLOSES THE OTHER.** `loop()` would otherwise be
+  asked to replay the server's snapshots AND gate on peer inputs for one world: `netPlay`
+  calls `lockStop`, `lockConnect` calls `netLeave`, and `tests/netlock.mjs` reads
+  `NET.remote` false throughout a direct match.
+  ⚠️ **BOTH SEATS ARE `ctrl:'lock'`, INCLUDING YOUR OWN, and that is the whole trick.** Your
+  input is sampled, quantised to int8, delayed `LOCK.delay` (3) frames and applied FROM THE
+  BUFFER — the exact path the opponent's copy of you runs. A local seat applied live would
+  act three frames earlier here than there and the sims part on the first touch. Everything
+  device-local (keyboard/pad merge, one-hand kick, cocktail rotation, touch snapping)
+  resolves on the SAMPLING side — `applyHumanInput` onto a scratch body, before
+  quantisation — so none of it has to match across machines, and both ends divide the same
+  integers by 127 so the floats they apply are bit-identical.
+  ⚠️ **`acc` IS CAPPED WHILE BLOCKED** (`Math.min(acc, 0.25)`), or a long stall banks a
+  burst of catch-up steps and the sim lurches the moment the peer comes back.
+  ⚠️ **AND THE SCRATCH BODY'S `rotQuarter` SHIPPED AS A HARD ZERO, WHICH HANDED EVERY
+  DESKTOP PLAYER A STICK A QUARTER TURN WRONG.** `applyHumanInput` reads `p.rotQuarter` —
+  that is where SELECT's turn AND the layout's own turn are applied — and
+  `applySeatRotation` gives every non-bot a base of `pitchHorizontal() ? 1 : 0`, with `auto`
+  turning the pitch on ANY wide screen. Measured on a 1280×800 page: ArrowLeft sampled
+  **(-127, 0)** where the pitch wanted **(0, -127)**. This is `syncSeatRotation`'s own
+  recorded defect — *"the controller direction does not match up down left right"* —
+  arriving through the wire instead of through the touchline.
+  ⚠️ **TWO LINES FIX IT AND THE SECOND ONE IS ONLY VISIBLE ON THE JOINER.** `lockDress` calls
+  `syncSeatRotation(w)`, and `lockSample` reads the local body's `rotQuarter` onto the
+  scratch. Without the first, `startMatch`'s own `applySeatRotation` has already run over a
+  roster where **seat 1 is still a BOT** — bots get 0 — so the HOST's body is right and the
+  JOINER's is a quarter turn out. A host-only probe reads perfectly on that build, and the
+  sabotage was MISSED until `tests/netlock.mjs` measured both pages.
+  ⚠️ **SELECT's per-pad turn is added in `lockSample`, not in `applySeatRotation`**, which
+  only adds it for `ctrl === 'gamepad'`: a lock seat has `padIndex = -1` and is bound to no
+  pad, so the rotation that applies is the one belonging to the pad actually being SAMPLED.
+  It resolves BEFORE quantisation, so what travels is world-space input and the two machines
+  cannot disagree about it.
+  ⚠️ **AND FIXING IT SILENTLY STOPPED THE SUITE EXERCISING ITS OWN GOAL PHASE.** The scripted
+  keys were written against the unrotated build, where ArrowUp was world -y; once the
+  rotation was honoured, Up became a run straight ACROSS the pitch, the ball was never
+  touched and the score went 1-0 → 0-0 — with every check still green, because they assert
+  the two sims AGREE rather than that anything happened. The keys are ArrowLeft/ArrowRight
+  now and the scoreline is in the suite's own output line so a silent 0-0 is visible.
+  ⚠️ **`LOCK_SEL_KEYS` IS NOT `RESUME.keys`, though they overlap heavily.** That list is what
+  a match is STARTED from; this one is what the sim READS — a key the sim reads and this
+  list omits is a desync, where `RESUME.keys` may safely carry dressing. Copied over the
+  joiner's `sel` for the match and restored by `lockStop`, never through `saveSel()`, which
+  is also why the relay address lives in `magnetball.lockstep` and not in `sel`.
+  ⚠️ **WHAT STANDS DOWN**: auto-replay (`playReplay` parks `loop()` for seconds at a
+  wall-clock length the peer cannot see, and `resetKickoff` then fires BETWEEN steps here
+  and INSIDE a step there), drop-in (local hardware rewriting the roster), the
+  grow-to-fit-the-pads rule in `startMatch` (`lock._begin`), and `resumable` (half the match
+  is somebody else's).
+  ⚠️ **`toMenu` USES `lockPeerGone`, NOT `lockStop`, and the difference is a frozen pitch.**
+  On a desktop the match keeps playing behind the dock, and a world left holding
+  `ctrl:'lock'` seats with `lock.inbuf` already null reads a null record for both bodies
+  every step — two players standing still on a court that is otherwise running.
+  ⚠️ **THE DEMO IS EXEMPT FROM `lockGuardStart`** (`_startQuiet`): it starts itself whenever
+  the menu goes idle, and hosting a room IS sitting on the menu waiting, so a demo kicking
+  you out of the room you are waiting in would make hosting impossible on any desktop.
+  ⚠️ **MEASURED in `tests/netlock.mjs`**, which spawns the real relay and drives two real
+  pages through the real handshake with real keyboard events: a goal crossed the wire
+  (**1-0**) with **9 common hashed frames agreeing** and the hash varying over time (a hash
+  returning 0 passes equality on its own).
+  ⚠️ **AND THE GATE CANNOT BE TESTED OVER A LOCALHOST RELAY — A SABOTAGE PROVED IT.**
+  Deleting `lockCanStep`'s block from `loop()` left the whole suite GREEN, because every
+  input arrives inside the 3-frame (50ms) buffer and the gate never once has to hold. The
+  suite delays one side's outgoing socket by **130ms** — a real slow connection, not a
+  stubbed predicate — and then the pair must stay bit-identical while advancing **under 120
+  frames in 2.8s of wall clock against ~168 at 60Hz**. ⚠️ **That frame-count CEILING was
+  then dropped**, and the number is why: it measured 110 against a bar of 120, a 9% margin,
+  because a UNIFORM delay does not slow lockstep once it is running — every packet is
+  shifted by the same 130ms, the stream still arrives at 60 a second, and the gate only pays
+  the initial catch-up. A ceiling that close is a threshold waiting to be tuned on the first
+  slow CI box, and the hash check catches the sabotage outright anyway.
+  Ten sabotages, each caught by its own check.
+  ⚠️ **AN ELEVENTH IS INERT BY CONSTRUCTION AND IS WRITTEN DOWN RATHER THAN CHASED.**
+  Perturbing `lockSample`'s quantiser leaves the suite green, and that is correct: the
+  integer is stored in the sampler's OWN buffer and sent on the wire, so both machines
+  apply the identical value. It changes what the player asked for, never whether the two
+  sims agree — a MISSED sabotage is only a weak check when there is a defect to find.
+  ⚠️ **NOT BUILT, written down**: more than two peers (the relay is N-way already, the game
+  is not); rollback instead of a fixed 3-frame delay; a rematch without hosting again; and
+  a pause still stalls the opponent, which lockstep has no other answer to.
+- **THE ONLINE ROW'S `hidden` CLASS DID NOTHING FOR THE WHOLE LIFE OF THE FEATURE**
+  (`#onlineRow.hidden`, `#hostedOnline.hidden`, `#directOnline.hidden`, `syncOnlineUI`,
+  `directOnlineOffered`). The hosted row's own entry says *"THE ROW IS HIDDEN, NEVER
+  DISABLED, until `online.json` names BOTH an `api` and a `match` — a room-code box that
+  cannot join anything is the dead control the Online card was deleted for"*, and
+  `syncOnlineUI` did set that class — **and there was no CSS rule for it.**
+  ⚠️ **MEASURED on the shipped build with `api:''` and `match:''`**: the row read
+  `class="hidden"` and `display: block`, occupying **305 × 87px** — a four-letter room-code
+  box and a Play online button nobody could use, exactly the control the old Online card
+  was deleted for, on every deploy that never configured a match server.
+  ⚠️ **THIS IS `#scoreStyleRow`'S OWN LESSON, SHIPPED.** That entry already records that
+  there is NO generic `.hidden` rule in this stylesheet and that a bare
+  `<div class="hidden">` computes `display: block` — the fix is an id rule per user of the
+  class, and this row never got one. `tests/netlock.mjs` re-measures the bare div in the
+  same run, so the day a generic rule does arrive the check says so rather than going quiet.
+  ⚠️ **TWO GATES NOW, because the row carries two independent features under different
+  conditions**: hosted needs `online.json`, direct needs only an address you type, and the
+  ROW is up when EITHER is, or its label sits over nothing. `directOnlineOffered()` is the
+  one predicate so the row, the block and the search index cannot disagree.
+  ⚠️ **AND OFFERING DIRECT ALWAYS IS NOT THAT RULE BENT.** The rule is about a control that
+  CANNOT WORK; a relay-address box joins whatever you point it at, and
+  `server/lockstep/relay.mjs` is one file anybody can run.
 - **Loop:** `loop(t)` → fixed-timestep accumulator calling `step(w)` at `STEP = 1/60`, then
   `render()` with `renderAlpha = acc/STEP` so `ix(e)`/`iy(e)` interpolate between steps.
   Juice: `shake`, `hitStop`, goal `slow`-mo.
@@ -8378,7 +8498,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 146 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 147 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

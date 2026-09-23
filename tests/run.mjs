@@ -51,7 +51,11 @@ const filter = process.argv[2] || '';
 // passed alone every time.
 // `netmatch` spawns two servers and a third browser and waits on them with finite timeouts;
 // it is `updatecheck`'s case exactly.
-const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape', 'netmatch']);
+// ⚠️ `netlock` joins them, and its case is sharper than "it waits on a server": half of it
+// measures a DELIBERATE 130ms send delay against the wall clock, requiring the pair to
+// advance under 120 frames where 60Hz would give ~168. A busy pool starves the rAF loops
+// on its own and the margin between "the gate held it back" and "the machine did" closes.
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape', 'netmatch', 'netlock']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper

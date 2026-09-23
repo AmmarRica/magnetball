@@ -251,8 +251,14 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 
 12. **Phone-as-controller (local WebRTC)** (L) — shared screen + phones as pads via room code/QR.
     *Answers "permanent room links" + mobile multiplayer.* (Design already scoped.)
-13. **Online 1v1/2v2 rooms by code** (XL) — WebRTC peer play with a lightweight signaling broker.
-    *Real accounts/rooms are the biggest structural ask; room-code links are the practical version.*
+13. ✅ **Online 1v1 rooms by code** (XL) — shipped **twice, on purpose**, because the two
+    answers are a trade rather than one being better. **Hosted** (`server/match/`,
+    `server/docs/MATCH-SERVER.md`): a dedicated server runs the whole match and both
+    players are thin clients, so neither connection decides anything — costs a container.
+    **Direct** (`server/lockstep/relay.mjs`, `server/docs/LOCKSTEP.md`): deterministic
+    lockstep peer to peer, only inputs on the wire, free to run, and it advances at the
+    pace of the worse connection. Both live in one Online row under Match → Game.
+    *Still open: 2v2 and up, spectators, and matchmaking beyond a code shared out of band.*
 14. **Room presets / favourites** (S) — save & pin match setups (mode, field, magnet, length).
     *Favourite/pinned rooms request.*
 15. **Spectator view** (M) — watch a bot-vs-bot match; useful for demos and streams.
