@@ -7860,6 +7860,67 @@ three lines a second time, name it.
   on a **phone-sized second page**: writing to `pads.p1` cannot test this at all (the fix
   reads `pad.move.id`, which only the touch handlers set), and the suite's main page is
   1280×800 where `zoneForTouch` never returns `move`.
+- **THE GAME FROZE AFTER "WATCH GOAL", AND FIVE THINGS WERE WRONG AT ONCE** (`watchReplayFile`'s
+  `ovWas`/`hudWas`, `repReset` → `replayAbort`, `startDrill` → `replayAbort`, `playReplay`'s
+  `goals` local and `tick`/`tickBody`, `playReplayFile`'s `world === mine` guard,
+  `.repctlrow { flex-wrap }`, `--repctl-h`, `setDockCollapsed`'s pause-screen return,
+  `dockOrFull` clearing `sel.dockCollapsed` on every dock layout; `tests/replayfile.mjs`'
+  `rw:` block, `tests/replaywatch.mjs` block 4, `tests/deckmenu.mjs`' last two blocks).
+  Reported as *"bugs just hanging"*, with nothing more specific — and found by a sweep that
+  drives the page the way a player does (`elementFromPoint` at a button's centre, the real
+  rAF loop, wall-clock waits with a deadline and a stall watchdog), not by any suite.
+  ⚠️ **THE HANG, MEASURED.** On the result screen, Watch goal played the replay BEHIND the
+  result screen: `#overlay` is fixed, full-bleed, painted in the page gradient and z-indexed
+  over the canvas, and `watchReplayFile` hid only the `.screen`s. The transport's ✕, Video
+  and HQ all hit-tested to `#overlay`. On a phone, with no Escape key, that is a replay you
+  cannot leave — and the one control still under a thumb was **Restart**, which calls
+  `repReset()`, which nulled `lastReplay` under a tick that read `lastReplay.goals` on its
+  next frame. A throw inside a rAF is silent, `finish()` never ran, `replay.active` stayed
+  true, and `loop()` returned at its first line for the rest of the page: the next **26
+  drills and every KICK OFF after that read 0 steps**. Every one of those five is fixed and
+  each has its own sabotage.
+  ⚠️ **EVERY SUITE WAS BLIND TO IT, AND NOT BY BAD LUCK.** All of them reached the transport
+  through `getElementById(...).click()`, which does no hit testing (rule 6 — the same trap
+  `#lobbyStartBtn` records), and the whole HQ batch was verified that way. The new checks
+  hit-test every control and press the real ✕.
+  ⚠️ **A NEW WORLD ENDS THE REPLAY ON SCREEN — in `repReset`, the one place every world
+  start already passes through**, plus `startDrill`, which does not. `tryKickOff` and
+  `openWarmup` had it; Restart, Rematch, a drill tile, a season round and `resumeApply` did
+  not. Measured without it: `startMatch` under a controlled file replay left
+  `replay.active` true and the new match at 0 steps a second later.
+  ⚠️ **AND THE FILE REPLAY'S `finally` MUST PUT BACK ONLY WHAT IS STILL ITS OWN.** It ran an
+  unconditional `world = prevWorld` a microtask after `replayAbort` settled it — which is
+  AFTER the new `startMatch` had assigned `world` — so the fresh match was overwritten by
+  the finished one it was a replay of. `if (world === mine)`, the `toMenu` argument.
+  ⚠️ **THE TICK READS NOTHING A NEW WORLD NULLS** (`goals` joins `frames` and `goalAt` as a
+  local) **and whatever still throws releases the replay** (`tick` wraps `tickBody` in a
+  try/catch that lowers the flag, settles the promise and rethrows). With the abort in
+  place the wrapper is inert by construction — a sabotage of it alone stays green, and is
+  written down here rather than chased; removing it TOGETHER with the local is caught.
+  ⚠️ **THE TRANSPORT DID NOT FIT A PHONE.** Nine 44px controls and eight gaps are 460px and
+  the bar is 366px on a 390 viewport: ✕ measured at **x=458** and HQ video at 406, past
+  the edge, `elementFromPoint` null for both. The row wraps; the toasts clear it by its
+  MEASURED height (`--repctl-h`, written in `repCtlShow`) rather than a constant 96px that
+  was right for one row — `replaywatch`'s toast check went red on the wrap and said so.
+  ⚠️ **AND THE HUD STAYED HIDDEN.** From the result screen nobody restores it — the menu's
+  `back` goes through `dockOrFull`, which does; the result screen's `back` is null — so the
+  match after Watch goal → Restart had no scorebug and no pause button (`#pauseBtn` 0×0).
+  ⚠️ **MAIN MENU FROM THE PAUSE SCREEN LEFT A FROZEN PITCH BEHIND THE DOCK**, desktop and
+  deck alike: `dockOrFull` hides the overlay and nothing un-pauses, so closing the dock
+  showed a paused pitch with no overlay, no countdown and the pause button peeked away —
+  measured 0 sim steps in a second with `#overlay` hidden. `setDockCollapsed` puts the
+  pause screen back when it closes over a paused, overlay-less match; a match the MENU
+  paused still resumes (the deck's `deckPausedByMenu` rule, untouched). And on a desktop
+  where the ‹ tab had once been pressed (persisted), Main Menu opened NO menu at all: the
+  player's own collapse was only ever cleared for a deck. *"Asking for a page is asking to
+  see it"* now runs on every dock layout.
+  ⚠️ **WHAT THE SWEEP ALSO SAW AND WAS LEFT ALONE, with the numbers**: a Best-goals
+  auto-replay runs **15.2s** wall clock at the shipped lead-in and speed (3.0s hold + 6s at
+  0.55×), which a player may well describe as the game stopping; the HUD corners peek only
+  on hover on a desktop, so the pause button is *covered by `#game`* until the mouse goes
+  there; Warm-up is not offered on a desktop with no pad; the menu slides for 0.2s after
+  Main Menu, so a press 11ms later lands at x=−223; and one rAF gap of 1.1–1.8s per run
+  during a theme bake. None of those is a hang.
 - **A replay must never outlive its world** (`replayAbort`, and the `if (!world)` guard in
   `playReplay`'s tick). `toMenu()` sets `world = null`, and leaving a match mid-celebration
   is an ordinary thing to do — so the pending tick of a live auto-replay read `world.field`

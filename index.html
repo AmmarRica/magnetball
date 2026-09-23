@@ -1154,14 +1154,19 @@
     /* ⚠️ Toasts live at the bottom too, and a "now playing" toast landed straight on top
        of the speed buttons. The transport is the thing you need to press, so the toasts
        move up while it is on screen. */
-    body.repctl #toasts { bottom: calc(96px + max(14px, env(safe-area-inset-bottom))); }
+    body.repctl #toasts { bottom: calc(var(--repctl-h, 82px) + 14px + max(14px, env(safe-area-inset-bottom))); }
     .repprog { position: relative; height: 4px; border-radius: 3px; background: rgba(128,128,128,.30); }
     #repProgFill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); }
     /* Where the ball actually crossed. Everything right of it is the tail. */
     #repProgGoal { position: absolute; inset: 0; pointer-events: none; }
     .repgoal { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--go);
       border-radius: 1px; }
-    .repctlrow { display: flex; align-items: center; gap: 8px; }
+    /* ⚠️ WRAPS. Nine 44px controls and eight gaps are 460px, and the bar is 366px on a
+       390px phone — so ✕ and HQ video sat past the right-hand edge of the screen, and with
+       no Escape key a phone had NO way out of a replay. Measured: ✕ centred at x=458 on a
+       390 viewport, `elementFromPoint` null. Wrapped, the speeds keep the first line and
+       the exports and ✕ take the second. */
+    .repctlrow { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
     .repspeeds { display: flex; gap: 6px; margin: 0 auto; }
     #repCtl button {
       min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
@@ -6133,7 +6138,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0742PM';
+const VERSION = '20260923.0921PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6149,6 +6154,14 @@ const VERSION = '20260923.0742PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0921PM', title: 'No more freezing after a replay',
+    changed: [
+      '<b>Watch goal and Watch match now play in front of the result screen, not behind it.</b> The replay and its controls were underneath the result screen, so on a phone there was no way to close it \u2014 and pressing Restart from there froze the whole game until you reloaded. Both are fixed: the result screen steps aside while you watch and comes back when you press \u2715.',
+      '<b>The replay controls fit a phone screen.</b> The close and HQ video buttons sat past the right-hand edge on a narrow phone; the row wraps now.',
+      '<b>Main Menu from the pause screen no longer leaves a frozen pitch behind.</b> Closing the menu brings the pause screen back, and the menu always opens, even if you had tucked it away earlier.',
+      'The next match after watching a replay has its scorebug and pause button again.',
+    ],
+    fixed: 'A replay interrupted by a new match (a drill, a restart, a kickoff) now ends cleanly instead of leaving the game stuck.' },
   { v: '20260923.0742PM', title: 'High quality video, and one place to export from',
     changed: [
       '<b>A new High quality export, at one video frame per step of the match.</b> A whole match is recorded at half rate to keep the file small, so the ordinary export writes half the frames; high quality fills in the ones between, for a smoother video that takes a little longer to write and costs a bit more space. A goal clip is already at full rate, so there it changes nothing.',
@@ -15553,8 +15566,13 @@ function dockOrFull(id, build, auto){
     // below never fires: the match's own collapse is the thing it is reacting to.
     const wasCollapsed = dockCollapsedNow();
     if (!auto) matchCollapse = false;
+    // ⚠️ ...and the PLAYER'S OWN collapse too, on every dock layout — it was cleared for a
+    // deck only. On a desktop where the ‹ tab had once been pressed (persisted), Main Menu
+    // on the pause screen hid the overlay, kept the match paused, and showed NO menu: the
+    // dock stayed slid away, which is a frozen pitch with nothing on it to press. Asking
+    // for a page is asking to see it.
+    if (!auto && wasCollapsed && sel.dockCollapsed){ sel.dockCollapsed = false; saveSel(); }
     if (isDeck() && !auto && wasCollapsed){
-      if (sel.dockCollapsed){ sel.dockCollapsed = false; saveSel(); }
       // Opening a page over a live match pauses it, same rule as Select.
       if (world && running && !world.demo && world.state !== 'over' && !paused){ paused = true; deckPausedByMenu = true; }
     }
@@ -15604,6 +15622,16 @@ function setDockCollapsed(v){
     if (!dockCollapsedNow() && !paused){ paused = true; deckPausedByMenu = true; }
     else if (dockCollapsedNow() && deckPausedByMenu){ paused = false; deckPausedByMenu = false; lastT = 0; acc = 0; }
   }
+  // ⚠️ **A MATCH PAUSED ON ITS OVERLAY AND THEN WALKED AWAY FROM GETS ITS PAUSE SCREEN
+  // BACK.** Main Menu and Settings on the pause screen both go through `dockOrFull`, which
+  // hides the overlay and keeps the match — paused, because nothing un-pauses it — behind
+  // the dock. Closing the dock then showed a frozen pitch with no overlay, no countdown and
+  // nothing saying why, on a desktop and on a deck alike: measured, 0 sim steps in a second
+  // with `#overlay` hidden and the pause button peeked away. That is what "the game is
+  // hanging" looks like. Closing the menu puts you back where you were — playing if the
+  // menu paused it (the branch above), on the pause screen if you did. `togglePause`
+  // carries the guards (a finished match, a completed drill, nothing running).
+  if (dockCollapsedNow() && paused && world && !world.demo && !$('overlay').classList.contains('show')) togglePause(true);
   resize();
 }
 $('dockToggle').onclick = () => setDockCollapsed(!dockCollapsedNow());
@@ -20161,6 +20189,14 @@ let repMatchGoals = [];     // frame indices where the ball crossed
 let repMatchSlots = [];     // the bodies, in a STABLE order — see repMatchCapture
 
 function repReset(){
+  // ⚠️ A NEW WORLD ENDS WHATEVER REPLAY IS ON SCREEN, and every world start comes through
+  // here (startMatch, restartMatch, the tutorial). Without it a controlled replay kept its
+  // frame loop while the match started underneath it: `loop()` returns while
+  // `replay.active` is set, a transport replay holds on its last frame for ever, and the
+  // fresh match never took a step — measured as `aiTick` stuck and `replay.active` true a
+  // second after `startMatch`. `replayAbort` also settles `playReplay`'s promise, so
+  // `watchReplayFile`'s `finally` runs and puts the screens back.
+  replayAbort();
   repBuf = []; lastReplay = null; repPend = -1; repGoalIdx = -1;
   repMatchBuf = []; repMatchEvery = REPMATCH.every; repMatchTick = 0;
   repMatchGoals = []; repMatchSlots = [];
@@ -20558,6 +20594,10 @@ function repCtlShow(){
       vb.disabled = !replay.doc;
     } }
   repCtlSync();
+  // ⚠️ The toasts clear the bar by its MEASURED height, not a constant. The row wraps to two
+  // lines on a phone, so the old fixed 96px put a "now playing" toast straight across the
+  // exports. Read here, once the speed buttons exist, so the number is the bar as shown.
+  document.body.style.setProperty('--repctl-h', el.offsetHeight + 'px');
 }
 function repCtlHide(){ const el = $('repCtl'); if (el) el.classList.add('hidden');
   document.body.classList.remove('repctl'); }
@@ -20601,7 +20641,15 @@ function playReplay(speed, opts){
   opts = opts || {};
   return new Promise(resolve=>{
     if (!lastReplay || !lastReplay.frames.length || lastReplay.players !== (world?world.players.length:-1)){ resolve(); return; }
-    const frames = lastReplay.frames, goalAt = lastReplay.goalAt;
+    // ⚠️ READ INTO LOCALS, ALL THREE. `lastReplay` is a module variable that `repReset()`
+    // nulls whenever a world starts — Restart on the result screen, a drill tile, KICK OFF —
+    // and the tick below runs from a rAF AFTER that, so `lastReplay.goals` read live threw
+    // "Cannot read properties of null (reading 'goals')" inside the frame. A throw in a rAF
+    // is silent, `finish()` never ran, `replay.active` stayed true, and `loop()` returned at
+    // its `replay.active` line for the rest of the page: every drill, every match and every
+    // KICK OFF after that was a frozen pitch. Measured on the real result screen: Watch goal
+    // then Restart, and the next 26 drills all read 0 steps and `replay.active` true.
+    const frames = lastReplay.frames, goalAt = lastReplay.goalAt, goals = lastReplay.goals;
     // ⚠️ THE CELEBRATION IS OVER once you have watched it back. `applyGoalCam` already stands
     // down while a replay is on screen, but the step loop is not running either — so
     // `advanceGoalCam` never ticks and `goalCam.t` sits frozen at whatever it reached. The
@@ -20637,7 +20685,15 @@ function playReplay(speed, opts){
     };
     replay.finish = finish;
     let idx = 0, last = 0;
+    // ⚠️ WHATEVER THROWS IN A TICK RELEASES THE REPLAY. The locals above remove the one
+    // known throw; this is the backstop for the next one, because the failure mode is not
+    // "a replay stops" but "the whole game stops" (see the note on `loop()`'s early return).
+    // Rethrown so it still lands in the console rather than being swallowed.
     function tick(t){
+      try { tickBody(t); }
+      catch (e){ replay.active = false; finish(); throw e; }
+    }
+    function tickBody(t){
       if (!replay.active){ finish(); return; }
       // ⚠️ Not while the transport is up: with controls the pad is how you drive it, and
       // "any button ends the replay" would make the thing unusable on a controller.
@@ -20689,7 +20745,7 @@ function playReplay(speed, opts){
           // ⚠️ Sync the bar the moment it ends, or the button still reads Pause on a replay
           // that has nothing left to pause — and pressing it then looks like it did nothing.
           if (!replay.ended) { replay.ended = true; repCtlSync(); }
-          if (replay.controls) repCtlProgress(frames.length - 1, frames.length, goalAt, lastReplay.goals);
+          if (replay.controls) repCtlProgress(frames.length - 1, frames.length, goalAt, goals);
           replay.raf = requestAnimationFrame(tick);
           return;
         }
@@ -20705,7 +20761,7 @@ function playReplay(speed, opts){
       // wall is a real corner in the path, and a curve through it would round the bounce
       // off — which would be the replay telling a lie about the physics.
       drawReplayFrame(repTween(frames[idx], frames[idx+1], (t - last) / dur, fps));
-      if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
+      if (replay.controls) repCtlProgress(idx, frames.length, goalAt, goals);
       replay.raf = requestAnimationFrame(tick);
     }
     replay.raf = requestAnimationFrame(tick);
@@ -21228,6 +21284,7 @@ function repFileWorld(doc){
 async function playReplayFile(doc, speed, opts){
   if (replay.active) return;
   const prevWorld = world, prevLast = lastReplay;
+  let mine = null, mineLast = null;
   try {
     // ⚠️ Stashed so the transport's Video button can film exactly what is on screen. The
     // document is the only thing that knows whether this is a goal or a whole match
@@ -21240,10 +21297,19 @@ async function playReplayFile(doc, speed, opts){
                    goals: Array.isArray(doc.goals) ? doc.goals : null,
                    fps: doc.fps || 60 };
     computeCam();
+    mine = world; mineLast = lastReplay;
     await playReplay(speed || 1, opts);
   } finally {
     replay.doc = null;
-    world = prevWorld; lastReplay = prevLast;
+    // ⚠️ PUT BACK ONLY WHAT IS STILL OURS. A match can start while a file replay is on
+    // screen (Restart, a drill tile, KICK OFF — anything that calls `replayAbort` and then
+    // builds a world in the same tick), and this `finally` runs a microtask later: an
+    // unconditional `world = prevWorld` then overwrote the brand-new match with the
+    // finished one it was a replay of. Same shape as `toMenu` nulling the world — the
+    // world is not this function's to restore once somebody else has replaced it.
+    // In the `finally`, so a throw mid-playback still restores a world that IS ours.
+    if (world === mine) world = prevWorld;
+    if (lastReplay === mineLast) lastReplay = prevLast;
     if (world) computeCam();
     render();
   }
@@ -21290,7 +21356,22 @@ async function watchReplayFile(back, pick){
   // be completely invisible. (On desktop the menu docks left and the pitch keeps the
   // right-hand side, but hiding it there too keeps one code path.)
   hideScreens();
+  // ⚠️ Remembered, and put back below. From the result screen nobody else restores the
+  // HUD (`watchReplayFromMenu`'s `back` goes through `dockOrFull`, which does; the result
+  // screen's `back` is null), so Watch goal then Restart played the next match with no
+  // scorebug and no pause button — measured: `#pauseBtn` 0×0 after that sequence.
+  const hudWas = !$('hud').classList.contains('hidden');
   $('hud').classList.add('hidden');
+  // ⚠️ **AND THE RESULT SCREEN, WHICH IS NOT A `.screen`.** `#overlay` is fixed, full-bleed,
+  // painted in the page gradient and z-indexed over the canvas — so Watch goal pressed on
+  // it played the replay BEHIND it: the transport's ✕, Video and HQ buttons sat under the
+  // overlay (measured: `elementFromPoint` at each centre returned `#overlay`), the picture
+  // was covered, and the only ways out were Escape on a keyboard or pressing a result
+  // button over a running replay — which is how Restart got pressed mid-replay and stranded
+  // `replay.active` for the rest of the page. On a phone there is no Escape at all.
+  // Hidden here and put back below, so ✕ lands on the screen you left.
+  const ovWas = $('overlay').classList.contains('show');
+  if (ovWas) hideOverlay();
   // ⚠️ And whatever the last match left shouting. A "GOAL!" banner from the match you just
   // finished sits at z-index above the canvas and reads as part of the replay.
   { const bn = $('banner'); if (bn){ bn.textContent = ''; bn.classList.remove('show'); } }
@@ -21310,6 +21391,11 @@ async function watchReplayFile(back, pick){
       const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind, film, speed || 1, hq);
       toast(why || '\u2713 Video saved');
     }
+    // \u26a0\ufe0f After the film, not before it: an export is drawn on the same canvas and the result
+    // screen would cover the recording indicator as surely as it covered the replay. Only
+    // if a world still owns that screen \u2014 a match started meanwhile has its own.
+    if (ovWas && world && world.state === 'over') $('overlay').classList.add('show');
+    if (hudWas && world && running) $('hud').classList.remove('hidden');
     if (back) back();
   }
 }
@@ -29545,6 +29631,7 @@ function drillAutoPad(w){
   return out;
 }
 function startDrill(key){
+  replayAbort();   // a drill is a new world too — see repReset, which a drill does not call
   drillKey = key; const def = DRILLS[key];
   // Use the SAME movement as a real match — your Game Feel sliders, pitch grip,
   // ball cap/kick power and magnet — so a drill controls exactly like you play.

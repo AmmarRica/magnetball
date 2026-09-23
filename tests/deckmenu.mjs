@@ -72,6 +72,41 @@ const r = await p.evaluate(async ()=>{
   // ---- A never reopens the menu while playing (A is KICK)
   await press(B.A); await wait(60);
   o.aStillDoesNotReopen = M.dockCollapsedNow()===true;
+
+  // ---- REGRESSION: pause screen → Main Menu → close the dock → the PAUSE SCREEN comes back.
+  // Main Menu and Settings on the pause screen go through `dockOrFull`, which hides the
+  // overlay and keeps the match paused behind the dock; closing the dock then showed a
+  // frozen pitch with no overlay and nothing saying why — measured before the fix as
+  // `paused` true, `#overlay` hidden, 0 sim steps in a second. The match was paused by the
+  // PLAYER, so closing the menu must not resume it either (the deck's own rule above); it
+  // puts the pause screen back, and Resume works from there.
+  const ovShown = () => document.getElementById('overlay').classList.contains('show');
+  M.togglePause(true); await wait(60);
+  o.pauseShowsOverlay = M.paused===true && ovShown();
+  M.toMenu(); await wait(250);
+  o.menuFromPauseKeepsMatch = M.dockCollapsedNow()===false && !!M.world && M.world.state!=='over' && !ovShown();
+  await press(B.SELECT); await wait(250);          // close the dock
+  o.closingBringsPauseBack = M.dockCollapsedNow()===true && M.paused===true && ovShown();
+  const tickA = M.world.aiTick; await wait(300);
+  o.andStillPaused = M.world.aiTick===tickA;
+  M.togglePause(false); await wait(60);
+  o.resumeFromThere = M.paused===false && !ovShown();
+
+  // ...and the same on a DESKTOP dock (the › tab instead of SELECT), because both layouts
+  // share `setDockCollapsed` and the report came from a desktop.
+  M.sel.display='auto'; M.applyDisplayMode(); await wait(200);
+  M.startMatch(); await wait(150);
+  M.world.state='play'; M.world.stateT=1;
+  o.deskDockCapable = M.dockCapable()===true && M.isDeck()===false;
+  M.togglePause(true); await wait(60);
+  M.toMenu(); await wait(250);
+  o.deskMenuFromPauseKeepsMatch = M.dockCollapsedNow()===false && M.world.state==='play' && !ovShown();
+  M.setDockCollapsed(true); await wait(250);       // the › tab
+  o.deskClosingBringsPauseBack = M.dockCollapsedNow()===true && M.paused===true && ovShown();
+  // control: a dock opened by the tab over a RUNNING match closes back to a running match
+  M.togglePause(false); await wait(60);
+  M.setDockCollapsed(false); await wait(150); M.setDockCollapsed(true); await wait(150);
+  o.deskTabRoundTripKeepsPlaying = M.paused===false && !ovShown();
   return o;
 });
 console.log(JSON.stringify(r,null,2));

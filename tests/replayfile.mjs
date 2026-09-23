@@ -1563,6 +1563,107 @@ ok('...and the live match keeps it', rings.liveVsLive === 0,
    `${rings.liveVsLive} pixels differ between two live draws of the same frame — paired, because a build that dropped the ring EVERYWHERE satisfies the check above and is the worse bug`);
 await vpage.close();
 
+// ---- WATCH GOAL ON THE RESULT SCREEN, DRIVEN THE WAY A THUMB DOES ---------------
+// Found by a real-path sweep, not by any suite — every suite reached the transport through
+// `getElementById(...).click()`, which does no hit testing. `#overlay` is fixed, full-bleed,
+// painted in the page gradient and z-indexed over the canvas, and `watchReplayFile` only
+// ever hid the `.screen`s — so Watch goal played the replay BEHIND the result screen: the
+// transport's ✕, Video and HQ sat under the overlay (`elementFromPoint` returned
+// `#overlay` at each centre), and the one thing a player could still press was Restart.
+// Restart called `repReset()`, which nulled `lastReplay` under a tick that read
+// `lastReplay.goals` on its next frame: a throw inside a rAF is silent, `finish()` never
+// ran, `replay.active` stayed true, and `loop()` returned at its first line for the rest
+// of the page — the next 26 drills and every KICK OFF after that read 0 steps. On a phone
+// there is no Escape key, so this was the whole game hanging on the first Watch goal.
+// Four rules, each with its own sabotage: the overlay hides while you watch; a new world
+// aborts the replay; the tick reads nothing that a new world nulls; and a file replay's
+// `finally` puts back only a world that is still its own.
+{
+  const q = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  q.on('pageerror', e => errors.push(e.message));
+  q.on('console', m => { if (m.type()==='error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  await q.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+  await q.goto('file://' + process.cwd() + '/index.html');
+  await q.waitForTimeout(800);
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  // where a control's centre is, and whether a finger there would land on it
+  const hit = (sel) => q.evaluate((sel) => {
+    const el = sel.startsWith('text=')
+      ? [...document.querySelectorAll('button')].find(b => b.textContent.includes(sel.slice(5)) && b.offsetParent !== null)
+      : document.querySelector(sel);
+    if (!el) return { err: 'missing ' + sel };
+    el.scrollIntoView({ block:'center' });
+    const r = el.getBoundingClientRect(); if (r.width < 1) return { err: sel + ' has no box' };
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const h = document.elementFromPoint(cx, cy);
+    return (h === el || el.contains(h)) ? { cx, cy } : { err: sel + ' covered by ' + (h ? ('#' + h.id || h.tagName) : 'nothing') };
+  }, sel);
+  const press = async (sel) => { const h = await hit(sel); if (h.err) return h.err; await q.mouse.click(h.cx, h.cy); return null; };
+  const st = () => q.evaluate(() => { const M = window.__magnet; const w = M.world; return {
+    active: M.replay.active, controls: M.replay.controls, overlay: document.getElementById('overlay').classList.contains('show'),
+    state: w && w.state, tick: w ? (w.aiTick|0) : -1, tag: w && w._tag, paused: M.paused }; });
+  // a finished match with a goal in the buffer — the buffer fills per FRAME in loop(),
+  // never in step(), so this plays on the real loop
+  await q.evaluate(() => { const M = window.__magnet; M.sel.autoReplay = false; M.setMatchSeed(11); M.sel.mode='1v1'; M.startMatch(); const w = M.world; w.state='play'; w.stateT=1; });
+  await wait(2500);
+  await q.evaluate(() => { const w = window.__magnet.world; const bl = w.ball; bl.x = 0; bl.y = -(w.bounds.halfL - 40); bl.vx = 0; bl.vy = -25; });
+  for (let i = 0; i < 80 && (await st()).state !== 'goal'; i++) await wait(50);
+  await wait(2200);                                   // the tail freeze
+  await q.evaluate(() => { const M = window.__magnet; const w = M.world; if (w.score[0] === w.score[1]) w.score[0]++; M.endMatch(w); M.finishMatch(w); });
+  await wait(400);
+  const s0 = await st();
+  ok('rw: a result screen with a goal to watch', s0.overlay && s0.state === 'over' && s0.paused, JSON.stringify(s0));
+  const e1 = await press('text=Watch goal');
+  ok('rw: Watch goal is pressable on the result screen', !e1, e1);
+  await wait(800);
+  const s1 = await st();
+  ok('rw: it plays with the transport up', s1.active && s1.controls, JSON.stringify(s1));
+  ok('rw: and the result screen is OUT OF THE WAY while it plays', !s1.overlay,
+     'the overlay is still shown — the replay is behind it and the transport under it');
+  const reach = {};
+  for (const sel of ['#repExit', '#repVidBtn', '#repVidHqBtn', '#repPause']) reach[sel] = (await hit(sel)).err || 'ok';
+  ok('rw: ✕, Video, HQ and pause are all under a thumb', Object.values(reach).every(v => v === 'ok'), JSON.stringify(reach));
+  const rr = await hit('#ovResume');
+  ok('rw: ...and Restart is NOT — a match cannot start under a running replay', !!rr.err, 'Restart hittable at ' + JSON.stringify(rr));
+  const e2 = await press('#repExit');
+  ok('rw: ✕ is pressed', !e2, e2);
+  await wait(400);
+  const s2 = await st();
+  ok('rw: ✕ brings the result screen back', s2.overlay && !s2.active && s2.state === 'over', JSON.stringify(s2));
+  const goalDoc = await q.evaluate(() => JSON.stringify(window.__magnet.repFileBuild()));
+  const e3 = await press('#ovResume');
+  ok('rw: Restart is pressable again', !e3, e3);
+  await wait(300);
+  const s3 = await st(); await wait(1000); const s4 = await st();
+  ok('rw: Restart starts a match that RUNS', !s4.active && (s4.state === 'kickoff' || s4.state === 'play') && s4.tick - s3.tick >= 30,
+     `replay.active ${s4.active}, state ${s4.state}, ${s4.tick - s3.tick} steps in a second`);
+  // `watchReplayFile` hides the HUD for the replay and, from the result screen, nobody else
+  // puts it back — the next match played with no scorebug and no pause button.
+  const hudBox = await q.evaluate(() => { const b = document.getElementById('pauseBtn').getBoundingClientRect(); return { hidden: document.getElementById('hud').classList.contains('hidden'), w: b.width, h: b.height }; });
+  ok('rw: ...WITH its HUD — the pause button is back on the screen', !hudBox.hidden && hudBox.w >= 40 && hudBox.h >= 40, JSON.stringify(hudBox));
+  // ---- the stranding case, driven directly: a controlled file replay, then a world starts
+  await q.evaluate((d) => { const M = window.__magnet; M.world._tag = 'old'; M.playReplayFile(JSON.parse(d), null, { controls:true }); }, goalDoc);
+  await wait(300);
+  const s5 = await st();
+  ok('rw: a file replay with controls is running', s5.active && s5.controls, JSON.stringify(s5));
+  await q.evaluate(() => window.__magnet.startMatch());
+  await wait(600);
+  const s6 = await st(); await wait(1000); const s7 = await st();
+  ok('rw: a new world ENDS the replay on screen', !s6.active && !s7.active, `replay.active ${s6.active} / ${s7.active} after startMatch`);
+  ok('rw: ...and the new world is the one that runs, not the finished one put back by the replay\'s finally',
+     s7.tag !== 'old' && (s7.state === 'kickoff' || s7.state === 'play') && s7.tick - s6.tick >= 30,
+     `tag ${s7.tag}, state ${s7.state}, ${s7.tick - s6.tick} steps in a second`);
+  // ---- the tick survives `lastReplay` going away under it (the throw that stranded the page)
+  await q.evaluate((d) => { const M = window.__magnet; M.playReplayFile(JSON.parse(d), null, { controls:true }); }, goalDoc);
+  await wait(200);
+  await q.evaluate(() => { window.__magnet.lastReplay = null; });
+  await wait(300);
+  const s8 = await st();
+  ok('rw: a tick outliving `lastReplay` keeps drawing rather than throwing', s8.active && s8.controls, JSON.stringify(s8));
+  await q.evaluate(() => window.__magnet.replayAbort());
+  await q.close();
+}
+
 await b.close();
 if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));
 if (fails.length){ console.log('FAIL replayfile\n  ' + fails.join('\n  ')); process.exit(1); }

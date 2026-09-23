@@ -284,6 +284,52 @@ const page = async () => {
   await p.close();
 }
 
+// ---- 4. EVERY control on the bar is on the screen, on a 390px phone ------------
+// Nine 44px controls and eight gaps are 460px, and the bar is 366px on a 390 viewport, so
+// the row overflowed to the right: ✕ measured at x=458 and HQ video at 406, past the edge,
+// with `elementFromPoint` returning null for both. A phone has no Escape key, so that was a
+// replay you could not leave. The row wraps now; this reads the rendered boxes, never a
+// class or a count — a control the row has and the screen does not is the whole defect.
+{
+  const p = await b.newPage({ viewport:{ width:390, height:844 }, isMobile:true, hasTouch:true });
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(800);
+  const r = await p.evaluate(async () => {
+    const M = window.__magnet, o = { off: [], covered: [] };
+    M.setMatchSeed(9); M.sel.mode='1v1'; M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=1;
+    let n = 0; while (w.state !== 'goal' && n < 6000){ M.step(w); n++; }
+    for (let i = 0; i < M.REP_TAIL_F + 6; i++) M.step(w);
+    M.playReplay(1, { controls:true });
+    await new Promise(r => setTimeout(r, 200));
+    const bar = document.getElementById('repCtl');
+    o.barUp = !bar.classList.contains('hidden') && bar.getBoundingClientRect().height > 0;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const btns = [...bar.querySelectorAll('button')];
+    o.count = btns.length;
+    for (const el of btns){
+      const b = el.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const name = el.id || el.textContent.trim();
+      if (cx < 0 || cx > vw || cy < 0 || cy > vh) o.off.push(name + '@' + cx.toFixed(0));
+      const h = document.elementFromPoint(cx, cy);
+      if (!h || !(h === el || el.contains(h))) o.covered.push(name + '@' + cx.toFixed(0) + ',' + cy.toFixed(0));
+    }
+    const bb = bar.getBoundingClientRect();
+    o.barFits = bb.left >= 0 && bb.right <= vw;
+    M.replayAbort();
+    return o;
+  });
+  ok('the transport is up on a 390px phone', r.barUp);
+  ok('...with every one of its controls', r.count >= 9, r.count + ' buttons');
+  ok('every control is on the screen', r.off.length === 0, 'past the viewport: ' + r.off.join(' '));
+  ok('and pressable at its centre', r.covered.length === 0, 'centre not hittable: ' + r.covered.join(' '));
+  ok('the bar itself fits the screen', r.barFits);
+  await p.close();
+}
+
 await b.close();
 if (errors.length) fails.push('console/page errors: ' + errors.slice(0, 4).join(' | '));
 if (fails.length){ console.log('FAIL replaywatch\n  ' + fails.join('\n  ')); process.exit(1); }
