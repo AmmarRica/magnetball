@@ -2489,17 +2489,22 @@ three lines a second time, name it.
   the players in this pic. Body inside the circle but legs can go out. Make it animated.
   Set this as one of the themes"* — with *"I already have the Kenney pack"*.
   ⚠️ **DRAWN, NOT SPRITED, AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE — the pack
-  IS here and it cannot do this.** `assets/Kenney/kenney_sports-pack`'s top-down art is
-  **19 × 13 pixel** PNGs, four per kit colour, and every one of them is **head and
-  shoulders ONLY**: there is not a single arm, leg or boot anywhere in the pack, in the
-  PNGs or in `Vector/charactersEquipment.svg` (rendered and checked, not assumed). The
-  limbs in the sample picture belong to that picture's own composition. So **both halves
-  of the ask are out of reach of the files** — there are no limbs to draw, and the four
-  frames per colour are four HAIR AND SKIN variations rather than walk frames, so a sprite
-  body could not be animated at all. A drawn one also carries the TEAM colour, which a
-  fixed blue PNG cannot, and stays crisp at the 9–15px a body is really drawn at. This is
-  the rule `assets/README.md` states and `sketch` is the one documented exception to;
-  `sketch` stays the exception.
+  IS here and it cannot do this.** ⚠️ **THE FIRST VERSION OF THIS ENTRY HAD THE NUMBERS
+  WRONG and is corrected here rather than quietly edited**: it said the art was 19 × 13
+  PNGs, four per kit colour. It is **fourteen** per kit colour — **ten at 21 × 31** plus
+  four at 19 × 13 — so the sprite somebody would reach for is the 21 × 31 one, which the
+  old figure did not even mention. The CONCLUSION survives, and is now measured rather
+  than asserted: **all ten share ONE silhouette, 501 ink pixels each, identical to the
+  pixel**, and that silhouette is a plain **OVAL** — a head and shoulders from directly
+  above, with no arm, leg or boot breaking the outline anywhere. The ten differ in hair
+  and skin colour ONLY, so they are not walk frames and a sprite body cannot be animated
+  at all; the four 19 × 13 plates are a smaller head-and-shoulders again. Nothing in
+  `assets/` is named for a limb, and the pack's own `Preview.png` shows the same ovals.
+  So **both halves of the ask are out of reach of the files** — there are no limbs to
+  blit, and no frames to run. A drawn body also carries the TEAM colour, which a fixed
+  blue/red/green/white PNG cannot, and stays crisp at the 9–15px a body is really drawn
+  at. This is the rule `assets/README.md` states and `sketch` is the one documented
+  exception to; `sketch` stays the exception.
   ⚠️ **AND IT IS ALREADY VECTOR — asked as *"if we are not already, we must use svg"*, and
   the answer is that nothing here is a bitmap.** The skin is canvas PATHS — two ellipses,
   two arcs and four stroked lines — so it is resolution-independent in exactly the way SVG
