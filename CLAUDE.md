@@ -2500,6 +2500,16 @@ three lines a second time, name it.
   fixed blue PNG cannot, and stays crisp at the 9–15px a body is really drawn at. This is
   the rule `assets/README.md` states and `sketch` is the one documented exception to;
   `sketch` stays the exception.
+  ⚠️ **AND IT IS ALREADY VECTOR — asked as *"if we are not already, we must use svg"*, and
+  the answer is that nothing here is a bitmap.** The skin is canvas PATHS — two ellipses,
+  two arcs and four stroked lines — so it is resolution-independent in exactly the way SVG
+  is, re-drawn at whatever `r` the camera gives it, with no raster to scale and nothing for
+  a DPR change to soften. What SVG would add over that is an **asset**, and an asset is the
+  half the measurement above rules out: a file cannot carry the team colour, cannot be
+  animated by `p.gait`, and would make a dependency-free page fetch something before it can
+  draw a player. `ICONS`/`iconSvg` (inline SVG for the menu marks) and `sketch`'s
+  `spriteImg` sheet are both still the right tools for what they do; a body on the pitch is
+  not one of them.
   ⚠️ **THE BODY AND THE BUTT FILL THE GUIDE RING AND NEVER CROSS IT; ONLY THE ARMS AND THE
   LEGS GO OUT.** Asked for in those words. Measured on the build before it, the shirt and
   the shorts together reached **0.902r at the farthest point and 0.813r at the thinnest
@@ -2546,7 +2556,7 @@ three lines a second time, name it.
   lesson intact is that the **SHIRT** stays inside `r` and the ring lands on the
   shoulders, so the ring still reads as the player and a limb sticking out of a circle
   reads as a limb rather than as a bigger body. Measured: shirt **0.98r**, whole figure
-  **1.38..1.54r** across the stride. ⚠️ **THREE CHECKS, NOT ONE, and each passes on a build that breaks the
+  **1.451..1.582r** across the stride. ⚠️ **THREE CHECKS, NOT ONE, and each passes on a build that breaks the
   others**: the shirt inside the ring, the figure past it, and a **CEILING** at 1.6r so
   *"legs can go out"* cannot drift into a body drawn bigger than its collider.
   `tests/discskins.mjs`' own `bothInsideTheRing` is scoped to `crablobster` and is
@@ -2583,7 +2593,46 @@ three lines a second time, name it.
   feet swapping between those two places and nothing else. The foot was never once in front
   of the body, one foot's whole travel was **0.46r**, and the hands sat permanently in
   FRONT at +0.54. Arms forward, legs back, neither moving through the body: a breaststroke.
-  The foot now runs **−1.09 .. +0.57** about a hip at −0.28 and the hand **−0.16 .. +0.62**.
+  The build that fixed it read **−1.09 .. +0.57** for the foot and **−0.16 .. +0.62** for the
+  hand; where the arcs sit now is the centring entry below.
+  ⚠️ **AND THE SWING IS CENTRED ON THE BODY, NOT ON ITS OWN JOINT — swinging it about the
+  joint is what put the legs behind the player and the arms in front of him.** Reported as
+  *"the legs are not centered on the body. Same to the arms"*, and it is arithmetic rather
+  than taste: a limb swung about its joint carries its whole ARC to that joint, the hip sits
+  behind the middle of the body and the shoulder in front of it. Measured on the build
+  before this one, against a body whose own along-centre is **+0.01** (the union of the
+  shirt, −0.86..+0.98, and the shorts, −0.96..+0.08): the foot's arc ran **−1.09 .. +0.57,
+  a midpoint of −0.26**, and the hand's **−0.14 .. +0.61 about +0.23** — a quarter of a
+  radius of lean each way, in opposite directions. Both arcs are centred on `swingAt` now
+  and read **−1.11 .. +1.09 about −0.01** and **−0.43 .. +0.48 about +0.02**.
+  ⚠️ **ONE `swingAt` FOR BOTH, and a per-limb pair was tried and measured not worth it.**
+  The obvious worry about one centre is that at mid-stride all four limbs sit at the same
+  place along the body, so each side reads as ONE stick rather than two; offsetting them to
+  −0.10 and +0.10 separates them by a fifth of a radius, which is invisible at the 9–15px a
+  body is really drawn at, and it costs **both** guards that bound this geometry — the
+  ceiling (1.566 against 1.582 for a stride a whole 0.12 shorter) and the occlusion (the
+  boot's quietest phase reads **25** pixels against 9, over the suite's floor of 20).
+  ⚠️ **THE JOINTS CAME IN WITH IT, because the limb's LENGTH is the other half of looking
+  centred**: a foot swinging about a hip more than a quarter of a radius behind it draws a
+  long diagonal forward and a stub backward. At ±0.13 the leg's two extremes are **1.29r
+  and 1.05r**. They are NOT taken to zero — the shoulders sit near the head and the hips
+  behind them, and that is the one thing about a torso a top-down view can still show.
+  ⚠️ **AND BOTH LIMBS ARE LONGER, AS FAR AS THE TWO EXISTING GUARDS ALLOW** — asked for in
+  those words, and the guards set the number rather than taste. Leg (hip to boot) **0.88r →
+  1.05..1.29r** and arm (shoulder to hand) **0.80r → 0.88..1.04r**, longer at every phase
+  and not only at the ends. What stops it there: the foot may not go past about **0.82**
+  across or the boot stops tucking under the shirt at mid-swing and *"swing under the
+  player"* — the ask the geometry was built for — is gone (at 0.88 across its quietest phase
+  reads **102** pixels against 9, at 0.94 it reads **164**); and the figure may not pass
+  1.60r, which the LEG now brings to **1.582** — so shortening the arm buys no headroom at
+  all, and the arm is therefore left at the longest the same ceiling allows.
+  ⚠️ **"LONGER" IS MEASURED AGAINST THE BODY, IN THE SAME RUN, and the CENTROID is the
+  wrong instrument.** A pixel constant is vacuous at one radius and impossible at another,
+  and deriving a length from `FOOTBALLER` compares the table with itself; so a limb is
+  measured from its own joint to the FARTHEST ink at its tip and must out-reach the body's
+  own 0.98r. Taken as a centroid instead the arm read **0.822r** on a build whose arm is
+  really 1.144r — the hand's band catches the outer stretch of the arm as well, which pulls
+  the centroid inboard — and it would have reported a good build as stubby.
   ⚠️ **THE SHIRT IS DRAWN OVER THE LIMBS, SO PASSING UNDER THE TORSO IS OCCLUSION — and
   that is what "under the player" MEANS here.** The leg is hidden where it crosses the
   shirt and emerges behind, so the check is a PAIR: the boot is plainly there at some phase
@@ -2591,9 +2640,9 @@ three lines a second time, name it.
   whose foot sat 0.76r across, where the shirt does not reach at all.
   ⚠️ **WHICH IS ALSO THE TRAP: all four limbs tuck AT ONCE.** The two legs are half a cycle
   apart, so they tuck together, and arms counter-swinging the legs tuck on the same phase —
-  a bare oval twice a stride. The hand is therefore held at **1.20r across**, outside the
-  shirt's own 0.88, so the arms carry the figure's reach through the moment the legs are
-  under the body. Measured: the figure reaches **1.34..1.49r at every phase**, and pulling
+  a bare oval twice a stride. The hand is therefore held at **1.34r across**, outside the
+  shirt's own 0.96, so the arms carry the figure's reach through the moment the legs are
+  under the body. Measured: the figure reaches **1.451..1.582r at every phase**, and pulling
   the hand in to 0.70 drops it under the 1.15 floor.
   ⚠️ **THE STRIDE IS A CONTINUOUS PHASE (`gaitSwing`), NOT TWO FRAMES** — asked for as more
   frames of animation, and a phase is EVERY frame rather than a bigger number of them. It
@@ -2614,7 +2663,7 @@ three lines a second time, name it.
   phase lost it entirely — and the probe then reported a **fabricated 0** for the centroid.
   Equally, the UNION of both limbs is symmetric under the half-cycle swap and read `lo
   −0.93, hi 0.87` at every single phase on the broken build: **one side only**.
-  ⚠️ **Thirteen sabotages, each caught by its own check.** `tests/footballers.mjs`.
+  ⚠️ **Eighteen sabotages, each caught by its own check.** `tests/footballers.mjs`.
   ⚠️ **FOUR PEOPLE, CHOSEN BY A HASH OF THE NAME, never rolled**: a paint has to give the
   same picture twice for one step. The hair and skin tones are the picture's own.
   ⚠️ **A PALETTE AND A LOOK, with no `DYN_FIELDS` painter and no `pitch`** — the same

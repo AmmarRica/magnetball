@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260922.1115PM';
+const VERSION = '20260923.1040AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,12 @@ const VERSION = '20260922.1115PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.1040AM', title: 'The Sunday League players get their stride centred',
+    changed: [
+      '<b>The arms and legs swing about the middle of the player now.</b> They hung off the hip and the shoulder, so the legs trailed behind the body and the arms led in front of it.',
+      '<b>Both are longer</b>, as far as they can go while the boot still tucks under the shirt at mid-stride and the figure stays smaller than a body drawn bigger than it collides.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260922.1115PM', title: 'The Sunday League players fill their circle',
     changed: [
       '<b>The footballers\u2019 bodies now fill the circle they actually collide at.</b> The shirt and the shorts were floating inside it with a rim of bare pitch all the way round; they reach the edge now, and never cross it.',
@@ -33706,7 +33712,7 @@ DISC_SKINS.sleeve = {
 // **SHIRT** — the body — stays inside `r` and the ring lands on the shoulders, so the
 // ring still reads as the player. Only the arms and legs reach past it, and a limb
 // sticking out of a circle reads as a limb rather than as a bigger body. Measured: the
-// shirt spans 1.92r of a 2r circle and the whole figure 2.7r.
+// shirt reaches 0.98r of the 1.0r ring and the whole figure 1.451..1.582r.
 // ⚠️ **THE SILHOUETTE RULE CANNOT BE MET AND THE PAIR IS MEASURED INSTEAD.** Both sides
 // are footballers, because that is the art that was asked for — so hue and lightness are
 // all there is, and this is the third deliberate exception in the file after Abduction's
@@ -33759,26 +33765,63 @@ const FOOTBALLER = {
   // was never once in front of the body, one foot's whole travel was **0.46r**, and both
   // feet were splayed to 0.76r across — while the hands sat permanently in FRONT at +0.54
   // and flung out to 1.06. Arms forward, legs back, neither moving through the body: a
-  // breaststroke. Measured on the same probe now: the foot runs **-1.09 .. +0.57** about a
-  // hip at -0.28 and the hand **-0.16 .. +0.62**, correlation between the two **-0.997**.
+  // breaststroke. The build that fixed it read **-1.09 .. +0.57** for the foot and
+  // **-0.16 .. +0.62** for the hand, correlation between the two **-0.997**; where the arcs
+  // sit now is the centring note further down.
   // ⚠️ **THE SHIRT IS DRAWN OVER THE LIMBS, so passing under the torso is OCCLUSION and
   // that is what "under the player" MEANS here** — the leg is hidden where it crosses the
   // shirt and emerges behind. It is also the trap: the two legs are half a cycle apart, so
   // they tuck TOGETHER, and arms counter-swinging the legs tuck on the same phase. All
   // four limbs hidden at once is a bare oval twice a stride.
-  // ⚠️ **WHICH IS WHY THE HAND IS HELD AT 1.20 ACROSS AND THE FOOT AT 0.62.** The shirt is
-  // an ellipse 0.74 along by 0.88 across, so a hand outside 0.88 clears it at EVERY phase
-  // and the arms carry the figure's reach through the moment the legs are under the body.
-  // The legs are free to sweep under because the arms are not. Measured over a whole cycle
-  // in `tests/footballers.mjs`: the figure reaches 1.34..1.49r at every phase, never once
-  // falling back to the shirt's own 0.88.
+  // ⚠️ **WHICH IS WHY THE HAND IS HELD WIDER ACROSS THAN THE SHIRT AND THE FOOT IS NOT.**
+  // The shirt is an ellipse 0.92 along by 0.96 across, so a hand at 1.34 clears it at EVERY
+  // phase and the arms carry the figure's reach through the moment the legs are under the
+  // body. The legs are free to sweep under precisely because the arms are not. Measured
+  // over a whole cycle in `tests/footballers.mjs`: the figure reaches **1.451..1.582r** at
+  // every phase, never once falling back to the shirt's own 0.98.
   // ⚠️ **A WIDER BODY HIDES MORE LEG, so the foot and the hand move OUT with it.** The
   // limbs are painted under the shirt, so how much of a swing shows is the ellipse's own
   // width at that distance across — and growing the shirt from 0.88 to 0.94 across buries
   // the forward half of the stride, which is the half the swing was built for. The foot
   // goes 0.62 -> 0.70 and the hand 1.20 -> 1.24 to hold the same clearance they had.
-  hip:  [-0.28, 0.42], foot: 0.78, legSwing: 0.80, legW: 0.26,
-  sh:   [ 0.24, 0.58], hand: 1.24, armSwing: 0.45, armW: 0.22,
+  // ⚠️ **THE SWING IS CENTRED ON THE BODY, NOT ON ITS OWN JOINT — and centring it on the
+  // joint is what made the legs sit behind the player and the arms in front of him.** The
+  // hip is behind the middle and the shoulder in front of it, which is anatomy; swing a
+  // foot about the hip and its whole ARC travels with the hip. Measured on the build
+  // before this one, facing +x: the boot's centroid ran **-1.09 .. +0.57, a midpoint of
+  // -0.26**, and the hand **-0.14 .. +0.61 about +0.23** — against a body whose own
+  // along-centre is **+0.01** (the union of the shirt, -0.86..+0.98, and the shorts,
+  // -0.96..+0.08). A quarter of a radius of lean each way, in opposite directions, which
+  // is what "the legs are not centered on the body, same to the arms" is. Both arcs are
+  // centred on `swingAt` now and measure **-1.11 .. +1.09 about -0.01** and
+  // **-0.43 .. +0.48 about +0.02**.
+  // ⚠️ **ONE `swingAt` FOR BOTH, and a per-limb pair was tried and is not worth it.** The
+  // obvious worry about giving the arms and the legs one centre is that at mid-stride all
+  // four sit at the same place along the body, so each side reads as ONE stick rather than
+  // two. Offsetting them to -0.10 and +0.10 separates them by a fifth of a radius, which
+  // is indistinguishable at the 9-15px a body is really drawn at — and it costs both of
+  // the guards that bound this geometry: the ceiling (1.566 against 1.582 for a stride a
+  // whole 0.12 shorter) and the occlusion (the boot's quietest phase reads 25 pixels
+  // against 9, over the suite's floor of 20). Two numbers that say one thing and buy a
+  // separation nobody can see.
+  // ⚠️ **THE JOINTS CAME IN WITH IT, because the limb's LENGTH is the other half of looking
+  // centred.** A foot swinging about a hip more than a quarter of a radius behind it draws
+  // a long diagonal forward and a stub backward. At +/-0.13 the leg's two extremes are
+  // **1.29r and 1.05r**; they are not taken all the way to zero, because the shoulders sit
+  // near the head and the hips behind them and that is the one thing about a torso a
+  // top-down view can still show.
+  // ⚠️ **AND BOTH LIMBS ARE LONGER, AS FAR AS THE TWO EXISTING GUARDS ALLOW** — asked for
+  // in those words, and the two guards are what set the number rather than taste. The leg
+  // (hip to boot) goes **0.88r -> 1.05..1.29r** and the arm (shoulder to hand) **0.80r ->
+  // 0.88..1.04r**, longer at every phase of the stride, not only at its ends. What stops
+  // it there: the foot may not go further ACROSS than about 0.82, or the boot stops tucking
+  // under the shirt at mid-swing and "swing under the player" — the ask this geometry was
+  // built for — is gone (at 0.88 across the boot's quietest phase reads 102 pixels against
+  // 9, and at 0.94 it reads 164); and the whole figure may not pass 1.60r, which the hand
+  // brings to **1.582**. Longer than this is a different trade, not a tuning.
+  swingAt: 0,          // the along position BOTH arcs are centred on: the body's own middle
+  hip:  [-0.13, 0.42], foot: 0.82, legSwing: 1.10, legW: 0.26,
+  sh:   [ 0.13, 0.58], hand: 1.34, armSwing: 0.58, armW: 0.22,
   bootR: 0.19,
   stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
 };
@@ -33842,7 +33885,7 @@ DISC_SKINS.footballers = {
       // The foot travels along the facing axis about a hip that does not move, so the leg
       // points forward, shortens as it passes under the shirt, and points back again.
       const A = pt(F.hip[0], F.hip[1]*sgn);
-      const B = pt(F.hip[0] + F.legSwing*sw, F.foot*sgn);
+      const B = pt(F.swingAt + F.legSwing*sw, F.foot*sgn);
       c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.legW);
       c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
       c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
@@ -33850,7 +33893,7 @@ DISC_SKINS.footballers = {
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0], F.sh[1]*sgn);
-      const H = pt(F.sh[0] - F.armSwing*sw, F.hand*sgn);
+      const H = pt(F.swingAt - F.armSwing*sw, F.hand*sgn);
       c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.armW);
       c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
     }

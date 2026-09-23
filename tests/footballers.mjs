@@ -107,8 +107,8 @@ const r = await p.evaluate(async ()=>{
   // excluded (the same ink on one of the four people), and the hair reaches 0.42r across
   // against a boot spanning 0.43..0.81r.
   const boot = (d,i,ax,ay,rad) => ay > R*0.45 && near(d,i,ink,40);
-  // ...and the hand by being further ACROSS than any part of a leg can reach (foot 0.62
-  // plus half the leg's width is 0.75r, against a hand held at 1.20r).
+  // ...and the hand by being further ACROSS than any part of a leg can reach (foot 0.82
+  // plus half the leg's width is 0.95r, against a hand held at 1.34r).
   const hand = (d,i,ax,ay,rad) => ay > R*0.95 && near(d,i,skinCol,40);
   const footAlong = [], handAlong = [], handPix = [], bootPix = [], figR = [], shirtR = [];
   for (const f of frames){
@@ -185,6 +185,56 @@ const r = await p.evaluate(async ()=>{
   o.limbsCrossTheRing   = o.figureReachMin >= 1.15;      // at the WORST phase, not the best
   o.limbsAreLimbs       = o.figureReachMax <= 1.60;      // ...and not a bigger body
   o.limbsClearTheShirt  = o.figureReachMin >= o.shirtReachMax * 1.25;
+
+  // ---- 2b. the swing is centred on the BODY, and the limbs are long enough to read
+  // ⚠️ **THE ARC'S MIDPOINT IS THE CLAIM, NOT ITS ENDS.** A limb swung about its own joint
+  // has an arc centred on that joint, and the hip sits behind the middle of the body while
+  // the shoulder sits in front of it — so the legs trailed and the arms led, which is what
+  // *"the legs are not centered on the body, same to the arms"* was. Measured on the build
+  // before this one the foot's midpoint was **-0.26** and the hand's **+0.23** against a
+  // body centred on +0.01; both read within 0.02 of it now.
+  // ⚠️ **THE BODY'S OWN CENTRE IS MEASURED IN THE SAME RUN, never written down as a
+  // number.** It is the midpoint of the shirt-and-shorts extent along the facing axis, so
+  // moving either ellipse moves the reference with it and this check cannot go stale.
+  let bLo = 9, bHi = -9;
+  for (let i=0;i<frames[0].length;i+=4){
+    if (!bodyPick(frames[0],i)) continue;
+    const k=(i/4)|0, ax=((k%W)-CX)/R;
+    if (ax < bLo) bLo = ax; if (ax > bHi) bHi = ax;
+  }
+  o.bodyAlongCentre = +((bLo+bHi)/2).toFixed(3);
+  o.footMid = +((o.footFront + o.footBack)/2).toFixed(3);
+  o.handMid = +((o.handFront + o.handBack)/2).toFixed(3);
+  o.legsCentredOnTheBody = Math.abs(o.footMid - o.bodyAlongCentre) <= 0.10;
+  o.armsCentredOnTheBody = Math.abs(o.handMid - o.bodyAlongCentre) <= 0.10;
+  // ⚠️ **AND "LONGER" IS MEASURED AGAINST THE BODY, in the same run** — a pixel constant
+  // would be vacuous at one radius and impossible at another, and deriving the length from
+  // `FOOTBALLER` compares the table with itself. A limb is measured from its own joint to
+  // the FARTHEST ink at its tip, and at the ends of the stride both have to be longer than
+  // the body's own reach.
+  // ⚠️ **THE TIP, NEVER THE CENTROID, and the centroid was written first.** The hand's band
+  // catches the outer stretch of the arm as well as the hand itself, so its centroid sits
+  // well inboard of the thing being measured — it read **0.822r** on a build whose arm is
+  // really 1.15r, which is under the bar and would have reported a good build as stubby.
+  const tipFrom = (d, pick, jx, jy) => {
+    let m = 0, n = 0;
+    for (let i=0;i<d.length;i+=4){
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      if (!pick(d,i,ax,ay,Math.hypot(ax,ay))) continue;
+      m = Math.max(m, Math.hypot(ax/R - jx, ay/R - jy)); n++;
+    }
+    return { len:+m.toFixed(3), n };
+  };
+  const FB = M.FOOTBALLER, legLen = [], armLen = [];
+  for (const f of frames){
+    const bt = tipFrom(f, boot, FB.hip[0], FB.hip[1]);
+    const hd = tipFrom(f, hand, FB.sh[0],  FB.sh[1]);
+    if (bt.n > 300) legLen.push(bt.len);
+    if (hd.n > 200) armLen.push(hd.len);
+  }
+  o.legLongest = Math.max(...legLen);
+  o.armLongest = Math.max(...armLen);
+  o.limbsOutreachTheBody = o.legLongest > o.shirtReachMax && o.armLongest > o.shirtReachMax;
 
   // ---- 3. the swing goes UNDER the torso, which is the shirt occluding it ------
   // The two opposite peaks of the phase (`sin` at +1 and -1), a quarter and three quarters
@@ -336,6 +386,12 @@ ok(r.limbsCrossTheRing,
   `at some phase nothing reaches past the guide ring: the figure falls to ${r.figureReachMin}r — "legs can go out" was the ask, and it has to hold right round the cycle rather than at one lucky pose`);
 ok(r.limbsAreLimbs,
   `the figure reaches ${r.figureReachMax}r — past the ceiling, which is a body drawn bigger than the thing it collides with rather than limbs sticking out of one`);
+ok(r.legsCentredOnTheBody,
+  `the legs swing about a midpoint of ${r.footMid}r while the body's own centre is ${r.bodyAlongCentre}r — a limb swung about its own joint carries its whole arc to that joint, which puts the legs behind the player and the arms in front of him`);
+ok(r.armsCentredOnTheBody,
+  `the arms swing about a midpoint of ${r.handMid}r while the body's own centre is ${r.bodyAlongCentre}r`);
+ok(r.limbsOutreachTheBody,
+  `the limbs are shorter than the body they hang off: leg ${r.legLongest}r and arm ${r.armLongest}r at the ends of the stride against a body reaching ${r.shirtReachMax}r — a limb that does not out-reach the torso reads as a stub rather than as a leg`);
 ok(r.limbsClearTheShirt,
   `the limbs barely clear the shirt: figure ${r.figureReachMin}r at its worst against shirt ${r.shirtReachMax}r`);
 ok(r.limbsAnimate,
