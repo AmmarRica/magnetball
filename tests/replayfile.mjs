@@ -1059,8 +1059,18 @@ const tween = await vpage.evaluate(async () => {
   const a = { bx:0, by:0, p:[{x:0,y:0,k:false}] }, b = { bx:100, by:40, p:[{x:20,y:8,k:true}] };
   const mid = M.repTween(a, b, 0.5);
   o.mathOK = mid.bx === 50 && mid.by === 20 && mid.p[0].x === 10;
-  o.zeroIsTheFrame = M.repTween(a, b, 0) === a;      // no allocation, and no drift at k=0
-  o.noNextIsTheFrame = M.repTween(a, null, 0.7) === a;
+  // ⚠️ **THESE TWO USED TO ASSERT OBJECT IDENTITY (`=== a`) AND NOW ASSERT THE VALUES.**
+  // `repTween` short-circuited to the frame itself at `t = 0` and with no next frame, which
+  // was free and is no longer possible: the tween is also where a body's VELOCITY is worked
+  // out (a recording holds positions and nothing else — see `repAnimate`), and a velocity
+  // has to be attached on exactly those two paths, because `repFastExport` draws raw frames
+  // one at a time. Re-pointed rather than deleted: the claim being protected is that
+  // nothing DRIFTS at the ends, which is what is checked.
+  const at0 = M.repTween(a, b, 0), noNext = M.repTween(a, null, 0.7);
+  o.zeroIsTheFrame = at0.bx === a.bx && at0.by === a.by &&
+                     at0.p[0].x === a.p[0].x && at0.p[0].y === a.p[0].y && at0.p[0].k === a.p[0].k;
+  o.noNextIsTheFrame = noNext.bx === a.bx && noNext.by === a.by &&
+                       noNext.p[0].x === a.p[0].x && noNext.p[0].y === a.p[0].y;
   // ⚠️ A kick is an EVENT, not a quantity — taken from whichever frame is nearer.
   o.kickIsNotBlended = M.repTween(a, b, 0.2).p[0].k === false && M.repTween(a, b, 0.8).p[0].k === true;
 
@@ -1216,6 +1226,158 @@ ok('...with the transport actually up when it was pressed', scope.transportShown
 
 ok('a replay is DRAWN BETWEEN its frames', tween.drawsBetween,
    `${tween.distinct} distinct ball positions from a ${tween.recorded}-frame recording — a stepping build cannot exceed its own frame count, and a match replay is sampled at 30Hz and halves past the cap`);
+
+// ============================================================
+//  A REPLAY ANIMATES ITS BODIES
+// ============================================================
+// ⚠️ Reported as the replay not capturing the animation, and it did not: a frame holds a
+// position and a kick flag, and `drawReplayFrame` builds its bodies by spreading the LIVE
+// world's player over that position — so `gait`, `vx`, `vy` and the facing all came from a
+// body that is not moving (`loop()` yields while a replay is active) or, for a file, from
+// one `repFileWorld` has just minted with every one of them at zero. Measured on that
+// build over 120 replayed frames of a body walked 300 units down the pitch: gait **0** at
+// every frame, speed **0**, one pose.
+// ⚠️ This is NOT a footballers claim, which is why it lives here rather than in that
+// suite: `legFrame` reads the same two fields, so the crab, the lobster and the shrimp
+// were frozen too, and the Abduction craft's bank is read off velocity.
+// ⚠️ **Measured on the BODIES `drawReplayFrame` builds, not on pixels**, so it is one
+// claim about every skin at once rather than about whichever one happens to be worn.
+// ⚠️ **The CONTROL is the positions themselves moving, in the same run.** "The gait
+// advances" is equally true of a build that walks the bodies nowhere and advances a
+// counter, and a distance that grows while nothing travels is worse than a frozen leg.
+// ⚠️ **READ THROUGH A REAL PAINT, never by calling `repAnimate` and inspecting its
+// output.** What is claimed is that the game hands its painters a moving body, so the
+// probe records what a painter is actually given — `drawReplayFrame` -> `drawDiscs` ->
+// the skin — with the Sunday League skin borrowed purely as the instrument, because it
+// is the one whose whole subject is the stride.
+const anim = await (async () => {
+  const p = await page();
+  const out = await p.evaluate(async () => {
+    const M = window.__magnet, o = {};
+    M.applyBundle('kickabout');
+    M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.setMatchSeed(5); M.startMatch();
+    const w = M.world; w.state = 'play'; w.stateT = 2;
+    // A body walked straight across the pitch at 2.5 units a frame, at the recording's rate.
+    const N = 80, frames = [];
+    for (let i = 0; i < N; i++)
+      frames.push({ bx:0, by:0, p: w.players.map(() => ({ x: -100 + i*2.5, y: 40, k:false })) });
+    const seen = [];
+    const skin = M.DISC_SKINS.footballers, real = skin.paint;
+    let first = true;
+    skin.paint = function(c, q){
+      if (first){ seen.push({ x:q.x, g:q.gait || 0, v:Math.hypot(q.vx||0, q.vy||0),
+                              f:(+(q.faceX||0)).toFixed(2)+','+(+(q.faceY||0)).toFixed(2),
+                              s:M.gaitSwing(q) }); first = false; }
+      return real.apply(this, arguments);
+    };
+    try {
+      M.repAnimReset();
+      for (let i = 0; i < N; i++){
+        first = true;
+        M.drawReplayFrame(M.repTween(frames[i], frames[i+1], 0, 60));
+      }
+    } finally { skin.paint = real; }
+    o.painted = seen.length;
+    o.travel  = +(seen[seen.length-1].x - seen[0].x).toFixed(1);
+    o.gaitEnd = +seen[seen.length-1].g.toFixed(1);
+    o.gaitRises = seen.every((s, i) => i === 0 || s.g >= seen[i-1].g);
+    o.speedMax = +Math.max(...seen.map(s => s.v)).toFixed(2);
+    o.facing = seen[seen.length-1].f;
+    o.distinctSwings = new Set(seen.map(s => s.s.toFixed(3))).size;
+    o.bodiesReallyTravel = o.painted === N && Math.abs(o.travel) > 100;
+    o.gaitFollowsTheWalk = o.gaitRises && Math.abs(o.gaitEnd - Math.abs(o.travel)) < 5;
+    o.speedIsReal  = o.speedMax >= M.GAIT.minSpd;
+    o.facesTravel  = o.facing === '1.00,0.00';
+    o.limbsMove    = o.distinctSwings >= 6;
+
+    // ⚠️ **AND THE STRIDE IS RESET WHEN A REPLAY STARTS**, or the first frame of the next
+    // one measures the distance from wherever the last one left slot 0 — one frame of a
+    // large jump, on bodies whose slot need not even mean the same person. Driven through
+    // the REAL `playReplay` twice, because that is where the reset lives; the loop above
+    // calls `drawReplayFrame` itself and so can never see it.
+    const firsts = [];
+    skin.paint = function(c, q){
+      if (first){ firsts.push(q.gait || 0); first = false; }
+      return real.apply(this, arguments);
+    };
+    M.lastReplay = { players: w.players.length, frames, goalAt: -1, goals: null, fps: 60 };
+    try {
+      for (let run = 0; run < 2; run++){
+        first = true;
+        const play = M.playReplay(8);
+        await new Promise(r => setTimeout(r, 300));
+        M.replayAbort();
+        await play;
+      }
+    } finally { skin.paint = real; }
+    o.firstGaits = firsts.map(v => +v.toFixed(1));
+    o.strideResets = firsts.length === 2 && firsts[1] < 1;
+
+    // ⚠️ **AND THE BALL ROLLS.** Same cause on the object everybody is watching: `roll`,
+    // `rollAx` and `rot` were spread off the live ball, so a ball walked 197.5 units through
+    // a replay held ONE value and the 3D pattern — shipped on — was a still picture.
+    // ⚠️ **MEASURED IN PIXELS, because reading `roll` back off the fake ball is reading the
+    // model.** The ball's own patch, taken at its drawn centre, must DIFFER between two
+    // frames it has travelled between — and the control in the same run is a ball that does
+    // not move, whose patch must be identical, or "the pixels differ" is satisfied by a ball
+    // that merely went somewhere.
+    const cv2 = document.getElementById('game'), cx2 = cv2.getContext('2d');
+    const dpr2 = cv2.width / cv2.clientWidth;
+    const patch = () => {
+      const sx = Math.round(M.screenPt(M.wx(0), M.wy(0))[0] * dpr2);
+      const sy = Math.round(M.screenPt(M.wx(0), M.wy(0))[1] * dpr2);
+      const r = 26;
+      return cx2.getImageData(sx - r, sy - r, r*2, r*2).data;
+    };
+    // ⚠️ **SUMMED CHANNEL DIFFERENCE, not a count of pixels over a threshold.** Counting
+    // read **44 against a bar of 40** on a ball only ~20 device pixels across — a real
+    // reading with no margin at all, which is a check waiting to flake. Summed it is
+    // **11,846** for a ball that rolled 160 units against **0** for the still control.
+    const diff = (a2, b2) => { let n = 0;
+      for (let i = 0; i < a2.length; i += 4)
+        n += Math.abs(a2[i]-b2[i]) + Math.abs(a2[i+1]-b2[i+1]) + Math.abs(a2[i+2]-b2[i+2]);
+      return n; };
+    // The ball is pinned at the pitch centre in both runs, so the patch is the same pixels;
+    // only how far it has ROLLED to get there differs.
+    const rollFrames = (travel) => {
+      const fr = [];
+      for (let i = 0; i < 40; i++)
+        fr.push({ bx: 0, by: 0, p: w.players.map(() => ({ x: 0, y: -320, k: false })) });
+      // walk the ball to the centre over the first 39 frames, then hold it there
+      for (let i = 0; i < 39; i++) fr[i].bx = -travel + (travel/39) * i;
+      return fr;
+    };
+    const lastPatch = (travel) => {
+      M.repAnimReset();
+      const fr = rollFrames(travel);
+      for (let i = 0; i < fr.length; i++)
+        M.drawReplayFrame(M.repTween(fr[i], fr[i+1], 0, 60));
+      return patch();
+    };
+    const moved = lastPatch(160), still = lastPatch(0), stillAgain = lastPatch(0);
+    o.ballPatchMoved = diff(moved, still);
+    o.ballPatchStill = diff(still, stillAgain);
+    o.ballRolls = o.ballPatchStill === 0 && o.ballPatchMoved > 2000;
+    return o;
+  });
+  await p.close();
+  return out;
+})();
+
+ok('a replayed body really travels', anim.bodiesReallyTravel,
+   `${anim.travel} units over the recording — the control, because a gait that advances while nothing moves is worse than a frozen leg`);
+ok('a replay advances the stride from the path the body walks', anim.gaitFollowsTheWalk,
+   `gait reached ${anim.gaitEnd} against ${Math.abs(anim.travel)} units walked (rising: ${anim.gaitRises}) — the shipped build read 0 at every one of 120 frames`);
+ok('...with a real velocity off the recording', anim.speedIsReal,
+   `fastest ${anim.speedMax} against GAIT.minSpd — a frame carries no velocity, so it comes from the pair either side; below the floor every leg reads as standing still`);
+ok('...and the facing follows travel', anim.facesTravel,
+   `${anim.facing} for a body running along +x — facing is not recorded either, and the live world's was measured at (0,-1) on a body travelling the other way, which swings the stride sideways to the run`);
+ok('...so the limbs actually move', anim.limbsMove,
+   `${anim.distinctSwings} distinct stride phases over the recording — one, on the build this was reported from`);
+ok('...and the ball rolls through a replay', anim.ballRolls,
+   `the ball's own patch differs by ${anim.ballPatchMoved} (summed channels) between a ball that rolled 160 units to the centre spot and one that was already there, against ${anim.ballPatchStill} for two runs of the same still ball — measured in pixels because reading roll off the fake ball is reading the model, and a ball walked 197.5 units held ONE value of roll on the build this was reported from`);
+ok('...and a new replay starts the stride from scratch', anim.strideResets,
+   `first painted gait per run ${JSON.stringify(anim.firstGaits)} — left standing, the opening frame of the next replay measures the distance from wherever the last one left that slot`);
 await vpage.close();
 
 await b.close();

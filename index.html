@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0215PM';
+const VERSION = '20260923.0415PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,14 @@ const VERSION = '20260923.0215PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0415PM', title: 'The players run in a replay, at a pace you can follow',
+    changed: [
+      '<b>Replays animate the players now.</b> Legs, arms and the creature skins all held a single frozen pose from kickoff to whistle, however far anybody ran.',
+      '<b>The Sunday League stride is slower</b> — it turned over nearly eight times a second at a running pace, which reads as a blur rather than a run.',
+      '<b>And the ball rolls in a replay</b>, where its pattern used to be a still picture however far it was belted.',
+      'A replayed player faces the way they are travelling, so the stride runs along the run.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260923.0215PM', title: 'The Sunday League players wear Kenney\'s own arms and legs',
     changed: [
       "<b>The arms and legs are the sports pack's own limb art now</b>, recoloured to your team, your player's skin and the palette's ink — sleeve, forearm and hand on one, short, shin and boot on the other.",
@@ -20068,14 +20076,92 @@ function repOnGoal(w){
 }
 // One frame part-way between two recorded ones. `k` is a boolean per body and is taken
 // from whichever frame is nearer — a kick is an event, not a quantity.
-function repTween(a, b, f){
-  if (!b || !(f > 0)) return a;
-  const t = Math.max(0, Math.min(1, f));
+// ⚠️ **AND IT CARRIES A VELOCITY, which is not in the recording and cannot be.** A frame
+// holds a position and a kick flag and nothing else, so a body's speed has to come from the
+// PAIR of recorded frames either side of it — see `repAnimate` for why anything needs it at
+// all. It is scaled to a per-STEP velocity, because that is the unit everything downstream
+// compares against (`GAIT.minSpd` is 0.35 units a step): a recorded interval is `60/fps`
+// steps long, so the gap between two frames divided by that is the velocity the body really
+// had. Taking the drawn delta instead would make it depend on the REFRESH RATE and on the
+// playback speed — at 144Hz and quarter pace a sprinting body reads as standing still, which
+// is the trails rule arriving through a replay.
+// ⚠️ It no longer returns `a` untouched on the degenerate case, because the velocity has to
+// be attached either way and `repFastExport` draws raw frames one at a time. The positions
+// and the kick flag are exactly what they always were at `t = 0`.
+function repTween(a, b, f, fps){
+  const t = b ? Math.max(0, Math.min(1, f || 0)) : 0;
+  const k = Math.max(1, fps || 60) / 60;
   const p = a.p.map((pa, i) => {
-    const pb = b.p[i] || pa;
-    return { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t, k: t < 0.5 ? pa.k : pb.k };
+    const pb = (b && b.p[i]) || pa;
+    return { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t, k: t < 0.5 ? pa.k : pb.k,
+             vx: (pb.x - pa.x) * k, vy: (pb.y - pa.y) * k };
   });
-  return { bx: a.bx + (b.bx - a.bx) * t, by: a.by + (b.by - a.by) * t, p };
+  return { bx: a.bx + (b ? (b.bx - a.bx) * t : 0),
+           by: a.by + (b ? (b.by - a.by) * t : 0), p };
+}
+// ⚠️ **A REPLAY ANIMATES ITS BODIES, AND FOR THE WHOLE LIFE OF THE FEATURE IT DID NOT**
+// (`repAnim`, `repAnimReset`, `repAnimate`). Reported as the replay not capturing the
+// animation, and measured as exactly that: over **120 replayed frames** of a body walked 300
+// world units down the pitch, `p.gait` read **0** at every one of them, the speed read **0**,
+// and `gaitSwing` returned a single value — **one pose out of a hundred and twenty**. The
+// footballers' legs, the crab's, the lobster's and the shrimp's (`legFrame` reads the same
+// two fields) and the Abduction craft's bank (read off velocity) were all frozen solid.
+// ⚠️ **THE CAUSE IS THAT A FRAME IS A POSITION AND NOTHING ELSE.** `drawReplayFrame` builds
+// its bodies by spreading the LIVE world's player over the frame's x and y — so `gait`, `vx`
+// and `vy` came from whatever body happens to be standing on the pitch right now, which
+// during a replay is not advancing at all (`loop()` returns while `replay.active`), and for a
+// replay loaded from a FILE is a body `repFileWorld` has just minted with all three at zero.
+// This is `advanceBallSpin` in a drill wearing a different hat: the machinery was fine and
+// nothing was turning the handle.
+// ⚠️ **THE GAIT IS ACCUMULATED FROM THE PATH THE DRAWN BODY ACTUALLY WALKS**, never from the
+// velocity above it. `p.gait` is a DISTANCE — that is the whole reason the stride is driven
+// by it rather than by a clock — so summing the distance between consecutive drawn positions
+// is the same quantity `integrate` accumulates, and it is right at any refresh rate (more,
+// smaller draws sum to the same distance) and in slow motion (the legs slow with the action,
+// exactly as `advanceDynField` does).
+// ⚠️ **THE FACING IS DERIVED FROM TRAVEL, and it is LATCHED.** Facing is not recorded either,
+// so a replayed body wore the live world's — measured at (0, -1), fixed, on a body running
+// along +x, which swings the stride sideways to the direction of travel. Travel is the best
+// proxy a recording has; below `GAIT.minSpd` the last heading is kept, or a body that stops
+// snaps round to a default at the moment it is most visible.
+// ⚠️ **RESET WHEN A REPLAY STARTS**, or the first frame of the next one measures the distance
+// from wherever the last one left a body — one frame of a large jump, and the slot indices
+// need not even mean the same person.
+// ⚠️ **AND THE BALL DOES NOT ROLL EITHER — the same defect on the object everybody is
+// actually watching.** `roll`, `rollAx` and `rot` are spread off the live ball exactly as
+// `gait` was, and `advanceBallSpin` runs in the step loop, which is not running: measured, a
+// ball walked **197.5 units** across a replay held **one value of `roll`**, so the 3D pattern
+// — shipped ON — was a static picture and the flat look's wheel never turned.
+// ⚠️ It is `advanceBallSpin`'s OWN arithmetic (`along / r` about a `rollAxFor` axis, and
+// `canonRollAx` for the flat look) fed with the DISTANCE rather than a per-step velocity:
+// those are the same quantity for one step, and the distance is what makes it right at any
+// refresh rate — the same argument the gait above is built on.
+var repAnim = { g: [], px: [], py: [], fx: [], fy: [], b: null };
+function repAnimReset(){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], b: null }; }
+function repAnimate(w){
+  const bodies = w.players;
+  for (let i = 0; i < bodies.length; i++){
+    const p = bodies[i];
+    const hx = repAnim.px[i], hy = repAnim.py[i];
+    const d = (hx == null) ? 0 : Math.hypot(p.x - hx, p.y - hy);
+    repAnim.px[i] = p.x; repAnim.py[i] = p.y;
+    p.gait = repAnim.g[i] = (repAnim.g[i] || 0) + d;
+    const sp = Math.hypot(p.vx || 0, p.vy || 0);
+    if (sp >= GAIT.minSpd){ repAnim.fx[i] = p.vx / sp; repAnim.fy[i] = p.vy / sp; }
+    if (repAnim.fx[i] != null){ p.faceX = repAnim.fx[i]; p.faceY = repAnim.fy[i]; }
+  }
+  const bl = w.ball;
+  if (!bl) return;
+  const b = repAnim.b || (repAnim.b = { roll: 0, rot: 0, ax: 0, x: null, y: null });
+  const dx = (b.x == null) ? 0 : bl.x - b.x, dy = (b.y == null) ? 0 : bl.y - b.y;
+  b.x = bl.x; b.y = bl.y;
+  if (Math.hypot(dx, dy) > 0.01){
+    b.ax = rollAxFor(b.ax, dx, dy);
+    b.roll += (dx * Math.cos(b.ax) + dy * Math.sin(b.ax)) / (bl.r || 10);
+    const ca = canonRollAx(dx, dy);
+    b.rot += (dx * Math.cos(ca) + dy * Math.sin(ca)) * 0.03;
+  }
+  bl.roll = b.roll; bl.rollAx = b.ax; bl.rot = b.rot; bl.spin = 0;
 }
 function drawReplayFrame(f){
   ctx.clearRect(0,0,cw,ch); ctx.fillStyle=TH.fieldBg; ctx.fillRect(0,0,cw,ch);
@@ -20087,10 +20173,15 @@ function drawReplayFrame(f){
     // the end of `f.p` and take the page down with "cannot read properties of undefined".
     // The world is only consulted for what each body LOOKS like, and falls back if it is
     // short, because a replay drawn in the wrong colours still beats a stack trace.
+    // ⚠️ `vx`/`vy` come off the FRAME and are not allowed to fall through from the live
+    // body — a stale velocity is exactly what froze every leg in the file. `repAnimate`
+    // then writes `gait` and the facing. See its header.
     players: f.p.map((fp,i)=>({ ...(world.players[i] || world.players[0]),
-                                x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0 })),
+                                x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0,
+                                vx:fp.vx||0, vy:fp.vy||0 })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
+  repAnimate(fake);
   // ⚠️ The SAME transform render() applies, through the same `pitchXform` — deck view
   // turns the pitch a quarter-turn, and this drew it un-rotated, so on a Steam Deck the
   // replay came back at ninety degrees to the match it was a replay OF. It is two passes
@@ -20310,6 +20401,9 @@ function playReplay(speed, opts){
     // loop, which is not running either, so they hold at full strength for the whole replay
     // and discharge into the kickoff. See juiceReset().
     juiceReset();
+    // ...and the stride, so the first drawn frame does not measure the distance from
+    // wherever the last replay left slot 0. See repAnimate().
+    repAnimReset();
     replay.active = true;
     replay.paused = false;
     replay.ended = false; replay.restart = false;
@@ -20368,7 +20462,7 @@ function playReplay(speed, opts){
       // is silent and strands the flag, which is far worse than a replay that stops.
       if (!world){ replay.active=false; finish(); return; }
       if (idx >= frames.length){
-        drawReplayFrame(frames[frames.length-1]);
+        drawReplayFrame(repTween(frames[frames.length-1], null, 0, fps));
         // ⚠️ A replay you CHOSE to watch holds on the last frame instead of closing itself.
         // Reaching the end is not a request to leave — you went looking for this one, and
         // being thrown back to the menu the moment it finishes takes away watching it again,
@@ -20394,7 +20488,7 @@ function playReplay(speed, opts){
       // ⚠️ A straight LERP here rather than the ghosts' Catmull-Rom: a ball bouncing off a
       // wall is a real corner in the path, and a curve through it would round the bounce
       // off — which would be the replay telling a lie about the physics.
-      drawReplayFrame(repTween(frames[idx], frames[idx+1], (t - last) / dur));
+      drawReplayFrame(repTween(frames[idx], frames[idx+1], (t - last) / dur, fps));
       if (replay.controls) repCtlProgress(idx, frames.length, goalAt, lastReplay.goals);
       replay.raf = requestAnimationFrame(tick);
     }
@@ -22017,6 +22111,7 @@ async function repFastExport(doc, speed, onProgress){
   try {
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames, fps: doc.fps || 60 };
+    repAnimReset();
     computeCam();
     const step = 1e6 / fps;
     // ⚠️ A keyframe about every two seconds: a cue can only point at a cluster and a
@@ -22025,7 +22120,7 @@ async function repFastExport(doc, speed, onProgress){
     for (let i = 0; i < frames.length; i++){
       if (replay.filmStopped){ stopped = true; break; }
       if (fail) break;
-      drawReplayFrame(frames[i]);
+      drawReplayFrame(repTween(frames[i], frames[i+1], 0, fps));
       // ⚠️ The crop is taken AFTER the frame is painted and AFTER the world is installed,
       // which is what makes `clipFramePlan` able to ask where the court is at all.
       if (mirror) clipBlit(mirror);
@@ -33844,13 +33939,34 @@ const FOOTBALLER = {
   sh:   [ 0.13, 0.58], hand: 1.30, armSwing: 0.58, armW: 0.32,
   bootR: 0.19,
   stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
+  // ⚠️ **THE STRIDE IS SLOWER THAN THE TRAVEL SAYS, AND IT IS A MULTIPLIER OF ITS OWN
+  // RATHER THAN A CHANGE TO `GAIT.stride`.** Asked for as "animate the frames a bit slower
+  // for arms and legs", and measured on a seeded 3v3 first: a moving body's median speed is
+  // **1.80 units a step**, so at `legFrame`'s own 14-unit cycle the legs turned over **7.7
+  // times a second — 7.8 frames per cycle on a 60Hz screen** — and at pace **12.3 a second,
+  // 5.3 frames per cycle**. A person runs at about 1.5-2.5 stride cycles a second, so the
+  // shipped figure was four to five times a human cadence and read as a blur rather than a
+  // run. At 2.0 it is **3.9 a second at the median and 6.1 at pace**, which is a fast
+  // player rather than a cartoon and is still above life so the game does not read as slow
+  // motion.
+  // ⚠️ **`GAIT.stride` IS NOT TOUCHED**, and that is the whole reason this number exists:
+  // it is shared with `legFrame`, which the crab, lobster and shrimp are built on and whose
+  // claims `tests/discskins.mjs` pins. Slowing it would slow every creature skin in the
+  // file, which nobody asked for.
+  cadence: 2,
 };
+// ⚠️ **ONE OWNER FOR THE CYCLE LENGTH.** `tests/footballers.mjs` samples a whole stride and
+// derived the period as `2 * GAIT.stride` itself — a second copy of a formula, which is the
+// duplication rule with its usual ending: the moment the cadence moved, the suite would have
+// gone on sampling the old range and every phase-based check in it would have silently
+// measured the wrong part of the stride. The suite asks this instead.
+function gaitPeriod(){ return 2 * GAIT.stride * FOOTBALLER.cadence; }
 // ⚠️ **THE STRIDE IS A CONTINUOUS PHASE, NOT TWO FRAMES** — asked for as more frames of
 // animation, and a phase is every frame rather than a bigger number of them. Driven by
 // `p.gait`, the DISTANCE travelled, exactly as `legFrame` is: never a clock, because
 // anything advanced in a draw runs 2.4x fast on a 144Hz screen. The period is `2 *
-// GAIT.stride`, which is `legFrame`'s own full cycle, so the CADENCE is unchanged and
-// only the smoothness is new.
+// GAIT.stride` times `FOOTBALLER.cadence` — see that field for why the footballers carry a
+// cadence of their own and `legFrame`'s does not move.
 // ⚠️ **`legFrame` IS UNTOUCHED.** The creature skins are built on its two frames and
 // `tests/discskins.mjs` pins its claims — rest is frame 0, a draw must not advance it.
 // This is a second reader of the same `p.gait`, not a change to the first.
@@ -33858,7 +33974,7 @@ const FOOTBALLER = {
 // player who stops mid-stride is left standing with one leg stretched out behind.
 function gaitSwing(p){
   if (Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd) return FOOTBALLER.stand;
-  return Math.sin((p.gait || 0) / GAIT.stride * Math.PI);
+  return Math.sin((p.gait || 0) / gaitPeriod() * 2 * Math.PI);
 }
 // Four people rather than one, so a side does not read as eight clones. The hair and skin
 // tones are the picture's own, sampled off it. ⚠️ Chosen by a HASH OF THE NAME, never
@@ -36827,7 +36943,7 @@ if (window.__MAGNETDEBUG) {
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
-    drawReplayFrame,
+    drawReplayFrame, repTween, repAnimate, repAnimReset,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; }, repRecStop, repRecSync, repClock, repFastExport, repFastPick, repFastPossible, webmMux, ebSize,
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
@@ -36935,7 +37051,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, KLIMB, klimbSprite, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, gaitPeriod, KLIMB, klimbSprite, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

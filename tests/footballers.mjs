@@ -120,7 +120,12 @@ const r = await p.evaluate(async ()=>{
   // untouched, and what changed is which pixels ARE the arm. With no pack the shade band
   // does not exist and this is exactly the picker it was.
   const skinDark = skinCol.map(v => Math.round(v * ((M.KLIMB && M.KLIMB.shade) || 1)));
-  const PH = 12, CYCLE = 2 * M.GAIT.stride;
+  // ⚠️ **THE CYCLE LENGTH IS ASKED FOR, NEVER RE-DERIVED.** This read `2 * M.GAIT.stride`,
+  // which was a second copy of the game's own formula — so the moment the footballers got a
+  // cadence of their own (`FOOTBALLER.cadence`), every phase-based check in this file would
+  // have gone on sampling the old range and silently measured a fraction of the stride while
+  // still passing. `gaitPeriod()` is the one owner.
+  const PH = 12, CYCLE = M.gaitPeriod();
   const frames = [];
   for (let k=0;k<PH;k++) frames.push(paint({ vx:3, gait: k*CYCLE/PH }));
 
@@ -175,6 +180,41 @@ const r = await p.evaluate(async ()=>{
   o.armsCounterSwingTheLegs  = o.legArmCorr < -0.90;
   o.armsAlwaysVisible        = o.handPixelsMin > 30;
   o.manyFrames               = o.poses >= 6;
+
+  // ---- 1b. the CADENCE, measured between two consecutive 60Hz frames -------------
+  // ⚠️ **HOW FAST A STRIDE TURNS OVER IS A PROPERTY OF THE PICTURE, NOT OF THE TABLE, so
+  // it is measured and not read.** Comparing `gaitPeriod()` against `2 * GAIT.stride`
+  // compares the game with itself and passes at any cadence. What was reported is what two
+  // ADJACENT frames look like: at the shipped cadence the legs turned over 7.7 times a
+  // second at a moving body's median speed — 7.8 frames for a whole cycle, so the hand was
+  // most of the way across its arc between one frame and the next and the run read as a
+  // blur.
+  // ⚠️ **THE HAND IS THE TRACKER AND THE BOOT IS NOT**: the boot is deliberately hidden
+  // under the shirt at some phases (`footPassesUnderTheShirt`), so a boot centroid is
+  // missing exactly when the sampling is coarsest and the arc it appears to cover then
+  // depends on where the frames happen to land. The hand is drawn at every phase.
+  // ⚠️ **A DENSE ARC AGAINST A PER-FRAME JUMP, which is the only pair that is sampling
+  // independent.** The arc is swept at 96 phases (the same arc whatever the cadence, since
+  // it is geometry); the jump is taken at whole 60Hz frames at the median running speed
+  // measured on a seeded 3v3, **1.80 units a step**. Measured: **0.39 of the arc in one
+  // frame at cadence 1 and 0.20 at the shipped 2**, so the bar sits between them at 0.28 —
+  // which is also about a dozen frames to a cycle, the floor hand-drawn animation has
+  // always worked to.
+  // ⚠️ Paired with the arc being covered AT ALL (`handSwingsForeAndAft`, `manyFrames`), or
+  // "the stride is slow" is satisfied outright by a leg that never moves.
+  const MSPD = 1.80;
+  const handAt = (g) => scan(paint({ vx:3, gait:g }), hand).along;
+  const dense = [];
+  for (let k=0;k<96;k++){ const a = handAt(k*CYCLE/96); if (a != null) dense.push(a); }
+  o.strideArc = +(Math.max(...dense) - Math.min(...dense)).toFixed(3);
+  let jump = 0, prev = null;
+  for (let k=0;k<Math.ceil(CYCLE/MSPD)+2;k++){
+    const a = handAt(k*MSPD);
+    if (a != null && prev != null) jump = Math.max(jump, Math.abs(a - prev));
+    prev = a;
+  }
+  o.strideFrameJump = +(jump / (o.strideArc || 1)).toFixed(3);
+  o.strideIsFollowable = o.strideArc > 0.30 && o.strideFrameJump < 0.28;
 
   // ---- 2. the ring exception, held at EVERY phase ------------------------------
   // ⚠️ **THE BODY IS THE SHIRT AND THE SHORTS TOGETHER**, asked for as *"have players body
@@ -498,6 +538,8 @@ ok(r.armsAlwaysVisible,
   `at some phase the hand all but disappears (${r.handPixelsMin} pixels at its worst) — the legs are free to sweep under the shirt only because the ARMS are held wide enough to clear it at every phase, or all four limbs tuck at once and the figure is a bare oval twice a stride`);
 ok(r.manyFrames,
   `only ${r.poses} distinct pictures over a whole stride — "add more frames of animation" was the ask, and the two-frame build scored 2`);
+ok(r.strideIsFollowable,
+  `one 60Hz frame carries the hand ${r.strideFrameJump} of its whole ${r.strideArc}r stride arc at a moving body's median speed — a stride that turns over this fast is a blur rather than a run. Measured at 0.39 on the build that shipped without FOOTBALLER.cadence (7.7 cycles a second, 7.8 frames for a cycle) and 0.20 at the shipped cadence of 2. The arc itself has to be real, or "slow" is satisfied by a leg that never moves`);
 ok(r.bodyInsideTheRing,
   `the body reaches ${r.bodyFarthest}r — the shirt and the shorts TOGETHER may never cross the guide ring, which is the circle the player collides at. Only the arms and the legs are allowed out`);
 ok(r.bodyFillsTheRing,

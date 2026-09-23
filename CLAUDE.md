@@ -2722,10 +2722,35 @@ three lines a second time, name it.
   the hand in to 0.70 drops it under the 1.15 floor.
   ⚠️ **THE STRIDE IS A CONTINUOUS PHASE (`gaitSwing`), NOT TWO FRAMES** — asked for as more
   frames of animation, and a phase is EVERY frame rather than a bigger number of them. It
-  is `sin(p.gait / GAIT.stride * π)`: the same distance-driven `p.gait` `legFrame` reads,
-  never a clock, with a period of `2 * GAIT.stride` so the CADENCE is unchanged and only
-  the smoothness is new. Twelve samples round a cycle draw **7 distinct pictures** against
-  the two-frame build's 2.
+  is `sin(p.gait / gaitPeriod() * 2π)`: the same distance-driven `p.gait` `legFrame` reads,
+  never a clock. Twelve samples round a cycle draw **7 distinct pictures** against the
+  two-frame build's 2.
+  ⚠️ **AND THE CADENCE IS THE FOOTBALLERS' OWN** (`FOOTBALLER.cadence`, 2), asked for as
+  *"animate the frames a bit slower for arms and legs"* — **and measured before it was
+  touched**: on a seeded 3v3 a moving body's median speed is **1.80 units a step**, so at
+  `legFrame`'s own 14-unit cycle the legs turned over **7.7 times a second, 7.8 frames for a
+  whole cycle on a 60Hz screen**, and at pace **12.3 a second, 5.3 frames a cycle**. A person
+  runs at about 1.5–2.5 stride cycles a second, so the shipped figure was four to five times
+  a human cadence and read as a blur. At 2 it is **3.9 a second at the median and 6.1 at
+  pace** — a fast player, still above life so the game does not read as slow motion.
+  ⚠️ **`GAIT.stride` IS NOT TOUCHED, which is the whole reason this number exists**: it is
+  shared with `legFrame`, which the crab, the lobster and the shrimp are built on, so slowing
+  it would slow every creature skin in the file. A drive-by nobody asked for.
+  ⚠️ **ONE OWNER FOR THE CYCLE LENGTH (`gaitPeriod()`), because the suite had the second
+  copy.** `tests/footballers.mjs` derived the period as `2 * M.GAIT.stride` itself, so the
+  moment the cadence moved it would have gone on sampling the old range and every
+  phase-based check in it would have measured a fraction of the stride while still passing.
+  It asks the game now, and putting the formula back is a caught sabotage.
+  ⚠️ **HOW FAST IS MEASURED IN THE PICTURE, NOT READ OFF THE TABLE** — `gaitPeriod()`
+  against `2 * GAIT.stride` compares the game with itself and passes at any cadence. What is
+  measured is what two ADJACENT 60Hz frames look like at that median speed: the largest
+  single-frame move of the HAND against its whole stride arc, **0.39 of the arc before and
+  0.20 now**, with the bar between them at 0.28 (about a dozen frames to a cycle, the floor
+  hand-drawn animation has always worked to). The hand rather than the boot, because the
+  boot is deliberately hidden under the shirt at some phases and is therefore missing exactly
+  when the sampling is coarsest; the arc is swept at 96 phases and the jump at whole frames,
+  which is the only pair that is sampling-independent. Paired with the arc being real, or
+  "slow" is satisfied by a leg that never moves.
   ⚠️ **`legFrame` IS UNTOUCHED AND IS STILL THE OWNER OF THE GENERIC CLAIMS.** The creature
   skins are built on its two frames and `tests/discskins.mjs` pins them (a draw must not
   advance it, rest is frame 0, faster travel means faster legs) — this is a second reader
@@ -7724,6 +7749,68 @@ three lines a second time, name it.
   is white right across the pitch (the first run reported 2 positions for that reason), and
   `lastReplay` needed a setter on the debug hook or the synthetic recording was silently
   ignored.
+  ⚠️ **AND IT IS ALSO WHERE A BODY'S VELOCITY COMES FROM** (`repTween(a, b, f, fps)`). See
+  the animation entry below; the two early returns that handed the frame straight back
+  (`f <= 0`, and no next frame) are gone, because `repFastExport` draws raw frames one at a
+  time and a velocity has to be attached on that path too. `tests/replayfile.mjs`'
+  `zeroIsTheFrame`/`noNextIsTheFrame` asserted OBJECT IDENTITY and now assert the values —
+  the claim being protected is that nothing drifts at the ends, and that is untouched.
+- **A REPLAY ANIMATES ITS BODIES, AND FOR THE WHOLE LIFE OF THE FEATURE IT DID NOT**
+  (`repAnim`, `repAnimReset`, `repAnimate`, `repTween`'s `fps` argument). Reported as
+  *"replay does not capture the animation"*.
+  ⚠️ **MEASURED FIRST, and it is total rather than intermittent**: over **120 replayed
+  frames** of a body walked 300 world units down the pitch, `p.gait` read **0** at every
+  single one, the speed read **0**, and `gaitSwing` returned one value — **one pose out of a
+  hundred and twenty**. The footballers' legs, the crab's, the lobster's and the shrimp's
+  (`legFrame` reads the same two fields) and the Abduction craft's bank (read off velocity)
+  were all frozen solid for the length of every replay ever played.
+  ⚠️ **THE CAUSE IS THAT A FRAME IS A POSITION AND NOTHING ELSE.** `drawReplayFrame` builds
+  its bodies by spreading the LIVE world's player over the frame's x and y — so `gait`, `vx`,
+  `vy` and the facing came from whatever body is standing on the pitch right now, which
+  during a replay is not advancing at all (`loop()` returns while `replay.active` is set),
+  and for a file is a body `repFileWorld` has just minted with all of them at zero. **This is
+  `advanceBallSpin` in a drill wearing a different hat**: the machinery was right and nothing
+  was turning the handle.
+  ⚠️ **THE GAIT IS ACCUMULATED FROM THE PATH THE DRAWN BODY WALKS**, never from the velocity
+  above it. `p.gait` is a DISTANCE — which is the whole reason the stride is driven by it
+  rather than by a clock — so summing the distance between consecutive drawn positions is the
+  same quantity `integrate` accumulates: right at any refresh rate (more, smaller draws sum
+  to the same distance) and right in slow motion, where the legs slow with the action exactly
+  as `advanceDynField` does.
+  ⚠️ **THE VELOCITY COMES OFF THE PAIR OF RECORDED FRAMES, NOT OFF THE DRAWN DELTA**, and it
+  is scaled to a per-STEP velocity because that is the unit everything downstream compares
+  against (`GAIT.minSpd` is 0.35 a step): a recorded interval is `60/fps` steps long. Taken
+  from the drawn delta it would depend on the REFRESH RATE and on the playback speed — at
+  144Hz and quarter pace a sprinting body reads as standing still, which is the trails rule
+  arriving through a replay.
+  ⚠️ **THE FACING IS DERIVED FROM TRAVEL AND IS LATCHED.** Facing is not recorded either, so
+  a replayed body wore the live world's — measured at **(0, −1), fixed, on a body running
+  along +x**, which swings the whole stride sideways to the direction of travel. Below
+  `GAIT.minSpd` the last heading is kept, or a body that stops snaps round to a default at
+  the moment it is most visible.
+  ⚠️ **AND THE BALL DOES NOT ROLL EITHER — the same defect on the object everybody is
+  actually watching.** `drawReplayFrame` spreads the live ball over the frame's position, so
+  `roll`, `rollAx` and `rot` are frozen exactly as `gait` was: measured, a ball walked
+  **197.5 units** across a replay held **one value of `roll`**, so the 3D pattern (shipped
+  ON) was a static picture and the flat one never turned. `repAnimate` advances it from the
+  ball's own drawn path with `advanceBallSpin`'s own arithmetic — `along / r` about a
+  `rollAxFor` axis, and `canonRollAx` for the flat look's `rot` — because that function takes
+  a per-step VELOCITY and here the honest input is the DISTANCE, which is the same quantity
+  and is refresh-rate independent. ⚠️ Measured in **PIXELS** rather than by reading `roll`
+  back: the ball's own patch must differ between two frames it has travelled between, with a
+  **stationary** ball's patch identical in the same run as the control, or "the pixels
+  differ" is true of a ball that merely moved.
+  ⚠️ **RESET WHEN A REPLAY STARTS** (`playReplay`, `repFastExport`), or the first frame of
+  the next one measures the distance from wherever the last one left that slot — and a slot
+  need not even mean the same person.
+  ⚠️ **THE CHECK READS WHAT A PAINTER IS ACTUALLY HANDED**, through a real
+  `drawReplayFrame` → `drawDiscs` → skin paint, with the Sunday League skin borrowed as the
+  instrument; calling `repAnimate` and inspecting its return proves only that a helper
+  exists. Paired with **the positions really travelling in the same run**, because "the gait
+  advances" is equally true of a build that walks the bodies nowhere and advances a counter,
+  which is worse than a frozen leg. The RESET has a block of its own driven through the real
+  `playReplay` **twice**, since the loop that drives `drawReplayFrame` by hand can never see
+  it. Six sabotages, each caught by its own check. `tests/replayfile.mjs`.
 - **Save clip REPORTS what it did.** Every exit in `recordAndShareClip` was a bare `return`
   or a swallowed `catch`, and `saveClip` wrote its status to `$('clipBtn')` — the in-match
   bar's button, **deleted** when Save clip moved to the result screen. So on a browser with
