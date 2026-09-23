@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260922.0925PM';
+const VERSION = '20260922.1115PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,12 @@ const VERSION = '20260922.0925PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260922.1115PM', title: 'The Sunday League players fill their circle',
+    changed: [
+      '<b>The footballers\u2019 bodies now fill the circle they actually collide at.</b> The shirt and the shorts were floating inside it with a rim of bare pitch all the way round; they reach the edge now, and never cross it.',
+      '<b>Arms and legs still stick out past it</b>, which is what makes a limb read as a limb rather than as a bigger body.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260922.0925PM', title: 'The Sunday League players run properly',
     changed: [
       '<b>The footballers now swing their legs front to back under the body</b> rather than trailing them behind, which read as swimming. A foot reaches out in front, passes under the shirt and comes out behind, and the arms swing the other way like they do when you run.',
@@ -33726,10 +33732,26 @@ DISC_SKINS.sleeve = {
 // limbs reading as a star jump. At rest it is a fixed stance rather than the phase frozen
 // wherever it stopped, so a standing footballer is not caught mid-stride.
 const FOOTBALLER = {
-  torsoA: 0.74, torsoB: 0.88,      // the shirt from above: wider ACROSS than along
-  headR:  0.50, headAt: 0.05,      // the top of the head, the biggest single shape
+  // ⚠️ **THE BODY AND THE BUTT FILL THE GUIDE RING AND NEVER CROSS IT**, asked for in
+  // those words. Measured on the build before this one, the shirt and the shorts together
+  // reached **0.902r** at every phase — a tenth of the radius of bare grass inside the
+  // circle that collides, so the figure read as a small body floating in a big ring. The
+  // two shapes now reach **0.985r** and are capped by construction rather than by eye.
+  // ⚠️ **AN OFFSET ELLIPSE BULGES, so the cap is arithmetic and not the semi-axes.** For a
+  // centre `d` along the facing axis and semi-axes `a` (along) by `b` (across), the
+  // farthest point is NOT the nose at `d + a` whenever `a < b`: it is at
+  // `cos t = d*a / (b*b - a*a)`, where the radius is `sqrt(d*d + b*b + d*d*a*a/(b*b-a*a))`.
+  // Picked by eye, `torsoAt 0.20 / 0.78 / 0.97` measures a nose of 0.98 and a FLANK of
+  // **1.027** — outside the ring, in the one place nobody thinks to look.
+  // ⚠️ **THE SHIRT IS FORWARD AND THE SHORTS ARE BEHIND, which is what leaves a butt to
+  // see.** A torso centred on the body fills the ring front and back on its own and the
+  // shorts are then drawn entirely underneath it — the picture loses the thing that was
+  // asked for while passing every reach check. Offset forward, the shirt's own back edge
+  // sits at -0.76 and the shorts run to -0.98, so 0.22r of butt shows.
+  torsoAt: 0.06, torsoA: 0.92, torsoB: 0.96,   // the shirt from above: wider ACROSS than along
+  headR:  0.50, headAt: 0.10,      // the top of the head, the biggest single shape
   hairR:  0.84, hairBack: 0.12,    // ...hair over it, leaving a crescent of face in front
-  shortsAt: -0.62, shortsA: 0.28, shortsB: 0.52,
+  shortsAt: -0.44, shortsA: 0.52, shortsB: 0.78,
   // ⚠️ **A LIMB SWINGS FORE-AND-AFT ABOUT ITS OWN JOINT, and the first build had both
   // limbs PARKED — reported as the players looking like they were swimming.** Measured on
   // that build, facing +x, the boot's centroid along the facing axis: **-0.55r and
@@ -33750,8 +33772,13 @@ const FOOTBALLER = {
   // The legs are free to sweep under because the arms are not. Measured over a whole cycle
   // in `tests/footballers.mjs`: the figure reaches 1.34..1.49r at every phase, never once
   // falling back to the shirt's own 0.88.
-  hip:  [-0.28, 0.36], foot: 0.62, legSwing: 0.80, legW: 0.26,
-  sh:   [ 0.24, 0.54], hand: 1.20, armSwing: 0.45, armW: 0.22,
+  // ⚠️ **A WIDER BODY HIDES MORE LEG, so the foot and the hand move OUT with it.** The
+  // limbs are painted under the shirt, so how much of a swing shows is the ellipse's own
+  // width at that distance across — and growing the shirt from 0.88 to 0.94 across buries
+  // the forward half of the stride, which is the half the swing was built for. The foot
+  // goes 0.62 -> 0.70 and the hand 1.20 -> 1.24 to hold the same clearance they had.
+  hip:  [-0.28, 0.42], foot: 0.78, legSwing: 0.80, legW: 0.26,
+  sh:   [ 0.24, 0.58], hand: 1.24, armSwing: 0.45, armW: 0.22,
   bootR: 0.19,
   stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
 };
@@ -33834,7 +33861,7 @@ DISC_SKINS.footballers = {
     c.ellipse(F.shortsAt*r, 0, F.shortsA*r, F.shortsB*r, 0, 0, 2*Math.PI);
     c.fillStyle = trim; c.fill();
     c.beginPath();
-    c.ellipse(0, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
+    c.ellipse(F.torsoAt*r, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
     c.fillStyle = col; c.fill();
     c.beginPath(); c.arc(F.headAt*r, 0, F.headR*r, 0, 2*Math.PI);
     c.fillStyle = skin; c.fill();

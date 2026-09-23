@@ -2500,14 +2500,53 @@ three lines a second time, name it.
   fixed blue PNG cannot, and stays crisp at the 9–15px a body is really drawn at. This is
   the rule `assets/README.md` states and `sketch` is the one documented exception to;
   `sketch` stays the exception.
+  ⚠️ **THE BODY AND THE BUTT FILL THE GUIDE RING AND NEVER CROSS IT; ONLY THE ARMS AND THE
+  LEGS GO OUT.** Asked for in those words. Measured on the build before it, the shirt and
+  the shorts together reached **0.902r at the farthest point and 0.813r at the thinnest
+  ray** — a tenth to a fifth of the radius of bare pitch inside the circle the player
+  collides at, so the figure read as a small body floating in a big ring. It measures
+  **0.980 / 0.906** now.
+  ⚠️ **"FILLS THE CIRCLE" IS A MINIMUM OVER ANGLES, NEVER THE FARTHEST PIXEL**, and the
+  farthest pixel is the check that gets written first. A body reaching the ring at the nose
+  and stopping at 0.74 down both flanks scores a perfect 1.0 on it while leaving two
+  crescents of grass inside the circle. Every ray out of the centre is walked and the WORST
+  one is the reading — which is also what made the shipped geometry choosable: swept over
+  six candidates, the thinnest ray ran 0.813 to 0.960 while the farthest never moved off
+  0.98, so the farthest could not have told them apart at all.
+  ⚠️ **AN OFFSET ELLIPSE BULGES, so the cap is arithmetic and not the semi-axes.** For a
+  centre `d` along the facing axis and semi-axes `a` (along) by `b` (across), the farthest
+  point is NOT the nose at `d + a` whenever `a < b`: it is at `cos t = d·a / (b² − a²)`.
+  The candidate that filled best by eye measured a nose of 0.98 and a **FLANK of 1.027** —
+  outside the ring, in the one place nobody thinks to look.
+  ⚠️ **THE SHIRT IS FORWARD AND THE SHORTS ARE BEHIND, which is the whole of why there is
+  still a butt to see.** A torso centred on the body fills the ring front and back on its
+  own and the shorts are then drawn entirely underneath it — the picture loses the thing
+  that was asked for while passing every reach check. `buttShows` is the guard, derived
+  from the two shapes (`(torsoAt − torsoA) − (shortsAt − shortsA)`, 0.10r) rather than
+  eyeballed, and it is what the *shorts swallowed* sabotage trips.
+  ⚠️ **A WIDER BODY HIDES MORE LEG, so the foot moved out with it** (0.62 → 0.78 across,
+  and the hand 1.20 → 1.24). The limbs are painted under the shirt, so how much of a swing
+  shows is the ellipse's own width at that distance across: growing the shirt from 0.88 to
+  0.96 across buried the forward half of the stride, which is the half the swing exists
+  for. Measured at the forward peak, the visible boot went 187 → 65 pixels and back to
+  **790** once the foot moved out.
+  ⚠️ **AND THE KIT-TRIM PROBE WAS A LITERAL THAT WENT STALE IN THE SAME BREATH.** It
+  sampled a flat `-0.80r` — *"beyond the shirt, where only the shorts are drawn"* — and the
+  grown shirt's own back edge went past it, so it read the KIT colour and reported a
+  perfectly good white short as blue. It is halfway between the two back edges now, derived.
+  ⚠️ **TWO OF THE FIVE SABOTAGES PASSED BECAUSE THE CHECKS WERE NEVER ASSERTED.** Both
+  readings were computed into the results object and no `ok()` line was ever written for
+  them, so the numbers printed and nothing read them — a check that exists as a measurement
+  and not as an assertion is decoration, and it looks identical in the output to one that
+  passed. Five sabotages, each caught by its own check once they were wired.
   ⚠️ **THE LIMBS CROSS THE GUIDE RING, AND THAT IS AN EXCEPTION THE OWNER GRANTED IN THE
   ASK ITSELF.** The standing rule is that a skin may not cross it — *"the guide ring is
   the one thing a skin may not cross"* — because the ring is the circle that collides and
   the VideoSoccer arrowhead shipped a third bigger than its own collider. What keeps that
   lesson intact is that the **SHIRT** stays inside `r` and the ring lands on the
   shoulders, so the ring still reads as the player and a limb sticking out of a circle
-  reads as a limb rather than as a bigger body. Measured: shirt **0.88r**, whole figure
-  **1.45r**. ⚠️ **THREE CHECKS, NOT ONE, and each passes on a build that breaks the
+  reads as a limb rather than as a bigger body. Measured: shirt **0.98r**, whole figure
+  **1.38..1.54r** across the stride. ⚠️ **THREE CHECKS, NOT ONE, and each passes on a build that breaks the
   others**: the shirt inside the ring, the figure past it, and a **CEILING** at 1.6r so
   *"legs can go out"* cannot drift into a body drawn bigger than its collider.
   `tests/discskins.mjs`' own `bothInsideTheRing` is scoped to `crablobster` and is

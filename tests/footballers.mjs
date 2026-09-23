@@ -148,6 +148,35 @@ const r = await p.evaluate(async ()=>{
   o.manyFrames               = o.poses >= 6;
 
   // ---- 2. the ring exception, held at EVERY phase ------------------------------
+  // ⚠️ **THE BODY IS THE SHIRT AND THE SHORTS TOGETHER**, asked for as *"have players body
+  // and butt fill the circle but never go outside it"*. Two shapes, one claim: their UNION
+  // has to reach the guide ring and may never cross it. Measuring the shirt alone is the
+  // vacuous half — the shorts are drawn UNDER it and stick out at the back, so they are
+  // the part most likely to breach the ring and the part a shirt-only probe cannot see.
+  // ⚠️ **"FILLS THE CIRCLE" IS A MINIMUM OVER ANGLES, NEVER THE FARTHEST PIXEL.** The
+  // farthest point is one spike: a body that reaches the ring at the nose and stops at
+  // 0.74 down both flanks scores a perfect 1.0 on it while leaving two crescents of bare
+  // grass inside the circle that collides. What was asked for is the whole circle, so
+  // every ray out of the centre is walked and the WORST one is the reading.
+  const trimCol = M.relLum(homeCol) > 0.5 ? (M.TH.discRim || '#151515') : '#ffffff';
+  const bodyPick = (d,i) => near(d,i,hex(homeCol),48) || near(d,i,hex(trimCol),40);
+  const RAYS = 120;
+  const bodyRay = (d) => {                       // farthest body pixel along each ray
+    const out = new Array(RAYS).fill(0);
+    for (let i=0;i<d.length;i+=4){
+      if (!bodyPick(d,i)) continue;
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      const a = Math.atan2(ay, ax), rad = Math.hypot(ax, ay);
+      const s2 = ((a + Math.PI*2) % (Math.PI*2)) / (Math.PI*2) * RAYS | 0;
+      if (rad > out[s2]) out[s2] = rad;
+    }
+    return out.map(v => +(v/R).toFixed(3));
+  };
+  const rays = frames.map(bodyRay);
+  o.bodyThinnest = Math.min(...rays.map(v => Math.min(...v)));
+  o.bodyFarthest = Math.max(...rays.map(v => Math.max(...v)));
+  o.bodyFillsTheRing   = o.bodyThinnest >= 0.90;
+  o.bodyInsideTheRing  = o.bodyFarthest <= 1.0;
   const shirtPx = scan(frames[0], (d,i)=>near(d,i,hex(homeCol),48));
   o.shirtPixels = shirtPx.n;
   o.figureReachMin = Math.min(...figR);  o.figureReachMax = Math.max(...figR);
@@ -197,8 +226,18 @@ const r = await p.evaluate(async ()=>{
   // the dark one on BOTH of this theme's kits, so the picture's white shorts came out
   // black on both sides. Sampled straight behind the head, beyond the shirt, where only
   // the shorts are drawn.
+  // ⚠️ **THE SAMPLE POINT IS DERIVED FROM THE TWO SHAPES, never a literal.** It was a flat
+  // `-0.80r` — "beyond the shirt, where only the shorts are drawn" — and that stopped being
+  // true the moment the body was grown to fill the guide ring: the shirt's own back edge
+  // went past it and the probe read the KIT colour, reporting a perfectly good white short
+  // as blue. Halfway between the shirt's back edge and the shorts' is the one spelling that
+  // cannot go stale, and it fails loudly if the butt is ever covered completely.
+  const Fb = M.FOOTBALLER;
+  const buttAt = ((Fb.torsoAt - Fb.torsoA) + (Fb.shortsAt - Fb.shortsA)) / 2;
+  o.buttBand = +(((Fb.torsoAt - Fb.torsoA) - (Fb.shortsAt - Fb.shortsA))).toFixed(3);
+  o.buttShows = o.buttBand > 0.04;
   const trimAt = (d) => {
-    const x = Math.round(CX - 0.80*R), y = CY, i = (y*W + x)*4;
+    const x = Math.round(CX + buttAt*R), y = CY, i = (y*W + x)*4;
     return [d[i], d[i+1], d[i+2]];
   };
   const mean = (v)=> (v[0]+v[1]+v[2])/3;
@@ -287,6 +326,10 @@ ok(r.armsAlwaysVisible,
   `at some phase the hand all but disappears (${r.handPixelsMin} pixels at its worst) — the legs are free to sweep under the shirt only because the ARMS are held wide enough to clear it at every phase, or all four limbs tuck at once and the figure is a bare oval twice a stride`);
 ok(r.manyFrames,
   `only ${r.poses} distinct pictures over a whole stride — "add more frames of animation" was the ask, and the two-frame build scored 2`);
+ok(r.bodyInsideTheRing,
+  `the body reaches ${r.bodyFarthest}r — the shirt and the shorts TOGETHER may never cross the guide ring, which is the circle the player collides at. Only the arms and the legs are allowed out`);
+ok(r.bodyFillsTheRing,
+  `the body is only ${r.bodyThinnest}r at its thinnest ray — the shirt and the shorts have to FILL the guide ring, not float inside it leaving crescents of bare pitch. The build before this one measured 0.902 at the farthest point and 0.813 at the thinnest`);
 ok(r.shirtInsideTheRing,
   `the SHIRT crosses the guide ring: ${r.shirtReachMax}r at its worst phase over ${r.shirtPixels} pixels — the body has to stay inside the circle it collides with, which is the half of the exception that was NOT granted`);
 ok(r.limbsCrossTheRing,
@@ -308,6 +351,8 @@ ok(r.sidesFarApartInLightness,
 ok(r.sidesDifferOnScreen, 'the two sides render identically');
 ok(r.shirtIsTheTeamColour,
   `the shirt is not painted in the team colour: home ${r.shirtPixels} away ${r.awayShirtPixels} matching pixels — a sprite could not do this, which is most of why the skin is drawn`);
+ok(r.buttShows,
+  `the shirt covers the shorts: only ${r.buttBand}r of butt is left behind it — the body fills the guide ring by growing the shirt, and grown too far it swallows the thing that was meant to stay visible behind it`);
 ok(r.trimIsLightOnADarkKit,
   `the shorts on a DARK kit came out ${JSON.stringify(r.trimOnDarkKit)} — the picture's shorts are white, and `+
   `pickTextColor (a contrast maximum) returns the dark ink for both of this theme's kits`);
