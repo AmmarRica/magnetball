@@ -2488,33 +2488,104 @@ three lines a second time, name it.
   for from a picture of Kenney's own top-down sports sample — *"have the players look like
   the players in this pic. Body inside the circle but legs can go out. Make it animated.
   Set this as one of the themes"* — with *"I already have the Kenney pack"*.
-  ⚠️ **DRAWN, NOT SPRITED, AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE — the pack
-  IS here and it cannot do this.** ⚠️ **THE FIRST VERSION OF THIS ENTRY HAD THE NUMBERS
-  WRONG and is corrected here rather than quietly edited**: it said the art was 19 × 13
-  PNGs, four per kit colour. It is **fourteen** per kit colour — **ten at 21 × 31** plus
-  four at 19 × 13 — so the sprite somebody would reach for is the 21 × 31 one, which the
-  old figure did not even mention. The CONCLUSION survives, and is now measured rather
-  than asserted: **all ten share ONE silhouette, 501 ink pixels each, identical to the
-  pixel**, and that silhouette is a plain **OVAL** — a head and shoulders from directly
-  above, with no arm, leg or boot breaking the outline anywhere. The ten differ in hair
-  and skin colour ONLY, so they are not walk frames and a sprite body cannot be animated
-  at all; the four 19 × 13 plates are a smaller head-and-shoulders again. Nothing in
-  `assets/` is named for a limb, and the pack's own `Preview.png` shows the same ovals.
-  So **both halves of the ask are out of reach of the files** — there are no limbs to
-  blit, and no frames to run. A drawn body also carries the TEAM colour, which a fixed
-  blue/red/green/white PNG cannot, and stays crisp at the 9–15px a body is really drawn
-  at. This is the rule `assets/README.md` states and `sketch` is the one documented
-  exception to; `sketch` stays the exception.
-  ⚠️ **AND IT IS ALREADY VECTOR — asked as *"if we are not already, we must use svg"*, and
-  the answer is that nothing here is a bitmap.** The skin is canvas PATHS — two ellipses,
-  two arcs and four stroked lines — so it is resolution-independent in exactly the way SVG
-  is, re-drawn at whatever `r` the camera gives it, with no raster to scale and nothing for
-  a DPR change to soften. What SVG would add over that is an **asset**, and an asset is the
-  half the measurement above rules out: a file cannot carry the team colour, cannot be
-  animated by `p.gait`, and would make a dependency-free page fetch something before it can
-  draw a player. `ICONS`/`iconSvg` (inline SVG for the menu marks) and `sketch`'s
-  `spriteImg` sheet are both still the right tools for what they do; a body on the pitch is
-  not one of them.
+  ⚠️ **THE BODY IS DRAWN AND THE ARMS AND LEGS ARE KENNEY'S OWN SPRITES**
+  (`KLIMB`, `klimbSprite`, `klimbDraw`; `assets/Kenney/kenney_sports-pack/PNG/Red/
+  characterRed (11).png` for the arm and `(13)` for the leg). Asked for as *"I wanted to use
+  the sprites provided with Kenney especially for arms and legs"*, then *"only use limbs from
+  kenney"*, and finally pointed at by name: *"charachter red 11 is the sprite for the arm or
+  limb"*.
+  ⚠️ **THIS WITHDRAWS A CLAIM THIS ENTRY MADE TWICE, AND THE INSTRUMENT IS WHAT WAS WRONG
+  BOTH TIMES.** The first version said the art was *"19 × 13 PNGs, four per kit colour"*; that
+  was corrected to fourteen per colour — **ten at 21 × 31** plus four at 19 × 13 — and the ten
+  were then measured as **one identical 501-pixel silhouette**, a plain oval differing in hair
+  and skin only. Both of those readings are TRUE and are kept below. What was false is the
+  conclusion drawn from them — *"there is not a single arm, leg or boot anywhere in the pack"*
+  and *"the four 19 × 13 plates are a smaller head-and-shoulders again"*. They are the LIMBS.
+  ⚠️ **A SILHOUETTE PROBE COULD NEVER HAVE SAID SO, WHICH IS THE LESSON: a limb seen from
+  above is an oval too.** What says it at once is a COLOUR MAP. Plate 11 runs kit `#e86a17`
+  for its first **8** columns and skin `#ffe0b1` for the remaining **11** — a sleeve, then a
+  bare forearm and a hand. Plate 13 runs kit for 8, skin for 5 and `#3f3b3b` for 6 — a short,
+  a shin and a **BOOT**. 12 and 14 are the same pair in the dark skin tone, and `Special`
+  11/12 are the same limb with no sleeve at all. Two wrong answers came out of asking the
+  pixels *what shape is this*; the right one came out of asking *what colour is it, where*.
+  ⚠️ **THE BODY IS STILL DRAWN, for the half of the old reasoning that survived.** The ten
+  21 × 31 plates share one silhouette to the pixel, so they are hair-and-skin variations
+  rather than walk frames and a sprite body cannot be animated at all; and a fixed
+  Blue/Red/Green/White PNG carries neither the team colour nor one of this skin's four
+  people. `assets/README.md`'s rule stands for the body and `sketch` stays its one full
+  exception; this is a narrowing of it for the limbs, written down rather than left to be
+  rediscovered as an inconsistency.
+  ⚠️ **ONE PLATE EACH, RECOLOURED BAND BY BAND, rather than four plates picked by skin
+  tone.** The pack ships the limb in two skin tones and four kit colours; this skin has FOUR
+  people and twenty-seven palettes to be worn over, so a fixed PNG can carry neither. Kit →
+  the team colour, skin → that person's, boot → the palette's own ink. What comes from the
+  pack is the thing a drawing could not copy: the silhouette, the rounded cap, the outline,
+  where the bands fall and how long the boot is.
+  ⚠️ **THE DARK OF EVERY BAND IS THE PACK'S OWN OUTLINE AND ITS RATIO IS MEASURED, NOT
+  PICKED**: `#a64c12/#e86a17`, `#c4a26f/#ffe0b1` and `#2c2a2a/#3f3b3b` are all **0.72** to two
+  places. So one number shades all three and the outline arrives in the destination colour,
+  rather than as a rim this skin would have to draw itself. ⚠️ Classified by NEAREST COLOUR,
+  never by column: the bands have antialiased seams, and a column rule hands those pixels to
+  the wrong band and puts a one-pixel stripe of kit colour down the middle of the forearm.
+  ⚠️ **THE SLEEVE IS LAID INWARD OF THE JOINT — the plate's kit/skin SEAM sits at the joint,
+  not its first column — and getting that wrong CROSSED THE GUIDE RING.** Stretched whole
+  from joint to tip the sleeve takes the first 42% of the limb, which on the arm runs from a
+  shoulder at 0.58 across out past the ring: the suite read the body at **1.015r** over 6,955
+  pixels and named the SHIRT, because a kit-coloured band on a limb is exactly what a shirt
+  crossing its own circle looks like — to the probe and to a player at 15px. The seam is
+  where a sleeve ends on a person, so outward of the joint there is only skin and boot and
+  the reading goes back to the shirt's own 0.98.
+  ⚠️ **A `sleeveMax` CAP WAS ADDED AND DELETED — a second withdrawn claim in one batch.** A
+  square kit-coloured tab out of the far side of a round shirt was blamed on the sleeve
+  running 0.87r inward of the shoulder. It is not: measured over a whole cycle as kit pixels
+  the pack-less drawing does not have, a cap of 0.40, a cap of 1.2 and **no cap at all read
+  identically at all twelve phases** (4 3 0 2 0 3 4 2 1 1 1 2). The tab was the 1× bake being
+  smoothly upscaled and it went when `bake` did. A clamp nothing can observe is a constant
+  nothing reads, so it went with its check.
+  ⚠️ **BAKED NEAREST AT 8×, THEN SCALED DOWN** — `sketch`'s rule, needed in both directions
+  here. The source is 19 columns and a picker tile draws a limb over 100px long, so a smooth
+  upscale straight off the plate turned the boot into a soft cloud; baking crisp and scaling
+  down keeps the pack's hard pixel edge at every size and is a box filter at the 9–15px a
+  match really draws. ⚠️ Keyed on (plate, kit, skin, ink) **with the DIRECTORY in the key** —
+  `scribCell`'s rule, and for its reason: without it the bake survives a change of
+  `KLIMB.dir`, which is the only way the missing-pack path is reached at all.
+  ⚠️ **THE PACK'S LIMB IS 19 × 13 AND OURS IS 19 × 5 — the sprite is STRETCHED along its
+  length, and that is a real cost written down rather than hidden.** Kenney's body is 21 along
+  by 31 across with a limb 13 wide, so a faithful limb here would be **0.81r** against
+  `legW`'s 0.26 — four limbs that wide leave no shirt to see and no way for a boot to tuck
+  under it, which is the ask the geometry was built for. What survives the stretch is what
+  reads at the size a body is really drawn at: the three bands and the boot.
+  ⚠️ **BOTH LIMBS WIDENED WITH THE SPRITES** (`legW` 0.26 → **0.38**, `armW` 0.22 → **0.32**).
+  A stroke carries nothing but its colour, so it read the same at any width; the plate carries
+  a rounded cap, an outline and a six-column boot, and at 0.26 the boot came out 0.41r long by
+  0.26r wide — a spike rather than a boot. 0.44 was rendered and cut: the legs read as
+  flippers. ⚠️ **AND `hand` CAME IN 1.34 → 1.30, because the FALLBACK is what the ceiling
+  binds on.** A round stroke cap overshoots further than the sprite's flat tip, so the widened
+  limbs put the pack-less figure at **1.628r** against the 1.60 ceiling while the sprite one
+  sat at 1.564. One number, and both builds clear it: 1.573 and 1.589.
+  ⚠️ **`assets/` IS OPTIONAL AND THE FALLBACK IS THE SHIPPED DRAWING, kept verbatim.**
+  `spriteImg` answers null while a file loads and for ever if it is missing, so a downloaded
+  single-file copy still fields two readable sides — and every geometry check still has
+  something to measure with no pack at all.
+  ⚠️ **THE SUITE WAITS FOR THE SPRITE BEFORE IT MEASURES ANYTHING, and asserts which of the
+  two it got.** The plate loads asynchronously, so a probe that paints too early measures the
+  FALLBACK and every number in it silently describes a build nobody ships.
+  ⚠️ **ONE PROBE OVER "THE LIMB BAND" IS BLIND TO HALF THE FIGURE, and a sabotage proved it.**
+  Both limbs are on the same side, so a band picked by how far ACROSS it is contains whichever
+  one reaches further: with the LEG's sprite disabled and the arm's left alone, a single
+  `ay > 0.95r` probe reported the limbs as Kenney's, which they half were. At the swing PEAK
+  the arms counter-swing the legs, so the foot is a whole radius forward and the hand more
+  than half a radius behind — the ALONG axis is what tells them apart, and everything is
+  measured as a difference against the pack-less drawing at that same phase.
+  ⚠️ **THE SHAFT AND THE BOOT ARE COUNTED SEPARATELY**: deleting the fallback's leg stroke and
+  leaving its boot circle put ~380 ink pixels in the region and sailed past a pooled bar.
+  ⚠️ **AND THE FALLBACK'S OUTLINE BAR IS DERIVED, where zero got written first** — a stroke
+  carries no outline, but its own antialiased rim against the boot circle lands within
+  tolerance of `skin × 0.72` on **9** pixels against the plate's **257**, so the bar is a
+  tenth of the sprite arm of the same run rather than an absolute that is vacuous or
+  impossible. ⚠️ Ten sabotages on the limb sprites, each caught by its own check — **three of
+  which did not apply at all** because the target strings had drifted, which the
+  `count == 1` guard named rather than reporting a green run.
   ⚠️ **THE BODY AND THE BUTT FILL THE GUIDE RING AND NEVER CROSS IT; ONLY THE ARMS AND THE
   LEGS GO OUT.** Asked for in those words. Measured on the build before it, the shirt and
   the shorts together reached **0.902r at the farthest point and 0.813r at the thinnest

@@ -6091,7 +6091,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.1040AM';
+const VERSION = '20260923.0215PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6107,6 +6107,13 @@ const VERSION = '20260923.1040AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0215PM', title: 'The Sunday League players wear Kenney\'s own arms and legs',
+    changed: [
+      "<b>The arms and legs are the sports pack's own limb art now</b>, recoloured to your team, your player's skin and the palette's ink — sleeve, forearm and hand on one, short, shin and boot on the other.",
+      '<b>Both limbs are a little chunkier</b>, so the boot reads as a boot rather than a spike.',
+      'Without the artwork folder beside the game the players still have arms and legs, drawn exactly as they were.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260923.1040AM', title: 'The Sunday League players get their stride centred',
     changed: [
       '<b>The arms and legs swing about the middle of the player now.</b> They hung off the hip and the shoulder, so the legs trailed behind the body and the arms led in front of it.',
@@ -33694,17 +33701,24 @@ DISC_SKINS.sleeve = {
 // Asked for from a picture of Kenney's own top-down sports sample: little players with a
 // head, a shirt and limbs sticking out, *"body inside the circle but legs can go out"*,
 // animated, as one of the themes.
-// ⚠️ **DRAWN, NOT SPRITED — AND THAT IS A MEASUREMENT RATHER THAN A PREFERENCE.** The pack
-// is here (`assets/Kenney/kenney_sports-pack`) and it cannot do this. Its top-down art is
-// **19 x 13 pixel** PNGs, four per kit colour, and every one of them is **head and
-// shoulders ONLY** — there is not a single arm, leg or boot anywhere in the pack, in the
-// PNGs or in `Vector/charactersEquipment.svg`. The limbs in the sample picture belong to
-// that picture's own composition. So both halves of the ask are out of reach of the
-// files: there are no limbs to draw, and the four frames per colour are four HAIR AND
-// SKIN variations rather than walk frames, so a sprite body could not be animated at all.
-// A drawn one also carries the TEAM colour (a fixed blue PNG cannot) and stays crisp at
-// the 9-15px a body is really drawn at — which is the rule `assets/README.md` states and
-// `sketch` is the one documented exception to.
+// ⚠️ **THE BODY IS DRAWN AND THE LIMBS ARE KENNEY'S OWN SPRITES**, and getting to that
+// took two WITHDRAWN readings of the pack, both recorded here because the instrument is
+// what was wrong each time. It was first reported as "19 x 13 PNGs, four per kit colour";
+// it is fourteen per colour — **ten at 21 x 31** plus four at 19 x 13 — and the ten were
+// then measured as one identical 501-pixel OVAL, differing in hair and skin only. Both of
+// those are true. What was false is the conclusion drawn from them: *"there is not a single
+// arm, leg or boot anywhere in the pack"*. The four small plates are the limbs, and a
+// SILHOUETTE probe could never have said so, because a limb from above is an oval too.
+// A COLOUR MAP says it at once — see `KLIMB` below.
+// ⚠️ **SO THE BODY IS STILL DRAWN, AND FOR THE REASON THAT SURVIVED.** The ten 21 x 31
+// plates share one silhouette to the pixel, so they are hair-and-skin variations rather
+// than walk frames and a sprite body cannot be animated at all; and a fixed blue PNG
+// carries neither the team colour nor one of this skin's four people. What was wrong was
+// only the half about the limbs.
+// ⚠️ **AND IT IS ALREADY VECTOR, asked as *"if we are not already, we must use svg"*.** The
+// body is canvas PATHS — two ellipses, two arcs — so it is resolution-independent in
+// exactly the way SVG is, with no raster to scale. What SVG would add over that is an
+// ASSET, and an asset can carry neither the team colour nor the person.
 // ⚠️ **THE LIMBS CROSS THE GUIDE RING ON PURPOSE, and that is an exception the owner
 // granted in the ask itself.** The standing rule is that a skin may not cross the ring,
 // because the ring is the circle that collides and the VideoSoccer arrowhead shipped a
@@ -33820,8 +33834,14 @@ const FOOTBALLER = {
   // 9, and at 0.94 it reads 164); and the whole figure may not pass 1.60r, which the hand
   // brings to **1.582**. Longer than this is a different trade, not a tuning.
   swingAt: 0,          // the along position BOTH arcs are centred on: the body's own middle
-  hip:  [-0.13, 0.42], foot: 0.82, legSwing: 1.10, legW: 0.26,
-  sh:   [ 0.13, 0.58], hand: 1.34, armSwing: 0.58, armW: 0.22,
+  // ⚠️ **BOTH LIMBS WIDENED WITH THE SPRITES** (`legW` 0.26 -> 0.38, `armW` 0.22 -> 0.32).
+  // A stroke carries nothing but its colour, so it read the same at any width; the plate
+  // carries a rounded cap, an outline and a SIX-COLUMN boot, and at 0.26 the boot came out
+  // 0.41r long by 0.26r wide — a spike rather than a boot. Kenney's own limb is 13 wide
+  // against a 19 length (0.68); at 0.38 this one is 0.29, which is as near as the tuck under
+  // the shirt allows. 0.44 was rendered and cut: the legs read as flippers.
+  hip:  [-0.13, 0.42], foot: 0.82, legSwing: 1.10, legW: 0.38,
+  sh:   [ 0.13, 0.58], hand: 1.30, armSwing: 0.58, armW: 0.32,
   bootR: 0.19,
   stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
 };
@@ -33856,6 +33876,141 @@ function kitPerson(p){
   for (let i=0;i<s.length;i++) h = ((h*33) ^ s.charCodeAt(i)) | 0;
   return KIT_PEOPLE[Math.abs(h) % KIT_PEOPLE.length];
 }
+// ⚠️ **THE ARMS AND LEGS ARE KENNEY'S OWN SPRITES**, asked for as *"only use limbs from
+// kenney"* and pointed at by name: *"charachter red 11 is the sprite for the arm or limb"*.
+// ⚠️ **AND FINDING THEM WITHDRAWS A CLAIM THIS FILE MADE TWICE.** The entry above used to
+// say the pack held nothing but head-and-shoulders ovals and that the four small plates per
+// kit colour were "a smaller head-and-shoulders again". They are not. Measured as a colour
+// map rather than a silhouette — which is the instrument the first two readings lacked, and
+// why both were wrong — plate **11** runs kit `#e86a17` for its first 8 columns and skin
+// `#ffe0b1` for the remaining 11: a SLEEVE then a bare forearm and hand. Plate **13** runs
+// kit for 8, skin for 5 and `#3f3b3b` for 6: a short, a shin and a BOOT. 12 and 14 are the
+// same two in the dark skin tone, and `Special` 11/12 are the same limb with no sleeve.
+// ⚠️ **ONE PLATE EACH, RECOLOURED, rather than four plates picked by skin tone.** The pack
+// ships the limb in two skin tones and four kit colours, and this skin already has FOUR
+// people (`KIT_PEOPLE`) and twenty-seven palettes to be worn over — so a fixed PNG can
+// carry neither the person nor the team, which is the objection `assets/README.md` raises
+// against sprites in the first place. Every band is mapped instead: kit -> the team colour,
+// skin -> that person's, boot -> the palette's own ink. What comes from the pack is the
+// thing a drawing could not copy — the silhouette, the rounded cap, the outline, where the
+// bands fall and how long the boot is.
+// ⚠️ **THE DARK OF EVERY BAND IS THE PACK'S OWN OUTLINE, AND ITS RATIO IS MEASURED, NOT
+// PICKED**: `#a64c12 / #e86a17`, `#c4a26f / #ffe0b1` and `#2c2a2a / #3f3b3b` are all
+// **0.72** to two places. So one number shades all three, and the outline arrives in the
+// destination colour rather than as a rim this skin would have to draw itself.
+// ⚠️ **CLASSIFIED BY NEAREST COLOUR, never by column.** The plate is 19 wide and its bands
+// have antialiased seams; a column rule would hand those pixels to the wrong band and put a
+// one-pixel stripe of kit colour down the middle of the forearm at every size.
+// ⚠️ **THE PACK'S LIMB IS 19 x 13 AND OURS IS 19 x 5 — the sprite is STRETCHED along its
+// length, and that is a real cost written down rather than hidden.** Kenney's body is 21
+// along by 31 across and the limb 13 wide, so a faithful limb here would be **0.81r** wide
+// against `legW`'s 0.26 — four limbs that wide leave no shirt to see and no way for a boot
+// to tuck under it, which is the ask this geometry was built for. What survives the stretch
+// is what reads at the 9-15px a body is really drawn at: the three bands and the boot.
+// ⚠️ **`assets/` IS OPTIONAL AND THE FALLBACK IS THE SHIPPED DRAWING.** `spriteImg` answers
+// null while a file loads and for ever if it is missing, so the stroke-and-boot-circle limbs
+// are kept verbatim underneath — a downloaded single-file copy still fields two readable
+// sides. That is what `assets/README.md` promises, and it is why every geometry check in
+// `tests/footballers.mjs` still has something to measure with no pack at all.
+const KLIMB = {
+  dir: 'assets/Kenney/kenney_sports-pack/PNG/Red/',
+  arm: 'characterRed (11).png',    // sleeve -> forearm -> hand
+  leg: 'characterRed (13).png',    // short  -> shin    -> boot
+  // ⚠️ **BAKED NEAREST AT 8x, THEN SCALED DOWN** — `sketch`'s rule, and it is needed in
+  // BOTH directions here. The source is 19 columns and a body in a picker tile or a preview
+  // draws a limb 130px long, so a smooth upscale straight off the plate turned the boot into
+  // a soft cloud; baking crisp and scaling down keeps the pack's hard pixel edge at every
+  // size and is a box filter at the 9-15px a match really draws.
+  bake: 8,
+  shade: 0.72,                     // the pack's own dark-of-a-band ratio, measured
+  // Both plates run 8 columns of kit then 11 of skin (and boot), measured off the art. The
+  // ratio of the two is what puts the seam on the joint whatever the swing made of the span.
+  sleeve: 8 / 11,
+  // ⚠️ **A `sleeveMax` CAP WAS ADDED HERE AND DELETED — A WITHDRAWN CLAIM.** A square
+  // kit-coloured tab appeared out of the far side of a round shirt at a large radius and was
+  // blamed on the sleeve running 0.87r inward of a shoulder already 0.58 across. It is not:
+  // measured over a whole cycle as kit pixels the pack-less drawing does not have, a cap of
+  // 0.40, a cap of 1.2 and no cap at all read **identically at all twelve phases**
+  // (4 3 0 2 0 3 4 2 1 1 1 2). The tab was the 1x bake being smoothly upscaled, and it went
+  // when `bake` did. A clamp nothing can observe is a constant nothing reads.
+  // Every colour those two plates are drawn in, as (band, is-it-the-light-one).
+  src: {
+    e86a17: ['kit', 1],  a64c12: ['kit', 0],
+    ffe0b1: ['skin', 1], c4a26f: ['skin', 0],
+    '3f3b3b': ['boot', 1], '2c2a2a': ['boot', 0],
+  },
+};
+var _klimbBake = {};
+function klimbRgb(col){
+  const h = hexRgb(col);
+  if (h) return h;
+  const m = /rgba?\(\s*([\d.]+)\D+([\d.]+)\D+([\d.]+)/.exec(String(col || ''));
+  return m ? [m[1]|0, m[2]|0, m[3]|0] : [128, 128, 128];
+}
+// One bake per (plate, kit, skin, ink). ⚠️ **THE DIRECTORY IS IN THE KEY** — `scribCell`'s
+// rule, and for its reason: without it a bake survives a change of `KLIMB.dir`, which is how
+// the missing-pack path is exercised at all.
+function klimbSprite(which, kit, skin, ink){
+  const file = which === 'leg' ? KLIMB.leg : KLIMB.arm;
+  const key = KLIMB.dir + file + ':' + kit + ':' + skin + ':' + ink;
+  let cv = _klimbBake[key];
+  if (cv !== undefined) return cv;
+  const img = spriteImg(KLIMB.dir + file);
+  if (!img) return null;                      // still loading, or the pack is not there
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  if (!W || !H) return null;
+  const dest = { kit: klimbRgb(kit), skin: klimbRgb(skin), boot: klimbRgb(ink) };
+  const keys = Object.keys(KLIMB.src).map(h => ({ rgb: hexRgb('#' + h), band: KLIMB.src[h] }));
+  const raw = document.createElement('canvas');
+  raw.width = W; raw.height = H;
+  const rc = raw.getContext('2d');
+  rc.imageSmoothingEnabled = false;
+  rc.drawImage(img, 0, 0);
+  const d = rc.getImageData(0, 0, W, H);
+  const a = d.data;
+  for (let i = 0; i < a.length; i += 4){
+    if (a[i+3] < 8) continue;
+    let best = null, bd = Infinity;
+    for (const k of keys){
+      const dr = a[i] - k.rgb[0], dg = a[i+1] - k.rgb[1], db = a[i+2] - k.rgb[2];
+      const q = dr*dr + dg*dg + db*db;
+      if (q < bd){ bd = q; best = k.band; }
+    }
+    const to = dest[best[0]], f = best[1] ? 1 : KLIMB.shade;
+    a[i]   = Math.round(to[0] * f);
+    a[i+1] = Math.round(to[1] * f);
+    a[i+2] = Math.round(to[2] * f);
+  }
+  rc.putImageData(d, 0, 0);
+  const K = KLIMB.bake;
+  cv = document.createElement('canvas');
+  cv.width = W * K; cv.height = H * K;
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.drawImage(raw, 0, 0, cv.width, cv.height);
+  _klimbBake[key] = cv;
+  return cv;
+}
+// ⚠️ **THE SLEEVE IS LAID INWARD OF THE JOINT — the plate's kit/skin SEAM sits at A, not its
+// first column — and getting that wrong crossed the guide ring.** Stretched whole from A to
+// B the sleeve occupies the first 42% of the limb, which on the ARM runs from a shoulder at
+// 0.58 across out past the ring: `tests/footballers.mjs` read the body at **1.015r** over
+// 6,955 pixels and named the shirt, because a kit-coloured band on a limb is exactly what a
+// shirt crossing its own circle looks like — to the probe and to a player at 15px. The seam
+// is the joint, which is where a sleeve ends on a person, so outward of A there is only skin
+// and boot and the reading goes back to the shirt's own 0.98.
+// ⚠️ `over` carries the far end past B by what the fallback's round cap and boot circle
+// already reached, or swapping the drawing for the sprite silently shortens the whole figure.
+function klimbDraw(c, sp, A, B, wpx, over){
+  const dx = B[0] - A[0], dy = B[1] - A[1];
+  const out = Math.hypot(dx, dy) + (over || 0);
+  if (!(out > 0)) return;
+  const inn = out * KLIMB.sleeve;                // ...and the sleeve behind it, to scale
+  c.save();
+  c.translate(A[0], A[1]); c.rotate(Math.atan2(dy, dx));
+  c.drawImage(sp, -inn, -wpx/2, inn + out, wpx);
+  c.restore();
+}
 DISC_SKINS.footballers = {
   name: 'Footballers',
   paint(c, p, x, y, r, w){
@@ -33876,6 +34031,8 @@ DISC_SKINS.footballers = {
     const trim = relLum(col) > 0.5 ? (TH.discRim || '#151515') : '#ffffff';
     const [hair, skin] = kitPerson(p);
     const s = gaitSwing(p);
+    const armSp = klimbSprite('arm', col, skin, ink);
+    const legSp = klimbSprite('leg', col, skin, ink);
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
@@ -33886,16 +34043,22 @@ DISC_SKINS.footballers = {
       // points forward, shortens as it passes under the shirt, and points back again.
       const A = pt(F.hip[0], F.hip[1]*sgn);
       const B = pt(F.swingAt + F.legSwing*sw, F.foot*sgn);
-      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.legW);
-      c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
-      c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
-      c.fillStyle = ink; c.fill();
+      if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*F.legW), r*F.bootR);
+      else {
+        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.legW);
+        c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
+        c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
+        c.fillStyle = ink; c.fill();
+      }
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0], F.sh[1]*sgn);
       const H = pt(F.swingAt - F.armSwing*sw, F.hand*sgn);
-      c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.armW);
-      c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
+      if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*F.armW), r*F.armW*0.5);
+      else {
+        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.armW);
+        c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
+      }
     }
     // --- shorts, shirt, head --------------------------------------------------------
     c.save();
@@ -36772,7 +36935,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, KLIMB, klimbSprite, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

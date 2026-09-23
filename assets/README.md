@@ -17,9 +17,9 @@ drawn over the same physics disc/ball.
 | Controller flair | `assets/Kenney/kenney_input-prompts_1.5/Flairs/Vector/` | The connected-pad icons |
 | Scribble tiles + characters | `assets/Kenney/kenney_scribble-dungeons/Vector/` | The **Sketchbook** theme: the floor tiles and the player counters |
 
-### The one exception, and why it is one
+### The first exception, and why it is one
 
-**Sketchbook** is the only theme whose players and pitch surface are sprites: it was asked
+**Sketchbook** is the only theme whose players and pitch SURFACE are both sprites: it was asked
 for with those two sheets, and the art is the point of it. Everything else about the rule
 still holds — `spriteImg` returns null while a file loads and for ever if it is missing, so
 the skin falls back to a drawn counter and the field to plain paper. A copy of the game
@@ -29,18 +29,35 @@ Credit: the pack is Kenney's **Scribble Dungeons** (CC0 — free to use, credit 
 not required). The THEME's name is ours; naming our content after somebody else's title is
 the one thing the project's standing rule asks us not to do.
 
-### The pack that could not be one, and why it is worth writing down
+### The second exception, and the two wrong answers that came before it
 
 **Sunday League** was asked for from Kenney's own top-down sports sample, with *"I already
-have the Kenney pack"* — and it is **drawn**, not sprited. That is a measurement rather
-than a preference, taken on the files in `Kenney/kenney_sports-pack`: its top-down art is
-**19 × 13 pixel** PNGs, four per kit colour, and every one of them is **head and shoulders
-only**. There is not a single arm, leg or boot anywhere in the pack, in the PNGs or in
-`Vector/charactersEquipment.svg` — the limbs in the sample picture belong to that
-picture's own composition. So both halves of the ask were out of reach of the files: there
-were no limbs to draw, and the four frames per colour are four hair-and-skin variations
-rather than walk frames, so a sprite body could not have been animated at all. A drawn one
-also carries the **team colour**, which a fixed blue PNG cannot.
+have the Kenney pack"*. Its **arms and legs are Kenney's own plates** —
+`kenney_sports-pack/PNG/Red/characterRed (11).png` for the arm and `(13)` for the leg —
+and its **body is drawn**. Both halves of that are measurements.
+
+Getting there took two withdrawn readings of the pack, and the instrument was what was
+wrong each time. The first said the art was "19 × 13 PNGs, four per kit colour": it is
+**fourteen** per colour, ten at 21 × 31 plus four at 19 × 13. The second measured the ten
+as **one identical 501-pixel silhouette** — a plain oval — and concluded from it that there
+was "not a single arm, leg or boot anywhere in the pack". That conclusion was wrong, and a
+silhouette probe could never have caught it: **a limb seen from above is an oval too.** A
+colour map says it at once. Plate 11 runs kit orange for its first 8 columns and skin for
+the remaining 11 — a sleeve, a forearm and a hand. Plate 13 runs kit for 8, skin for 5 and
+near-black for 6 — a short, a shin and a boot.
+
+The **body** is still drawn, for the half of that reasoning that survived: the ten 21 × 31
+plates share one silhouette to the pixel, so they are hair-and-skin variations rather than
+walk frames and a sprite body cannot be animated at all — and a fixed Blue/Red/Green/White
+PNG carries neither the team colour nor one of the four people the skin deals out. The
+limbs are recoloured band by band for the same reason: kit → the team colour, skin → that
+person's, boot → the palette's own ink. What comes from the pack is what a drawing could
+not copy — the silhouette, the rounded cap, the outline, where the bands fall and how long
+the boot is.
+
+Everything else about the rule still holds. `spriteImg` returns null while a file loads
+and for ever if it is missing, so with no `assets/` beside it the skin draws the limbs it
+always drew and a downloaded single-file copy still fields two readable sides.
 
 Credit: the pack is Kenney's **Sports Pack** (CC0). The theme's name is ours.
 

@@ -17,11 +17,21 @@
 // must not advance it, frame 0 is the rest pose, faster travel means faster legs). One
 // owner, many readers — a second copy is the one that rots.
 //
+// ⚠️ THE ARMS AND LEGS ARE KENNEY'S OWN PLATES, recoloured — `characterRed (11)` and
+// `(13)` — so this file also has to say that the pixels on the pitch really came out of
+// them, that the pack-less FALLBACK still fields readable limbs, and that neither claim is
+// asserted from the other's arm. All three are measured as a DIFFERENCE against the same
+// figure rendered with `KLIMB.dir` pointed at nothing, in the same run.
+//
 // ⚠️ Measurement traps. The pixels have to be classified against the flat backdrop the
 // figure is painted on, not against an absolute; the two ends of the stride differ ONLY in
 // the limbs, so a whole-frame diff that finds nothing inside the torso is the claim rather
-// than a weakness; and the two limb probes each produced a false reading before they were
-// right — see the notes on `boot` below.
+// than a weakness; the two limb probes each produced a false reading before they were right
+// (see the notes on `boot`); the sprite loads ASYNCHRONOUSLY, so a suite that paints before
+// it lands measures the fallback and every number in it describes a build nobody ships; and
+// ONE probe over "the limb band" is blind to half the figure, because both limbs are on the
+// same side — they are told apart by the ALONG axis at the swing peak, where the arms
+// counter-swing the legs.
 import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:900,height:900} });
@@ -36,6 +46,16 @@ const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.applyBundle('kickabout');
+
+  // ⚠️ **THE LIMB SPRITE LOADS ASYNCHRONOUSLY, SO IT IS WAITED FOR BEFORE ANYTHING IS
+  // MEASURED.** `spriteImg` answers null until the file is in and the skin falls back to
+  // the stroke-and-circle limbs while it is — so a suite that paints too early measures
+  // the FALLBACK, and every number in it silently describes a build nobody ships. The
+  // assertion beside the wait is what says which of the two was measured.
+  const warmLimb = () => M.klimbSprite('arm', M.TH.teamRed,
+                                       M.kitPerson({ name:'Mike' })[1], M.TH.discRim || '#151515');
+  for (let i=0;i<80;i++){ if (warmLimb()) break; await new Promise(res=>setTimeout(res,40)); }
+  o.limbSpriteLoaded = !!warmLimb();
 
   const R = 60, CX = 150, CY = 150, W = 300;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = W;
@@ -91,6 +111,15 @@ const r = await p.evaluate(async ()=>{
   const homeCol = M.TH.teamRed, awayCol = M.TH.teamBlue;
   const ink = hex(M.TH.discRim || '#151515');
   const skinCol = hex(M.kitPerson({ name:'Mike' })[1]);
+  // ⚠️ **A LIMB IS TWO TONES NOW, and a one-tone picker under-counts it.** The arms and legs
+  // are Kenney's plates recoloured, and the pack draws every band's OUTLINE as that band at
+  // `KLIMB.shade` (0.72, measured off the art) — so the rim of the arm is a skin the picker
+  // below missed entirely. It read 153 hand pixels at the quietest phase against the tip
+  // probe's own sufficiency gate of 200 and reported the arm's length as -Infinity. This is
+  // not a bar being widened: the claim (`armsAlwaysVisible`, `limbsOutreachTheBody`) is
+  // untouched, and what changed is which pixels ARE the arm. With no pack the shade band
+  // does not exist and this is exactly the picker it was.
+  const skinDark = skinCol.map(v => Math.round(v * ((M.KLIMB && M.KLIMB.shade) || 1)));
   const PH = 12, CYCLE = 2 * M.GAIT.stride;
   const frames = [];
   for (let k=0;k<PH;k++) frames.push(paint({ vx:3, gait: k*CYCLE/PH }));
@@ -109,7 +138,7 @@ const r = await p.evaluate(async ()=>{
   const boot = (d,i,ax,ay,rad) => ay > R*0.45 && near(d,i,ink,40);
   // ...and the hand by being further ACROSS than any part of a leg can reach (foot 0.82
   // plus half the leg's width is 0.95r, against a hand held at 1.34r).
-  const hand = (d,i,ax,ay,rad) => ay > R*0.95 && near(d,i,skinCol,40);
+  const hand = (d,i,ax,ay,rad) => ay > R*0.95 && (near(d,i,skinCol,40) || near(d,i,skinDark,40));
   const footAlong = [], handAlong = [], handPix = [], bootPix = [], figR = [], shirtR = [];
   for (const f of frames){
     const bt = scan(f, boot), hd = scan(f, hand);
@@ -327,6 +356,99 @@ const r = await p.evaluate(async ()=>{
   o.reusesClassicBall = bs.ball === 'classic';
   o.themeNamed = M.THEMES.kickabout.name;
 
+  // ---- 8b. the limbs are KENNEY'S plates, and the pack is still optional --------
+  // ⚠️ **THE DISCRIMINATOR IS THE LIMB'S SECOND TONE, not that a file loaded.** The plate
+  // draws every band's outline as that band at `KLIMB.shade`, so a sprite limb is skin AND
+  // skin x 0.72 while the fallback stroke is one flat colour — `M.klimbSprite(...) != null`
+  // says a PNG decoded, and this says the pixels on the pitch came out of it.
+  // ⚠️ **AND THE FALLBACK IS CHECKED IN THE SAME RUN, because `assets/` is optional.** A
+  // downloaded single-file copy has no pack, `spriteImg` answers null for ever, and the
+  // skin has to field two readable sides anyway — which is what `assets/README.md`
+  // promises and what `sketch` is the other reader of. Pointing `KLIMB.dir` at nothing is
+  // how that path is reached at all, and it only works because the DIRECTORY is in the
+  // bake key: without it the cached sprites survive the change and the probe reports the
+  // pack as present, which is the exact trap `tests/dyntheme.mjs` records for `SCRIB.dir`.
+  // ⚠️ **THE ARM AND THE LEG ARE MEASURED IN SEPARATE REGIONS, and one probe over "the limb
+  // band" IS BLIND TO HALF OF IT — a sabotage proved it.** Both limbs are on the `ay > 0`
+  // side, so a band picked by how far ACROSS it is contains whichever one reaches further
+  // and nothing else: with the LEG's sprite disabled and the arm's left alone, a single
+  // `ay > 0.95r` probe reported the limbs as Kenney's, which they half were. At the swing
+  // PEAK the arms counter-swing the legs, so the foot is a whole radius FORWARD and the
+  // hand more than half a radius behind — the along axis is what separates them, and it is
+  // the phase this block is taken at for exactly that reason.
+  // ⚠️ `ay > 0.55r` clears the head, which is drawn in the same skin as the limbs and would
+  // otherwise be counted as one.
+  const PEAK = CYCLE * 0.25;
+  const inLeg = (ax, ay) => ay > R*0.55 && ax >  R*0.20;
+  const inArm = (ax, ay) => ay > R*0.55 && ax < -R*0.10;
+  const inkDark = ink.map(v => Math.round(v * ((M.KLIMB && M.KLIMB.shade) || 1)));
+  const limbPixel = (d,i) => near(d,i,skinCol,40) || near(d,i,skinDark,40)
+                          || near(d,i,ink,40)     || near(d,i,inkDark,40);
+  // ⚠️ **THE SHAFT AND THE BOOT ARE COUNTED SEPARATELY, and pooling them is blind to half a
+  // leg** — a sabotage that deleted the fallback's leg STROKE and left its boot circle put
+  // ~380 ink pixels in the region and sailed past a pooled bar of 150. A leg is a shaft AND
+  // a boot; an arm is a shaft and no boot.
+  const region = (d, want) => {
+    let skin = 0, boot = 0, dark = 0;
+    for (let i=0;i<d.length;i+=4){
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      if (!want(ax, ay)) continue;
+      if (near(d,i,skinCol,40) || near(d,i,skinDark,40)){ skin++; if (near(d,i,skinDark,40)) dark++; }
+      else if (near(d,i,ink,40) || near(d,i,inkDark,40)) boot++;
+    }
+    return { skin, boot, dark };
+  };
+  const differs = (a2, b2, want) => {
+    let n = 0;
+    for (let i=0;i<a2.length;i+=4){
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      if (!want(ax, ay)) continue;
+      if (Math.abs(a2[i]-b2[i]) + Math.abs(a2[i+1]-b2[i+1]) + Math.abs(a2[i+2]-b2[i+2]) > 24) n++;
+    }
+    return n;
+  };
+  const withSprite = paint({ vx:3, gait: PEAK });
+  const dirWas = M.KLIMB.dir;
+  M.KLIMB.dir = 'assets/__no_such_pack__/';
+  const bare = [];
+  for (let k=0;k<PH;k++) bare.push(paint({ vx:3, gait: k*CYCLE/PH }));
+  const bareAtPeak = paint({ vx:3, gait: PEAK });
+  M.KLIMB.dir = dirWas;
+
+  // ⚠️ **THE CONTROL IS THE FALLBACK DRAWING, RENDERED IN THE SAME RUN AT THE SAME PHASE.**
+  // An absolute count of anything says nothing here: the shirt, the shorts and the head are
+  // in both regions and identical either way, so what is left when the two frames are
+  // subtracted is the limb and only the limb. Pointing `KLIMB.dir` at nothing is how the
+  // pack-less path is reached at all, and it works ONLY because the directory is in the bake
+  // key — without it the cached sprites survive the change and the probe reports the pack as
+  // present, the exact trap `tests/dyntheme.mjs` records for `SCRIB.dir`.
+  o.legSpriteDiff = differs(withSprite, bareAtPeak, inLeg);
+  o.armSpriteDiff = differs(withSprite, bareAtPeak, inArm);
+  o.limbOutlinePixels = region(withSprite, inArm).dark + region(withSprite, inLeg).dark;
+  o.limbsAreTheSprite = o.limbSpriteLoaded && o.legSpriteDiff > 150 && o.armSpriteDiff > 150
+                        && o.limbOutlinePixels > 20;
+
+  // ...and with no pack BOTH limbs still have to be drawn. ⚠️ A figure-reach check alone is
+  // blind to one of them: deleting the leg's stroke left the arm and the boot circle reaching
+  // 1.58r and every reach assertion green.
+  const bareLeg = region(bareAtPeak, inLeg), bareArm = region(bareAtPeak, inArm);
+  o.bareLegSkin = bareLeg.skin;  o.bareLegBoot = bareLeg.boot;  o.bareArmSkin = bareArm.skin;
+  o.bareOutlinePixels = bareLeg.dark + bareArm.dark;
+  const bareReach = bare.map(d => scan(d, anyInk).reach);
+  o.bareFigureReachMin = Math.min(...bareReach);
+  o.bareFigureReachMax = Math.max(...bareReach);
+  o.bareShirtReachMax  = Math.max(...bare.map(d => scan(d, (d2,i)=>near(d2,i,hex(homeCol),48)).reach));
+  // ⚠️ **A TENTH, NOT ZERO — and zero is what got written first.** A stroke carries no
+  // outline, but its own antialiased rim against the boot circle lands within tolerance of
+  // `skin x 0.72` on a handful of pixels: the fallback measures **9** against the plate's
+  // **257**, so the bar is derived from the sprite arm of the same run rather than set at an
+  // absolute that is either vacuous or impossible.
+  o.fallbackIsTheDrawing  = o.bareOutlinePixels * 10 < o.limbOutlinePixels;
+  o.fallbackStillHasLimbs = bareLeg.skin > 100 && bareLeg.boot > 100 && bareArm.skin > 150
+                            && o.bareFigureReachMin >= 1.15 && o.bareFigureReachMax <= 1.60
+                            && o.bareShirtReachMax <= 1.0;
+
+
   // ---- 9. render only, and it plays -------------------------------------------
   // ⚠️ **THE CONTROL IS THE SAME THEME WITH THE SKIN STOOD DOWN, and `applyBundle` for the
   // other arm was VACUOUS — caught by a sabotage passing.** There is no `classic` theme
@@ -392,6 +514,14 @@ ok(r.armsCentredOnTheBody,
   `the arms swing about a midpoint of ${r.handMid}r while the body's own centre is ${r.bodyAlongCentre}r`);
 ok(r.limbsOutreachTheBody,
   `the limbs are shorter than the body they hang off: leg ${r.legLongest}r and arm ${r.armLongest}r at the ends of the stride against a body reaching ${r.shirtReachMax}r — a limb that does not out-reach the torso reads as a stub rather than as a leg`);
+ok(r.limbSpriteLoaded,
+  `Kenney's limb plate did not load, so everything measured here is the pack-less FALLBACK rather than the shipped picture`);
+ok(r.limbsAreTheSprite,
+  `the limbs on the pitch are not Kenney's plates: the leg region differs from the pack-less drawing by ${r.legSpriteDiff} pixels and the arm by ${r.armSpriteDiff}, with ${r.limbOutlinePixels} of the plate's own outline on either — measured at the swing peak, where the arms counter-swing the legs and the along axis is what tells the two apart`);
+ok(r.fallbackIsTheDrawing,
+  `with no pack the limbs still carry the plate's second tone (${r.bareOutlinePixels} px) — the missing-pack path is not being reached, so the fallback is asserted rather than tested`);
+ok(r.fallbackStillHasLimbs,
+  `with no pack the figure reads ${r.bareFigureReachMin}..${r.bareFigureReachMax}r with a shirt at ${r.bareShirtReachMax}r, over a leg of ${r.bareLegSkin} skin and ${r.bareLegBoot} boot pixels and an arm of ${r.bareArmSkin} — a downloaded copy with no assets/ has to field BOTH readable arms and legs, which is what assets/README.md promises`);
 ok(r.limbsClearTheShirt,
   `the limbs barely clear the shirt: figure ${r.figureReachMin}r at its worst against shirt ${r.shirtReachMax}r`);
 ok(r.limbsAnimate,
