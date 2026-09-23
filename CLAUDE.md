@@ -5751,6 +5751,55 @@ three lines a second time, name it.
   each of the eight sites that repurpose that button for Menu / Cup / Retry / Drills.
   `tests/warmupoffer.mjs`, which pins the rule from **both** ends — a predicate that only
   ever returns false passes every hiding check and would have deleted the feature.
+- **FOUR CONTROLLERS, MATCH AFTER MATCH, WITH NOTHING BUT START** (`pollOverOptions`'
+  any-pad START, `lobbyStart`'s same-again rule, `lobbySeatByTeam`, `w.lobby.sizeWas`;
+  `tests/autoadvance.mjs`, `tests/warmupoffer.mjs`). Asked for as a meetup question: *"start
+  the game, go to the end screen, press start on the controller and go to the next game,
+  always 2v2 — or will I struggle to quick start again after using the controller?"*
+  ⚠️ **MEASURED FIRST with four virtual pads on the real loop** (KICK OFF, a goal, the whistle,
+  the result screen, a pad press through the paused loop's own `pollOverOptions`): KICK OFF
+  fields **2v2 of four people** straight away; **one START press on pad 0** at the result
+  screen lands in a fresh 2v2 kickoff with the same sides (START is still held when warm-up
+  opens, `enterWarmup` clears `_startPrev`, so the host's tap fires on the next step — the
+  documented way in, working from this door too); and the loop holds on a second lap.
+  ⚠️ **TWO GAPS, both shipped.** (1) **START and A on pad 3 did nothing at the result screen**:
+  `pollOverOptions` read the host's pad and nobody else's, so three of four people could not
+  start the next match and nothing on screen said whose button it was. (2) **Left alone, the
+  game played itself with everybody benched**: the result clock's 30s lands in the step-out
+  room with `a=0 b=0 out=4 per=1` — by definition nobody has touched anything — and its own
+  30s later `lobbyStart` fielded **bot v bot with all four controllers on the bench**; a host
+  START tap in that room with nobody having moved did the same. START on any pad then did
+  nothing, because a match was running.
+  ⚠️ **START IS READ OFF EVERY CONNECTED PAD ON THE RESULT SCREEN; the CURSOR and A stay the
+  host's.** START means "get me playing" to whoever presses it — the lobby already reads every
+  pad's START and its five-second hold — and four people driving one cursor is not a control.
+  A non-host's START lands in warm-up with the sides kept; from there the host's tap or
+  anybody's five-second hold kicks off. `tests/warmupoffer.mjs` pins both halves, and the
+  over-correction (every pad drives the cursor and A) is a caught sabotage.
+  ⚠️ **NOBODY WALKING ON AFTER A MATCH MEANS "SAME AGAIN", NEVER A MATCH OF BOTS.** In
+  `lobbyStart`, not in the idle clock: every door into a match — the host's tap, the hold,
+  the idle clock — comes through it, and a hold on the clock alone was built first and left
+  the host's tap fielding bots (measured, then withdrawn). Everybody goes back on the half
+  their `team` says (`lobbySeatByTeam`, the one placement Warm-up-from-the-result-screen
+  already used, extracted rather than copied) at the size the match WAS, bots included
+  (`w.lobby.sizeWas`, recorded on stepping out — two people on a 2v2 get their 2v2 back, not a
+  1v1). The keyboard-only restart already reads an untouched result screen this way.
+  ⚠️ **AND IT CANNOT FIRE OVER A CHOICE**: the rule is gated on the plan being EMPTY, so the
+  moment anybody walks onto a half the walk-on decides the whole roster exactly as before —
+  that is what stepping off is for — and a pad that went away is already a bot by then
+  (`pollLobbyPads`), so the person who left is replaced as promised. `tests/autoadvance.mjs`
+  drives both doors through `step()` and pairs them with one person walking on alone and the
+  other benching.
+  ⚠️ **`if (keepSides)` on the stepper override in `enterWarmup`, not `if (keepPer)`** —
+  `keepPer` is computed for every room now (the step-out room records it as `sizeWas`), and
+  a truthiness gate would have written the stepper in the room opened from the menu too.
+  ⚠️ **WHAT IS LEFT ALONE, with the numbers, for the meetup**: a Best-goals auto-replay costs
+  ~21s from the goal to the next kickoff (15s of replay plus the six-second kickoff wait);
+  Effects → Auto replay → Off is the setting for non-stop play. A 0-0 at the whistle is sudden
+  death and only a goal ends it. A tap shorter than one frame (16ms in the probe) is missed by
+  the pad poll, as anywhere else in the game; a real press is 80ms and up.
+  Four sabotages, each caught by its own check — the first by a NAMED failure only after the
+  suite stopped writing `lobby.idle` on a build whose last kickoff had benched every pad.
 - **AT FULL TIME EVERYBODY STEPS OFF THE PITCH, AND WALKS BACK ON TO PLAY THE NEXT ONE**
   (`enterWarmup(w, lite, 'out')`, `w.lobby.reJoin`, `restartToPick`). Asked for in those
   words — *"when a match ends, have all players sit outside the field"* — and the reason
@@ -6183,6 +6232,15 @@ three lines a second time, name it.
   control having been overwritten by the game.
   ⚠️ **THE TWO SIDES MUST DIFFER**, the guard the demo dressing already has: two random
   draws landing on the same country is a match against itself. Measured 0 of 20.
+  ⚠️ **AND THAT GUARD READ THE LAYER, NOT THE PICK — a side PINNED to a country was never
+  in it.** A pinned side resolves from `sel` and writes nothing into `matchTeamFlag`, so
+  `rollTeamFlags` saw `null` for it and the random side was free to draw the same country:
+  measured with side 0 on England and side 1 random, **8 of 600 seeds** drew England for
+  side 1, and `tests/botlook.mjs`' `randMixedKept` went red on one unseeded pool run for
+  exactly that — 146 of 147 with the failure passing 4 of 4 alone, which is the shape rule 5
+  says to measure rather than re-run. The roll avoids the other side's pinned PICK wherever
+  it is stored (0 of 600 now), and the suite sweeps 200 seeds so a 1-in-85 defect is
+  reachable on every run rather than once a fortnight.
   ⚠️ **`stableAcrossRestarts` IN `tests/botlook.mjs` HAD TO SPLIT IN TWO**, and that is a
   real narrowing rather than a check being nudged: the whole look is now seed-dependent, so
   the old claim ("a bot looks the same across restarts") is false by design for the flag.

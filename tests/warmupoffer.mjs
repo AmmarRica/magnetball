@@ -236,8 +236,42 @@ const DESKTOP = { w:1280, h:900, mobile:false };
     press(9);
     first.onclick = wasFb;
     o.startFallsBack = fb === first.id;
+
+    // ⚠️ **START IS READ OFF EVERY CONNECTED PAD.** Four people at a result screen: only
+    // pad 0 could press START for the next match — measured, START and A on pad 3 did
+    // nothing — and nothing on screen said whose button it was. The CURSOR and A stay the
+    // host's, and that is the control: a build that hands every pad the whole screen
+    // passes the START half on its own and is four people fighting over one cursor.
+    window.__pads.push({ axes:[0,0,0,0], buttons:new Array(17).fill(false) },
+                       { axes:[0,0,0,0], buttons:new Array(17).fill(false) },
+                       { axes:[0,0,0,0], buttons:new Array(17).fill(false) });
+    const pressOn = (k, i) => { window.__pads[k].buttons[i] = true;  M.pollOverOptions();
+                                window.__pads[k].buttons[i] = false; M.pollOverOptions(); };
+    toResult();
+    o.fourSeats = M.world.players.filter(x => x.ctrl === 'gamepad').length;
+    const hostPad = (M.world.players.find(x => x.ctrl !== 'bot') || {}).padIndex;
+    o.hostIsPad0 = hostPad === 0;
+    const navBefore = M.overNav;
+    pressOn(3, 13);                                 // D-pad DOWN on pad 3
+    o.otherPadNoCursor = M.overNav === navBefore;
+    let confirmed = null;
+    const b0 = M.overButtons()[M.overNav], was0 = b0.onclick;
+    b0.onclick = () => { confirmed = b0.id; };
+    pressOn(3, 0);                                  // A on pad 3
+    b0.onclick = was0;
+    o.otherPadNoConfirm = confirmed === null;
+    pressOn(3, 9);                                  // START on pad 3
+    o.otherPadStartsWarmup = M.world && M.world.state === 'warmup';
     return o;
   });
+  if (r.fourSeats !== 4) fails.push('result screen: expected four pad seats for the any-pad START check, got ' + r.fourSeats);
+  if (!r.hostIsPad0) fails.push('result screen: the host is not pad 0, so "another pad" is not another pad');
+  if (!r.otherPadStartsWarmup)
+    fails.push('START on a pad that is not the host does nothing on the result screen — three of four people cannot start the next match');
+  if (!r.otherPadNoCursor)
+    fails.push('a pad that is not the host moved the result cursor — the cursor is the host\'s');
+  if (!r.otherPadNoConfirm)
+    fails.push('A on a pad that is not the host confirmed an option — only START is any-pad');
   if (!r.warmupOffered) fails.push('result screen: warm-up was not on offer to begin with');
   if (!r.cursorIsNotWarmup)
     fails.push('result screen: the cursor started ON the warm-up option, so the check is vacuous — ' + r.cursorAt);

@@ -123,6 +123,13 @@ const r = await p.evaluate(async ()=>{
     // ⚠️ A side set to a real country is LEFT ALONE, and the other still rolls — or
     // "it randomises" is equally true of a build that ignores the picker entirely.
     M.sel.teamFlag = ['england','random']; M.startMatch(); o.randMixed = flagsOf();
+    // ⚠️ SWEPT OVER 200 SEEDS, because one unseeded draw hits the defect 1 time in 85. A
+    // side PINNED to a country never writes the one-match layer, and the roll's "two sides
+    // must differ" guard read that layer — measured, side 1 drew England beside a pinned
+    // England on 8 of 600 seeds, and this suite's one draw went red on a pool run for it.
+    o.randMixedClash = 0;
+    for (let sd = 1; sd <= 200; sd++){ M.setMatchSeed(sd); M.startMatch(); if (flagsOf()[1] === 'england') o.randMixedClash++; }
+    M.setMatchSeed(null);
     // ...and `none` is still no country at all.
     // ⚠️ Measured against `FLAG_KEYS` rather than by eye: what must not happen is a
     // COUNTRY appearing, and a shirt number is not one.
@@ -151,7 +158,7 @@ const r = await p.evaluate(async ()=>{
 });
 
 r.shippedIsRandom = r.shippedFlags[0] === 'random' && r.shippedFlags[1] === 'random';
-r.randMixedKept = r.randMixed && r.randMixed[0] === 'england' && r.randMixed[1] && r.randMixed[1] !== 'england';
+r.randMixedKept = r.randMixed && r.randMixed[0] === 'england' && r.randMixed[1] && r.randMixed[1] !== 'england' && r.randMixedClash === 0;
 console.log(JSON.stringify(r,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = r.seats===4 && r.youKeepYourLook && r.yourShirtIsTheTeamS && r.oneShadeASide &&
@@ -175,7 +182,7 @@ if(!r.randSeedRepeats)
   console.log('  a pinned seed did NOT reproduce the countries — the roll is off Math.random, ' +
               'which makes every world hash in the repo noisy');
 if(!r.randMixedKept)
-  console.log(`  a side set to a real country was rolled over: ${JSON.stringify(r.randMixed)}`);
+  console.log(`  a side set to a real country was rolled over, or the random side drew the SAME country: ${JSON.stringify(r.randMixed)}, ${r.randMixedClash} of 200 seeds clashed`);
 if(!r.randNoneStaysNone)
   console.log(`  'none' picked up a country: ${JSON.stringify(r.randNone)}`);
 if(!r.randInLobbyBlock)

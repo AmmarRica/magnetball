@@ -4729,7 +4729,17 @@ function rollTeamFlags(seed, only){
   const cur = matchTeamFlag ? matchTeamFlag.slice(0, 2) : [null, null];
   const out = cur.slice(0, 2);
   const taken = [];
-  for (const t of [0, 1]) if (!want[t] && cur[t]) taken.push(cur[t]);
+  // ⚠️ A side PINNED to a country never writes the one-match layer, so `cur[t]` is null
+  // for it and the "two sides must differ" guard read nothing — measured, with side 0 set to
+  // England and side 1 random, the roll drew England for side 1 on **8 of 600 seeds**, and
+  // `tests/botlook.mjs`' `randMixedKept` went red on an unseeded pool run for exactly that.
+  // The pinned PICK is what the other side must avoid, wherever it is stored.
+  for (const t of [0, 1]){
+    if (want[t]) continue;
+    const pin = teamFlagPick(t);
+    const k = cur[t] || (pin && pin !== 'none' && pin !== 'random' ? pin : null);
+    if (k) taken.push(k);
+  }
   if (only != null && cur[only]) taken.push(cur[only]);
   for (const t of [0, 1]){
     if (!want[t]) continue;
@@ -6138,7 +6148,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0921PM';
+const VERSION = '20260923.1102PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6154,6 +6164,13 @@ const VERSION = '20260923.0921PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.1102PM', title: 'Match after match with four controllers',
+    changed: [
+      '<b>START on any controller starts the next match from the result screen.</b> Only player one\u2019s controller could; the other three did nothing. Moving the cursor and picking an option stay with player one.',
+      '<b>A side set to a country no longer meets the same country on the other side.</b> With one side pinned and the other on Random, the random draw could occasionally land on the pinned country.',
+      '<b>Nobody walking back on after a match means the same match again.</b> Left alone after full time, the game used to kick off a match of bots with everybody watching from the bench. Now it deals the same teams at the same size, and anybody who does walk onto a half still decides who plays.',
+    ],
+    fixed: 'An after-match room left alone no longer starts a match with nobody in it.' },
   { v: '20260923.0921PM', title: 'No more freezing after a replay',
     changed: [
       '<b>Watch goal and Watch match now play in front of the result screen, not behind it.</b> The replay and its controls were underneath the result screen, so on a phone there was no way to close it \u2014 and pressing Restart from there froze the whole game until you reloaded. Both are fixed: the result screen steps aside while you watch and comes back when you press \u2715.',
@@ -23555,6 +23572,24 @@ function lobbyHost(w){
 //              whoever walks in. The result screen's RESTART.
 // ⚠️ `true` is still accepted for 'keep': four suites pass it, and a rename only ever
 // ADDS a spelling.
+// Everybody back on the half their `team` says, spread across it: warm-up from the result
+// screen ("same again, but let me change something first") and the after-match room's
+// "same again" below both place bodies this way, so it is one function and not two rows.
+// Placed past `LOBBY.neutral` so `lobbySideOf` reads it as a real pick, and well inside
+// the touchline so `lobbyOutside` does not read it as sitting out.
+function lobbySeatByTeam(w, hs){
+  [0, 1].forEach(t => {
+    const list = hs.filter(p => p.team === t), m = list.length, sgn = t === 0 ? 1 : -1;
+    list.forEach((p, i) => {
+      p.x = m === 1 ? 0 : (i/(m-1) - 0.5) * Math.min(w.field.W*0.6, 300);
+      p.y = sgn * Math.min(w.bounds.halfL * 0.45, 200);
+      p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
+      // ⚠️ `_px`/`_py` too, or `ix`/`iy` interpolate the body across the pitch for a
+      // frame — the trap `tests/lobbyhold.mjs` records against teleporting a player.
+      p._px = p.x; p._py = p.y;
+    });
+  });
+}
 function enterWarmup(w, lite, place){
   const keepSides = place === 'keep' || place === true;
   const stepOut   = place === 'out';
@@ -23562,10 +23597,10 @@ function enterWarmup(w, lite, place){
   // ⚠️ Counted BEFORE anything moves, and off the bodies rather than the mode: the lobby
   // stepper and a mid-match drop-in can both have taken the match away from `mode.per`,
   // and "the same match again" means the size it actually finished at.
-  const keepPer = keepSides
-    ? Math.max(1, w.players.filter(p => p.team === 0).length,
-                  w.players.filter(p => p.team === 1).length)
-    : 0;
+  // The size the match was at, bots included — what Warm-up from the result screen keeps,
+  // and what the after-match room hands back when nobody walks on (`lobbyStart`).
+  const keepPer = Math.max(1, w.players.filter(p => p.team === 0).length,
+                              w.players.filter(p => p.team === 1).length);
   // ⚠️ The START edge is latched per key in `_startPrev`, and a player who came in here
   // by holding START on the menu is still holding it — so the edge never fires and the
   // one button the lobby exists to get you past does nothing until they let go and press
@@ -23592,7 +23627,7 @@ function enterWarmup(w, lite, place){
               rng: mulberry32(((w.seed|0) ^ 0x9E3779B9) >>> 0) };
   // ⚠️ The stepper's own value, so the size comes back too. `lobbyPlan` reads this live and
   // floors it at the humans on a side, so it can only ever field the same match or bigger.
-  if (keepPer) w.lobby.per = Math.min(LOBBY.maxPerSide, keepPer);
+  if (keepSides) w.lobby.per = Math.min(LOBBY.maxPerSide, keepPer);
   // ⚠️ **THE SIZE FOLLOWS THE PEOPLE, and setting the stepper to ONE is the whole of how.**
   // Asked for: *"always go back to number of players — 4v4, match ends, only 3 players, then
   // 2v2 with one bot"*, and *"if one player goes into field then it becomes 1 vs AI"*.
@@ -23605,7 +23640,7 @@ function enterWarmup(w, lite, place){
   // menu on a 4v4 still gets a 4v4 against bots. This is the room you land in AFTER a
   // match, where the question really is "who is still here".
   // ⚠️ The stepper still works. It is a starting value, not a lock.
-  if (stepOut) w.lobby.per = 1;
+  if (stepOut){ w.lobby.per = 1; w.lobby.sizeWas = keepPer; }
   // ⚠️ Read by `lobbyPlan` for ONE line: an empty pitch is a legitimate state in here, so
   // the rule that drags the host back on when nobody has picked a half has to stand down.
   // Everywhere else that rule is right — an empty lobby with nobody coming is a match that
@@ -23627,17 +23662,7 @@ function enterWarmup(w, lite, place){
   // inside the touchline so `lobbyOutside` does not read it as sitting out.
   const hs = lobbyHumans(w), n = hs.length;
   if (keepSides){
-    [0, 1].forEach(t => {
-      const list = hs.filter(p => p.team === t), m = list.length, sgn = t === 0 ? 1 : -1;
-      list.forEach((p, i) => {
-        p.x = m === 1 ? 0 : (i/(m-1) - 0.5) * Math.min(w.field.W*0.6, 300);
-        p.y = sgn * Math.min(w.bounds.halfL * 0.45, 200);
-        p.vx = 0; p.vy = 0; p.kick = false; p.kickUsed = false;
-        // ⚠️ `_px`/`_py` too, or `ix`/`iy` interpolate the body across the pitch for a
-        // frame — the trap `tests/lobbyhold.mjs` records against teleporting a player.
-        p._px = p.x; p._py = p.y;
-      });
-    });
+    lobbySeatByTeam(w, hs);
   } else if (stepOut){
     // ⚠️ **EVERYBODY STEPS OFF AT FULL TIME**, asked for in those words — and the reason
     // given for it is the half that matters: *"so if someone leaves then they are replaced
@@ -24762,6 +24787,28 @@ function numberTheSides(w, fillOnly){
 // Resolve the sides people picked, balance them with bots, and kick off.
 function lobbyStart(w){
   lobbyKbCommit(w);
+  // ⚠️ **NOBODY WALKED ON AFTER A MATCH MEANS "SAME AGAIN", NOT A MATCH OF BOTS.** Full
+  // time puts everybody outside the touchline (`enterWarmup(w, false, 'out')`, `reJoin`),
+  // and every way this room starts — the host's START tap, the five-second hold, the
+  // 30-second idle clock the result screen's own clock lands in by definition — came
+  // through here with `a=0 b=0` and `per=1`. Measured with four pads on a 2v2: result screen
+  // left alone 30s, then this room left alone 30s, fielded **bot v bot with all four
+  // controllers on the bench**, and a host START tap with nobody having moved did the same.
+  // Nobody choosing anything is not a request for a match with nobody in it; it is the
+  // match that just finished, again — the same reading the keyboard-only restart already
+  // makes. Anybody who DOES walk onto a half still decides the whole roster (that is what
+  // stepping off is for), and a pad that went away is already a bot by now
+  // (`pollLobbyPads`), so the person who left is replaced exactly as promised.
+  if (w.lobby && w.lobby.reJoin){
+    const pl = lobbyPlan(w), hs = lobbyHumans(w);
+    if (!pl.a.length && !pl.b.length && hs.length){
+      lobbySeatByTeam(w, hs);
+      // The size it was, bots included (`sizeWas`) — two people on a 2v2 get their 2v2 back,
+      // not a 1v1 — floored by the people on each half in case somebody has since arrived.
+      w.lobby.per = Math.max(w.lobby.sizeWas || 1, hs.filter(p => p.team === 0).length,
+                                                   hs.filter(p => p.team === 1).length);
+    }
+  }
   const { a, b, out, need0, need1 } = lobbyPlan(w);
   a.forEach(p => p.team = 0); b.forEach(p => p.team = 1);
   const bots = w.players.filter(p => p.ctrl === 'bot');
@@ -26634,7 +26681,15 @@ function pollOverOptions(){
   // stopped being reachable; this only takes a meaning AWAY from START and gives it one
   // that matches the rest of the game.
   const go    = pad.kick || !!(g && btn(g, 0));
-  const start = !!(g && btn(g, START_BTN));
+  // ⚠️ **START IS READ OFF EVERY CONNECTED PAD, and it was the host's alone.** Four people
+  // on four controllers at a result screen: the one holding pad 0 could press START for
+  // the next match and the other three could not — measured, START and A on pad 3 did
+  // nothing at all, and nothing on the screen said whose button it was. START means "get
+  // me playing" to whoever presses it (the lobby already reads every pad's START and its
+  // five-second hold); the CURSOR and A stay the host's, because four people driving one
+  // cursor is not a control.
+  const start = !!(g && btn(g, START_BTN)) ||
+                gps.some(q => q && q.connected !== false && btn(q, START_BTN));
   const step = (k, v, fn) => { if (v && !_overPrev[k]) fn(); _overPrev[k] = v; };
   step('l', left,  () => { overNav--; syncOverNav(); playSfx('kick'); });
   step('r', right, () => { overNav++; syncOverNav(); playSfx('kick'); });
