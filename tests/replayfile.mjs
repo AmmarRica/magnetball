@@ -1378,6 +1378,124 @@ ok('...and the ball rolls through a replay', anim.ballRolls,
    `the ball's own patch differs by ${anim.ballPatchMoved} (summed channels) between a ball that rolled 160 units to the centre spot and one that was already there, against ${anim.ballPatchStill} for two runs of the same still ball — measured in pixels because reading roll off the fake ball is reading the model, and a ball walked 197.5 units held ONE value of roll on the build this was reported from`);
 ok('...and a new replay starts the stride from scratch', anim.strideResets,
    `first painted gait per run ${JSON.stringify(anim.firstGaits)} — left standing, the opening frame of the next replay measures the distance from wherever the last one left that slot`);
+
+// ---- A TELEPORT IS NOT TRAVEL -----------------------------------------------------------
+// ⚠️ `resetKickoff` puts the ball on the centre spot and every body on its formation mark,
+// and a recording is POSITIONS — so the frame after a goal shows the ball hundreds of units
+// "further on". Measured on the build this was reported from: the largest single-frame move
+// while the LIVE ball was at rest was 417 units, which at r 9 is 46.35 radians in ONE frame,
+// and the replay's roll parted company with the live match at exactly that point.
+// ⚠️ The claim is a CEILING on the per-frame increment, not agreement with the live match's
+// accumulated roll — that comparison reads backwards. `rollAxFor` folds an axis and its
+// opposite onto one line, so an axis differing by pi with an opposite-signed roll DRAWS
+// IDENTICALLY; the totals diverge on a build that is perfectly correct.
+// ⚠️ Paired with the ball still rolling at all (above) and with the bound being a real one,
+// or "no big jumps" is satisfied by a ball that never rolls.
+const tele = await (async () => {
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  const out = await p.evaluate(() => {
+    const M = window.__magnet;
+    M.sel.length = '5'; M.sel.mode = '2v2'; M.setMatchSeed(11); M.startMatch({ lobby: false });
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    // ⚠️ step() captures the match buffer itself (repCapture -> repMatchCapture); calling it
+    // here as well doubles the rate against the fps the doc declares, which made an earlier
+    // probe measure a replay whose declared speed was half its content.
+    for (let i = 0; i < 1800; i++) M.step(w);
+    const doc = M.repMatchFileBuild();
+    const frames = M.repDecodeFrames(doc.frames, doc.players);
+    M.repAnimReset(doc.fps);
+    let prev = 0, maxJump = 0, over = 0, moved = 0;
+    for (let i = 0; i < frames.length; i++){
+      M.drawReplayFrame(M.repTween(frames[i], frames[i + 1], 0, doc.fps));
+      const r = (M.repAnim.b && M.repAnim.b.roll) || 0;
+      const d = Math.abs(r - prev); prev = r;
+      if (d > maxJump) maxJump = d;
+      if (d > 3) over++;                  // half a turn in one frame
+      if (d > 0.01) moved++;
+    }
+    return { frames: frames.length, fps: doc.fps, r: w.ball.r,
+             maxJump: +maxJump.toFixed(2), over, moved,
+             bound: +(((w.ballCap || 46) * (60 / doc.fps) + 2) / (w.ball.r || 10)).toFixed(2) };
+  });
+  await p.close();
+  return out;
+})();
+ok('a teleport does not spin the replayed ball', tele.over === 0 && tele.maxJump <= tele.bound,
+   `largest single-frame roll ${tele.maxJump} rad over ${tele.frames} frames, ${tele.over} of them past half a turn, against a ceiling of ${tele.bound} derived from the ball's own speed cap — 46.35 rad and 1 frame on the build this was reported from, which is 7.4 whole turns at one kickoff`);
+ok('...and the ball is still rolling at all', tele.moved > tele.frames * 0.2,
+   `${tele.moved} of ${tele.frames} frames advanced the roll — the control, because "no big jumps" is equally true of a ball that never turns`);
+
+// ---- NO GUIDE RING ROUND A BODY IN A REPLAY ---------------------------------------------
+// ⚠️ The ring exists so a drawn body matches the body you are about to COLLIDE with. A
+// replay has no physics and nothing to collide, so it is a circle round every body in the
+// picture — asked for in those words.
+// ⚠️ **MEASURED AS A DIFFERENCE AGAINST THE LIVE MATCH IN THE SAME RUN**, never as an
+// absolute count: the skin paints a body either way, and "few ring pixels" is true of a
+// build that draws no bodies at all. The live frame is the control, and it must KEEP its
+// ring — a predicate that dropped the ring everywhere would satisfy the replay half on its
+// own and is the worse bug.
+const rings = await (async () => {
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  const out = await p.evaluate(() => {
+    const M = window.__magnet;
+    // A palette whose guide ring is plainly not the court, and a skin that uses one.
+    M.applyTheme('grass');
+    // ⚠️ AFTER applyTheme, which rewrites the slots — set first, the skin came back `none`,
+    // `drawOneDisc` took its flat-sprite branch (which has no guide ring at all) and the
+    // whole check measured two identical pictures and read 0.
+    M.sel.look.palette = 'grass'; M.sel.look.discs = 'arrow';
+    M.sel.length = '5'; M.sel.mode = '1v1'; M.setMatchSeed(5); M.startMatch({ lobby: false });
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    for (let i = 0; i < 90; i++) M.step(w);
+    const me = w.players[0];
+    // the ring is a thin annulus just inside and outside r — sample a circle of points at
+    // exactly r and count how many are inked differently from the same points with the body
+    // taken away. Reading the ANNULUS rather than the whole disc is what keeps the skin's
+    // own paint out of the number.
+    const ringInk = (drawIt) => {
+      const cv = document.createElement('canvas');
+      cv.width = 260; cv.height = 260;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#2f7d32'; c.fillRect(0, 0, 260, 260);
+      if (drawIt) M.strokeDiscGuide(c, 130, 130, 60);
+      const d = c.getImageData(0, 0, 260, 260).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4){
+        if (Math.abs(d[i] - 0x2f) + Math.abs(d[i+1] - 0x7d) + Math.abs(d[i+2] - 0x32) > 40) n++;
+      }
+      return n;
+    };
+    // ...and the real thing: one frame drawn live, one drawn under a replay, diffed.
+    const cvs = document.getElementById('game');
+    const shot = () => { M.render(); return cvs.getContext('2d').getImageData(0, 0, cvs.width, cvs.height); };
+    const px = (a2, b2) => { let n = 0; for (let i = 0; i < a2.data.length; i += 4){
+        if (Math.abs(a2.data[i]-b2.data[i]) + Math.abs(a2.data[i+1]-b2.data[i+1])
+          + Math.abs(a2.data[i+2]-b2.data[i+2]) > 12) n++; } return n; };
+    const live = shot();
+    M.replay.active = true;
+    const inReplay = shot();
+    M.replay.active = false;
+    const backLive = shot();
+    return { skin: !!M.discSkin(), ringPainterInks: ringInk(true) - ringInk(false),
+             liveVsReplay: px(live, inReplay), liveVsLive: px(live, backLive) };
+  });
+  await p.close();
+  return out;
+})();
+ok('a skin with a guide ring is what is being drawn', rings.skin,
+   'the flat-sprite branch has no guide ring at all, so without a skin this whole block measures two identical pictures');
+ok('the guide ring is a real mark to begin with', rings.ringPainterInks > 200,
+   `${rings.ringPainterInks} pixels for one ring at r 60 — the control, or "the replay drops it" is a claim about nothing`);
+ok('a replay drops the ring round every body', rings.liveVsReplay > 100,
+   `${rings.liveVsReplay} pixels differ between the same frame drawn live and drawn under a replay`);
+ok('...and the live match keeps it', rings.liveVsLive === 0,
+   `${rings.liveVsLive} pixels differ between two live draws of the same frame — paired, because a build that dropped the ring EVERYWHERE satisfies the check above and is the worse bug`);
 await vpage.close();
 
 await b.close();

@@ -6128,7 +6128,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0430PM';
+const VERSION = '20260923.0518PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6144,6 +6144,14 @@ const VERSION = '20260923.0430PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0518PM', title: 'Two kinds of footballer, and replays that look right',
+    changed: [
+      '<b>The footballers come in two styles now.</b> Sunday League has the sprite arms and legs; <b>Sunday League Inked</b> is the same team with the drawn ones, so you can pick either.',
+      '<b>Players turn round instead of flipping.</b> Reverse direction and the figure swings round to face the way it is going \u2014 quickly, about a tenth of a second. Both Kenney themes, and it changes nothing about how the game plays.',
+      '<b>The ball no longer spins wildly in a replay.</b> Every kickoff after a goal sent it through seven full turns in a single frame, because being put back on the centre spot looked like travel.',
+      '<b>And replays lost the circles drawn round every player.</b> They are there to show you what you are about to collide with, and there is nothing to collide with in a recording.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260923.0430PM', title: 'Play online with no server at all',
     changed: [
       '<b>A second way to play online: a direct 1v1 that needs no match server.</b> One small relay file — anybody can run it on a home machine — introduces the two of you, and the match runs on both devices.',
@@ -8408,6 +8416,20 @@ const THEMES = {
       hudText:'#1a2430', hudSub:'#3a566b', accent:'#2f6fd0', padRing:'rgba(30,50,40,0.45)' },
   },
 };
+// ⚠️ **THE SAME PITCH, THE OTHER PAIR OF ARMS.** Asked for: keep the Kenney limb sprites and
+// bring back the drawn strokes they replaced, both pickable. What differs between the two is
+// ONE disc skin, so this palette is DERIVED from Sunday League's rather than written out
+// again — thirty-odd colours copied is the duplication rule with the usual ending, and a
+// second copy would drift the first time either was retuned.
+// ⚠️ **SPREAD, and `ui`/`pitch` are deliberately SHARED rather than cloned.** Nothing ever
+// mutates a `THEMES` palette — `paintedPitch` returns a COPY for exactly that reason, which
+// is what makes sharing safe here.
+// ⚠️ **THE NAME IS OURS**, derived from our own: the art is Kenney's (CC0, credited in
+// `assets/README.md`) either way, and the key is generic so the shown name can change for
+// free. The `sketch` / `clash` / `ledge` precedent.
+// ⚠️ A NEW KEY NEEDS NO FOLD — `normalizeLook` exists for keys that MOVED, and nothing has
+// ever stored this one.
+THEMES.kickink = { ...THEMES.kickabout, name: 'Sunday League Inked', emoji: '\u270f\ufe0f' };
 // ---- Contrast maths (declared above applyTheme, which runs at module init) ----
 // Pick whichever of the two ink colours actually contrasts more with the given
 // background — measured by WCAG ratio, not by a brightness threshold. The old
@@ -9277,6 +9299,10 @@ const THEME_BUNDLES = {
   // `seam` look made against `BALL_LOOKS.tennis`. ⚠️ **No `pitch`**: a Sunday league is a
   // treatment that works on any rectangle.
   kickabout: { discs:'footballers', ball:'classic', sfx:'classic' },
+  // ...and the same bundle with the drawn limbs. No `field` and no `pitch`: a mown pitch
+  // is `stripeA`/`stripeB`, which `drawPitch` already paints, and a kickabout is a
+  // treatment that works on any rectangle.
+  kickink:   { discs:'footballersink', ball:'classic', sfx:'classic' },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
@@ -19911,6 +19937,7 @@ function loop(t){
     advanceFx();            // ...and the sparks, for exactly the same reason
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
+    advanceFaceTurn(world); // ...and the figure's turn toward its heading — render only, see FACETURN
     advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
     if (lock.playing) lockAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
@@ -20227,26 +20254,60 @@ function repTween(a, b, f, fps){
 // `canonRollAx` for the flat look) fed with the DISTANCE rather than a per-step velocity:
 // those are the same quantity for one step, and the distance is what makes it right at any
 // refresh rate — the same argument the gait above is built on.
-var repAnim = { g: [], px: [], py: [], fx: [], fy: [], b: null };
-function repAnimReset(){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], b: null }; }
+// ⚠️ **A TELEPORT IS NOT TRAVEL, AND TREATING IT AS TRAVEL SPUN THE BALL RIGHT OFF.**
+// `resetKickoff` puts the ball on the centre spot and every body on its formation mark, and
+// a recording is POSITIONS — so the frame after a goal shows the ball several hundred units
+// "further on". Measured on a seeded 2v2: the largest single-frame move while the live ball
+// was at rest was **417 units**, which at r 9 is **46.4 radians in one frame**, and the
+// replay's roll left the live match's behind at exactly that point (live held -41.55 while
+// the replay swung to +5.97). The legs had the same defect on the same line, because
+// `p.gait` is a distance too and a body teleported across the pitch banks a huge stride.
+// ⚠️ **THE CEILING IS THE BALL'S OWN SPEED CAP** (`w.ballCap`, a Game Feel slider), times the
+// steps this drawn frame covers. Nothing on the pitch travels faster than the ball is
+// allowed to, so one bound covers the bodies as well — a player tops out around 3 units a
+// step against the ball's 46, so it can never reject real running.
+// ⚠️ **AND A SHORT TELEPORT IS INDISTINGUISHABLE FROM A FAST SHOT and is written down rather
+// than papered over.** A re-serve that moves the ball fifty units looks exactly like a
+// fifty-unit shot to a recording of positions; the roll is briefly wrong and there is no
+// rule that could tell them apart without recording the reset itself.
+// ⚠️ **THE FLOOR IS THE RECORDING'S OWN RESOLUTION.** `repEncodeFrames` rounds every
+// coordinate to an integer, so a chord under a unit is quantisation rather than movement —
+// and the live rule it mirrors (`advanceBallSpin`'s `sp > 0.15` a step) is well under that at
+// any sane frame rate. A resting ball otherwise rolls on rounding noise alone.
+var repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], b: null, fps: 60 };
+function repAnimReset(fps){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], b: null,
+                                        fps: Math.max(1, fps || 60) }; }
 function repAnimate(w){
+  const steps = 60 / Math.max(1, repAnim.fps || 60);   // sim steps this drawn frame covers
+  const jump = (w.ballCap || 46) * steps + 2;          // beyond this it is a teleport, not travel
+  const floor = Math.max(1, 0.15 * steps);             // ...and below this it is rounding
   const bodies = w.players;
   for (let i = 0; i < bodies.length; i++){
     const p = bodies[i];
     const hx = repAnim.px[i], hy = repAnim.py[i];
     const d = (hx == null) ? 0 : Math.hypot(p.x - hx, p.y - hy);
     repAnim.px[i] = p.x; repAnim.py[i] = p.y;
-    p.gait = repAnim.g[i] = (repAnim.g[i] || 0) + d;
+    p.gait = repAnim.g[i] = (repAnim.g[i] || 0) + (d > jump ? 0 : d);
     const sp = Math.hypot(p.vx || 0, p.vy || 0);
-    if (sp >= GAIT.minSpd){ repAnim.fx[i] = p.vx / sp; repAnim.fy[i] = p.vy / sp; }
+    if (sp >= GAIT.minSpd && d <= jump){ repAnim.fx[i] = p.vx / sp; repAnim.fy[i] = p.vy / sp; }
     if (repAnim.fx[i] != null){ p.faceX = repAnim.fx[i]; p.faceY = repAnim.fy[i]; }
+    // ⚠️ The turn has to be eased HERE too — `advanceFaceTurn` runs in the step loop and the
+    // step loop is not running during a replay, so without this a replayed figure snaps to
+    // its heading exactly as it did before the turn existed. `steps` because one drawn frame
+    // of a replay covers several sim steps, the same reason the teleport ceiling scales.
+    // ⚠️ The body is REBUILT every frame by `drawReplayFrame`, so the eased angle cannot
+    // live on it — it is kept per slot in `repAnim.fa` and written back.
+    p._drawAng = repAnim.fa[i];
+    turnFaceToward(p, steps);
+    repAnim.fa[i] = p._drawAng;
   }
   const bl = w.ball;
   if (!bl) return;
   const b = repAnim.b || (repAnim.b = { roll: 0, rot: 0, ax: 0, x: null, y: null });
   const dx = (b.x == null) ? 0 : bl.x - b.x, dy = (b.y == null) ? 0 : bl.y - b.y;
   b.x = bl.x; b.y = bl.y;
-  if (Math.hypot(dx, dy) > 0.01){
+  const bd = Math.hypot(dx, dy);
+  if (bd > floor && bd <= jump){
     b.ax = rollAxFor(b.ax, dx, dy);
     b.roll += (dx * Math.cos(b.ax) + dy * Math.sin(b.ax)) / (bl.r || 10);
     const ca = canonRollAx(dx, dy);
@@ -20493,8 +20554,10 @@ function playReplay(speed, opts){
     // and discharge into the kickoff. See juiceReset().
     juiceReset();
     // ...and the stride, so the first drawn frame does not measure the distance from
-    // wherever the last replay left slot 0. See repAnimate().
-    repAnimReset();
+    // wherever the last replay left slot 0. See repAnimate(). The rate goes with it:
+    // repAnimate's teleport ceiling is per DRAWN FRAME, so it has to know how many sim
+    // steps one covers.
+    repAnimReset(lastReplay.fps || 60);
     replay.active = true;
     replay.paused = false;
     replay.ended = false; replay.restart = false;
@@ -22202,7 +22265,7 @@ async function repFastExport(doc, speed, onProgress){
   try {
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames, fps: doc.fps || 60 };
-    repAnimReset();
+    repAnimReset(doc.fps || 60);
     computeCam();
     const step = 1e6 / fps;
     // ⚠️ A keyframe about every two seconds: a cue can only point at a cluster and a
@@ -32700,6 +32763,49 @@ function discFace(p){
   return { ux: fx/m, uy: fy/m };
 }
 // ============================================================
+//  A FIGURE TURNS ROUND RATHER THAN FLIPPING — render only
+// ============================================================
+// Asked for: a player who reverses from left to right should be SEEN to turn, quickly,
+// and it must not touch the game.
+// ⚠️ **RENDER ONLY, AND STRUCTURALLY SO.** The eased angle lives on `p._drawAng`, which
+// nothing in `step()` reads — the sim keeps using `faceX`/`faceY`, which still snap, so a
+// kick still fires exactly where it always did and a seeded match hashes the same with this
+// running. That is the goal camera's rule: a thing that moves the PICTURE may not be
+// anything the physics, a hit test or a bot can see.
+// ⚠️ **ADVANCED IN THE STEP LOOP, NEVER IN A DRAW** — the trails rule. An ease rolled per
+// draw turns 2.4x fast on a 144Hz screen, and two draws of one frame would give two
+// different pictures.
+// ⚠️ **IT EASES TOWARD `discFace`, NOT TOWARD THE RAW FACING**, so the per-player rotation
+// choice and the no-facing fallback are honoured in ONE place: with rotation switched off
+// `discFace` returns a constant, the ease converges on it, and nothing ever spins.
+// ⚠️ **THE SHORT WAY ROUND**, the `TRAP.spin` rule: a body reversing turns through the
+// nearer half, so a left-to-right flip is half a turn rather than three quarters of one.
+// ⚠️ 0.55 rad a step is a HALF TURN IN 5.7 STEPS — 95ms at 60Hz, which is "quick" as asked
+// and still visibly a turn rather than the instant flip it replaces.
+const FACETURN = { rate: 0.55 };
+function turnFaceToward(p, steps){
+  const f = discFace(p);
+  const want = Math.atan2(f.uy, f.ux);
+  if (p._drawAng == null){ p._drawAng = want; return; }
+  let d = want - p._drawAng;
+  while (d > Math.PI) d -= 2*Math.PI;
+  while (d < -Math.PI) d += 2*Math.PI;
+  const lim = FACETURN.rate * (steps || 1);
+  p._drawAng += Math.abs(d) <= lim ? d : (d < 0 ? -lim : lim);
+}
+// ⚠️ `allBodies`, not `w.players`: a body waiting on the touchline is drawn too, and one
+// that walks on mid-match would otherwise snap to its heading on the frame it arrives.
+function advanceFaceTurn(w){
+  if (!w) return;
+  for (const p of allBodies(w)) turnFaceToward(p, 1);
+}
+// What an opted-in skin draws along. Falls back to the snap while no eased angle exists
+// yet, so the first frame of a body's life is never drawn pointing nowhere.
+function discFaceTurn(p){
+  if (p._drawAng == null) return discFace(p);
+  return { ux: Math.cos(p._drawAng), uy: Math.sin(p._drawAng) };
+}
+// ============================================================
 //  ATTRIBUTE CLASH — the character grid inside, the rainbow round the edge
 // ============================================================
 // Two marks, and both are things the machine could not help doing.
@@ -33017,7 +33123,16 @@ const DISC_SKINS = {
       const im = scribChar(p.team);
       if (im){
         // The bake is square and its ink fills it, so the whole canvas maps to 2r.
-        c.drawImage(im, x - r, y - r, r*2, r*2);
+        // ⚠️ **AND IT TURNS WITH THE PLAYER** — asked for across both Kenney themes. The
+        // counter used to be drawn axis-aligned whichever way its owner was running, so a
+        // reversal was invisible on it. `discFaceTurn` eases, so this is a turn rather than
+        // a flip, and `+PI/2` because the bake faces UP the sheet while a heading of zero
+        // points along +x. Render only — see FACETURN.
+        const { ux, uy } = discFaceTurn(p);
+        c.save();
+        c.translate(x, y); c.rotate(Math.atan2(uy, ux) + Math.PI/2);
+        c.drawImage(im, -r, -r, r*2, r*2);
+        c.restore();
         return;
       }
       c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI);
@@ -34222,11 +34337,25 @@ function klimbDraw(c, sp, A, B, wpx, over){
   c.drawImage(sp, -inn, -wpx/2, inn + out, wpx);
   c.restore();
 }
-DISC_SKINS.footballers = {
-  name: 'Footballers',
+// ⚠️ **TWO LIMB STYLES, ONE FIGURE, AND THE SECOND ONE IS THE BUILD BEFORE IT.** Asked for:
+// keep the Kenney limb sprites AND bring back the drawn strokes they replaced, both
+// pickable. The drawn path is not a reimplementation — it is the FALLBACK that has always
+// been here for a copy with no `assets/` beside it, which is why there was a second style to
+// bring back at all. `sprites:false` simply declines to look for the plate.
+// ⚠️ **ONE PAINTER TAKING A FLAG, never two copies.** Everything below the limbs — the
+// shorts, the shirt, the head, the hair, the four people, the kit trim threshold, the
+// stride — is one geometry that took a lot of measuring to settle, and a second copy of it
+// is the duplication rule with the usual ending. The two skins differ by one boolean.
+function footballerSkin(name, sprites){
+ return {
+  name,
   paint(c, p, x, y, r, w){
     const F = FOOTBALLER;
-    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
+    // ⚠️ `discFaceTurn`, not `discFace`: this figure TURNS toward its heading over a few
+    // frames rather than flipping to it — see FACETURN. Render only; the sim still reads the
+    // snapped `faceX`/`faceY`, so a kick fires exactly where it always did.
+    const { ux, uy } = discFaceTurn(p);             // honours the rotation checkbox
+
     const px = -uy, py = ux;
     const pt = (a, b) => [x + ux*a*r + px*b*r, y + uy*a*r + py*b*r];
     const col  = p.team === 0 ? (TH.teamRed || '#e86a17') : (TH.teamBlue || '#3d9ae0');
@@ -34242,8 +34371,8 @@ DISC_SKINS.footballers = {
     const trim = relLum(col) > 0.5 ? (TH.discRim || '#151515') : '#ffffff';
     const [hair, skin] = kitPerson(p);
     const s = gaitSwing(p);
-    const armSp = klimbSprite('arm', col, skin, ink);
-    const legSp = klimbSprite('leg', col, skin, ink);
+    const armSp = sprites ? klimbSprite('arm', col, skin, ink) : null;
+    const legSp = sprites ? klimbSprite('leg', col, skin, ink) : null;
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
@@ -34288,7 +34417,13 @@ DISC_SKINS.footballers = {
     c.restore();
     c.restore();
   },
-};
+ };
+}
+DISC_SKINS.footballers    = footballerSkin('Footballers', true);
+// ⚠️ The drawn pair keeps its own name so the picker says which is which. Same figure, same
+// stride, same people — the arms and legs are strokes with a boot on the end instead of the
+// pack's plates.
+DISC_SKINS.footballersink = footballerSkin('Footballers (drawn)', false);
 function seaPair(name, t0, t1){
   return {
     name,
@@ -34794,7 +34929,14 @@ function drawOneDisc(w, p, x, y, r, s, idx){
       // and a new skin cannot forget one. The VideoSoccer arrowhead shipped without a
       // ring and the shape on screen was a third bigger than the shape in the
       // physics; a skin free to draw a triangle is not free to hide the body.
-      strokeDiscGuide(ctx, x, y, r);
+      // ⚠️ **...EXCEPT IN A REPLAY, and that is not the rule bent — it is the rule's own
+      // premise going away.** The ring exists so the drawn body matches the body you are
+      // ABOUT TO COLLIDE WITH; a replay is a recording of positions with no physics, no
+      // input and nothing to collide, so the ring stops being a promise about the game and
+      // becomes a circle drawn round every body in the picture. Asked for in those words.
+      // A live match, a drill and the warm-up lobby all keep it, which is everywhere the
+      // premise still holds.
+      if (!replay.active && !replay.filming) strokeDiscGuide(ctx, x, y, r);
     }
     else {
     // Flat sprite: rim, team-colour ring, custom-colour core.
@@ -37439,7 +37581,7 @@ if (window.__MAGNETDEBUG) {
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
-    drawReplayFrame, repTween, repAnimate, repAnimReset,
+    drawReplayFrame, repTween, repAnimate, repAnimReset, get repAnim(){ return repAnim; },
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; }, repRecStop, repRecSync, repClock, repFastExport, repFastPick, repFastPossible, webmMux, ebSize,
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,
@@ -37492,7 +37634,7 @@ if (window.__MAGNETDEBUG) {
     PHOTOLIB, photoLibAdd, photoLibAll, photoLibDel, photoLibTrim, photoPick, photoDeleteArmed,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec, COCKTAIL,
-    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, discFaceTurn, turnFaceToward, advanceFaceTurn, FACETURN, footballerSkin, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,

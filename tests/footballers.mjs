@@ -380,6 +380,85 @@ const r = await p.evaluate(async ()=>{
   const facing = (fx, fy) => paint({ faceX:fx, faceY:fy, vx:3 }).join(',');
   o.turnsToFaceTravel = facing(1,0) !== facing(0,1);
 
+  // ---- 7b. ...and it TURNS rather than flipping --------------------------------
+  // Asked for: a player reversing left to right should be SEEN to turn, quickly, without
+  // touching the game. Three separate claims, because each is true of a build that breaks
+  // the other two: it is not instant, it is not slow, and it goes the SHORT way round.
+  const turnFrames = (fromX, fromY, toX, toY) => {
+    const body = { team:0, faceX:fromX, faceY:fromY, vx:3 };
+    M.turnFaceToward(body, 1);                    // adopt the starting angle outright
+    const a0 = body._drawAng;
+    body.faceX = toX; body.faceY = toY;
+    const want = Math.atan2(toY, toX);
+    const path = [a0];
+    let n = 0;
+    for (; n < 60; n++){
+      M.turnFaceToward(body, 1);
+      path.push(body._drawAng);
+      let d = want - body._drawAng;
+      while (d > Math.PI) d -= 2*Math.PI;
+      while (d < -Math.PI) d += 2*Math.PI;
+      if (Math.abs(d) < 1e-9) break;
+    }
+    return { n: n + 1, path };
+  };
+  const rev = turnFrames(1, 0, -1, 0);            // the literal left-to-right reversal
+  o.turnFramesForAHalfTurn = rev.n;
+  o.turnIsNotInstant = rev.n >= 3;
+  o.turnIsQuick = rev.n <= 12;                    // 12 frames is a fifth of a second at 60Hz
+  // ⚠️ THE SHORT WAY ROUND: every step of a reversal must move the same way, so the path is
+  // monotonic once unwrapped. A build that turns the long way still ARRIVES, in the same
+  // number of frames, so arrival time cannot see it.
+  let mono = true;
+  for (let i = 2; i < rev.path.length; i++){
+    const d1 = rev.path[i] - rev.path[i-1], d0 = rev.path[1] - rev.path[0];
+    if (d0 !== 0 && d1 !== 0 && Math.sign(d1) !== Math.sign(d0)) mono = false;
+  }
+  o.turnTakesTheShortWay = mono;
+  // ...and the PICTURE really differs part way round, or the ease is a number nobody sees.
+  // ⚠️ **THE THREE PICTURES MUST DIFFER ONLY BY THE TURN, and the first version compared a
+  // mid-turn body at `gait:7` against two ends at `gait:0`** — so they differed by the
+  // STRIDE and the check passed with the turn made instant. A sabotage that pointed
+  // `discFaceTurn` straight at `discFace` was MISSED because of exactly that.
+  const GA = 7;
+  const atAngle = (fx, fy) => {
+    const q = { team:0, faceX:fx, faceY:fy, vx:3, gait:GA };
+    M.turnFaceToward(q, 1);                      // settled: _drawAng IS the facing
+    return paint(q).join(',');
+  };
+  const mid = { team:0, faceX:1, faceY:0, vx:3, gait:GA };
+  M.turnFaceToward(mid, 1);
+  mid.faceX = -1; M.turnFaceToward(mid, 1); M.turnFaceToward(mid, 1);
+  const midSig = paint(mid).join(',');
+  o.turnIsVisible = midSig !== atAngle(1,0) && midSig !== atAngle(-1,0);
+
+  // ⚠️ **A REVERSAL THROUGH 0/pi CANNOT SEE THE WRAP AT ALL, and a sabotage proved it.**
+  // Dropping the +-pi normalisation was MISSED because the case above runs 0 -> pi exactly,
+  // where the wrapped and unwrapped answers are identical. What separates them is a turn
+  // whose short path CROSSES the boundary: +3.0 rad to -3.0 rad is 0.28 rad the near way and
+  // 6.0 the long way, so it is one frame against eleven.
+  const wrap = turnFrames(Math.cos(3.0), Math.sin(3.0), Math.cos(-3.0), Math.sin(-3.0));
+  o.turnFramesAcrossTheWrap = wrap.n;
+  o.turnWrapsTheShortWay = wrap.n <= 2;
+
+  // ⚠️ **RENDER ONLY, measured as WHAT IT WRITES.** The eased angle may touch nothing the
+  // sim reads — so the whole body object is diffed across a turn and `_drawAng` must be the
+  // only key that moved. That is `tests/botai.mjs`' idiom: a hash of the world would pass on
+  // a build that writes a field nothing happens to read yet.
+  const probe = { team:0, x:1, y:2, vx:3, vy:0, faceX:1, faceY:0, inX:0, inY:0, kick:false,
+                  gait:5, chargeT:0, r:15 };
+  // ⚠️ The snapshot is taken AFTER the reversal is asked for, or the probe's own
+  // `faceX = -1` shows up as a write and the check reports a good build as dirty.
+  M.turnFaceToward(probe, 1);
+  probe.faceX = -1;
+  const was = JSON.stringify(probe);
+  M.turnFaceToward(probe, 1);
+  const wasObj = JSON.parse(was);
+  const turnTouched = Object.keys(probe).filter(k =>
+    JSON.stringify(probe[k]) !== JSON.stringify(wasObj[k]));
+  o.turnWritesOnlyDrawAng = turnTouched.length === 1 && turnTouched[0] === '_drawAng';
+  o.turnWrote = turnTouched;
+
   // ---- 8. the theme ------------------------------------------------------------
   o.isBundle = !!M.bundleSlots('kickabout');
   M.applyBundle('kickabout');
@@ -488,6 +567,35 @@ const r = await p.evaluate(async ()=>{
                             && o.bareFigureReachMin >= 1.15 && o.bareFigureReachMax <= 1.60
                             && o.bareShirtReachMax <= 1.0;
 
+  // ---- 8b. TWO LIMB STYLES, SHIPPED AS TWO SKINS -------------------------------
+  // Asked for: keep the Kenney limb sprites AND bring back the drawn strokes they replaced,
+  // both pickable. The drawn skin is the FALLBACK path made choosable rather than a second
+  // drawing, so the discriminator is the one two paragraphs up: the pack's plates carry an
+  // OUTLINE tone (`skin x KLIMB.shade`) and a stroke does not — measured at 257 against 9.
+  // ⚠️ Rendered here with the pack PRESENT for both, which is the whole claim: on a machine
+  // that has the artwork the two skins must still draw different arms. Pointing `KLIMB.dir`
+  // at nothing proves only that the fallback exists, which the block above already does.
+  // ⚠️ Paired with the drawn skin still having limbs, or "no outline" is equally true of a
+  // skin that draws no arms at all.
+  const skinPaint = (skin, opt) => {
+    c.fillStyle = '#7f7f7f'; c.fillRect(0,0,W,W);
+    const q = body(opt);
+    skin.paint(c, q, CX, CY, R, { players:[q] });
+    return c.getImageData(0,0,W,W).data;
+  };
+  const inkedAtPeak = skinPaint(M.DISC_SKINS.footballersink, { vx:3, gait: PEAK });
+  const inkLeg = region(inkedAtPeak, inLeg), inkArm = region(inkedAtPeak, inArm);
+  o.bothSkinsExist  = !!M.DISC_SKINS.footballers && !!M.DISC_SKINS.footballersink;
+  o.inkedOutline    = inkLeg.dark + inkArm.dark;
+  o.inkedLimbInk    = inkLeg.skin + inkLeg.boot + inkArm.skin;
+  o.inkedIsDrawn    = o.limbSpriteLoaded && o.inkedOutline * 10 < o.limbOutlinePixels;
+  o.inkedHasLimbs   = inkLeg.skin > 100 && inkLeg.boot > 100 && inkArm.skin > 150;
+  o.twoStylesDiffer = differs(withSprite, inkedAtPeak, inLeg) > 150
+                   && differs(withSprite, inkedAtPeak, inArm) > 150;
+  o.inkedThemeIsABundle = !!M.bundleSlots('kickink');
+  o.inkedThemeSkin  = (M.THEME_BUNDLES.kickink || {}).discs;
+  o.inkedThemeNamed = (M.THEMES.kickink || {}).name;
+
 
   // ---- 9. render only, and it plays -------------------------------------------
   // ⚠️ **THE CONTROL IS THE SAME THEME WITH THE SKIN STOOD DOWN, and `applyBundle` for the
@@ -591,6 +699,27 @@ ok(r.sameNameSamePicture,
 ok(r.peopleVary, `only ${r.peopleSeen} distinct looks across eight names, out of a table of ${r.peopleTable}`);
 ok(r.noRandomInThePaint, 'Math.random reached the paint or the person hash');
 ok(r.turnsToFaceTravel, 'the body does not turn to face travel — a footballer has a front');
+ok(r.turnIsNotInstant,
+  `a left-to-right reversal finished in ${r.turnFramesForAHalfTurn} frame(s) — it is supposed to be SEEN as a turn, and one frame is the flip this replaces`);
+ok(r.turnIsQuick,
+  `a left-to-right reversal took ${r.turnFramesForAHalfTurn} frames — asked for quick; 12 is a fifth of a second at 60Hz`);
+ok(r.turnTakesTheShortWay,
+  'the turn wandered back on itself — a reversal must go round the nearer half, and the long way round ARRIVES in the same number of frames, so arrival time cannot see it');
+ok(r.turnIsVisible,
+  'the picture part way through a turn matches one of the two ends — an ease nobody can see is a number, not an animation');
+ok(r.turnWrapsTheShortWay,
+  `a turn whose short path crosses +-pi took ${r.turnFramesAcrossTheWrap} frames — 0.28 rad the near way against 6.0 the long way, and a reversal through 0/pi reads the same either way, which is why the check above cannot see a missing wrap`);
+ok(r.turnWritesOnlyDrawAng,
+  `the turn wrote ${JSON.stringify(r.turnWrote)} — it may only ever touch _drawAng, which nothing in step() reads; a world hash would pass on a build that writes a field nothing happens to read YET`);
+ok(r.bothSkinsExist, 'one of the two limb styles is missing from DISC_SKINS');
+ok(r.twoStylesDiffer,
+  'the two limb styles render the same arms and legs with the pack present — which is the whole of what the second theme is for');
+ok(r.inkedIsDrawn,
+  `the drawn skin carried ${r.inkedOutline} outline pixels against the sprite skin's ${r.limbOutlinePixels} — the pack's plates carry an outline tone and a stroke does not, so this is what says which style is which`);
+ok(r.inkedHasLimbs,
+  `the drawn skin put ${r.inkedLimbInk} limb pixels out there — "no outline" is equally true of a skin that draws no arms`);
+ok(r.inkedThemeIsABundle && r.inkedThemeSkin === 'footballersink' && r.inkedThemeNamed === 'Sunday League Inked',
+  `the drawn-limb theme does not resolve: bundle=${r.inkedThemeIsABundle} discs=${r.inkedThemeSkin} name=${r.inkedThemeNamed}`);
 ok(r.isBundle && r.named === 'Sunday League' && r.themeNamed === 'Sunday League',
   `the Sunday League bundle does not resolve: ${r.named} / ${r.themeNamed}`);
 ok(r.setsTheSkin, `the bundle does not field the skin: ${r.slots}`);

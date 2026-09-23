@@ -2085,6 +2085,22 @@ three lines a second time, name it.
   is. ⚠️ **Two tones**, hugging `r` from either side: a single-colour ring is invisible whenever
   the skin under it happens to be that colour, and Mono's white team-1 disc ate a white ring on
   7 of 24 arcs. `tests/discskins.mjs` pixel-checks every entry in the registry, both teams.
+  ⚠️ **...EXCEPT IN A REPLAY, and that is not the rule bent — it is the rule's own premise
+  going away.** Asked for as *"on replay, we draw circles around bot and player; that is not
+  needed"*. The ring exists so the drawn body matches the body you are ABOUT TO COLLIDE WITH;
+  a replay is a recording of positions with no physics, no input and nothing to collide, so
+  the ring stops being a promise about the game and becomes a circle drawn round every body
+  in the picture. A live match, a drill and the warm-up lobby all keep it, which is everywhere
+  the premise still holds.
+  ⚠️ **`replay.active` AND `replay.filming`**, because an OFFLINE export
+  (`repFastExport`) renders frames with `active` false and `filming` true — one flag misses
+  half the paths that draw a replay.
+  ⚠️ **MEASURED AS A DIFFERENCE AGAINST THE LIVE MATCH IN THE SAME RUN** and paired with the
+  live frame KEEPING its ring, because a predicate that dropped the ring everywhere satisfies
+  the replay half on its own and is the worse bug. ⚠️ Its own trap: the probe has to set
+  `sel.look.discs` AFTER `applyTheme`, which rewrites the slots — set first, the skin came
+  back `none`, `drawOneDisc` took its flat-sprite branch (which has no guide ring at all) and
+  the whole check measured two identical pictures and read **0**. `tests/replayfile.mjs`.
 - **Two-frame leg animation** on the creature skins, driven by DISTANCE travelled
   (`p.gait`, accumulated in `integrate`), never by a clock. ⚠️ A timer would have to be
   advanced somewhere, and anything advanced in a draw runs 2.4× fast at 144Hz (the trails
@@ -2098,6 +2114,68 @@ three lines a second time, name it.
   helper so they cannot honour it differently; round skins (mono, pool) are unaffected, which
   is what the hint under the control promises and what the suite checks. Off points the body up
   its OWN pitch, so the two sides don't both face one way.
+- **A FIGURE TURNS ROUND RATHER THAN FLIPPING** (`FACETURN`, `turnFaceToward`,
+  `advanceFaceTurn`, `discFaceTurn`, `p._drawAng`). Asked for: a player reversing from left to
+  right should be SEEN to turn, quickly, without touching the game. Measured: a half turn takes
+  **6 frames — 100ms at 60Hz** — against the single-frame flip it replaces.
+  ⚠️ **RENDER ONLY, AND STRUCTURALLY SO.** The eased angle lives on `p._drawAng`, which nothing
+  in `step()` reads: the sim keeps using `faceX`/`faceY`, which still snap, so a kick fires
+  exactly where it always did. The goal camera's rule — a thing that moves the PICTURE may not
+  be anything the physics, a hit test or a bot can see.
+  ⚠️ **MEASURED AS WHAT IT WRITES, not as a world hash.** The whole body object is diffed
+  across a turn and `_drawAng` must be the only key that moved; a hash would pass on a build
+  that writes a field nothing happens to read YET. (Its own trap: the probe must snapshot AFTER
+  asking for the reversal, or its own `faceX = -1` shows up as a write and a good build reads
+  as dirty.)
+  ⚠️ **ADVANCED IN THE STEP LOOP, NEVER IN A DRAW** — the trails rule — and separately in
+  `repAnimate`, because the step loop is not running during a replay and without it a replayed
+  figure snaps exactly as it did before the turn existed. The replay's copy eases by the
+  STEPS a drawn frame covers, and keeps the angle per slot in `repAnim.fa` because
+  `drawReplayFrame` rebuilds the body every frame.
+  ⚠️ **IT EASES TOWARD `discFace`, NOT THE RAW FACING**, so the per-player rotation choice and
+  the no-facing fallback are honoured in ONE place: with rotation off `discFace` returns a
+  constant, the ease converges on it, and nothing ever spins.
+  ⚠️ **THE SHORT WAY ROUND** (the `TRAP.spin` rule), and the long way ARRIVES IN THE SAME
+  NUMBER OF FRAMES — so arrival time cannot see it and the check reads the path's monotonicity
+  instead.
+  ⚠️ **OPT-IN, on the two Kenney themes**, which is what was asked for: both footballer skins
+  and Sketchbook's counters. Every other direction-drawn skin still calls `discFace` and snaps
+  — changing that for all of them is a drive-by nobody asked for. ⚠️ Sketchbook's counter did
+  not rotate AT ALL before this, so a reversal was invisible on it; its bake faces up the
+  sheet, hence the `+π/2`. `tests/footballers.mjs`.
+- **TWO LIMB STYLES FOR THE FOOTBALLERS, AND THE SECOND IS THE BUILD BEFORE IT**
+  (`footballerSkin(name, sprites)`, `DISC_SKINS.footballersink`, `THEMES.kickink`
+  = **Sunday League Inked**, `THEME_BUNDLES.kickink`). Asked for: keep the Kenney limb sprites
+  and bring back the drawn strokes they replaced, both pickable, as a separate theme.
+  ⚠️ **THE DRAWN PATH IS NOT A REIMPLEMENTATION** — it is the FALLBACK that has always been
+  there for a copy with no `assets/` beside it, which is why there was a second style to bring
+  back at all. `sprites:false` simply declines to look for the plate.
+  ⚠️ **ONE PAINTER TAKING A FLAG, never two copies.** Everything below the limbs — the shorts,
+  the shirt, the head, the four people, the kit-trim threshold, the stride — is one geometry
+  that took a lot of measuring to settle; a second copy is the duplication rule with the usual
+  ending. The two skins differ by one boolean.
+  ⚠️ **THE PALETTE IS DERIVED, NOT COPIED**: `THEMES.kickink = { ...THEMES.kickabout, name,
+  emoji }`. Thirty-odd colours written out again would drift the first time either was retuned,
+  and `ui`/`pitch` are deliberately SHARED rather than cloned — nothing mutates a `THEMES`
+  palette, which is exactly why `paintedPitch` returns a copy.
+  ⚠️ **A NEW KEY NEEDS NO FOLD.** `normalizeLook` exists for keys that MOVED; nothing has ever
+  stored this one.
+  ⚠️ **THE DISCRIMINATOR IS THE PACK'S OUTLINE TONE, not a pixel count.** Two drawings always
+  differ; what says WHICH is which is that Kenney's plates draw every band's outline at
+  `KLIMB.shade` and a stroke does not — measured **9 against 257**, the same instrument the
+  pack-less fallback check already uses, and rendered with the pack PRESENT for both, because
+  pointing `KLIMB.dir` at nothing proves only that a fallback exists. ⚠️ A kit-colour band was
+  tried first and is vacuous: the sleeve sits near the shoulder, INSIDE the shirt's across
+  extent, so a band picked to exclude the shirt excludes the sleeve too and both styles read
+  **26**.
+  ⚠️ **NINE SABOTAGES ACROSS THE FOUR CHANGES, each caught by its own check — and TWO of them
+  only after the check was fixed.** Pointing `discFaceTurn` straight at `discFace` (the turn
+  made instant) was MISSED because the mid-turn picture was compared against two ends at a
+  DIFFERENT stride phase, so the three differed by the legs rather than the turn. Dropping the
+  ±π normalisation was MISSED because the reversal being tested runs 0 → π exactly, where the
+  wrapped and unwrapped answers are identical — it needs a turn whose short path CROSSES the
+  boundary (+3.0 to −3.0 rad is 0.28 the near way against 6.0 the long way: **1 frame against
+  11**). `tests/footballers.mjs`.
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
@@ -7922,7 +8000,44 @@ three lines a second time, name it.
   differ" is true of a ball that merely moved.
   ⚠️ **RESET WHEN A REPLAY STARTS** (`playReplay`, `repFastExport`), or the first frame of
   the next one measures the distance from wherever the last one left that slot — and a slot
-  need not even mean the same person.
+  need not even mean the same person. The RATE goes with it (`repAnimReset(fps)`), because
+  the teleport ceiling below is per DRAWN FRAME and has to know how many sim steps one covers.
+  ⚠️ **A TELEPORT IS NOT TRAVEL, AND TREATING IT AS TRAVEL SPUN THE BALL RIGHT OFF.** Reported
+  as the replay's ball animation being wrong, and it is the other half of building the roll
+  out of positions: `resetKickoff` puts the ball on the centre spot and every body on its
+  formation mark, so the frame after a goal shows the ball hundreds of units "further on".
+  Measured on a seeded 2v2, the largest single-frame move while the LIVE ball was at rest was
+  **417 units — 46.35 radians in one frame at r 9, 7.4 whole turns** — and the replay's roll
+  left the live match's behind at exactly that point (live held −41.55 while the replay swung
+  to +5.97). It reads **1.94 rad** worst now, with **0** frames past half a turn. The legs had
+  the identical defect on the identical line, because `p.gait` is a distance too.
+  ⚠️ **THE CEILING IS THE BALL'S OWN SPEED CAP** (`w.ballCap`, a Game Feel slider) times the
+  steps a drawn frame covers. Nothing on the pitch travels faster than the ball is allowed to,
+  so ONE bound covers the bodies as well — a player tops out near 3 units a step against the
+  ball's 46, so it can never reject real running.
+  ⚠️ **THE FLOOR IS THE RECORDING'S OWN RESOLUTION.** `repEncodeFrames` rounds every
+  coordinate to an integer, so a chord under a unit is quantisation rather than movement, and
+  a resting ball otherwise rolls on rounding noise. The live rule it mirrors — `sp > 0.15` a
+  step — is well under that at any sane frame rate.
+  ⚠️ **A SHORT TELEPORT IS INDISTINGUISHABLE FROM A FAST SHOT, written down rather than
+  papered over**: a re-serve that moves the ball fifty units looks exactly like a fifty-unit
+  shot to a recording of positions, and no rule could tell them apart without recording the
+  reset itself.
+  ⚠️ **AND RE-SIMULATING THE MATCH IS NOT AVAILABLE, which was the suggestion.** A replay
+  records POSITIONS, not inputs — `repMatchCapture` stores `{bx, by, p:[{x,y,k}]}` and nothing
+  else — so there is nothing to feed a sim with. Recording inputs instead is a different file
+  format and a different feature (that IS what `LOCK` does across the wire); with positions,
+  deriving the roll is the only thing on offer, and what was wrong was the derivation trusting
+  a teleport.
+  ⚠️ **COMPARING THE REPLAY'S ACCUMULATED ROLL WITH THE LIVE MATCH'S READS BACKWARDS, and it
+  was the first instrument tried.** `rollAxFor` folds an axis and its opposite onto one line,
+  so an axis differing by π with an opposite-signed roll **draws identically** — the totals
+  diverge on a build that is perfectly correct (measured −194 live against +48 replayed, with
+  nothing wrong). The claim that survives is a CEILING on the per-frame increment.
+  ⚠️ **AND THE PROBE DOUBLE-CAPTURED TWICE BEFORE IT WAS RIGHT.** `step()` already reaches
+  `repMatchCapture` through `repCapture`, so a probe that also calls it stores at twice the
+  rate the doc's `fps` declares and measures a replay whose declared speed is half its content.
+  Measured: 100 steps and no explicit call gives **50** frames.
   ⚠️ **THE CHECK READS WHAT A PAINTER IS ACTUALLY HANDED**, through a real
   `drawReplayFrame` → `drawDiscs` → skin paint, with the Sunday League skin borrowed as the
   instrument; calling `repAnimate` and inspecting its return proves only that a helper
