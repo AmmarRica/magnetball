@@ -1819,6 +1819,11 @@
            being made to go back and pick again is the thing that was reported. The label
            says which it will be, because "Video" alone does not. -->
       <button id="repVidBtn" type="button" aria-label="Export this replay as video">⤓ Video</button>
+      <!-- ⚠️ HIGH QUALITY = one video frame per SIM STEP. A match is recorded at 30Hz, so
+           the ordinary export writes 30fps; this asks the replay for the frames BETWEEN the
+           recorded ones (which it has always drawn anyway) and writes 60. A goal replay is
+           already captured every frame, so there it costs nothing and changes nothing. -->
+      <button id="repVidHqBtn" type="button" aria-label="Export this replay as a high quality video">⤓ HQ video</button>
       <button id="repExit" type="button" aria-label="Stop watching">✕</button>
     </div>
   </div>
@@ -6128,7 +6133,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.0518PM';
+const VERSION = '20260923.0742PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6144,6 +6149,13 @@ const VERSION = '20260923.0518PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260923.0742PM', title: 'High quality video, and one place to export from',
+    changed: [
+      '<b>A new High quality export, at one video frame per step of the match.</b> A whole match is recorded at half rate to keep the file small, so the ordinary export writes half the frames; high quality fills in the ones between, for a smoother video that takes a little longer to write and costs a bit more space. A goal clip is already at full rate, so there it changes nothing.',
+      '<b>Every video export now lives in the replay view.</b> The end of a match used to offer five buttons; it offers <b>Watch goal</b> and <b>Watch match</b> now, and both video buttons are on the player you land in \u2014 so whatever you are watching is what gets saved.',
+      'Saving the replay itself (the small file you keep and can re-watch) is still on the result screen, as two buttons.',
+    ],
+    fixed: 'Assorted fixes and tidying.' },
   { v: '20260923.0518PM', title: 'Two kinds of footballer, and replays that look right',
     changed: [
       '<b>The footballers come in two styles now.</b> Sunday League has the sprite arms and legs; <b>Sunday League Inked</b> is the same team with the drawn ones, so you can pick either.',
@@ -8429,7 +8441,22 @@ const THEMES = {
 // free. The `sketch` / `clash` / `ledge` precedent.
 // ⚠️ A NEW KEY NEEDS NO FOLD — `normalizeLook` exists for keys that MOVED, and nothing has
 // ever stored this one.
-THEMES.kickink = { ...THEMES.kickabout, name: 'Sunday League Inked', emoji: '\u270f\ufe0f' };
+// ⚠️ **AND IT NEEDED A PITCH OF ITS OWN, which a check caught rather than taste.** It
+// shipped as the Sunday League palette verbatim with a different name, and
+// `tests/themetiles.mjs`' `allDistinct` went red: the Background pane paints one tile per
+// `THEMES` key from the palette ALONE, so two keys with identical colours are two tiles a
+// player cannot tell apart — and in THAT pane they really are the same thing, because there
+// a palette IS its colours. `bundleSlots` hard-codes `palette: k`, so a bundle cannot borrow
+// another theme's colours without a structural change; the honest answer is that a second
+// theme should look like a second theme.
+// ⚠️ **ONLY THE TURF MOVES.** The kits, the markings, the ball, the goal frame and the whole
+// `ui` block are Sunday League's, so it is the same team on a more worn park pitch rather
+// than a different game. White on `#4f8f4a` measures **3.92:1**, comfortably over the 2.5
+// `paintedPitch` uses to decide a marking has vanished into the court — the floor the
+// original entry records for exactly this.
+THEMES.kickink = { ...THEMES.kickabout, name: 'Sunday League Inked', emoji: '\u270f\ufe0f',
+  pitch: { ...THEMES.kickabout.pitch,
+           fieldBg:'#2f5a2c', court:'#4f8f4a', stripeA:'#4f8f4a', stripeB:'#559a50' } };
 // ---- Contrast maths (declared above applyTheme, which runs at module init) ----
 // Pick whichever of the two ink colours actually contrasts more with the given
 // background — measured by WCAG ratio, not by a brightness threshold. The old
@@ -13046,7 +13073,14 @@ function drawThemeSwatch(c, t, cw, ch){
 // ⚠️ TH is swapped for the duration: the skins and the ball painter read the LIVE
 // palette, so a preview of another bundle would otherwise wear the current one.
 function drawBundleSwatch(c, key, cw, ch){
-  const cv = cachedSwatch('bundle|' + key + '|' + cw + 'x' + ch, () => {
+  // ⚠️ **THE LIMB PLATES LOAD ASYNCHRONOUSLY AND THIS CACHE IS THE ONE THAT IS NEVER
+  // DROPPED** (`swatchFixed`), so a tile baked before they land shows the drawn fallback for
+  // the rest of the session — which means Sunday League's own tile has been showing the
+  // wrong limbs whenever the Theme card was opened quickly. Harmless while it was the only
+  // footballer theme; the moment there are TWO, whose whole difference is the limb art, it
+  // makes two tiles a player cannot tell apart. Putting readiness in the KEY re-bakes once,
+  // when the art arrives.
+  const cv = cachedSwatch('bundle|' + key + '|' + cw + 'x' + ch + '|' + (klimbReady() ? 1 : 0), () => {
     const s = bundleSlots(key); if (!s) return null;
     const t = document.createElement('canvas'); t.width = cw; t.height = ch;
     drawSlotsSwatch(t.getContext('2d'), s, cw, ch);
@@ -13073,7 +13107,14 @@ function drawSlotsSwatch(c, s, cw, ch){
     }
     const skin = DISC_SKINS[s.discs], r = ch*0.19;
     for (const team of [0,1]){
-      const x = team ? cw*0.75 : cw*0.25, pl = { team, color: team ? '#4d7bff' : '#ff3b6b' };
+      // ⚠️ **MID-STRIDE, NOT AT REST.** `gaitSwing` returns the standing pose without a gait
+      // and a velocity, so every walking skin drew its quietest frame — the one where a
+      // footballer's legs are tucked under the shirt and there is least to see. A quarter of
+      // a cycle puts the limbs out, which is what the tile is a picture OF. Fixed numbers,
+      // never a clock or a roll: a swatch is baked once and must be the same every time.
+      const x = team ? cw*0.75 : cw*0.25;
+      const pl = { team, color: team ? '#4d7bff' : '#ff3b6b',
+                   vx: 3, vy: 0, faceX: 1, faceY: 0, gait: gaitPeriod() * 0.25 };
       if (skin) skin.paint(c, pl, x, ch/2, r, null);
       else {
         c.beginPath(); c.arc(x, ch/2, r*1.16, 0, 2*Math.PI); c.fillStyle = t.pitch.discRim; c.fill();
@@ -13857,14 +13898,32 @@ if (rmEl){
   // re-fires for a value the drag had just previewed — measured at 16ms apart, which cuts
   // the one you can feel short with an identical one. So `change` fires only where it has
   // something new to say, which is whenever the throttle swallowed the last step.
-  let rmLast = 0, rmLastV = null;
+  // ⚠️ **AND WHEN IT HAS SOMETHING TO SAY INSIDE THE WINDOW IT WAITS RATHER THAN CUTTING
+  // IN.** Firing outright was measured breaking the very rule the throttle exists for:
+  // gaps of **[238, 63]** and **[234, 34]** against a 200ms pulse — the release landing
+  // 34ms after a preview replaces it with a stub, which is the defect, not a slow machine.
+  // It needs no contention to reach: drag slowly, steps 150ms apart, and the last one is
+  // swallowed while the release is 10ms behind it. Skipping it instead is worse — a fast
+  // flick from 20 to 90 fires ONE preview at 20 and you never feel where you landed, which
+  // is the whole point of the release. So it is deferred to the end of the window, at most
+  // 220ms, and reads the slider at FIRE time so it previews the value actually landed on.
+  let rmLast = 0, rmLastV = null, rmHold = 0;
+  const fireRumble = () => {
+    rmLast = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    rmLastV = +rmEl.value;
+    for (const i of connectedGamepadIndices()) padRumble(i, 'preview', 1);
+  };
   const previewRumble = (onRelease) => {
     const v = +rmEl.value;
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    if (onRelease){ if (v === rmLastV) return; }
+    if (onRelease){
+      if (v === rmLastV) return;
+      const left = RUMBLE.previewGap - (now - rmLast);
+      if (left > 0){ clearTimeout(rmHold); rmHold = setTimeout(fireRumble, left); return; }
+    }
     else if (now - rmLast < RUMBLE.previewGap) return;
-    rmLast = now; rmLastV = v;
-    for (const i of connectedGamepadIndices()) padRumble(i, 'preview', 1);
+    clearTimeout(rmHold);
+    fireRumble();
   };
   rmEl.oninput = () => { sel.rumble = +rmEl.value; saveSel(); showRM(); previewRumble(false); };
   rmEl.onchange = () => previewRumble(true);
@@ -15926,15 +15985,18 @@ function isDesktop(){
 // `watchReplayFile` does the recording in its `finally`, while the screens are still
 // hidden — so you watch it being filmed rather than staring at a menu for the length of a
 // match, which is the complaint `saveMatchClip`'s own label already exists to avoid.
-let _repFilmDoc = null;
-$('repVidBtn').onclick = (e) => {
-  const b = e.currentTarget;
+let _repFilmDoc = null, _repFilmHq = false;
+// ⚠️ ONE handler for both, because they differ by a single flag and two copies of "stash
+// the document and bail out of the playback" is the second copy that rots.
+const repFilmNow = (b, hq) => {
   if (!replay.doc){ const was = b.textContent; b.textContent = '\u26a0 Nothing to film';
                     setTimeout(() => { if (b.textContent !== was) b.textContent = was; }, 2200); return; }
-  _repFilmDoc = replay.doc;
+  _repFilmDoc = replay.doc; _repFilmHq = !!hq;
   b.textContent = '\u25cf REC';
   replayAbort();
 };
+$('repVidBtn').onclick = (e) => repFilmNow(e.currentTarget, false);
+$('repVidHqBtn').onclick = (e) => repFilmNow(e.currentTarget, true);
 $('repRecStop').onclick = repRecStop;
 $('repSaveBtn').onclick = (e) => {
   const b = e.currentTarget, was = b.textContent;
@@ -21243,8 +21305,9 @@ async function watchReplayFile(back, pick){
     // happened, a goal is worth slowing down.
     if (_repFilmDoc){
       const film = _repFilmDoc; _repFilmDoc = null;
+      const hq = _repFilmHq; _repFilmHq = false;
       const speed = film.kind === 'match' ? 1 : null;
-      const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind, film, speed || 1);
+      const why = await recordAndShareClip(null, () => playReplayFile(film, speed), film.kind, film, speed || 1, hq);
       toast(why || '\u2713 Video saved');
     }
     if (back) back();
@@ -21738,7 +21801,7 @@ function repMakeRecorder(stream){
 // document and puts it back in a `finally` — so the match on the pitch behind the result
 // screen is untouched, and a throw mid-recording cannot strand the game holding a
 // replay's world.
-async function saveMatchClip(btn){
+async function saveMatchClip(btn, hq){
   const doc = repMatchFileBuild();
   if (!doc){
     if (btn) clipSay(btn, '⚠ No match to save');
@@ -21747,7 +21810,7 @@ async function saveMatchClip(btn){
   const secs = Math.round((doc.frames.length / Math.max(1, doc.fps)) || 0);
   const was = btn ? btn.textContent : '';
   if (btn) btn.textContent = '● REC · ' + Math.max(1, Math.round(secs/60)) + ' min';
-  const why = await recordAndShareClip(btn, () => playReplayFile(doc, 1), 'match', doc, 1);
+  const why = await recordAndShareClip(btn, () => playReplayFile(doc, 1), 'match', doc, 1, hq);
   if (btn) clipSay(btn, why || '✓ Saved', was);
   return why;
 }
@@ -22231,9 +22294,23 @@ async function repFastPick(W, H, fps){
 // ⚠️ **IT SWAPS THE GLOBAL `world`, the idiom `playReplayFile` already uses**, and puts it
 // back in a `finally` — `drawReplayFrame` reads the field geometry and every look off the
 // live world, so a document can only be painted by making it the world for the duration.
-async function repFastExport(doc, speed, onProgress){
+// ⚠️ **`hq` IS THE 1:1 EXPORT, AND IT IS AN INTERPOLATION RATHER THAN A BIGGER RECORDING.**
+// A whole match is captured at 30Hz (`REPMATCH.every`), so the frames for a 60fps video do
+// not exist and no export can conjure them — but the replay has ALWAYS drawn between its
+// frames (`repTween`, the drill-ghost argument: stepping a sparse recording is what reads as
+// a stutter). All this does is ask for those in-between frames on the way out, so a match
+// exports at one video frame per SIM STEP instead of one per recorded frame.
+// ⚠️ A goal replay is already captured every frame, so `sub` comes out 1 there and high
+// quality costs nothing and changes nothing — the rate is what it is aiming at, not a
+// multiplier.
+// ⚠️ **THE REAL-TIME PATH IS ALREADY 1:1** and takes no flag: `MediaRecorder` films the
+// canvas at its rAF rate while `playReplayFile` interpolates, so it has always produced
+// 60fps. This is the OFFLINE encoder catching up with it.
+async function repFastExport(doc, speed, onProgress, hq){
   if (!doc || !doc.frames || !doc.frames.length) return null;
-  const fps = Math.max(1, (doc.fps || 60) * (speed || 1));
+  const base = Math.max(1, doc.fps || 60);
+  const sub = hq ? Math.max(1, Math.round(60 / base)) : 1;
+  const fps = Math.max(1, base * sub * (speed || 1));
   // ⚠️ EVEN DIMENSIONS. A 4:2:0 encoder refuses an odd width or height, and the canvas is
   // sized from the window, so an odd one is the ordinary case rather than a rare one.
   // ⚠️ **AND SNAPPED INTO A SHAPE THAT CAN BE POSTED** (`clipFrameSize`) — which on a
@@ -22265,24 +22342,34 @@ async function repFastExport(doc, speed, onProgress){
   try {
     world = repFileWorld(doc);
     lastReplay = { players: doc.players.length, frames, fps: doc.fps || 60 };
-    repAnimReset(doc.fps || 60);
+    // ⚠️ The teleport ceiling is per DRAWN frame, so it scales with the sub-frames too.
+    repAnimReset(base * sub);
     computeCam();
     const step = 1e6 / fps;
     // ⚠️ A keyframe about every two seconds: a cue can only point at a cluster and a
     // cluster only starts on a keyframe, so this is what makes the file seekable.
     const gop = Math.max(1, Math.round(fps * 2));
+    const total = frames.length * sub;
     for (let i = 0; i < frames.length; i++){
       if (replay.filmStopped){ stopped = true; break; }
       if (fail) break;
-      drawReplayFrame(repTween(frames[i], frames[i+1], 0, fps));
+      for (let sfr = 0; sfr < sub; sfr++){
+      // ⚠️ **`base`, NOT the output `fps`.** `repTween`'s last argument scales the per-step
+      // VELOCITY it derives, and the recorded pair either side is `60/base` steps apart
+      // however many video frames are drawn between them — so the output rate is the wrong
+      // number and would hand every body a velocity off by `sub` (and by `speed`, which is
+      // the same latent bug the single-frame version had).
+      drawReplayFrame(repTween(frames[i], frames[i+1], sfr / sub, base));
       // ⚠️ The crop is taken AFTER the frame is painted and AFTER the world is installed,
       // which is what makes `clipFramePlan` able to ask where the court is at all.
       if (mirror) clipBlit(mirror);
+      const n = i * sub + sfr;
       const vf = new VideoFrame(mirror ? mirror.cv : cv,
-                               { timestamp: Math.round(i * step), duration: Math.round(step) });
-      enc.encode(vf, { keyFrame: i % gop === 0 });
+                               { timestamp: Math.round(n * step), duration: Math.round(step) });
+      enc.encode(vf, { keyFrame: n % gop === 0 });
       vf.close();
-      if (onProgress) onProgress(i, frames.length, fps);
+      if (onProgress) onProgress(n, total, fps);
+      }
       // ⚠️ Yield when the queue backs up, or the whole export is one synchronous block:
       // nothing repaints, the Stop button cannot be pressed, and a long match reads as a
       // hung page — which is the complaint this feature exists to answer.
@@ -22308,7 +22395,7 @@ function repDropStream(stream){
   if (!stream) return;
   try { stream.getTracks().forEach(t => t.stop()); } catch(e){}
 }
-async function recordAndShareClip(btn, play, stem, doc, speed){
+async function recordAndShareClip(btn, play, stem, doc, speed, hq){
   play = play || (() => playReplay(0.7));
   let stream = null, rec = null, mirror = null, pump = 0;
   try {
@@ -22345,7 +22432,7 @@ async function recordAndShareClip(btn, play, stem, doc, speed){
       repRecShow('Encoding');
       let fast = null;
       try {
-        fast = await repFastExport(doc, speed, (i, n, fps) => repRecSync(i, n, fps));
+        fast = await repFastExport(doc, speed, (i, n, fps) => repRecSync(i, n, fps), hq);
       } finally { replay.filming = false; repRecHide(); }
       if (fast){
         repDropStream(stream); stream = null; rec = null;
@@ -27020,19 +27107,30 @@ function renderAwards(w){
   // One-tap replay / clip share of the winning goal, if we captured one.
   if (lastReplay){
     const foot=document.createElement('div'); foot.className='awfoot';
-    const rep=document.createElement('button'); rep.textContent='🎬 Replay';
-    rep.onclick=()=>playReplay(0.6);
-    foot.appendChild(rep);
-    if (typeof MediaRecorder!=='undefined'){
-      const sh=document.createElement('button'); sh.textContent='⬇ Save clip';
-      sh.onclick=()=>saveClip(sh); foot.appendChild(sh);
-      // ⚠️ THE WHOLE MATCH AS A VIDEO, and it is its own button rather than a state of the
-      // one above: a goal clip is a few seconds and a match is however long the match was,
-      // played back in full to film it. The label says so, because a button that appears to
-      // hang for four minutes is a broken button.
-      const mv=document.createElement('button'); mv.textContent='⬇ Save match video';
-      mv.onclick=()=>saveMatchClip(mv); foot.appendChild(mv);
-    }
+    // ⚠️ **EVERY VIDEO EXPORT LIVES IN THE REPLAY VIEW NOW, and this screen carries the two
+    // ways IN rather than four ways to download.** Asked for: the post-game screen had five
+    // buttons, two of which filmed a video by playing the whole thing back — and the replay
+    // transport already has a Video button that films WHAT YOU ARE WATCHING, so the two here
+    // were a second door onto it. The transport's own pair (ordinary and high quality) is the
+    // one place a video comes from.
+    // ⚠️ **AND THE MATCH NEEDED A DOOR, or the change would have made its video unreachable.**
+    // `🎬 Replay` only ever opened the GOAL, so with the match-video button gone there was no
+    // route from here to a match replay at all — a feature nobody can reach is a feature that
+    // does not exist. Both open the transport (`controls:true`), which is what puts the
+    // exports in front of you.
+    const watch = (label, doc) => {
+      const bt=document.createElement('button'); bt.textContent=label;
+      bt.onclick=(e)=>{
+        const el=e.currentTarget, was=el.textContent;
+        const d = doc();
+        if (!d){ el.textContent='⚠ Nothing to watch';
+                 setTimeout(()=>{ if (el.textContent!==was) el.textContent=was; }, 2200); return; }
+        watchReplayFile(null, () => Promise.resolve(d));
+      };
+      foot.appendChild(bt);
+    };
+    watch('🎬 Watch goal',  () => repFileBuild());
+    watch('🎬 Watch match', () => repMatchFileBuild());
     // ⚠️ THREE things and they are all different, which is why all three get a button.
     // The clip is a VIDEO of the last goal, to send someone. The other two are the match
     // DATA, which re-renders at your screen's size in your theme and can be watched again:
@@ -34276,6 +34374,9 @@ function klimbRgb(col){
 // One bake per (plate, kit, skin, ink). ⚠️ **THE DIRECTORY IS IN THE KEY** — `scribCell`'s
 // rule, and for its reason: without it a bake survives a change of `KLIMB.dir`, which is how
 // the missing-pack path is exercised at all.
+// Is the limb art in yet? The plates load asynchronously, so anything BAKED against them
+// has to know whether it was baked before or after they landed — see drawBundleSwatch.
+function klimbReady(){ return !!(spriteImg(KLIMB.dir + KLIMB.arm) && spriteImg(KLIMB.dir + KLIMB.leg)); }
 function klimbSprite(which, kit, skin, ink){
   const file = which === 'leg' ? KLIMB.leg : KLIMB.arm;
   const key = KLIMB.dir + file + ':' + kit + ':' + skin + ':' + ink;
@@ -37689,7 +37790,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, gaitPeriod, KLIMB, klimbSprite, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, gaitPeriod, KLIMB, klimbSprite, klimbReady, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

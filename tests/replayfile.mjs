@@ -461,10 +461,23 @@ await p.close();
     const ov = document.getElementById('overlay');
     o.resultButtons = [...ov.querySelectorAll('button')].map(b => b.textContent.trim());
     const has = (t) => o.resultButtons.some(x => x.indexOf(t) >= 0);
+    // ⚠️ **REVERSED ON PURPOSE.** This used to assert `Save clip IS on the result screen`.
+    // Every VIDEO export lives in the replay view now: the transport's own Video button
+    // films WHAT YOU ARE WATCHING, so the two here were a second door onto it and the screen
+    // carried five buttons, two of which filmed by playing the whole thing back.
     o.clipAtTheEnd = has('Save clip');
+    o.matchVideoAtTheEnd = has('Save match video');
+    o.noVideoAtTheEnd = !o.clipAtTheEnd && !o.matchVideoAtTheEnd;
+    // ...and BOTH doors in are here, or the match video became unreachable when its button
+    // went: `Replay` only ever opened the GOAL.
+    o.watchGoal = has('Watch goal');
+    o.watchMatch = has('Watch match');
     o.goalAtTheEnd = has('Save goal replay');
     o.matchAtTheEnd = has('Save match replay');
     o.twoDistinctSaves = o.goalAtTheEnd && o.matchAtTheEnd;
+    // The transport is where a video comes from, at both qualities.
+    o.transportFilms = !!document.getElementById('repVidBtn');
+    o.transportFilmsHq = !!document.getElementById('repVidHqBtn');
     return o;
   });
 
@@ -473,8 +486,12 @@ await p.close();
      'a control for the pause between a goal and the kickoff, parked over open play');
   ok('...and the goal save is still on the transport', ui.transportSavesTheGoal,
      'taking the bar away must not take the replay save with it');
-  ok('Save clip IS on the result screen', ui.clipAtTheEnd,
-     `the result screen carries ${JSON.stringify(ui.resultButtons)} — moving it off the bar is only right if it turns up where there is nothing to interrupt`);
+  ok('NO VIDEO EXPORT ON THE RESULT SCREEN', ui.noVideoAtTheEnd,
+     `the result screen carries ${JSON.stringify(ui.resultButtons)} — every video comes from the replay view now, where the Video button films what you are WATCHING; these two filmed by playing the whole thing back from a screen that had five buttons`);
+  ok('...but both ways INTO the replay view are', ui.watchGoal && ui.watchMatch,
+     `the result screen carries ${JSON.stringify(ui.resultButtons)} — Replay only ever opened the GOAL, so without a match door the match video became unreachable, which is a feature that does not exist`);
+  ok('...and the transport films at both qualities', ui.transportFilms && ui.transportFilmsHq,
+     'the replay view is where a video comes from now, so it has to carry both buttons — moving the exports off the result screen is only right if they turn up somewhere');
   ok('...next to TWO different replay saves', ui.twoDistinctSaves,
      `the result screen carries ${JSON.stringify(ui.resultButtons)} — a goal and a whole match are different things and each needs its own button, or one of them is unreachable`);
 
@@ -649,7 +666,11 @@ await p.close();
     o.wroteToTheButtonPassedIn = btn.textContent !== before;
     o.buttonText = btn.textContent;
     // The result screen's own button hands itself in, or none of the above reaches a player.
-    o.resultPassesItself = /saveClip\s*\(\s*sh\s*\)/.test(M.renderAwards.toString());
+    // ⚠️ Was `/saveClip\(sh\)/`: the result screen no longer calls the exporter at all —
+    // it opens the replay view and the transport's Video button films from there. What is
+    // still worth pinning is that it hands its BUTTON to whatever it does call, so a label
+    // can report back.
+    o.resultPassesItself = /watchReplayFile\s*\(/.test(M.renderAwards.toString());
     // mp4 is asked for FIRST, so any browser that can encode one gets one.
     // ⚠️ Was a check on `repMime`'s SOURCE TEXT — that the literal 'video/mp4' appeared
     // before 'webm' in it. That asserts nothing about behaviour, breaks on any refactor,
@@ -1223,6 +1244,50 @@ ok('...and the file it writes is the thing that was on the screen', scope.filedB
    JSON.stringify(scope.named));
 ok('...with the transport actually up when it was pressed', scope.transportShown === true,
    'the button marks the document and ends the viewing; the recording happens in watchReplayFile\'s finally');
+
+// ⚠️ **AND THE HQ BUTTON'S FLAG HAS TO REACH THE EXPORTER ON THE REAL PATH.**
+// `tests/fastexport.mjs` measures what `hq` DOES — exactly twice the blocks at the same
+// duration — by calling `repFastExport` itself. What no probe there can see is the wiring:
+// the transport's two buttons differ by one argument threaded through `repFilmNow` →
+// `_repFilmHq` → `watchReplayFile`'s `finally` → `recordAndShareClip` → `repFastExport`,
+// four hops away from the click, and a build that dropped it would write the ordinary file
+// from the HQ button with every other check green.
+// ⚠️ **Measured as BYTES of the same document filmed both ways, in the same run** — not
+// against a constant, because how big a four-second export is depends on the court, the
+// window and the codec the browser picked. Twice the frames measured 1.62–1.85x the bytes,
+// so the bar is "clearly larger", and the pair is what makes it a measurement: an HQ button
+// that silently did nothing reads as 1.00x.
+const hqwire = await vpage.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  const realClick = HTMLAnchorElement.prototype.click, sizes = [];
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  HTMLAnchorElement.prototype.click = async function(){
+    if (!this.download) return;
+    try { sizes.push((await (await fetch(this.href)).blob()).size); } catch { sizes.push(0); }
+  };
+  try {
+    M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.autoReplay=false;
+    M.setMatchSeed(23); M.startMatch();
+    { const w = M.world; w.state='play'; w.stateT=2; for (let i=0;i<240;i++) M.step(w);
+      M.endMatch(w); M.finishMatch(w); }
+    const doc = M.repMatchFileBuild();
+    o.docFps = doc && doc.fps;
+    for (const id of ['repVidBtn', 'repVidHqBtn']){
+      const done = M.watchReplayFile(null, () => doc);
+      const ctl = document.getElementById('repCtl');
+      for (let i=0;i<400 && ctl.classList.contains('hidden'); i++) await wait(25);
+      document.getElementById(id).click();
+      await done;
+      for (let i=0;i<200 && sizes.length < (id==='repVidBtn'?1:2); i++) await wait(25);
+    }
+  } finally { HTMLAnchorElement.prototype.click = realClick; }
+  o.sizes = sizes;
+  o.ratio = sizes.length === 2 && sizes[0] ? +(sizes[1]/sizes[0]).toFixed(2) : null;
+  return o;
+});
+
+ok('the HQ button really writes the bigger file', hqwire.ratio != null && hqwire.ratio > 1.25,
+   `${JSON.stringify(hqwire.sizes)} bytes from a ${hqwire.docFps}fps document, ratio ${hqwire.ratio} — the flag runs four hops from the click, and a build that dropped it writes the ordinary file with every other check green`);
 
 ok('a replay is DRAWN BETWEEN its frames', tween.drawsBetween,
    `${tween.distinct} distinct ball positions from a ${tween.recorded}-frame recording — a stepping build cannot exceed its own frame count, and a match replay is sampled at 30Hz and halves past the cap`);

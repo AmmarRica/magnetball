@@ -2155,11 +2155,33 @@ three lines a second time, name it.
   that took a lot of measuring to settle; a second copy is the duplication rule with the usual
   ending. The two skins differ by one boolean.
   ⚠️ **THE PALETTE IS DERIVED, NOT COPIED**: `THEMES.kickink = { ...THEMES.kickabout, name,
-  emoji }`. Thirty-odd colours written out again would drift the first time either was retuned,
+  emoji }`, WITH A TURF OF ITS OWN. Thirty-odd colours written out again would drift the first time either was retuned,
   and `ui`/`pitch` are deliberately SHARED rather than cloned — nothing mutates a `THEMES`
   palette, which is exactly why `paintedPitch` returns a copy.
   ⚠️ **A NEW KEY NEEDS NO FOLD.** `normalizeLook` exists for keys that MOVED; nothing has ever
   stored this one.
+  ⚠️ **AND IT NEEDED A PITCH OF ITS OWN, WHICH A CHECK CAUGHT RATHER THAN TASTE.** It shipped
+  as the Sunday League palette verbatim with a different name and `tests/themetiles.mjs`'
+  `allDistinct` went red: the Background pane paints one tile per `THEMES` key **from the
+  palette alone**, so two keys with identical colours are two tiles a player cannot tell
+  apart — and in THAT pane they really are the same thing, because there a palette IS its
+  colours. `bundleSlots` hard-codes `palette: k`, so a bundle cannot borrow another theme's
+  colours without a structural change; the honest answer is that a second theme should look
+  like one. ONLY THE TURF MOVES — the kits, the markings, the ball, the goal frame and the
+  whole `ui` block are Sunday League's — and white on `#4f8f4a` measures **3.92:1**, well over
+  the 2.5 `paintedPitch` uses to decide a marking has vanished into the court.
+  ⚠️ **AND THE BUNDLE TILE FOUND A SHIPPED DEFECT ON THE WAY.** The two bundle swatches
+  differed by **44 of 4096 pixels**, because `drawBundleSwatch` bakes into `swatchFixed` —
+  the cache that is NEVER dropped — and the limb plates load asynchronously, so a tile baked
+  before they land shows the drawn fallback for the rest of the session. Sunday League's own
+  tile has therefore been showing the wrong limbs whenever the Theme card was opened quickly;
+  harmless while it was the only footballer theme, and two indistinguishable tiles the moment
+  there were two. Readiness is in the cache KEY now (`klimbReady()`), so it re-bakes once when
+  the art arrives. ⚠️ And the swatch draws its bodies MID-STRIDE rather than at rest —
+  `gaitSwing` returns the standing pose without a gait and a velocity, which for a footballer
+  is the frame where the legs are tucked under the shirt and there is least to see. Fixed
+  numbers, never a clock: a swatch is baked once and must be the same every time. Together:
+  **44 → 299** pixels at 64px, **234 → 1503** at 160.
   ⚠️ **THE DISCRIMINATOR IS THE PACK'S OUTLINE TONE, not a pixel count.** Two drawings always
   differ; what says WHICH is which is that Kenney's plates draw every band's outline at
   `KLIMB.shade` and a stroke does not — measured **9 against 257**, the same instrument the
@@ -4533,6 +4555,39 @@ three lines a second time, name it.
   `change` alone re-fires for a value the drag had just previewed — measured 16ms apart,
   which cuts the one you can feel short with an identical one. So `change` fires only where
   the throttle swallowed the last step, which is most of the time.
+  ⚠️ **AND WHEN IT HAS SOMETHING TO SAY INSIDE THE WINDOW IT WAITS RATHER THAN CUTTING IN**
+  (`rmHold`). Firing outright broke the very rule the throttle exists for, and the check
+  said so: gaps of **[238, 63]** and **[234, 34]** against a 200ms pulse — a release landing
+  34ms after a preview replaces it with a stub. **It needs no slow machine to reach**: drag
+  slowly, steps 150ms apart, and the last step is swallowed while the release is 10ms behind
+  it. Skipping it instead is worse — a fast flick from 20 to 90 fires ONE preview at 20 and
+  you never feel where you landed, which is the whole point of the release — so it is
+  deferred to the end of the window, at most 220ms, and reads the slider at FIRE time so it
+  previews the value actually landed on. Both alternatives are caught sabotages.
+  ⚠️ **IT SURFACED AS A POOL FLAKE AND WAS NOT ONE.** `tests/history.mjs` failed twice in a
+  147-suite run and passed 4/4 alone, which is the shape of every wall-clock race this file
+  records — the remedy for those is `TIMING` in `tests/run.mjs`. Run deliberately against
+  four heavy suites it failed **2 of 3**, with the gaps above naming a real defect. Rule 5:
+  the number is the evidence. A suite that only fails under load is a suspect, not a verdict.
+  ⚠️ **AND THE FIXTURE HAD ITS OWN FOUR DEFECTS, every one found by a sabotage that PASSED.**
+  (a) Its wait after `change` was **120ms**, which counts a deferred release on a fast
+  machine and misses it on a loaded one. (b) The lowest-step probe reset its recorder *after*
+  the `input` and read only the `change` — which fires solely when the value is NEW, so the
+  moment the preceding wait grew past the throttle window the input previewed it first, the
+  release had nothing to say, and a perfectly good build reported **0**; the claim is that a
+  5% dial previews above the floor, not which handler said so. (c) **THE FAST DRAG CANNOT SEE
+  THIS AT ALL** — at 15ms a step every step inside the window is swallowed and the release
+  lands a long way after the last fire, so both sabotages went through untouched; a
+  deliberately slow drag (120ms a step, what a person does) is what makes it reachable with
+  no contention. (d) That slow drag then had to be got right TWICE: with FIVE steps the last
+  one fires, so the release has nothing new to say and returns (**[241, 242]**, `slowCut` 0
+  on the sabotaged build), and sleeping once more *after* the last step puts the release a
+  whole window past the last fire (**[241, 245]**, 0 again). Four steps with `change`
+  dispatched immediately — which is what a pointerup does — reads **[245, 121]** broken
+  against **[241, 222]** fixed.
+  ⚠️ **AND SKIPPING THE RELEASE CUTS NOTHING SHORT, so no gap check can see it.** That arm is
+  caught by the MAGNITUDE of the last preview instead: the dial scales it, so the last one
+  names the value it fired for — **0.30 for a slider left at 35%** on the skipped build.
   ⚠️ Every CONNECTED pad, not every seated one: the person setting this is holding a
   controller and may not be in a seat, and there may be no match at all.
   ⚠️ `tests/history.mjs` drives the REAL `input`/`change` events on the REAL element — the
@@ -5182,6 +5237,73 @@ three lines a second time, name it.
   with `elementFromPoint`, never `.click()`, which does no hit testing and passes over a
   control nothing can reach. `tests/filmrec.mjs`, on a PHONE viewport — where it was
   reported, and where a stray tap is likeliest.
+  ⚠️ **EVERY VIDEO EXPORT LIVES IN THE REPLAY VIEW, AND THE RESULT SCREEN CARRIES THE WAYS
+  IN** (`renderAwards`, `#repVidBtn`, `#repVidHqBtn`). Asked for as *"post game has a lot of
+  download of replay options — have all the exports of videos be in the replay view"*, and it
+  was five buttons: Replay, Save clip, Save match video, Save goal replay, Save match replay.
+  Two of them filmed a video by playing the whole thing back, which the transport's own Video
+  button already does for **whatever you are watching** — so they were a second door onto it.
+  ⚠️ **THE MATCH NEEDED A DOOR OR THE CHANGE WOULD HAVE HIDDEN ITS VIDEO.** `🎬 Replay` only
+  ever opened the GOAL, so removing the match-video button left no route from here to a match
+  replay at all — a feature nobody can reach is a feature that does not exist. It is
+  `🎬 Watch goal` and `🎬 Watch match` now, both through `watchReplayFile` with
+  `controls:true`, which is what puts the exports in front of you. The two replay-FILE saves
+  stay: a `.json` is not a video and it is the thing you keep.
+  ⚠️ `tests/replayfile.mjs`' *"Save clip IS on the result screen"* is REVERSED rather than
+  deleted, and paired with both doors being present and the transport carrying both buttons —
+  moving an export off a screen is only right if it turns up somewhere.
+  ⚠️ **`saveClip` AND `saveMatchClip` NOW HAVE NO UI CALLER AT ALL, and that is written down
+  rather than tidied away.** Both are thin wrappers over `recordAndShareClip` — pick a
+  document, hand it over — and the transport does the same thing with the document it is
+  watching, so nothing is lost; but three suites drive them as the harness for the OFFLINE
+  ENCODER (`tests/fastexport.mjs`' whole speed-and-length claim is measured through
+  `saveMatchClip`), which is the *drive the real path* rule pointing the other way. What
+  closes it is `tests/replayfile.mjs`' HQ block: it presses the REAL `#repVidHqBtn`, waits on
+  the real `watchReplayFile` promise and weighs the file that lands against the same document
+  filmed by `#repVidBtn` in the same run. The flag runs four hops from the click
+  (`repFilmNow` → `_repFilmHq` → the `finally` → `recordAndShareClip` → `repFastExport`) and
+  a build that dropped any of them writes the ordinary file with every `fastexport` check
+  still green. ⚠️ `#clipBtn`'s guarded handler is dead markup-wise and has been since Save
+  clip moved to the result screen; it is left exactly as it is, with its own comment, because
+  an unguarded `$(id).onclick` there once threw during the bootstrap and took the rest of the
+  wiring with it.
+  ⚠️ **HIGH QUALITY IS ONE VIDEO FRAME PER SIM STEP, AND IT IS AN INTERPOLATION RATHER THAN A
+  BIGGER RECORDING** (`repFastExport`'s `hq`, `sub`). A whole match is captured at 30Hz
+  (`REPMATCH.every`), so the frames for a 60fps video do not exist and no export can conjure
+  them — but the replay has ALWAYS drawn between its frames (`repTween`, the drill-ghost
+  argument: stepping a sparse recording is what reads as a stutter). High quality asks for
+  those in-between frames on the way out.
+  ⚠️ **A GOAL REPLAY IS ALREADY 1:1**, captured every frame, so `sub` comes out **1** there
+  and high quality costs nothing and changes nothing. The rate is what it AIMS AT, never a
+  multiplier — and *"it doubles"* is otherwise equally true of a build that blindly doubles
+  whatever it is handed, which is a caught sabotage.
+  ⚠️ **THE REAL-TIME PATH WAS ALREADY 1:1 AND TAKES NO FLAG**: `MediaRecorder` films the
+  canvas at its rAF rate while `playReplayFile` interpolates, so it has always written 60fps.
+  This is the OFFLINE encoder catching up with it.
+  ⚠️ **MEASURED**: a 30fps match export goes **117 → 234 blocks, exactly twice**, at the SAME
+  duration (3.90s both), and costs **1.94× the wall clock and 1.62–1.85× the bytes**. The
+  claim is the frame count AT THE SAME LENGTH, because twice the frames at twice the length
+  is just a longer video played slowly — and the duration is read back from the decoder,
+  since the block count alone cannot tell those apart.
+  ⚠️ **THOSE COUNTS ARE A CORRECTION: THIS ENTRY SAID "1193 → 2299 (1.93×)" AND THAT WAS THE
+  INSTRUMENT, NOT THE FILE.** The first probe counted every `0xa3` byte in the blob — the
+  SimpleBlock id, and also an ordinary byte of compressed payload — so it was really
+  measuring FILE SIZE, and on a later run it read **1295 against 2231, a ratio of 1.72**,
+  under its own 1.8 floor on a build with nothing wrong with it. Rule 5 says a threshold
+  moved to make a check pass is a defect report; here the defect was the metric. The suite
+  walks the container with the EBML reader it already had — now ONE source string with two
+  readers rather than a second copy — and the numbers are exact integers with no ratio bar
+  at all.
+  ⚠️ **AND THE NO-OP ARM WAS SILENTLY TRUE, which is how `sub = hq ? 2 : 1` got through.**
+  *"High quality changes nothing for a document already at 60"* was read off
+  `repFileBuild()`, which is **null until a goal has been frozen**, and the check fell back
+  to `true` when it was. It is handed the match document with `fps` relabelled 60 now, so
+  the arm always runs and the two exports must be block-for-block equal.
+  ⚠️ **`repTween` IS FED THE RECORDED RATE, NOT THE OUTPUT ONE.** Its last argument scales the
+  per-step velocity it derives, and the recorded pair either side is `60/base` steps apart
+  however many video frames are drawn between them — so passing the output rate hands every
+  body a velocity off by `sub`. The single-frame version had the same latent bug through
+  `speed`, and it is fixed in passing.
   ⚠️ **AND IT DOES NOT PLAY THE MATCH OUT TO SAVE IT** (`webmMux`, `repFastExport`,
   `repFastPick`, `repFastPossible`, `FASTCODECS`, `WEBM`). Asked for as *"I don't want to
   watch the video to get it saved — press the button and have the file start downloading"*,

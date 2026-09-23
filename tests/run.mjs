@@ -55,7 +55,12 @@ const filter = process.argv[2] || '';
 // measures a DELIBERATE 130ms send delay against the wall clock, requiring the pair to
 // advance under 120 frames where 60Hz would give ~168. A busy pool starves the rAF loops
 // on its own and the margin between "the gate held it back" and "the machine did" closes.
-const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape', 'netmatch', 'netlock']);
+// ⚠️ `fastexport` joins them: it DECODES the files it writes and SEEKS inside them, and a
+// seek under contention can land on the same frame twice — which is what `picturePlays`
+// reads. Measured alone it has a 10x margin (movingPx 4940 against a bar of 500) and it went
+// red once in a busy pool; it is `clipshape`'s case, one layer along, and it now writes four
+// more files per run for the high-quality export.
+const TIMING = new Set(['ball3d', 'replayfile', 'updatecheck', 'swatchcache', 'clipshape', 'netmatch', 'netlock', 'fastexport']);
 
 const all = readdirSync(here)
   .filter(f => f.endsWith('.mjs') && f !== 'run.mjs' && !f.startsWith('_'))   // _ = shared helper

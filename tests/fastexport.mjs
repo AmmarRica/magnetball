@@ -226,10 +226,14 @@ const clusters = await p.evaluate(async () => {
   const blob = M.webmMux(frames, { cid:'V_VP9', width:2, height:2, frameMs: 1000/30 });
   return Array.from(new Uint8Array(await blob.arrayBuffer()));
 });
-{
-  const buf = Uint8Array.from(clusters);
-  const dv = new DataView(buf.buffer);
-  // A minimal EBML reader: enough to walk into clusters and read every block's offset.
+// ⚠️ **ONE WALKER, TWO READERS.** This block reads bytes handed back to Node; the high
+// quality block below reads a blob that never leaves the page. A second copy is the
+// duplication this repo keeps recording, so the reader is a source string both sides
+// build from — and the HQ block is where a byte-COUNTING proxy gave a wrong answer once
+// (see below), which is exactly why it has to use the real thing.
+const EBML_SRC = `(bytes) => {
+  const buf = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const vlen = (b) => { for (let i=0;i<8;i++) if (b & (0x80 >> i)) return i+1; return 8; };
   const readId = (at) => { const n = vlen(buf[at]); let v = 0;
     for (let i=0;i<n;i++) v = v*256 + buf[at+i]; return { v, n }; };
@@ -240,10 +244,10 @@ const clusters = await p.evaluate(async () => {
     while (at < end - 1){
       const id = readId(at), sz = readSz(at + id.n);
       const body = at + id.n + sz.n, next = body + sz.v;
-      if (id.v === 0x18538067) walk(body, next, false);            // Segment
+      if (id.v === 0x18538067) walk(body, next, false);
       else if (id.v === 0x1F43B675){ nClusters++; walk(body, next, true); }
-      else if (id.v === 0xA3 && inCluster){                        // SimpleBlock
-        const rel = dv.getInt16(body + 1);                         // after the track vint
+      else if (id.v === 0xA3 && inCluster){
+        const rel = dv.getInt16(body + 1);
         blocks++;
         if (rel < 0) bad++;
         if (Math.abs(rel) > Math.abs(worst)) worst = rel;
@@ -252,12 +256,86 @@ const clusters = await p.evaluate(async () => {
     }
   };
   walk(0, buf.length, false);
-  o.mux = { clusters: nClusters, blocks, worstRel: worst, negativeRel: bad };
+  return { clusters: nClusters, blocks, worst, bad };
+}`;
+{
+  const ebml = eval(EBML_SRC);
+  const r = ebml(Uint8Array.from(clusters));
+  o.mux = { clusters: r.clusters, blocks: r.blocks, worstRel: r.worst, negativeRel: r.bad };
   // Every block must sit inside the signed range, and none may have wrapped negative.
-  o.blocksInRange = blocks === 1800 && Math.abs(worst) <= 32767 && bad === 0;
+  o.blocksInRange = r.blocks === 1800 && Math.abs(r.worst) <= 32767 && r.bad === 0;
   // ...and that is only true because the muxer opened more than one cluster for a minute.
-  o.splitsClusters = nClusters > 1;
+  o.splitsClusters = r.clusters > 1;
 }
+
+// ---- HIGH QUALITY: ONE VIDEO FRAME PER SIM STEP -----------------------------------------
+// A whole match is recorded at 30Hz, so an ordinary export writes 30fps. High quality asks
+// the replay for the frames BETWEEN the recorded ones — which `repTween` has always drawn
+// — and writes 60, one per sim step.
+// ⚠️ **THE CLAIM IS THE FRAME COUNT AT THE SAME DURATION**, and either half alone is
+// vacuous: twice the frames at twice the length is just a longer video played slowly, and
+// the same length with the same frames is the file that was already being written. Read off
+// the muxer's OWN BYTES with the EBML scanner this suite already has, because a browser's
+// demuxer reports the duration from the Info element — which is written explicitly — and
+// would agree with a file that never gained a frame.
+// ⚠️ Paired with a document ALREADY AT 60, which is what a goal replay is: there `sub`
+// comes out 1 and high quality must change NOTHING. "It doubles" is otherwise equally true
+// of a build that blindly doubles whatever it is given — and that sabotage (`sub = hq ? 2
+// : 1`) went through, because the no-op arm was reading `repFileBuild()`, which is **null
+// until a goal has been frozen**, and the check then fell back to `true`. It is fed the
+// match document with `fps` relabelled 60 now, so the arm always runs.
+// ⚠️ **AND THE FRAME COUNT IS WALKED, NEVER COUNTED AS BYTES.** The first version counted
+// every 0xa3 in the file — the SimpleBlock id, and also an ordinary payload byte — so it
+// was really measuring FILE SIZE: 1295 against 2231 for 117 frames against 234, a ratio of
+// 1.72 that drifted under its own 1.8 bar on a perfectly good build. Walked properly it is
+// exactly 117 and 234. A proxy that tracks the wrong quantity is worse than no check.
+Object.assign(o, await p.evaluate(async (src) => {
+  const M = window.__magnet, r = {};
+  const ebml = eval(src);
+  const doc = M.repMatchFileBuild();
+  if (!doc) return { hqRan: false };
+  const blocks = async (blob) => ebml(new Uint8Array(await blob.arrayBuffer())).blocks;
+  const n1 = await M.repFastExport(doc, 1, null, false);
+  const n2 = await M.repFastExport(doc, 1, null, true);
+  if (!n1 || !n2) return { hqRan: false };
+  r.hqRan = true;
+  r.recordedFps = doc.fps;
+  r.recordedFrames = doc.frames.length;
+  r.normalBlocks = await blocks(n1.blob);
+  r.hqBlocks = await blocks(n2.blob);
+  r.hqBytesRatio = +(n2.blob.size / n1.blob.size).toFixed(2);
+  // ⚠️ **AND THE LENGTH READ BACK, because twice the frames at twice the length is just a
+  // longer video played slowly.** The frame count alone cannot tell those apart.
+  const dur = (blob) => new Promise(res => {
+    const v = document.createElement('video'); v.preload = 'metadata';
+    v.onloadedmetadata = () => res(+v.duration.toFixed(2));
+    v.onerror = () => res(null);
+    v.src = URL.createObjectURL(blob);
+  });
+  r.normalSecs = await dur(n1.blob);
+  r.hqSecs = await dur(n2.blob);
+  r.contentSecs = +(doc.frames.length / doc.fps).toFixed(2);
+  // a GOAL replay is already 1:1 — high quality must be a no-op there
+  const g = { ...doc, fps: 60 };
+  const g1 = await M.repFastExport(g, 1, null, false);
+  const g2 = await M.repFastExport(g, 1, null, true);
+  r.goalFps = g.fps;
+  r.goalNormalBlocks = g1 ? await blocks(g1.blob) : null;
+  r.goalHqBlocks = g2 ? await blocks(g2.blob) : null;
+  return r;
+}, EBML_SRC));
+// The recorded document is 30Hz, so an ordinary export is one block per recorded frame and
+// high quality is one per sim step: EXACTLY twice, derived from the document rather than
+// written out, so a differently-long match cannot make this vacuous.
+o.hqDoublesTheFrames = !o.hqRan ? false
+  : o.normalBlocks === o.recordedFrames
+    && o.hqBlocks === o.recordedFrames * Math.round(60 / o.recordedFps);
+o.hqKeepsTheLength = !o.hqRan ? false
+  : (o.normalSecs != null && o.hqSecs != null
+     && Math.abs(o.hqSecs - o.normalSecs) < 0.2
+     && Math.abs(o.hqSecs - o.contentSecs) < 0.3);
+o.hqIsANoOpOnAGoal = !!o.hqRan && o.goalNormalBlocks != null
+  && o.goalNormalBlocks === o.goalHqBlocks;
 
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
@@ -270,6 +348,7 @@ const ok = o.possible === false ? errors.length === 0 : (
            o.stopStops && o.stopSaysSo && o.barHiddenAfter && o.clean &&
            o.vintReserves127 && o.vintReserves16383 && o.vintNeverAllOnes &&
            o.vintSpillsInAFile && o.blocksInRange && o.splitsClusters &&
+           o.hqDoublesTheFrames && o.hqKeepsTheLength && o.hqIsANoOpOnAGoal &&
            errors.length === 0);
 if(!ok) console.log('FAILED:', Object.entries(o).filter(([k,v])=>v===false).map(([k])=>k));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');

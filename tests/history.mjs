@@ -262,24 +262,70 @@ const r = await p.evaluate(async () => {
         await new Promise(x => setTimeout(x, 15));         // what a real drag samples at
       }
       el.dispatchEvent(new Event('change', { bubbles:true }));
-      await new Promise(x => setTimeout(x, 120));
+      // ⚠️ Long enough to cover a DEFERRED release. A release landing inside the throttle
+      // window now waits it out rather than cutting the running pulse short, so the last
+      // preview can arrive up to `previewGap` after the change plus its own 200ms — a 120ms
+      // wait counted it on a fast machine and missed it on a loaded one, which is a fixture
+      // that measures the host rather than the game.
+      await new Promise(x => setTimeout(x, 420));
       return got.map(g => ({ dt: g.t, ms: g.duration,
                              s: +g.strongMagnitude.toFixed(4), w: +g.weakMagnitude.toFixed(4) }));
     };
     const run = await drag(20, 90);
     const gaps = run.slice(1).map((g, i) => Math.round(g.dt - run[i].dt));
+    // ⚠️ **AND A DELIBERATELY SLOW DRAG, because the fast one CANNOT SEE the defect.** At
+    // 15ms a step every step inside the window is swallowed and the release lands a long
+    // way after the last fire, so a release that cuts in never actually cuts anything —
+    // both sabotages of the deferral (fire outright; skip entirely) went through a fast
+    // drag untouched, and the real defect only showed up when a loaded pool stretched the
+    // steps. A step every 120ms is what a person dragging slowly does: one fires, the next
+    // is swallowed, and the release is a few ms behind it — INSIDE the window with a new
+    // value to say, which is the whole case. Deterministic, no contention needed.
+    // ⚠️ **FOUR STEPS, AN EVEN NUMBER, AND THAT IS THE WHOLE CASE.** At 120ms a step the
+    // throttle passes every other one, so with FIVE the last step fires, the release has
+    // nothing new to say and returns — measured on the sabotaged build as gaps [241, 242]
+    // and `slowCut` 0, a probe sailing past the defect it exists for. With four the last
+    // step is SWALLOWED, so the release carries a value no pad has felt and lands ~125ms
+    // after the previous fire: inside the window, which is the case.
+    const slow = [];
+    { got.length = 0;
+      for (let v = 20; v <= 35; v += 5){
+        if (v > 20) await new Promise(x => setTimeout(x, 120));
+        el.value = v; el.dispatchEvent(new Event('input', { bubbles:true }));
+      }
+      // ⚠️ **IMMEDIATELY, as a real release does.** The wait belongs BETWEEN the steps, not
+      // after the last one: sleeping once more before `change` puts the release a full
+      // window past the last fire, so it is outside it and nothing can be cut short —
+      // measured on the sabotaged build as [241, 245] and `slowCut` 0, the probe missing
+      // its own defect for the second time. A pointerup follows the last input by a frame.
+      el.dispatchEvent(new Event('change', { bubbles:true }));
+      await new Promise(x => setTimeout(x, 420));
+      for (const g of got) slow.push({ dt: g.t, ms: g.duration, s: +g.strongMagnitude.toFixed(4) }); }
+    const slowGaps = slow.slice(1).map((g, i) => Math.round(g.dt - slow[i].dt));
     // Dial 0 has nothing to preview.
     el.value = 0; el.dispatchEvent(new Event('input', { bubbles:true }));
     const atZero = await drag(0, 0);
     // The lowest step the slider can select must still clear the table's own feel floor.
-    el.value = 5; el.dispatchEvent(new Event('input', { bubbles:true }));
+    // ⚠️ **CAPTURED FROM WHICHEVER HANDLER PREVIEWS IT, and reading only the release was a
+    // fixture that depended on its own earlier timing.** It reset `got` after the `input`
+    // and read the `change` — which only fires when the value is NEW, so the moment the
+    // preceding wait grew past the throttle window the input previewed it first, the
+    // release had nothing to say, and a perfectly good build reported **0**. The claim is
+    // that a 5% dial previews above the floor, not which of the two said so.
+    el.value = 5; got.length = 0; el.dispatchEvent(new Event('input', { bubbles:true }));
     await new Promise(x => setTimeout(x, 260));
-    got.length = 0; el.dispatchEvent(new Event('change', { bubbles:true }));
-    await new Promise(x => setTimeout(x, 80));
+    el.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(x => setTimeout(x, 300));
     const atFive = got.slice();
     navigator.getGamepads = was; M.padForgetAll && M.padForgetAll();
     M.sel.rumble = 70; M.saveSel();
     return { n: run.length, gaps, ms: run.length ? run[0].ms : 0,
+             slowN: slow.length, slowGaps,
+             slowCut: slowGaps.filter(g => g < (slow.length ? slow[0].ms : 0)).length,
+             // ⚠️ The magnitude is the dial, so the LAST preview names the value it was
+             // fired for. Skipping the release entirely cuts nothing short and is caught
+             // only here: you are left feeling the step BEFORE the one you landed on.
+             slowEnd: 35, slowLastS: slow.length ? slow[slow.length-1].s : 0,
              firstS: run.length ? run[0].s : 0, lastS: run.length ? run[run.length-1].s : 0,
              cutShort: gaps.filter(g => g < (run.length ? run[0].ms : 0)).length,
              zeroFired: atZero.length,
@@ -373,6 +419,15 @@ ok('no pad, no throw', r.safeWithoutHardware === true, String(r.safeWithoutHardw
   // ⚠️ THE LOAD-BEARING ONE. `playEffect` replaces rather than queues, so an effect
   // started before the last one finished is the last one CUT SHORT. On the shipped build
   // this read 14 of 15 at 16-17ms apart against a 90ms ask.
+  ok('...and the value you LAND on is the one you feel', Math.abs((P.slowLastS||0) - (P.slowEnd||0)/100) < 0.005,
+     `the last preview of a slow drag was ${P.slowLastS} for a dial left at ${P.slowEnd}% — skipping a release ` +
+     'that lands inside the window cuts nothing short and passes every gap check, and leaves you feeling the ' +
+     'step BEFORE the one you stopped on; a flick from 20 to 90 would preview 20 and never 90');
+  ok('...and a SLOW drag\'s release waits the window out', P.slowCut === 0 && P.slowN >= 2,
+     `${P.slowCut} of ${P.slowN} previews cut short on a 120ms-a-step drag (gaps ${JSON.stringify(P.slowGaps)}) — ` +
+     'the release lands a few ms after a swallowed step, INSIDE the window with a new value to say; firing ' +
+     'outright replaces the running pulse with a stub, and skipping it means a flick from 20 to 90 never ' +
+     'previews where it landed. The fast drag above cannot see either, which is why this one exists');
   ok('...and no preview is cut short by the next', P.cutShort === 0,
      `${P.cutShort} of ${P.n} previews were replaced before their ${P.ms}ms was up (gaps ` +
      `${JSON.stringify(P.gaps)}) — what the pad renders is stubs, never the pulse it was asked for`);
