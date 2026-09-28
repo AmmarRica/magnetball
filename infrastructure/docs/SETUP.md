@@ -4,6 +4,8 @@ Step-by-step, from a fresh Azure account to the first deploy. Steps 1 to 5 are d
 your own machine, and are the only part that needs your Azure login. After that a push to
 `main` deploys everything through `.github/workflows/azure.yml`.
 
+Prefer not to type them? `infrastructure/setup.ipynb` is these same steps as a Jupyter notebook you run top to bottom; it keeps the one secret off the screen and, with the GitHub CLI installed, stores it in the repo and starts the deploy for you.
+
 Commands are for PowerShell on Windows. On macOS or Linux they are the same words in bash,
 with a backslash instead of the backtick to continue a line.
 
