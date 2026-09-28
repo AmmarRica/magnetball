@@ -28,13 +28,14 @@
 //
 // ⚠️ AND THE DETECTOR IS ITSELF CONTROLLED, in the same run, against a locally rendered
 // captioned frame — "no caption found" is equally true of a detector that can never find one.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, withoutMp4Init } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 // A phone, because that is where it was reported and where `VideoEncoder` decides it.
 const p = await b.newPage({ viewport:{width:420,height:860}, hasTouch:true, isMobile:true });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
 p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
+await p.addInitScript(withoutMp4Init);
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
 
@@ -104,11 +105,15 @@ const o = await p.evaluate(async ()=>{
     return r;
   };
 
-  // 1) NO MP4 ON OFFER (this browser): the fast path runs and the file says what it is.
+  // 1) NO MP4 ON OFFER: the fast path runs and the file says what it is.
   //    ⚠️ This is not the happy case — it is the case where the speed is free, because
   //    the real-time recorder could only have produced a WebM too.
+  //    ⚠️ MP4 is TAKEN AWAY rather than assumed absent (`__withoutMp4`, `_browser.mjs`):
+  //    Chrome for Testing 151 has an H.264 recorder, so on it this block filmed a real-time
+  //    `.mp4` and read "Recording" — the shipped rule working, reported as a failure.
   {
-    const r = await film(doc);
+    const r = await window.__withoutMp4(() => film(doc));
+    o.noMp4_stubApplied = window.__withoutMp4.applied === true;
     o.noMp4_ranEncoder = r.word === 'Encoding';
     o.noMp4_isWebm     = /\.webm$/.test(r.name || '');
     o.noMp4_saysWebm   = /webm/i.test(r.why || '');
@@ -208,6 +213,7 @@ const checks = {
   instrumentHasAFloor:  o.noiseFloor < o.captionInk * 0.3,
   detectorSeesCaption:  o.detectorSeesCaption === true,
   detectorSeesNone:     o.detectorSeesNone === false,
+  noMp4_stubApplied:    o.noMp4_stubApplied === true,
   noMp4_ranEncoder:     o.noMp4_ranEncoder === true,
   noMp4_isWebm:         o.noMp4_isWebm === true,
   noMp4_saysWebm:       o.noMp4_saysWebm === true,

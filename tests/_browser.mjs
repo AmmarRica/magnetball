@@ -44,6 +44,35 @@ export const LAUNCH = {
   ...(FALLBACK ? { executablePath: FALLBACK } : {}),
 };
 
+// ⚠️ **A SUITE ABOUT WHICH CODEC AN EXPORT PICKS HAS TO SAY WHICH CODECS IT RUNS UNDER.**
+// `recordAndShareClip` builds a MediaRecorder first and runs the offline `VideoEncoder`
+// path only where that recorder cannot produce an MP4 — so every claim about the fast
+// path, the HQ export and the "no MP4 on offer" arm is a claim about a browser WITHOUT
+// H.264. The suites were written on Playwright's chromium-1194 (Chrome 141), which has
+// none, and assumed it. Chrome for Testing 151 (Playwright 1.62.1) HAS an H.264
+// MediaRecorder, so on it the fast path stands down BY DESIGN and `clipfile`,
+// `fastexport` and `replayfile` all went red in CI while measuring nothing wrong —
+// the container outranking the speed is the shipped behaviour they exist to pin.
+// Measured on Chrome 151: `MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E')`
+// is true, and `saveMatchClip` wrote a 3-second match in real time as `.mp4`.
+//
+// So the no-MP4 arms take MP4 away EXPLICITLY, through this init script: `__withoutMp4(fn)`
+// runs `fn` with `MediaRecorder.isTypeSupported` refusing every mp4 type, which is the gate
+// `repMakeRecorder` consults BEFORE construction, and puts it back in a `finally`.
+// ⚠️ On Chrome 141 it is inert by construction — the only mp4 answer that browser gives is
+// the bare `video/mp4` carrying VP9, which `repBadMux` already refuses — so a sabotage
+// (dropping the wrap) can only be seen on a browser WITH H.264; verified on Chrome 151.
+// The FakeRec stand-in in `clipfile` replaces the whole class and is not touched by this.
+export const withoutMp4Init = () => {
+  window.__withoutMp4 = async (fn) => {
+    const MR = window.MediaRecorder;
+    const ITS = MR && MR.isTypeSupported;
+    window.__withoutMp4.applied = !!ITS;
+    if (ITS) MR.isTypeSupported = m => !/mp4/i.test(String(m)) && ITS.call(MR, m);
+    try { return await fn(); } finally { if (ITS) MR.isTypeSupported = ITS; }
+  };
+};
+
 // Opening the Leaderboard makes a real cross-origin fetch to a public Google
 // Sheet. The game handles an unreachable sheet correctly — it falls back to the
 // offline sample — but the BROWSER still logs the CORS refusal to the console,

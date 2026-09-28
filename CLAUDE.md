@@ -8864,6 +8864,32 @@ football at the shipped ball float, fixed by the dead-ball re-serve — see `KQD
 Neither bar was widened, and neither may be: each going red again means the thing it
 describes has REGRESSED. `tests/README.md` lists what each covers and the measurement
 traps that have produced false results here before — read it before writing a new one.
+⚠️ **CI PINS THE PLAYWRIGHT THE SUITES ARE MEASURED ON (1.56.1, chromium-1194 = Chrome
+141), AND A NEWER PIN TURNED CI RED FOR A MONTH ON NOTHING WRONG.** `.github/workflows/
+tests.yml` went to 1.62.1 (Chrome for Testing 151) on 2026-08-20; every suite written
+since was run locally on 141 and CI was ignored as red. Reproduced on CI's exact stack
+(`PLAYWRIGHT_MODULE` + `CHROME_PATH`, `tests/_browser.mjs`), two causes, neither a defect:
+(a) **Chrome 151 has an H.264 `MediaRecorder`** (`isTypeSupported('video/mp4;codecs=
+avc1.42E01E')` true) and Chrome 141 does not, so `recordAndShareClip` rightly filmed a
+real-time `.mp4` and the offline `VideoEncoder` path stood down — which is the shipped
+rule — while `clipfile`'s "no MP4 on this browser" arm, `fastexport`'s
+`fasterThanRealTime`/`barSaysEncoding` and `replayfile`'s HQ byte ratio (both buttons
+filmed in real time and no download landed inside the probe's wait) all assumed the
+browser had none. **A suite
+about which codec an export picks has to say which codecs it runs under**: the three
+take MP4 away explicitly now (`withoutMp4Init` → `window.__withoutMp4(fn)`, which makes
+`isTypeSupported` refuse mp4 — the gate `repMakeRecorder` consults before construction —
+and restores it in a `finally`), and each asserts the stub applied. On Chrome 141 the
+stub is **inert by construction** (its only mp4 answer is the bare type carrying VP9,
+which `repBadMux` refuses anyway), so dropping the wrap is a sabotage only Chrome 151
+can see; it was verified there. (b) **`botfoot`'s seeded ladder is a same-engine
+measurement**: the two-seed chain-of-passes share read Normal 31 / Rookie 19 on Chrome
+141 and **19 / 22 on Chrome 151**. The determinism bar this file records is
+same-engine reproducibility, so a browser bump is a different set of matches — bump the
+pin only with the local install, and re-read every seeded bot suite before believing a
+red one. The rule that came out of it: a suite that goes red only in CI is measured on
+CI's own browser before anything is widened (rule 5), and the pin and the local install
+are one number.
 
 Always: (1) render every new flag/eye/text/ball-look once to catch throwing draw fns, (2) re-verify
 ball containment on all fields after physics changes, (3) check the console for errors, (4) assert

@@ -13,12 +13,13 @@
 // ⚠️ THE LOAD-BEARING CHECK IS THE FILE'S OWN DURATION, not the wall clock. "It finished
 // quickly" is exactly what the broken MediaRecorder builds also did — they just produced a
 // video that was short. Fast AND correct length is the claim, and neither half alone is it.
-import { chromium, LAUNCH } from './_browser.mjs';
+import { chromium, LAUNCH, withoutMp4Init } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:420,height:860}, hasTouch:true, isMobile:true });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
 p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
+await p.addInitScript(withoutMp4Init);
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(600);
 
@@ -85,8 +86,12 @@ const o = await p.evaluate(async ()=>{
   };
 
   // 1) THE FAST PATH — press the button, get a file, far quicker than the match.
+  // ⚠️ With MP4 TAKEN AWAY (`__withoutMp4`, `_browser.mjs`): the fast path only runs
+  // where the recorder cannot write an MP4, and a browser with H.264 (Chrome for Testing
+  // 151, which CI ran for a while) films this in real time as `.mp4` — the shipped rule.
   const t0 = performance.now();
-  const fast = await grab(() => M.saveMatchClip(null));
+  const fast = await window.__withoutMp4(() => grab(() => M.saveMatchClip(null)));
+  o.stubApplied = window.__withoutMp4.applied === true;
   o.fastWall = +((performance.now()-t0)/1000).toFixed(2);
   o.fastWhy = fast.why; o.fastName = fast.name; o.fastBytes = fast.bytes;
   o.speedup = +(o.contentSecs / Math.max(0.01, o.fastWall)).toFixed(1);
@@ -157,7 +162,8 @@ const o = await p.evaluate(async ()=>{
     const doc3 = doc;
     const bar = document.getElementById('repRec');
     o.barHiddenBefore = bar.classList.contains('hidden');
-    const run = grab(() => M.recordAndShareClip(null, () => M.playReplayFile(doc3,1), 'match', doc3, 1));
+    // Same MP4 stand-down as block 1: an encode is what is being stopped here.
+    const run = window.__withoutMp4(() => grab(() => M.recordAndShareClip(null, () => M.playReplayFile(doc3,1), 'match', doc3, 1)));
     await wait(600);
     o.barShown = !bar.classList.contains('hidden');
     o.barText = document.getElementById('repRecText').textContent;
@@ -340,7 +346,7 @@ o.hqIsANoOpOnAGoal = !!o.hqRan && o.goalNormalBlocks != null
 console.log(JSON.stringify(o,null,2));
 console.log('ERRORS:', errors.length?errors.slice(0,5):'none');
 const ok = o.possible === false ? errors.length === 0 : (
-           o.fasterThanRealTime && o.saysSaved && o.rightLength && o.rightSize &&
+           o.stubApplied && o.fasterThanRealTime && o.saysSaved && o.rightLength && o.rightSize &&
            o.picturePlays && o.pictureInked &&
            o.fallbackEngaged && o.fallbackSaves && o.fallbackIsRealTime &&
            o.refusedPick && o.refusedSaves && o.refusedIsRealTime &&

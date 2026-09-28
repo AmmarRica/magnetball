@@ -27,14 +27,24 @@ jobs:
       # --no-package-lock keeps it that way — nothing is written but node_modules,
       # which is gitignored. The version is pinned here instead of in a lockfile so
       # a Playwright release can't turn a green suite red on its own.
+      #
+      # ⚠️ THE PIN IS THE BROWSER THE SUITES ARE MEASURED ON, not the newest Playwright.
+      # 1.56.1 ships chromium-1194 (Chrome 141), which is what every suite is written and
+      # run against locally. The pin sat at 1.62.1 (Chrome for Testing 151) for a month
+      # and CI was red the whole time for two reasons that were not defects: Chrome 151
+      # has an H.264 MediaRecorder, so the video suites' "no MP4 on this browser" arms
+      # measured the shipped stand-down instead (fixed in the suites — they take MP4 away
+      # explicitly now); and `botfoot`'s seeded ladder is a SAME-ENGINE measurement, which
+      # read Normal 19% against Rookie 22% on Chrome 151 and 31 / 19 on Chrome 141. Bump
+      # this only together with the local install, and re-run the seeded bot suites first.
       - name: Install Playwright
-        run: npm install --no-save --no-package-lock playwright@1.62.1
+        run: npm install --no-save --no-package-lock playwright@1.56.1
 
       - name: Cache browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-1.62.1-${{ runner.os }}
+          key: pw-1.56.1-${{ runner.os }}
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

@@ -24,7 +24,7 @@
 // rather than as an error anybody can read), and that playback puts the live world back
 // exactly as it found it — the loader swaps the global `world`, which is only safe
 // because `loop()` yields while a replay is active.
-import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
+import { chromium, LAUNCH, pinCasualFeel, withoutMp4Init } from './_browser.mjs';
 
 const b = await chromium.launch(LAUNCH);
 const fails = [], errors = [];
@@ -35,6 +35,7 @@ const page = async () => {
   p.on('pageerror', e => errors.push(e.message));
   p.on('console', m => { if (m.type()==='error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await p.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+  await p.addInitScript(withoutMp4Init);
   await p.goto('file://' + process.cwd() + '/index.html');
   await p.waitForTimeout(700);
   return p;
@@ -1272,20 +1273,30 @@ const hqwire = await vpage.evaluate(async () => {
       M.endMatch(w); M.finishMatch(w); }
     const doc = M.repMatchFileBuild();
     o.docFps = doc && doc.fps;
-    for (const id of ['repVidBtn', 'repVidHqBtn']){
-      const done = M.watchReplayFile(null, () => doc);
-      const ctl = document.getElementById('repCtl');
-      for (let i=0;i<400 && ctl.classList.contains('hidden'); i++) await wait(25);
-      document.getElementById(id).click();
-      await done;
-      for (let i=0;i<200 && sizes.length < (id==='repVidBtn'?1:2); i++) await wait(25);
-    }
+    // ⚠️ HIGH QUALITY IS AN OFFLINE-ENCODER FEATURE, and the encoder only runs where no
+    // MP4 was on offer — so MP4 is TAKEN AWAY here (`__withoutMp4`, `_browser.mjs`). On a
+    // browser with H.264 (Chrome for Testing 151) both buttons film in real time instead:
+    // measured with the wrap dropped, no download lands inside this probe's wait at all
+    // (sizes `[]`, ratio null) — red, on a build with nothing wrong.
+    await window.__withoutMp4(async () => {
+      for (const id of ['repVidBtn', 'repVidHqBtn']){
+        const done = M.watchReplayFile(null, () => doc);
+        const ctl = document.getElementById('repCtl');
+        for (let i=0;i<400 && ctl.classList.contains('hidden'); i++) await wait(25);
+        document.getElementById(id).click();
+        await done;
+        for (let i=0;i<200 && sizes.length < (id==='repVidBtn'?1:2); i++) await wait(25);
+      }
+    });
+    o.stubApplied = window.__withoutMp4.applied === true;
   } finally { HTMLAnchorElement.prototype.click = realClick; }
   o.sizes = sizes;
   o.ratio = sizes.length === 2 && sizes[0] ? +(sizes[1]/sizes[0]).toFixed(2) : null;
   return o;
 });
 
+ok('the HQ block took MP4 away before measuring', hqwire.stubApplied === true,
+   'without the stub a browser with H.264 films both buttons in real time — measured on Chrome 151: no download inside the wait, ratio null');
 ok('the HQ button really writes the bigger file', hqwire.ratio != null && hqwire.ratio > 1.25,
    `${JSON.stringify(hqwire.sizes)} bytes from a ${hqwire.docFps}fps document, ratio ${hqwire.ratio} — the flag runs four hops from the click, and a build that dropped it writes the ordinary file with every other check green`);
 
