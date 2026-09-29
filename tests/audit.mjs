@@ -39,6 +39,8 @@ const r = await p.evaluate(async ()=>{
     snd:'#sndMaster .opt', feel:'#feelSlidersBall input', names:'#seatNames',
     // Pitch-side ads: the switch, the rollover clock, the per-board toggles, your own line.
     adsOn:'#adsPick .opt', adEvery:'#feelSlidersAds input', adOff:'#adBoards .opt', adText:'#adText',
+    // Synergy links: the switch and its two dials, all in the Player pane.
+    synergy:'#synergyPick .opt', synReach:'#feelSlidersPlayer input', synForm:'#feelSlidersPlayer input',
   };
   // Sub-panes hide controls with display:none, and querySelectorAll still finds
   // those — so "the node exists" stopped being the same as "you can get to it".

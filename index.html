@@ -2375,6 +2375,10 @@
       <label class="field">One-handed</label>
       <div class="opts" id="oneHandPick"></div>
       <div class="hint" style="text-align:left; margin-top:4px">Letting go of the movement stick shoots, so you can play with one thumb. The KICK button keeps working either way.</div>
+      <div style="height:10px"></div>
+      <label class="field">Synergy links</label>
+      <div class="opts" id="synergyPick"></div>
+      <div class="hint" style="text-align:left; margin-top:4px">Two teammates who stop within reach of each other, with nobody from the other side on the line between them, are joined by a line after a moment &mdash; mainly across the pitch, the way a defensive line stands &mdash; and <b>the ball bounces off it</b>. Run off, or let an opponent walk onto the line, and it goes. Three players linked to each other fill in the zone between them. Bots from Normal up form lines too. <b>Synergy link reach</b> and <b>Synergy link forms in</b>, below, are the two dials.</div>
       <div id="feelSlidersPlayer"></div>
       </div>
 
@@ -3086,6 +3090,8 @@
    Hold to kick harder         "HOLD TO KICK HARDER"
    Bot types / strategies      "PLAYER TYPES AND TEAM STRATEGIES"
    Fireworks                   "FIREWORKS — only for the goal"
+   Synergy links (settings)    "SYNERGY — lines between teammates who stand"
+   Synergy links (engine)      "SYNERGY — the engine"
 
    ── the match ────────────────────────────────────────────────────────────
    Match setup (startMatch)    "MATCH SETUP"
@@ -5160,6 +5166,43 @@ const AD_BOARDS = [
   { key:'sunfish',    text:'Sunfish Surf Co.',        bg:'#ff9a3c', ink:'#123a5c' },
   { key:'lantern',    text:'Lantern Row Books',       bg:'#e9e2d0', ink:'#2b3a67' },
 ];
+// ============================================================
+//  SYNERGY — lines between teammates who stand together
+// ============================================================
+// Asked for from a soccer-analysis picture: three players joined by white lines, the
+// triangle between them filled with white diagonal streaks. A LINK forms between two
+// teammates who have stopped (or nearly) within reach of each other with nobody from the
+// other side standing on the line between them; it takes `formMs` to appear, it is mainly
+// ACROSS the pitch (a defensive line — two players side by side), and once live it is a
+// WALL THE BALL BOUNCES OFF. Three mutual links are a triangle, and the zone is filled.
+// The engine is `advanceSynergy`, beside `moveBall`; the bots' half is in `runBot`.
+// ⚠️ OFF by default: it changes how the ball moves, so it is something you turn on — the
+// score pips' rule. With it off the match is bit-identical to a build without it.
+// ⚠️ Declared ABOVE `defaultSel`, which reads `reach` and `formMs`: one owner of both
+// numbers, or the dial's default and the engine's fallback drift (`hitStopFrames`' 0).
+const SYN = {
+  reach: 170,      // max link length ACROSS the pitch, world units (`sel.synReach`)
+  formMs: 60,      // hundredths of a second to form (`sel.synForm`): 0.60s
+  alongMul: 0.55,  // the reach ALONG the pitch (goal to goal) is this fraction of `reach`.
+                   // An ellipse: a pair standing across the pitch links at the dial, a pair
+                   // strung goal-to-goal only when much closer. "Mainly a horizontal line"
+                   // is this number; 1 would be a circle.
+  settle: 0.9,     // units/step — under this BOTH bodies count as stopped/slowed and the
+                   // form clock runs. Full stick settles at ~2.8, a walk is ~1.2.
+  hold: 1.9,       // units/step — a LIVE link survives a shuffle under this and breaks at a
+                   // run. Two thresholds, never one, or the link flickers at the boundary.
+  lane: 6,         // an opponent within its radius + this of the segment is "on the line":
+                   // it blocks a forming link and breaks a live one.
+  bCoef: 0.75,     // ball restitution off a link — a firm wall, under the boards' 0.9
+  minLen: 30,      // a pair standing closer than this is a huddle, not a line
+};
+const SYNOPT = {
+  off: { name:'Off', emoji:'🚫', icon:'barrier' },
+  on:  { name:'On',  emoji:'🤝', icon:'people' },
+};
+function synergyOn(){ return sel.synergy === 'on'; }
+function synReach(){ const v = +sel.synReach; return isFinite(v) && v > 0 ? Math.max(40, Math.min(600, v)) : SYN.reach; }
+function synFormSecs(){ const v = +sel.synForm; return isFinite(v) && v >= 0 ? Math.min(5, v/100) : SYN.formMs/100; }
 const ADSOPT = {
   on:  { name:'On',  emoji:'📣', icon:'billboard' },
   off: { name:'Off', emoji:'🚫', icon:'barrier' },
@@ -6148,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260923.1102PM';
+const VERSION = '20260929.0210PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6164,6 +6207,13 @@ const VERSION = '20260923.1102PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20260929.0210PM', title: 'Synergy lines between teammates',
+    changed: [
+      '<b>Synergy links, a new switch under Game Feel → Player.</b> Two teammates who stop near each other with nobody from the other side between them are joined by a line after a moment — mainly across the pitch, the way a defensive line stands — and <b>the ball bounces off it</b>. Run off, or let an opponent walk onto the line, and it goes. Three players linked to each other fill in the zone between them.',
+      '<b>Bots work together too.</b> From Normal up, a defending bot moves to stand level with a teammate in reach and holds still until the line forms.',
+      'Two dials beside the switch: how long a line can be, and how long it takes to form. Off out of the box, so nothing changes until you switch it on.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260923.1102PM', title: 'Match after match with four controllers',
     changed: [
       '<b>START on any controller starts the next match from the result screen.</b> Only player one\u2019s controller could; the other three did nothing. Moving the cursor and picking an option stay with player one.',
@@ -7563,6 +7613,7 @@ function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', leng
             // has to be the thing that decides how hard the match is.
             botPlan:'standard',                            // AI shape; 'auto' deals one per side
             charge:'on', chargeMs:100,                     // hold to kick harder: on, full power at 0.1s
+            synergy:'off', synReach:SYN.reach, synForm:SYN.formMs,   // synergy links (see SYN): off; reach across; hundredths of a second to form
             goalZoom:115, goalZoomSpd:5, repSecs:6,        // goal camera: 1.15x over 0.05s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
@@ -13686,6 +13737,7 @@ function buildMatchOpts(){
   // the moment the switch moves or it sits there offering to tune something that is off.
   buildOpts('chargePick', CHARGEOPT, 'charge');
   buildOpts('sprintPick', SPRINTOPT, 'sprint');
+  buildOpts('synergyPick', SYNOPT, 'synergy');
   syncCharge();
   buildOpts('sideViewPick', SIDEOPT, 'sideView');
   buildOpts('touchDigPick', TOUCHDIGOPT, 'touchDigital');
@@ -13893,6 +13945,19 @@ function syncRepSecs(){
 // Hold-to-kick: a switch and a dial, wired like the goal camera's pair. Read through
 // chargeSecs() rather than off `sel` directly, so the clamp and the default stay in one
 // place and a value synced in from /menu cannot push the wind-up out of range.
+// The two synergy dials grey out while the switch is off — `syncCharge`'s rule: a dial
+// offering to tune something that is off is a dead control. Called at the END of
+// `buildSettings`, after `buildFeelSliders` has minted the inputs it greys.
+function syncSynergy(){
+  const wrap = $(feelSliderWrapId('player')); if (!wrap) return;
+  const on = synergyOn();
+  for (const lab of wrap.querySelectorAll('label')){
+    if (!/^Synergy/.test(lab.textContent)) continue;
+    const inp = lab.nextElementSibling;
+    if (inp && inp.tagName === 'INPUT'){ inp.disabled = !on; inp.style.opacity = on ? '' : '0.4'; }
+    lab.style.opacity = on ? '' : '0.55';
+  }
+}
 function syncCharge(){
   const c=$('chargeMs'), cv=$('chargeVal');
   if (c){ c.value = Math.round(chargeSecs()*1000); c.disabled = !chargeOn(); c.style.opacity = chargeOn() ? '' : '0.4'; }
@@ -16062,6 +16127,7 @@ $('feelReset').onclick = () => { const d = defaultSel();
   sel.magReach = d.magReach; sel.magKick = d.magKick;
   sel.adsOn = d.adsOn; sel.adEvery = d.adEvery; sel.adOff = d.adOff.slice(); sel.adText = d.adText;
   sel.charge = d.charge; sel.chargeMs = d.chargeMs;     // the wind-up is a feel control too
+  sel.synergy = d.synergy; sel.synReach = d.synReach; sel.synForm = d.synForm;   // and so are the links
   saveSel(); applyFeel(); buildSettings(); };
 $('settingsReset').onclick = () => {
   if (!confirm('Reset all settings (theme, display, ball, sound, game feel, controls) to defaults?\n\nYour progress and unlocks are kept.')) return;
@@ -16125,6 +16191,11 @@ const FEEL_SLIDERS = [
   {g:'kick', label:'Kick reach', get:()=>sel.kickRing==null?KICKRING.def:sel.kickRing, set:v=>sel.kickRing=v,
    min:KICKRING.min, max:KICKRING.max, step:KICKRING.step, fmt:v=>(v/100).toFixed(2)+'\u00d7'},
   {g:'player', label:'Stick sensitivity', get:()=>Math.round(sel.sens*100), set:v=>sel.sens=v/100, min:60,max:160,step:10, fmt:v=>(v/100).toFixed(1)+'×'},
+  // Synergy links (see `SYN`): how far a line reaches across the pitch, and how long two
+  // settled teammates take to form one. `synReach`/`synFormSecs` are what the engine reads,
+  // so the dial and the physics cannot disagree; both grey out while the switch is off.
+  {g:'player', label:'Synergy link reach', get:()=>synReach(), set:v=>sel.synReach=v, min:60,max:400,step:10, fmt:v=>v+'u'},
+  {g:'player', label:'Synergy link forms in', get:()=>Math.round(synFormSecs()*100), set:v=>sel.synForm=v, min:0,max:300,step:10, fmt:v=>(v/100).toFixed(1)+'s'},
   // ⚠️ Stored in HUNDREDTHS of a second, so the slider steps are integers — the same
   // trick the trap window uses. `sprintSecs()` is what the physics and the ring both
   // read, so the dial can never move one and leave the other behind.
@@ -17046,6 +17117,7 @@ function buildSettings(){
   // would show nothing at all. buildSubTabs re-selects the remembered pane (`subTab`), so
   // changing a ball look leaves you looking at the ball tab rather than at a blank card.
   buildSubTabs();
+  syncSynergy();   // after buildFeelSliders: greys the two synergy dials while the switch is off
   // Changing the Warm-up lobby pick or the display mode changes whether the Warm-up
   // button has anywhere to go, and both of those rebuild the settings.
   syncWarmupOffer();
@@ -22816,6 +22888,9 @@ function step(w){
   // is safe here for the same reason the balls are: `checkGoal` is gated on
   // `w.state === 'play'`, so nothing that happens in the lobby can put a goal on the
   // board, and `resetKickoff` puts the ball back on the centre spot on the way out.
+  // The synergy links are worked out from where everybody stands at the top of the step,
+  // and `integrate` then bounces the ball off them (see advanceSynergy). Off, it clears.
+  advanceSynergy(w);
   if (w.state==='warmup'){ stepWarmup(w); pollLobbyStart(w); integrate(w, false, false); }
   else if (w.state==='play') integrate(w, false, false);
   else if (w.state==='kickoff') integrate(w, true, false);   // ball parked at centre, players jockey
@@ -23340,6 +23415,102 @@ function nearestControlBall(w, p, ball){
   return best;
 }
 
+// ============================================================
+//  SYNERGY — the engine (the numbers are `SYN`, up with the settings)
+// ============================================================
+// Runs once a step from `step()`, in PLAY only, and writes three things on the world:
+// `w.links` (index pairs into `w.players`, with how far along the form clock each is),
+// `w.linkWalls` (a `ballOnly` wall per LIVE link, collided by `moveBall` beside `w.walls`,
+// so `predictsGoal` and the bots' shot prediction inherit it) and `w.tris` (every three
+// mutually linked players — the filled zone). Index pairs, never body references, so the
+// world stays hashable and a drop-in shifting the roster costs at most a step of a timer.
+// ⚠️ Deterministic by construction: it reads positions and velocities and nothing else,
+// and it is called from inside `step()`, so nothing here may roll anything.
+// ⚠️ With the switch off it empties the three fields and returns, so the match is
+// bit-identical to a build without the feature — `tests/synergy.mjs` hashes it.
+function synEligible(q){ return !bodyStaged(q); }   // a body walking on or off is a ghost to this too
+// Is anybody from the OTHER side standing on the segment a–b? An opponent's body within
+// its own radius plus `SYN.lane` of the line is on it. The ball is not asked: the line is
+// there to be bounced off, so a ball resting on it is pushed clear rather than a blocker.
+function synBlocked(w, a, b){
+  for (const o of w.players){
+    if (o.team === a.team || !synEligible(o)) continue;
+    if (segDist(o.x, o.y, a.x, a.y, b.x, b.y) < o.r + SYN.lane) return true;
+  }
+  return false;
+}
+// Within reach — an ELLIPSE, full reach across the pitch (x) and `alongMul` of it along
+// it (y). That is what makes a link "mainly horizontal": two bodies side by side link at
+// the dial, two strung out goal-to-goal only when much closer.
+function synInReach(a, b){
+  const dx = a.x - b.x, dy = a.y - b.y, R = synReach(), A = R * SYN.alongMul;
+  if (dx*dx + dy*dy < SYN.minLen*SYN.minLen) return false;
+  return (dx*dx)/(R*R) + (dy*dy)/(A*A) <= 1;
+}
+function synSpeed(q){ return Math.hypot(q.vx, q.vy); }
+function advanceSynergy(w){
+  if (!synergyOn() || w.state !== 'play' || w.drillMode){
+    if (w.links && w.links.length){ w.links = []; w.linkWalls = []; w.tris = []; }
+    w.synT = null;
+    return;
+  }
+  const T = w.synT || (w.synT = {});
+  const form = synFormSecs();
+  const live = {}, links = [], walls = [], seen = new Set();
+  const ps = w.players;
+  for (let i = 0; i < ps.length; i++){
+    const a = ps[i]; if (!synEligible(a)) continue;
+    for (let j = i+1; j < ps.length; j++){
+      const b = ps[j]; if (b.team !== a.team || !synEligible(b)) continue;
+      const key = i + ',' + j;
+      const was = T[key] || 0, wasLive = was > 0 && was >= form;
+      // The form clock needs both bodies SETTLED; a live link is kept through a shuffle
+      // (under `hold`) and lost at a run. Reach and a clear lane are needed either way.
+      const lim = wasLive ? SYN.hold : SYN.settle;
+      const ok = synInReach(a, b) && synSpeed(a) < lim && synSpeed(b) < lim && !synBlocked(w, a, b);
+      const t = !ok ? 0 : wasLive ? form : was + STEP;   // held at `form` once live: nothing to count past it
+      if (t <= 0) continue;
+      T[key] = t; seen.add(key);
+      const isLive = t >= form;
+      links.push({ i, j, t: form > 0 ? Math.min(1, t/form) : 1, live: isLive });
+      if (isLive){
+        live[key] = true;
+        walls.push({ a:{x:a.x, y:a.y}, b:{x:b.x, y:b.y}, bCoef: SYN.bCoef, ballOnly:true, isLink:true, i, j });
+      }
+    }
+  }
+  for (const k in T) if (!seen.has(k)) delete T[k];
+  // A triangle is three players each linked to the other two, every pair live.
+  const tris = [];
+  const ids = [...new Set(walls.flatMap(l => [l.i, l.j]))].sort((x, y) => x - y);
+  for (let x = 0; x < ids.length; x++) for (let y = x+1; y < ids.length; y++) for (let z = y+1; z < ids.length; z++){
+    const i = ids[x], j = ids[y], k = ids[z];
+    if (live[i+','+j] && live[i+','+k] && live[j+','+k]) tris.push([i, j, k]);
+  }
+  w.links = links; w.linkWalls = walls; w.tris = tris;
+}
+// For the bots: may this body stand in a line right now? Outfield (not the chaser, not
+// the keeper), not on a berry, a give-and-go or a carry, and on the pitch.
+function synHookable(q){
+  return q.aiRole !== 'chaser' && q.aiRole !== 'goalie' && !q.aiBerry && !(q.aiRunT > 0) &&
+         q.aiState !== 'carry' && synEligible(q);
+}
+// For the bots: the nearest OUTFIELD teammate this body could link with — inside reach,
+// standing (under `hold`), with a clear lane — or null. The chaser is left out (the body
+// on the ball is not going to stand still for anybody) and so is the keeper: a line is
+// two outfield bodies across the pitch, and pulling a defender level with a keeper on the
+// goal line is a defender standing in the goal. Reads only positions and velocities.
+function synMateFor(w, p){
+  let best = null, bd = 1e9;
+  for (const q of w.players){
+    if (q === p || q.team !== p.team || q.aiRole === 'chaser' || q.aiRole === 'goalie' || !synEligible(q)) continue;
+    if (synSpeed(q) >= SYN.hold || !synInReach(p, q) || synBlocked(w, p, q)) continue;
+    const d = Math.hypot(q.x-p.x, q.y-p.y);
+    if (d < bd){ bd = d; best = q; }
+  }
+  return best;
+}
+
 // Move one ball a fixed step: damp, cap, sub-step + collide vs players/posts/walls.
 function moveBall(w, ball, discs){
   ball.vx *= ball.damp; ball.vy *= ball.damp;
@@ -23357,6 +23528,7 @@ function moveBall(w, ball, discs){
     if (playable) for (const p of discs) collideDiscs(p, ball);
     for (const post of w.posts) collideDiscs(ball, post);
     for (const wall of w.walls) collideWall(ball, wall);
+    if (w.linkWalls) for (const wall of w.linkWalls) collideWall(ball, wall);   // synergy links: a live one is a wall
     for (const arc of w.arcs) collideArc(ball, arc);
   }
   clampBallInside(w, ball);   // hard backstop: the ball can never leave the pitch/net
@@ -27303,6 +27475,16 @@ const BOT = {
   decideTicks: 6,
   roleTicks: 20,             // roles are re-matched this often, not every frame
   roleMargin: 0.10,          // a challenger must beat the incumbent by 10% to take a role
+  // --- Synergy (the links, `SYN`). The outfield bots of a defending side FORM a line —
+  // see the hook in `runBot`. `linkPull` is how far (world units, × the tier's `coop`)
+  // the anchor's slot may have drifted for it to hold where it is anyway; within
+  // `linkLevel` of its line spot a follower holds still so the clock can run. `coopAt`
+  // is the tier the cooperation starts at (Normal and up); Rookie and Easy never do it.
+  linkPull: 70,
+  linkLevel: 10,
+  linkFollow: 260,           // a follower leaves its own slot by up to this (× coop) to join a line
+  linkSpanF: 0.6,            // the spacing along a line, as a fraction of the link reach dial
+  coopAt: 0.35,
 
   // --- Killer Lobsters berries. A berry is shepherded by walking into it — no kick, no
   // bot-only mechanic — so the bot stands behind it on the line to its own hive and
@@ -27673,6 +27855,9 @@ function botSkill(diff){
     run:       s >= 0.45,
     mark:      BOT.markW + (BOT.markWTop - BOT.markW) * s,
     goalieOut: BOT.goalieOut * s,
+    // Synergy: how readily a defending bot stands level with a mate to form a link.
+    // (guarded below the start so a `coopAt` past the top of the ladder means nobody)
+    coop:      s >= BOT.coopAt ? clamp((s - BOT.coopAt) / Math.max(1e-9, 1 - BOT.coopAt), 0, 1) : 0,
   };
 }
 
@@ -28643,6 +28828,46 @@ function runBot(w, p){
       if (p.aiMark && st.press !== p){
         const m = skill.mark;
         target.x = target.x*(1-m) + p.aiMark.x*m; target.y = target.y*(1-m) + p.aiMark.y*m; }
+    }
+  }
+
+  // --- Synergy: work together. With the links on, the OUTFIELD bots of a side that is
+  // defending or in transition form a line: the deepest of them (nearest its own goal)
+  // anchors it and holds where it is, and every other one takes a spot LEVEL with the
+  // anchor, one span along the line, and holds when it gets there — so two bodies stand
+  // still across the pitch and the link forms. Never the chaser, the keeper, a bot on a
+  // berry, a give-and-go or a carry. A TARGET decision like everything above it: Layer 0
+  // still steers, separates and keeps off the boards.
+  // ⚠️ **THE OPPORTUNISTIC VERSION WAS BUILT FIRST AND MEASURED WORSE THAN NOTHING.** A
+  // bot that merely held still when a settled mate happened to be in reach fired 48 times
+  // in 11,822 chances — the outfield bots are almost never near a settled mate, because a
+  // formation slot shades with the ball every tick and nobody ever drops under
+  // `SYN.settle` — and it read 1.5% of play with a live link against 5.5% with no hook at
+  // all (all of that beside the keeper). A line has to be DECIDED, not waited for.
+  // ⚠️ The follow distance and the anchor's own leash scale with the tier's `coop`, so
+  // Rookie and Easy (coop 0) never do it and Insane will leave its slot furthest.
+  if (synergyOn() && skill.coop > 0 && synHookable(p) && (st.phase === 'defend' || st.phase === 'transition')){
+    const mates = w.players.filter(q => q !== p && q.team === p.team && q.ctrl === 'bot' && synHookable(q));
+    if (mates.length){
+      const depth = q => q.y * -attackDir;
+      let anchor = p; for (const q of mates) if (depth(q) > depth(anchor)) anchor = q;
+      if (anchor === p){
+        // hold: a partner is level and in reach (the link is about to form, and it is
+        // worth more than a slot that has shaded a few units), or the slot is close anyway
+        const near = mates.some(q => synInReach(p, q) && Math.abs(q.y - p.y) < BOT.linkLevel * 2);
+        if (near || Math.hypot(target.x - p.x, target.y - p.y) <= BOT.linkPull * skill.coop) target = { x: p.x, y: p.y };
+      } else {
+        // one span out from the anchor on the side I am already on; a second body on the
+        // same side takes the next span, so two followers never want one spot
+        const side = (p.x - anchor.x) >= 0 ? 1 : -1;
+        const rank = mates.filter(q => q !== anchor && ((q.x - anchor.x) >= 0 ? 1 : -1) === side &&
+                                       Math.abs(q.x - anchor.x) < Math.abs(p.x - anchor.x)).length;
+        const spot = { x: anchor.x + side * synReach() * BOT.linkSpanF * (rank + 1), y: anchor.y };
+        if (Math.hypot(spot.x - target.x, spot.y - target.y) <= BOT.linkFollow * skill.coop){
+          const there = Math.abs(p.x - spot.x) < BOT.linkLevel * 2 && Math.abs(p.y - spot.y) < BOT.linkLevel;
+          target = there ? { x: p.x, y: p.y } : spot;
+        }
+      }
     }
   }
 
@@ -31298,6 +31523,7 @@ function drawPitch(w){
   // ink `renderDrill` already paints an interior wall in: on a light court the fill alone
   // would be a pale patch on a pale pitch.
   drawGap(w, s);
+  drawLinks(w, s);
 
   // The net pocket mirrored onto the pitch: same mouth width, same depth, in FRONT
   // of the goal line. Gives you a read on how deep you are without looking at the
@@ -31357,6 +31583,49 @@ function drawGap(w, s){
     ctx.globalAlpha = _mA;
   }
   ctx.restore();
+}
+// ⚠️ **THE SYNERGY LINKS ARE DRAWN ON THE GROUND, INSIDE `pitchXform`**, right after the
+// gap — they are a thing on the pitch the ball bounces off, so they go under the bodies,
+// and `wx`/`wy` give them deck view's quarter-turn and the side view's squash for free.
+// Endpoints through `ix`/`iy`: a body is drawn interpolated, and a line to its raw
+// position lags it by up to a step. Ink is `kickRingInk()` — white on every dark court,
+// which is what the picture showed, and black on the pale ones (Paper, Highlighter) where
+// a white line is a line nobody can see. A FORMING link is a faint dashed line that firms
+// up as its clock runs, which is the only readout "it takes a moment to form" has; a LIVE
+// one is solid. A triangle is filled with diagonal streaks clipped to it — the `drawGap`
+// hatch, at the picture's angle. Render only: it reads `w.links`/`w.tris` and writes nothing.
+function drawLinks(w, s){
+  const L = w.links; if (!L || !L.length) return;
+  const ps = w.players, ink = kickRingInk();
+  const P = q => [wx(ix(q)), wy(iy(q))];
+  const _mA = ctx.globalAlpha;        // MULTIPLY, never assign — drawGap's rule (vjMarkA)
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (w.tris) for (const [i, j, k] of w.tris){
+    if (!ps[i] || !ps[j] || !ps[k]) continue;
+    const [ax, ay] = P(ps[i]), [bx, by] = P(ps[j]), [cx, cy] = P(ps[k]);
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy); ctx.closePath();
+    ctx.clip();
+    ctx.globalAlpha = 0.5 * _mA;
+    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1, 1.6*s); ctx.setLineDash([]);
+    const x0 = Math.min(ax,bx,cx), x1 = Math.max(ax,bx,cx), y0 = Math.min(ay,by,cy), y1 = Math.max(ay,by,cy);
+    const hh = y1 - y0, stp = Math.max(6, 9*s);
+    ctx.beginPath();
+    for (let d = -hh; d < x1 - x0; d += stp){ ctx.moveTo(x0+d, y1); ctx.lineTo(x0+d+hh, y0); }
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (const l of L){
+    const a = ps[l.i], b = ps[l.j]; if (!a || !b) continue;
+    const [ax, ay] = P(a), [bx, by] = P(b);
+    ctx.strokeStyle = ink;
+    if (l.live){ ctx.setLineDash([]); ctx.globalAlpha = 0.9 * _mA; ctx.lineWidth = Math.max(2, 3*s); }
+    else { const d = Math.max(4, 6*s); ctx.setLineDash([d, d]); ctx.globalAlpha = (0.15 + 0.35*l.t) * _mA; ctx.lineWidth = Math.max(1, 1.8*s); }
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = _mA;
 }
 // Grass "mow" patterns — two alternating court tones (stripeA/stripeB) laid out
 // in the selected style. Purely cosmetic.
@@ -37805,6 +38074,7 @@ if (window.__MAGNETDEBUG) {
     get world(){ return world; }, get TH(){ return TH; }, pads, sel, FIELDS, SFX, THEMES,
     fieldShape, FIELD_SHAPES, buildFieldShapeTabs, setFieldShapeTab, fieldShapeNow,
     gapRects, gapPush, gapBlocks,
+    SYN, SYNOPT, synergyOn, synReach, synFormSecs, advanceSynergy, synMateFor, synHookable, synBlocked, synInReach, drawLinks, syncSynergy,
     startMatch, step, applyFeel, feelVals, playSfx, applyTheme, applyPreset,
     handleBallControl, handleSnailKick, openSettings, closeSettings, resetSettings, defaultSel, VERSION,
     get repBuf(){ return repBuf; }, get lastReplay(){ return lastReplay; }, set lastReplay(v){ lastReplay = v; }, playReplay, saveClip, repMime,

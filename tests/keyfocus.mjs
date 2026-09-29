@@ -154,7 +154,7 @@ o.everySliderInItsOwnPane = o.groups.want.every(([g, lab]) =>
 o.want = { ball:   ['max ball speed','ball stopping time'],
            kick:   ['kick power','trap window','kick reach'],
            magnet: ['magnet strength','magnet reach','magnet kick bonus'],
-           player: ['acceleration','player stopping time','sensitivity'],
+           player: ['acceleration','player stopping time','sensitivity','synergy link reach','synergy link forms'],
            sprint: ['sprint length','sprint recovery','sprint speed','tired speed'],
            ads:    ['ads change every'] };
 o.groupedAsIntended = Object.entries(o.want).every(([g, words]) => words.every(w =>

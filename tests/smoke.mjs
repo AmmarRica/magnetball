@@ -2,7 +2,11 @@ import { chromium, LAUNCH } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:1280,height:800} });
 const errs=[]; p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
-p.on('console',m=>{ if(m.type()==='error') errs.push('CONSOLE: '+m.text()); });
+// ⚠️ `ERR_TUNNEL_CONNECTION_FAILED` is the PROXY refusing the leaderboard's Google fetch (and
+// Chromium's own background traffic) on a box with no route out — the game already falls
+// back to its offline sample, and every other suite here filters the same line. Measured
+// on the committed build from a clean copy: the same error, so it is the environment.
+p.on('console',m=>{ if(m.type()==='error' && !/ERR_TUNNEL/.test(m.text())) errs.push('CONSOLE: '+m.text()); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(700);

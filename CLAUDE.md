@@ -1550,6 +1550,83 @@ three lines a second time, name it.
   display and never the tile count, which is built either way.
   ⚠️ Render only — the world is bit-identical over 900 steps with the style on and off.
   Fourteen sabotages, each caught by its own check.
+- **SYNERGY LINKS — LINES BETWEEN TEAMMATES WHO STAND TOGETHER, AND THE BALL BOUNCES OFF
+  THEM** (`SYN`, `SYNOPT`, `sel.synergy` / `sel.synReach` / `sel.synForm`, `synergyOn`,
+  `synReach`, `synFormSecs`, `advanceSynergy`, `synInReach`, `synBlocked`, `synMateFor`,
+  `synHookable`, `w.links` / `w.linkWalls` / `w.tris`, `drawLinks`, `syncSynergy`,
+  `BOT.linkPull` / `linkLevel` / `linkFollow` / `linkSpanF` / `coopAt`, `botSkill().coop`;
+  Game Feel → Player; `tests/synergy.mjs`). Asked for from a soccer-analysis picture — three
+  players joined by white lines, the triangle between them filled with white diagonal
+  streaks — as a mode to switch on and off: a line between teammates close to each other,
+  not drawn when an enemy is on the line, *"mainly a horizontal line"* (two players next to
+  each other defending), physical so the ball bounces off it, with an adjustable maximum
+  length, taking a moment to form once you stop or slow down, three players filling in a
+  triangle, *"to make the game a little bit more strategic"* — and *"I want the bots to be
+  able to work together"*.
+  ⚠️ **IT SHIPS OFF** — it changes how the ball moves, so it is something you turn on (the
+  score pips' rule), and with it off `advanceSynergy` empties its three fields and returns,
+  so the match is bit-identical to a build without it (measured: no link and no wall over
+  900 bot steps). The two dials grey out while the switch is off (`syncSynergy`, the
+  `syncCharge` rule: a dial offering to tune something that is off is a dead control).
+  ⚠️ **ONE ENGINE IN THE STEP LOOP, THREE FIELDS ON THE WORLD.** `advanceSynergy` runs from
+  `step()` before `integrate`, in PLAY only, and reads positions and velocities and nothing
+  else — deterministic by construction (two runs of a seed hash identically). `w.links` is
+  index pairs into `w.players`, never body references, so the world stays hashable and a
+  drop-in shifting the roster costs at most a step of a timer. `w.linkWalls` is a
+  `ballOnly` wall per LIVE link, collided by `moveBall` beside `w.walls` — so `predictsGoal`
+  and the bots' shot prediction inherit it for free; players walk through, which is what
+  makes an opponent able to break a line by standing on it.
+  ⚠️ **A LINK IS FORMED, NOT FOUND**: both bodies under `SYN.settle` (0.9 units a step —
+  full stick settles at ~2.8, a walk is ~1.2) for `synFormSecs()` (0.6s ships), within
+  reach, with no opponent inside its radius + `SYN.lane` of the segment. Measured: **36
+  steps to live at 0.6s, 72 at 1.2s** — the dial is the clock. A live link then survives
+  a shuffle under `SYN.hold` (1.9) and breaks at a run: **two thresholds, never one**, or
+  it flickers at the boundary. A forming link is drawn dashed and faint, firming as its
+  clock runs — the only readout "it takes a moment" has (measured **2,579 against 22,659**
+  of summed pixel change on the same bare segment) — and it is NOT a wall yet. Measured: a
+  ball driven at a live link on y = 100 tops out at **91** and comes back at −1.34 a step;
+  with the switch off, or against a link ten steps into forming, the same ball runs through
+  to **148.6**.
+  ⚠️ **"MAINLY HORIZONTAL" IS AN ELLIPSE** (`SYN.alongMul` 0.55): full reach across the
+  pitch, 55% of it goal-to-goal, so a pair 150 apart links side by side and not strung down
+  the pitch. The pitch's length is world y, so "across" is x; `drawLinks` draws through
+  `wx`/`wy` inside `pitchXform`, so deck view's quarter-turn comes for free.
+  ⚠️ **THE BALL IS NOT A BLOCKER.** The line exists to be bounced off, so a ball resting on
+  the segment when it goes live is pushed clear by `collideWall`, never counted as standing
+  on it.
+  ⚠️ **DRAWN ON THE GROUND LAYER, RIGHT AFTER THE GAP** — a thing on the pitch the ball
+  bounces off goes under the bodies. Ink is `kickRingInk()`: white on every dark court,
+  which is what the picture showed, black on the pale ones where a white line is no line.
+  The triangle is the `drawGap` hatch clipped to the three bodies. Measured as a pixel
+  DIFFERENCE against the same frame with `w.links` stood down, never an absolute count (the
+  pitch has markings), and the fill is streaks: well under a solid box.
+  ⚠️ **THE BOTS FORM A LINE, AND THE OPPORTUNISTIC VERSION WAS BUILT FIRST AND MEASURED
+  WORSE THAN NOTHING.** A bot that merely held still when a settled mate happened to be in
+  reach fired **48 times in 11,822 chances** — a formation slot shades with the ball every
+  tick, so no outfield bot ever drops under `settle`, and nearly every natural link is a
+  body beside the KEEPER — and it read **1.5%** of play with a live link against **5.5%**
+  with no hook at all. A line has to be decided: in defend/transition the deepest outfield
+  bot (never the chaser or the keeper, never on a berry, a give-and-go or a carry —
+  `synHookable`) ANCHORS and holds where it is once a partner is level and in reach, and
+  every other one takes a spot one span (`linkSpanF` × the reach dial) along the line and
+  holds on arrival. Measured on seeded all-bot 4v4s: **Insane 21.7%** of play with a live
+  link, **5.5%** on the same seeds with the hook inert, **3.4% at Rookie**, whose `coop` is
+  0 — the follow distance and the anchor's leash scale with `botSkill().coop`, so it is
+  still a ladder. A 5v5 side (three outfield bots) forms a triangle on one seed of two.
+  ⚠️ **`coop` IS GUARDED BELOW `coopAt`**, and the reason is a control that silently
+  measured the feature: `(s - coopAt) / (1 - coopAt)` with `coopAt` pushed past the top of
+  the ladder flips sign and clamps to 1, so "the hook made inert" was the hook fully on and
+  the two arms read identically. `synMateFor` leaves the keeper out too: pulling a
+  defender level with a keeper on the goal line is a defender standing in the goal.
+  ⚠️ **NOT BUILT, written down**: a hosted-online client simulates nothing (`netStep`), so
+  it draws no links — the server's ball still bounces; a replay records positions only, so
+  a replayed match shows no lines; the triangle's zone is a picture and not a rule (its
+  three edges are the walls); a bot's bank candidates walk `w.walls` and not `w.linkWalls`,
+  so a bot will not aim a bank off a line on purpose; and the two sides' lines can cross,
+  which is two walls where the picture would show one.
+  ⚠️ STAGING TRAP in the suite: the far side's pair must stand further apart than the
+  reach or THEY link — the first run read two walls on a build with one intended. Twelve
+  sabotages, each caught by its own check. `tests/synergy.mjs`.
 - **Floating stat text** (`FLOAT`, `floaters`, `addFloater`, `advanceFloaters`,
   `drawFloaters`, `sel.popups`): a short label over a player the instant they earn
   something the match record keeps — GOAL, ASSIST, SAVE, KEY PASS, CLEARANCE, SHOT, POST.
