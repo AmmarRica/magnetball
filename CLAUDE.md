@@ -3187,6 +3187,72 @@ three lines a second time, name it.
   because the cue ball look is *plain* and never exercised the spot, so every other look
   rendered as a plain white ball. Every other palette is 10.6:1+, which is why it hid.
   A readable spot is left untouched; this is a floor, not a repaint. `tests/balllook.mjs`.
+- **THE FACE OF THE BALL IS RENDERED PER PIXEL, AND THE STRIP-OF-SLICES PAINTER IT
+  REPLACES DREW A CYLINDER** (`paintBallSphere`, `sphScratch`, `BALL3D.maxPx`, `t.px` on the
+  baked strip; `BALL3D.slices` DELETED). Reported, a batch after the panels were put on the
+  sphere, as *"Ball still looks odd when in 3D and the black markings don't all match"*.
+  ⚠️ **THE BAKE WAS RIGHT AND THE PAINTER WAS WRONG, and the entry below records the painter
+  as "a cylinder-projected sphere" in its first sentence.** It drew the visible hemisphere as
+  up to 26 vertical strips, one `drawImage` each, placed at x = r·sin(longitude) and
+  stretched over the ball's WHOLE height. A meridian seen from above is not a vertical line;
+  it is half an ellipse, x = r·cos(latitude)·sin(longitude), pinching toward the poles. So
+  the pattern was exact along the equator and stretched sideways by 1/cos(latitude)
+  everywhere else — a pentagon at 60° latitude drawn **twice** as wide as its twin on the
+  equator. That is "the markings don't all match", literally: which panels were the wrong
+  shape depended on where the roll had carried them.
+  ⚠️ **MEASURED against the exact pattern** — the look's own `sphere` evaluated at every
+  screen pixel's point on the unit ball, turned back through the roll axis and the roll —
+  on a 110px ball through twelve phases with the axis turned 0.6 rad: **4.6–5.8% of the face
+  disagreed at every phase, 1.8–2.8% within 30° of the equator and 9.5–11.8% beyond it.**
+  A five-fold ratio between the two bands is what says the error is a function of latitude.
+  With the axis turned the slice edges also left hairline seams through the black panels.
+  The per-pixel painter reads **0 / 0 / 0**.
+  ⚠️ **WHY THE OLD SUITE COULD NOT SEE IT**: the whole-panel size check corrects a panel's
+  area by √(1−ρ²) at its CENTROID and compares panels within ONE frame, and inside its 0.80R
+  probe the inflated panels sit far enough from the pole that the ratio still read 1.00.
+  The instrument that sees it is the exact pattern, which needs no correction at all.
+  ⚠️ **PER PIXEL, and the arithmetic is the inverse of the bake's**: for each pixel of an
+  S×S face, X and Y on the unit disc, Z = √(1−X²−Y²), into the roll frame by the axis,
+  longitude = atan2(Xr, Z) − phase, sin(latitude) = Yr, then a bilinear sample of the strip.
+  There is no orientation at which it is only approximately right, which is the claim the
+  bake already made for itself and the painter now keeps.
+  ⚠️ **BILINEAR ON PREMULTIPLIED VALUES.** The strip is transparent between the marks with
+  RGB left at zero there, so a plain bilinear over RGBA pulls a pale ink (Pool's spot) toward
+  black along every soft edge. The colour is weighted by alpha and divided back out.
+  ⚠️ **AUTHORED AT THE DEVICE PIXELS IT OCCUPIES** (`getTransform`'s scale sizes the face
+  canvas), the crisp rule applied to the most-watched object on the pitch: at DPR 3 a 15px
+  ball is rendered 90 pixels across, not 30 stretched by three. Measured as edge softness on
+  a 3× context: **503 soft pixels authored against 1,251** for a 1× render blown up by
+  three; with the scale ignored the two read 1,251 alike. `BALL3D.maxPx` (512) caps the
+  side, above which the face is drawn a little soft rather than costing a quarter of a
+  million pixels a frame.
+  ⚠️ **THE SCRATCH IS AN `OffscreenCanvas`, AND THAT IS A MEASURED 5×, NOT A PREFERENCE.**
+  Through a DOM canvas fitted to a 14px ball the write-then-draw cost **0.119ms a ball**,
+  0.077 of it in `putImageData` — a write into a canvas that was a draw source on the
+  previous frame forces a flush. The same pixels through an `OffscreenCanvas` read
+  **0.025ms**. A DOM canvas is the fallback where there is none, on the same code path.
+  ⚠️ **ONE SCRATCH PER SIZE CLASS, NEVER ONE THAT GROWS — a grow-only scratch was built
+  first and measured.** Once a 110px ball (a picker tile at DPR 3, a goal zoom on a big
+  screen) had grown it to 256, every 7px ball afterwards cost **0.145ms instead of 0.031**
+  for the rest of the session: a large canvas is accelerated and the small write into it
+  pays the flush again. Buckets of 64 / 128 / 256 / 512 keep the in-game ball on the small
+  one whatever the menu has drawn. `tests/ball3d.mjs` measures a 7px ball before and after
+  twenty 110px paints as a RATIO in the same run.
+  ⚠️ **AND THE FIRST SABOTAGE OF THAT CHECK WAS NOT THE DEFECT.** Forcing every size onto
+  the 512 bucket made BOTH readings slow, so the ratio held and only the fourteen-ball
+  frame-budget check went red (8.95ms). The faithful sabotage is the grow-only scratch that
+  was actually built, and that is the one the check is verified against — and it PASSED
+  too, at first: the suite's earlier blocks paint a 220px face, so on the grow-only build
+  the scratch was already grown when "before" was measured (0.148 against 0.130). The check
+  empties the scratch map (`sphScratch` on the hook) before its first reading.
+  ⚠️ **THE COST, at game sizes, before and after** (best of four, demo paused, same page):
+  r7 0.020 → 0.025ms, r11 0.116 → 0.038, r15 0.135 → 0.059, r22 0.311 → 0.139, fourteen
+  lobby balls 0.72 → 0.51ms a frame. It is cheaper than the strips at every size a match
+  draws, because a strip painter's cost was 26 clipped `drawImage`s whatever the radius.
+  At 110px it is 2.4ms — a picker tile or a probe, never a frame of play.
+  ⚠️ **THREE SABOTAGES, EACH CAUGHT BY ITS OWN CHECK**: the strip painter put back verbatim
+  (0.058 / 0.028 / 0.118), the context scale ignored (1,251 against 1,251), and the
+  grow-only scratch. `tests/ball3d.mjs`.
 - **A PATTERN IS DEFINED ON THE SPHERE, NOT PROJECTED ONTO IT** (`look.sphere`, `SPH_AA`,
   `sphPent`, `sphSeam`, `sphGores`, `sphBand`, `sphCap`, `icoVerts`, `icoNearest`;
   `look.prints`, `look.ground`). Reported as *"for the ball, it looks odd on 3D still"*,
@@ -3274,9 +3340,10 @@ three lines a second time, name it.
   punches the print's antialiased rim through the ground as a hairline. "Every texel of a
   pool ball is opaque" is the check that sees both. `tests/ball3d.mjs`.
 - **The ball as a ROLLING SPHERE** (`sel.ball3d`, default **on**; `BALL3D`,
-  `paintBallSphere`, `ballSphereTex`): the pattern is mapped onto a cylinder-projected
-  sphere and scrolled by the roll, so the markings compress toward the limb and go over
-  the horizon. The ball already had sphere *shading* — a ground shadow and a fixed
+  `paintBallSphere`, `ballSphereTex`): the pattern is baked onto a longitude strip and the
+  face is rendered from it per pixel, so the markings compress toward the limb and go over
+  the horizon. ⚠️ **This sentence used to say "mapped onto a cylinder-projected sphere and
+  scrolled by the roll", and the cylinder was the defect** — see the per-pixel entry above. The ball already had sphere *shading* — a ground shadow and a fixed
   highlight — and what read flat was the pattern being **rotated in 2D**, which is a
   spinning disc.
   ⚠️ **IT SHIPS ON NOW, and this REVERSES the "default off" written below.** It shipped
@@ -3294,12 +3361,12 @@ three lines a second time, name it.
   there for the day the default moves again, which is exactly how `zoomfold` was bitten.
   ⚠️ **A setting, not a theme**, and it was default off: it changes the most-watched object on
   the pitch, so it was something you turned on rather than something that arrived.
-  ⚠️ The texture is **baked once per (look, ink)** and scrolled with `drawImage` — keyed
+  ⚠️ The texture is **baked once per (look, ink)** and sampled per pixel — keyed
   on the ink because slots mix and the pattern is drawn in the ball's spot colour, and
   dropped in `clearSwatchCache` so cycling palettes leaves nothing behind.
-  ⚠️ **Slices scale with radius** (`max(8, min(26, r*0.9))`). A fixed 26 costs the same
-  at 9px as at 70px, and the warm-up lobby fields fourteen balls; worst case measured at
-  **1.4ms** of a 16.6ms frame.
+  ⚠️ **`BALL3D.slices` IS GONE** — *"slices scale with radius, worst case 1.4ms"* described
+  the strip painter, which is withdrawn above; the cost scales with the face's AREA now and
+  the fourteen-ball worst case measures 0.51ms.
   ⚠️ **`minPx` is 5, matching the flat pattern's own `r >= 5`.** It shipped at 7 — above
   the **6.56px** the ball is actually drawn at on a 390×844 phone — so the feature did
   nothing at all for the people most likely to switch it on. `tests/ball3d.mjs` asserts

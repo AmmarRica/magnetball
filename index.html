@@ -9979,7 +9979,18 @@ const FLOAT = {
 // is the pattern compressing toward the limb and going over the edge, so the pattern is
 // mapped onto a cylinder-projected sphere and scrolled by the roll.
 const BALL3D = {
-  slices: 26,     // vertical strips across the face. 26 is smooth at any size we draw.
+  // ⚠️ **`slices` IS GONE, AND WITH IT THE WHOLE IDEA OF SCROLLING A STRIP.** The painter
+  // used to draw the visible hemisphere as up to 26 vertical strips, one `drawImage` each,
+  // placed at x = r·sin(longitude) — and a meridian is NOT a vertical line on a sphere seen
+  // from above: it is half an ellipse, x = r·cos(latitude)·sin(longitude), pinching in
+  // toward the poles. So the pattern was right along the equator and stretched sideways by
+  // 1/cos(latitude) everywhere else — a pentagon at 60° drawn TWICE as wide as the one on
+  // the equator. Measured against the exact pattern, pixel by pixel on a 110px ball: 2% of
+  // the face disagreed within 30° of the equator and **10–12%** beyond it, at every phase.
+  // That is "the black markings don't all match". The strips also left hairline seams
+  // through the panels at a rotated axis. The face is rendered PER PIXEL now, into a canvas
+  // sized to the device pixels it will occupy (`maxPx` caps that side), and drawn once.
+  maxPx: 512,     // the offscreen face canvas's largest side, in device pixels
   // ⚠️ 5, MATCHING the threshold the flat pattern already uses (`r >= 5` in paintBall).
   // It was 7, which is above the size the ball is actually DRAWN at on a phone — measured
   // at 6.56px on a 390x844 viewport on Classic — so the whole feature silently did nothing
@@ -36368,7 +36379,9 @@ function ballSphereTex(key, spot, paper){
     }
   }
   cc.putImageData(img, 0, 0);
-  t = { cv, TW, D };
+  // The pixels are kept beside the canvas: the painter samples them directly, and a
+  // `getImageData` per ball per frame would be the cost this whole bake exists to avoid.
+  t = { cv, TW, D, W, px: out };
   ballTexCache.set(ck, t);
   return t;
 }
@@ -36378,37 +36391,99 @@ function ballSphereTex(key, spot, paper){
 // `vx/vy` was the earlier design and it had two faults at once: the direction was
 // backwards, and a bounce flipping the heading by 180° jumped half a turn of texture
 // across the ball in one frame.
+//
+// ⚠️ **THE FACE IS RENDERED PER PIXEL, AND THE STRIP-OF-SLICES PAINTER IT REPLACES DREW A
+// CYLINDER.** That painter blitted the strip in up to 26 vertical slices, each placed at
+// x = r·sin(longitude) and stretched over the ball's full height. On a sphere seen from
+// above a meridian is half an ELLIPSE — x = r·cos(latitude)·sin(longitude) — so a vertical
+// slice is right only on the equator and everything above and below it was drawn too far
+// out by 1/cos(latitude): a pentagon at 60° latitude came out twice as wide as its twin on
+// the equator, and the ball read as a drum with a football's panels wrapped round it.
+// Measured against the exact pattern (the look's own `sphere` evaluated at every screen
+// pixel's point on the unit ball) on a 110px ball through twelve phases: **2.0% of the face
+// disagreed within 30° of the equator and 9.5–11.8% beyond it**, at every phase — the error
+// is a function of latitude, which is what "the black markings don't all match" is. With
+// the axis turned the slice edges also left hairline seams through the black panels.
+// Here every screen pixel asks which point on the ball it is looking at, turns that point
+// back through the roll axis and the roll, and samples the strip there — the inverse of the
+// map the bake used, so there is no orientation at which it is only approximately right.
+// ⚠️ **AUTHORED AT THE PIXELS IT WILL OCCUPY.** The face canvas is sized from the context's
+// own scale (`getTransform`), so at DPR 3 a 15px ball is rendered 90 device pixels across
+// and not 30 stretched by three — the crisp rule, applied to the most-watched object on
+// the pitch. `BALL3D.maxPx` caps the side; above it the face is drawn a little soft rather
+// than costing a quarter-million pixels a frame. The scratch canvas is grow-only and shared.
+// ⚠️ **BILINEAR ON PREMULTIPLIED VALUES.** The strip is transparent between the marks with
+// RGB left at zero there, so a plain bilinear over RGBA pulls a pale ink toward black along
+// every soft edge. The colour is weighted by alpha and divided back out.
+// ⚠️ **THE SCRATCH IS AN `OffscreenCanvas`, AND THAT IS A MEASURED 5×, NOT A PREFERENCE.**
+// Writing the face into a DOM canvas sized exactly to a 14px ball and then drawing from it
+// cost **0.119ms a ball** in the game page, 0.077 of it in `putImageData` alone — the write
+// into a canvas that was a draw SOURCE on the previous frame forces a flush. The same
+// pixels through an `OffscreenCanvas` read **0.025ms**, against the old strip painter's
+// 0.020 at that size. Where there is no `OffscreenCanvas` a DOM canvas of the same size
+// is used and the same code runs — only the scratch differs.
+// ⚠️ **ONE SCRATCH PER SIZE CLASS, never one that grows.** A single grow-only scratch was
+// built first and measured: once a 110px ball (a picker tile at DPR 3, or a goal zoom on a
+// big screen) had grown it to 256, every 7px ball afterwards cost **0.145ms instead of
+// 0.031** for the rest of the session — a large canvas is accelerated and the small write
+// into it pays the flush again. Buckets of 64 / 128 / 256 / 512 keep the in-game ball on
+// the small one whatever the menu has drawn.
+const _sphScratch = new Map();
+function sphScratch(S){
+  const side = S <= 64 ? 64 : S <= 128 ? 128 : S <= 256 ? 256 : 512;
+  let sc = _sphScratch.get(side);
+  if (!sc){
+    const off = typeof OffscreenCanvas !== 'undefined';
+    const cv = off ? new OffscreenCanvas(side, side) : document.createElement('canvas');
+    if (!off) cv.width = cv.height = side;
+    sc = { cv, cc: cv.getContext('2d'), img: null };
+    _sphScratch.set(side, sc);
+  }
+  if (!sc.img || sc.img.width !== S) sc.img = sc.cc.createImageData(S, S);
+  return sc;
+}
 function paintBallSphere(c, x, y, r, roll, ax, key, spot, paper){
   const t = ballSphereTex(key, spot, paper);
-  // ⚠️ SLICES SCALE WITH SIZE. A fixed 26 costs the same at 9px as at 70px, and the
-  // warm-up lobby can field fourteen balls at once — measured, a fixed count put that
-  // frame well past its budget. At the size a ball is actually drawn on a phone the
-  // extra slices are below a pixel each and change nothing you can see.
-  const N = Math.max(8, Math.min(BALL3D.slices, Math.round(r * 0.9)));
-  const phase = roll || 0;
+  const m = c.getTransform();
+  const scl = Math.max(1, Math.hypot(m.a, m.b));
+  const S = Math.max(4, Math.min(BALL3D.maxPx, Math.ceil(2 * r * scl)));
+  const sc = sphScratch(S), _sphCv = sc.cv, _sphCc = sc.cc, _sphImg = sc.img;
+  const out = _sphImg.data, px = t.px, TW = t.TW, W = t.W, D = t.D;
+  const phase = roll || 0, ca = Math.cos(ax || 0), sa = Math.sin(ax || 0);
+  const k = TW / (2*Math.PI), hD = D / 2;
+  for (let j = 0; j < S; j++){
+    const Y = (j + 0.5) / S * 2 - 1;
+    const row = j * S * 4;
+    for (let i = 0; i < S; i++){
+      const o = row + i*4;
+      const X = (i + 0.5) / S * 2 - 1, d2 = X*X + Y*Y;
+      if (d2 >= 1){ out[o] = out[o+1] = out[o+2] = out[o+3] = 0; continue; }
+      const Z = Math.sqrt(1 - d2);
+      // Into the roll frame: the texture's +y is the roll axis, which sits at `ax` on screen.
+      const Xr = X*ca + Y*sa, Yr = -X*sa + Y*ca;
+      // ⚠️ MINUS the phase — the sign is the whole "it rolls backwards" bug. Seen from above
+      // the face of a rolling ball travels the way the ball is going (the contact point is
+      // what stands still), so the mark baked at longitude u₀ has to appear at ever-larger x.
+      let u = (Math.atan2(Xr, Z) - phase) * k - 0.5;
+      u = u - Math.floor(u / TW) * TW;                    // 0 ≤ u < TW; column TW+n repeats n
+      const v = Math.max(0, Math.min(D - 1, (Yr + 1) * hD - 0.5));
+      const u0 = Math.floor(u), v0 = Math.floor(v), fu = u - u0, fv = v - v0;
+      const u1 = u0 + 1, v1 = Math.min(D - 1, v0 + 1);
+      const iA = (v0*W + u0)*4, iB = (v0*W + u1)*4, iC = (v1*W + u0)*4, iD = (v1*W + u1)*4;
+      const wA = (1-fu)*(1-fv), wB = fu*(1-fv), wC = (1-fu)*fv, wD = fu*fv;
+      const aA = px[iA+3]*wA, aB = px[iB+3]*wB, aC = px[iC+3]*wC, aD = px[iD+3]*wD;
+      const A = aA + aB + aC + aD;
+      if (A <= 0){ out[o] = out[o+1] = out[o+2] = out[o+3] = 0; continue; }
+      out[o]   = (px[iA]*aA   + px[iB]*aB   + px[iC]*aC   + px[iD]*aD)   / A;
+      out[o+1] = (px[iA+1]*aA + px[iB+1]*aB + px[iC+1]*aC + px[iD+1]*aD) / A;
+      out[o+2] = (px[iA+2]*aA + px[iB+2]*aB + px[iC+2]*aC + px[iD+2]*aD) / A;
+      out[o+3] = A;
+    }
+  }
+  _sphCc.putImageData(_sphImg, 0, 0);
   c.save();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.clip();
-  c.translate(x, y); c.rotate(ax || 0);
-  for (let i = 0; i < N; i++){
-    // Longitudes of this slice's two edges, over the visible hemisphere.
-    const lonA = -Math.PI/2 + (i / N) * Math.PI;
-    const lonB = -Math.PI/2 + ((i+1) / N) * Math.PI;
-    // ⚠️ Destination edges from sin(lon), which IS the compression: slices near the limb
-    // are narrow because the surface is turning away there. Taking a constant width and
-    // scaling it would give a flat scroll, which is the thing this replaces.
-    const dA = r * Math.sin(lonA), dB = r * Math.sin(lonB);
-    const dw = dB - dA;
-    if (dw <= 0.01) continue;
-    // ⚠️ MINUS the phase, and the sign is the whole "it rolls backwards" bug. A mark baked
-    // at texture coordinate u₀ shows up wherever `u` evaluates to u₀ — with `+ phase` that
-    // is `lon = 2π·u₀ − phase`, which slides the mark toward SMALLER x as the roll grows,
-    // i.e. backwards out of the direction of travel. Seen from above, the face of a rolling
-    // ball travels forwards (the contact point is what stands still), so the mark has to
-    // move to larger x.
-    let u = ((lonA - phase) / (2*Math.PI)) % 1; if (u < 0) u += 1;
-    const sx = u * t.TW, sw = t.TW * (lonB - lonA) / (2*Math.PI);
-    c.drawImage(t.cv, sx, 0, sw, t.D, dA, -r, dw, r*2);
-  }
+  c.drawImage(_sphCv, 0, 0, S, S, x - r, y - r, 2*r, 2*r);
   c.restore();
 }
 function ballIs3D(r){ return sel.ball3d === 'on' && r >= BALL3D.minPx; }
@@ -38181,7 +38256,7 @@ if (window.__MAGNETDEBUG) {
     TRAIL_LOOKS, TRAIL_LOOK_KEYS, trailLook, paintRibbon, RIBBON,
     get discTrails2(){ return discTrails; },
     paintBall, buildBallLookPick, ballSpotInk, BALL_SPOT_CONTRAST,
-    BALL3D, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; },
+    BALL3D, SPH_AA, paintBallSphere, ballSphereTex, ballIs3D, get ballTexCache(){ return ballTexCache; }, get sphScratch(){ return _sphScratch; },
     startDrill, stepDrill, DRILLS, DRILL_KEYS, repOnGoal, surfaceFeel, PITCH,
     advanceBallSpin, SHEEP, paintBallLook,
     get drillBest(){ return drillBest; }, updateDrill, drillDone,

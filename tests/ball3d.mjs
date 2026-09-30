@@ -267,9 +267,10 @@ const r = await p.evaluate(() => {
   // ...and a different look gets its own.
   o.texPerLook = M.ballSphereTex('token', '#111111') !== M.ballSphereTex('classic', '#111111');
 
-  // ---- slices scale with size ---------------------------------------------
-  // A fixed count costs the same at 9px as at 70px, and the warm-up lobby fields
-  // fourteen balls at once. Measured as cost, not as an internal number.
+  // ---- the cost scales with size ------------------------------------------
+  // A face rendered per pixel costs by its area, so a 9px ball is far cheaper than a 70px
+  // one, and the warm-up lobby fields fourteen balls at once. Measured as cost, not as an
+  // internal number (the old strip painter's `slices` count is gone).
   // ⚠️ BEST OF THREE, not a single pass. A single timing of this loop swung between 0.28ms
   // and 1.48ms for the same build on the same machine — enough to fail the comparison on its
   // own — because these suites run back to back and the browser is contending for the CPU.
@@ -707,6 +708,111 @@ const r = await p.evaluate(() => {
     o.panelsAreWhole = whole >= 12 && worstAspect < 1.8 && worstRatio > 0.4;
   }
 
+  // ================= THE FACE IS THE SPHERE, AT EVERY LATITUDE =======================
+  // The report, a batch after the panels were put on the sphere: *"Ball still looks odd when
+  // in 3D and the black markings don't all match"*. The bake was right and the PAINTER drew
+  // a cylinder: up to 26 vertical strips, each placed at x = r·sin(longitude) over the ball's
+  // whole height — and on a sphere seen from above a meridian is half an ELLIPSE,
+  // x = r·cos(latitude)·sin(longitude). So the pattern was exact on the equator and
+  // stretched sideways by 1/cos(latitude) above and below it: a pentagon at 60° latitude
+  // drawn twice as wide as its twin on the equator. The instrument is the exact pattern —
+  // the look's own `sphere` evaluated at every screen pixel's point on the unit ball, turned
+  // back through the roll axis and the roll — against what the painter put on a 110px face,
+  // through twelve phases with the axis turned so the seams cannot hide on a pixel column.
+  // ⚠️ MEASURED on the strip painter before anything was changed: **4.6–5.8% of the face
+  // disagreed, 1.8–2.8% within 30° of the equator and 9.5–11.8% beyond it**, at every
+  // phase; the per-pixel painter reads 0 everywhere. The two bands are asserted separately
+  // because the defect is a function of LATITUDE — an overall bar alone is satisfied by a
+  // build that is uniformly a little off, which is a different bug.
+  {
+    const R = 110, SZ = 2*R, AA = M.SPH_AA, sph = M.BALL_LOOKS.classic.sphere;
+    const cv = document.createElement('canvas'); cv.width = cv.height = SZ;
+    const c = cv.getContext('2d');
+    const pt = [0,0,0];
+    let worst = 0, worstEq = 0, worstPol = 0;
+    M.sel.ball3d = 'on';
+    for (let k = 0; k < 12; k++){
+      const phase = k/12 * 2*Math.PI, ax = 0.6;
+      c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,SZ,SZ);
+      c.beginPath(); c.arc(R, R, R, 0, 7); c.fillStyle = '#ffffff'; c.fill();
+      M.paintBallSphere(c, R, R, R, phase, ax, 'classic', '#000000', '#ffffff');
+      const d = c.getImageData(0, 0, SZ, SZ).data;
+      let bad = 0, tot = 0, badEq = 0, totEq = 0, badPol = 0, totPol = 0;
+      for (let y = 0; y < SZ; y++) for (let x = 0; x < SZ; x++){
+        const X = (x+0.5)/R - 1, Y = (y+0.5)/R - 1, d2 = X*X + Y*Y;
+        if (d2 > 0.92*0.92) continue;                       // the rim's own antialiasing is not the claim
+        const Z = Math.sqrt(1 - d2);
+        const Xr = X*Math.cos(ax) + Y*Math.sin(ax), Yr = -X*Math.sin(ax) + Y*Math.cos(ax);
+        const lon = Math.atan2(Xr, Z) - phase, cl = Math.sqrt(Math.max(0, 1 - Yr*Yr));
+        pt[0] = cl*Math.sin(lon); pt[1] = Yr; pt[2] = cl*Math.cos(lon);
+        const cov = Math.max(0, Math.min(1, 0.5 - sph(pt)/AA));
+        const dark = 1 - d[(y*SZ+x)*4]/255;
+        const diff = Math.abs(cov - dark) > 0.5;
+        tot++; if (diff) bad++;
+        if (Math.abs(Yr) < 0.5){ totEq++; if (diff) badEq++; } else { totPol++; if (diff) badPol++; }
+      }
+      worst = Math.max(worst, bad/tot); worstEq = Math.max(worstEq, badEq/totEq); worstPol = Math.max(worstPol, badPol/totPol);
+    }
+    o.faceMismatch = +worst.toFixed(4); o.faceMismatchEq = +worstEq.toFixed(4); o.faceMismatchPol = +worstPol.toFixed(4);
+    // Strip painter: 0.058 / 0.028 / 0.118. Per-pixel: 0 / 0 / 0.
+    o.faceIsTheSphere = worst < 0.01 && worstEq < 0.01 && worstPol < 0.02;
+  }
+
+  // ================= AUTHORED AT THE PIXELS IT OCCUPIES ==============================
+  // The face canvas is sized from the context's own scale, so at DPR 3 a ball is rendered
+  // three times as many pixels across and not rendered once and stretched — the crisp rule.
+  // Measured as EDGE SOFTNESS: the count of pixels that are neither ink nor paper inside
+  // the face, on a 3×-scaled context, against the same ball rendered at 1× and blown up by
+  // three. A hard edge has one or two soft pixels a crossing; an upscaled one has four or
+  // five, so the upscale has more than twice the soft pixels.
+  {
+    const r = 20, K = 3, SZ = 2*r*K;
+    const soft = (paintAtScale) => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = SZ;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#ffffff'; c.fillRect(0,0,SZ,SZ);
+      paintAtScale(c);
+      const d = c.getImageData(0,0,SZ,SZ).data; let n = 0;
+      for (let y = 0; y < SZ; y++) for (let x = 0; x < SZ; x++){
+        const dx = x - SZ/2 + 0.5, dy = y - SZ/2 + 0.5; if (dx*dx + dy*dy > (r*K*0.9)**2) continue;
+        const v = d[(y*SZ+x)*4]; if (v > 20 && v < 235) n++;
+      }
+      return n;
+    };
+    M.sel.ball3d = 'on';
+    o.softAuthored = soft(c => { c.setTransform(K,0,0,K,0,0); M.paintBallSphere(c, r, r, r, 1.3, 0.4, 'classic', '#000000', '#ffffff'); });
+    o.softUpscaled = soft(c => {
+      const one = document.createElement('canvas'); one.width = one.height = 2*r;
+      const oc = one.getContext('2d'); oc.fillStyle = '#ffffff'; oc.fillRect(0,0,2*r,2*r);
+      M.paintBallSphere(oc, r, r, r, 1.3, 0.4, 'classic', '#000000', '#ffffff');
+      c.drawImage(one, 0, 0, 2*r, 2*r, 0, 0, SZ, SZ);
+    });
+    // Authored 3× reads 1,0xx soft pixels against ~2,5xx for the 1× render blown up; with the
+    // scale ignored (`scl = 1`) the two read within a few percent of each other.
+    o.authoredAtDevicePixels = o.softAuthored * 2 < o.softUpscaled;
+  }
+
+  // ================= ONE SCRATCH PER SIZE CLASS ======================================
+  // A grow-only scratch was built first: once a 110px ball had grown it to 256, a 7px ball
+  // cost 0.145ms for the rest of the session against 0.031 before — a large canvas is
+  // accelerated and every small write into it pays a flush. Best of three, both readings
+  // in the same run, and the bar is a RATIO between them, never a millisecond.
+  {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 300; const c = cv.getContext('2d');
+    const timeSmall = () => { let best = Infinity; for (let t = 0; t < 3; t++){ const t0 = performance.now();
+      for (let i = 0; i < 300; i++) M.paintBall(c, 150, 150, 7, 0, 'classic', null, i*0.02, 0.3);
+      best = Math.min(best, (performance.now()-t0)/300); } return best; };
+    M.sel.ball3d = 'on';
+    // ⚠️ Emptied FIRST: the blocks above have already painted a 220px face, so on a grow-only
+    // build the scratch is grown before "before" is measured — 0.148 against 0.130, and the
+    // sabotage passed until this line went in.
+    M.sphScratch.clear();
+    o.smallBefore = +timeSmall().toFixed(4);
+    for (let i = 0; i < 20; i++) M.paintBall(c, 150, 150, 110, 0, 'classic', null, i*0.1, 0.3);
+    o.smallAfter = +timeSmall().toFixed(4);
+    o.smallStaysCheap = o.smallAfter < o.smallBefore * 3;
+  }
+
   // ============================ THE SPHERE LOOKS BAKE, AND BAKE ONCE ==================
   // Every look that carries a `sphere` definition inks its strip (a definition with a sign
   // error inks nothing, or everything), and the bake is a one-off — a sphere look is asked
@@ -892,7 +998,7 @@ ok('the texture is baked once, not per paint', r.texBakedOnce,
 ok('...one per ink', r.texPerInk, 'slots mix, so a texture baked in the old spot colour would be wrong');
 ok('...and one per look', r.texPerLook);
 ok('a small ball costs less than a big one', r.smallIsCheaper,
-   `${r.smallMs}ms at 11px against ${r.bigMs}ms at 60px — a fixed slice count costs the same at both`);
+   `${r.smallMs}ms at 11px against ${r.bigMs}ms at 60px — a painter with a fixed cost would read the same at both`);
 ok('the worst case still fits a frame', r.worstCaseFitsAFrame,
    `fourteen lobby balls cost ${r.fourteenMs}ms of a 16.6ms frame`);
 ok('the roll UNWINDS on a rebound', r.rollUnwinds,
@@ -931,6 +1037,12 @@ ok('THE PATTERN IS ON THE WHOLE BALL, at every phase of the roll', r.everyPhaseI
    `worst phase inks ${r.worstInk} and best ${r.bestInk} against the flat painter's ${r.flatInk} — the bake laid the design in by COLUMNS at asin(x), which is only the equator's mapping, so each print was squeezed into the middle of its own cap: measured 0.078 at the seam against 0.303 head-on, i.e. half of every rotation showed a near-blank ball with one smeared panel. Coverage: ${JSON.stringify(r.rollInk)}`);
 ok('EVERY PANEL IS A WHOLE PANEL — none clipped at a seam, none stretched', r.panelsAreWhole,
    `${r.panelsSeen} whole panels seen through a turn, worst aspect ${r.panelWorstAspect}:1, smallest ${r.panelWorstRatio} of the largest (foreshortening corrected) — the cap-print bake read 2.15:1 and 0.09, because it stretched the outer pentagons and cut them where two caps met`);
+ok('THE FACE IS THE SPHERE AT EVERY LATITUDE, not a cylinder', r.faceIsTheSphere,
+   `against the exact pattern, ${r.faceMismatch} of the face disagrees at the worst phase — ${r.faceMismatchEq} within 30° of the equator, ${r.faceMismatchPol} beyond it. The strip painter read 0.058 / 0.028 / 0.118: it placed every slice at x = r·sin(longitude) over the whole height, and a meridian is half an ellipse, so a pentagon at 60° latitude was drawn twice as wide as one on the equator — "the black markings don't all match"`);
+ok('...and is AUTHORED AT THE DEVICE PIXELS it occupies', r.authoredAtDevicePixels,
+   `${r.softAuthored} soft edge pixels rendered on a 3× context against ${r.softUpscaled} for a 1× render blown up by three — with the context's scale ignored the two read alike, which is a 15px ball rasterised at 30 and stretched over 90 on every phone`);
+ok('...and a small ball stays cheap after a big one', r.smallStaysCheap,
+   `a 7px ball cost ${r.smallBefore}ms before twenty 110px paints and ${r.smallAfter}ms after — a grow-only scratch measured 0.031 → 0.145, because a canvas grown past 256 is accelerated and every small write into it then pays a flush`);
 ok('every sphere-defined look inks its strip, and not all of it', r.sphereLooksInk, JSON.stringify(r.sphereInk));
 ok('...and bakes inside a frame budget', r.sphereBakesFast, JSON.stringify(r.sphereBakeMs));
 ok('EVERY SPHERE LOOK HAS A FULL-TURN PERIOD, not a half-turn one', r.everyLookPeriodIsAFullTurn,
