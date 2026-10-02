@@ -6191,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20260929.0210PM';
+const VERSION = '20261002.0330PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6207,12 @@ const VERSION = '20260929.0210PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261002.0330PM', title: 'Chunkier limbs on Sunday League Inked, and a rounder ball',
+    changed: [
+      '<b>Sunday League Inked has thicker arms and legs.</b> The drawn limbs are half as thick again, with bigger boots to match, so the two Sunday League looks are easy to tell apart on the pitch. Sunday League itself is unchanged.',
+      '<b>The rolling ball’s markings sit where they should at every angle.</b> The panels used to stretch sideways toward the top and bottom of the ball as it turned; the face is drawn properly as a sphere now, and it costs less than before.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20260929.0210PM', title: 'Synergy lines between teammates',
     changed: [
       '<b>Synergy links, a new switch under Game Feel → Player.</b> Two teammates who stop near each other with nobody from the other side between them are joined by a line after a moment — mainly across the pitch, the way a defensive line stands — and <b>the ball bounces off it</b>. Run off, or let an opponent walk onto the line, and it goes. Three players linked to each other fill in the zone between them.',
@@ -34668,6 +34674,25 @@ const FOOTBALLER = {
   hip:  [-0.13, 0.42], foot: 0.82, legSwing: 1.10, legW: 0.38,
   sh:   [ 0.13, 0.58], hand: 1.30, armSwing: 0.58, armW: 0.32,
   bootR: 0.19,
+  // ⚠️ **THE INKED SKIN'S LIMBS ARE HALF AS THICK AGAIN, AND THE SPRITE SKIN READS NONE OF
+  // THIS.** Asked for as *"make the inked limbs thicker so the two themes look more
+  // different"*. Measured at r 60 before touching anything: the drawn arm was **19px** across
+  // against the plate's **15** — the two styles differed by their tone, hardly by their
+  // weight. At 1.5x the arm is **28px** and the boot's area 2.3x (885 against 387 pixels).
+  // 1.7x and 2x were rendered and cut: the legs read as flippers and the boot as a ball.
+  // ⚠️ **THE WIDTH IS PAID FOR UNDER THE 1.60r CEILING, and a round cap is what charges
+  // it.** A stroke's tip reaches half its width past the point it is drawn to, so widening
+  // alone read **1.641 / 1.679 / 1.707r** at 1.3 / 1.5 / 1.7x — every one past the ceiling
+  // that keeps "legs can go out" from drifting into a body drawn bigger than its collider.
+  // So the inked leg swings 1.10 -> 0.98 and the hand sits 1.30 -> 1.20, which buys the
+  // width back: **1.581r** against the stock drawing's 1.589. ⚠️ `bootR` stays `legW / 2`,
+  // the relation the stock drawing already has — a boot smaller than the stroke's own cap
+  // is a dot sitting on the skin rather than a boot on the end of a leg.
+  // ⚠️ Only these five move; everything else — the body, the hips and shoulders, the
+  // stride, the people — is the shared figure, which is the whole reason the two skins are
+  // one painter. The pack-less fallback of the SPRITE skin keeps the stock widths: it is a
+  // stand-in for Kenney's plates, not the inked look. `tests/footballers.mjs`.
+  inked: { legW: 0.57, armW: 0.48, bootR: 0.285, legSwing: 0.98, hand: 1.20 },
   stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
   // ⚠️ **THE STRIDE IS SLOWER THAN THE TRAVEL SAYS, AND IT IS A MULTIPLIER OF ITS OWN
   // RATHER THAN A CHANGE TO `GAIT.stride`.** Asked for as "animate the frames a bit slower
@@ -34868,12 +34893,16 @@ function klimbDraw(c, sp, A, B, wpx, over){
 // ⚠️ **ONE PAINTER TAKING A FLAG, never two copies.** Everything below the limbs — the
 // shorts, the shirt, the head, the hair, the four people, the kit trim threshold, the
 // stride — is one geometry that took a lot of measuring to settle, and a second copy of it
-// is the duplication rule with the usual ending. The two skins differ by one boolean.
-function footballerSkin(name, sprites){
+// is the duplication rule with the usual ending. The two skins differ by one boolean — and
+// since the limbs were asked to be thicker on the inked one, by the five limb numbers in
+// `FOOTBALLER.inked`, which `inked:true` reads in place of the shared ones. The sprite skin's
+// own pack-less fallback takes the drawn branch WITHOUT them: it stands in for the plates.
+function footballerSkin(name, sprites, inked){
  return {
   name,
   paint(c, p, x, y, r, w){
     const F = FOOTBALLER;
+    const L = inked ? F.inked : F;                  // limb width and reach: see FOOTBALLER.inked
     // ⚠️ `discFaceTurn`, not `discFace`: this figure TURNS toward its heading over a few
     // frames rather than flipping to it — see FACETURN. Render only; the sim still reads the
     // snapped `faceX`/`faceY`, so a kick fires exactly where it always did.
@@ -34905,21 +34934,21 @@ function footballerSkin(name, sprites){
       // The foot travels along the facing axis about a hip that does not move, so the leg
       // points forward, shortens as it passes under the shirt, and points back again.
       const A = pt(F.hip[0], F.hip[1]*sgn);
-      const B = pt(F.swingAt + F.legSwing*sw, F.foot*sgn);
-      if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*F.legW), r*F.bootR);
+      const B = pt(F.swingAt + L.legSwing*sw, F.foot*sgn);
+      if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*L.legW), r*L.bootR);
       else {
-        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.legW);
+        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.legW);
         c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke();
-        c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*F.bootR), 0, 2*Math.PI);
+        c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*L.bootR), 0, 2*Math.PI);
         c.fillStyle = ink; c.fill();
       }
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0], F.sh[1]*sgn);
-      const H = pt(F.swingAt - F.armSwing*sw, F.hand*sgn);
-      if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*F.armW), r*F.armW*0.5);
+      const H = pt(F.swingAt - F.armSwing*sw, L.hand*sgn);
+      if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
-        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*F.armW);
+        c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
         c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
       }
     }
@@ -34945,8 +34974,8 @@ function footballerSkin(name, sprites){
 DISC_SKINS.footballers    = footballerSkin('Footballers', true);
 // ⚠️ The drawn pair keeps its own name so the picker says which is which. Same figure, same
 // stride, same people — the arms and legs are strokes with a boot on the end instead of the
-// pack's plates.
-DISC_SKINS.footballersink = footballerSkin('Footballers (drawn)', false);
+// pack's plates, half as thick again (`FOOTBALLER.inked`).
+DISC_SKINS.footballersink = footballerSkin('Footballers (drawn)', false, true);
 function seaPair(name, t0, t1){
   return {
     name,

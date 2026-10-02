@@ -596,6 +596,57 @@ const r = await p.evaluate(async ()=>{
   o.inkedThemeSkin  = (M.THEME_BUNDLES.kickink || {}).discs;
   o.inkedThemeNamed = (M.THEMES.kickink || {}).name;
 
+  // ---- 8c. THE INKED LIMBS ARE THICKER, and the sprite skin's are not -----------------
+  // Asked for as "make the inked limbs thicker so the two themes look more different".
+  // Measured before the change at this radius: the drawn arm was 19px across against the
+  // plate's 15 — the two styles differed by tone and hardly by weight.
+  // ⚠️ **THE CONTROL IS THE PACK-LESS FALLBACK, DRAWN IN THE SAME RUN AT THE SAME PHASE.**
+  // That is the stroke-and-circle drawing at the SHARED widths — the sprite skin standing in
+  // for its plates — so "the inked skin is thicker" is a difference between two drawings of
+  // one figure, never a pixel constant that is vacuous at one radius and impossible at another.
+  // ⚠️ **THE ARM IS MEASURED ACROSS, THE LEG BY ITS BOOT.** A perpendicular walked through the
+  // arm three quarters of the way to the hand is clear of the shirt on both skins (the shirt
+  // reaches 0.83r across there against a hand at 1.20..1.30); the same walk through the leg
+  // runs into the shirt on the inboard side and into the boot on the outboard, so the leg's
+  // width is read off the boot instead — `bootR` is `legW / 2` on both drawings, so the
+  // boot's AREA is the stroke's width squared. Both read against the fallback, which rules
+  // out the hand having moved: the walk is taken on each drawing's own arm.
+  // ⚠️ **AND THE INKED FIGURE IS HELD TO THE SAME THREE REACH RULES AS THE SPRITE'S.** A
+  // thicker stroke's round cap reaches half the extra width further, so widening alone put
+  // the figure at 1.641..1.707r — past the 1.60 ceiling that stops "legs can go out" becoming
+  // a body drawn bigger than its collider. The inked swing is pulled in to pay for it, and
+  // this is what says the bill was paid: at every phase, not at one lucky pose.
+  const across = (d, A, B, t, pick) => {
+    const mx = A[0] + (B[0]-A[0])*t, my = A[1] + (B[1]-A[1])*t;
+    const len = Math.hypot(B[0]-A[0], B[1]-A[1]), nx = -(B[1]-A[1])/len, ny = (B[0]-A[0])/len;
+    let n = 0;
+    for (let s = -R; s <= R; s += 0.5){
+      const x = Math.round(CX + mx*R + nx*s), y = Math.round(CY + my*R + ny*s);
+      if (pick(d, (y*W + x)*4)) n++;
+    }
+    return +(n*0.5).toFixed(1);
+  };
+  const limbSkin = (d,i) => near(d,i,skinCol,40) || near(d,i,skinDark,40);
+  const F = M.FOOTBALLER, FI = F.inked || F;
+  const armOf = (G) => [[F.sh[0], F.sh[1]], [F.swingAt - F.armSwing, G.hand]];   // at PEAK, sgn +1
+  o.bareArmPx  = across(bareAtPeak,  ...armOf(F),  0.75, limbSkin);
+  o.inkedArmPx = across(inkedAtPeak, ...armOf(FI), 0.75, limbSkin);
+  o.spriteArmPx = across(withSprite, ...armOf(F),  0.75, limbSkin);
+  o.bareBootPx  = bareLeg.boot;  o.inkedBootPx = inkLeg.boot;
+  const inkedFrames = []; for (let k=0;k<PH;k++) inkedFrames.push(skinPaint(M.DISC_SKINS.footballersink, { vx:3, gait: k*CYCLE/PH }));
+  const inkedReach = inkedFrames.map(d => scan(d, anyInk).reach);
+  o.inkedReachMin = Math.min(...inkedReach);  o.inkedReachMax = Math.max(...inkedReach);
+  o.inkedShirtMax = Math.max(...inkedFrames.map(d => scan(d, (d2,i)=>near(d2,i,hex(homeCol),48)).reach));
+  o.inkedBootByPhase = inkedFrames.map(d => scan(d, boot).n);
+  o.inkedArmsThicker  = o.inkedArmPx >= o.bareArmPx * 1.3;
+  o.inkedLegsThicker  = o.inkedBootPx >= o.bareBootPx * 1.6;
+  // ⚠️ The plate draws NARROWER than the stroke it stands in for (15 against 19 at r 60: its
+  // outline rows antialias away), so "the sprite skin is untouched" is the plate still under
+  // the fallback's width. Handing the sprite skin the inked widths reads 22 and fails it; a
+  // tolerance band round the fallback was tried first and let that sabotage through.
+  o.spriteUntouched   = o.spriteArmPx <= o.bareArmPx;
+  o.inkedFigureInBounds = o.inkedReachMin >= 1.15 && o.inkedReachMax <= 1.60 && o.inkedShirtMax <= 1.0;
+
 
   // ---- 9. render only, and it plays -------------------------------------------
   // ⚠️ **THE CONTROL IS THE SAME THEME WITH THE SKIN STOOD DOWN, and `applyBundle` for the
@@ -718,6 +769,14 @@ ok(r.inkedIsDrawn,
   `the drawn skin carried ${r.inkedOutline} outline pixels against the sprite skin's ${r.limbOutlinePixels} — the pack's plates carry an outline tone and a stroke does not, so this is what says which style is which`);
 ok(r.inkedHasLimbs,
   `the drawn skin put ${r.inkedLimbInk} limb pixels out there — "no outline" is equally true of a skin that draws no arms`);
+ok(r.inkedArmsThicker,
+  `the inked arm is ${r.inkedArmPx}px across against the pack-less fallback's ${r.bareArmPx} at the same phase — "make the inked limbs thicker" was the ask, and before it the two read 19 against 19`);
+ok(r.inkedLegsThicker,
+  `the inked boot covers ${r.inkedBootPx} pixels against the fallback's ${r.bareBootPx} — bootR is legW/2 on both, so this IS the leg's width squared; a leg that did not thicken reads 1.0`);
+ok(r.spriteUntouched,
+  `the SPRITE skin's arm is ${r.spriteArmPx}px across against the fallback stroke's ${r.bareArmPx} — the thickening belongs to the inked skin alone, and the plate has always drawn a little narrower than the stroke it stands in for`);
+ok(r.inkedFigureInBounds,
+  `the inked figure reads ${r.inkedReachMin}..${r.inkedReachMax}r with a shirt at ${r.inkedShirtMax}r — the same three rules the sprite skin is held to: limbs past the ring at every phase, never past 1.60r, body inside it. Widening alone measured 1.641..1.707r; the inked swing is pulled in to pay for the width`);
 ok(r.inkedThemeIsABundle && r.inkedThemeSkin === 'footballersink' && r.inkedThemeNamed === 'Sunday League Inked',
   `the drawn-limb theme does not resolve: bundle=${r.inkedThemeIsABundle} discs=${r.inkedThemeSkin} name=${r.inkedThemeNamed}`);
 ok(r.isBundle && r.named === 'Sunday League' && r.themeNamed === 'Sunday League',

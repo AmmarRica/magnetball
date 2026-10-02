@@ -2275,6 +2275,35 @@ three lines a second time, name it.
   wrapped and unwrapped answers are identical — it needs a turn whose short path CROSSES the
   boundary (+3.0 to −3.0 rad is 0.28 the near way against 6.0 the long way: **1 frame against
   11**). `tests/footballers.mjs`.
+  ⚠️ **THE INKED LIMBS ARE HALF AS THICK AGAIN, AND THE SPRITE SKIN IS NOT TOUCHED**
+  (`FOOTBALLER.inked`, the third argument of `footballerSkin`). Asked for as *"make the inked
+  limbs thicker so the two themes look more different"*, and measured before anything moved:
+  at r 60 the drawn arm was **19px** across against the plate's **15** — the two styles
+  differed by tone and hardly by weight. At 1.5x (`legW` 0.57, `armW` 0.48, `bootR` 0.285)
+  the arm is **28px** and the boot's area **2.3x** (868 against 384 pixels); 1.7x and 2x
+  were rendered and cut, because the legs read as flippers and the boot as a ball.
+  ⚠️ **THE WIDTH IS PAID FOR UNDER THE 1.60r CEILING, AND A ROUND CAP IS WHAT CHARGES IT.**
+  A stroke's tip reaches half its width past the point it is drawn to, so widening alone
+  read **1.641 / 1.679 / 1.707r** at 1.3 / 1.5 / 1.7x — every one past the ceiling that
+  stops *"legs can go out"* becoming a body drawn bigger than its collider. The inked leg
+  swings 1.10 → 0.98 and the hand sits 1.30 → 1.20, which buys the width back: **1.581r**
+  against the stock drawing's 1.589, with the figure still 1.45r at its quietest phase and
+  the shirt at 0.98. `bootR` stays `legW / 2`, the relation the stock drawing already has — a
+  boot smaller than the stroke's own cap is a dot on the skin, not a boot on a leg.
+  ⚠️ **ONE PAINTER STILL, reading five numbers off `F.inked` in place of the shared ones**
+  — the body, the joints, the stride and the people are untouched, which is the whole reason
+  the two skins are one function. The SPRITE skin's pack-less fallback keeps the stock
+  widths: it stands in for Kenney's plates, not for the inked look.
+  ⚠️ **THE CONTROL IS THAT FALLBACK, DRAWN IN THE SAME RUN AT THE SAME PHASE** — "thicker"
+  is a difference between two drawings of one figure, never a pixel constant. The arm is
+  measured ACROSS (a perpendicular walked three quarters of the way to the hand, clear of
+  the shirt on both skins) and the leg by its BOOT, because the same walk through the leg
+  runs into the shirt inboard and the boot outboard. ⚠️ **"The sprite is untouched" is the
+  plate still under the fallback's width (15 ≤ 19), and a tolerance band round the fallback
+  was tried first and let the sabotage through** — a sprite plate handed the inked width
+  reads 24 and only that check goes red. Six sabotages, each caught by its own check, and the
+  one that hands BOTH skins the inked block is caught by the control moving with the feature
+  (28 against 28.5) and by the sprite's own shirt crossing the ring (1.007r). `tests/footballers.mjs`.
 - **What a theme can OWN:** `DYN_FIELDS` entries (`{name, reset?, step?, paint}`) paint over
   the pitch surface; `DISC_SKINS` entries replace `drawOneDisc`'s body. `warp` = black-and-white
   with a starfield tunnel; `pool` = a pool table with numbered solids vs stripes;
