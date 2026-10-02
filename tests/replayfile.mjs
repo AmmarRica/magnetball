@@ -1572,6 +1572,85 @@ ok('a replay drops the ring round every body', rings.liveVsReplay > 100,
    `${rings.liveVsReplay} pixels differ between the same frame drawn live and drawn under a replay`);
 ok('...and the live match keeps it', rings.liveVsLive === 0,
    `${rings.liveVsLive} pixels differ between two live draws of the same frame — paired, because a build that dropped the ring EVERYWHERE satisfies the check above and is the worse bug`);
+
+// ---- THE COLOUR-BLIND RINGS IN A SAVED REPLAY FOLLOW THE SETTING ------------------------
+// Reported as the replay drawing "a circle around the player and a dashed circle around the
+// AI". That is `drawOneDisc`'s colour-blind aid (solid ring team 0, dashed team 1 at 1.12r),
+// and `repFileWorld` set `w.cb = w.bounds` — a truthy object — so every saved replay wore it
+// with the setting OFF. Measured on the shipped build: 276 ring pixels round two bodies in a
+// file replay with the setting off, against 0 in the live match in the same run.
+// ⚠️ THE CONTROL IS THE SETTING ON, IN THE SAME RUN: "no ring in a replay" is equally true of
+// a build that deleted the aid from replays outright, which takes it away from the one player
+// it exists for. Both the live path and the file path must answer the setting the same way.
+// ⚠️ Driven through the REAL `playReplayFile` (which installs the document's world) and one
+// known frame through `drawReplayFrame`; the ring is read as near-white ink in an annulus
+// 1.04r..1.22r round each body, on a skin-less palette so the body's own paint stays out.
+const cbRings = await (async () => {
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  const out = await p.evaluate(async () => {
+    const M = window.__magnet;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    M.applyTheme('grass'); M.sel.look.palette = 'grass'; M.sel.look.discs = 'none';
+    M.sel.length = '5'; M.sel.mode = '1v1'; M.sel.cb = 'off'; M.sel.autoReplay = false;
+    M.setMatchSeed(5); M.startMatch({ lobby: false });
+    const w = M.world; w.state = 'play'; w.stateT = 1;
+    for (let i = 0; i < 120; i++) M.step(w);
+    const frame = { bx: w.ball.x, by: w.ball.y, p: w.players.map(q => ({ x: q.x, y: q.y, k: false })) };
+    const doc = M.repMatchFileBuild();
+    const cvs = document.getElementById('game');
+    const annulus = (bodies) => {
+      const d = cvs.getContext('2d').getImageData(0, 0, cvs.width, cvs.height).data;
+      const W = cvs.width, dpr = cvs.width / cvs.clientWidth;
+      let n = 0;
+      for (const q of bodies){
+        const [sx, sy] = M.screenPt(M.wx(q.x), M.wy(q.y));
+        const cx = sx * dpr, cy = sy * dpr, R = q.r * M.cam.s * dpr;
+        for (let y = Math.floor(cy - 1.3*R); y <= cy + 1.3*R; y++) for (let x = Math.floor(cx - 1.3*R); x <= cx + 1.3*R; x++){
+          const dd = Math.hypot(x - cx, y - cy);
+          if (dd < 1.04*R || dd > 1.22*R) continue;
+          const i = (y*W + x)*4;
+          if (d[i] > 235 && d[i+1] > 235 && d[i+2] > 235) n++;
+        }
+      }
+      return n;
+    };
+    w.cb = false; M.render(); const liveOff = annulus(w.players);
+    w.cb = true;  M.render(); const liveOn = annulus(w.players);
+    w.cb = false;
+    const watch = async (cbSetting) => {
+      M.sel.cb = cbSetting;
+      const done = M.playReplayFile(doc, 1, { controls: true });
+      await sleep(80);
+      M.replay.paused = true;
+      const rw = M.world;
+      const installed = rw !== w;
+      M.drawReplayFrame(frame);
+      const n = annulus(frame.p.map((fp, i) => ({ x: fp.x, y: fp.y, r: rw.players[i].r })));
+      M.replayAbort();
+      await done;
+      return { n, installed, cb: rw.cb };
+    };
+    const fileOff = await watch('off');
+    const fileOn = await watch('on');
+    M.sel.cb = 'off';
+    return { liveOff, liveOn, fileOff, fileOn };
+  });
+  await p.close();
+  return out;
+})();
+ok('cb: the file replay path really installed the document\'s world', cbRings.fileOff.installed && cbRings.fileOn.installed,
+   'without it the probe draws against the live world and measures nothing about repFileWorld');
+ok('cb: the live match draws no aid ring with Colour-blind markers off', cbRings.liveOff === 0,
+   `${cbRings.liveOff} near-white pixels in the ring band round two bodies`);
+ok('cb: ...and a real one with it on', cbRings.liveOn > 100,
+   `${cbRings.liveOn} — the control: the aid ring is a real mark to begin with, or the replay half is a claim about nothing`);
+ok('cb: a saved replay draws no aid ring with the setting off', cbRings.fileOff.n === 0,
+   `${cbRings.fileOff.n} ring pixels on a file replay with Colour-blind markers off (shipped build read 276, because repFileWorld set w.cb to the bounds object; w.cb reads ${JSON.stringify(cbRings.fileOff.cb)})`);
+ok('cb: ...and keeps it with the setting on', cbRings.fileOn.n > 100 && cbRings.fileOn.cb === true,
+   `${cbRings.fileOn.n} ring pixels on the same replay with the setting on — paired, or "no ring in a replay" is satisfied by deleting the aid from replays, which takes it away from the player it exists for`);
 await vpage.close();
 
 // ---- WATCH GOAL ON THE RESULT SCREEN, DRIVEN THE WAY A THUMB DOES ---------------

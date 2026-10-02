@@ -2178,6 +2178,24 @@ three lines a second time, name it.
   `sel.look.discs` AFTER `applyTheme`, which rewrites the slots — set first, the skin came
   back `none`, `drawOneDisc` took its flat-sprite branch (which has no guide ring at all) and
   the whole check measured two identical pictures and read **0**. `tests/replayfile.mjs`.
+  ⚠️ **AND A SAVED REPLAY WORE THE COLOUR-BLIND RINGS WITH THE SETTING OFF, FOR THE WHOLE
+  LIFE OF THE FEATURE** (`repFileWorld`'s `w.cb`). Reported, with a screenshot, as *"we draw a
+  circle around the player and then a dash circle around the AI player when we are showing
+  the replay"* — and that is `drawOneDisc`'s colour-blind aid (`if (w.cb)`: a solid ring round
+  team 0, a dashed one round team 1 at 1.12r), not a you-against-the-bots marker. The guide
+  ring above was innocent. `repFileWorld` set **`w.cb = w.bounds`** — a truthy OBJECT — so
+  Watch goal, Watch match and the offline video export all drew it with Colour-blind markers
+  off; the goal auto-replay copies the live world's flag and never had it. Measured on a
+  two-body frame: **276 ring pixels in a file replay with the setting off, 0 live**, and the
+  same 276 with it on, because an object is true either way.
+  ⚠️ **THE FIX IS THAT THE REPLAY FOLLOWS THE SETTING, NOT THAT IT HIDES THE RING.** The ask
+  was to hide it in replays outright, and the guide ring's argument does not transfer: that
+  ring's premise (a collider) goes away in a replay, this one's (telling the sides apart
+  without hue) does not — a colour-blind player watching a replay needs it exactly as much as
+  in the match. With the setting off, which is the default and what the reporter had, the
+  replay draws nothing, which is the picture that was asked for; with it on it draws what the
+  match draws. `tests/replayfile.mjs` pairs the two, through the real `playReplayFile`, and
+  the over-correction (`w.cb = false`) is a caught sabotage.
 - **Two-frame leg animation** on the creature skins, driven by DISTANCE travelled
   (`p.gait`, accumulated in `integrate`), never by a clock. ⚠️ A timer would have to be
   advanced somewhere, and anything advanced in a draw runs 2.4× fast at 144Hz (the trails

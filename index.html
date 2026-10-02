@@ -6191,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261002.0330PM';
+const VERSION = '20261002.0430PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6207,12 @@ const VERSION = '20261002.0330PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261002.0430PM', title: 'Saved replays stop drawing rings round the players',
+    changed: [
+      '<b>No more stray rings in a saved replay.</b> Watching a saved goal or match drew a solid ring round one side and a dashed ring round the other even with Colour-blind markers switched off. A replay now shows exactly what the match shows: no rings unless you have that option on.',
+      '<b>Exported videos are clean too.</b> A video saved from a replay carried the same two rings; it comes out looking like the match did.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261002.0330PM', title: 'Chunkier limbs on Sunday League Inked, and a rounder ball',
     changed: [
       '<b>Sunday League Inked has thicker arms and legs.</b> The drawn limbs are half as thick again, with bigger boots to match, so the two Sunday League looks are easy to tell apart on the pitch. Sunday League itself is unchanged.',
@@ -21378,7 +21384,15 @@ function repFileWorld(doc){
     ball: { x:0, y:0, vx:0, vy:0, r:BALL.r, spin:0, rot:0 },
   };
   buildGeometry(w);
-  w.cb = w.bounds;
+  // ⚠️ THE COLOUR-BLIND RINGS FOLLOW THE SETTING HERE, AS THEY DO IN A MATCH. This line
+  // read `w.cb = w.bounds` for the whole life of the feature — a truthy OBJECT, so
+  // `drawOneDisc`'s aid block drew a solid ring round one side and a dashed ring round the
+  // other on EVERY saved replay (Watch goal, Watch match, and the offline video export,
+  // which all come through here) with Colour-blind markers OFF. Reported as the replay
+  // drawing "a circle around the player and a dashed circle around the AI". Measured: 276
+  // ring pixels on a two-body frame with the setting off, against 0 live; the goal
+  // auto-replay copies the live world's flag and never had it. `tests/replayfile.mjs`.
+  w.cb = sel.cb === 'on';
   return w;
 }
 // Watch a saved replay. ⚠️ It swaps the GLOBAL `world` for the duration rather than threading
