@@ -3169,6 +3169,41 @@ three lines a second time, name it.
   frame. The gate is six tenths of the fullest boot now, and the leg reads **1.184r**.
   ⚠️ **TEN SABOTAGES, each caught by its own check**, in `tests/footballers.mjs` — two of
   them (the landing snap, the sine) only after the check was tightened, as written above.
+  ⚠️ **AND THE WHOLE FIGURE YAWS WITH THE STRIDE, SO ONE SHOULDER LEADS** (`FOOTBALLER.twist`,
+  0.22). Asked for next as *"shoulders should go front and back, rotating the player a little
+  bit to show which shoulder is ahead"*. The drawn facing is turned `twist` radians with the
+  arm swing — the shoulder whose arm is forward leads — and the shirt, the shorts, the head,
+  the shoulders and the hips turn together about the body; the FEET do not, being planted in
+  the world, so each leg runs from a hip that has turned to a foot that has not. Measured on
+  the face (the skin crescent the hair leaves in front): **+0.063r / −0.071r** across at the
+  two peaks, **−0.004** at mid-stride and at rest.
+  ⚠️ **RIGID, AND THAT IS WHAT MAKES IT FREE — two partial versions were built first and
+  both failed.** A rotation about the body preserves every radius, so the ring-filling rule,
+  the 1.60r ceiling and the shirt-inside-the-ring rule read what they read unturned. Turning
+  the SHOULDERS alone (the arm roots, hands fixed) shifted the arm's visible root by
+  **0.044r** — half a pixel on a real body, nothing anyone would see. Turning the shirt or
+  the shorts with them opened a flank: the body's thinnest ray read **0.883** with the shirt
+  turned about the body, **0.898** about its own centre (a 0.92 × 0.96 ellipse is a hair
+  narrower across once off-axis), **0.898** with the shorts turned a quarter as far, against
+  0.906 unturned and a bar of 0.90. Carrying the hands round with the shoulders was ruled
+  out on arithmetic: `hand × sin(twist)` is 0.28r more swing at 1.30 across, a hand at 1.70r
+  through the ceiling.
+  ⚠️ **THE RIGID YAW STILL READ 0.895 AT THE SUITE'S RADIUS, AND THAT WAS THE INSTRUMENT.**
+  A rotation cannot change a radius; at R 60 a ray bin is 3° and an edge is a pixel, and the
+  same ellipses read 0.906 / 0.895 unturned / turned. At R 120 they read **0.909 / 0.907**,
+  at R 200 **0.915 / 0.912**. The fill rays are painted at R 150 now (0.910), where the
+  margin over the bar is wider than a pixel. The bar did not move.
+  ⚠️ **`torsoHoldsStill` IS WITHDRAWN** — *"the head and shirt must hold still while only
+  the limbs swing"* is false by design now. What replaces it is a YAW and not a drift: equal
+  and opposite face swings at the two peaks, centred at mid-stride and at rest, under 0.30r
+  of swing (a little bit is a ceiling too), the nose turned AWAY from the side whose arm is
+  forward, and the shirt's centroid and pixel count holding between the peaks (a rotation
+  about the body, not a torso moving about). ⚠️ **"Centred at rest" is not a bar on the face's
+  position** — a standing player left with the yaw on turns `stand × twist` = 0.066 rad, which
+  moves the face 0.016r and sailed under a 0.02 bar; the rest frame is pinned to the same body
+  with the twist stood down, **zero pixels** different, in the same run. Four sabotages — the
+  yaw ignored, reversed, kept at rest (caught only by that pixel pin), and 0.60 rad — each
+  caught by its own check.
   ⚠️ **THE OLD CADENCE'S MEASUREMENT, kept**: *"animate the frames a bit slower for arms
   and legs"* — on a seeded 3v3 a moving body's median speed is **1.80 units a step**, so at
   `legFrame`'s own 14-unit cycle the legs turned over **7.7 times a second, 7.8 frames for a

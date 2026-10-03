@@ -6191,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261003.1115AM';
+const VERSION = '20261003.0105PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6207,12 @@ const VERSION = '20261003.1115AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261003.0105PM', title: 'The footballers lean into their stride',
+    changed: [
+      '<b>Sunday League footballers turn a little with each step.</b> The whole body yaws with the stride so the shoulder of the forward arm leads, the way a runner\u2019s does, while the feet stay planted on the grass. Standing still, nothing moves.',
+      '<b>Sunday League Inked gets the same stride.</b> Both footballer looks plant their feet and turn with the step; only the arms and legs differ between them.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261003.1115AM', title: 'The footballers plant their feet',
     changed: [
       '<b>Sunday League footballers step like people now.</b> Each foot is put down on the grass and stays there while the body runs over it, then swings forward for the next step from wherever it ended up. The stepping follows how fast you are going, not how you move the stick: spin round or slam the joystick about and the player turns without stamping his feet all over the pitch.',
@@ -34822,6 +34828,24 @@ const FOOTBALLER = {
   // the along position a planted foot WOULD have — `1 - 4u` on the ground as the body passes
   // over it, a smoothstep forward in the air (`footPhase`) — which is what keeps a tile a
   // true picture of the pitch and what every phase-based check in the suite still samples.
+  // ⚠️ **THE WHOLE FIGURE YAWS WITH THE STRIDE, SO ONE SHOULDER LEADS** (`twist`). Asked
+  // for as *"shoulders should go front and back, rotating the player a little bit to show
+  // which shoulder is ahead"*. The drawn facing is turned `twist` radians with the arm
+  // swing — the shoulder whose arm is forward leads — and the shirt, the shorts, the head,
+  // the shoulders and the hips all turn together about the body. The FEET do not: they are
+  // planted in the world (`stepFeet`), so the legs run from a hip that has turned to a foot
+  // that has not, which is what a turning torso does over planted feet.
+  // ⚠️ **RIGID, AND THAT IS WHAT MAKES IT FREE.** A rotation about the body preserves every
+  // radius, so the ring-filling rule (thinnest ray >= 0.90), the 1.60r ceiling and the
+  // shirt-inside-the-ring rule read exactly what they read unturned. **Two partial versions
+  // were built first and both failed the fill**: turning the shoulders alone shifted the
+  // arm's visible root by 0.044r — half a pixel on a real body, nothing anybody would see —
+  // and turning the shirt or the shorts with them opened a flank (thinnest ray 0.883 with
+  // the shirt turned about the body, 0.898 about its own centre, 0.898 with the shorts
+  // turned a quarter as far). Turning everything costs nothing and is the thing asked for.
+  // ⚠️ Zero at rest: a standing player has no stride to show a shoulder for. Render only,
+  // like everything in this painter — it reads `footSwing` and writes nothing.
+  twist: 0.22,
   stride: 0.93,   // half a step, in r: a foot lands this far AHEAD and lifts this far BEHIND
   reach:  1.28,   // the leash: a planted foot is dragged in rather than drawn further out than this
   settle: 0.22,   // at rest, the fraction of the way to the stance each foot moves per step
@@ -35111,7 +35135,14 @@ function footballerSkin(name, sprites, inked){
     // ⚠️ `discFaceTurn`, not `discFace`: this figure TURNS toward its heading over a few
     // frames rather than flipping to it — see FACETURN. Render only; the sim still reads the
     // snapped `faceX`/`faceY`, so a kick fires exactly where it always did.
-    const { ux, uy } = discFaceTurn(p);             // honours the rotation checkbox
+    const f0 = discFaceTurn(p);                     // honours the rotation checkbox
+    // ⚠️ The stride's yaw (FOOTBALLER.twist) is folded into the drawn facing HERE, so every
+    // shape below turns together. Negative turns the +1 side forward, which is the side whose
+    // arm is forward when `footSwing(p, 1)` is -1 — hence the sign.
+    const running = Math.hypot(p.vx || 0, p.vy || 0) >= GAIT.minSpd;
+    const twist = running ? F.twist * footSwing(p, 1) : 0;
+    const ct = Math.cos(twist), st = Math.sin(twist);
+    const ux = f0.ux*ct - f0.uy*st, uy = f0.ux*st + f0.uy*ct;
 
     const px = -uy, py = ux;
     const pt = (a, b) => [x + ux*a*r + px*b*r, y + uy*a*r + py*b*r];
@@ -35151,8 +35182,8 @@ function footballerSkin(name, sprites, inked){
       // The foot is on the ground or in the air (see FOOTBALLER.stride) about a hip that
       // moves with the body, so the leg points forward at the plant, shortens as the body
       // passes over the foot, and points back by the lift.
-      const A = pt(F.hip[0], F.hip[1]*sgn);
-      const B = footAt(sgn > 0 ? 1 : 0, sgn);
+      const A = pt(F.hip[0], F.hip[1]*sgn);                 // turns with the body (the yaw is in `pt`)
+      const B = footAt(sgn > 0 ? 1 : 0, sgn);                 // ...and the foot does not: it is planted
       if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*L.legW), r*L.bootR);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.legW);
@@ -35162,7 +35193,7 @@ function footballerSkin(name, sprites, inked){
       }
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
-      const S = pt(F.sh[0], F.sh[1]*sgn);
+      const S = pt(F.sh[0], F.sh[1]*sgn);                    // the shoulder leads or trails with the yaw
       const H = pt(F.swingAt - F.armSwing*sw, L.hand*sgn);   // ...on the cadence, not the ground
       if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
@@ -35173,6 +35204,7 @@ function footballerSkin(name, sprites, inked){
     // --- shorts, shirt, head --------------------------------------------------------
     c.save();
     c.translate(x, y); c.rotate(Math.atan2(uy, ux));
+    // (The whole body is already yawed with the stride: `ux`/`uy` carry FOOTBALLER.twist.)
     c.beginPath();
     c.ellipse(F.shortsAt*r, 0, F.shortsA*r, F.shortsB*r, 0, 0, 2*Math.PI);
     c.fillStyle = trim; c.fill();

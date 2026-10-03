@@ -260,7 +260,34 @@ const r = await p.evaluate(async ()=>{
     }
     return out.map(v => +(v/R).toFixed(3));
   };
-  const rays = frames.map(bodyRay);
+  // ⚠️ **THE RAYS ARE MEASURED ON FRAMES PAINTED AT 2.5x THIS SIZE.** At R 60 a ray bin is
+  // 3 degrees wide and an edge is a pixel, and the SAME two ellipses read 0.906 unturned and
+  // 0.895 turned a rigid 12.6 degrees with the stride (FOOTBALLER.twist) — a rotation
+  // about the body cannot change a radius, so the drop was the instrument. At R 120 they
+  // read 0.909 / 0.907 and at R 200 0.915 / 0.912. The margin over the 0.90 bar is real
+  // only at a size where a pixel is not most of it.
+  const RB = 150, WB = 5*RB;
+  const cvB = document.createElement('canvas'); cvB.width = WB; cvB.height = WB;
+  const cB = cvB.getContext('2d');
+  const paintBig = (opt) => {
+    cB.fillStyle = '#7f7f7f'; cB.fillRect(0,0,WB,WB);
+    const q = body(Object.assign({ r: RB }, opt));
+    M.DISC_SKINS.footballers.paint(cB, q, WB/2, WB/2, RB, { players:[q] });
+    return cB.getImageData(0,0,WB,WB).data;
+  };
+  const bodyRayBig = (d) => {
+    const out = new Array(RAYS).fill(0);
+    for (let i=0;i<d.length;i+=4){
+      if (!bodyPick(d,i)) continue;
+      const k=(i/4)|0, ax=(k%WB)-WB/2, ay=((k/WB)|0)-WB/2;
+      const a = Math.atan2(ay, ax), rad = Math.hypot(ax, ay);
+      const s2 = ((a + Math.PI*2) % (Math.PI*2)) / (Math.PI*2) * RAYS | 0;
+      if (rad > out[s2]) out[s2] = rad;
+    }
+    return out.map(v => +(v/RB).toFixed(3));
+  };
+  const rays = [];
+  for (let k=0;k<PH;k++) rays.push(bodyRayBig(paintBig({ vx:3, gait: k*CYCLE/PH })));
   o.bodyThinnest = Math.min(...rays.map(v => Math.min(...v)));
   o.bodyFarthest = Math.max(...rays.map(v => Math.max(...v)));
   o.bodyFillsTheRing   = o.bodyThinnest >= 0.90;
@@ -336,9 +363,51 @@ const r = await p.evaluate(async ()=>{
   // same picture in both.
   const a0 = frames[kHi], a1 = frames[kLo];
   o.framesDifferOutside = moved(a0, a1, rad => rad > R*0.80);
-  o.framesSameInside    = moved(a0, a1, rad => rad < R*0.55);
   o.limbsAnimate        = o.framesDifferOutside > 300;
-  o.torsoHoldsStill     = o.framesSameInside < 40;
+  // ⚠️ **THE BODY YAWS WITH THE STRIDE, SO ONE SHOULDER LEADS** (FOOTBALLER.twist) — asked
+  // for as "shoulders should go front and back, rotating the player a little bit to show
+  // which shoulder is ahead". This REPLACES `torsoHoldsStill` ("the head and shirt must hold
+  // still while only the limbs swing"), which is now false by design. What is measured is a
+  // YAW and not a drift: the head's skin crescent — the face, since the hair covers the back —
+  // swings ACROSS by equal and opposite amounts at the two peaks, sits centred at mid-stride
+  // and at rest, and turns AWAY from the side whose arm is forward (a body turned so the +1
+  // shoulder leads has its nose toward the -1 side). "A little bit" is a ceiling as well as a
+  // floor: the first partial build moved a shoulder 0.044r, half a pixel on a real body, and
+  // a full-figure yaw past 0.15r of crescent swing is a wobble rather than a stride.
+  // ⚠️ Paired with the SHIRT not swinging — a plain near-round shirt turned a few degrees is
+  // the same picture, so its centroid and its pixel count must hold between the peaks: a
+  // yaw is a rotation about the body, not the torso moving about.
+  const face = (d) => { let sx = 0, sy = 0, n = 0;
+    for (let i=0;i<d.length;i+=4){
+      const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY;
+      if (Math.hypot(ax, ay) > R*0.55 || !near(d,i,skinCol,40)) continue;
+      sx += ax; sy += ay; n++;
+    }
+    return n ? { along:+(sx/n/R).toFixed(3), across:+(sy/n/R).toFixed(3), n } : null; };
+  const faceHi = face(a0), faceLo = face(a1);
+  const mids = [frames[Math.round((kHi + kLo)/2) % PH], paint({ vx:0, gait:0 })].map(face);
+  o.faceAcross = { hi: faceHi.across, lo: faceLo.across, mid: mids[0].across, rest: mids[1].across };
+  o.faceAcrossSwing = +Math.abs(faceHi.across - faceLo.across).toFixed(3);
+  // ⚠️ "Centred at rest" is NOT a bar on the face's across position — a standing player
+  // left with the yaw on turns `stand × twist` = 0.066 rad, which moves the face 0.016r and
+  // sailed under a 0.02 bar. At rest the picture must be IDENTICAL to the same body with
+  // the twist stood down, in pixels, in the same run.
+  const restOn = paint({ vx:0, gait:0 });
+  const twistWas = M.FOOTBALLER.twist; M.FOOTBALLER.twist = 0;
+  const restOff = paint({ vx:0, gait:0 });
+  M.FOOTBALLER.twist = twistWas;
+  o.restYawPixels = moved(restOn, restOff, () => true);
+  o.bodyYawsWithTheStride = faceHi.across * faceLo.across < 0
+                          && Math.abs(faceHi.across) > 0.03 && Math.abs(faceLo.across) > 0.03
+                          && o.faceAcrossSwing <= 0.30
+                          && Math.abs(mids[0].across) < 0.02 && o.restYawPixels === 0;
+  // ...and away from the leading shoulder: the +1 hand's along at each peak against the face.
+  o.noseTurnsFromTheLeadingShoulder = Math.sign(faceHi.across) === -Math.sign(handAlong[kHi])
+                                    && Math.sign(faceLo.across) === -Math.sign(handAlong[kLo]);
+  const shirtHi = scan(a0, (d,i)=>near(d,i,hex(homeCol),48)), shirtLo = scan(a1, (d,i)=>near(d,i,hex(homeCol),48));
+  o.shirtBetweenPeaks = { nHi: shirtHi.n, nLo: shirtLo.n, alongHi: shirtHi.along, alongLo: shirtLo.along };
+  o.shirtHoldsItsPlace = Math.abs(shirtHi.n - shirtLo.n) < shirtHi.n * 0.03
+                       && Math.abs(shirtHi.along - shirtLo.along) < 0.03;
 
   // ⚠️ AT REST IT IS A FIXED STANCE, never the phase frozen wherever the player stopped —
   // or somebody who stops mid-stride is left standing with a leg stretched out behind.
@@ -1017,8 +1086,12 @@ ok(r.limbsClearTheShirt,
   `the limbs barely clear the shirt: figure ${r.figureReachMin}r at its worst against shirt ${r.shirtReachMax}r`);
 ok(r.limbsAnimate,
   `the two opposite peaks of the stride are the same picture outside the torso (${r.framesDifferOutside} pixels moved) — the legs do not swing`);
-ok(r.torsoHoldsStill,
-  `${r.framesSameInside} pixels inside the torso changed between the two peaks of the stride — the head and shirt must hold still while only the limbs swing under them`);
+ok(r.bodyYawsWithTheStride,
+  `the body does not yaw with the stride: the face sits ${JSON.stringify(r.faceAcross)}r across at the two peaks, mid-stride and at rest (swing ${r.faceAcrossSwing}r; ${r.restYawPixels} pixels differ at rest against the twist stood down) — "rotating the player a little bit to show which shoulder is ahead" is equal and opposite turns at the two peaks, nothing at mid-stride or standing still, and a little bit`);
+ok(r.noseTurnsFromTheLeadingShoulder,
+  `the body turns the WRONG way: face ${JSON.stringify(r.faceAcross)}r against the +1 hand at ${r.handAlong[r.peakPhases[0]]} / ${r.handAlong[r.peakPhases[1]]}r along — the shoulder whose arm is forward has to lead, which turns the nose away from that side`);
+ok(r.shirtHoldsItsPlace,
+  `the shirt moved between the two peaks (${JSON.stringify(r.shirtBetweenPeaks)}) — the yaw is a rotation about the body, and a near-round shirt turned a few degrees keeps its place and its size`);
 ok(r.restIsAFixedStance,
   'a standing player draws a different pose at a different `gait` — at rest it must be a FIXED stance, or somebody who stops mid-stride is left with a leg stretched out behind');
 ok(r.standIsCalmer,
