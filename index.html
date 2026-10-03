@@ -6191,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261002.0430PM';
+const VERSION = '20261003.1115AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6207,12 @@ const VERSION = '20261002.0430PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261003.1115AM', title: 'The footballers plant their feet',
+    changed: [
+      '<b>Sunday League footballers step like people now.</b> Each foot is put down on the grass and stays there while the body runs over it, then swings forward for the next step from wherever it ended up. The stepping follows how fast you are going, not how you move the stick: spin round or slam the joystick about and the player turns without stamping his feet all over the pitch.',
+      '<b>Players face the way they are running on wide screens.</b> On a desktop every drawn figure \u2014 footballers, arrowheads, shrimps, saucers \u2014 was turned a quarter off its direction of travel, running sideways. They point where they are going now.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261002.0430PM', title: 'Saved replays stop drawing rings round the players',
     changed: [
       '<b>No more stray rings in a saved replay.</b> Watching a saved goal or match drew a solid ring round one side and a dashed ring round the other even with Colour-blind markers switched off. A replay now shows exactly what the match shows: no rings unless you have that option on.',
@@ -13213,12 +13219,15 @@ function drawSlotsSwatch(c, s, cw, ch){
     for (const team of [0,1]){
       // ⚠️ **MID-STRIDE, NOT AT REST.** `gaitSwing` returns the standing pose without a gait
       // and a velocity, so every walking skin drew its quietest frame — the one where a
-      // footballer's legs are tucked under the shirt and there is least to see. A quarter of
-      // a cycle puts the limbs out, which is what the tile is a picture OF. Fixed numbers,
-      // never a clock or a roll: a swatch is baked once and must be the same every time.
+      // footballer's legs are tucked under the shirt and there is least to see. The start of
+      // the cycle is one foot's PLANT and the other's LIFT (`footPhase`), both legs at full
+      // reach, which is what the tile is a picture OF. ⚠️ It was a quarter of a cycle, the
+      // sine's peak — on the planted stride that is the phase where both feet are level with
+      // the hips and under the shirt. Fixed numbers, never a clock or a roll: a swatch is
+      // baked once and must be the same every time.
       const x = team ? cw*0.75 : cw*0.25;
       const pl = { team, color: team ? '#4d7bff' : '#ff3b6b',
-                   vx: 3, vy: 0, faceX: 1, faceY: 0, gait: gaitPeriod() * 0.25 };
+                   vx: 3, vy: 0, faceX: 1, faceY: 0, gait: 0 };
       if (skin) skin.paint(c, pl, x, ch/2, r, null);
       else {
         c.beginPath(); c.arc(x, ch/2, r*1.16, 0, 2*Math.PI); c.fillStyle = t.pitch.discRim; c.fill();
@@ -20140,6 +20149,7 @@ function loop(t){
     advanceFireworks(world); // ...and the winning goal's fireworks, likewise
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
     advanceFaceTurn(world); // ...and the figure's turn toward its heading — render only, see FACETURN
+    advanceFeet(world);     // ...and the footballers' planted feet — render only, see FOOTBALLER.stride
     advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
     if (lock.playing) lockAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
@@ -20484,8 +20494,8 @@ function repTween(a, b, f, fps){
 // coordinate to an integer, so a chord under a unit is quantisation rather than movement —
 // and the live rule it mirrors (`advanceBallSpin`'s `sp > 0.15` a step) is well under that at
 // any sane frame rate. A resting ball otherwise rolls on rounding noise alone.
-var repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], b: null, fps: 60 };
-function repAnimReset(fps){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], b: null,
+var repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], b: null, fps: 60 };
+function repAnimReset(fps){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], b: null,
                                         fps: Math.max(1, fps || 60) }; }
 function repAnimate(w){
   const steps = 60 / Math.max(1, repAnim.fps || 60);   // sim steps this drawn frame covers
@@ -20510,6 +20520,13 @@ function repAnimate(w){
     p._drawAng = repAnim.fa[i];
     turnFaceToward(p, steps);
     repAnim.fa[i] = p._drawAng;
+    // ⚠️ ...and the planted feet, for the same two reasons: `advanceFeet` is not running,
+    // and the spread body carries the LIVE player's `_feet` object, which a replay must not
+    // walk about under a match that is still being played. Per slot, assigned BEFORE the
+    // step and stored after it — see FOOTBALLER.stride.
+    p._feet = repAnim.ft[i];
+    stepFeet(p, steps);
+    repAnim.ft[i] = p._feet;
   }
   const bl = w.ball;
   if (!bl) return;
@@ -33339,11 +33356,43 @@ function advanceFaceTurn(w){
   if (!w) return;
   for (const p of allBodies(w)) turnFaceToward(p, 1);
 }
+// ============================================================
+//  A SKIN PAINTS INSIDE `uprightAt`, AND A WORLD DIRECTION NEEDS THE PITCH'S TURN BACK
+// ============================================================
+// ⚠️ **EVERY DIRECTION-DRAWN SKIN WAS A QUARTER TURN WRONG ON EVERY WIDE SCREEN, for the
+// whole life of the skins.** `drawOneDisc` is called inside `uprightAt`, which cancels
+// `cam.rot` so faces and name plates stay upright in deck view — and `auto` orientation
+// turns the pitch (`cam.rot` = -PI/2) on ANY wide window, which is every desktop. Inside
+// that frame a world vector drawn as it stands is rotated by `-cam.rot` against the body
+// it belongs to. Measured on a 1280x800 page: a footballer driven along world +x travelled
+// **(0, -13.5) on screen — straight UP — while its head sat at (+4.9, -0.6), facing
+// RIGHT.** Every figure on a desktop ran sideways, crab-wise; the arrowheads, the shrimp
+// and the saucers point the same quarter turn off their travel. The ball already knew:
+// `drawOneBall` adds `cam.rot` to `rollAx` with a comment saying exactly this.
+// ⚠️ **IT IS THE DRAW-TIME READERS THAT TURN, NEVER `discFace` ITSELF.** `turnFaceToward`
+// eases `_drawAng` toward `discFace` in WORLD angle, and that angle is also what the replay
+// keeps per slot (`repAnim.fa`) — rotating it at the source would ease toward a screen
+// angle and then turn it again on the way out. `discFaceDraw` and `discFaceTurn` are what
+// a skin reads, and they are the two places the turn is put back.
+// ⚠️ **ONLY ON THE GAME CANVAS.** A picker tile, a bundle swatch and the suites paint a
+// skin straight from their own context, where there is no turn to put back — and a tile
+// baked into `swatchFixed` (never dropped) with the live `cam.rot` folded in would show a
+// figure lying on its side for the rest of the session. So the turn is a flag `drawOneDisc`
+// raises round the paint and lowers after it, and anything else reads zero.
+// ⚠️ `var`: `drawOneDisc` is a hoisted declaration the attract demo reaches during the
+// bootstrap, and a `let` here is in the temporal dead zone at that moment.
+var skinRot = 0;
+function skinDir(ux, uy){
+  if (!skinRot) return { ux, uy };
+  const c = Math.cos(skinRot), s = Math.sin(skinRot);
+  return { ux: ux*c - uy*s, uy: ux*s + uy*c };
+}
+function discFaceDraw(p){ const f = discFace(p); return skinDir(f.ux, f.uy); }
 // What an opted-in skin draws along. Falls back to the snap while no eased angle exists
 // yet, so the first frame of a body's life is never drawn pointing nowhere.
 function discFaceTurn(p){
-  if (p._drawAng == null) return discFace(p);
-  return { ux: Math.cos(p._drawAng), uy: Math.sin(p._drawAng) };
+  if (p._drawAng == null) return discFaceDraw(p);
+  return skinDir(Math.cos(p._drawAng), Math.sin(p._drawAng));
 }
 // ============================================================
 //  ATTRIBUTE CLASH — the character grid inside, the rainbow round the edge
@@ -34351,7 +34400,7 @@ DISC_SKINS.vector = {
     c.lineWidth = Math.max(1.2, r*VEC.ring); c.strokeStyle = col; c.stroke();
     c.lineJoin = 'round'; c.lineCap = 'round';
     if (dart){
-      const { ux, uy } = discFace(p);
+      const { ux, uy } = discFaceDraw(p);           // world facing, with the pitch's turn put back — see skinDir
       c.rotate(Math.atan2(uy, ux));                 // +x is now the way it points
       const D = VEC.dart;
       c.beginPath();
@@ -34453,7 +34502,7 @@ function craftPair(name, t0, t1){
       const drive = Math.min(1, spd / UFO.driveAt);
       let ux, uy;
       if (spd > 0.05){ ux = (p.vx||0)/spd; uy = (p.vy||0)/spd; }
-      else { const f = discFace(p); ux = f.ux; uy = f.uy; }
+      else { const f = discFaceDraw(p); ux = f.ux; uy = f.uy; }
       const lean = UFO.bank * drive;
       // The ground shadow, thrown behind and holding its own circle — it is on the
       // grass, so it does not foreshorten with the craft above it.
@@ -34685,7 +34734,7 @@ const FOOTBALLER = {
   // 0.41r long by 0.26r wide — a spike rather than a boot. Kenney's own limb is 13 wide
   // against a 19 length (0.68); at 0.38 this one is 0.29, which is as near as the tuck under
   // the shirt allows. 0.44 was rendered and cut: the legs read as flippers.
-  hip:  [-0.13, 0.42], foot: 0.82, legSwing: 1.10, legW: 0.38,
+  hip:  [-0.13, 0.42], foot: 0.82, legW: 0.38,
   sh:   [ 0.13, 0.58], hand: 1.30, armSwing: 0.58, armW: 0.32,
   bootR: 0.19,
   // ⚠️ **THE INKED SKIN'S LIMBS ARE HALF AS THICK AGAIN, AND THE SPRITE SKIN READS NONE OF
@@ -34698,52 +34747,194 @@ const FOOTBALLER = {
   // it.** A stroke's tip reaches half its width past the point it is drawn to, so widening
   // alone read **1.641 / 1.679 / 1.707r** at 1.3 / 1.5 / 1.7x — every one past the ceiling
   // that keeps "legs can go out" from drifting into a body drawn bigger than its collider.
-  // So the inked leg swings 1.10 -> 0.98 and the hand sits 1.30 -> 1.20, which buys the
-  // width back: **1.581r** against the stock drawing's 1.589. ⚠️ `bootR` stays `legW / 2`,
-  // the relation the stock drawing already has — a boot smaller than the stroke's own cap
-  // is a dot sitting on the skin rather than a boot on the end of a leg.
-  // ⚠️ Only these five move; everything else — the body, the hips and shoulders, the
+  // So the hand sits 1.30 -> 1.20, which buys the width back. ⚠️ **The inked leg used to pay
+  // too (`legSwing` 1.10 -> 0.98) and no longer does**: the stride is a PLANTED one now and
+  // `stride` is one number for both skins, with the leash (`reach`) holding the figure under
+  // the ceiling where a shorter swing used to — see the stride block below. ⚠️ `bootR` stays
+  // `legW / 2`, the relation the stock drawing already has — a boot smaller than the stroke's
+  // own cap is a dot sitting on the skin rather than a boot on the end of a leg.
+  // ⚠️ Only these four move; everything else — the body, the hips and shoulders, the
   // stride, the people — is the shared figure, which is the whole reason the two skins are
   // one painter. The pack-less fallback of the SPRITE skin keeps the stock widths: it is a
   // stand-in for Kenney's plates, not the inked look. `tests/footballers.mjs`.
-  inked: { legW: 0.57, armW: 0.48, bootR: 0.285, legSwing: 0.98, hand: 1.20 },
-  stand: 0.30,        // the fixed stance a standing player holds, as a fraction of a stride
-  // ⚠️ **THE STRIDE IS SLOWER THAN THE TRAVEL SAYS, AND IT IS A MULTIPLIER OF ITS OWN
-  // RATHER THAN A CHANGE TO `GAIT.stride`.** Asked for as "animate the frames a bit slower
-  // for arms and legs", and measured on a seeded 3v3 first: a moving body's median speed is
-  // **1.80 units a step**, so at `legFrame`'s own 14-unit cycle the legs turned over **7.7
-  // times a second — 7.8 frames per cycle on a 60Hz screen** — and at pace **12.3 a second,
-  // 5.3 frames per cycle**. A person runs at about 1.5-2.5 stride cycles a second, so the
-  // shipped figure was four to five times a human cadence and read as a blur rather than a
-  // run. At 2.0 it is **3.9 a second at the median and 6.1 at pace**, which is a fast
-  // player rather than a cartoon and is still above life so the game does not read as slow
-  // motion.
-  // ⚠️ **`GAIT.stride` IS NOT TOUCHED**, and that is the whole reason this number exists:
-  // it is shared with `legFrame`, which the crab, lobster and shrimp are built on and whose
-  // claims `tests/discskins.mjs` pins. Slowing it would slow every creature skin in the
-  // file, which nobody asked for.
-  cadence: 2,
+  inked: { legW: 0.57, armW: 0.48, bootR: 0.285, hand: 1.20 },
+  stand: 0.30,        // the fixed stance a standing player holds: each foot this far along, in strides
+  // ⚠️ **THE FEET ARE PLANTED ON THE GROUND AND STEP ON A CADENCE SET BY THE SPEED, NEVER
+  // BY THE STICK** (`stepFeet`, `advanceFeet`, `footPhase`, `footSwing`, `p._feet`). Asked
+  // for from another game's walk: *"his legs kinda follow the direction but step on a
+  // cadence that is separate from the player input — you can slam the joystick around all
+  // over and he'll turn but he won't do steps all over, because he steps on this cadence
+  // that is just influenced by the speed, not the changes in direction. Both legs while
+  // the player is moving, and the foot takes the next step from where the last step
+  // ended."*
+  // ⚠️ **WHAT WAS WRONG WITH THE SINE**: the foot's position was a FUNCTION OF THE BODY —
+  // `sin(gait)` along the facing — so it rode the body wherever the body went. A planted
+  // foot does the opposite: it stays on the spot where it was put down while the body moves
+  // over it, and the stick cannot move it. Measured on a seeded body driven down the pitch:
+  // under the sine a "planted" foot travelled with the body at **1 : 1**; it reads **0.000
+  // units** of drift now while the body covers a whole stride — see `tests/footballers.mjs`.
+  // ⚠️ **A FOOT IS EITHER ON THE GROUND OR IN THE AIR, HALF A CYCLE EACH.** Planted (the
+  // first half of its phase) its WORLD position is held; in the air (the second half) it is
+  // carried to the next landing spot — `stride` ahead of the body along the heading, `foot`
+  // across — by a smoothstep share of the remaining distance each step. That share is what
+  // makes *"the next step starts where the last one ended"* true BY CONSTRUCTION: there is
+  // no lift point to record, the foot simply moves on from wherever it is, and a body that
+  // stops mid-swing and starts again carries on from there without a jump.
+  // ⚠️ **THE CADENCE IS `p.gait`, THE DISTANCE TRAVELLED** — the same clock `legFrame` reads,
+  // so it is a function of SPEED and of nothing else. Turning does not advance it; only
+  // ground covered does. Measured: a straight run and a zig-zag of the same length put down
+  // the same number of plants. That is the whole of the ask.
+  // ⚠️ **THE LANDING SPOT FOLLOWS A HEADING THAT EASES TOWARD THE TRAVEL** (`heading`, 0.30
+  // a step), never the raw velocity: a stick slammed round flips the velocity in a few
+  // frames, and a foot in the air aimed at the raw heading would swing through a full half
+  // turn of landing spots in those frames. Eased, it is where the body is really going.
+  // ⚠️ **THE LEASH IS WHAT A PLANTED FOOT COSTS** (`reach`, 1.28r). A foot held on the
+  // ground while the body turns a corner ends up further from the body than a leg can be
+  // drawn — a quarter turn mid-plant puts it 2.1r away against a figure ceiling of 1.60r —
+  // so a foot past the leash is dragged in along the line to the body rather than lifted
+  // early, because lifting early would make the cadence a function of the turn, which is
+  // exactly what was asked not to happen. In a straight run the leash never bites: a
+  // planted foot is at most `hypot(stride, foot)` = 1.24r from the centre.
+  // ⚠️ **`stride` 0.93 PUTS ONE STEP AT 1.86r OF TRAVEL, a period of 55.8 units.** It was
+  // a sine of period 28 (`2 * GAIT.stride * cadence`), under which a planted step would be
+  // 0.47r long — the foot would land and lift under the shirt. The old cadence was itself a
+  // measured retune ("animate the frames a bit slower") from 7.7 cycles a second at a
+  // moving body's median 1.80 units a step down to 3.9; this is **1.9 a second at the
+  // median and 3.0 at pace**, against a person's 1.3-1.5. Still above life, and the stride
+  // is now a length you can see rather than a frequency. ⚠️ `PLAYER.r`, never `p.r`: a
+  // party modifier that grows the bodies would otherwise lengthen the stride AND slow the
+  // cadence at once, and the period has to be one number for every body in a match.
+  // ⚠️ **`GAIT.stride` IS STILL NOT TOUCHED**: it is `legFrame`'s, which the crab, the
+  // lobster and the shrimp are built on and `tests/discskins.mjs` pins.
+  // ⚠️ **AT REST BOTH FEET SETTLE INTO THE STANCE** (`settle`, a fifth of the way a step),
+  // the way they always did — a player who stops is not left straddled wherever the last
+  // step landed. ⚠️ **A TELEPORT PUTS THEM STRAIGHT THERE** (`jump`): a kickoff reset
+  // moves a body hundreds of units, and feet left behind on the old spot would be dragged
+  // the length of the pitch by the leash.
+  // ⚠️ **RENDER ONLY, AND KEPT OFF THE BODY THE REPLAY SPREADS.** `p._feet` is written by
+  // `advanceFeet` from `loop()` beside `advanceFaceTurn` — never in a draw (the trails
+  // rule) — and nothing in `step()` reads it. A replay rebuilds its bodies every frame by
+  // spreading the LIVE body, so `repAnimate` keeps the feet per slot (`repAnim.ft`) and
+  // puts them on the rebuilt body before stepping them, or a replay would walk the live
+  // player's feet about under a match that is still running.
+  // ⚠️ **THE STATELESS FALLBACK IS THE SAME WAVE WITHOUT THE WORLD.** A picker tile, a
+  // bundle swatch and the suite's synthetic bodies carry no `_feet`, so `footSwing` draws
+  // the along position a planted foot WOULD have — `1 - 4u` on the ground as the body passes
+  // over it, a smoothstep forward in the air (`footPhase`) — which is what keeps a tile a
+  // true picture of the pitch and what every phase-based check in the suite still samples.
+  stride: 0.93,   // half a step, in r: a foot lands this far AHEAD and lifts this far BEHIND
+  reach:  1.28,   // the leash: a planted foot is dragged in rather than drawn further out than this
+  settle: 0.22,   // at rest, the fraction of the way to the stance each foot moves per step
+  heading: 0.20,  // how fast the heading the feet land along follows the travel, per step
+  catch:  0.40,   // the most of the remaining way to its landing spot a foot in the air closes a step
+  jump: 6,        // a body moving further than this a step (plus the same again) was PUT there
 };
 // ⚠️ **ONE OWNER FOR THE CYCLE LENGTH.** `tests/footballers.mjs` samples a whole stride and
 // derived the period as `2 * GAIT.stride` itself — a second copy of a formula, which is the
-// duplication rule with its usual ending: the moment the cadence moved, the suite would have
+// duplication rule with its usual ending: the moment the period moved, the suite would have
 // gone on sampling the old range and every phase-based check in it would have silently
-// measured the wrong part of the stride. The suite asks this instead.
-function gaitPeriod(){ return 2 * GAIT.stride * FOOTBALLER.cadence; }
-// ⚠️ **THE STRIDE IS A CONTINUOUS PHASE, NOT TWO FRAMES** — asked for as more frames of
-// animation, and a phase is every frame rather than a bigger number of them. Driven by
-// `p.gait`, the DISTANCE travelled, exactly as `legFrame` is: never a clock, because
-// anything advanced in a draw runs 2.4x fast on a 144Hz screen. The period is `2 *
-// GAIT.stride` times `FOOTBALLER.cadence` — see that field for why the footballers carry a
-// cadence of their own and `legFrame`'s does not move.
-// ⚠️ **`legFrame` IS UNTOUCHED.** The creature skins are built on its two frames and
-// `tests/discskins.mjs` pins its claims — rest is frame 0, a draw must not advance it.
-// This is a second reader of the same `p.gait`, not a change to the first.
+// measured the wrong part of the stride. The suite asks this instead. Two steps a cycle,
+// each `2 * stride` of travel — see `FOOTBALLER.stride` for the number and `PLAYER.r`.
+function gaitPeriod(){ return 4 * FOOTBALLER.stride * PLAYER.r; }
+// Where a foot is along the body for a phase `u` of its own cycle, in strides: on the
+// ground for the first half, sliding back at the body's pace (`1 - 4u`, so +1 at the plant
+// and -1 at the lift), and in the air for the second, carried forward on a smoothstep to
+// land at +1 again. Continuous at both ends, and the same wave `stepFeet` realises in the
+// world — this is the stateless reading of it.
+function footPhase(u){
+  u -= Math.floor(u);
+  if (u < 0.5) return 1 - 4*u;
+  const t = (u - 0.5) * 2;
+  return -1 + 2 * t*t*(3 - 2*t);
+}
 // ⚠️ **AT REST IT IS A FIXED STANCE, never the phase frozen wherever it stopped**, or a
-// player who stops mid-stride is left standing with one leg stretched out behind.
-function gaitSwing(p){
-  if (Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd) return FOOTBALLER.stand;
-  return Math.sin((p.gait || 0) / gaitPeriod() * 2 * Math.PI);
+// player who stops mid-stride is left standing with one leg stretched out behind. The two
+// sides are half a cycle apart. ⚠️ `legFrame` IS UNTOUCHED — this is a second reader of the
+// same `p.gait`, not a change to the first.
+function footSwing(p, sgn){
+  if (Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd) return FOOTBALLER.stand * sgn;
+  return footPhase((p.gait || 0) / gaitPeriod() + (sgn > 0 ? 0 : 0.5));
+}
+function gaitSwing(p){ return footSwing(p, 1); }
+// The planted feet: one step of the model above for one body. `steps` is how many sim
+// steps this call covers — 1 from the step loop, several per drawn frame of a replay.
+function stepFeet(p, steps){
+  const F = FOOTBALLER, r = p.r || PLAYER.r, P = gaitPeriod(), n = steps || 1;
+  const sp = Math.hypot(p.vx || 0, p.vy || 0);
+  let f = p._feet;
+  const stanceAt = (i) => {
+    const sgn = i ? 1 : -1, a = F.stride * F.stand * sgn * r, b = F.foot * sgn * r;
+    return [ p.x + f.hx*a - f.hy*b, p.y + f.hy*a + f.hx*b ];
+  };
+  if (!f){
+    const h = discFace(p);
+    f = p._feet = { x:[0,0], y:[0,0], hx:h.ux, hy:h.uy, px:p.x, py:p.y, g:p.gait || 0 };
+    for (let i = 0; i < 2; i++){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; }
+    return;
+  }
+  const d = Math.hypot(p.x - f.px, p.y - f.py);
+  const put = d > F.jump * n + F.jump;                 // teleported, not travelled
+  f.px = p.x; f.py = p.y;
+  const g0 = f.g, g1 = p.gait || 0; f.g = g1;
+  const moving = sp >= GAIT.minSpd && !put;
+  // The heading the feet land along eases toward the travel — or, standing still, toward
+  // the facing, so the stance is squared up to the body rather than to the last run.
+  // ⚠️ **AS AN ANGLE, NEVER A LERP OF THE VECTOR.** A unit vector lerped toward its own
+  // opposite and re-normalised never gets there — (0,-1) toward (0,1) is (0, -1+2k), which
+  // normalises straight back to (0,-1) — so a body that set off against its facing landed
+  // every foot BEHIND itself and the leash dragged them for the whole run: measured as
+  // zero plants down the pitch against seven across it, the first check written for this
+  // model. The short way round, the `TRAP.spin` rule, and an exact reversal turns one way.
+  {
+    const want = moving ? { ux: p.vx / sp, uy: p.vy / sp } : discFace(p);
+    const ha = Math.atan2(f.hy, f.hx);
+    let da = Math.atan2(want.uy, want.ux) - ha;
+    while (da > Math.PI) da -= 2*Math.PI;
+    while (da < -Math.PI) da += 2*Math.PI;
+    const a = ha + da * (1 - Math.pow(1 - F.heading, n));
+    f.hx = Math.cos(a); f.hy = Math.sin(a);
+  }
+  for (let i = 0; i < 2; i++){
+    const sgn = i ? 1 : -1, off = i ? 0 : 0.5;
+    if (put){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; continue; }
+    if (!moving){
+      const s2 = stanceAt(i), k = 1 - Math.pow(1 - F.settle, n);
+      f.x[i] += (s2[0] - f.x[i])*k; f.y[i] += (s2[1] - f.y[i])*k;
+      continue;
+    }
+    const tx = p.x + f.hx*F.stride*r - f.hy*F.foot*r*sgn;   // where this foot lands next
+    const ty = p.y + f.hy*F.stride*r + f.hx*F.foot*r*sgn;
+    const u0 = (g0 / P + off) - Math.floor(g0 / P + off);
+    const u1 = (g1 / P + off) - Math.floor(g1 / P + off);
+    const air0 = u0 >= 0.5, air1 = u1 >= 0.5;
+    if (air1 && (!air0 || u1 >= u0)){
+      // In the air: the smoothstep's share of the way from wherever it is to the landing
+      // spot. Equal to a lerp from the lift point when the spot holds still, and continuous
+      // from ANY starting position when it does not — which is the "from where the last
+      // step ended" half of the ask. ⚠️ Capped (`catch`): the share runs to 1 at the end of
+      // the swing, so a foot that is FAR from its spot there — stopped mid-swing, settled
+      // into the stance, and started again at the phase where it should be landing — would
+      // be put there in one frame, a hop of half a radius. Capped, it closes what it can
+      // and simply plants a little short, which is what a foot does.
+      const t0 = air0 ? (u0 - 0.5)*2 : 0, t1 = (u1 - 0.5)*2;
+      const s0 = t0*t0*(3 - 2*t0), s1 = t1*t1*(3 - 2*t1);
+      const k = Math.min(1 - Math.pow(1 - F.catch, n), s0 >= 0.999 ? 1 : (s1 - s0) / (1 - s0));
+      f.x[i] += (tx - f.x[i])*k; f.y[i] += (ty - f.y[i])*k;
+    }
+    // ...otherwise it is planted — on the spot the swing ended, wherever that was — and a
+    // planted foot stays exactly where it is. Nothing is ever snapped into place: a landing
+    // is the foot STOPPING, which is the only thing that can never be a jump.
+  }
+  const lim = F.reach * r;                               // the leash
+  for (let i = 0; i < 2; i++){
+    const dx = f.x[i] - p.x, dy = f.y[i] - p.y, dd = Math.hypot(dx, dy);
+    if (dd > lim){ f.x[i] = p.x + dx/dd*lim; f.y[i] = p.y + dy/dd*lim; }
+  }
+}
+// ⚠️ `allBodies`, not `w.players`: a body waiting on the touchline is drawn too, and walks.
+function advanceFeet(w){
+  if (!w) return;
+  for (const p of allBodies(w)) stepFeet(p, 1);
 }
 // Four people rather than one, so a side does not read as eight clones. The hair and skin
 // tones are the picture's own, sampled off it. ⚠️ Chosen by a HASH OF THE NAME, never
@@ -34936,7 +35127,19 @@ function footballerSkin(name, sprites, inked){
     // is a choice about the look rather than a contrast maximum.
     const trim = relLum(col) > 0.5 ? (TH.discRim || '#151515') : '#ffffff';
     const [hair, skin] = kitPerson(p);
-    const s = gaitSwing(p);
+    // ⚠️ The feet are PLANTED IN THE WORLD when the body carries them (`p._feet`, written by
+    // `advanceFeet` in the step loop and by `repAnimate` in a replay), so each is a world
+    // offset from the body, put through the same turn the facing gets (`skinDir`) and
+    // scaled to the drawn radius. With no feet on the body — a tile, a swatch, a synthetic
+    // body in a suite — `footSwing` draws the along position a planted foot would have.
+    // ⚠️ `ix`/`iy`, never `p.x`: the body is drawn at its interpolated position and a foot
+    // measured from the raw one would jitter a step's travel against it.
+    const fe = p._feet && p._feet.x ? p._feet : null;
+    const sc = r / (p.r || PLAYER.r), bx = fe ? ix(p) : 0, by = fe ? iy(p) : 0;
+    const footAt = (i, sgn) => {
+      if (fe){ const o = skinDir(fe.x[i] - bx, fe.y[i] - by); return [x + o.ux*sc, y + o.uy*sc]; }
+      return pt(F.swingAt + F.stride*footSwing(p, sgn), F.foot*sgn);
+    };
     const armSp = sprites ? klimbSprite('arm', col, skin, ink) : null;
     const legSp = sprites ? klimbSprite('leg', col, skin, ink) : null;
     c.save();
@@ -34944,11 +35147,12 @@ function footballerSkin(name, sprites, inked){
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
     //     under the body, and it is the whole of what makes this read from above -------
     for (const sgn of [-1, 1]){
-      const sw = s * sgn;                                  // the two sides are half a cycle apart
-      // The foot travels along the facing axis about a hip that does not move, so the leg
-      // points forward, shortens as it passes under the shirt, and points back again.
+      const sw = footSwing(p, sgn);                        // the two sides are half a cycle apart
+      // The foot is on the ground or in the air (see FOOTBALLER.stride) about a hip that
+      // moves with the body, so the leg points forward at the plant, shortens as the body
+      // passes over the foot, and points back by the lift.
       const A = pt(F.hip[0], F.hip[1]*sgn);
-      const B = pt(F.swingAt + L.legSwing*sw, F.foot*sgn);
+      const B = footAt(sgn > 0 ? 1 : 0, sgn);
       if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*L.legW), r*L.bootR);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.legW);
@@ -34959,7 +35163,7 @@ function footballerSkin(name, sprites, inked){
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0], F.sh[1]*sgn);
-      const H = pt(F.swingAt - F.armSwing*sw, L.hand*sgn);
+      const H = pt(F.swingAt - F.armSwing*sw, L.hand*sgn);   // ...on the cadence, not the ground
       if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
@@ -34994,7 +35198,7 @@ function seaPair(name, t0, t1){
   return {
     name,
     paint(c, p, x, y, r, w){
-      const { ux, uy } = discFace(p);              // honours the rotation checkbox
+      const { ux, uy } = discFaceDraw(p);          // honours the rotation checkbox, and the pitch's turn
       const px = -uy, py = ux;
       const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
       const pt = (a2, b2) => [x + ux*a2*r + px*b2*r, y + uy*a2*r + py*b2*r];
@@ -35009,7 +35213,7 @@ DISC_SKINS.shrimpcrab    = seaPair('Shrimp vs Crab',    'shrimp', 'crab');
 DISC_SKINS.arrow = {
   name: 'Arrowheads',
   paint(c, p, x, y, r, w){
-    const { ux, uy } = discFace(p);                 // honours the rotation checkbox
+    const { ux, uy } = discFaceDraw(p);             // honours the rotation checkbox, and the pitch's turn
     const px = -uy, py = ux;                        // perpendicular
     const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
     // The body: rim, wash, and a ring in the team colour so the circle is the
@@ -35489,7 +35693,11 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // A theme can own what a player LOOKS like, not just what colour they are.
     const skin = discSkin();
     if (skin){
-      skin.paint(ctx, p, x, y, r, w);
+      // ⚠️ The pitch's turn, for the skin to put back on any world direction it draws —
+      // see skinDir. Raised round the paint and lowered after, so a tile or a swatch
+      // painting the same skin from its own context reads zero.
+      skinRot = cam.rot;
+      try { skin.paint(ctx, p, x, y, r, w); } finally { skinRot = 0; }
       // ⚠️ STRUCTURAL, not policy. A disc is a circle of radius r and that circle is
       // what collides — so every skin gets a guide ring drawn HERE, after it paints,
       // and a new skin cannot forget one. The VideoSoccer arrowhead shipped without a
@@ -38265,7 +38473,7 @@ if (window.__MAGNETDEBUG) {
     PHOTOLIB, photoLibAdd, photoLibAll, photoLibDel, photoLibTrim, photoPick, photoDeleteArmed,
     renderStats, saveStats, updateScoreUI,
     viewMode, isTouchLayout, applyDisplayMode, seatSide, sideQuarter, rotVec, COCKTAIL,
-    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, discFaceTurn, turnFaceToward, advanceFaceTurn, FACETURN, footballerSkin, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
+    ICONS, iconSvg, optGlyph, DISC_GUIDE, strokeDiscGuide, GAIT, legFrame, LOBSTER, CRAB, SEA, seaPair, discRotates, discFace, discFaceDraw, discFaceTurn, skinDir, get skinRot(){ return skinRot; }, set skinRot(v){ skinRot = v; }, turnFaceToward, advanceFaceTurn, FACETURN, footballerSkin, footPhase, footSwing, stepFeet, advanceFeet, buildSpinPick, SHRIMP, MODES, DIFF, LENGTHS, KICKOFFRULE,
     SFX_CATS, KICKPUSH, handleKickPush, segClosest, collideWall, collideArc, collideDiscs, buildGeometry, LOBBY, lobbyWanted, warmupUseful, syncWarmupOffer,
     showModeOn, shownInShowMode, applyShowMode, toggleShowMode, SHOW_PANES, SHOW_TILES,
     qrMatrix, qrCanvas, qrCapacity, qrPickVersion, qrFormatBits, qrVersionBits, QR, shareUrl, buildShareQr,

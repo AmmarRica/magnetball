@@ -36,7 +36,11 @@ import { chromium, LAUNCH, pinCasualFeel } from './_browser.mjs';
 const b = await chromium.launch(LAUNCH);
 const p = await b.newPage({ viewport:{width:900,height:900} });
 const errors=[]; p.on('pageerror',e=>errors.push(e.message));
-p.on('console',m=>{ if(m.type()==='error') errors.push(m.text()); });
+// ⚠️ The missing-pack block below points `KLIMB.dir` at a directory that does not exist ON
+// PURPOSE, and the browser reports each of those fetches as a console error some time
+// later. The suite used to close before they arrived; with the planted-feet runs it no
+// longer does, and a deliberate miss is not a defect. Anything else is still an error.
+p.on('console',m=>{ if(m.type()==='error' && !((m.location()||{}).url||'').includes('__no_such_pack__')) errors.push(m.text()+' @ '+((m.location()||{}).url||'')); });
 await p.addInitScript(()=>{window.__MAGNETDEBUG=true;});
 await p.goto('file://' + process.cwd() + '/index.html');
 await p.waitForTimeout(900);
@@ -122,12 +126,26 @@ const r = await p.evaluate(async ()=>{
   const skinDark = skinCol.map(v => Math.round(v * ((M.KLIMB && M.KLIMB.shade) || 1)));
   // ⚠️ **THE CYCLE LENGTH IS ASKED FOR, NEVER RE-DERIVED.** This read `2 * M.GAIT.stride`,
   // which was a second copy of the game's own formula — so the moment the footballers got a
-  // cadence of their own (`FOOTBALLER.cadence`), every phase-based check in this file would
+  // period of their own (`FOOTBALLER.stride`), every phase-based check in this file would
   // have gone on sampling the old range and silently measured a fraction of the stride while
   // still passing. `gaitPeriod()` is the one owner.
+  // ⚠️ **AND SO ARE THE PEAKS.** The two ends of a foot's travel were written as a quarter
+  // and three quarters of the cycle — true of a sine and of nothing else. The planted stride
+  // (`footPhase`) peaks at the PLANT and the LIFT, which are the ends of the cycle's halves,
+  // so sampling at the sine's quarters measured the two phases where the foot is level with
+  // the hip and UNDER the shirt: "the two peaks are the same picture" read 0 pixels moved on
+  // a build whose legs swing perfectly well. The peaks are found on the game's own wave.
   const PH = 12, CYCLE = M.gaitPeriod();
   const frames = [];
   for (let k=0;k<PH;k++) frames.push(paint({ vx:3, gait: k*CYCLE/PH }));
+  let kHi = 0, kLo = 0;
+  for (let k=0;k<PH;k++){
+    const s2 = M.gaitSwing({ vx:3, vy:0, gait: k*CYCLE/PH });
+    if (s2 > M.gaitSwing({ vx:3, vy:0, gait: kHi*CYCLE/PH })) kHi = k;
+    if (s2 < M.gaitSwing({ vx:3, vy:0, gait: kLo*CYCLE/PH })) kLo = k;
+  }
+  const PEAK = kHi*CYCLE/PH;                   // the sgn:+1 foot at its furthest forward
+  o.peakPhases = [kHi, kLo];
 
   // ⚠️ ONE SIDE ONLY. The two legs are half a cycle apart, so the pair's centroid barely
   // moves and the UNION of both limbs is symmetric under the swap — measured on the
@@ -183,23 +201,24 @@ const r = await p.evaluate(async ()=>{
 
   // ---- 1b. the CADENCE, measured between two consecutive 60Hz frames -------------
   // ⚠️ **HOW FAST A STRIDE TURNS OVER IS A PROPERTY OF THE PICTURE, NOT OF THE TABLE, so
-  // it is measured and not read.** Comparing `gaitPeriod()` against `2 * GAIT.stride`
-  // compares the game with itself and passes at any cadence. What was reported is what two
-  // ADJACENT frames look like: at the shipped cadence the legs turned over 7.7 times a
-  // second at a moving body's median speed — 7.8 frames for a whole cycle, so the hand was
-  // most of the way across its arc between one frame and the next and the run read as a
-  // blur.
+  // it is measured and not read.** Comparing `gaitPeriod()` against its own formula
+  // compares the game with itself and passes at any period. What was reported is what two
+  // ADJACENT frames look like: on the first build the legs turned over 7.7 times a second
+  // at a moving body's median speed — 7.8 frames for a whole cycle, so the hand was most of
+  // the way across its arc between one frame and the next and the run read as a blur.
   // ⚠️ **THE HAND IS THE TRACKER AND THE BOOT IS NOT**: the boot is deliberately hidden
   // under the shirt at some phases (`footPassesUnderTheShirt`), so a boot centroid is
   // missing exactly when the sampling is coarsest and the arc it appears to cover then
   // depends on where the frames happen to land. The hand is drawn at every phase.
   // ⚠️ **A DENSE ARC AGAINST A PER-FRAME JUMP, which is the only pair that is sampling
-  // independent.** The arc is swept at 96 phases (the same arc whatever the cadence, since
+  // independent.** The arc is swept at 96 phases (the same arc whatever the period, since
   // it is geometry); the jump is taken at whole 60Hz frames at the median running speed
   // measured on a seeded 3v3, **1.80 units a step**. Measured: **0.39 of the arc in one
-  // frame at cadence 1 and 0.20 at the shipped 2**, so the bar sits between them at 0.28 —
-  // which is also about a dozen frames to a cycle, the floor hand-drawn animation has
-  // always worked to.
+  // frame at the 14-unit period, 0.20 at 28** (the sine's two cadences), so the bar sits
+  // between them at 0.28 — which is also about a dozen frames to a cycle, the floor
+  // hand-drawn animation has always worked to. The planted stride's period is 55.8 units
+  // (`FOOTBALLER.stride`), and its swing is a smoothstep whose steepest point is 1.5x the
+  // average, so it reads about 0.10.
   // ⚠️ Paired with the arc being covered AT ALL (`handSwingsForeAndAft`, `manyFrames`), or
   // "the stride is slow" is satisfied outright by a leg that never moves.
   const MSPD = 1.80;
@@ -294,11 +313,17 @@ const r = await p.evaluate(async ()=>{
     }
     return { len:+m.toFixed(3), n };
   };
+  // ⚠️ **A FRAME QUALIFIES AGAINST THE BOOT'S OWN FULLEST COUNT, never an absolute.** The
+  // gate was `n > 300`, and on the planted stride the plate's boot at the PLANT reads 269
+  // against 319 at the lift — so the one phase where the leg is longest was the one phase
+  // thrown out, and the leg measured 0.987r against a body of 0.98: a pass by seven
+  // thousandths, on the wrong frame. Six tenths of the fullest boot keeps both ends.
   const FB = M.FOOTBALLER, legLen = [], armLen = [];
+  const bootFull = Math.max(...bootPix);
   for (const f of frames){
     const bt = tipFrom(f, boot, FB.hip[0], FB.hip[1]);
     const hd = tipFrom(f, hand, FB.sh[0],  FB.sh[1]);
-    if (bt.n > 300) legLen.push(bt.len);
+    if (bt.n > bootFull * 0.6) legLen.push(bt.len);
     if (hd.n > 200) armLen.push(hd.len);
   }
   o.legLongest = Math.max(...legLen);
@@ -306,10 +331,10 @@ const r = await p.evaluate(async ()=>{
   o.limbsOutreachTheBody = o.legLongest > o.shirtReachMax && o.armLongest > o.shirtReachMax;
 
   // ---- 3. the swing goes UNDER the torso, which is the shirt occluding it ------
-  // The two opposite peaks of the phase (`sin` at +1 and -1), a quarter and three quarters
-  // of the way round: the limbs are at opposite ends of their travel and the shirt, the
-  // head and the shorts are the same picture in both.
-  const a0 = frames[Math.round(PH*0.25)], a1 = frames[Math.round(PH*0.75)];
+  // The two opposite peaks of the phase (`footPhase` at +1 and -1, found above): the limbs
+  // are at opposite ends of their travel and the shirt, the head and the shorts are the
+  // same picture in both.
+  const a0 = frames[kHi], a1 = frames[kLo];
   o.framesDifferOutside = moved(a0, a1, rad => rad > R*0.80);
   o.framesSameInside    = moved(a0, a1, rad => rad < R*0.55);
   o.limbsAnimate        = o.framesDifferOutside > 300;
@@ -333,7 +358,7 @@ const r = await p.evaluate(async ()=>{
   o.sidesFarApartInLightness = o.lightGap > 1.87;
   // ...at the SAME phase as the home frame it is compared against, or the limbs move
   // between the two pictures and a build whose two kits are identical still scores.
-  const away = paint({ team:1, vx:3, gait: Math.round(PH*0.25)*CYCLE/PH });
+  const away = paint({ team:1, vx:3, gait: PEAK });
   o.sidesDifferOnScreen = moved(a0, away, () => true) > 1500;
   // ...and the shirt really is the TEAM colour, so a palette swap recolours it.
   o.awayShirtPixels = scan(away, (d,i)=>near(d,i,hex(awayCol),48)).n;
@@ -496,8 +521,7 @@ const r = await p.evaluate(async ()=>{
   // hand more than half a radius behind — the along axis is what separates them, and it is
   // the phase this block is taken at for exactly that reason.
   // ⚠️ `ay > 0.55r` clears the head, which is drawn in the same skin as the limbs and would
-  // otherwise be counted as one.
-  const PEAK = CYCLE * 0.25;
+  // otherwise be counted as one. `PEAK` is found on the game's own wave, above.
   const inLeg = (ax, ay) => ay > R*0.55 && ax >  R*0.20;
   const inArm = (ax, ay) => ay > R*0.55 && ax < -R*0.10;
   const inkDark = ink.map(v => Math.round(v * ((M.KLIMB && M.KLIMB.shade) || 1)));
@@ -679,9 +703,275 @@ const r = await p.evaluate(async ()=>{
   o.escapes = onIt.escapes + offIt.escapes;
   o.renderOnly = onIt.h === offIt.h;
 
+  // ---- 10. THE FEET ARE PLANTED, AND THEY STEP ON THE DISTANCE -------------------
+  // Asked for from another game's walk: the legs follow the direction, but they step on a
+  // cadence set by the SPEED and not by the stick — slam the joystick about and the body
+  // turns without the feet stepping all over — and each step starts from where the last one
+  // ended. Everything here drives the REAL body through `step` and `advanceFeet`, the two
+  // calls `loop()` makes, with the velocity written straight onto the body so the path is
+  // exactly the one asked for; a probe that walks `stepFeet` on a synthetic object would prove
+  // only that a helper exists.
+  // ⚠️ **A PLANT IS THE FOOT'S WORLD POSITION NOT MOVING AT ALL** while the body does — the
+  // sine it replaces rode the body at 1:1, so this is the one number that separates the two
+  // models, and it is zero rather than small.
+  // ⚠️ **A LANDING IS THE FOOT STOPPING AFTER A SWING**, read as a still frame following one
+  // in which the foot outran the body by half again: a swing peaks at about three times the
+  // body's speed, and the leash (`FOOTBALLER.reach`) never drags a planted foot faster than
+  // the body is leaving it. Counting bare still stretches reads the leash's drags as extra
+  // plants on a zig-zag and reported 11 against 7 on a build whose cadence was identical.
+  // ⚠️ **THE CADENCE CLAIM IS THE GAIT AT WHICH THE LANDINGS FALL**, straight run against a
+  // right angle every 15 steps, over the same distance: identical lists, not merely equal
+  // counts. The reversal run (a slam every 12 steps) is held to the count, because a
+  // landing there can be followed at once by a leash drag and the still frame moves.
+  const feetRun = (dirAt, steps, speed) => {
+    M.applyBundle('kickabout'); M.sel.mode='1v1'; M.sel.controllers='off'; M.setMatchSeed(11); M.startMatch();
+    const w = M.world; w.state='play'; w.stateT=2;
+    const me = w.players[0];
+    const park = () => { for (const q of w.players) if (q !== me){ q.x = 9e3; q.y = 9e3; q.vx = q.vy = 0; }
+                         w.ball.x = 9e3; w.ball.y = 9e3; w.ball.vx = w.ball.vy = 0; };
+    // ⚠️ Down the LONG axis, from deep in one half: 240 steps at 2 a step is 434 units, and a
+    // run across the pitch met the touchline clamp at x = 240 with the body held at the wall
+    // and its speed reading 0 — the feet settled into the stance and the last landing went
+    // missing from the straight run alone, which read as the zig-zag stepping MORE.
+    me.x = 0; me.y = -350; me.vx = 0; me.vy = 0; me.gait = 0; me._feet = null; me._px = me.x; me._py = me.y;
+    M.pads.p1.dx = 0; M.pads.p1.dy = 0; M.pads.p1.kick = false;
+    const rec = [];
+    for (let i = 0; i < steps; i++){
+      const dir = dirAt(i); me.vx = dir[0]*speed; me.vy = dir[1]*speed;
+      park(); M.step(w); M.advanceFeet(w);
+      const f = me._feet;
+      rec.push({ x: me.x, y: me.y, g: me.gait, sp: Math.hypot(me.vx, me.vy),
+                 f0: [f.x[0], f.y[0]], f1: [f.x[1], f.y[1]] });
+    }
+    return { rec, w, me };
+  };
+  const feetRead = (rec, r) => {
+    const out = { plants:[0,0], landAt:[[],[]], plantLen:[[],[]], moveMax:0, swingPeak:0, farMax:0, bodyStill:0 };
+    for (const s of rec) if (s.sp < 0.5) out.bodyStill++;
+    for (const k of [0,1]){
+      let planted = false, start = null, fast = 0;
+      for (let i = 1; i < rec.length; i++){
+        const a = rec[i-1]['f'+k], c = rec[i]['f'+k];
+        const mv = Math.hypot(c[0]-a[0], c[1]-a[1]);
+        out.moveMax = Math.max(out.moveMax, mv);
+        // ⚠️ A plant is a run of EXACTLY still frames (`< 1e-9`), so "the foot held" needs no
+        // drift reading of its own: a foot that crept would simply never be still, and the
+        // sine it replaces was never still. A tolerance here would let the first slow frame
+        // of a swing read as creep — it did, at 0.75 units, on a build whose plants are exact.
+        const still = mv < 1e-9;
+        if (!still) fast = Math.max(fast, mv);
+        if (still && !planted){
+          planted = true; start = i;
+          if (fast > rec[i].sp * 1.5){ out.plants[k]++; out.landAt[k].push(+rec[i].g.toFixed(2)); out.swingPeak = Math.max(out.swingPeak, fast); }
+          fast = 0;
+        }
+        if (!still && planted){ planted = false; out.plantLen[k].push(+(rec[i].g - rec[start].g).toFixed(1)); }
+      }
+    }
+    for (const s of rec) for (const k of [0,1])
+      out.farMax = Math.max(out.farMax, Math.hypot(s['f'+k][0]-s.x, s['f'+k][1]-s.y) / r);
+    out.gait = +rec[rec.length-1].g.toFixed(1);
+    return out;
+  };
+  const SPD = 2.0, STEPS = 240;
+  const straight = feetRun(() => [0,1], STEPS, SPD);
+  const bodyR = straight.me.r;
+  const st = feetRead(straight.rec, bodyR);
+  const zz = feetRead(feetRun((i) => (((i/15)|0) % 2) ? [1,0] : [0,1], STEPS, SPD).rec, bodyR);
+  const sl = feetRead(feetRun((i) => (((i/12)|0) % 2) ? [0,-1] : [0,1], STEPS, SPD).rec, bodyR);
+  // ...and the body never stood still in any of them, or a run that met a wall reads as a
+  // foot that settled rather than stepped.
+  o.feetBodyStill = [st.bodyStill, zz.bodyStill, sl.bodyStill];
+  o.feetStraight = { plants: st.plants, landAt: st.landAt, plantLen: st.plantLen, moveMax: +st.moveMax.toFixed(2), swingPeak: +st.swingPeak.toFixed(2), farMax: +st.farMax.toFixed(3), gait: st.gait };
+  o.feetZig   = { plants: zz.plants, landAt: zz.landAt, moveMax: +zz.moveMax.toFixed(2), farMax: +zz.farMax.toFixed(3), gait: zz.gait };
+  o.feetSlam  = { plants: sl.plants, landAt: sl.landAt, moveMax: +sl.moveMax.toFixed(2), farMax: +sl.farMax.toFixed(3), gait: sl.gait };
+  // ⚠️ The straight run's plants have to be LONG — the body covers a whole step of travel
+  // over a foot that does not move — or "zero drift" is true of a foot that is never down.
+  const longPlants = st.plantLen.map(a => a.filter(v => v > 15).length);
+  o.plantedFootHoldsStill = st.plants[0] >= 5 && st.plants[1] >= 5
+                          && longPlants[0] >= 4 && longPlants[1] >= 4 && st.bodyStill === 0;
+  const sameList = (a, b2) => a.length === b2.length && a.every((v, i) => Math.abs(v - b2[i]) < 0.01);
+  o.cadenceIsDistanceNotTurns = sameList(st.landAt[0], zz.landAt[0]) && sameList(st.landAt[1], zz.landAt[1])
+                              && Math.abs(st.plants[0] - sl.plants[0]) <= 1 && Math.abs(st.plants[1] - sl.plants[1]) <= 1
+                              && st.gait === zz.gait && st.gait === sl.gait
+                              && zz.bodyStill === 0 && sl.bodyStill === 0;
+  // ⚠️ **THE LEASH IS WHAT HOLDS A TURN UNDER THE CEILING**, and a straight run never reaches
+  // it: a planted foot is at most hypot(stride, foot) from the centre there.
+  o.feetLeashed = Math.max(st.farMax, zz.farMax, sl.farMax) <= M.FOOTBALLER.reach + 0.001
+               && zz.farMax >= Math.hypot(M.FOOTBALLER.stride, M.FOOTBALLER.foot) - 0.05;
+  // ⚠️ **NOTHING IS EVER SNAPPED INTO PLACE.** A body that stops mid-swing, settles into the
+  // stance and starts again at the phase where the foot should be LANDING is where a snap
+  // shows: the first build put the foot on its spot in one frame, a 7.4-unit hop against a
+  // swing that peaks at 5.4. Measured against the straight run's own swing peak, in the same
+  // run, never a constant.
+  const stopGo = feetRun((i) => (i < 30 || i > 60) ? [0,1] : [0,0], 120, SPD).rec;
+  let restartMove = 0;
+  for (let i = 62; i < 80; i++) for (const k of [0,1]){
+    const a = stopGo[i-1]['f'+k], c = stopGo[i]['f'+k];
+    restartMove = Math.max(restartMove, Math.hypot(c[0]-a[0], c[1]-a[1]));
+  }
+  o.restartMove = +restartMove.toFixed(2);
+  // ⚠️ No margin on the bar: with the capped pursuit in place a landing snap put back moves
+  // the foot the REMAINING gap on the frame it lands — 6.0 units at this restart against a
+  // swing peak of 5.6 — and a 10% allowance let exactly that sabotage through. Deterministic
+  // (a seeded match, the velocity written), so the bar can be the peak itself; the honest
+  // build reads 5.0.
+  o.noHopOnRestart = restartMove <= st.swingPeak && st.swingPeak > SPD * 1.5;
+  // ⚠️ **AND THE REVERSAL RUN IS WHERE A SNAP ACTUALLY SHOWS.** The restart reading above
+  // cannot catch the landing snap put back — the snap lifts the straight run's own peak with
+  // it (6.84 against 5.56) and the restart hop sits under it (6.27). What a snap cannot hide
+  // is a swing ending while the landing spot is swinging round behind a reversal: the foot is
+  // put on it in one frame, **16.0 units** against 6.8 with the foot left to stop where it is.
+  // Held against the straight run's peak in the same run; the honest build reads 1.22x.
+  o.turnMoveMax = +Math.max(zz.moveMax, sl.moveMax).toFixed(2);
+  o.noHopOnATurn = o.turnMoveMax <= st.swingPeak * 1.5;
+  // ⚠️ **THE STATELESS WAVE IS THE PLANTED STRIDE WITHOUT THE WORLD, and nothing above pins
+  // its SHAPE** — the phase sweep finds its own peaks, so a sine put back in `footPhase`
+  // passed every check in this file. What a planted foot does on the ground is slide back
+  // under the body at exactly the body's pace: along + travel is a constant for the whole
+  // first half. A sine reads 0.59, 0.95, 0.95 where a plant reads 0.6, 0.2, -0.2.
+  const ground = [0.05, 0.15, 0.25, 0.35, 0.45].map(u => +(M.footPhase(u) + 4*u).toFixed(6));
+  o.groundHalf = ground;
+  o.fallbackGroundHalfIsPlanted = ground.every(v => Math.abs(v - 1) < 1e-6)
+                                && Math.abs(M.footPhase(0.75)) < 0.05 && M.footPhase(0.999) > 0.99;
+  // ⚠️ At rest both feet SETTLE into the stance — mirror images about the body, each within
+  // the leg's reach — rather than being left wherever the last step landed. Read off the
+  // mirror, not off FOOTBALLER.stand, which would compare the table with itself.
+  const rest = stopGo[60];
+  const rmid = [ (rest.f0[0]+rest.f1[0])/2 - rest.x, (rest.f0[1]+rest.f1[1])/2 - rest.y ];
+  const rdist = (f) => Math.hypot(f[0]-rest.x, f[1]-rest.y) / bodyR;
+  o.restMid = rmid.map(v => +v.toFixed(2)); o.restDist = [ +rdist(rest.f0).toFixed(3), +rdist(rest.f1).toFixed(3) ];
+  const restStill = Math.hypot(stopGo[60].f0[0]-stopGo[59].f0[0], stopGo[60].f0[1]-stopGo[59].f0[1]) < 0.05;
+  o.feetSettleAtRest = Math.hypot(rmid[0], rmid[1]) < 0.4 && o.restDist.every(v => v > 0.6 && v < 1.0) && restStill;
+  // ⚠️ **RENDER ONLY, measured as WHAT IT WRITES** — the `turnWritesOnlyDrawAng` idiom: the
+  // whole body is diffed across a step of the feet and `_feet` must be the only key moved.
+  {
+    const q = { team:0, x:1, y:2, vx:2, vy:0, faceX:1, faceY:0, inX:0, inY:0, kick:false, gait:5, chargeT:0, r:15 };
+    M.stepFeet(q, 1); q.x += 2; q.gait += 2;
+    const was = JSON.parse(JSON.stringify(q));
+    M.stepFeet(q, 1);
+    const touched = Object.keys(q).filter(k => JSON.stringify(q[k]) !== JSON.stringify(was[k]));
+    o.feetWrote = touched;
+    o.feetWriteOnlyFeet = touched.length === 1 && touched[0] === '_feet';
+  }
+  // ⚠️ **THE WHOLE FIGURE STAYS UNDER THE CEILING ON THE LIVE PATH, THROUGH A REVERSAL** —
+  // the suite's phase sweep above draws the stateless wave, and a planted foot is the one
+  // thing that can be further from the body than that wave ever puts it. Measured in
+  // rendered pixels as a DIFFERENCE against the same frame with the skin stood down (the
+  // name plate hangs below the body in the limbs' own dark ink and read 1.9r on its own),
+  // keeping only the limb colours, so what is left is the arms and the legs.
+  {
+    const live = feetRun(() => [1,0], 1, SPD);
+    const w = live.w, me = live.me;
+    const park = () => { for (const q of w.players) if (q !== me){ q.x = 9e3; q.y = 9e3; q.vx = q.vy = 0; } w.ball.x = 9e3; w.ball.y = 9e3; };
+    me.x = 0; me.y = 0; me._feet = null; me.gait = 0; me.faceX = 1; me.faceY = 0; me._drawAng = 0;
+    const gctx = document.getElementById('game').getContext('2d');
+    const hexc = (h) => [1,3,5].map(k=>parseInt(h.substr(k,2),16));
+    const sk = hexc(M.kitPerson(me)[1]), ik = hexc(M.TH.discRim || '#151515'), sh = (M.KLIMB && M.KLIMB.shade) || 1;
+    const cols = [sk, sk.map(v=>Math.round(v*sh)), ik, ik.map(v=>Math.round(v*sh))];
+    const reachNow = () => {
+      const grab = () => {
+        M.render();
+        const s0 = M.screenPt(M.wx(me.x), M.wy(me.y)), dpr = gctx.getTransform().a, rs = me.r*M.cam.s*dpr;
+        const Rb = rs*2.2, Wb = Math.round(2*Rb);
+        return { d: gctx.getImageData(Math.round(s0[0]*dpr-Rb), Math.round(s0[1]*dpr-Rb), Wb, Wb).data, Rb, Wb, rs };
+      };
+      const was = M.sel.look.discs; M.sel.look.discs = 'none'; const ctl = grab(); M.sel.look.discs = was; const on = grab();
+      let m = 0;
+      for (let i=0;i<on.d.length;i+=4){
+        if (!cols.some(c2 => Math.abs(on.d[i]-c2[0])+Math.abs(on.d[i+1]-c2[1])+Math.abs(on.d[i+2]-c2[2]) <= 40)) continue;
+        if (Math.abs(on.d[i]-ctl.d[i])+Math.abs(on.d[i+1]-ctl.d[i+1])+Math.abs(on.d[i+2]-ctl.d[i+2]) <= 24) continue;
+        const k=i/4, ax=(k%on.Wb)-on.Rb, ay=((k/on.Wb)|0)-on.Rb;
+        m = Math.max(m, Math.hypot(ax, ay));
+      }
+      return +(m/on.rs).toFixed(3);
+    };
+    const reaches = [];
+    for (let i = 0; i < 100; i++){
+      me.vx = (i < 40 ? 1 : -1)*SPD; me.vy = 0; park(); M.step(w); M.advanceFeet(w);
+      if (i % 2 === 0) reaches.push(reachNow());
+    }
+    o.liveReachMax = Math.max(...reaches); o.liveReachMin = Math.min(...reaches.slice(5));
+    o.liveFigureInBounds = o.liveReachMax <= 1.60 && o.liveReachMin >= 1.15;
+  }
+  // ⚠️ **A REPLAY'S FEET ARE ITS OWN, NEVER THE LIVE BODY'S.** `drawReplayFrame` spreads the
+  // live player over each frame — `_feet` included, as a REFERENCE — so a replay stepping the
+  // feet it was handed walks the live player's feet about under a match still being played.
+  // The live object must come out of a replay byte-identical, and the replay's own feet must
+  // have moved.
+  {
+    const live = feetRun(() => [1,0], 20, SPD), w = live.w, me = live.me;
+    const before = JSON.stringify(me._feet);
+    const N = 40, frames = [];
+    for (let i = 0; i < N; i++) frames.push({ bx:0, by:0, p: w.players.map(() => ({ x: -100 + i*2.5, y: 40, k:false })) });
+    M.repAnimReset(60);
+    const seenFeet = [];
+    for (let i = 0; i < N - 1; i++){
+      M.drawReplayFrame(M.repTween(frames[i], frames[i+1], 0, 60));
+      const ft = M.repAnim.ft[0]; if (ft) seenFeet.push(ft.x[0].toFixed(1) + ',' + ft.y[0].toFixed(1));
+    }
+    o.replayFeetSeen = new Set(seenFeet).size;
+    o.replayLeavesLiveFeetAlone = JSON.stringify(me._feet) === before && o.replayFeetSeen >= 4;
+  }
+
   M.applyBundle('grass'); M.sel.mode='1v1'; M.setMatchSeed(null);
   return o;
 });
+
+// ---- 11. THE PITCH'S TURN IS PUT BACK ON EVERY WORLD DIRECTION A SKIN DRAWS -----------
+// ⚠️ `drawOneDisc` paints inside `uprightAt`, which cancels `cam.rot` — and `auto` turns the
+// pitch a quarter on any wide window. A world facing drawn as it stood was therefore a
+// quarter turn off the body's own travel on every desktop: measured on a 1280x800 page, a
+// footballer driven along world +x moved (0, -13.5) on screen — straight UP — while its head
+// sat at (+4.9, -0.6), facing RIGHT. Every direction-drawn skin ran crab-wise. The planted feet
+// made it load-bearing (a foot anchored in the world has to stay put ON SCREEN too), so the
+// turn is put back by `skinDir` and this measures it where it was wrong: a wide page.
+// ⚠️ The head's SKIN crescent is the instrument — the hair covers the back of the head, so the
+// skin that shows is the front — and the on-screen travel is the control, taken through
+// `screenPt` in the same run; `cam.rot` is asserted non-zero or the whole block is vacuous on
+// an upright page.
+const p2 = await b.newPage({ viewport:{width:1280,height:800} });
+p2.on('pageerror',e=>errors.push(e.message));
+await p2.addInitScript(()=>{window.__MAGNETDEBUG=true;});
+await p2.goto('file://' + process.cwd() + '/index.html');
+await p2.waitForTimeout(700);
+const turned = await p2.evaluate(() => {
+  const M = window.__magnet, o = {};
+  M.applyBundle('kickabout');
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.controllers='off'; M.sel.adsOn='off';
+  M.setMatchSeed(3); M.startMatch();
+  const w = M.world; w.state='play'; w.stateT=2;
+  o.rot = M.cam.rot;
+  const me = w.players[0];
+  const park = () => { for (const q of w.players) if (q !== me){ q.x = 9e3; q.y = 9e3; q.vx = q.vy = 0; } w.ball.x = 9e3; w.ball.y = 9e3; };
+  me.x = -60; me.y = 0; me.faceX = 1; me.faceY = 0; me._drawAng = 0; me._feet = null;
+  for (let i=0;i<30;i++){ me.vx = 2.5; me.vy = 0; park(); M.step(w); M.advanceFeet(w); }
+  M.render();
+  const s0 = M.screenPt(M.wx(me.x), M.wy(me.y)), s1 = M.screenPt(M.wx(me.x+10), M.wy(me.y));
+  const tv = [s1[0]-s0[0], s1[1]-s0[1]], tl = Math.hypot(tv[0], tv[1]);
+  o.travelScreen = [ +tv[0].toFixed(1), +tv[1].toFixed(1) ];
+  const ctx = document.getElementById('game').getContext('2d');
+  const skin = M.kitPerson(me)[1], hx = [1,3,5].map(k=>parseInt(skin.substr(k,2),16));
+  const dpr = ctx.getTransform().a, R = me.r*M.cam.s*dpr, cx = s0[0]*dpr, cy = s0[1]*dpr, W = Math.round(2*R);
+  const d = ctx.getImageData(Math.round(cx-R), Math.round(cy-R), W, W).data;
+  let sx=0, sy=0, n=0;
+  for (let i=0;i<d.length;i+=4){
+    if (Math.abs(d[i]-hx[0])+Math.abs(d[i+1]-hx[1])+Math.abs(d[i+2]-hx[2]) > 40) continue;
+    const k=i/4, ax=(k%W)-R, ay=((k/W)|0)-R; if (Math.hypot(ax,ay) > R*0.7) continue;   // the head, not the hands
+    sx += ax; sy += ay; n++;
+  }
+  o.headOffsetScreen = n ? [ +(sx/n).toFixed(1), +(sy/n).toFixed(1), n ] : null;
+  const hl = n ? Math.hypot(sx/n, sy/n) : 0;
+  o.headLeadsTravel = n > 20 && hl > 2 && ((sx/n)*tv[0] + (sy/n)*tv[1]) / (hl*tl) > 0.85;
+  o.pitchIsTurned = Math.abs(o.rot) > 1;
+  // ...and the picker tile, which paints the same skin from its own context, is NOT turned:
+  // the flag is raised round the game canvas's paint only, so a bundle swatch baked once and
+  // never dropped cannot carry the live turn into the menu for the rest of the session.
+  o.skinRotOutsideADraw = M.skinRot;
+  return o;
+});
+await p2.close();
+Object.assign(r, { turned });
 
 const fail=[];
 const ok=(c2,m)=>{ if(!c2) fail.push(m); };
@@ -698,7 +988,7 @@ ok(r.armsAlwaysVisible,
 ok(r.manyFrames,
   `only ${r.poses} distinct pictures over a whole stride — "add more frames of animation" was the ask, and the two-frame build scored 2`);
 ok(r.strideIsFollowable,
-  `one 60Hz frame carries the hand ${r.strideFrameJump} of its whole ${r.strideArc}r stride arc at a moving body's median speed — a stride that turns over this fast is a blur rather than a run. Measured at 0.39 on the build that shipped without FOOTBALLER.cadence (7.7 cycles a second, 7.8 frames for a cycle) and 0.20 at the shipped cadence of 2. The arc itself has to be real, or "slow" is satisfied by a leg that never moves`);
+  `one 60Hz frame carries the hand ${r.strideFrameJump} of its whole ${r.strideArc}r stride arc at a moving body's median speed — a stride that turns over this fast is a blur rather than a run. Measured at 0.39 on the first build (7.7 cycles a second, 7.8 frames for a cycle), 0.20 at the sine's slowed cadence, and about 0.10 on the planted stride (FOOTBALLER.stride). The arc itself has to be real, or "slow" is satisfied by a leg that never moves`);
 ok(r.bodyInsideTheRing,
   `the body reaches ${r.bodyFarthest}r — the shirt and the shorts TOGETHER may never cross the guide ring, which is the circle the player collides at. Only the arms and the legs are allowed out`);
 ok(r.bodyFillsTheRing,
@@ -786,6 +1076,31 @@ ok(r.mown, 'the pitch is flat — the mown stripes are half of what the picture 
 ok(r.noFieldPainter && r.noCourt && r.reusesClassicBall,
   `the bundle grew a field painter, a court or a ball of its own: field=${!r.noFieldPainter} pitch=${!r.noCourt} ball=${r.reusesClassicBall?'classic':'its own'}`);
 ok(r.renderOnly, 'the theme moved the world — a skin may only ever draw');
+ok(r.plantedFootHoldsStill,
+  `a planted foot does not stay planted: ${JSON.stringify(r.feetStraight.plants)} plants over ${r.feetStraight.gait} units with plant lengths ${JSON.stringify(r.feetStraight.plantLen)} (body still on ${r.feetBodyStill} steps) — a foot on the ground has to keep its WORLD position while the body passes over it, and the sine it replaces rode the body at 1:1`);
+ok(r.cadenceIsDistanceNotTurns,
+  `turning changes the stepping: landings at gait ${JSON.stringify(r.feetStraight.landAt)} on a straight run against ${JSON.stringify(r.feetZig.landAt)} on a zig-zag and ${JSON.stringify(r.feetSlam.plants)} plants on a slam, over ${r.feetStraight.gait} / ${r.feetZig.gait} / ${r.feetSlam.gait} units — the cadence is the distance travelled and nothing else, which is the whole of the ask`);
+ok(r.feetLeashed,
+  `a foot reaches ${Math.max(r.feetStraight.farMax, r.feetZig.farMax, r.feetSlam.farMax)}r from the body — the leash (FOOTBALLER.reach) is what keeps a planted foot drawable through a turn, and a straight run has to reach hypot(stride, foot) without it biting`);
+ok(r.noHopOnRestart,
+  `a foot moved ${r.restartMove} units in one frame restarting from a stop, against a swing peak of ${r.feetStraight.swingPeak} — the next step has to start from where the last one ended, and a foot snapped onto its landing spot is a hop`);
+ok(r.noHopOnATurn,
+  `a foot moved ${r.turnMoveMax} units in one frame on a zig-zag or a reversal, against a straight run's swing peak of ${r.feetStraight.swingPeak} — a swing ending while its landing spot swings round behind a reversal must leave the foot where it is, not put it on the spot in one frame (16.0 on the snapping build)`);
+ok(r.feetSettleAtRest,
+  `at rest the feet sit ${JSON.stringify(r.restDist)}r from the body about a midpoint ${JSON.stringify(r.restMid)} — a player who stops is not left straddled wherever the last step landed`);
+ok(r.fallbackGroundHalfIsPlanted,
+  `the stateless wave is not a planted stride: along + travel reads ${JSON.stringify(r.groundHalf)} over the ground half (a plant holds it at 1 throughout) — a tile and a swatch draw this wave, and a sine here is a tile that is not a picture of the pitch`);
+ok(r.feetWriteOnlyFeet,
+  `stepping the feet wrote ${JSON.stringify(r.feetWrote)} — it may only ever touch _feet, which nothing in step() reads`);
+ok(r.liveFigureInBounds,
+  `on the live path the figure reads ${r.liveReachMin}..${r.liveReachMax}r through a reversal — the same ceiling (1.60) and floor (1.15) the phase sweep is held to, measured where a planted foot can put a leg the stateless wave never draws`);
+ok(r.replayLeavesLiveFeetAlone,
+  `a replay walked the LIVE player's feet (or drew ${r.replayFeetSeen} positions of its own) — the spread body carries the live _feet object by reference, and a replay must keep its own per slot`);
+ok(r.turned.pitchIsTurned, `the wide page did not turn the pitch (cam.rot ${r.turned.rot}) — the frame check below is vacuous upright`);
+ok(r.turned.headLeadsTravel,
+  `on a turned pitch the body travels ${JSON.stringify(r.turned.travelScreen)} on screen while its head sits at ${JSON.stringify(r.turned.headOffsetScreen)} — a skin paints inside uprightAt, which cancels the pitch's turn, so a world direction needs it put back (skinDir); measured at (+4.9, -0.6) against a travel of (0, -13.5) on the build that did not`);
+ok(r.turned.skinRotOutsideADraw === 0,
+  `skinRot reads ${r.turned.skinRotOutsideADraw} outside a draw — a tile or a swatch painting the same skin from its own context would carry the live turn into the menu`);
 ok(r.escapes === 0, `${r.escapes} ball escapes`);
 ok(errors.length===0, 'console errors: '+errors.join(' | '));
 

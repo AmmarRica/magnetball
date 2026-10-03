@@ -2238,6 +2238,34 @@ three lines a second time, name it.
   — changing that for all of them is a drive-by nobody asked for. ⚠️ Sketchbook's counter did
   not rotate AT ALL before this, so a reversal was invisible on it; its bake faces up the
   sheet, hence the `+π/2`. `tests/footballers.mjs`.
+- **EVERY DIRECTION-DRAWN SKIN WAS A QUARTER TURN WRONG ON EVERY WIDE SCREEN, for the
+  whole life of the skins** (`skinRot`, `skinDir`, `discFaceDraw`, `discFaceTurn`;
+  `tests/footballers.mjs`' turned-page block). `drawOneDisc` is called inside `uprightAt`,
+  which cancels `cam.rot` so faces and name plates stay upright in deck view — and `auto`
+  orientation turns the pitch (`cam.rot` = −π/2) on ANY wide window, which is every desktop.
+  Inside that frame a world vector drawn as it stood is rotated by `−cam.rot` against the
+  body it belongs to. **Measured on a 1280×800 page: a footballer driven along world +x
+  travelled (0, −13.5) on screen — straight UP — while its head sat at (+4.9, −0.6), facing
+  RIGHT.** Every figure on a desktop ran crab-wise; the arrowheads, the shrimp and the
+  saucers point the same quarter turn off their travel. The ball already knew: `drawOneBall`
+  adds `cam.rot` to `rollAx` with a comment saying exactly this.
+  ⚠️ **FOUND BECAUSE THE PLANTED FEET MADE IT LOAD-BEARING**: a foot anchored in the world
+  has to stay put ON SCREEN, and an offset drawn in the wrong frame slides on every turned
+  pitch. Not a drive-by: the feet could not be built on the frame as it was, and the fix is
+  one owner for every skin rather than a correction inside the footballers alone.
+  ⚠️ **IT IS THE DRAW-TIME READERS THAT TURN, NEVER `discFace` ITSELF.** `turnFaceToward`
+  eases `_drawAng` toward `discFace` in WORLD angle, and that angle is what the replay keeps
+  per slot (`repAnim.fa`) — rotating it at the source would ease toward a screen angle and
+  turn it again on the way out. The four skins that read `discFace` directly read
+  `discFaceDraw` now, and `discFaceTurn` turns its own answer.
+  ⚠️ **ONLY ON THE GAME CANVAS, and that is a flag rather than a read of `cam.rot`.** A
+  picker tile, a bundle swatch and the suites paint a skin straight from their own context,
+  where there is no turn to put back — and a tile baked into `swatchFixed` (never dropped)
+  with the live `cam.rot` folded in would show a figure lying on its side for the rest of the
+  session. `drawOneDisc` raises `skinRot` round the paint and lowers it in a `finally`;
+  `tests/footballers.mjs` reads it as **0** outside a draw, and the turned page measures the
+  head at **(−0.7, −8.5)** against a travel of (0, −13.5). `var`, because the attract demo
+  reaches `drawOneDisc` during the bootstrap.
 - **TWO LIMB STYLES FOR THE FOOTBALLERS, AND THE SECOND IS THE BUILD BEFORE IT**
   (`footballerSkin(name, sprites)`, `DISC_SKINS.footballersink`, `THEMES.kickink`
   = **Sunday League Inked**, `THEME_BUNDLES.kickink`). Asked for: keep the Kenney limb sprites
@@ -3066,17 +3094,88 @@ three lines a second time, name it.
   the hand in to 0.70 drops it under the 1.15 floor.
   ⚠️ **THE STRIDE IS A CONTINUOUS PHASE (`gaitSwing`), NOT TWO FRAMES** — asked for as more
   frames of animation, and a phase is EVERY frame rather than a bigger number of them. It
-  is `sin(p.gait / gaitPeriod() * 2π)`: the same distance-driven `p.gait` `legFrame` reads,
-  never a clock. Twelve samples round a cycle draw **7 distinct pictures** against the
-  two-frame build's 2.
-  ⚠️ **AND THE CADENCE IS THE FOOTBALLERS' OWN** (`FOOTBALLER.cadence`, 2), asked for as
-  *"animate the frames a bit slower for arms and legs"* — **and measured before it was
-  touched**: on a seeded 3v3 a moving body's median speed is **1.80 units a step**, so at
+  was `sin(p.gait / gaitPeriod() * 2π)` — the same distance-driven `p.gait` `legFrame`
+  reads, never a clock — and is `footPhase` now, below. Twelve samples round a cycle draw
+  **7 distinct pictures** against the two-frame build's 2.
+  ⚠️ **THE FEET ARE PLANTED ON THE GROUND AND STEP ON A CADENCE SET BY THE SPEED, NEVER BY
+  THE STICK** (`FOOTBALLER.stride`/`reach`/`settle`/`heading`/`catch`/`jump`, `footPhase`,
+  `footSwing`, `stepFeet`, `advanceFeet`, `p._feet`, `repAnim.ft`). Asked for from another
+  game's walk — *"his legs kinda follow the direction but step on a cadence that is separate
+  from the player input; you can slam the joystick around and he'll turn but he won't do
+  steps all over, because he steps on this cadence that is just influenced by the speed, not
+  the changes in direction. Both legs while the player is moving. The foot takes the next
+  step from where the last step ended."* **THIS WITHDRAWS `FOOTBALLER.cadence` AND
+  `legSwing`**, and the old cadence's measurement is kept at the end because the new period
+  was set against it.
+  ⚠️ **WHAT WAS WRONG WITH THE SINE**: the foot's position was a FUNCTION OF THE BODY —
+  `sin(gait)` along the facing — so it rode the body wherever the body went, 1:1. A planted
+  foot stays on the spot it was put down while the body moves over it, and the stick cannot
+  move it. Measured: a planted foot's world position moves **exactly 0** across runs of
+  **23.5 units** of body travel, seven and eight plants a foot over 434 units.
+  ⚠️ **ON THE GROUND OR IN THE AIR, HALF A CYCLE EACH, ON `p.gait`.** Planted, the world
+  position is held; in the air the foot closes a smoothstep share of the remaining distance
+  to its landing spot (`stride` 0.93r ahead along the heading, `foot` across) EVERY STEP, from
+  wherever it is — so "the next step starts where the last ended" is true by construction,
+  with no lift point to record and no jump when a body stops mid-swing and goes again. The
+  cadence is the distance travelled and nothing else: a straight run, a right angle every 15
+  steps and a reversal every 12 land at **28.96, 85.07, 141.18 … over 434 units — identical
+  lists**, the whole of the ask in one number.
+  ⚠️ **NOTHING IS EVER SNAPPED INTO PLACE** (`catch`, 0.40). The smoothstep share runs to 1
+  at the end of the swing, so a foot far from its spot there — stopped mid-swing, settled into
+  the stance, started again at the landing phase — was put there in one frame: a **7.4**-unit
+  hop against a swing peak of 5.4. Capped, it plants a little short (about 0.07r in a straight
+  run) and a landing is the foot STOPPING, which can never be a jump. Measured **5.0 against
+  5.6** now. ⚠️ **The restart reading cannot catch the snap put back, and two bars were tried
+  on it before the right instrument was found**: the snap lifts the straight run's OWN peak
+  with it (6.84 against 5.56) and the restart hop sits under that (6.27). What a snap cannot
+  hide is a swing ending while its landing spot is swinging round behind a REVERSAL — the foot
+  is put on it in one frame, **16.0 units against 6.8** with the foot left to stop where it is.
+  The reversal run's largest move is held to 1.5× the straight run's peak (1.22× honest).
+  ⚠️ **THE LEASH IS WHAT A PLANTED FOOT COSTS** (`reach`, 1.28r): a foot held while the body
+  turns a corner ends up 2.1r away against a figure ceiling of 1.60r, so it is dragged in
+  along the line to the body — never lifted early, because an early lift makes the cadence a
+  function of the turn, which is the one thing asked not to happen. A straight run never
+  reaches it (`hypot(stride, foot)` = 1.24r). Live figure through a reversal: **1.38..1.52r**,
+  against **2.27r** with the leash cut.
+  ⚠️ **THE HEADING EASES AS AN ANGLE, NEVER A LERP OF THE VECTOR.** (0,−1) lerped toward
+  (0,1) and re-normalised is (0,−1) for ever, so a body setting off against its facing landed
+  every foot behind itself and the leash dragged them all the way: **zero plants down the
+  pitch against seven across it**, caught by the first run of the suite's own check — the
+  probe had happened to run across the pitch while the model was written.
+  ⚠️ **`stride` 0.93 PUTS ONE STEP AT 1.86r OF TRAVEL — a period of 55.8 units**, against
+  the sine's 28. Under 28 a planted step would be 0.47r and the foot would land and lift
+  under the shirt. At a moving body's median 1.80 units a step that is **1.9 cycles a second,
+  3.0 at pace**, against a person's 1.3–1.5: still above life, and a stride you can see rather
+  than a frequency. `PLAYER.r`, never `p.r`, so a party modifier growing the bodies cannot
+  slow every cadence in the match. `GAIT.stride` is still `legFrame`'s and untouched.
+  ⚠️ **RENDER ONLY AND OFF THE SPREAD BODY.** `_feet` is the only key `stepFeet` writes
+  (diffed, the `_drawAng` idiom); it is advanced in `loop()` beside `advanceFaceTurn`, never
+  in a draw. A replay rebuilds its bodies by spreading the LIVE player — `_feet` included, by
+  REFERENCE — so `repAnimate` keeps the feet per slot and puts them on the rebuilt body before
+  stepping, or a replay walks the live player's feet about under a match still being played.
+  ⚠️ **THE STATELESS FALLBACK IS THE SAME WAVE WITHOUT THE WORLD** (`footSwing`: `1 − 4u` on
+  the ground, a smoothstep in the air), and it is what a tile, a swatch and the suite's
+  synthetic bodies draw, so the phase sweep still holds — **with its PEAKS found on the
+  wave**: a quarter and three quarters of the cycle were the sine's extremes and are this
+  wave's two phases with the foot level with the hip and UNDER the shirt, so "the two peaks
+  differ" read **0 pixels** on a build whose legs swing perfectly well, and the bundle
+  swatch's quarter-cycle pose had both legs tucked. ⚠️ **And finding the peaks on the wave
+  means the sweep no longer pins the wave's SHAPE**: a sine put back in `footPhase` passed
+  every check, so the ground half is pinned directly — along + travel is a constant for a
+  planted foot (a sine reads 0.59, 0.95, 0.95 where a plant reads 0.6, 0.2, −0.2).
+  ⚠️ **THE PLANT PHASE HAS FEWER BOOT PIXELS THAN THE LIFT (269 against 319)**, so the
+  suite's fixed `n > 300` gate threw out the one frame where the leg is longest and the leg
+  measured **0.987r against a body of 0.98** — a pass by seven thousandths on the wrong
+  frame. The gate is six tenths of the fullest boot now, and the leg reads **1.184r**.
+  ⚠️ **TEN SABOTAGES, each caught by its own check**, in `tests/footballers.mjs` — two of
+  them (the landing snap, the sine) only after the check was tightened, as written above.
+  ⚠️ **THE OLD CADENCE'S MEASUREMENT, kept**: *"animate the frames a bit slower for arms
+  and legs"* — on a seeded 3v3 a moving body's median speed is **1.80 units a step**, so at
   `legFrame`'s own 14-unit cycle the legs turned over **7.7 times a second, 7.8 frames for a
   whole cycle on a 60Hz screen**, and at pace **12.3 a second, 5.3 frames a cycle**. A person
   runs at about 1.5–2.5 stride cycles a second, so the shipped figure was four to five times
-  a human cadence and read as a blur. At 2 it is **3.9 a second at the median and 6.1 at
-  pace** — a fast player, still above life so the game does not read as slow motion.
+  a human cadence and read as a blur. At `cadence` 2 it was **3.9 a second at the median and
+  6.1 at pace**; the planted stride halves that again.
   ⚠️ **`GAIT.stride` IS NOT TOUCHED, which is the whole reason this number exists**: it is
   shared with `legFrame`, which the crab, the lobster and the shrimp are built on, so slowing
   it would slow every creature skin in the file. A drive-by nobody asked for.
