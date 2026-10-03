@@ -810,19 +810,27 @@ const r = await p.evaluate(async ()=>{
       park(); M.step(w); M.advanceFeet(w);
       const f = me._feet;
       rec.push({ x: me.x, y: me.y, g: me.gait, sp: Math.hypot(me.vx, me.vy),
-                 f0: [f.x[0], f.y[0]], f1: [f.x[1], f.y[1]] });
+                 f0: [f.x[0], f.y[0]], f1: [f.x[1], f.y[1]], up: [!!(f.up && f.up[0]), !!(f.up && f.up[1])] });
     }
     return { rec, w, me };
   };
   const feetRead = (rec, r) => {
-    const out = { plants:[0,0], landAt:[[],[]], plantLen:[[],[]], moveMax:0, swingPeak:0, farMax:0, bodyStill:0 };
+    const out = { plants:[0,0], landAt:[[],[]], plantLen:[[],[]], moveMax:0, swingPeak:0, farMax:0, bodyStill:0, slides:0, lifts:0 };
     for (const s of rec) if (s.sp < 0.5) out.bodyStill++;
+    for (const s of rec) for (const k of [0,1]) if (s.up[k]) out.lifts++;
+    const P = M.gaitPeriod();
     for (const k of [0,1]){
       let planted = false, start = null, fast = 0;
       for (let i = 1; i < rec.length; i++){
         const a = rec[i-1]['f'+k], c = rec[i]['f'+k];
         const mv = Math.hypot(c[0]-a[0], c[1]-a[1]);
         out.moveMax = Math.max(out.moveMax, mv);
+        // ⚠️ A SLIDE is a foot that moved while it was DOWN — in its ground phase (f1 is the
+        // foot with offset 0, f0 the one half a cycle on, as in `stepFeet`) and not lifted on
+        // either side of the frame. The build before the lift dragged the trailing foot along
+        // the ground through every reversal: 36-43 such frames a foot over this run.
+        const u = ((rec[i].g / P + (k ? 0 : 0.5)) % 1 + 1) % 1;
+        if (u < 0.5 && mv > 1e-9 && !rec[i].up[k] && !rec[i-1].up[k]) out.slides++;
         // ⚠️ A plant is a run of EXACTLY still frames (`< 1e-9`), so "the foot held" needs no
         // drift reading of its own: a foot that crept would simply never be still, and the
         // sine it replaces was never still. A tolerance here would let the first slow frame
@@ -854,6 +862,18 @@ const r = await p.evaluate(async ()=>{
   o.feetStraight = { plants: st.plants, landAt: st.landAt, plantLen: st.plantLen, moveMax: +st.moveMax.toFixed(2), swingPeak: +st.swingPeak.toFixed(2), farMax: +st.farMax.toFixed(3), gait: st.gait };
   o.feetZig   = { plants: zz.plants, landAt: zz.landAt, moveMax: +zz.moveMax.toFixed(2), farMax: +zz.farMax.toFixed(3), gait: zz.gait };
   o.feetSlam  = { plants: sl.plants, landAt: sl.landAt, moveMax: +sl.moveMax.toFixed(2), farMax: +sl.farMax.toFixed(3), gait: sl.gait };
+  // ⚠️ **A FOOT STRETCHED PAST THE LEASH LIFTS AND STEPS IN; IT IS NOT DRAGGED.** Reported as
+  // the leg dragging too much on a left-to-right switch, and measured as the leash doing it:
+  // on the reversal run a grounded foot SLID on 36-43 frames a foot (79 in all), at the body's
+  // own pace. It reads 0 now. Paired with the lift actually happening on that run — "no slide"
+  // is equally true of a leash that never binds, and that build fails the 1.60r ceiling.
+  o.feetSlides = [st.slides, zz.slides, sl.slides]; o.feetLifts = [st.lifts, zz.lifts, sl.lifts];
+  o.noSlideOnAReversal = sl.slides <= 2 && sl.lifts >= 10;
+  // ⚠️ **AND THE LIFTED FOOT MOVES AT A PACE, NOT A SHARE.** Closing 40% of the way from 2.2r
+  // behind is a 13-unit hop in one frame — and the two hop checks below PASSED it, because they
+  // are measured against the straight run's own swing peak and the hop lifted that with it
+  // (5.6 → 14). So the peak itself is held to the body's speed: 3.5 body-steps a frame, where
+  // the honest swing reads 2.6 (5.23 at a speed of 2) and the hop 7.
   // ⚠️ The straight run's plants have to be LONG — the body covers a whole step of travel
   // over a foot that does not move — or "zero drift" is true of a foot that is never down.
   const longPlants = st.plantLen.map(a => a.filter(v => v > 15).length);
@@ -894,6 +914,7 @@ const r = await p.evaluate(async ()=>{
   // Held against the straight run's peak in the same run; the honest build reads 1.22x.
   o.turnMoveMax = +Math.max(zz.moveMax, sl.moveMax).toFixed(2);
   o.noHopOnATurn = o.turnMoveMax <= st.swingPeak * 1.5;
+  o.liftIsAStepNotAHop = st.swingPeak <= SPD * 3.5 && o.turnMoveMax <= SPD * 3.5;
   // ⚠️ **THE STATELESS WAVE IS THE PLANTED STRIDE WITHOUT THE WORLD, and nothing above pins
   // its SHAPE** — the phase sweep finds its own peaks, so a sine put back in `footPhase`
   // passed every check in this file. What a planted foot does on the ground is slide back
@@ -1157,6 +1178,10 @@ ok(r.feetLeashed,
   `a foot reaches ${Math.max(r.feetStraight.farMax, r.feetZig.farMax, r.feetSlam.farMax)}r from the body — the leash (FOOTBALLER.reach) is what keeps a planted foot drawable through a turn, and a straight run has to reach hypot(stride, foot) without it biting`);
 ok(r.noHopOnRestart,
   `a foot moved ${r.restartMove} units in one frame restarting from a stop, against a swing peak of ${r.feetStraight.swingPeak} — the next step has to start from where the last one ended, and a foot snapped onto its landing spot is a hop`);
+ok(r.noSlideOnAReversal,
+  `a grounded foot slid on ${r.feetSlides[2]} frames of the reversal run (lifted on ${r.feetLifts[2]}) — a foot stretched past the leash lifts and steps in, it is not dragged along the ground (36-43 frames a foot before the lift)`);
+ok(r.liftIsAStepNotAHop,
+  `a foot moved ${Math.max(r.feetStraight.swingPeak, r.turnMoveMax)} units in one frame at a body speed of ${2.0} — a lifted foot steps in at a pace (liftPace), never a share of the way (14 units on the build that closed 40% from 2.2r)`);
 ok(r.noHopOnATurn,
   `a foot moved ${r.turnMoveMax} units in one frame on a zig-zag or a reversal, against a straight run's swing peak of ${r.feetStraight.swingPeak} — a swing ending while its landing spot swings round behind a reversal must leave the foot where it is, not put it on the spot in one frame (16.0 on the snapping build)`);
 ok(r.feetSettleAtRest,

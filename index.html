@@ -6191,7 +6191,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261003.0105PM';
+const VERSION = '20261003.0315PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6207,12 @@ const VERSION = '20261003.0105PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261003.0315PM', title: 'The footballers stop dragging a leg on a turn',
+    changed: [
+      '<b>Sunday League footballers no longer drag a foot when they switch direction.</b> Turning sharply left to right used to pull the trailing foot along the grass for a stride; it lifts and steps in now, on the same rhythm as before, so a reversal looks like a reversal rather than a slide.',
+      '<b>The step stays a step.</b> The lifted foot comes in at a running pace, never in one jump, and the footballer still takes exactly as many steps for the ground he covers whatever you do with the stick.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261003.0105PM', title: 'The footballers lean into their stride',
     changed: [
       '<b>Sunday League footballers turn a little with each step.</b> The whole body yaws with the stride so the shoulder of the forward arm leads, the way a runner\u2019s does, while the feet stay planted on the grass. Standing still, nothing moves.',
@@ -34847,7 +34853,27 @@ const FOOTBALLER = {
   // like everything in this painter — it reads `footSwing` and writes nothing.
   twist: 0.22,
   stride: 0.93,   // half a step, in r: a foot lands this far AHEAD and lifts this far BEHIND
-  reach:  1.28,   // the leash: a planted foot is dragged in rather than drawn further out than this
+  reach:  1.28,   // the leash: a planted foot past this LIFTS and steps in (and is never drawn further out)
+  // ⚠️ **A FOOT STRETCHED PAST THE LEASH LIFTS AND STEPS IN — IT IS NOT DRAGGED.** Reported
+  // as *"the leg drags a bit too much when switching from left to right"*, and the leash was
+  // the drag: on a reversal the foot just planted AHEAD is suddenly behind, the body runs
+  // away from it, and once the leg was at full stretch the foot was pulled along the ground
+  // for the rest of its ground phase. Measured, a reversal every 12 steps: a grounded foot
+  // SLID on **36-43 frames of 240**, 51-62 units in all, at up to 1.8 units a frame — the
+  // body's own pace. It reads 0 frames and 0 units now; the leash never binds.
+  // ⚠️ **THE PLANT STAYS ON THE CLOCK, so this is not "the cadence following the stick".**
+  // The rule written for the first build — *"never lifted early, because an early lift makes
+  // the cadence a function of the turn"* — is WITHDRAWN as stated and kept as what it was
+  // protecting: a lifted foot follows its landing spot at the swing's own pace (`catch`,
+  // `liftPace`) and is put down by the CLOCK — the air phase takes it over and lands it at
+  // the same gait value it always landed at. Measured: the straight, zig-zag and reversal
+  // runs land at the identical gait values before and after (slam plants 8 / 7 against the
+  // straight run's 8 / 7, every landing to the hundredth), so no step is added or lost.
+  // ⚠️ **PLANTING IT AGAIN ON ARRIVAL WAS BUILT FIRST AND MEASURED AS EXTRA STEPS.** Put down
+  // the moment it reached its spot, the lifted foot took a quick corrective step at every
+  // reversal and the slam run read **9 / 10 plants against 8 / 7** — `cadenceIsDistanceNot-
+  // Turns` caught it, and it is exactly the stepping-all-over the first ask ruled out.
+  liftPace: 2.5,  // a lifted foot steps in at most this many BODY speeds a frame (see stepFeet)
   settle: 0.22,   // at rest, the fraction of the way to the stance each foot moves per step
   heading: 0.20,  // how fast the heading the feet land along follows the travel, per step
   catch:  0.40,   // the most of the remaining way to its landing spot a foot in the air closes a step
@@ -34892,7 +34918,7 @@ function stepFeet(p, steps){
   };
   if (!f){
     const h = discFace(p);
-    f = p._feet = { x:[0,0], y:[0,0], hx:h.ux, hy:h.uy, px:p.x, py:p.y, g:p.gait || 0 };
+    f = p._feet = { x:[0,0], y:[0,0], up:[false,false], hx:h.ux, hy:h.uy, px:p.x, py:p.y, g:p.gait || 0 };
     for (let i = 0; i < 2; i++){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; }
     return;
   }
@@ -34918,12 +34944,14 @@ function stepFeet(p, steps){
     const a = ha + da * (1 - Math.pow(1 - F.heading, n));
     f.hx = Math.cos(a); f.hy = Math.sin(a);
   }
+  if (!f.up) f.up = [false, false];                      // feet from before the lift existed
+  const lim = F.reach * r;                               // the leash
   for (let i = 0; i < 2; i++){
     const sgn = i ? 1 : -1, off = i ? 0 : 0.5;
-    if (put){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; continue; }
+    if (put){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; f.up[i] = false; continue; }
     if (!moving){
       const s2 = stanceAt(i), k = 1 - Math.pow(1 - F.settle, n);
-      f.x[i] += (s2[0] - f.x[i])*k; f.y[i] += (s2[1] - f.y[i])*k;
+      f.x[i] += (s2[0] - f.x[i])*k; f.y[i] += (s2[1] - f.y[i])*k; f.up[i] = false;
       continue;
     }
     const tx = p.x + f.hx*F.stride*r - f.hy*F.foot*r*sgn;   // where this foot lands next
@@ -34944,12 +34972,30 @@ function stepFeet(p, steps){
       const s0 = t0*t0*(3 - 2*t0), s1 = t1*t1*(3 - 2*t1);
       const k = Math.min(1 - Math.pow(1 - F.catch, n), s0 >= 0.999 ? 1 : (s1 - s0) / (1 - s0));
       f.x[i] += (tx - f.x[i])*k; f.y[i] += (ty - f.y[i])*k;
+      f.up[i] = false;
+    } else {
+      // On the ground. A foot stretched past the leash LIFTS (`up`) and follows its spot at
+      // the swing's own pace until the clock's air phase takes it over and lands it — see
+      // `FOOTBALLER.reach`. The clock is untouched: it lands at the gait value it always did.
+      if (!f.up[i] && Math.hypot(f.x[i] - p.x, f.y[i] - p.y) > lim) f.up[i] = true;
+      if (f.up[i]){
+        // ⚠️ At a PACE, never a share alone: `catch` is 40% of the remaining way, and from
+        // 2.2r behind that is a 13-unit hop in one frame — the landing snap this model was
+        // built to be rid of, back on the lift. The suite's hop checks PASSED it, because
+        // they are measured against the straight run's own swing peak and the hop lifted
+        // that with it (5.6 → 14). Measured at `liftPace` 2.5: the lifted foot moves 5.0 a
+        // frame at a body speed of 2, under the swing's own 5.6 — a quick step, not a jump.
+        const gx = tx - f.x[i], gy = ty - f.y[i], gd = Math.hypot(gx, gy) || 1e-9;
+        const mv = Math.min(gd * (1 - Math.pow(1 - F.catch, n)), F.liftPace * sp * n);
+        f.x[i] += gx / gd * mv; f.y[i] += gy / gd * mv;
+      }
     }
     // ...otherwise it is planted — on the spot the swing ended, wherever that was — and a
     // planted foot stays exactly where it is. Nothing is ever snapped into place: a landing
     // is the foot STOPPING, which is the only thing that can never be a jump.
   }
-  const lim = F.reach * r;                               // the leash
+  // The leash as a BACKSTOP: a foot can only cross it on the frame it lifts, by one step of
+  // the body, and a drawn leg longer than this is a body bigger than its collider.
   for (let i = 0; i < 2; i++){
     const dx = f.x[i] - p.x, dy = f.y[i] - p.y, dd = Math.hypot(dx, dy);
     if (dd > lim){ f.x[i] = p.x + dx/dd*lim; f.y[i] = p.y + dy/dd*lim; }

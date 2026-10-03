@@ -3132,11 +3132,42 @@ three lines a second time, name it.
   is put on it in one frame, **16.0 units against 6.8** with the foot left to stop where it is.
   The reversal run's largest move is held to 1.5× the straight run's peak (1.22× honest).
   ⚠️ **THE LEASH IS WHAT A PLANTED FOOT COSTS** (`reach`, 1.28r): a foot held while the body
-  turns a corner ends up 2.1r away against a figure ceiling of 1.60r, so it is dragged in
-  along the line to the body — never lifted early, because an early lift makes the cadence a
-  function of the turn, which is the one thing asked not to happen. A straight run never
-  reaches it (`hypot(stride, foot)` = 1.24r). Live figure through a reversal: **1.38..1.52r**,
-  against **2.27r** with the leash cut.
+  turns a corner ends up 2.1r away against a figure ceiling of 1.60r, so it is held in to
+  that line. A straight run never reaches it (`hypot(stride, foot)` = 1.24r). Live figure
+  through a reversal: **1.38..1.52r**, against **2.27r** with the leash cut.
+  ⚠️ **A FOOT STRETCHED PAST THE LEASH LIFTS AND STEPS IN — IT IS NOT DRAGGED** (`f.up`,
+  `FOOTBALLER.liftPace`). Reported as *"the leg drags a bit too much when switching locations
+  from left to right"*, and the leash WAS the drag: on a reversal the foot just planted ahead
+  is suddenly behind, the body runs away from it, and once the leg was at full stretch the
+  foot was pulled along the ground for the rest of its ground phase. Measured on a reversal
+  every 12 steps: a grounded foot **slid on 36-43 frames of 240 a foot, 51-62 units in all,
+  at up to 1.8 units a frame** — the body's own pace. It reads **0 frames** now.
+  ⚠️ **THIS WITHDRAWS "never lifted early, because an early lift makes the cadence a function
+  of the turn", AS STATED.** What that sentence was protecting survives: the lifted foot
+  follows its landing spot and is put down by the CLOCK — the air phase takes it over and
+  lands it at the gait value it always landed at — so the straight, zig-zag and reversal
+  runs still land at the identical values (**8 / 7 plants on the slam against 8 / 7 on the
+  straight run**, every landing to the hundredth). The lift moves the LIFT; the STEPS are
+  where they were.
+  ⚠️ **PLANTING IT AGAIN ON ARRIVAL WAS BUILT FIRST AND MEASURED AS EXTRA STEPS**: put down
+  the moment it reached its spot, the trailing foot took a corrective step at every
+  reversal and the slam read **9 / 10 plants against 8 / 7** — `cadenceIsDistanceNotTurns`
+  caught it, and it is exactly the stepping-all-over the first ask ruled out.
+  ⚠️ **AT A PACE, NEVER A SHARE — AND THE SUITE'S HOP CHECKS PASSED THE HOP.** The lifted
+  foot first closed `catch` (40%) of the remaining way a frame, which from 2.2r behind is a
+  **13-unit hop in one frame** — the landing snap this model was built to be rid of, back on
+  the lift. `noHopOnRestart`/`noHopOnATurn` are measured against the straight run's OWN swing
+  peak, and the hop lifted that with it (**5.6 → 14**), so both stayed green: rule 4. It
+  steps in at most `liftPace` (2.5) body-speeds a frame — 5.0 at a speed of 2, under the
+  swing's 5.2 — and the peak itself is now held to the body's speed (`liftIsAStepNotAHop`).
+  ⚠️ **THE HEADING EASE WAS SWEPT AND LEFT ALONE.** Frames with a foot more than a radius
+  behind the body on the reversal run: 39 at `heading` 0.20, 26 at 0.30, 16 at 0.40 — and on
+  the right-angle run 3, 12, 23. A faster heading trades one turn for the other; rule 8.
+  ⚠️ The leash stays as a backstop (a foot can only cross it on the frame it lifts, by one
+  body step), and it still binds: the slam reads `farMax` **1.280** exactly. The sliding
+  check (`noSlideOnAReversal`) counts a foot that moved while DOWN — ground phase, not lifted
+  on either side of the frame — and is paired with the lift happening on that run, because
+  "no slide" is equally true of a leash that never binds, which fails the 1.60r ceiling.
   ⚠️ **THE HEADING EASES AS AN ANGLE, NEVER A LERP OF THE VECTOR.** (0,−1) lerped toward
   (0,1) and re-normalised is (0,−1) for ever, so a body setting off against its facing landed
   every foot behind itself and the leash dragged them all the way: **zero plants down the
