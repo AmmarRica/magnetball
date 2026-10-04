@@ -449,6 +449,8 @@ const def = await bare.evaluate(() => {
   return {
     palette: d.look.palette,
     livePalette: M.sel.look.palette,
+    discs: d.look.discs,
+    bundle: M.currentBundle(),
     profileFlag: M.defaultProfile().flag,
     // ⚠️ Every bot wears a NUMBER, not a country. The first-run continent lineup used to
     // dress a brand-new install in flags, which is the opposite of "players are numbered".
@@ -497,11 +499,63 @@ ok('...and the headline is centred on the COURT', lob.headlineFollowsTheCourt !=
    `headline at ${lob.headMid}, court centre ${lob.courtMid} — cw/2 is the middle of the canvas, and the menu dock takes a bite out of one side of it`);
 
 
-ok('the default theme is grass', def.palette === 'grass' && def.livePalette === 'grass',
-   `${def.palette} — a plain green pitch is what a football game looks like before you have chosen anything, and it is what a reset gives back`);
+// ⚠️ REVERSED: this read "the default theme is grass" for the whole life of the entry. Sunday
+// League (`kickabout`) is the shipped look now, asked for by the owner, and it is checked as
+// the BUNDLE slot for slot — a default of `palette:'kickabout'` with plain discs would make a
+// fresh install's Theme card read "Custom", which is the lie `currentBundle` is derived to avoid.
+ok('the default theme is Sunday League', def.palette === 'kickabout' && def.livePalette === 'kickabout',
+   `${def.palette} / live ${def.livePalette} — the owner's own look ships; grass was the neutral answer and is one tap away in Theme`);
+ok('...as the whole bundle, so a fresh install reads Sunday League and not Custom',
+   def.bundle === 'kickabout' && def.discs === 'footballers',
+   `currentBundle ${def.bundle}, discs ${def.discs}`);
 ok('...and you are numbered', /^num\d$/.test(def.profileFlag), def.profileFlag);
 ok('...and so is every bot', def.botFlags.length > 0 && def.botFlags.every(f => /^num\d$/.test(f)),
    `${JSON.stringify(def.botFlags)} — the first-run continent lineup dressed a fresh install in country flags, which is the opposite of "players are numbered"`);
+
+// ============================== the theme fold: an untouched grass install is moved on ==
+// A factory default only ever meets a fresh install, so `magnetball.themefold` carries a
+// device still on the OLD default's whole look to Sunday League, once. Three cases, each a
+// different device: untouched (moves, SAVED, stamped), one that chose a slot (kept), and one
+// already stamped (kept — one-shot, or somebody who picks Grass back is folded out of it
+// again the next morning). The storage is seeded through an init script, the `shippedfeel`
+// idiom, because the fold runs in the bootstrap and nothing after load can reach it.
+const seeded = async (js) => {
+  const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on('pageerror', e => errors.push(e.message));
+  await p.addInitScript(() => { window.__MAGNETDEBUG = true; });
+  await p.addInitScript(js);
+  await p.goto('file://' + process.cwd() + '/index.html');
+  await p.waitForTimeout(700);
+  const r = await p.evaluate(() => {
+    const M = window.__magnet, stored = JSON.parse(localStorage.getItem('magnetball.sel') || '{}');
+    // `live` is the court colour the painter is actually using, read off `TH` and compared
+    // with the palette the SETTING names — the two disagree on a build that folds the
+    // setting after the boot has already applied the old theme.
+    return { palette: M.sel.look.palette, discs: M.sel.look.discs,
+             live: M.TH.court === M.THEMES[M.sel.look.palette].pitch.court,
+             stored: (stored.look || {}).palette, stamped: localStorage.getItem('magnetball.themefold') === '1' };
+  });
+  await p.close();
+  return r;
+};
+const oldLook = (over = {}) => JSON.stringify({ look: Object.assign(
+  { palette:'grass', field:'none', discs:'none', ball:'classic', trail:'dots', court:'', surround:'' }, over) });
+const fold = {
+  untouched: await seeded(`localStorage.setItem('magnetball.sel', ${JSON.stringify(oldLook())})`),
+  chose: await seeded(`localStorage.setItem('magnetball.sel', ${JSON.stringify(oldLook({ ball:'tennis' }))})`),
+  stamped: await seeded(`localStorage.setItem('magnetball.sel', ${JSON.stringify(oldLook())}); localStorage.setItem('magnetball.themefold','1')`),
+};
+console.log('themefold', JSON.stringify(fold));
+ok('an untouched grass install is moved on to Sunday League', fold.untouched.palette === 'kickabout' && fold.untouched.discs === 'footballers',
+   `${fold.untouched.palette}/${fold.untouched.discs} — a factory default only ever meets a fresh install, so without the fold the change reaches nobody who has opened the menu`);
+ok('...and the LIVE palette moved with it, not only the setting', fold.untouched.live,
+   'the boot applies the theme right under loadSel(), before the fold runs — a fold that only wrote sel would save Sunday League and play on grass');
+ok('...and the move is SAVED and the key stamped', fold.untouched.stored === 'kickabout' && fold.untouched.stamped,
+   `stored ${fold.untouched.stored}, stamped ${fold.untouched.stamped}`);
+ok('a device that chose one slot keeps its whole look', fold.chose.palette === 'grass' && fold.chose.stamped,
+   `${fold.chose.palette} — a tennis ball on grass is a choice, and a fold that overwrites a choice is a setting changing behind somebody's back`);
+ok('a stamped device is left exactly as it is', fold.stamped.palette === 'grass',
+   `${fold.stamped.palette} — one-shot, or picking Grass back is undone the next morning`);
 
 ok('holding SELECT for three seconds goes to warm-up', hold.wentToWarmup && hold.secs === 3,
    JSON.stringify(hold));

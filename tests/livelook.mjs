@@ -17,6 +17,12 @@ const r = await p.evaluate(async ()=>{
 
   // --- Live customisation, mid-match, without restarting
   M.sel.names=''; M.sel.mode='2v2'; M.sel.spectate='play'; M.sel.controllers='off';
+  // ⚠️ Plain discs, pinned: `repaints` below reads the body's own pixels for `p.color`, which
+  // is what a PLAIN body is painted in. Sunday League is the shipped default now and its
+  // footballer skin paints the kit from the team colour, so on the default the pixels did
+  // not move for a colour change that was in fact applied. This suite is about the plain
+  // body's documented behaviour, so it says so.
+  M.sel.look.palette='grass'; M.sel.look.discs='none'; M.applyTheme('grass');
   M.profile.color='#46d17a'; M.profile.cap='none'; M.profile.flag='none'; M.profile.eyes='googly';
   M.profile.name='Before'; M.saveProfile();
   M.startMatch(); const w=M.world; w.state='play'; w.stateT=1;

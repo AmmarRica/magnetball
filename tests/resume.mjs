@@ -54,17 +54,27 @@ const play = (mode, seed, secs) => p.evaluate(({ mode, seed, secs }) => {
            modeKey: w.modeKey, fieldKey: w.fieldKey, diffKey: w.diffKey, seed: w.seed };
 }, { mode, seed, secs });
 const snap = () => p.evaluate(() => JSON.parse(localStorage.getItem('magnetball.resume') || 'null'));
-const readWorld = () => p.evaluate(() => { const M = window.__magnet, w = M.world; if (!w) return null;
-  return { state: w.state, score: w.score.slice(), timeLeft: w.timeLeft, matchT: w.matchT, n: w.players.length,
+// ⚠️ THE READING AND THE PAGEHIDE HAPPEN IN ONE EVALUATE (`hide: true`). They were two: `play()`
+// returned its reading, and a second evaluate dispatched `pagehide`. Between two evaluates the
+// LIVE rAF loop gets a turn, and under pool load that turn stepped the match once — the
+// snapshot then held the berries 2–4 units from where the reading said, and `matchT` a
+// sixtieth on. Measured: 2 of 2 pool runs red and 1 of 3 red with three heavy suites alongside,
+// never alone. The reading the snapshot is checked against is taken in the same tick as the
+// snapshot now, which is what the claim ("where they stood") means.
+const readWorld = (opt = {}) => p.evaluate((opt) => { const M = window.__magnet, w = M.world; if (!w) return null;
+  if (opt.hive) w.hive = opt.hive;
+  const r = { state: w.state, score: w.score.slice(), timeLeft: w.timeLeft, matchT: w.matchT, n: w.players.length,
            names: w.players.map(q => q.team + ':' + q.name), goals: w.players.map(q => q.ms.goals),
            hive: w.hive ? w.hive.slice() : null, extra: (w.extraBalls || []).map(e => [+e.x.toFixed(2), +e.y.toFixed(2), !!e.banked]),
-           modeKey: w.modeKey, fieldKey: w.fieldKey, diffKey: w.diffKey, seed: w.seed, kickTeam: w.kickTeam }; });
+           modeKey: w.modeKey, fieldKey: w.fieldKey, diffKey: w.diffKey, seed: w.seed, kickTeam: w.kickTeam };
+  if (opt.hide) window.dispatchEvent(new Event('pagehide'));
+  return r; }, opt);
 
 // ---- 1. a match, closed on, comes back ------------------------------------------------
 const before = await play('2v2', 77, 60);
 ok('the fixture match got going', before.matchT >= 10 && before.score[0] + before.score[1] >= 1, JSON.stringify(before));
 ok('nothing is stored before the page goes away', !(await keyUp()), 'the heartbeat is wall-clock and this was stepped synchronously');
-await p.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+Object.assign(before, await readWorld({ hide: true }));   // the reading the snapshot is compared with, same tick
 const doc = await snap();
 ok('pagehide writes the snapshot', !!doc && doc.score.join() === before.score.join() && Math.abs(doc.matchT - before.matchT) < 1e-6,
    JSON.stringify(doc && { score: doc.score, matchT: doc.matchT }));
@@ -148,7 +158,7 @@ ok('a stale or unreadable snapshot is ignored', exits.staleRefused && exits.junk
 
 // ---- 5. Killer Lobsters: the hive and the objective stand where they stood ------------
 const kqBefore = await play('kq', 85, 25);
-await p.evaluate(() => { const w = window.__magnet.world; w.hive = [3, 1]; window.dispatchEvent(new Event('pagehide')); });
+Object.assign(kqBefore, await readWorld({ hide: true, hive: [3, 1] }));
 await p.reload(); await p.waitForTimeout(800);
 ok('a Killer Lobsters match is offered', await modalUp());
 await press('resumeYes'); await p.waitForTimeout(300);

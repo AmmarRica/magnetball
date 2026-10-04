@@ -28,6 +28,12 @@ const r = await p.evaluate(async ()=>{
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   const STEP=1/60;
   M.sel.autoReplay=false; M.sel.orient='v'; M.applyDisplayMode(); await wait(150);
+  // ⚠️ A suite that samples pixels says which palette it samples. The FPS probe below counts
+  // anything over 90 summed RGB in a row of the SURROUND as ink; grass's surround is under
+  // that and Sunday League's (the shipped default now) is not, so on the default this read
+  // the background as a frame-rate readout. Plain discs too: the streak probes sit beside
+  // the ball and a footballer's limbs reach further than a disc does.
+  M.sel.look.palette='grass'; M.sel.look.discs='none'; M.applyTheme('grass');
 
   // ---- 1) Same sim, different refresh rate --------------------------------
   // Run a fixed number of SIM STEPS while varying how many frames are rendered

@@ -17,9 +17,12 @@ match server, described in `server/docs/MATCH-SERVER.md`). `.github/workflows/az
 deploys all of it on a push to `main`. `server/` and `server/match/` each have their own
 `package.json` and lockfile; the repo ROOT still has none, and the dependency-free rule
 below is about what the browser loads.
-`tools/` is a third such folder: dev-only scripts, today just `tools/commercial.mjs`, which
-films a ~55s commercial off the real page with Playwright (`tools/README.md`). Not loaded by
-the page, not precached, not run by `tests/run.mjs`.
+`tools/` is a third such folder: dev-only scripts — `tools/commercial.mjs`, which films a
+~74s commercial off the real page with Playwright (courts, a stamina scene driven through the
+real keyboard, a goals montage, a "coming soon" close with no address), and
+`tools/goalseeds.mjs`, which sweeps seeds for the step a first goal lands on so the montage
+can fast-forward to just before it (`tools/README.md`). Not loaded by the page, not
+precached, not run by `tests/run.mjs`.
 
 **The routes are `/`, `/menu/` and `/vj/`, and there are only three.** `/` is the game
 AND the menu (the accordion behind KICK OFF), which is why there is no separate menu
@@ -883,9 +886,58 @@ three lines a second time, name it.
   floor — any zoom nudges every edge — and the plate-tint check read its reference through
   `teamColOf`, the very function that painted the plates, so SWAPPING the two sides inside
   it moved both terms together and passed. The reference is `sel.teamCol` now.
-- **The default is a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
+- **SUNDAY LEAGUE IS THE DEFAULT THEME** (`defaultSel().look` = `bundleSlots('kickabout')`
+  slot for slot: palette `kickabout`, discs `footballers`, ball `classic`, trail `dots`, no
+  field painter; `magnetball.themefold`; `tests/seatcontrols.mjs`' defaults block). Asked for
+  as *"Have Sunday league be default theme"*, and it **REVERSES the entry directly below** —
+  *"the default is a GREEN PITCH"* — which is kept because it records why grass was ever
+  chosen: a plain pitch is the NEUTRAL answer, and this is the owner's own answer, later,
+  chosen by hand (the owner's-defaults shape). The numbered half survives: `defaultProfile`
+  is still `num1`, only now it is under a skin that paints a figure rather than a plate, so
+  the number shows in the menu and on the scoresheet rather than on the body.
+  ⚠️ **THE WHOLE BUNDLE, NEVER THE PALETTE ALONE.** `currentBundle()` is derived by matching
+  the live slots against `bundleSlots`, so a default of `palette:'kickabout'` with plain discs
+  would make a fresh install's Theme card read **Custom** — the lie that function exists to
+  avoid. The suite checks `currentBundle() === 'kickabout'` on a fresh page for that reason.
+  ⚠️ **A DEVICE STILL ON THE UNTOUCHED GRASS LOOK IS MOVED ON, ONCE** (`magnetball.themefold`,
+  beside `ball3dfold`), on the OLD DEFAULT'S WHOLE LOOK slot for slot — change any slot and
+  you keep everything. The `feelfold` trade is made out loud: Grass is a tile anybody can
+  press, so somebody who picked Grass over another theme and touched nothing else is
+  indistinguishable from an untouched install and is folded once; the stamp is what makes it
+  once. The `magnetball.sel` guard is not catchable on today's values (a fresh install starts
+  on the new look) and is there for the day the default moves again — `zoomfold`'s lesson.
+  ⚠️ **THE FOLD HAS TO RE-APPLY THE THEME, and that is an ORDERING finding.** The boot's
+  `applyTheme(sel.look.palette)` sits right under `loadSel()`, two thousand lines ABOVE the
+  fold block, so a fold that only wrote `sel.look` saved Sunday League and PLAYED ON GRASS for
+  the first session. `tests/seatcontrols.mjs` reads `TH.court` against the palette the
+  setting names for exactly that case; three devices (untouched, chose a slot, already
+  stamped) are seeded through an init script, the `shippedfeel` idiom.
+  ⚠️ **EVERY PIXEL SUITE THAT RELIED ON THE DEFAULT BEING GRASS HAD TO SAY SO** — the
+  standing rule *a suite that samples pixels has to say which palette it is sampling*,
+  arriving through the default moving under it. Four went red on the first full run and
+  each was a probe about something else reading the new look: `smooth`'s FPS-row probe and
+  `tilt`'s thumbstick-marker probe both count anything over 90 summed RGB as ink, and Sunday
+  League's SURROUND is brighter than that where grass's is not (the whole corner read as
+  marker and its centroid never moved); `tilt`'s shadow footprint is measured on a round
+  body and a footballer's limbs widen it on their own; `livelook`'s `repaints` reads the
+  body's pixels for `p.color`, which the footballer skin does not paint (it wears the team
+  colour); and `replayfile`'s tween probe finds the ball as the brightest pixel in its row,
+  which a footballer's pale head ties. All four pin grass with plain discs and say why.
+  `tilt` also had `applyBundle('classic')`, the silent no-op `footballers` records, so that
+  block had been running on whatever the default was.
+  ⚠️ **AND `resume` WENT RED IN BOTH POOL RUNS AND GREEN ALONE, WHICH WAS A FIXTURE RACE
+  THE HEAVIER DEFAULT MADE LIKELIER.** Its `play()` returned a reading of the world and a
+  SECOND `evaluate` dispatched `pagehide`; the live rAF loop gets a turn between two
+  evaluates, and under load that turn stepped the match once — the snapshot held the berries
+  2–4 units from where the reading said and `matchT` a sixtieth on. Measured per rule 5
+  rather than re-run: 1 of 3 red with three heavy suites alongside on the old fixture, 4 of 4
+  green on the fixed one under the same load. `readWorld({ hide: true })` takes the reading
+  and fires the event in ONE evaluate, and the two blocks that compare against a snapshot
+  use it. A suite that fails only in the pool is measured under load, never widened.
+- **The default WAS a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
   `grass`, `defaultProfile().flag` = `num1`), **and the default match is FIRST TO 3**
-  (`defaultSel().length = 'g3'`), asked for. ⚠️ A goals-based default ENDS matches at
+  (`defaultSel().length = 'g3'`), asked for. ⚠️ **The palette half is SUPERSEDED by the
+  Sunday League entry above; the numbered half still holds.** ⚠️ A goals-based default ENDS matches at
   three goals, which is invisible to a person and load-bearing for the suites: ~94 of
   them start matches without pinning a length, and every long bot measurement (botai,
   botplans, kqberry, botstuck, sprint) was taken under timed play — those five pin

@@ -31,6 +31,12 @@ await p.waitForTimeout(900);
 const r = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
+  // ⚠️ Pinned to grass with plain discs: every probe in this file is a pixel reading. The
+  // shadow footprint is measured on a round body (a footballer's limbs widen it on their
+  // own), and the thumbstick marker is found as "anything brighter than 90 summed RGB" in
+  // its corner — Sunday League's surround, the shipped default now, is brighter than that,
+  // so on the default the whole corner read as marker and its centroid never moved.
+  M.sel.look.palette='grass'; M.sel.look.discs='none'; M.applyTheme('grass');
   M.sel.tilt='on'; M.sel.mode='2v2'; M.sel.kickoffRule='off';
   M.setMatchSeed(8); M.startMatch();
   const w=M.world; w.state='play'; w.stateT=2;
@@ -198,7 +204,10 @@ const r = await p.evaluate(()=>{
 // the failure this is here to catch.
 const shad = await p.evaluate(()=>{
   const M=window.__magnet; const o={};
-  M.applyBundle('classic');
+  // ⚠️ `applyBundle('classic')` was here and is a SILENT NO-OP — there is no `classic`
+  // theme key (the footballers suite records the same trap) — so this block ran on whatever
+  // the default was. Grass with plain discs, said out loud.
+  M.sel.look.palette='grass'; M.sel.look.discs='none'; M.applyTheme('grass');
   M.sel.tilt='on'; M.sel.mode='1v1'; M.sel.kickoffRule='off';
   // ⚠️ Goal camera OFF for this measurement. It latches onto whoever last touched the ball
   // and eases the camera toward them — and this probe moves a player between two renders to

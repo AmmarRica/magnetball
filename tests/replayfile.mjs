@@ -1077,6 +1077,11 @@ ok('a match video is named apart from a goal clip', vid.namedApart,
 // proves only that a helper exists and says nothing about whether playback calls it.
 const tween = await vpage.evaluate(async () => {
   const M = window.__magnet, o = {};
+  // ⚠️ Grass with plain discs, pinned: the ball is found below as the brightest pixel in its
+  // row, "white on a green pitch". Sunday League is the shipped default now, and a
+  // footballer's pale head in the same row is as bright as the ball, so on the default the
+  // probe read one position for the whole playback.
+  M.sel.look.palette = 'grass'; M.sel.look.discs = 'none'; M.applyTheme('grass');
   // Exact arithmetic first: a helper that is wrong makes everything below meaningless.
   const a = { bx:0, by:0, p:[{x:0,y:0,k:false}] }, b = { bx:100, by:40, p:[{x:20,y:8,k:true}] };
   const mid = M.repTween(a, b, 0.5);

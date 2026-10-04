@@ -6193,7 +6193,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261004.0530AM';
+const VERSION = '20261004.0915AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6209,6 +6209,12 @@ const VERSION = '20261004.0530AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261004.0915AM', title: 'Sunday League is the look out of the box',
+    changed: [
+      '<b>A fresh install plays as Sunday League</b> — the little footballers on the mown pitch — instead of the plain green pitch with numbered discs. Grass is still one tap away under Theme.',
+      '<b>If you never changed your theme, you are moved to Sunday League once.</b> Anybody who picked a look keeps it exactly as it was, and picking Grass back sticks.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261004.0530AM', title: 'The game is called Sumo Soccer',
     changed: [
       '<b>Magnetball was a working title; the game is Sumo Soccer.</b> The name on the menu, in the browser tab, on your home screen and in the share sheet all say so now.',
@@ -7656,17 +7662,26 @@ function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', leng
             goalZoom:115, goalZoomSpd:5, repSecs:6,        // goal camera: 1.15x over 0.05s (see GOALCAM)   // 'auto' (mobile/desktop by resolution) or 'cocktail'; per-seat sides for cocktail
             // A theme is a COLLECTION of slots, not one key — see SLOTS / bundleSlots().
             // Sound is the fifth slot and is NOT stored here: it's derived from sel.snd.
-            // ⚠️ GRASS AND NUMBERS, asked for: a plain green pitch with numbered players is
-            // what "a football game" looks like before you have chosen anything, and it is
-            // what a reset should give you back. `neon` was a striking first impression and
-            // a strange default — it is one tap away in Theme.
+            // ⚠️ SUNDAY LEAGUE IS THE DEFAULT, asked for — the `kickabout` bundle exactly as
+            // `bundleSlots('kickabout')` spells it (palette, the footballer skin, the
+            // panelled ball, dot trails, the classic sound set), so a fresh install's Theme
+            // card reads "Sunday League" and not "Custom". This REVERSES "grass and
+            // numbers", which is kept one entry down because it records WHY grass was ever
+            // picked: a plain pitch is the neutral answer, and Sunday League is the OWNER's
+            // answer — same person, later, choosing by hand. The shirt NUMBER is still the
+            // default faceplate (`defaultProfile`), it is simply under a skin that paints a
+            // figure rather than a plate; it still shows in the menu and on the scoresheet.
+            // (was: a plain green pitch with numbered players is what "a football game"
+            // looks like before you have chosen anything; `neon` before that was a striking
+            // first impression and a strange default.) A device still on the untouched
+            // grass look is moved on ONCE — see `magnetball.themefold` in the bootstrap.
             // ⚠️ `court` and `surround` are the player's OWN colours, laid over whatever
             // palette is picked, and empty means "use the palette's". They live in `look`
             // beside the slots but are deliberately NOT slots: `SLOT_KEYS` drives the
             // Theme card's chips, `bundleSlots` and `currentBundle`, so a seventh entry
             // there would give them a tab of their own and make a bundle's identity
             // depend on them — pick a colour and your theme would read "Custom".
-            look: { palette:'grass', field:'none', discs:'none', ball:'classic', trail:'dots',
+            look: { palette:'kickabout', field:'none', discs:'footballers', ball:'classic', trail:'dots',
                     court:'', surround:'' },
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -14544,6 +14559,39 @@ try {
       saveSel();
     }
     localStorage.setItem('magnetball.ball3dfold', '1');
+  }
+} catch(e){}
+// SUNDAY LEAGUE IS THE DEFAULT THEME NOW, AND A DEVICE STILL ON THE UNTOUCHED GRASS LOOK IS
+// MOVED ON, ONCE (`magnetball.themefold`). A factory default only ever meets a fresh install,
+// so without this the change reaches nobody who has opened the menu — including the person
+// who asked for it.
+// ⚠️ The fold fires only on the OLD DEFAULT'S WHOLE LOOK, slot for slot (grass palette, no
+// field painter, plain discs, classic ball, dot trails, no court colours): a device that
+// changed ANY slot has chosen something and keeps it. The trade `feelfold` and `ball3dfold`
+// already make is made here too and is worth saying out loud, because Grass is a tile anybody
+// can press: somebody who picked Grass OVER another theme and touched nothing else is
+// indistinguishable from an untouched install and is folded once. The stamp is what makes
+// that once — picking Grass again tomorrow sticks.
+// ⚠️ The `magnetball.sel` guard is not catchable on today's values (a fresh install starts on
+// the NEW look, so the old-look test can never match it) and is there for the day the default
+// moves again, which is exactly how `zoomfold` was bitten. `saveSel()` only in the branch
+// that moved something.
+try {
+  if (!localStorage.getItem('magnetball.themefold')){
+    const L = sel.look || {};
+    const untouched = L.palette === 'grass' && (L.field || 'none') === 'none' &&
+      (L.discs || 'none') === 'none' && (L.ball || 'classic') === 'classic' &&
+      (L.trail || 'dots') === 'dots' && !L.court && !L.surround;
+    if (localStorage.getItem('magnetball.sel') && untouched){
+      sel.look = Object.assign({}, sel.look, defaultSel().look);
+      saveSel();
+      // ⚠️ The boot's own `applyTheme(sel.look.palette)` has ALREADY run by this line (it
+      // sits right under `loadSel()`), so without re-applying, the first session after the
+      // fold would save Sunday League and play on grass. `applyTheme` is a hoisted
+      // declaration and `THEMES` is declared far above, so this is safe here.
+      applyTheme(sel.look.palette);
+    }
+    localStorage.setItem('magnetball.themefold', '1');
   }
 } catch(e){}
 // A DEVICE STILL ON THE EIGHT-SECOND AD ROLLOVER IS MOVED ON, ONCE

@@ -11,16 +11,35 @@ node tools/commercial.mjs             # → tools/out/sumo-soccer-commercial.web
 node tools/commercial.mjs /some/dir   # output somewhere else
 ```
 
-About 55 seconds at 1280×720. Playwright records the page while the game's own frame loop
-plays bots-only matches; the title cards are DOM overlays in the game's font. Because it is
-the shipped code being filmed, re-run it after any visual change and the film updates with
-the game — nothing is drawn by hand and nothing can drift.
+About 74 seconds at 1280×720. Playwright records the page while the game's own frame loop
+plays matches; the title cards are DOM overlays in the game's font. Because it is the
+shipped code being filmed, re-run it after any visual change and the film updates with the
+game — nothing is drawn by hand and nothing can drift.
 
-**Scenes** (edit the block at the top of the script): a title over live Sunday League play
-that scores a real goal at about nine seconds; a theme montage (Pool, Spaceships, Faceoff
-Orbit, Sketchbook, Retrowave); the warm-up room; a Killer Lobsters match under the modes
-card; a closing card with the repo name. The seeds are chosen so the goal lands inside the
-scene — change a seed and check the `03-goal` still before trusting it.
+**Scenes** (edit the block at the top of the script), all on Sunday League, the shipped
+look: a title over live play that scores a real goal at about nine seconds; play sessions
+on six courts (Futsal, Stadium, Octagon, Island, Leviathan, Faceoff Orbit — the caption
+counts the courts off `FIELDS` itself); a stamina scene, one body on Futsal driven through
+the real keyboard with KICK held until the ring is spent and red, then let go to refill; a
+montage of five goals, cut to cut, on five courts; and a closing card that says **coming
+soon** and nothing else — no address, because there is not one yet. The seeds are chosen
+so each goal lands inside its clip — change a seed, a court or a pinned setting and the
+goal steps in `GOALS` are stale. Re-sweep them, then check the `06-goal-*` stills:
+
+```bash
+node tools/goalseeds.mjs                     # six courts, seeds 1..36: `court seed step seconds team`
+node tools/goalseeds.mjs classic,island 60   # your courts, more seeds
+```
+
+`goalseeds.mjs` steps each seeded bots-only match headless under exactly the settings the
+commercial pins and prints the step its first goal lands on. A step is only good for the
+match it was measured on — a different court, mode, feel or browser build is a different
+set of matches — so re-run it rather than trusting last month's numbers. (Leviathan, for
+the record, produced no goal inside 25 seconds on any of 36 seeds; it is in the courts
+montage and not the finale for that reason.)
+
+The earlier cut (a theme montage, the warm-up room, Killer Lobsters, the repo name on the
+close) is in git history if a version that shows the themes is wanted again.
 
 **What comes out**: a silent VP8 WebM at 25fps. That is all Playwright's recorder can do and
 a plain Playwright box has no other encoder, so a soundtrack or an MP4 is a pass through a
