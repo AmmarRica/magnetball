@@ -1,5 +1,5 @@
 /**
- * Magnetball global leaderboard — Google Apps Script Web App.
+ * Sumo Soccer global leaderboard — Google Apps Script Web App.
  *
  * Paste this into your Sheet's Extensions → Apps Script, then
  * Deploy → New deployment → Web app (Execute as: Me, Access: Anyone).

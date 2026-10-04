@@ -1,5 +1,6 @@
-// Magnetball service worker — offline + installable.
-const CACHE = 'magnetball-v7';   // v7: the panel route is /menu (v6 precached /vj)
+// Sumo Soccer service worker — offline + installable. (The cache name keeps the old
+// working title: it is a key, not a label.)
+const CACHE = 'magnetball-v8';   // v8: the game is Sumo Soccer — manifest.json is cache-first, so the old name stayed on home screens until evicted (v7: the panel route is /menu)
 // './menu/' is the panel route — a stub that fetches index.html, so both need to be
 // cached for the menu window to open offline.
 // ⚠️ './settings/' is the OLD name of that route and is still precached on purpose: it

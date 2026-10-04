@@ -37,7 +37,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const OUT = path.resolve(process.argv[2] || path.join(HERE, 'out'));
 const W = 1280, H = 720;
-const NAME = 'magnetball-commercial.webm';
+const NAME = 'sumo-soccer-commercial.webm';
 
 // The scenes, in order. Edit here; everything below is mechanism.
 const TITLE_THEME = 'kickabout';       // Sunday League — the figures are the thing to open on
@@ -46,11 +46,11 @@ const THEMES = [['pool', 'Pool'], ['vector', 'Spaceships'], ['faceoff', 'Faceoff
                 ['sketch', 'Sketchbook'], ['synth', 'Retrowave']];
 const SEAT_NAME = 'pixel';             // the human seat is driven by a bot; not a BOT_NAMES entry
 const LINES = {
-  title:  '<h1>MAGNETBALL</h1><p>Top-down football. One file. Any screen.</p>',
+  title:  '<h1>SUMO SOCCER</h1><p>Top-down football. One file. Any screen.</p>',
   theme:  (name) => `<h2>${name}</h2><p>Twenty-seven looks. Every one a whole room.</p>`,
   lobby:  '<h2>Four controllers, one couch</h2><p>Walk onto a side. Spell your name with your feet.</p>',
   modes:  '<h2>Tournaments · Gauntlet · Drills · Mini golf</h2><p>Killer Lobsters, when football is not enough.</p>',
-  close:  '<h1>MAGNETBALL</h1><p>Free. No install. Plays in the browser you already have.</p><p>github.com/AmmarRica/magnetball</p>',
+  close:  '<h1>SUMO SOCCER</h1><p>Free. No install. Plays in the browser you already have.</p><p>github.com/AmmarRica/magnetball</p>',
 };
 
 fs.rmSync(OUT, { recursive: true, force: true }); fs.mkdirSync(OUT, { recursive: true });

@@ -1,4 +1,6 @@
-# ⚽ Magnetball
+# ⚽ Sumo Soccer
+
+*Shipped under the working title Magnetball; the repository, the storage keys and the file format strings keep that name, by design.*
 
 A fast, **mobile-first, touch-first** physics soccer game — the classic style discs, built to be played
 with two thumbs on a phone (and great on desktop and arcade "cocktail" setups too). It's a **single

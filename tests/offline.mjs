@@ -151,7 +151,7 @@ ok('...at a real size', ui.tall >= 30, `${ui.tall}px`);
 ok('it is offered over http', ui.possible);
 ok('the probe really did dirty the DOM first', ui.domIsDirty,
    'without that, "the file is the source" is true of a build using outerHTML too');
-ok('a file is saved, named for the build', /^magnetball-.*\.html$/.test(savedName) && savedName.indexOf(VERSION) >= 0,
+ok('a file is saved, named for the build', /^sumo-soccer-.*\.html$/.test(savedName) && savedName.indexOf(VERSION) >= 0,
    savedName);
 ok('...and it is the SERVED SOURCE, byte for byte', saved.length === SRC.length && saved === SRC,
    `${saved.length} bytes saved against ${SRC.length} served — outerHTML would save the page as it is right now, with the match running and every menu class toggled`);

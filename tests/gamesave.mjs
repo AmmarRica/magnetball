@@ -284,7 +284,7 @@ const save = await p.evaluate(async () => {
   M.applySaveDoc({ data: { evil: 'x', sel: { kickRing: 205 } } });
   o.ignoresUnknownKeys = localStorage.getItem('magnetball.evil') === null;
   o.filename = M.saveFilename();
-  o.filenameSaysWhatItIs = /magnetball-save-/.test(o.filename) && /\.json$/.test(o.filename);
+  o.filenameSaysWhatItIs = /sumo-soccer-save-/.test(o.filename) && /\.json$/.test(o.filename);
   return o;
 });
 

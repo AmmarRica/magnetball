@@ -91,7 +91,7 @@ ok('and nothing else', made.player0 && !('vx' in made.player0) && !('ms' in made
 ok('it is small', made.bytes < 200000, made.bytes + ' bytes');
 // ⚠️ The KIND is in the name: a goal and a whole match off the same court are otherwise
 // the same filename twice, and one of them is twenty times the size of the other.
-ok('the filename is safe on every OS, and says which kind', /^magnetball-(goal|match)-replay-classic-[\d-]+\.json$/.test(made.filename) && !made.filename.includes(':'),
+ok('the filename is safe on every OS, and says which kind', /^sumo-soccer-(goal|match)-replay-classic-[\d-]+\.json$/.test(made.filename) && !made.filename.includes(':'),
    made.filename);
 ok('the look is recorded', made.look && typeof made.look === 'object');
 ok('it stamps the build and the date', made.build && made.saved);
@@ -230,7 +230,7 @@ await p.close();
 
   ok('the good file is accepted', guards.good);
   ok('non-JSON is refused', /not a replay file/.test(guards.notJson), guards.notJson);
-  ok('unrelated JSON is refused', /not a Magnetball replay/.test(guards.otherJson), guards.otherJson);
+  ok('unrelated JSON is refused', /not a Sumo Soccer replay/.test(guards.otherJson), guards.otherJson);
   ok('a newer version says so', /newer build/.test(guards.newer), guards.newer);
   ok('empty frames refused', /no frames/.test(guards.noFrames), guards.noFrames);
   ok('empty players refused', /no players/.test(guards.noPlayers), guards.noPlayers);
@@ -701,8 +701,8 @@ await p.close();
     o.survivesThrow = M.replay.filming === false;
     o.throwHandled = !threw;
     // A clip is named per-goal, not one fixed name that overwrites itself.
-    o.namesAreUnique = M.repClipName('mp4') !== 'magnetball-goal.mp4' &&
-                       /magnetball-clip-.*\.mp4$/.test(M.repClipName('mp4'));
+    o.namesAreUnique = M.repClipName('mp4') !== 'sumo-soccer-goal.mp4' &&
+                       /sumo-soccer-clip-.*\.mp4$/.test(M.repClipName('mp4'));
     return o;
   });
   ok('the stale #clipBtn really is gone', o.noStaleButton,
@@ -925,7 +925,7 @@ await p.close();
     o.renamed = after.name === 'The good one';
     o.renameLeadsTheRow = M.repLibLabel(after).title === 'The good one';
     o.nameInFilename = /The-good-one/.test(M.repFilename('classic', 'goal', 'The good one'));
-    o.noNameStillFine = /magnetball-goal-replay/.test(M.repFilename('classic', 'goal', ''));
+    o.noNameStillFine = /sumo-soccer-goal-replay/.test(M.repFilename('classic', 'goal', ''));
 
     // ---- the two panes are filled by KIND ----
     M.openLook('replay');
@@ -1181,7 +1181,7 @@ const mv = await vpage.evaluate(async () => {
   // ⚠️ NOT `reason === ''`: an export now names the container when the browser could
   // only make a `.webm`. That is a fact about the file — a warning or a truncation is not.
   o.made = !/⚠|Stopped/.test(o.reason || '') && o.blobs === 1 && o.bytes > 20000;
-  o.namedMatch = /magnetball-match-/.test(o.name || '') && !M.repBadMux(o.type);
+  o.namedMatch = /sumo-soccer-match-/.test(o.name || '') && !M.repBadMux(o.type);
   return o;
 });
 
@@ -1235,7 +1235,7 @@ const scope = await vpage.evaluate(async () => {
   o.labelledByKind = /goal/i.test(labels[0]||'') && !/match/i.test(labels[0]||'') &&
                      /match/i.test(labels[1]||'');
   o.filedByKind = named.length === 2 &&
-                  /magnetball-goal-/.test(named[0]) && /magnetball-match-/.test(named[1]);
+                  /sumo-soccer-goal-/.test(named[0]) && /sumo-soccer-match-/.test(named[1]);
   return o;
 });
 

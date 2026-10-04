@@ -1,4 +1,4 @@
-# Magnetball — TODO
+# Sumo Soccer — TODO
 
 Near-term, actionable task list. For the larger feature backlog (tiers, effort
 estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Magnetball</title>
+  <title>Sumo Soccer</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0b3d1f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Magnetball" />
+  <meta name="apple-mobile-web-app-title" content="Sumo Soccer" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <style>
@@ -1858,7 +1858,7 @@
   <!-- ===================== SETUP SCREEN ===================== -->
   <div id="setup" class="screen">
     <div class="logo">
-      <h1>MAGNETBALL</h1>
+      <h1>SUMO SOCCER</h1>
       <p>Right thumb moves · Left thumb kicks</p>
     </div>
 
@@ -2511,8 +2511,8 @@
       <label class="field">Shared defaults</label>
       <div class="pathrow"><span class="pathkey">Sheet</span><span class="pathval" id="cloudInfo"></span></div>
       <button class="ghost" id="cloudCheckBtn" type="button">Read defaults now</button>
-      <div class="hint" style="text-align:left">Set the game's defaults once in a Google Sheet and every device you open Magnetball on starts there — the pitch, the difficulty, the theme, the Game Feel sliders. It is read, never written, so nothing about this device leaves it. Anything you change here still wins over the sheet, unless the sheet is set to <b>managed</b>, which is how a cabinet or a venue is kept identical. Read at launch from a copy kept on the device, so it works offline; the button pulls a fresh one now. See LEADERBOARD_SETUP.md for the tab.</div>
-      <div class="hint" style="text-align:left">Magnetball is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
+      <div class="hint" style="text-align:left">Set the game's defaults once in a Google Sheet and every device you open Sumo Soccer on starts there — the pitch, the difficulty, the theme, the Game Feel sliders. It is read, never written, so nothing about this device leaves it. Anything you change here still wins over the sheet, unless the sheet is set to <b>managed</b>, which is how a cabinet or a venue is kept identical. Read at launch from a copy kept on the device, so it works offline; the button pulls a fresh one now. See LEADERBOARD_SETUP.md for the tab.</div>
+      <div class="hint" style="text-align:left">Sumo Soccer is one web page with no accounts and no server: your player, settings, career and saved replays are stored on this device, and clearing site data clears them. It works offline once loaded.</div>
       <div style="height:14px"></div>
       <!-- ⚠️ WAS ITS OWN CARD, and a card is the wrong shape for one sentence. `data-sec="online"`
            held ZERO controls — the whole thing was this paragraph — while costing a card, a jump
@@ -2766,7 +2766,7 @@
     <div class="logo"><h1 style="font-size:28px">SHOP</h1><p>Cosmetics only · support the game</p></div>
     <div class="card" id="shopPledge">
       <h2>The honest bit ❤</h2>
-      <p class="shopnote">Magnetball is <b>free</b>, and everything that touches gameplay stays free — no
+      <p class="shopnote">Sumo Soccer is <b>free</b>, and everything that touches gameplay stays free — no
         pay-to-win, no ads, no loot boxes. The shop is <b>cosmetics only</b>: a way to support the game
         if you're enjoying it. You can also unlock every cosmetic just by <b>playing</b> and showing up
         for the <b>daily reward</b>. Coins buy nothing that helps you win — only how your disc looks.</p>
@@ -3145,7 +3145,9 @@
 (function () {
 
 /* ============================================================
-   Magnetball — a touch-first physics soccer game.
+   Sumo Soccer — a touch-first physics soccer game. (It shipped as Magnetball; every
+   storage key, file format string and debug hook keeps that spelling on purpose, because
+   a rename only ever ADDS a spelling — see CLAUDE.md.)
    Physics tuned to the real game: player r15 / ball r10,
    bounce 0.5, ball damping 0.99, player damping ~0.96,
    goals a 128-wide gap with solid posts, kick as a one-shot
@@ -6191,7 +6193,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261003.0315PM';
+const VERSION = '20261004.0530AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6207,6 +6209,13 @@ const VERSION = '20261003.0315PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261004.0530AM', title: 'The game is called Sumo Soccer',
+    changed: [
+      '<b>Magnetball was a working title; the game is Sumo Soccer.</b> The name on the menu, in the browser tab, on your home screen and in the share sheet all say so now.',
+      '<b>Saved replays, save files, clips and the offline copy are named sumo-soccer-… from here on.</b> Files you already saved still open — nothing about how they are read has changed.',
+      '<b>Your settings, career and saved replays are exactly where they were.</b> Nothing was reset.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261003.0315PM', title: 'The footballers stop dragging a leg on a turn',
     changed: [
       '<b>Sunday League footballers no longer drag a foot when they switch direction.</b> Turning sharply left to right used to pull the trailing foot along the grass for a stride; it lifts and steps in now, on the same rhythm as before, so a reversal looks like a reversal rather than a slide.',
@@ -7093,7 +7102,7 @@ const CHANGELOG = [
     fixed: 'A handful of smaller fixes.' },
   { v: '20260817.1015AM', title: 'Set the defaults once, in a sheet',
     added: [
-      '<b>The game can take its defaults from a Google Sheet.</b> Put a <i>Setting / Value</i> tab in the sheet, and every device you open Magnetball on starts there \u2014 the pitch, the difficulty, the theme, the sliders. It is read, never written, so nothing about your device leaves it, and it works offline because each device keeps a copy.',
+      '<b>The game can take its defaults from a Google Sheet.</b> Put a <i>Setting / Value</i> tab in the sheet, and every device you open Sumo Soccer on starts there \u2014 the pitch, the difficulty, the theme, the sliders. It is read, never written, so nothing about your device leaves it, and it works offline because each device keeps a copy.',
       '<b>Anything you change on a device still wins over the sheet</b>, because that is what a default is. Set <i>managed</i> in the sheet and it goes the other way, for a cabinet or a venue you want identical everywhere. There is a <b>Read defaults now</b> button in About that pulls a fresh copy and says when the sheet was last read.',
     ],
     changed: [
@@ -16567,7 +16576,7 @@ function applyPanelMode(){
     const h1 = document.querySelector('#setup .logo h1'); if (h1) h1.textContent = 'MENU';
     const tag = document.querySelector('#setup .logo p:last-child');
     if (tag) tag.textContent = 'Live-linked to the game tab';
-    document.title = 'Magnetball — Menu';
+    document.title = 'Sumo Soccer — Menu';
     const st = $('panelState');
     if (st) st.textContent = syncPeerLive() ? 'connected' : 'waiting for the game…';
   }
@@ -18956,7 +18965,7 @@ function buildPostCard(post){
   like.onclick=()=>doLike(false);
   const cbtn=document.createElement('button'); cbtn.textContent='💬';
   const share=document.createElement('button'); share.textContent='➦';
-  share.onclick=()=>{ try{ if(navigator.share) navigator.share({title:'Magnetball',text:post.n+' scored! '+post.cap}); }catch(e){} };
+  share.onclick=()=>{ try{ if(navigator.share) navigator.share({title:'Sumo Soccer',text:post.n+' scored! '+post.cap}); }catch(e){} };
   const save=document.createElement('button'); save.className='save'; save.textContent=post.saved?'🔖':'🏷';
   save.onclick=()=>{ post.saved=!post.saved; saveFeed(); refresh(); };
   acts.append(like,cbtn,share,save);
@@ -20936,6 +20945,8 @@ function playReplay(speed, opts){
 //
 // ⚠️ VERSIONED AND MAGIC-STAMPED. `v` is checked on load and `format` proves the file
 // is ours before we start indexing into arrays.
+// ⚠️ `format` KEEPS THE OLD NAME. It is the magic string every replay already on a disk carries,
+// so renaming it would make every one of them "not a replay" — a key, not a label (rule 9).
 const REPFILE = { ext:'json', format:'magnetball-replay', v:1 };
 // Everything a player needs to be DRAWN, and nothing else. Deliberately not the whole
 // object: velocities, AI scratch and match stats are all mid-play state that means
@@ -21005,7 +21016,7 @@ function repFilename(field, kind, name){
   // downloads folder is exactly where you go looking.
   const tag = String(name || '').trim().replace(/[^A-Za-z0-9 _-]+/g, '').replace(/\s+/g, '-').slice(0, 40);
   const head = tag ? tag + '-' : '';
-  return `magnetball-${head}${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
+  return `sumo-soccer-${head}${kind === 'match' ? 'match' : 'goal'}-replay-${f}-${t}.${REPFILE.ext}`;
 }
 // One download helper — Save clip builds its own Blob from MediaRecorder, but the
 // anchor-click dance is the same and there is no reason for two of them.
@@ -21049,7 +21060,7 @@ function downloadBlob(blob, filename){
 // carry one: the picker will hand us any JSON on the disk, so `format` is the only thing
 // between somebody's `package.json` and a wrecked save.
 const SAVEFILE = {
-  format: 'magnetball-save', v: 1,
+  format: 'magnetball-save', v: 1,   // a KEY, kept through the rename — see REPFILE
   // ⚠️ `cup` travels for the reason `season` and `rogue` do: a tournament half-played is
   // a run in progress, and a save file that moves the settings but not the thing you were
   // in the middle of is a save of the game's look rather than of your game.
@@ -21072,7 +21083,7 @@ function buildSaveDoc(){
 function saveFilename(){
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
   const who = String((profile && profile.name) || 'player').replace(/[^a-z0-9]+/gi,'-').slice(0,16);
-  return `magnetball-save-${who}-${t}.json`;
+  return `sumo-soccer-save-${who}-${t}.json`;
 }
 function exportSaveFile(){
   try {
@@ -21088,7 +21099,7 @@ function parseSaveDoc(text){
   let doc;
   try { doc = JSON.parse(text); }
   catch(e){ throw new Error('That file is not JSON'); }
-  if (!doc || doc.format !== SAVEFILE.format) throw new Error('That is not a Magnetball save file');
+  if (!doc || doc.format !== SAVEFILE.format) throw new Error('That is not a Sumo Soccer save file');
   if (!(doc.v <= SAVEFILE.v)) throw new Error('That save was written by a newer version of the game');
   if (!doc.data || typeof doc.data !== 'object') throw new Error('That save file has no data in it');
   return doc;
@@ -21385,7 +21396,7 @@ function saveReplayFile(kind){
 function repFileParse(text){
   let doc;
   try { doc = JSON.parse(text); } catch(_){ throw new Error('not a replay file'); }
-  if (!doc || doc.format !== REPFILE.format) throw new Error('not a Magnetball replay');
+  if (!doc || doc.format !== REPFILE.format) throw new Error('not a Sumo Soccer replay');
   if (doc.v > REPFILE.v) throw new Error('saved by a newer build — update the game');
   if (!Array.isArray(doc.frames) || !doc.frames.length) throw new Error('no frames in it');
   if (!Array.isArray(doc.players) || !doc.players.length) throw new Error('no players in it');
@@ -21740,7 +21751,7 @@ function aboutReport(){
   const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) ||
                      navigator.standalone === true;
   return [
-    'Magnetball v' + VERSION,
+    'Sumo Soccer v' + VERSION,
     'Updates: ' + (($('aboutUpd') || {}).textContent || '—'),
     'Screen: ' + w + '\u00d7' + h + ' @' + dpr + (standalone ? ' (installed)' : ''),
     'Layout: ' + viewMode() + (sel.sideView && sel.sideView !== 'off' ? ' · side view on' : ''),
@@ -21865,8 +21876,8 @@ async function downloadOffline(btn){
     // ⚠️ Sanity-check what came back. A captive portal or an offline worker miss can answer
     // 200 with something that is not the game, and a file called magnetball.html that opens
     // to a login page is worse than a refusal.
-    if (text.indexOf('__MAGNETDEBUG') < 0 && text.indexOf('MAGNETBALL') < 0) throw new Error('not the game');
-    downloadBlob(new Blob([text], { type: 'text/html' }), 'magnetball-' + VERSION + '.html');
+    if (text.indexOf('__MAGNETDEBUG') < 0 && text.indexOf('SUMO SOCCER') < 0) throw new Error('not the game');
+    downloadBlob(new Blob([text], { type: 'text/html' }), 'sumo-soccer-' + VERSION + '.html');
     say('✓ Saved · ' + Math.round(text.length / 1024) + ' KB');
     return true;
   } catch(e){
@@ -22115,7 +22126,7 @@ async function saveClip(btn){
 // ⚠️ **WHERE THE FAST PATH CANNOT RUN, THE OLD ONE STILL DOES.** No `VideoEncoder`, no
 // codec it will take, or a muxer that comes back empty, and the export falls through to the
 // real-time recorder exactly as before — so this can add speed and never take a file away.
-const WEBM = { scale: 1e6, app: 'Magnetball' };    // 1e6 ns per tick = milliseconds
+const WEBM = { scale: 1e6, app: 'Sumo Soccer' };    // 1e6 ns per tick = milliseconds
 // ---- the smallest EBML writer that can hold a video track --------------------
 function ebId(id){                                  // an ID is already marker-prefixed
   const b = []; let v = id;
@@ -22772,7 +22783,7 @@ async function clipHandOver(file, cut){
   if (!/\.mp4$/i.test(file.name)) notes.push('saved as .webm — this browser cannot make MP4');
   const done = notes.length ? '· ' + notes.join(' · ') : '';
   if (navigator.canShare && navigator.canShare({ files:[file] })){
-    try { await navigator.share({ files:[file], title:'Magnetball', text:'My Magnetball goal!' }); }
+    try { await navigator.share({ files:[file], title:'Sumo Soccer', text:'My Sumo Soccer goal!' }); }
     catch(e){
       // Cancelling a share sheet is a choice, not a failure — but it does mean no file
       // exists, so fall back to a download rather than claiming it saved.
@@ -22801,7 +22812,7 @@ function repClipExt(type){
 }
 function repClipName(ext, stem){
   const t = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  return 'magnetball-' + (stem || 'clip') + '-' + t + '.' + ext;
+  return 'sumo-soccer-' + (stem || 'clip') + '-' + t + '.' + ext;
 }
 
 function step(w){

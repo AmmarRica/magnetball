@@ -7,7 +7,7 @@ the page itself never sees.
 ## `commercial.mjs` — film a commercial off the real page
 
 ```bash
-node tools/commercial.mjs             # → tools/out/magnetball-commercial.webm, plus stills
+node tools/commercial.mjs             # → tools/out/sumo-soccer-commercial.webm, plus stills
 node tools/commercial.mjs /some/dir   # output somewhere else
 ```
 

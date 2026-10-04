@@ -74,7 +74,7 @@ const page = async (w, h, mobile) => {
   ok('it states the folder', folder.length > 3 && folder === r.pathHint, folder);
   // The kind is in the name now — a goal and a whole match off the same court are otherwise
   // the same filename twice, and one is twenty times the size of the other.
-  ok('it states the filename', /^magnetball-(goal|match)-replay-.*\.json$/.test(named), named);
+  ok('it states the filename', /^sumo-soccer-(goal|match)-replay-.*\.json$/.test(named), named);
   // ⚠️ Built from the REAL filename, minus the timestamp — an example typed by hand is
   // an example that goes stale the next time the naming changes.
   ok('the example matches what actually gets written',

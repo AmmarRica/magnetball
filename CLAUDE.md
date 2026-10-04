@@ -1,4 +1,4 @@
-# CLAUDE.md — working on Magnetball
+# CLAUDE.md — working on Sumo Soccer (the repo is still `magnetball`)
 
 Guidance for Claude Code (or any contributor) working in this repo.
 
@@ -34,6 +34,28 @@ the same thing, which is what a `file://` copy has instead of folders.
   graceful fallback).
 - Everything is served over relative paths (`./`, `sw.js`, `assets/…`) so it works at any root.
 - Prefer editing `index.html` in place; match the surrounding terse, comment-light-but-present style.
+
+**THE GAME IS CALLED SUMO SOCCER, AND EVERY KEY STILL SAYS MAGNETBALL — ON PURPOSE.**
+Magnetball was a working title and was renamed on request with no mechanic change. What
+moved is the NAME: `<title>`, the home-screen title, the `.logo` wordmark, the About block
+(`Sumo Soccer v…`), the share sheet, the two "not a … file" refusals, the hint prose, the
+`WEBM` app tag, and every filename the game writes (`sumo-soccer-…-replay-…json`,
+`sumo-soccer-save-…`, `sumo-soccer-<version>.html`, `sumo-soccer-clip-…`). What did NOT
+move is everything a device already holds or a file already carries — rule 9, *a rename
+only ever ADDS a spelling*: the `magnetball.*` localStorage keys, `UI_KEY`, the `magnetball`
+IndexedDB, `REPFILE.format` (`magnetball-replay`) and `SAVEFILE.format` (`magnetball-save`)
+— the magic strings every saved file on every disk carries, so renaming them makes every
+one of them "not a replay" — the `magnetball-settings` window name, the `__MAGNETDEBUG` /
+`__magnet` / `__MAGNETPANEL` / `__MAGNETONLINE` hooks, the `sw.js` cache name (bumped to
+v8 because `manifest.json` is cache-first and the old name would otherwise stay on home
+screens until evicted), and every Azure resource, container image, workflow and server
+package name (`magnetball-rg`, `magnetball-match`, `magnetball-api`), which are deployed
+things and renaming them is re-creating them. The GitHub repo is `AmmarRica/magnetball`
+and the close card of the commercial still says so; GitHub redirects a renamed repo, so
+that is the owner's call. `tests/qrcode.mjs`' `REF_TEXT` of `MAGNETBALL-…` is a byte-pinned
+fixture and is not a name. ⚠️ The offline-copy guard (`downloadOffline`) checks the
+fetched page for the WORDMARK — it reads `SUMO SOCCER` now, and a build that changed the
+`<h1>` without it would refuse to download itself.
 
 ## How to work here — the rules that keep being re-learned
 These are general and they are earned: every one of them has cost a red merge, a wrong
@@ -4043,7 +4065,7 @@ three lines a second time, name it.
   refreshes the worker's cached copy, so what is saved is the current build rather than
   whatever was cached when the tab opened.
   ⚠️ The reply is **sanity-checked** before it is offered — a captive portal answers 200 with
-  a login page, and a file called `magnetball-<version>.html` that opens to a wifi sign-in is
+  a login page, and a file called `sumo-soccer-<version>.html` that opens to a wifi sign-in is
   worse than a refusal.
   ⚠️ On a `file://` page the button is **relabelled, not hidden** ("You are playing the
   offline copy"): a page there cannot fetch itself, and hiding the control leaves somebody

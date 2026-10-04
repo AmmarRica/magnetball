@@ -1,4 +1,4 @@
-# Magnetball — Feature Roadmap
+# Sumo Soccer — Feature Roadmap
 
 A backlog derived from what players of top-down football games most often ask
 for, filtered to what makes sense for a **mobile, touch-first** game. Each item notes rough
@@ -200,7 +200,7 @@ Legend: ✅ done · 🎯 recommended next · effort S(hours) M(a day) L(days) XL
 - **Control tuning** (#6) — left-handed swap + stick sensitivity
 - **Ball presets** (#17) — Normal / Big / Heavy / Bouncy
 
-## ✅ Already in Magnetball
+## ✅ Already in Sumo Soccer
 - Mobile-native, touch dual-thumb controls — *the single most-requested platform gap*
 - 1v1 / 2v2 / 3v3 / 4v4 vs bots, 7 difficulty tiers
 - Player customization: name, colour, cap, faceplate (flag / animal / text), eyes

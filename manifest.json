@@ -1,6 +1,6 @@
 {
-  "name": "Magnetball",
-  "short_name": "Magnetball",
+  "name": "Sumo Soccer",
+  "short_name": "Sumo Soccer",
   "description": "A touch-first vertical physics soccer game with dual-thumb controls, bots for 1v1–4v4, and gamepad support.",
   "start_url": ".",
   "display": "fullscreen",

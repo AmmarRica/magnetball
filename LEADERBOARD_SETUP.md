@@ -1,4 +1,4 @@
-# Magnetball — Google Sheet leaderboard setup
+# Sumo Soccer — Google Sheet leaderboard setup
 
 The game reads a **global leaderboard** straight from your Google Sheet, and can
 submit each player's score back to it. There are two capabilities and they're
@@ -134,7 +134,7 @@ downsampled + rounded so each replay fits in one cell.
 ## 4. Shared default settings (optional, 1 minute)
 
 Set the game's defaults **once**, in a tab of this same sheet, and every device you open
-Magnetball on starts there — the pitch, the difficulty, the theme, the Game Feel sliders.
+Sumo Soccer on starts there — the pitch, the difficulty, the theme, the Game Feel sliders.
 It is a **read**: the game never writes to this tab, and nothing about the device leaves it.
 
 ### The tab
