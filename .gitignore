@@ -17,3 +17,6 @@ node_modules/
 server/node_modules/
 server/local.settings.json
 server/match/node_modules/
+
+# tools/commercial.mjs renders here
+tools/out/

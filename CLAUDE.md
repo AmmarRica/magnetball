@@ -17,6 +17,9 @@ match server, described in `server/docs/MATCH-SERVER.md`). `.github/workflows/az
 deploys all of it on a push to `main`. `server/` and `server/match/` each have their own
 `package.json` and lockfile; the repo ROOT still has none, and the dependency-free rule
 below is about what the browser loads.
+`tools/` is a third such folder: dev-only scripts, today just `tools/commercial.mjs`, which
+films a ~55s commercial off the real page with Playwright (`tools/README.md`). Not loaded by
+the page, not precached, not run by `tests/run.mjs`.
 
 **The routes are `/`, `/menu/` and `/vj/`, and there are only three.** `/` is the game
 AND the menu (the accordion behind KICK OFF), which is why there is no separate menu
