@@ -6193,7 +6193,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261004.0915AM';
+const VERSION = '20261006.1020AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6209,6 +6209,12 @@ const VERSION = '20261004.0915AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261006.1020AM', title: 'Sunday League footballers show their stamina',
+    changed: [
+      '<b>A sprinting footballer leaves a hot white trail, and a spent one a grey trail.</b> You can see who is running flat out and who is out of breath from across the pitch, without reading the ring.',
+      '<b>A footballer who has run himself out slumps and sweats.</b> Head and shoulders drop, the arms hang, and drops come off him until the ring is full again. Sunday League and Sunday League Inked only; every other look is unchanged.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261004.0915AM', title: 'Sunday League is the look out of the box',
     changed: [
       '<b>A fresh install plays as Sunday League</b> — the little footballers on the mown pitch — instead of the plain green pitch with numbered discs. Grass is still one tap away under Theme.',
@@ -9766,6 +9772,66 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, showAfter:0.5 };
 // to lift a green arc off green grass (1.29:1 on Grass), and the gauge is carried by the
 // wind-up ring's own colour now — white against `RING.spent` — which needs no help.
 const RING = { kickMin: 2.2, spent: '#e0563c' };
+// ============================================================
+//  STAMINA TELLS — the TRAIL and the FIGURE say "sprinting" and "spent", on Sunday League only
+// ============================================================
+// Asked for, after a design pass that found the ring doing too many jobs: the ring is the
+// kick REACH and must stay a complete circle at one radius, so colour on a 1.5px stroke
+// round a 10px phone body was the only channel it had — and a fraction is not what a
+// player wants mid-match. They want three yes/no answers: am I sprinting, am I nearly out,
+// am I locked out. Two readouts carry them now, and the ring is left exactly as it was.
+// ⚠️ **THE TRAIL IS "WHAT YOU JUST DID", so it is where sprinting belongs.** A sprinting
+// body's dot tail is drawn in the court's contrast ink (`kickRingInk`: white on an ordinary
+// pitch, black on a pale one) — a HOT tail — and a SPENT body's in a flat grey at reduced
+// alpha. A sprinting body leaves a longer tail anyway, so the signal grows exactly when it
+// matters, and it costs nothing round the body, where the visual budget is already spent.
+// ⚠️ **THE FIGURE SAGS WHEN IT IS SPENT, and sweats.** The head and the shoulders slide
+// back along the facing (`sag`, a slump seen from above), the arms swing less (`armMul`),
+// the stride's yaw softens (`twistMul`), and a drop of sweat comes off the head every
+// `sweatEvery` seconds. Every one of those SHRINKS or moves inward, so the 1.60r ceiling,
+// the shirt-inside-the-ring rule and the ring-filling rule read exactly what they read on a
+// rested body — `tests/stamtells.mjs` pins that the spent figure reaches no further.
+// ⚠️ **ONLY ON THE SUNDAY LEAGUE PAIR** (`DISC_SKINS.footballers` and `footballersink`,
+// both built by `footballerSkin`, which is the one painter that can draw a slump). The
+// skin carries `staminaTells: true` and `staminaTellsOn(p)` is the ONE gate — the trail
+// recolour, the ease and the sweat all read it — so a plain disc, a crab or an arrowhead
+// on any other theme is bit-identical to the build before this. Asked for in those words:
+// *"Only implement on the default theme"*.
+// ⚠️ **`_tire` IS EASED IN THE STEP LOOP, NEVER IN A DRAW** (`advanceTire`, beside
+// `advanceFeet`) — the trails rule — and it is a RENDER-ONLY field nothing in `step()`
+// reads, the `_drawAng`/`_feet` idiom: a seeded match hashes the same with the tells on
+// and off. The ease snaps to exactly 0 and 1 within `snap`, so a rested figure is
+// pixel-identical to one that never tired rather than a sub-pixel off for ever.
+// ⚠️ **SWEAT IS SPAWNED OFF `fxRnd`, FROM THE STEP LOOP, UNGATED BY `motionOK()`.** `fxRnd`
+// because `fx` is render state spawned beside the sim and `w.rng` would perturb the bots
+// (the kick-spark rule); ungated because this is a TELL rather than an effect, the same
+// call `spawnKickFx` makes — `juice` ships false, and a readout behind that switch is one
+// nobody gets.
+// ⚠️ **A REPLAY SHOWS NO TIREDNESS.** `drawReplayFrame` spreads the LIVE body over a
+// recorded position, so `_tire` there is whoever is standing on the pitch now; the
+// painter reads 0 while `replay.active || replay.filming`. Stamina is not recorded.
+// ⚠️ Rendered before the numbers settled: at `sag` 0.16 the head moved 2.4px on a 15px
+// body and read as "the same figure, nearly"; 0.20 is 3px and reads as a slump. A drop at
+// r 2.2 for 0.55s was one 3px fleck alive at a time — a tell nobody sees is a dead one —
+// so it is 2.6 for 0.7s every 0.36s, about two alive. Still well short of the kick sparks.
+const STAMTELL = { spent: '#9a9a9a', spentA: 0.70, ease: 0.08, snap: 0.01,
+                   sag: 0.20, armMul: 0.45, twistMul: 0.5,
+                   sweatEvery: 0.36, sweatCol: '#bfe6ff', sweatLife: 0.70, sweatR: 2.6 };
+// The one gate. `discSkin()` is read at call time: `DISC_SKINS` is declared with the
+// renderer far below, and this is only ever called from the step loop and the draw.
+function staminaTellsOn(p){
+  const sk = discSkin();
+  return sprintsFor(p) && !!(sk && sk.staminaTells);
+}
+// What the dot trail is drawn in for this body — the team colour, or the hot ink, or the
+// spent grey — and the alpha to draw it at. One owner, so the picker tile could ask too.
+function trailInkFor(p){
+  const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
+  if (!staminaTellsOn(p)) return { col, a: 1 };
+  if (p.spent) return { col: STAMTELL.spent, a: STAMTELL.spentA };
+  if (p.sprinting) return { col: kickRingInk(), a: 1 };
+  return { col, a: 1 };
+}
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -20219,6 +20285,7 @@ function loop(t){
     advanceLabels();        // ...and the name plates' fade, or a draw changes its own picture
     advanceFaceTurn(world); // ...and the figure's turn toward its heading — render only, see FACETURN
     advanceFeet(world);     // ...and the footballers' planted feet — render only, see FOOTBALLER.stride
+    advanceTire(world);     // ...and the spent footballer's slump and sweat — render only, see STAMTELL
     advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
     if (lock.playing) lockAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
@@ -35065,6 +35132,36 @@ function advanceFeet(w){
   if (!w) return;
   for (const p of allBodies(w)) stepFeet(p, 1);
 }
+// The slump, eased toward 1 while a body is SPENT and back to 0 as it recovers, and the
+// sweat that comes off it meanwhile. Render only — see STAMTELL; nothing in `step()` reads
+// `_tire` or `_sweatT`. `allBodies`: a benched body is drawn too, at 0.45.
+// ⚠️ The drop leaves from the HEAD (`FOOTBALLER.headAt` along the drawn facing) and flies
+// off to one side or the other, never straight ahead — a drop in front of the face reads
+// as the ball. World coordinates, because `drawFx` draws every particle through `wx`/`wy`.
+function advanceTire(w){
+  if (!w) return;
+  const T = STAMTELL;
+  for (const p of allBodies(w)){
+    const want = staminaTellsOn(p) && p.spent ? 1 : 0;
+    let t = p._tire || 0;
+    t += (want - t) * T.ease;
+    if (Math.abs(want - t) < T.snap) t = want;
+    p._tire = t;
+    if (t > 0.5 && bodyPainted(w, p)){
+      p._sweatT = (p._sweatT || 0) - STEP;
+      if (p._sweatT <= 0){
+        p._sweatT = T.sweatEvery;
+        const f = discFace(p), r = p.r || PLAYER.r;
+        const side = fxRnd() < 0.5 ? -1 : 1;
+        const a = Math.atan2(f.uy, f.ux) + side * (0.7 + fxRnd() * 0.7);
+        const sp = 0.5 + fxRnd() * 0.6;
+        fx.push({ x: p.x + f.ux * FOOTBALLER.headAt * r, y: p.y + f.uy * FOOTBALLER.headAt * r,
+                  vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                  life: T.sweatLife, max: T.sweatLife, c: T.sweatCol, r: T.sweatR, sweat: true });
+      }
+    } else p._sweatT = 0;
+  }
+}
 // Four people rather than one, so a side does not read as eight clones. The hair and skin
 // tones are the picture's own, sampled off it. ⚠️ Chosen by a HASH OF THE NAME, never
 // rolled: a paint has to give the same picture twice for one step, and `Math.random` is
@@ -35244,8 +35341,16 @@ function footballerSkin(name, sprites, inked){
     // ⚠️ The stride's yaw (FOOTBALLER.twist) is folded into the drawn facing HERE, so every
     // shape below turns together. Negative turns the +1 side forward, which is the side whose
     // arm is forward when `footSwing(p, 1)` is -1 — hence the sign.
+    // ⚠️ THE SLUMP (see STAMTELL): 0 rested, 1 spent, eased in `advanceTire`. Read as 0 in a
+    // replay, which spreads the LIVE body over a recorded position; and a tile, a swatch or
+    // a synthetic body carries no `_tire` at all. Everything it moves shrinks or goes
+    // inward, so none of the three reach rules can be touched by it.
+    const tire = (replay.active || replay.filming) ? 0 : Math.max(0, Math.min(1, p._tire || 0));
+    const T = STAMTELL;
+    const sag = T.sag * tire;                                   // head and shoulders slide BACK
+    const armK = 1 - tire * (1 - T.armMul);                     // the arms hang
     const running = Math.hypot(p.vx || 0, p.vy || 0) >= GAIT.minSpd;
-    const twist = running ? F.twist * footSwing(p, 1) : 0;
+    const twist = running ? F.twist * footSwing(p, 1) * (1 - tire * (1 - T.twistMul)) : 0;
     const ct = Math.cos(twist), st = Math.sin(twist);
     const ux = f0.ux*ct - f0.uy*st, uy = f0.ux*st + f0.uy*ct;
 
@@ -35298,8 +35403,8 @@ function footballerSkin(name, sprites, inked){
       }
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
-      const S = pt(F.sh[0], F.sh[1]*sgn);                    // the shoulder leads or trails with the yaw
-      const H = pt(F.swingAt - F.armSwing*sw, L.hand*sgn);   // ...on the cadence, not the ground
+      const S = pt(F.sh[0] - sag*0.5, F.sh[1]*sgn);          // the shoulder leads or trails with the yaw (and drops with the slump)
+      const H = pt(F.swingAt - F.armSwing*armK*sw, L.hand*sgn);   // ...on the cadence, not the ground
       if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
@@ -35316,14 +35421,17 @@ function footballerSkin(name, sprites, inked){
     c.beginPath();
     c.ellipse(F.torsoAt*r, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
     c.fillStyle = col; c.fill();
-    c.beginPath(); c.arc(F.headAt*r, 0, F.headR*r, 0, 2*Math.PI);
+    c.beginPath(); c.arc((F.headAt - sag)*r, 0, F.headR*r, 0, 2*Math.PI);
     c.fillStyle = skin; c.fill();
     c.beginPath();
-    c.arc((F.headAt - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
+    c.arc((F.headAt - sag - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
     c.fillStyle = hair; c.fill();
     c.restore();
     c.restore();
   },
+  // The stamina tells (the hot/grey trail, the slump, the sweat) are this pair's and
+  // nobody else's — see STAMTELL and `staminaTellsOn`.
+  staminaTells: true,
  };
 }
 DISC_SKINS.footballers    = footballerSkin('Footballers', true);
@@ -36158,8 +36266,14 @@ function drawDiscTrails(w){
       const t = trailPts[k], d = hist[k];
       t.x = wx(d.x); t.y = wy(d.y); t.a = d.a;
     }
-    const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
-    look.draw(ctx, trailPts, hist.length, col, p.r*s, p.team);
+    // ⚠️ The team colour — or, on the Sunday League pair only, the HOT ink while sprinting
+    // and the spent grey while locked out (see STAMTELL). The alpha is handed down through
+    // `globalAlpha`, which every look already multiplies rather than overwrites.
+    const ink = trailInkFor(p);
+    const g0 = ctx.globalAlpha;
+    if (ink.a !== 1) ctx.globalAlpha = g0 * ink.a;
+    look.draw(ctx, trailPts, hist.length, ink.col, p.r*s, p.team);
+    ctx.globalAlpha = g0;
   }
 }
 
@@ -38665,7 +38779,7 @@ if (window.__MAGNETDEBUG) {
     GOALCAM, goalZoom, goalZoomSecs, goalZoomLabel, syncGoalCamSliders, get goalCam(){ return goalCam; }, goalCamStart, advanceGoalCam, goalCamEase, goalCamReset, applyGoalCam,
     DEMO, startDemo, ensureDemo,
     DYN_FIELDS, dynField, advanceDynField, get dynState(){ return dynState; },
-    DISC_SKINS, discSkin, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, gaitPeriod, KLIMB, klimbSprite, klimbReady, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
+    DISC_SKINS, discSkin, STAMTELL, staminaTellsOn, trailInkFor, advanceTire, ARROW, CHALK, FOOTBALLER, KIT_PEOPLE, kitPerson, gaitSwing, gaitPeriod, KLIMB, klimbSprite, klimbReady, SLOTS, SLOT_KEYS, THEME_BUNDLES, SFX_SETS, drawBundleSwatch,
     VJ, get vj(){ return vj; }, vjArm, vjSetOn, vjPanic, vjTap, vjClockReset, vjBeatLen,
     vjTimeToGrid, vjXGain, vjMarkA, vjPaintVideo, vjLoadAudio, vjLoadVideo, vjPlay, vjSeek,
     ytIdFrom, vjYtA, vjYtSync, vjExec, vjOpenView, VJVIEW,

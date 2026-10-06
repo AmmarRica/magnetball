@@ -301,7 +301,14 @@ for (const s of shapes){
     const w = M.world; w.state = 'play'; w.stateT = 2;
     for (let i = 0; i < 600; i++) M.step(w);
     const full = M.repMatchFileBuild();
-    const doc = { ...full, frames: full.frames.slice(0, 60) };
+    // ⚠️ **THE WHOLE 300 FRAMES, NOT 60.** Sixty frames at 4x is a quarter of a second of
+    // wall-clock recording, and the mirror is pumped on its own rAF — under load the pump
+    // had not blitted a single game frame before the recorder stopped, so the file held
+    // the cleared head frame and nothing else. Measured with three heavy suites alongside:
+    // **2437 bytes, 1 tone** and then **0 bytes**, 2 of 3 runs red, 3 of 3 green alone. At
+    // 300 frames the recording is 2.5s, which a stalled frame or two cannot empty. The
+    // tone bar (4) is untouched; a good run reads 71.
+    const doc = { ...full, frames: full.frames.slice(0, 300) };
     const cv = document.getElementById('game');
     o.canvas = { w: cv.width, h: cv.height };
     o.want = M.clipFrameSize(cv.width, cv.height);

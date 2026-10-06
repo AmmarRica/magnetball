@@ -67,7 +67,15 @@ const readWorld = (opt = {}) => p.evaluate((opt) => { const M = window.__magnet,
            names: w.players.map(q => q.team + ':' + q.name), goals: w.players.map(q => q.ms.goals),
            hive: w.hive ? w.hive.slice() : null, extra: (w.extraBalls || []).map(e => [+e.x.toFixed(2), +e.y.toFixed(2), !!e.banked]),
            modeKey: w.modeKey, fieldKey: w.fieldKey, diffKey: w.diffKey, seed: w.seed, kickTeam: w.kickTeam };
-  if (opt.hide) window.dispatchEvent(new Event('pagehide'));
+  // ⚠️ **AND THE WORLD IS PAUSED IN THE SAME EVALUATE**, or the snapshot can still be
+  // rewritten after this reading was taken: `resumeTick` is a wall-clock heartbeat in
+  // `loop()` (every `RESUME.every`), the live rAF loop keeps stepping between this evaluate
+  // returning and `p.reload()` landing, and under load that gap is long enough for a beat
+  // to fall in it — the doc then holds a world a few steps on from the reading. Measured
+  // with three heavy suites alongside: red 1 of 1, then 2 of 3, every time on "same score
+  // and clock" with the pagehide check beside it GREEN; 3 of 3 green alone. The paused
+  // branch of `loop()` returns before the heartbeat, so nothing can move or be written.
+  if (opt.hide){ window.dispatchEvent(new Event('pagehide')); M.togglePause(true); }
   return r; }, opt);
 
 // ---- 1. a match, closed on, comes back ------------------------------------------------

@@ -934,6 +934,17 @@ three lines a second time, name it.
   green on the fixed one under the same load. `readWorld({ hide: true })` takes the reading
   and fires the event in ONE evaluate, and the two blocks that compare against a snapshot
   use it. A suite that fails only in the pool is measured under load, never widened.
+  ⚠️ **AND THAT WAS HALF OF IT — THE HEARTBEAT WAS THE OTHER HALF.** `resumeTick` is a
+  wall-clock beat in `loop()` and the live rAF loop keeps stepping between the hide
+  evaluate returning and `p.reload()` landing, so under load a beat fell in that gap and
+  rewrote the doc with a world a few steps on: red 1 of 1 and 2 of 3 under a three-suite
+  load on *same score and clock*, with the pagehide check beside it green, 3 of 3 alone.
+  The hide evaluate pauses the world too (`togglePause(true)`), and the paused branch of
+  `loop()` returns before the heartbeat. ⚠️ **`tests/clipshape.mjs` had the same shape
+  through a different mechanism**: its real-time recording was 60 frames at 4x — a
+  quarter-second of wall clock — and under load the mirror's rAF pump had not blitted a
+  frame before the recorder stopped (**2437 bytes, 1 tone**, then **0 bytes**; 2 of 3 red,
+  3 of 3 alone). It records the whole 300-frame document now; the tone bar is untouched.
 - **The default WAS a GREEN PITCH AND NUMBERED PLAYERS** (`defaultSel().look.palette` =
   `grass`, `defaultProfile().flag` = `num1`), **and the default match is FIRST TO 3**
   (`defaultSel().length = 'g3'`), asked for. ⚠️ **The palette half is SUPERSEDED by the
@@ -6529,6 +6540,54 @@ three lines a second time, name it.
   suite measures it as a **difference against the same body drawn rested**: the disc
   already has a guide ring and a rim within a few pixels of that radius, so an absolute
   ink count reads 65 of 120 probe angles with no stamina ring drawn at all.
+- **THE TRAIL AND THE FIGURE SAY "SPRINTING" AND "SPENT", ON THE SUNDAY LEAGUE PAIR ONLY**
+  (`STAMTELL`, `staminaTellsOn`, `trailInkFor`, `advanceTire`, `p._tire`, `p._sweatT`,
+  `DISC_SKINS.footballers.staminaTells`; `tests/stamtells.mjs`). Asked for after a design
+  pass — *"implement the trail and 6. Only implement on the default theme"* — that found
+  the ring doing too many jobs: it is the kick REACH and must stay a complete circle at one
+  radius, so colour on a 1.5px stroke round a 10px phone body was its only channel, and a
+  fraction is not what a player wants mid-match. Two readouts carry the three yes/no
+  answers now (sprinting, nearly out, locked out) and **the ring is untouched** (rule 8).
+  ⚠️ **MEASURED FIRST**: the dots painter was handed the team colour (`#2f7fd0`) rested,
+  sprinting and spent alike, and a spent figure differed from a rested one by **0 pixels**.
+  ⚠️ **THE TRAIL IS "WHAT YOU JUST DID", so sprinting goes there.** A sprinting body's tail
+  is drawn in `kickRingInk()` — white on an ordinary pitch, black on a pale one — and a
+  spent body's in a flat grey at 0.70 alpha. A sprinting body leaves a longer tail anyway,
+  so the signal grows exactly when it matters and costs nothing round the body, where the
+  visual budget is already spent (kick ring, hold ring, colour-blind rings, name plate).
+  Whole tail, not dot by dot: per-dot colour is a `fillStyle` per dot, the 27%-of-render
+  allocation `TRAIL_LOOKS.dots` was rebuilt to avoid.
+  ⚠️ **THE FIGURE SLUMPS AND SWEATS WHEN SPENT.** Head and shoulders slide back along the
+  facing (`sag` 0.20r — 0.16 was rendered and read as "nearly the same figure", 2.4px on a
+  15px body), the arms swing less (`armMul` 0.45), the stride's yaw softens (`twistMul`),
+  and a pale drop leaves the head every 0.36s to one side, never ahead (a drop in front of
+  the face reads as the ball). **Every change shrinks or moves inward**, so the 1.60r
+  ceiling, the shirt-inside-the-ring rule and the fill rule read what they read rested; the
+  suite pins the spent reach at no more than the rested one, and a sabotage swinging the
+  arms OUT is caught by exactly that.
+  ⚠️ **ONE GATE** — `staminaTellsOn(p)` = `sprintsFor(p)` and the worn skin carries
+  `staminaTells` — read by the trail, the ease and the sweat alike, and the flag sits on
+  `footballerSkin`'s return so BOTH Sunday League and Sunday League Inked have it (one
+  painter, one flag). A plain disc, a crab or an arrowhead on any other theme is
+  bit-identical to the build before, and that control is the load-bearing half of the
+  suite: a build that recolours every trail passes every Sunday League check on its own.
+  ⚠️ **`_tire` IS EASED IN THE STEP LOOP** (`advanceTire`, beside `advanceFeet` in `loop()`),
+  render-only, the `_drawAng`/`_feet` idiom; it snaps to exactly 0 and 1 within `snap`, so a
+  rested figure is pixel-identical to one that never tired. **Sweat is `fxRnd`, from the step
+  loop, ungated by `motionOK()`** — `juice` ships false and a readout behind that switch is
+  one nobody gets; the same call `spawnKickFx` makes.
+  ⚠️ **A REPLAY SHOWS NO TIREDNESS.** `drawReplayFrame` spreads the LIVE body over a
+  recorded position, so `_tire` there is whoever is on the pitch now; the painter reads 0
+  under `replay.active || replay.filming`. Stamina is not recorded; written down.
+  ⚠️ **THREE MEASUREMENT TRAPS, each a false reading first.** Auto-quality drops the dot
+  trails under a long synchronous evaluate (`qualityPin`); nothing may be pinned on an axis
+  — on a 1280-wide page `auto` turns the pitch, the stick's x is WORLD y, and `me.y = 0`
+  every step held the body dead still with the ring draining; and the plain-disc control
+  may vary ONLY `_tire`, because the kick ring recolours on `spent` and read 727 changed
+  pixels on a body this feature never touches. ⚠️ **AND THE RENDER-ONLY HASH NEEDS A BODY
+  WITH A VELOCITY**: pinned against the boards it reads 0, and a sabotage bending the spent
+  body's `vx` inside `advanceTire` was INERT until the human ran back and forth. Ten
+  sabotages, each caught by its own check.
 - **TEAM COLOUR IS ONE SHADE A SIDE, AND IT IS PICKED ON THE PITCH** (`TEAM_COLS`,
   `sel.teamCol`, `teamColOf`, `applyTeamColours`, `setTeamCol`). Every player used to
   carry their own `color` — yours from `profile`, each bot a `teamTint` variation — so a
@@ -9287,7 +9346,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 147 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 149 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:
