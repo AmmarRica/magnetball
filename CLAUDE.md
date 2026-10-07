@@ -6540,6 +6540,74 @@ three lines a second time, name it.
   suite measures it as a **difference against the same body drawn rested**: the disc
   already has a guide ring and a rim within a few pixels of that radius, so an absolute
   ink count reads 65 of 120 probe angles with no stamina ring drawn at all.
+- **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
+  SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
+  `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,
+  `STAMTELL.handRest`/`restEase`, `p._rest`, `DOT_MAX` 20, `THEME_BUNDLES.kickabout.trail`,
+  `magnetball.stepsfold`; `tests/stamtells.mjs`, `tests/tells.mjs` 4d). Asked for in those
+  words, a batch after the entry below: *"hide the ring for now. Have the trail look like foot
+  steps so it would alternate sides. If player is standing still then their arms should come
+  closer to their body. Have the trail only show while sprinting."*
+  ⚠️ **MEASURED FIRST**: holding KICK changed **668** pixels in the ring's band; a trail
+  record carried `x,y,a` and nothing else, and a jog and a sprint left identical dots; the
+  sprite skin's hand reached **1.22r across standing against 1.23r running** (inked 1.43 /
+  1.43) — arms held out at rest exactly as at a sprint.
+  ⚠️ **THE RING IS A HIDE, NOT A DELETE.** `drawn: false` gates the one block in
+  `drawOneDisc`; `ringLayout` still answers (the SELECT and hold-to-join rings derive their
+  radius from it through `holdRingR`), the dial is still the reach, the stamina still drains
+  and locks out. Rule 10 was weighed and this is the other side of it: *"for now"* is the
+  owner saying the ring may come back, so the checks on its machinery stay LIVE — `tells`,
+  `sprint`, `gamesave` and `bigcourt` set `RING.drawn = true` for the blocks that measure the
+  ring, and `tells` 4d pins the SHIPPED frame at **0** pixels changed with the stood-up ring
+  as the control in the same run. Flip one value and everything is as it was. ⚠️ `bigcourt`
+  was the one the pool found: hidden, its "ring" probe read the body's own edge — **17px
+  against a reach of 23** on Classic — and reported *"the kick ring is not the reach"*.
+  ⚠️ **A FOOTPRINT IS A LOOK, AND THE SIDE IS SIM STATE.** `advanceTrails` stamps every
+  record with `s` — which half of the body's own stride it was dropped in, off `p.gait` and
+  `gaitPeriod()/2`, the same offsets `footSwing` gives the two feet — and `sp`, whether the
+  body was sprinting. `TRAIL_LOOKS.steps` draws one print at the FIRST record of each new
+  half-stride, beside the path on that side, headed along the path; the records between are
+  the sampling every look shares. `traillook`'s *"the look does not touch the sampling"*
+  therefore still holds: the sampling grew two FIELDS, not a second schedule, and a per-look
+  gap was considered and refused for exactly that check. `DOT_MAX` went 12 → 20 so a sprint
+  holds five or six prints; the fade still decides how long a record lives.
+  ⚠️ **`sqrt(a)`, NOT `a`, for the print's alpha.** `DOT_FADE` is tuned for a dot in the team
+  colour; rendered straight, the second print back (a=0.36) was a smudge and the third gone.
+  How a look RENDERS an age is the look's; the age is the sampling's.
+  ⚠️ **ONLY WHILE SPRINTING IS A READ, NOT A SECOND RECORDING** (`trailRecordShown`):
+  `drawDiscTrails` hands a `staminaTellsOn` body only its `sp` records, so switching themes
+  mid-match shows or hides the same history, and every other theme hands every record as it
+  always did. **The spent GREY trail of the entry below is GONE with that gate** — a spent
+  body cannot sprint, so it has no trail to be grey — and `STAMTELL.spent`/`spentA` went with
+  it rather than being left as constants nothing reads (rule 10 the other way round).
+  ⚠️ **THE BUNDLE NAMES THE TRAIL, SO THERE IS A FOLD.** `defaultSel().look.trail` and both
+  Sunday League bundles say `steps`; `currentBundle()` is derived from the slots, so without
+  `magnetball.stepsfold` every install already on Sunday League — including every device
+  `themefold` moved there — would wake up reading **Custom**. Untouched pair only (the
+  palette's own discs, no field, classic ball, dot trail), stamped either way, the
+  `themefold` rules. `tests/traillook.mjs` read the fallback trail as a literal `'dots'` for
+  the life of the slot and went red the day the default moved — it reads `defaultSel()` now.
+  ⚠️ **THE ARMS COME IN ON `_rest`, EASED IN `advanceTire`**, the `_tire` idiom: render only,
+  born AT the answer so a body seen for the first time is not caught mid-fold, snapped to 0
+  and 1. The hand's ACROSS goes to `handRest` (0.80) of `L.hand` — 1.03r sprite / 1.20 inked
+  against 1.23 / 1.43 moving, and still drawn (900 skin pixels) — inward only, so no reach
+  rule can see it. A replay reads it off `running` (a spread live body's `_rest` is whoever
+  is standing on the pitch now), and `tests/stamtells.mjs` pins a moving replay body's arms
+  OUT whatever `_rest` the live body holds.
+  ⚠️ **FIVE PROBE TRAPS, each a false reading first**: a jogging body turned round on
+  *"outside 120 and moving outward"* dithered at the line and dropped **one record in sixty
+  steps** (hysteresis: turn at 120, not again until inside 60); a body fresh from `startMatch`
+  is STANDING, so `_rest` is born at 1 and a ramp probe started from the wrong end; a copy of
+  the live body painted at the origin carries its planted `_feet` in WORLD coordinates and
+  drew its legs out to them (skin pixels a long way across in both arms of the arm probe);
+  the copy carried the live player's NAME and so a skin tone the probe was not looking for;
+  and `tells`, which moves bodies by hand, pins plain discs and the dot trail at the top or
+  every tail probe in it reads zero on the shipped look.
+  ⚠️ **NOT BUILT, written down**: a print lands at the record's position offset sideways,
+  not at the planted foot's own landing spot (`_feet` is render-only and a replay rebuilds
+  its bodies); the prints are the hot ink, not a pressed-grass shade; and a sprint onto a
+  pitch the sampler has never seen a stride on (a body that teleported) prints from the
+  stride phase it arrived with. Thirteen sabotages, each caught by its own check.
 - **THE TRAIL AND THE FIGURE SAY "SPRINTING" AND "SPENT", ON THE SUNDAY LEAGUE PAIR ONLY**
   (`STAMTELL`, `staminaTellsOn`, `trailInkFor`, `advanceTire`, `p._tire`, `p._sweatT`,
   `DISC_SKINS.footballers.staminaTells`; `tests/stamtells.mjs`). Asked for after a design

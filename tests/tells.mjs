@@ -15,6 +15,12 @@ const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={}; const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.sel.autoReplay=false; M.sel.orient='v'; M.applyDisplayMode(); await wait(150);
+  // ⚠️ PLAIN DISCS AND THE DOT TRAIL, said out loud: the shipped look is Sunday League, whose
+  // trail is FOOTSTEPS shown only while sprinting (`trailRecordShown`, tests/stamtells.mjs),
+  // so on the default a body moved by hand leaves no tell at all and every tail probe below
+  // reads zero. This suite is about the dots tell and the streak; it pins the look they are
+  // measured on. `applyTheme` does not touch the slots, so the per-theme loop keeps it.
+  M.sel.look.discs='none'; M.sel.look.trail='dots';
   M.sel.mode='2v2'; M.sel.kickoffRule='off'; M.startMatch(); await wait(150);
   const w=M.world; w.state='play'; w.stateT=2; M.computeCam();
   const cv=document.getElementById('game'), c2=cv.getContext('2d');
@@ -210,8 +216,38 @@ const r = await p.evaluate(async ()=>{
   o.beltIsAStreak  = !!o.beltBox  && o.beltBox.along  >= o.beltBox.across * 3;
   w.ball.x=-520; w.ball.y=-520; w.ball.vx=0; w.ball.vy=0;
 
+  // 4d) ⚠️ THE RING IS HIDDEN FOR NOW (`RING.drawn`, asked for in those words). At the
+  //     SHIPPED value a held KICK changes NOTHING in the ring's own band — measured before:
+  //     668 pixels. The control is the same frame with the ring stood up, in the same run,
+  //     or "nothing changes" is true of a probe looking at the wrong radius. The blocks
+  //     below then run with `RING.drawn` true, because they measure the MACHINERY behind the
+  //     switch (solid, full circle, the dial) and flipping it is what brings the ring back —
+  //     a hide, not a delete, so its checks stay live rather than going with it.
+  me.x=0; me.y=0; me.vx=0; me.vy=0; me.kick=false; me.chargeT=0; me.stam=1; me.spent=false;
+  M.resetTrails();
+  o.ringShipsHidden = M.RING.drawn === false;
+  {
+    const L0 = M.ringLayout(me, me.r*M.cam.s);
+    const band = () => { const [sx,sy]=M.screenPt(M.wx(me.x), M.wy(me.y));
+      const R=Math.ceil((L0.kickR+L0.kickW*2)*DPR)+2;
+      const d2=c2.getImageData(Math.round(sx*DPR)-R, Math.round(sy*DPR)-R, R*2, R*2).data; const out=[];
+      for (let i=0;i<d2.length;i+=4){ const k=i/4, ax=(k%(2*R))-R, ay=Math.floor(k/(2*R))-R, rr=Math.hypot(ax,ay)/DPR;
+        if (rr >= L0.kickR-L0.kickW*2 && rr <= L0.kickR+L0.kickW*2) out.push(d2[i]+d2[i+1]+d2[i+2]); }
+      return out; };
+    const changed = (a,b2) => { let n=0; for (let i=0;i<a.length;i++) if (Math.abs(a[i]-b2[i])>40) n++; return n; };
+    M.drawPitch(w); M.drawDiscs(w); const noKick = band();
+    me.kick=true; me.chargeT=M.CHARGE.max; me.holdT=0;
+    M.drawPitch(w); M.drawDiscs(w); const kicked = band();
+    o.hiddenRingChanges = changed(noKick, kicked);
+    M.RING.drawn = true;
+    M.drawPitch(w); M.drawDiscs(w); const shown = band();
+    o.shownRingChanges = changed(noKick, shown);
+    o.ringBand = noKick.length;
+    me.kick=false; me.chargeT=0; me.holdT=0;
+  }
+
   // 5) Wind-up is visible on the disc: a charged player differs from an idle one
-  //    at the charge-ring radius.
+  //    at the charge-ring radius. (`RING.drawn` is TRUE from here to the end of 5b — see 4d.)
   me.x=0; me.y=0; me.vx=0; me.vy=0; me.kick=false; me.chargeT=0;
   // ⚠️ **STAMINA PINNED FULL, because this block is about the CHARGE.** The ring carries
   // the stamina gauge in its colour now — part of it turns `RING.spent` red once you drop
@@ -273,6 +309,7 @@ const r = await p.evaluate(async ()=>{
   o.ringHalves = [lh, rh];
   o.ringIsFullCircle = Math.abs(lh-rh) < Math.max(lh,rh)*0.35;
   me.kick=false; me.chargeT=0; me.holdT=0;
+  M.RING.drawn = false;                                   // back to the shipped value — see 4d
 
   // 6) Trails reset with the match so nothing streaks in from before. The live
   //    render loop repopulates immediately, so assert the LONG history is gone
@@ -366,7 +403,8 @@ const ok = r.movingTail > 12 &&                 // a sprinter clearly marks the 
            r.streakIsBallWide &&                    // and a ball wide in play — see 4c
            r.ballIsRoundAtRest && r.roundAgainAfterAKick && r.streakLengthens &&
 
-           r.chargeVisible > 20 &&              // wind-up reads on the disc
+           r.ringShipsHidden && r.hiddenRingChanges === 0 && r.shownRingChanges > 100 &&  // hidden for now — see 4d
+           r.chargeVisible > 20 &&              // wind-up reads on the disc (with the ring stood up)
            r.ringSolid && r.ringInked && r.ringIsFullCircle &&  // solid, drawn, never a sweep
            r.layoutIsTouch && r.padDrawsSomething &&        // the pad is on screen at all
            r.padRingPulses && r.padRingIsFullCircle &&    // ...and it flashes too
@@ -383,7 +421,8 @@ if(!ok) console.log('checks:', {
   streakIsBallWide:r.streakIsBallWide, ballDiaPx:r.ballDiaPx,
   beltIsAStreak:r.beltIsAStreak, beltBox:r.beltBox,
   ringSolid:r.ringSolid, ringInked:r.ringInked, ringFull:r.ringIsFullCircle,
-  ringDial:[r.ringAtMin, r.ringAtMax] });
+  ringDial:[r.ringAtMin, r.ringAtMax],
+  ringShipsHidden:r.ringShipsHidden, hiddenRingChanges:r.hiddenRingChanges, shownRingChanges:r.shownRingChanges, ringBand:r.ringBand });
 if(!ok && !r.allThemesRead) console.log('per-theme:', JSON.stringify(r.perTheme));
 console.log('RESULT:', ok?'ALL PASS':'FAIL');
 await b.close(); process.exit(ok?0:1);

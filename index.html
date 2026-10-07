@@ -6193,7 +6193,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261006.1020AM';
+const VERSION = '20261007.0940AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6209,6 +6209,13 @@ const VERSION = '20261006.1020AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261007.0940AM', title: 'Footsteps instead of a ring',
+    changed: [
+      '<b>The ring round your player is gone for now.</b> Holding KICK no longer draws a circle, and the stamina colour went with it — the trail is the readout instead.',
+      '<b>A sprinting footballer leaves footprints, left and right, and nothing when jogging.</b> Sunday League and Sunday League Inked only; the Footsteps trail is a tile under Theme → Trail for any other look.',
+      '<b>A footballer standing still tucks his arms in.</b> They swing back out the moment he moves.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261006.1020AM', title: 'Sunday League footballers show their stamina',
     changed: [
       '<b>A sprinting footballer leaves a hot white trail, and a spent one a grey trail.</b> You can see who is running flat out and who is out of breath from across the pitch, without reading the ring.',
@@ -7687,7 +7694,7 @@ function defaultSel(){ return { mode:'3v3', field:'classic', diff:'normal', leng
             // Theme card's chips, `bundleSlots` and `currentBundle`, so a seventh entry
             // there would give them a tab of their own and make a bundle's identity
             // depend on them — pick a colour and your theme would read "Custom".
-            look: { palette:'kickabout', field:'none', discs:'footballers', ball:'classic', trail:'dots',
+            look: { palette:'kickabout', field:'none', discs:'footballers', ball:'classic', trail:'steps',
                     court:'', surround:'' },
             vj: { on:false },                        // VJ Mode is OFF unless asked for
             party: { big:false, lowg:false, sudden:false, multi:false },   // fun match modifiers
@@ -9221,6 +9228,10 @@ function applySfxSet(k){
 // per player per frame is exactly the steady allocation `advanceTrails` already went
 // out of its way to avoid. Screen space is also what lets the picker tile call the
 // real painter instead of drawing a picture of it.
+// The footprint, in body radii on screen: how far beside the path it sits (`off`), the sole
+// (`len` along by `wid` across), the toe ahead of it, and its alpha against a fresh record.
+// `fallbackEvery` is only for records that carry no stride side — see `steps` below.
+const FOOTSTEP = { off: 0.60, len: 0.38, wid: 0.23, toe: 0.15, alpha: 0.90, fallbackEvery: 3 };
 const TRAIL_LOOKS = {
   // ⚠️ **THE COLOUR IS SET ONCE AND THE FADE RIDES `globalAlpha`.** This built a fresh
   // `rgba()` string and re-assigned `fillStyle` for EVERY dot — 16 discs x 12 dots = 192
@@ -9238,6 +9249,46 @@ const TRAIL_LOOKS = {
       c.globalAlpha = g0 * 0.70 * d.a * (0.35 + 0.65*f);
       c.beginPath(); c.arc(d.x, d.y, rr*(0.15 + 0.19*f), 0, 2*Math.PI);
       c.fill();
+    }
+    c.restore();
+  } },
+  // FOOTSTEPS — a print every half-stride, alternating sides of the path, the Sunday League
+  // pair's trail. Asked for as *"have the trail look like foot steps so it would alternate
+  // sides"*. ⚠️ **THE SIDE COMES OFF THE RECORD, NOT OFF A COUNTER HERE**: `advanceTrails`
+  // stamps every record with `s`, which half of the body's own stride (`p.gait`, the
+  // distance-driven phase the planted feet step on) it was dropped in — so a print lands
+  // where that side's foot lands, on the cadence `stepFeet` keeps, and two draws of one
+  // step cannot disagree about which side a print is on. A print is drawn at the FIRST
+  // record of each new half-stride; the records between are the sampling every look shares
+  // (`DOT_GAP`), which this look reads and does not change. The heading is the path's own
+  // (this record from the one before it), so a bounce turns the prints with the run.
+  // ⚠️ A record with no `s` (a picker tile, a suite's synthetic points) alternates every
+  // `fallbackEvery` points instead, so the tile shows the pattern the pitch will.
+  steps: { name:'Footsteps', draw(c, pts, n, col, rr){
+    const g0 = c.globalAlpha, F = FOOTSTEP;
+    c.save();
+    c.fillStyle = rgba(col, 1);
+    for (let k = 0; k < n; k++){
+      const d = pts[k], tagged = d.s != null;
+      const print = tagged ? (k > 0 && pts[k-1].s != null && d.s !== pts[k-1].s)
+                           : (k % F.fallbackEvery === 0);
+      if (!print) continue;
+      const side = tagged ? d.s : (Math.floor(k / F.fallbackEvery) % 2 ? 1 : -1);
+      let hx = 1, hy = 0;
+      const q = k > 0 ? pts[k-1] : (n > 1 ? pts[1] : null);
+      if (q){
+        const dx = k > 0 ? d.x - q.x : q.x - d.x, dy = k > 0 ? d.y - q.y : q.y - d.y;
+        const L = Math.hypot(dx, dy); if (L > 1e-6){ hx = dx / L; hy = dy / L; }
+      }
+      const x = d.x - hy*side*F.off*rr, y = d.y + hx*side*F.off*rr;   // beside the path, this side
+      // ⚠️ `sqrt(a)`, not `a`: the record's fade (`DOT_FADE`) is tuned for a dot a few
+      // pixels wide in the team colour, and a print a half-stride back is already at 0.6 of
+      // it — rendered straight, the second print was a smudge and the third was gone. The
+      // age is the sampling's; how a look RENDERS an age is the look's.
+      c.globalAlpha = g0 * F.alpha * Math.sqrt(d.a);
+      c.beginPath(); c.ellipse(x, y, F.len*rr, F.wid*rr, Math.atan2(hy, hx), 0, 2*Math.PI); c.fill();
+      const tx = x + hx*(F.len + F.toe*0.7)*rr, ty = y + hy*(F.len + F.toe*0.7)*rr;      // the toe, ahead
+      c.beginPath(); c.arc(tx, ty, F.toe*rr, 0, 2*Math.PI); c.fill();
     }
     c.restore();
   } },
@@ -9466,11 +9517,15 @@ const THEME_BUNDLES = {
   // already in the registry, and adding a second copy of it is the mistake the withdrawn
   // `seam` look made against `BALL_LOOKS.tennis`. ⚠️ **No `pitch`**: a Sunday league is a
   // treatment that works on any rectangle.
-  kickabout: { discs:'footballers', ball:'classic', sfx:'classic' },
+  // ⚠️ `trail: 'steps'` — the Footsteps look, which on this pair shows only while
+  // sprinting (see STAMTELL). It shipped on `dots`; a device still on the untouched Sunday
+  // League look is moved on once (`magnetball.stepsfold`), the `themefold` shape, or every
+  // existing install's Theme card would read "Custom" the morning after.
+  kickabout: { discs:'footballers', ball:'classic', sfx:'classic', trail:'steps' },
   // ...and the same bundle with the drawn limbs. No `field` and no `pitch`: a mown pitch
   // is `stripeA`/`stripeB`, which `drawPitch` already paints, and a kickabout is a
   // treatment that works on any rectangle.
-  kickink:   { discs:'footballersink', ball:'classic', sfx:'classic' },
+  kickink:   { discs:'footballersink', ball:'classic', sfx:'classic', trail:'steps' },
   synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
@@ -9771,7 +9826,16 @@ const SPRINT = { secs:3.0, refill:5.0, slow:75, boost:135, showAfter:0.5 };
 // ⚠️ `case`/`caseA` and `ringCasing()` are GONE with the second ring: the casing existed
 // to lift a green arc off green grass (1.29:1 on Grass), and the gauge is carried by the
 // wind-up ring's own colour now — white against `RING.spent` — which needs no help.
-const RING = { kickMin: 2.2, spent: '#e0563c' };
+// ⚠️ **THE RING IS HIDDEN FOR NOW** (`drawn: false`), asked for in those words. Nothing
+// behind it moves: `ringLayout` still answers (the SELECT and hold-to-join rings derive their
+// radius from it through `holdRingR`), `kickRingMul`/`kickRangeUnits` are still the reach,
+// the dial is still a dial, and the stamina still drains and locks out — the TRAIL carries
+// that readout now (footsteps, only while sprinting; see STAMTELL). Measured on the build
+// before: holding KICK changed **668** pixels in the ring's band; with the ring stood down
+// it changes 0. Flip this and the ring, its gauge colour and every check on it come back —
+// `tests/tells.mjs`, `tests/sprint.mjs`, `tests/gamesave.mjs` and `tests/bigcourt.mjs` set it
+// true to measure the machinery, and `tells` pins that the SHIPPED value draws nothing.
+const RING = { kickMin: 2.2, spent: '#e0563c', drawn: false };
 // ============================================================
 //  STAMINA TELLS — the TRAIL and the FIGURE say "sprinting" and "spent", on Sunday League only
 // ============================================================
@@ -9781,10 +9845,23 @@ const RING = { kickMin: 2.2, spent: '#e0563c' };
 // player wants mid-match. They want three yes/no answers: am I sprinting, am I nearly out,
 // am I locked out. Two readouts carry them now, and the ring is left exactly as it was.
 // ⚠️ **THE TRAIL IS "WHAT YOU JUST DID", so it is where sprinting belongs.** A sprinting
-// body's dot tail is drawn in the court's contrast ink (`kickRingInk`: white on an ordinary
-// pitch, black on a pale one) — a HOT tail — and a SPENT body's in a flat grey at reduced
-// alpha. A sprinting body leaves a longer tail anyway, so the signal grows exactly when it
-// matters, and it costs nothing round the body, where the visual budget is already spent.
+// body's tail is drawn in the court's contrast ink (`kickRingInk`: white on an ordinary
+// pitch, black on a pale one) — a HOT tail — and it costs nothing round the body, where the
+// visual budget is already spent.
+// ⚠️ **AND ON THIS PAIR THE TRAIL SHOWS ONLY WHILE SPRINTING, AS FOOTSTEPS** — asked for a
+// batch later as *"have the trail look like foot steps so it would alternate sides … have
+// the trail only show while sprinting"*, with the ring hidden (`RING.drawn`). Every trail
+// record carries `sp` (was the body sprinting when it was dropped — `advanceTrails`, sim
+// state) and `drawDiscTrails` hands a `staminaTellsOn` body only its sprint records, so a
+// jog leaves nothing and a sprint leaves a line of prints that fade behind it. The prints
+// are `TRAIL_LOOKS.steps` (the bundle's trail), which alternates sides off the body's own
+// stride phase — see FOOTSTEP. The SPENT grey tail this entry used to describe is GONE with
+// that gate: a spent body cannot sprint, so it has no trail to be grey.
+// ⚠️ **A STANDING FOOTBALLER'S ARMS COME IN TO THE BODY** (`handRest`, eased on `_rest` in
+// `advanceTire`): the hand sits at `handRest` of its running across position once the body
+// is under `GAIT.minSpd`, and swings back out as it moves off. Measured before: the hand
+// reached 1.22r across standing and 1.23r running on the sprite skin — arms held out at
+// rest exactly as at a sprint. Both skins, one painter, one number.
 // ⚠️ **THE FIGURE SAGS WHEN IT IS SPENT, and sweats.** The head and the shoulders slide
 // back along the facing (`sag`, a slump seen from above), the arms swing less (`armMul`),
 // the stride's yaw softens (`twistMul`), and a drop of sweat comes off the head every
@@ -9814,8 +9891,9 @@ const RING = { kickMin: 2.2, spent: '#e0563c' };
 // body and read as "the same figure, nearly"; 0.20 is 3px and reads as a slump. A drop at
 // r 2.2 for 0.55s was one 3px fleck alive at a time — a tell nobody sees is a dead one —
 // so it is 2.6 for 0.7s every 0.36s, about two alive. Still well short of the kick sparks.
-const STAMTELL = { spent: '#9a9a9a', spentA: 0.70, ease: 0.08, snap: 0.01,
+const STAMTELL = { ease: 0.08, snap: 0.01,
                    sag: 0.20, armMul: 0.45, twistMul: 0.5,
+                   handRest: 0.80, restEase: 0.14,            // arms in at a standstill — see footballerSkin
                    sweatEvery: 0.36, sweatCol: '#bfe6ff', sweatLife: 0.70, sweatR: 2.6 };
 // The one gate. `discSkin()` is read at call time: `DISC_SKINS` is declared with the
 // renderer far below, and this is only ever called from the step loop and the draw.
@@ -9823,15 +9901,19 @@ function staminaTellsOn(p){
   const sk = discSkin();
   return sprintsFor(p) && !!(sk && sk.staminaTells);
 }
-// What the dot trail is drawn in for this body — the team colour, or the hot ink, or the
-// spent grey — and the alpha to draw it at. One owner, so the picker tile could ask too.
+// What the trail is drawn in for this body — the team colour, or the hot ink while
+// sprinting — and the alpha to draw it at. One owner, so the picker tile could ask too.
+// (On the Sunday League pair a trail only EXISTS while sprinting — `drawDiscTrails` — so the
+// hot branch is the whole of what this pair ever draws.)
 function trailInkFor(p){
   const col = p.team === 0 ? TH.teamRed : TH.teamBlue;
   if (!staminaTellsOn(p)) return { col, a: 1 };
-  if (p.spent) return { col: STAMTELL.spent, a: STAMTELL.spentA };
   if (p.sprinting) return { col: kickRingInk(), a: 1 };
   return { col, a: 1 };
 }
+// Whether a trail record is drawn for this body at all: on the Sunday League pair only the
+// records dropped while SPRINTING; everywhere else every record, as it always was.
+function trailRecordShown(p, d){ return !staminaTellsOn(p) || !!d.sp; }
 // ⚠️ **BOTH RINGS ARE CASED IN THE OPPOSITE INK, and RECOLOURING THEM WAS TRIED FIRST AND
 // WAS WRONG.** The problem is real: on Grass, the DEFAULT palette, `TH.good` is `#3ec06a`
 // against mown stripes of `#2f9e52` — a green ring on green grass at **1.29:1** — and the
@@ -14658,6 +14740,27 @@ try {
       applyTheme(sel.look.palette);
     }
     localStorage.setItem('magnetball.themefold', '1');
+  }
+} catch(e){}
+// SUNDAY LEAGUE'S TRAIL IS FOOTSTEPS NOW, AND A DEVICE STILL ON ITS OLD DOT TRAIL IS MOVED
+// ON, ONCE (`magnetball.stepsfold`). `currentBundle()` is DERIVED from the slots, so without
+// this every install already on Sunday League — including every device `themefold` moved
+// there — would wake up with its Theme card reading "Custom" for a change it did not make.
+// ⚠️ Only the UNTOUCHED pair fires: the palette's own discs, no field painter, the classic
+// ball and the dot trail. A device that picked a trail of its own keeps it. Stamped either
+// way, and `saveSel()` only in the branch that moved something; the `magnetball.sel` guard
+// is the standing one (a fresh install starts on `steps`, so it can never match).
+try {
+  if (!localStorage.getItem('magnetball.stepsfold')){
+    const L = sel.look || {};
+    const own = L.palette === 'kickabout' ? 'footballers' : L.palette === 'kickink' ? 'footballersink' : null;
+    const untouched = !!own && L.discs === own && (L.field || 'none') === 'none' &&
+      (L.ball || 'classic') === 'classic' && (L.trail || 'dots') === 'dots';
+    if (localStorage.getItem('magnetball.sel') && untouched){
+      sel.look = Object.assign({}, sel.look, { trail: 'steps' });
+      saveSel();
+    }
+    localStorage.setItem('magnetball.stepsfold', '1');
   }
 } catch(e){}
 // A DEVICE STILL ON THE EIGHT-SECOND AD ROLLOVER IS MOVED ON, ONCE
@@ -35147,6 +35250,14 @@ function advanceTire(w){
     t += (want - t) * T.ease;
     if (Math.abs(want - t) < T.snap) t = want;
     p._tire = t;
+    // ...and `_rest`: 1 at a standstill, 0 on the move, eased so the footballer's arms fold
+    // in and swing out rather than snapping (`handRest`). Born AT the answer, so a body
+    // seen for the first time is not caught mid-fold.
+    const wantRest = Math.hypot(p.vx || 0, p.vy || 0) < GAIT.minSpd ? 1 : 0;
+    let rs = p._rest == null ? wantRest : p._rest;
+    rs += (wantRest - rs) * T.restEase;
+    if (Math.abs(wantRest - rs) < T.snap) rs = wantRest;
+    p._rest = rs;
     if (t > 0.5 && bodyPainted(w, p)){
       p._sweatT = (p._sweatT || 0) - STEP;
       if (p._sweatT <= 0){
@@ -35350,6 +35461,15 @@ function footballerSkin(name, sprites, inked){
     const sag = T.sag * tire;                                   // head and shoulders slide BACK
     const armK = 1 - tire * (1 - T.armMul);                     // the arms hang
     const running = Math.hypot(p.vx || 0, p.vy || 0) >= GAIT.minSpd;
+    // ⚠️ ARMS IN AT A STANDSTILL (`STAMTELL.handRest`): the hand's ACROSS position eases from
+    // `L.hand` to `handRest` of it once the body stops, on `_rest` — eased in `advanceTire`
+    // in the step loop, the `_tire` idiom — so the arms fold in as the player pulls up and
+    // swing back out as it moves off. A body with no `_rest` (a tile, a swatch, a suite's
+    // synthetic body) and a replay (which spreads the LIVE body's fields over a recorded one)
+    // read the answer straight off `running`. Inward only, so no reach rule can see it.
+    const still = (replay.active || replay.filming || p._rest == null) ? (running ? 0 : 1)
+                : Math.max(0, Math.min(1, p._rest));
+    const handAcross = L.hand * (1 - still * (1 - T.handRest));
     const twist = running ? F.twist * footSwing(p, 1) * (1 - tire * (1 - T.twistMul)) : 0;
     const ct = Math.cos(twist), st = Math.sin(twist);
     const ux = f0.ux*ct - f0.uy*st, uy = f0.ux*st + f0.uy*ct;
@@ -35404,7 +35524,7 @@ function footballerSkin(name, sprites, inked){
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0] - sag*0.5, F.sh[1]*sgn);          // the shoulder leads or trails with the yaw (and drops with the slump)
-      const H = pt(F.swingAt - F.armSwing*armK*sw, L.hand*sgn);   // ...on the cadence, not the ground
+      const H = pt(F.swingAt - F.armSwing*armK*sw, handAcross*sgn);   // ...on the cadence, not the ground
       if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
@@ -35429,8 +35549,8 @@ function footballerSkin(name, sprites, inked){
     c.restore();
     c.restore();
   },
-  // The stamina tells (the hot/grey trail, the slump, the sweat) are this pair's and
-  // nobody else's — see STAMTELL and `staminaTellsOn`.
+  // The stamina tells (the sprint-only footprint trail, the slump, the sweat, the arms in
+  // at rest) are this pair's and nobody else's — see STAMTELL and `staminaTellsOn`.
   staminaTells: true,
  };
 }
@@ -36026,7 +36146,9 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // exactly as before and the gauge only exists once it is worth reading.
     const stamShow = sprintShow();
     const stamShown = sprintsFor(p) && p.stam != null && (p.spent || p.stam < stamShow);
-    if (p.kick || (chargeOn() && (p.chargeT||0) > 0.01) || stamShown){
+    // ⚠️ `RING.drawn` — the whole ring is hidden for now, asked for; see RING. Nothing in
+    // this block is deleted, so flipping that one value brings all of it back.
+    if (RING.drawn && (p.kick || (chargeOn() && (p.chargeT||0) > 0.01) || stamShown)){
       const f = chargeOn() ? chargeFrac(p) : 0;
       // ⚠️ **IT HAS TO READ THE MOMENT KICK GOES DOWN, not once it is charged.** The alpha
       // ramped 0.42 → 0.92, so the ring spent the start of every hold at well under half
@@ -36198,7 +36320,12 @@ let discTrails = [];                      // per-player dot history, index-align
 function resetTrails(){ ballTrail = []; discTrails = []; labelA = []; labelT = []; }
 
 const DOT_GAP      = 9;    // world units between player dots
-const DOT_MAX      = 12;   // dots kept per player
+// ⚠️ 20, up from 12, for the FOOTSTEPS look: a print lands every half-stride (~28 units) and
+// the records between them are the shared sampling, so twelve records was four prints and a
+// sprint read as a stub. The fade (`DOT_FADE`) still decides how long a record lives, so at
+// speed the oldest are gone before the cap is reached; a dot trail is simply allowed to be
+// as long as its fade already made it.
+const DOT_MAX      = 20;   // records kept per player
 const DOT_FADE     = 0.93; // per-frame decay, so a stopped player's tail dies off
 // ⚠️ Enough SAMPLES to draw the longest streak at a moderate speed, not just at the cap.
 // The streak walks back along recorded positions, so a buffer sized for a full-speed ball
@@ -36232,7 +36359,15 @@ function advanceTrails(w){
     const last = hist[hist.length-1];
     if (!last || Math.hypot(p.x-last.x, p.y-last.y) >= DOT_GAP){
       if (hist.length >= DOT_MAX) hist.shift();
-      hist.push({x:p.x, y:p.y, a:1});
+      // ⚠️ Every record carries two facts about the moment it was dropped, both sim state:
+      // `s`, which HALF of the body's stride it fell in (+1 while the +1 foot has just landed,
+      // -1 for the other — `footSwing`'s own offsets, so the Footsteps look prints where the
+      // planted foot is), and `sp`, whether the body was SPRINTING (`advanceStamina` writes
+      // it in `integrate`), which is what lets the Sunday League pair show a trail only
+      // while sprinting without a second recording. Both are read by the draw and never
+      // change what is recorded or when: the sampling is one thing for every look.
+      const half = gaitPeriod() / 2;
+      hist.push({x:p.x, y:p.y, a:1, s: Math.floor((p.gait || 0) / half) % 2 ? -1 : 1, sp: !!p.sprinting});
     }
     // Fade and drop spent dots in place — a filter() per player per frame was the
     // only steady allocation in the hot path.
@@ -36261,18 +36396,26 @@ function drawDiscTrails(w){
     const p = w.players[i], hist = discTrails[i];
     if (!hist || !hist.length) continue;
     if (!bodyPainted(w, p)) continue;      // no body, no tell — see bodyPainted
-    while (trailPts.length < hist.length) trailPts.push({x:0, y:0, a:1});
+    while (trailPts.length < hist.length) trailPts.push({x:0, y:0, a:1, s:null, sp:false});
+    // ⚠️ ON THE SUNDAY LEAGUE PAIR ONLY THE RECORDS DROPPED WHILE SPRINTING ARE HANDED ON
+    // (`trailRecordShown`): a jog leaves nothing, a sprint leaves its prints, and the
+    // recording itself is untouched — this is a READ of `sp`, so switching themes mid-match
+    // shows or hides the same history. Everywhere else every record, as it always was.
+    let n = 0;
     for (let k = 0; k < hist.length; k++){
-      const t = trailPts[k], d = hist[k];
-      t.x = wx(d.x); t.y = wy(d.y); t.a = d.a;
+      const d = hist[k];
+      if (!trailRecordShown(p, d)) continue;
+      const t = trailPts[n++];
+      t.x = wx(d.x); t.y = wy(d.y); t.a = d.a; t.s = d.s == null ? null : d.s; t.sp = !!d.sp;
     }
+    if (!n) continue;
     // ⚠️ The team colour — or, on the Sunday League pair only, the HOT ink while sprinting
-    // and the spent grey while locked out (see STAMTELL). The alpha is handed down through
-    // `globalAlpha`, which every look already multiplies rather than overwrites.
+    // (see STAMTELL). The alpha is handed down through `globalAlpha`, which every look
+    // already multiplies rather than overwrites.
     const ink = trailInkFor(p);
     const g0 = ctx.globalAlpha;
     if (ink.a !== 1) ctx.globalAlpha = g0 * ink.a;
-    look.draw(ctx, trailPts, hist.length, ink.col, p.r*s, p.team);
+    look.draw(ctx, trailPts, n, ink.col, p.r*s, p.team);
     ctx.globalAlpha = g0;
   }
 }
@@ -38841,7 +38984,7 @@ if (window.__MAGNETDEBUG) {
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
-    KICKRING, kickRingMul, LABEL_BALL,
+    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

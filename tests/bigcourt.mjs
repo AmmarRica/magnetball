@@ -173,6 +173,11 @@ const px = await p2.evaluate(() => {
   // (No backticks in here: this file builds pages with new Function() + a template
   // literal, and a backtick in a comment closes it early.)
   M.sel.orient = 'v';
+  // The ring is HIDDEN for now (RING.drawn ships false; tests/tells.mjs holds the shipped
+  // frame). This block measures the drawn ring AGAINST THE REACH — the machinery behind the
+  // switch — so the ring is stood up for it: hidden, the "ring" probe read the body's own
+  // edge (17px against a reach of 23 on Classic) and reported the promise broken.
+  M.RING.drawn = true;
   const cv = document.getElementById('game'), c = cv.getContext('2d');
   const dpr = cv.width / cv.clientWidth;
   for (const k of ['classic','giant','colossus','leviathan']){

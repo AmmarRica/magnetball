@@ -39,6 +39,10 @@ const ring = await p.evaluate(() => {
   // (No backticks in here: this file builds pages with new Function() + a template
   // literal, and a backtick in a comment closes it early.)
   M.sel.orient = 'v';
+  // The ring is HIDDEN for now (RING.drawn ships false; tests/tells.mjs measures the shipped
+  // frame). Stood up here because this block measures the ring's own painting; the dial and
+  // the reach below are physics and would read the same either way.
+  M.RING.drawn = true;
   o.dial = { def: M.KICKRING.def, mul: M.kickRingMul() };
   M.sel.mode = '1v1'; M.sel.lobby = 'off'; M.sel.charge = 'on'; M.setMatchSeed(4); M.startMatch();
   const w = M.world; w.state = 'play'; w.stateT = 2;

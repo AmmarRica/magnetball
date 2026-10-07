@@ -193,13 +193,18 @@ const r = await p.evaluate(()=>{
   o.defaultIsFlat = def.far.mean > 0.75 * def.near.mean;
 
   // ---- a save from before the slot existed, and a stored key that is gone --
+  // ⚠️ The default is `defaultSel().look.trail`, never a literal: it read `'dots'` here
+  // for the life of the slot and went red the day the shipped look (Sunday League) took
+  // Footsteps, which is the second-copy rot this file keeps recording.
+  const defTrail = M.defaultSel().look.trail;
   M.sel.look.trail = 'orbs';
   delete M.sel.look.trail;
   M.normalizeLook();
-  o.missingGetsDefault = M.sel.look.trail === 'dots';
+  o.missingGetsDefault = M.sel.look.trail === defTrail;
   M.sel.look.trail = 'nope';
   M.normalizeLook();
-  o.unknownGetsDefault = M.sel.look.trail === 'dots';
+  o.unknownGetsDefault = M.sel.look.trail === defTrail;
+  o.defTrail = defTrail;
 
   // ---- a bundle can own one, and Custom is still derived -------------------
   M.applyBundle('ufo');

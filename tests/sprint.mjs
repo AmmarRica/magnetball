@@ -331,6 +331,11 @@ const bands = await p.evaluate(() => {
   // red for a formation tweak it cannot otherwise see (it is a 1v1, and only bodies past
   // the first moved). `juiceReset()` is the one owner of that state.
   M.juiceReset();
+  // ⚠️ THE RING IS HIDDEN FOR NOW (`RING.drawn` ships false — tests/tells.mjs pins that and
+  // measures the shipped frame). This block is about the GAUGE the ring carries, so the ring
+  // is stood up for it: the machinery stays measured, and the day it is switched back on
+  // every number here is already known to hold.
+  M.RING.drawn = true;
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const me = w.players.find(q => q.ctrl === 'human1') || w.players[0];
   me.x = 60; me.y = 90; me.vx = me.vy = 0; me.name = '';
