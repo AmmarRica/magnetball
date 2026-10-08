@@ -6613,6 +6613,33 @@ three lines a second time, name it.
   ⚠️ **`_prints` IS RENDER-ONLY LIKE `_feet`**, advanced in `stepFeet` (per sim step, from
   the step loop), never in a draw; the replay's `repAnimate` steps feet per slot and so
   records prints on its slots too, which nothing draws (a replay shows no trails).
+  ⚠️ **A PRINT IS SOIL, AND WHITE ONCE THE BODY WAS NEARLY OUT WHEN IT LANDED**
+  (`FOOTSTEP.soil` `#3d342b`, `low` white, `lowAt` 0.35 of full; the `low` flag on each
+  record). Reported as *"the steps show the same color as team. It should always be dark
+  grey like soil. then they turn white when almost tired"* — and the team colour was a real
+  defect, not a taste: the look was handed `trailInkFor`, which is the hot ink only while
+  `p.sprinting` is true, so the moment a sprint ended every print still fading on the pitch
+  recoloured to the team. The colour is the PRINT's, decided at the landing, so a run reads
+  as soil going white toward its end whatever the body is doing when it is drawn, and the
+  Footsteps look ignores the ink it is handed on purpose. Measured through the real path:
+  the early prints of a sprint all `low` false, the last four `low` true as a suffix at
+  stamina 0.17, and a white print on the pitch a **0.43 → 0.25** blend of white over the
+  court once the three shapes became one fill (below).
+  ⚠️ **THE WIDE END IS THE TOE, AND THE FIRST SHAPE WAS A HEEL.** A sole with a small circle
+  AHEAD of it is narrow at the front, which is what a heel looks like — reported as the
+  prints *"backward from the direction person is running"* while the heading itself measured
+  correct (toe heading against the run **0.82–0.86**). The print is a heel circle, the sole
+  and a wider ball-of-the-foot circle at the front now (`heel` 0.70, `ball` 1.25 of the
+  width); the suite measures the front third of one print **10px wide against 6** at the
+  back, which is the only thing "facing forward" can mean for a shape.
+  ⚠️ **ONE PATH, ONE FILL.** Three overlapping fills at 0.45 compound where they overlap
+  (1 − 0.55² = 0.70 at the ball): the soil print read **83 against an asked-for 97** on grey
+  and the white one 211 against 185, every print darker and blotchier than its alpha. The
+  three shapes are one path filled once, and the flat-canvas colour checks read the blend
+  the constant promises.
+  ⚠️ **THE FLAT-CANVAS PROBES COUNT "NOT THE GROUND", NEVER "BRIGHTER THAN IT"**: a cut at
+  grey + 60 was written for white prints and read zero on every soil one — three checks red
+  on a build with nothing wrong, the instrument and not the feature (rule 4's cousin).
   ⚠️ **`sqrt(a)`, NOT `a`, for the print's alpha.** `DOT_FADE` is tuned for a dot in the team
   colour; rendered straight, the second print back (a=0.36) was a smudge and the third gone.
   How a look RENDERS an age is the look's; the age is the sampling's.

@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261007.1120AM';
+const VERSION = '20261008.0910AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261007.1120AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.0910AM', title: 'Footprints in the soil',
+    changed: [
+      '<b>A sprinting footballer\'s footprints are dark like soil</b>, whatever colour his side wears — and they turn white once he is nearly out of breath, so a run reads as soil prints going white toward its end.',
+      '<b>The prints point the way he ran.</b> The wide end is the toe now; the narrow one is the heel.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261007.1120AM', title: 'The hoardings slide',
     changed: [
       '<b>The pitch-side boards slide when they change</b> instead of cutting: the old sign slides off to the left and the next one slides in behind it.',
@@ -9273,7 +9279,23 @@ function applySfxSet(k){
 // feet and for a picker tile: a print beside the trail's own records, alternating sides.
 // ⚠️ `alpha` 0.45, down from 0.90 — asked for as *"less visible"*: a fresh print at 0.9 of
 // the hot ink read as a mark on the pitch rather than a mark left on it.
-const FOOTSTEP = { len: 0.34, wid: 0.21, toe: 0.13, alpha: 0.45, fade: 0.955, max: 10, inset: 0.72,
+// ⚠️ **A PRINT IS SOIL, AND TURNS WHITE WHEN THE BODY IS NEARLY OUT** (`soil`, `low`,
+// `lowAt`). Asked for as *"it should always be dark grey like soil. Then they turn white
+// when almost tired"* — and the report was that the steps showed the TEAM colour: the look
+// was handed the body's trail ink, which is the hot ink only while `p.sprinting` is true,
+// so the moment a sprint ended every print still fading on the pitch recoloured to the
+// team. The colour is the PRINT's now, recorded at the landing (`low`: stamina under
+// `lowAt` of full as the foot came down), so a run reads as soil prints turning white
+// toward its end, whatever the body is doing when they are drawn. The look ignores the
+// ink it is handed on purpose.
+// ⚠️ **THE WIDE END IS THE TOE** (`ball`, `heel`): the first shape was a sole with a small
+// circle AHEAD of it, and a narrow front is a heel — reported as the prints facing
+// backward from the run, with the heading itself measured correct. A foot is widest at the
+// ball and narrowest at the heel, so the print is a heel circle, the sole, and a wider ball
+// circle at the front. `tests/stamtells.mjs` measures the front third of a print wider
+// than the back third, which is the only thing "facing forward" can mean for a shape.
+const FOOTSTEP = { len: 0.30, wid: 0.19, ball: 1.25, heel: 0.70, alpha: 0.45, fade: 0.955, max: 10, inset: 0.72,
+                   soil: '#3d342b', low: '#ffffff', lowAt: 0.35,
                    off: 0.60, fallbackEvery: 3 };
 const TRAIL_LOOKS = {
   // ⚠️ **THE COLOUR IS SET ONCE AND THE FADE RIDES `globalAlpha`.** This built a fresh
@@ -9310,12 +9332,24 @@ const TRAIL_LOOKS = {
   steps: { name:'Footsteps', draw(c, pts, n, col, rr, team, prints){
     const g0 = c.globalAlpha, F = FOOTSTEP;
     c.save();
-    c.fillStyle = rgba(col, 1);
-    const print = (x, y, hx, hy, a) => {
+    // ⚠️ `col` — the body's trail ink — is deliberately NOT used: a print is soil, or white
+    // once the body was nearly out when it landed (`low`). See FOOTSTEP.
+    const soil = rgba(F.soil, 1), lowInk = rgba(F.low, 1);
+    const print = (x, y, hx, hy, a, low) => {
       c.globalAlpha = g0 * F.alpha * Math.sqrt(a);
-      c.beginPath(); c.ellipse(x, y, F.len*rr, F.wid*rr, Math.atan2(hy, hx), 0, 2*Math.PI); c.fill();
-      const tx = x + hx*(F.len + F.toe*0.7)*rr, ty = y + hy*(F.len + F.toe*0.7)*rr;      // the toe, ahead
-      c.beginPath(); c.arc(tx, ty, F.toe*rr, 0, 2*Math.PI); c.fill();
+      c.fillStyle = low ? lowInk : soil;
+      // heel (narrow) → sole → ball of the foot (wide), the wide end AHEAD along the heading.
+      // ⚠️ ONE path, ONE fill: three overlapping fills at 0.45 compound where they overlap
+      // (1 − 0.55² = 0.70 at the ball), which read 83 against an asked-for 97 on grey and
+      // made every print darker and blotchier than its alpha says. The union is filled once.
+      const w = F.wid*rr, L = F.len*rr;
+      c.beginPath();
+      c.arc(x - hx*L*0.75, y - hy*L*0.75, w*F.heel, 0, 2*Math.PI);
+      c.moveTo(x + L*0.8, y);
+      c.ellipse(x, y, L*0.8, w, Math.atan2(hy, hx), 0, 2*Math.PI);
+      c.moveTo(x + hx*L*0.8 + w*F.ball, y + hy*L*0.8);
+      c.arc(x + hx*L*0.8, y + hy*L*0.8, w*F.ball, 0, 2*Math.PI);
+      c.fill();
     };
     // ⚠️ THE FEET'S OWN LANDINGS WHEN THE BODY HAS THEM (`prints`, from `p._prints` through
     // `drawDiscTrails`): the spot each boot was put down and the heading it stepped on, so a
@@ -9323,7 +9357,7 @@ const TRAIL_LOOKS = {
     // stand-in for a body with no planted feet — and for the picker tile, whose points are
     // a stretch of travel and nothing else.
     if (prints && prints.n){
-      for (let k = 0; k < prints.n; k++){ const q = prints.pts[k]; print(q.x, q.y, q.hx, q.hy, q.a); }
+      for (let k = 0; k < prints.n; k++){ const q = prints.pts[k]; print(q.x, q.y, q.hx, q.hy, q.a, q.low); }
       c.restore();
       return;
     }
@@ -9343,7 +9377,7 @@ const TRAIL_LOOKS = {
       // pixels wide in the team colour, and a print a half-stride back is already at 0.6 of
       // it — rendered straight, the second print was a smudge and the third was gone. The
       // age is the sampling's; how a look RENDERS an age is the look's.
-      print(d.x - hy*side*F.off*rr, d.y + hx*side*F.off*rr, hx, hy, d.a);   // beside the path, this side
+      print(d.x - hy*side*F.off*rr, d.y + hx*side*F.off*rr, hx, hy, d.a, false);   // beside the path, this side
     }
     c.restore();
   } },
@@ -35308,7 +35342,9 @@ function stepFeet(p, steps){
     const along = dx*f.hx + dy*f.hy, across = -dx*f.hy + dy*f.hx;   // in the feet's own frame
     if (pr.length >= S.max) pr.shift();
     pr.push({ x: p.x + f.hx*along - f.hy*across*S.inset, y: p.y + f.hy*along + f.hx*across*S.inset,
-              hx: f.hx, hy: f.hy, s: i ? 1 : -1, sp: !!p.sprinting, a: 1 });
+              hx: f.hx, hy: f.hy, s: i ? 1 : -1, sp: !!p.sprinting,
+              low: !!p.sprinting && p.stam != null && p.stam < S.lowAt,   // nearly out as it landed — see FOOTSTEP.low
+              a: 1 });
   }
 }
 // ⚠️ `allBodies`, not `w.players`: a body waiting on the touchline is drawn too, and walks.
@@ -36496,12 +36532,12 @@ function drawDiscTrails(w){
     let pn = 0;
     const pr = p._prints;
     if (pr && pr.length){
-      while (printPts.length < pr.length) printPts.push({x:0, y:0, hx:1, hy:0, s:1, a:1, sp:false});
+      while (printPts.length < pr.length) printPts.push({x:0, y:0, hx:1, hy:0, s:1, a:1, sp:false, low:false});
       for (let k = 0; k < pr.length; k++){
         const d = pr[k];
         if (!trailRecordShown(p, d)) continue;
         const t = printPts[pn++];
-        t.x = wx(d.x); t.y = wy(d.y); t.hx = d.hx; t.hy = d.hy; t.s = d.s; t.a = d.a; t.sp = !!d.sp;
+        t.x = wx(d.x); t.y = wy(d.y); t.hx = d.hx; t.hy = d.hy; t.s = d.s; t.a = d.a; t.sp = !!d.sp; t.low = !!d.low;
       }
     }
     if (!n && !pn) continue;

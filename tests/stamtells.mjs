@@ -64,7 +64,8 @@ const r = await p.evaluate(async ()=>{
     M.TRAIL_LOOKS[key].draw = function(c,pts,n,col,rr,team,prints){
       handed.push({ look:key, col, n, a:+c.globalAlpha.toFixed(2),
                     sp: Array.from({length:n}, (_,k)=>!!pts[k].sp), s: Array.from({length:n}, (_,k)=>pts[k].s),
-                    pn: prints ? prints.n : 0, psp: prints ? Array.from({length:prints.n}, (_,k)=>!!prints.pts[k].sp) : [] });
+                    pn: prints ? prints.n : 0, psp: prints ? Array.from({length:prints.n}, (_,k)=>!!prints.pts[k].sp) : [],
+                    plow: prints ? Array.from({length:prints.n}, (_,k)=>!!prints.pts[k].low) : [] });
       return reals[key].call(this,c,pts,n,col,rr,team,prints); };
   }
   M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.length='5'; M.sel.controllers='off'; M.sel.adsOn='off';
@@ -124,11 +125,28 @@ const r = await p.evaluate(async ()=>{
       if (M.discTrails[1]) M.discTrails[1].length = 0;
       const withPrint = at();
       const saved = me._prints; me._prints = []; const court = at(); me._prints = saved;
-      const inkHex = M.kickRingInk(), ink = [1,3,5].map(k => parseInt(inkHex.substr(k,2),16)).reduce((a2,b2)=>a2+b2,0);
+      // ⚠️ SOIL, not the body's trail ink: the print's colour is its own (FOOTSTEP.soil), and
+      // the first build's were the ink — the team colour the moment a sprint ended.
+      const inkHex = M.FOOTSTEP.soil, ink = [1,3,5].map(k => parseInt(inkHex.substr(k,2),16)).reduce((a2,b2)=>a2+b2,0);
       out.printBlend = +((withPrint - court) / (ink - court)).toFixed(3);
       out.printExpect = +(M.FOOTSTEP.alpha * Math.sqrt(q.a)).toFixed(3);   // what the painter asked for
     }
-    run(200,true); out.spent = mine();  out.spentState  = { stam: +me.stam.toFixed(2), spent: me.spent, sprinting: me.sprinting, records: M.discTrails[0].length };
+    // nearly out: the last landings of the sprint are recorded `low` and the earlier ones not
+    run(110,true); out.low = mine();    out.lowState    = { stam: +me.stam.toFixed(2), spent: me.spent, sprinting: me.sprinting, lowAt: M.FOOTSTEP.lowAt };
+    if (out.low && out.low.pn){
+      // the newest print on the pitch, painted: a tint of WHITE over the court, not of soil
+      const q2 = (me._prints || []).filter(q => q.low).slice(-1)[0];
+      if (q2){ const g = document.getElementById('game'), gc = g.getContext('2d'), DPR = g.width / g.clientWidth;
+        const lumAt = () => { M.computeCam(); M.render(); const [sx, sy] = M.screenPt(M.wx(q2.x), M.wy(q2.y));
+          const d = gc.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data; return d[0] + d[1] + d[2]; };
+        // the third from last, clear of the body — see printBlend
+        const q3 = (me._prints || []).slice(-3)[0];
+        if (q3 && q3.low){ const [sx, sy] = [0,0]; const at2 = () => { M.computeCam(); M.render(); const [x2, y2] = M.screenPt(M.wx(q3.x), M.wy(q3.y)); const d = gc.getImageData(Math.round(x2*DPR), Math.round(y2*DPR), 1, 1).data; return d[0] + d[1] + d[2]; };
+          const withP = at2(); const saved = me._prints; me._prints = []; const court = at2(); me._prints = saved;
+          out.lowBlendWhite = +((withP - court) / (765 - court)).toFixed(3); out.lowExpect = +(M.FOOTSTEP.alpha * Math.sqrt(q3.a)).toFixed(3); }
+      }
+    }
+    run(90,true);  out.spent = mine();  out.spentState  = { stam: +me.stam.toFixed(2), spent: me.spent, sprinting: me.sprinting, records: M.discTrails[0].length };
     out.team = me.team; out.fxSweat = M.fx.filter(q=>q.sweat).length;
     M.pads.p1.dx=0; M.pads.p1.kick=false;
     return out;
@@ -165,6 +183,15 @@ const r = await p.evaluate(async ()=>{
   // less visible: the constant says so, and the freshest print on the pitch is a tint of the
   // ink over the court, not the ink
   o.printExpect = sl.printExpect;
+  // soil while fresh, white once nearly out — recorded per LANDING, so the sprint's early
+  // prints stay soil when the later ones are white, and the painted white print is a tint of
+  // white over the court
+  o.lowRun = { state: sl.lowState, plow: sl.low ? sl.low.plow : null, blendWhite: sl.lowBlendWhite, expect: sl.lowExpect };
+  o.soilThenWhite = !!sl.low && sl.low.pn >= 3 && sl.lowState.stam < M.FOOTSTEP.lowAt &&
+    sl.sprint.plow.every(v => !v) &&                                       // early in the run: soil
+    sl.low.plow.some(v => v) && sl.low.plow.some(v => !v) &&                // later: both, and...
+    sl.low.plow.slice(sl.low.plow.indexOf(true)).every(Boolean) &&         // ...the white ones are the newest
+    sl.lowBlendWhite != null && sl.lowBlendWhite > sl.lowExpect * 0.4 && sl.lowBlendWhite < sl.lowExpect * 1.4;
   o.printsAreFaint = M.FOOTSTEP.alpha <= 0.6 && sl.printBlend != null && sl.printBlend < 0.6 &&
                      sl.printBlend > sl.printExpect * 0.4 && sl.printBlend < sl.printExpect * 1.4;   // a tint, and the tint the painter asked for
   // ...and the CONTROL: plain discs on grass with the dot trail, same seed, same drive —
@@ -191,7 +218,9 @@ const r = await p.evaluate(async ()=>{
     cc.fillStyle='#7f7f7f'; cc.fillRect(0,0,W2,H2);
     M.TRAIL_LOOKS.steps.draw(cc, pts, pts.length, '#ffffff', rr);
     const d = cc.getImageData(0,0,W2,H2).data;
-    const ink = (i) => d[i]+d[i+1]+d[i+2] > 127*3 + 60;
+    // ink = anything that is not the grey ground (a print is SOIL, darker than the grey — a
+    // brightness cut written for white prints read zero on every one of them)
+    const ink = (i) => Math.abs(d[i]-127)+Math.abs(d[i+1]-127)+Math.abs(d[i+2]-127) > 30;
     let above=0, below=0, onLine=0; const cols = new Array(W2).fill(false);
     for (let i=0;i<d.length;i+=4){ if (!ink(i)) continue; const k=i/4, x=k%W2, y=Math.floor(k/W2); cols[x]=true;
       if (y < Y-1) above++; else if (y > Y+1) below++; else onLine++; }
@@ -205,8 +234,30 @@ const r = await p.evaluate(async ()=>{
     cc.fillStyle='#7f7f7f'; cc.fillRect(0,0,W2,H2);
     M.TRAIL_LOOKS.steps.draw(cc, plain, plain.length, '#ffffff', rr);
     const d2 = cc.getImageData(0,0,W2,H2).data; let ab2=0, be2=0;
-    for (let i=0;i<d2.length;i+=4){ if (d2[i]+d2[i+1]+d2[i+2] <= 127*3+60) continue; const y=Math.floor((i/4)/W2); if (y < Y-1) ab2++; else if (y > Y+1) be2++; }
+    for (let i=0;i<d2.length;i+=4){ if (Math.abs(d2[i]-127)+Math.abs(d2[i+1]-127)+Math.abs(d2[i+2]-127) <= 30) continue; const y=Math.floor((i/4)/W2); if (y < Y-1) ab2++; else if (y > Y+1) be2++; }
     o.untaggedTwoSided = ab2 > 100 && be2 > 100;
+    // ONE print from a landing record: the front third is WIDER than the back third (the
+    // ball of the foot leads, the heel trails — the first shape had a small toe ahead of
+    // the sole and read as a heel, reported as the prints facing backward), and it is soil
+    // whatever ink the look is handed; a `low` one is white.
+    const one = (low) => { cc.fillStyle='#7f7f7f'; cc.fillRect(0,0,W2,H2);
+      M.TRAIL_LOOKS.steps.draw(cc, [], 0, '#ff0000', rr, 0, { pts:[{ x:200, y:Y, hx:1, hy:0, s:1, a:1, sp:true, low }], n:1 });
+      return cc.getImageData(0,0,W2,H2).data; };
+    const dOne = one(false);
+    const widthAt = (d, x0, x1) => { let best=0; for (let x=x0;x<=x1;x++){ let lo=null, hi=null; for (let y=0;y<H2;y++){ const i=(y*W2+x)*4; if (Math.abs(d[i]-127)+Math.abs(d[i+1]-127)+Math.abs(d[i+2]-127) > 30){ if (lo==null) lo=y; hi=y; } } if (lo!=null) best=Math.max(best, hi-lo+1); } return best; };
+    const L1 = M.FOOTSTEP.len*rr;
+    o.printShape = { front: widthAt(dOne, Math.round(200 + L1*0.5), Math.round(200 + L1*1.3)), back: widthAt(dOne, Math.round(200 - L1*1.3), Math.round(200 - L1*0.5)) };
+    o.toeIsTheWideEnd = o.printShape.front >= o.printShape.back * 1.3 && o.printShape.back > 0;
+    const px0 = (d) => { const i=(Y*W2+200)*4; return [d[i],d[i+1],d[i+2]]; };
+    const cS = px0(dOne), cL = px0(one(true));
+    const hex2 = (h) => [1,3,5].map(k=>parseInt(h.substr(k,2),16));
+    const soil = hex2(M.FOOTSTEP.soil), red = [255,0,0], white = [255,255,255], grey=[127,127,127];
+    const blendTo = (c3, al) => c3.map((v,i)=>Math.round(grey[i]*(1-al)+v*al));
+    const dist = (a2,b2) => a2.reduce((n,v,i)=>n+Math.abs(v-b2[i]),0);
+    const al = M.FOOTSTEP.alpha;
+    o.printInk = { soil: cS, low: cL };
+    o.printIsSoilNotInk = dist(cS, blendTo(soil, al)) < dist(cS, blendTo(red, al)) && dist(cS, blendTo(soil, al)) < 40;
+    o.lowPrintIsWhite = dist(cL, blendTo(white, al)) < 40;
   }
 
   // ---- the figure, in pixels on a flat backdrop (the footballers suite's instrument) ----
@@ -396,6 +447,7 @@ const checks = {
   trail_isSteps: r.slTrailIsSteps, trail_restHidden: r.slRestHidden, trail_sprintShown: r.slSprintShown, trail_spentHidden: r.slSpentHidden,
   trail_recordsTagged: r.recordsTagged, sweats: r.slSweats,
   prints_areTheSteps: r.printsAreTheSteps, prints_areFaint: r.printsAreFaint,
+  prints_soilThenWhite: r.soilThenWhite, prints_toeIsTheWideEnd: r.toeIsTheWideEnd, prints_soilNotInk: r.printIsSoilNotInk, prints_lowIsWhite: r.lowPrintIsWhite,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,
