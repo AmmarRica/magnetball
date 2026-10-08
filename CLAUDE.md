@@ -6698,6 +6698,50 @@ three lines a second time, name it.
   formula of 1.16 plus a pixel of antialiasing. Six sabotages, each caught by its own check:
   the rim off, halved, painted over the body, painted after the limbs, the ball's own rim
   drifting from `ballRimPx`, and the floor moved.
+- **A SPRINTING FOOTBALLER PUMPS ITS ARMS AND LEADS WITH ITS HEAD** (`FOOTBALLER.dashArm`
+  1.40, `FOOTBALLER.dashLean` 0.14, `STAMTELL.dashEase`, `p._dash` eased in `advanceTire`
+  beside `_rest`, the `dash`/`armArc`/`dashAcross`/`lean` lines of `footballerSkin`'s paint;
+  `tests/stamtells.mjs`' dash block). Asked for as *"while running/turbo, have the arms swing
+  faster and the head move a bit forward"*, and read as the TURBO: `p.sprinting`, which
+  `advanceStamina` writes for every `sprintsFor` body — a person holding KICK with Sprint on,
+  and a bot on its own sprint decision. A plain run is the stride as it was.
+  ⚠️ **MEASURED FIRST**: a sprinting body and a jogging one drew the SAME pixels — 0 differ
+  at every phase, hand arc **1.309r / 1.239r** (sprite / inked), hair centroid −0.029r along.
+  ⚠️ **"FASTER" IS A LONGER ARC ON THE SAME CADENCE, NEVER A SECOND CADENCE.** The arms
+  counter-swing the legs off one `p.gait`, and arms on a faster clock than the legs come back
+  INTO phase with them twice a stride — four limbs together, the star jump this figure was
+  built to avoid. A longer arc moves the hand further between two frames at every speed, and
+  a sprinting body's gait already turns over 35% faster. Measured with the yaw stood down:
+  the hand's arc **1.283 → 1.750r** (sprite) and **1.617 → 2.050r** (inked), its move between
+  two 60Hz frames at sprint pace **0.123 → 0.182r** and **0.148 → 0.211r**.
+  ⚠️ **THE HANDS TUCK IN AS THE ARC GROWS, AND THE TUCK IS DERIVED, NOT TUNED.** The hand's
+  reach is `hypot(armSwing, hand)` and the 1.60r ceiling has no room above it (1.582r on the
+  inked skin): at full dash the hand's across position is whatever keeps that reach EXACTLY
+  (`dashAcross = sqrt(armReach² − dashArc²)`: 1.30 → 1.17r sprite, 1.20 → 1.06 inked), and a
+  linear blend of two points on one circle stays inside it, so the reach is held at every
+  value of the ease. Measured: **1.510 → 1.507r** and **1.581 → 1.580r**, 1.586 with the yaw
+  live — within a pixel of the jogging figure and under the ceiling. A sprinter pumps with the
+  hands close to the body, which is also what it looks like.
+  ⚠️ **THE HEAD LEADS BY `dashLean` ALONG THE FACING** — the same move `STAMTELL.sag` makes
+  the other way when spent, and 0.14 for the reason 0.20 was chosen there: 0.16 read as "the
+  same figure, nearly" at 15px, and this one is a lean rather than a slump. Hair centroid
+  **−0.030 → +0.108r**, `_dash` 0.5 between them, and the head's nose on the facing axis at
+  **0.978r** — inside the shirt's 0.98, so the fill rule and the ring rule read what they read.
+  ⚠️ **EASED IN THE STEP LOOP, RENDER ONLY, THE `_rest` IDIOM**: born AT the answer, a ramp
+  (0.14, 0.595 at five steps, exactly 1 by sixty, back to exactly 0 once the body stops), and
+  read as 0 in a replay (`replay.active || replay.filming` — stamina is not recorded). A body
+  with no `_dash` (a tile, a suite's synthetic body) reads its `sprinting` flag outright. The
+  render-only hash is untouched: `advanceTire` writes `_dash` and nothing in `step()` reads it.
+  ⚠️ **TWO INSTRUMENT FAULTS BEFORE THE CHECK WAS RIGHT, both false readings on a good
+  build.** A head band of |across| < 0.55r read the ARM ROOTS at the shoulder (1.165r for a
+  head whose nose is at 0.74); it is 0.15r now, inside where any limb roots. And the hand
+  pick: a flat 0.98r caught the inked leg's lane (foot 0.82 + half a 0.57 stroke = 1.105) and
+  diluted its arc ratio to 1.095; it is derived per skin from the leg's lane. ⚠️ **AND THE
+  STRIDE'S YAW IS STOOD DOWN FOR THE HAND PROBES**: `FOOTBALLER.twist` turns the whole figure
+  ±0.22 rad with the stride, which carries the hand UNDER the lane line at one phase and the
+  leg OVER it at the other — the pick changed limbs between frames and read a per-frame jump
+  of **1.32r** on the inked skin. A yaw is a rotation about the body and changes no radius, so
+  the ceiling is read again with it live. Eight sabotages, each caught by its own check.
 - **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
   SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
   `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,

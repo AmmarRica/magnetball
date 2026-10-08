@@ -504,6 +504,95 @@ const r = await p.evaluate(async ()=>{
     }
   }
 
+  // ---- THE DASH (`FOOTBALLER.dashArm` / `dashLean`, `p._dash`, `STAMTELL.dashEase`) ----
+  //      Asked for as *"while running/turbo, have the arms swing faster and the head move a
+  //      bit forward"*. Measured before: a sprinting body and a jogging one drew the SAME
+  //      pixels (0 differ) — hand arc 1.309r / 1.239r (sprite / inked), hair centroid −0.029r.
+  //      "Faster" is a LONGER ARC on the same cadence (the arms counter-swing the legs off one
+  //      `p.gait`; a second clock brings all four limbs into phase twice a stride), with the
+  //      hands tucked in by exactly what keeps the hand's reach — so the 1.60r ceiling reads
+  //      what it read. Every reading is the sprinting body against the jogging one, same skin,
+  //      same phase, in the same run.
+  {
+    const P = M.gaitPeriod(), F2 = M.FOOTBALLER;
+    const skinDark = skinCol.map(v => Math.round(v*0.72));          // the plate's outline band (the hand's cap)
+    // the hand: skin further ACROSS than any part of a leg can reach — the foot's lane plus
+    // half the leg's width, PER SKIN (0.82 + 0.19 on the sprite, 0.82 + 0.285 on the inked;
+    // a flat 0.98 read the inked leg's lane and diluted its arc ratio to 1.095). At a full
+    // dash the hand sits at 1.17 / 1.06r nominal with its cap reaching 0.16 / 0.24 past, so
+    // the outer part of the cap is what is read, and the ARC is the hand's EXTREMES over the
+    // stride (farthest forward to farthest back), with the centroid kept for the per-frame jump.
+    const lane = (skin) => { const L = skin === 'footballersink' ? F2.inked : F2; return F2.foot + L.legW/2 + 0.02; };
+    const handStats = (d, laneR) => { let n=0, sx=0, lo=Infinity, hi=-Infinity; for (let i=0;i<d.length;i+=4){ const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY; if (ay <= R*laneR) continue; if (!(near(d,i,skinCol,40) || near(d,i,skinDark,40))) continue; sx+=ax; n++; lo=Math.min(lo, ax); hi=Math.max(hi, ax); } return n ? { cen: sx/n/R, lo: lo/R, hi: hi/R } : null; };
+    const sweep = (skin, over, N) => { const laneR = lane(skin); let lo=Infinity, hi=-Infinity, reach=0, hair=0; for (let k=0;k<N;k++){ const d = paint(skin, base(Object.assign({ vx:3, gait: k*P/N }, over))); const h = handStats(d, laneR); if (h){ lo=Math.min(lo, h.lo); hi=Math.max(hi, h.hi); } reach=Math.max(reach, scan(d, anyInk).reach); hair += scan(d, isHair).along; } return { arc:+(hi-lo).toFixed(3), reach:+reach.toFixed(3), hair:+(hair/N).toFixed(3) }; };
+    // the hand's move between two 60Hz frames at a sprinting body's pace (1.80 a step, the
+    // median running speed `tests/footballers.mjs` measured, times the shipped boost)
+    const PACE = 1.80 * 1.35;
+    const jump = (skin, over) => { const laneR = lane(skin); let j=0, prev=null; for (let k=0;k<Math.ceil(P/PACE)+2;k++){ const h = handStats(paint(skin, base(Object.assign({ vx:3, gait:k*PACE }, over))), laneR); const a = h ? h.cen : null; if (a!=null && prev!=null) j=Math.max(j, Math.abs(a-prev)); prev=a; } return +j.toFixed(3); };
+    // the head stays inside the body: the farthest hair or skin pixel ON the facing axis (the
+    // arms root at 0.42r across and the legs at 0.23, so a band of 0.15r reads the head alone;
+    // a 0.55 band read the shoulders at 1.165)
+    const headReach = (d) => { let m=0; for (let i=0;i<d.length;i+=4){ const k=(i/4)|0, ax=(k%W)-CX, ay=((k/W)|0)-CY; if (Math.abs(ay) > R*0.15) continue; if (!(isHair(d,i) || near(d,i,skinCol,40))) continue; m=Math.max(m, Math.hypot(ax,ay)); } return +(m/R).toFixed(3); };
+    o.dash = { lean: F2.dashLean, arm: F2.dashArm, skins: {} };
+    // ⚠️ THE STRIDE'S YAW IS STOOD DOWN FOR THE HAND AND HEAD PROBES (`FOOTBALLER.twist`,
+    // pinned in tests/footballers.mjs). It turns the whole figure ±0.22 rad with the stride,
+    // which carries the hand UNDER the lane line at one phase and the leg's stroke OVER it at
+    // the other — the pick changed limbs between frames and read a per-frame jump of 1.32r
+    // on the inked skin. A yaw is a rotation about the body, so it changes no radius: the
+    // ceiling is read again with it live below.
+    const twistWas = F2.twist; F2.twist = 0;
+    for (const skin of ['footballers','footballersink']){
+      const jog = sweep(skin, { sprinting:false }, 48), run = sweep(skin, { sprinting:true }, 48);
+      const half = sweep(skin, { sprinting:true, _dash:0.5 }, 12), zero = sweep(skin, { sprinting:true, _dash:0 }, 12), jog12 = sweep(skin, { sprinting:false }, 12);
+      const quarter = { gait: P*0.25 };
+      o.dash.skins[skin] = { arcJog: jog.arc, arcRun: run.arc, jumpJog: jump(skin, { sprinting:false }), jumpRun: jump(skin, { sprinting:true }),
+        reachJog: jog.reach, reachRun: run.reach, hairJog: jog.hair, hairRun: run.hair, hairHalf: half.hair, hairJog12: jog12.hair,
+        headReachRun: headReach(paint(skin, base(Object.assign({ vx:3, sprinting:true }, quarter)))),
+        diff: diffPx(paint(skin, base(Object.assign({ vx:3 }, quarter))), paint(skin, base(Object.assign({ vx:3, sprinting:true }, quarter)))),
+        zeroIsJog: diffPx(paint(skin, base(Object.assign({ vx:3 }, quarter))), paint(skin, base(Object.assign({ vx:3, sprinting:true, _dash:0 }, quarter)))),
+        halfBetween: half.hair > jog12.hair + F2.dashLean*0.2 && half.hair < zero.hair + F2.dashLean*0.8 };
+    }
+    F2.twist = twistWas;
+    for (const skin of ['footballers','footballersink']) o.dash.skins[skin].reachRunYaw = sweep(skin, { sprinting:true }, 24).reach;   // the shipped figure, yaw and all
+    const D = o.dash.skins;
+    o.dashArmsSwingFurther = Object.values(D).every(s => s.arcRun >= s.arcJog*1.15 && s.arcRun > 1.2 && s.diff > 300);
+    o.dashHandIsFaster     = Object.values(D).every(s => s.jumpRun >= s.jumpJog*1.15 && s.jumpJog > 0.05);
+    o.dashHeadLeads        = Object.values(D).every(s => s.hairRun >= s.hairJog + F2.dashLean*0.6 && s.headReachRun < 0.98 && s.halfBetween && s.zeroIsJog === 0);
+    // the reach is the jogging body's, to a pixel, and under the ceiling at every phase
+    o.dashUnderCeiling     = Object.values(D).every(s => s.reachRun <= s.reachJog + 1.5/R && s.reachRun <= F2.ceiling && s.reachRunYaw <= F2.ceiling && s.reachRun > 1.4);
+    // ...the ease, through the real step-side function: born at the answer, a RAMP to exactly
+    // 1 while the body sprints and back to exactly 0 once it stops
+    M.setMatchSeed(3); M.startMatch(); const w=M.world; w.state='play'; w.stateT=2;
+    const me=w.players[0]; me.vx=3; me.vy=0;
+    // (`dv` reads a `_dash` nothing wrote as null rather than throwing on it — a build that
+    // never writes the field is a FINDING, and a throw here hid it behind a bare stack trace)
+    const dv = () => me._dash == null ? null : +me._dash.toFixed(3);
+    me.sprinting = false; for (let i=0;i<30;i++) M.advanceTire(w); const born = dv();
+    me.sprinting = true; const ups=[]; for (let i=0;i<60;i++){ M.advanceTire(w); ups.push(dv()); }
+    me.sprinting = false; const downs=[]; for (let i=0;i<60;i++){ M.advanceTire(w); downs.push(dv()); }
+    o.dash.ease = { born, u0: ups[0], u5: ups[5], u59: ups[59], between: ups.filter(v => v > 0 && v < 1).length, d0: downs[0], d59: downs[59] };
+    o.dashEases = born === 0 && ups[0] > 0 && ups[0] < 0.5 && ups[5] > ups[0] && ups[59] === 1 && o.dash.ease.between >= 5 && downs[0] < 1 && downs[0] > 0 && downs[59] === 0;
+    // a replay shows no dash — the spread body is whoever is on the pitch now
+    const sprinter = base({ vx:3, gait: P*0.25, sprinting:true, _dash:1 }), jogger = base({ vx:3, gait: P*0.25 });
+    M.replay.active = true; const rep3 = paint('footballers', sprinter); M.replay.active = false;
+    o.dashNotInReplay = diffPx(rep3, paint('footballers', jogger)) === 0 && diffPx(paint('footballers', sprinter), paint('footballers', jogger)) > 300;
+    // ...and on the PITCH, at the size a body is really drawn, `_dash` 0 against 1 moves pixels
+    // on the footballer and none on a plain disc (the `_tire` probe's own instrument)
+    {
+      const bot=w.players[1]; bot.x=0; bot.y=-300; bot.vx=bot.vy=0; bot._px=bot.x; bot._py=bot.y;
+      me.x=me._px=0; me.y=me._py=0; me.vx=3; me.vy=0; me.sprinting=true; w.ball.x=w.ball._px=0; w.ball.y=w.ball._py=-150; w.ball.vx=w.ball.vy=0;
+      const g=document.getElementById('game'), gc=g.getContext('2d'), DPR=g.width/g.clientWidth;
+      const box = () => { M.juiceReset(); M.computeCam(); M.render(); const [sx,sy]=M.screenPt(M.wx(0),M.wy(0));
+        const rad=Math.round(me.r*M.cam.s*2.2*DPR); return gc.getImageData(Math.round(sx*DPR)-rad, Math.round(sy*DPR)-rad, rad*2, rad*2).data; };
+      me._dash=0; const f0=box(); me._dash=1; const f1=box();
+      M.sel.look.discs='none';
+      me._dash=0; const a0=box(); me._dash=1; const a1=box();
+      M.applyBundle('kickabout');
+      o.dash.pitch = { footballer: diffPx(f0, f1), plain: diffPx(a0, a1) };
+      o.dashOnThePitch = o.dash.pitch.footballer > 10 && o.dash.pitch.plain === 0;
+    }
+  }
+
   // ---- render only: the world is bit-identical with the tells on and off --------------
   const hashWorld = (w) => { const s = JSON.stringify(w.players.map(q=>[q.x,q.y,q.vx,q.vy,q.stam,q.spent,q.kick,q.faceX,q.faceY])) + JSON.stringify([w.ball.x,w.ball.y,w.ball.vx,w.ball.vy,w.score,w.matchT]); let h=2166136261; for (let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; };
   // ⚠️ The human runs BACK AND FORTH, never into the boards: a body pinned against the
@@ -564,6 +653,8 @@ const checks = {
   kick_stamped: r.kickStamped, kick_isBrief: r.kickIsBrief, kick_footGoesForward: r.kickFootGoesForward, kick_armsMove: r.kickArmsMove,
   kick_underCeiling: r.kickUnderCeiling, kick_poseLeaves: r.kickPoseLeaves, kick_notInReplay: r.kickNotInReplay,
   rim_isReal: r.rimIsReal, rim_isTheBalls: r.rimIsTheBalls, rim_outsideOnly: r.rimOutsideOnly, rim_underTheLimbs: r.rimUnderTheLimbs, rim_onThePitch: r.rimOnThePitch,
+  dash_armsSwingFurther: r.dashArmsSwingFurther, dash_handIsFaster: r.dashHandIsFaster, dash_headLeads: r.dashHeadLeads,
+  dash_underCeiling: r.dashUnderCeiling, dash_eases: r.dashEases, dash_notInReplay: r.dashNotInReplay, dash_onThePitch: r.dashOnThePitch,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,

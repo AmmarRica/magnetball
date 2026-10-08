@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.1205PM';
+const VERSION = '20261008.0140PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.1205PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.0140PM', title: 'Sprinters pump their arms',
+    changed: [
+      '<b>A sprinting footballer pumps its arms.</b> Hold the turbo and the arms swing on a longer arc with the hands tucked in, and settle back as you ease off.',
+      '<b>…and leads with its head.</b> The head sits a little further forward while you sprint, the opposite of the slump when you are out of breath.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.1205PM', title: 'A goal fills the tank',
     changed: [
       '<b>A goal refills everybody\'s stamina.</b> The moment it is counted, every ring on both sides is full again and anybody who was out of breath can sprint.',
@@ -9995,6 +10001,7 @@ const RING = { kickMin: 2.2, spent: '#e0563c', drawn: false };
 const STAMTELL = { ease: 0.08, snap: 0.01,
                    sag: 0.20, armMul: 0.45, twistMul: 0.5,
                    handRest: 0.80, restEase: 0.14,            // arms in at a standstill — see footballerSkin
+                   dashEase: 0.14,                            // the sprint pump and lean — see FOOTBALLER.dashArm
                    sweatEvery: 0.36, sweatCol: '#bfe6ff', sweatLife: 0.70, sweatR: 2.6 };
 // ============================================================
 //  THE KICK POSE — a footballer's leg swings out as the ball leaves, for a moment
@@ -35132,6 +35139,22 @@ const FOOTBALLER = {
   // brings to **1.582**. Longer than this is a different trade, not a tuning.
   swingAt: 0,          // the along position BOTH arcs are centred on: the body's own middle
   rim: true,           // the ball's own heavy ring round the body (`ballRimPx`), under the limbs
+  // ⚠️ THE DASH: while a body SPRINTS the arms pump and the head leads (`p._dash`, eased in
+  // `advanceTire` on `STAMTELL.dashEase`; read as 0 in a replay). Asked for as *"while
+  // running/turbo, have the arms swing faster and the head move a bit forward"*. Measured
+  // before: a sprinting body and a jogging one drew the SAME pixels — hand arc 1.31r on both.
+  // ⚠️ **"FASTER" IS A LONGER ARC ON THE SAME CADENCE, never a second cadence.** The arms
+  // counter-swing the legs off one `p.gait`, and arms on a faster clock than the legs come
+  // back into phase with them twice a stride — four limbs together, the star jump this
+  // figure was built to avoid. A longer arc moves the hand further between two frames at
+  // every speed, and a sprinting body's gait already turns over 35% faster.
+  // ⚠️ **THE HANDS TUCK IN AS THE ARC GROWS, AND THE TUCK IS DERIVED.** The hand's reach is
+  // `hypot(armSwing, hand)`, and the figure's 1.60r ceiling has no room above it (1.582r);
+  // so at full dash the hand's across position is whatever keeps that reach EXACTLY — a
+  // sprinter pumps with the hands close to the body, which is also what it looks like.
+  dashArm: 1.40,       // the arm's arc at full sprint, as a multiple of `armSwing` (0.58 -> 0.81)
+  dashLean: 0.14,      // the head sits this much further forward along the facing, in radii
+                       // (STAMTELL.sag is the same move the other way; 0.14 is 2px on a 15px body)
   ceiling: 1.60,       // the whole figure may never reach past this, in radii — the rule the
                        // stride, the reach of the leash and the kick pose are all held under
                        // (`tests/footballers.mjs` pins it on the stride, `stamtells` on the kick)
@@ -35452,6 +35475,13 @@ function advanceTire(w){
     rs += (wantRest - rs) * T.restEase;
     if (Math.abs(wantRest - rs) < T.snap) rs = wantRest;
     p._rest = rs;
+    // ...and `_dash`: 1 while the body SPRINTS, 0 otherwise, eased the same way so the
+    // footballer's arms pump up and the head leans in rather than snapping (FOOTBALLER.dashArm).
+    const wantDash = staminaTellsOn(p) && p.sprinting ? 1 : 0;
+    let ds = p._dash == null ? wantDash : p._dash;
+    ds += (wantDash - ds) * T.dashEase;
+    if (Math.abs(wantDash - ds) < T.snap) ds = wantDash;
+    p._dash = ds;
     if (t > 0.5 && bodyPainted(w, p)){
       p._sweatT = (p._sweatT || 0) - STEP;
       if (p._sweatT <= 0){
@@ -35663,7 +35693,19 @@ function footballerSkin(name, sprites, inked){
     // read the answer straight off `running`. Inward only, so no reach rule can see it.
     const still = (replay.active || replay.filming || p._rest == null) ? (running ? 0 : 1)
                 : Math.max(0, Math.min(1, p._rest));
-    const handAcross = L.hand * (1 - still * (1 - T.handRest));
+    // ⚠️ THE DASH (`FOOTBALLER.dashArm`/`dashLean`): 0 jogging, 1 at a full sprint, eased in
+    // `advanceTire` beside `_rest` and read the same way — a body with no `_dash` (a tile,
+    // a suite's synthetic body) reads its `sprinting` flag outright, and a replay reads 0,
+    // since stamina is not recorded. The arc grows and the hands come IN by exactly what
+    // keeps the hand's reach where it was, so the 1.60r ceiling reads what it read.
+    const dash = (replay.active || replay.filming) ? 0
+               : (p._dash == null ? (p.sprinting ? 1 : 0) : Math.max(0, Math.min(1, p._dash)));
+    const armReach = Math.hypot(F.armSwing, L.hand);
+    const dashArc = Math.min(F.armSwing * F.dashArm, armReach * 0.95);
+    const dashAcross = Math.sqrt(armReach*armReach - dashArc*dashArc);
+    const armArc = F.armSwing + (dashArc - F.armSwing) * dash;
+    const handAcross = (L.hand + (dashAcross - L.hand) * dash) * (1 - still * (1 - T.handRest));
+    const lean = F.dashLean * dash;                             // the head leads
     const twist = running ? F.twist * footSwing(p, 1) * (1 - tire * (1 - T.twistMul)) : 0;
     const ct = Math.cos(twist), st = Math.sin(twist);
     const ux = f0.ux*ct - f0.uy*st, uy = f0.ux*st + f0.uy*ct;
@@ -35751,7 +35793,7 @@ function footballerSkin(name, sprites, inked){
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0] - sag*0.5, F.sh[1]*sgn);          // the shoulder leads or trails with the yaw (and drops with the slump)
-      let handAlong = F.swingAt - F.armSwing*armK*sw;        // ...on the cadence, not the ground
+      let handAlong = F.swingAt - armArc*armK*sw;            // ...on the cadence, not the ground
       if (kickSw > 0){                                        // the kick: opposite arm forward, striking side back
         const want = sgn === kickSide ? -KICKANIM.armBack : KICKANIM.armFwd;
         handAlong += (want - handAlong)*kickSw;
@@ -35773,10 +35815,10 @@ function footballerSkin(name, sprites, inked){
     c.beginPath();
     c.ellipse(F.torsoAt*r, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
     c.fillStyle = col; c.fill();
-    c.beginPath(); c.arc((F.headAt - sag)*r, 0, F.headR*r, 0, 2*Math.PI);
+    c.beginPath(); c.arc((F.headAt + lean - sag)*r, 0, F.headR*r, 0, 2*Math.PI);
     c.fillStyle = skin; c.fill();
     c.beginPath();
-    c.arc((F.headAt - sag - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
+    c.arc((F.headAt + lean - sag - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
     c.fillStyle = hair; c.fill();
     c.restore();
     c.restore();
