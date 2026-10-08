@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.1030AM';
+const VERSION = '20261008.1205PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.1030AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.1205PM', title: 'A goal fills the tank',
+    changed: [
+      '<b>A goal refills everybody\'s stamina.</b> The moment it is counted, every ring on both sides is full again and anybody who was out of breath can sprint.',
+      '<b>The footballers wear the ball\'s heavy rim.</b> The same thick dark ring the ball has runs round each player now, with the arms and legs sticking out over it.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.1030AM', title: 'Footballers kick',
     changed: [
       '<b>A footballer swings a leg at the ball.</b> As the ball leaves, the striking leg goes out along the kick and the arms counterbalance, for about a quarter of a second.',
@@ -10195,6 +10201,17 @@ function advanceStamina(w, p){
   if (p.stam <= 0) p.spent = true;
   if (p.stam >= 1) p.spent = false;
   return p.spent ? sprintSlow() : (want ? sprintBoost() : 1);
+}
+// ⚠️ A GOAL REFILLS EVERY RING, asked for as *"reset stamina after a goal is scored"*. Called
+// from the moment a goal is COUNTED on each path that plays on from it (scoreGoal, the
+// multiball pot, the Killer Lobsters goal and a practice goal in Training); the snail-home
+// and full-hive paths end the match, so there is nothing left to refill. Sim state written
+// from inside step(), deterministic by construction — nothing is rolled. Over `allBodies`,
+// because a benched player's ring is theirs too; `spent` lifts with it, or a full ring would
+// still be locked out until the next tick noticed (`advanceStamina` clears it at >= 1, but a
+// frame of lockout on a full ring is a lie on the one frame everybody is looking).
+function refillStamina(w){
+  for (const p of allBodies(w)){ p.stam = 1; p.spent = false; }
 }
 const CHARGE_MS = { min:100, max:2000, step:50 };
 // How far you can reach the ball, as a multiple of the player's own radius, drawn as the
@@ -26872,6 +26889,7 @@ function checkGoal(w){
       // instant it crosses the line. The re-serve happens in step() once the timer elapses.
       if (w._trainGoalCd > 0) return;
       w.practiceGoals++;
+      refillStamina(w);
       showBanner('GOAL!', 'var(--accent)');
       fx.length = 0; spawnConfetti(ball.x, ball.y, 20);
       goalBurst(w, inTop ? 1 : 0);
@@ -26908,6 +26926,7 @@ function scoreGoal(w, team){
   w._goalNotable = goalNotable(w, w.ball, team) || !!w.finalGoal;
   w.score[team]++;
   w.lastScorer = team;
+  refillStamina(w);
   creditScorer(w, w.ball, team);
   // Track the biggest deficit each side clawed back from (Comeback King).
   const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
@@ -26936,6 +26955,7 @@ function ball_x(w){ return w.ball.x; } function ball_y(w){ return w.ball.y; }
 function scoreMultiBall(w, ball, team){
   w.score[team]++;
   w.lastScorer = team;
+  refillStamina(w);
   creditScorer(w, ball, team);
   const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
   if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
@@ -27073,6 +27093,7 @@ function snailHome(w, ball, team){
 function kqGoal(w, ball, team){
   w.score[team]++;
   w.lastScorer = team;
+  refillStamina(w);
   creditScorer(w, ball, team);
   const d0 = w.score[1]-w.score[0], d1 = w.score[0]-w.score[1];
   if (d0 > w.maxDeficit[0]) w.maxDeficit[0] = d0;
@@ -33663,6 +33684,13 @@ DYN_FIELDS.vscourt = {
 // on it vanished on 7 of 24 arcs. Dark outside, light inside, so one of the two
 // always reads whatever the skin painted.
 const DISC_GUIDE = { w: 0.05, a: 0.45, dark: 'rgba(0,0,0,0.55)', light: 'rgba(255,255,255,0.55)' };
+// ⚠️ THE BALL'S RIM IS ONE NUMBER WITH TWO READERS. `paintBall` has always drawn its heavy
+// dark ring OUTSIDE the ball at r + max(1.5, 0.16r), and the footballers wear the same ring
+// round their own circle now (asked for as *"I like how the ball lines are extra heavy
+// stroke wise — make players like that too"*). One owner, so the two cannot drift apart:
+// a rim that is "like the ball's" is only that while it is the ball's own expression.
+const BALL_RIM = { f: 0.16, min: 1.5 };
+function ballRimPx(r){ return Math.max(BALL_RIM.min, r*BALL_RIM.f); }
 // Two-frame leg animation for the creature skins. Frame 0 is also the REST pose, so
 // a standing player is not caught mid-stride — and the threshold is a real speed,
 // not "is gait changing", because a player being nudged by a collision is not walking.
@@ -35103,6 +35131,7 @@ const FOOTBALLER = {
   // 9, and at 0.94 it reads 164); and the whole figure may not pass 1.60r, which the hand
   // brings to **1.582**. Longer than this is a different trade, not a tuning.
   swingAt: 0,          // the along position BOTH arcs are centred on: the body's own middle
+  rim: true,           // the ball's own heavy ring round the body (`ballRimPx`), under the limbs
   ceiling: 1.60,       // the whole figure may never reach past this, in radii — the rule the
                        // stride, the reach of the leash and the kick pose are all held under
                        // (`tests/footballers.mjs` pins it on the stride, `stamtells` on the kick)
@@ -35682,6 +35711,13 @@ function footballerSkin(name, sprites, inked){
     const kickReach = Math.sqrt(Math.max(0, Math.pow(F.ceiling - L.bootR - 0.03, 2) - Math.pow(F.foot*KICKANIM.across, 2)));
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
+    // ⚠️ THE BALL'S RIM, ROUND THE BODY (`ballRimPx`, `FOOTBALLER.rim`): an ink disc out to
+    // r + the ball's own rim, painted FIRST so the limbs stick out OVER it and the shirt, the
+    // shorts and the head sit on it. What is left is a heavy ring outside the circle the body
+    // collides at — the ring the ball wears, and the plain disc wears. OUTSIDE r and never
+    // inside it: an inward band would swallow the tenth of a radius of shorts that shows
+    // behind the shirt and the face's crescent, which are the two things the figure is made of.
+    if (F.rim){ c.beginPath(); c.arc(x, y, r + ballRimPx(r), 0, 2*Math.PI); c.fillStyle = ink; c.fill(); }
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
     //     under the body, and it is the whole of what makes this read from above -------
     for (const sgn of [-1, 1]){
@@ -37372,7 +37408,7 @@ function ballSpotInk(P){
 function paintBall(c, x, y, r, rot, key, pal, roll, rollAx){
   const P = pal || TH;
   const spot = ballSpotInk(P);
-  c.beginPath(); c.arc(x, y, r+Math.max(1.5,r*0.16), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
+  c.beginPath(); c.arc(x, y, r+ballRimPx(r), 0, 2*Math.PI); c.fillStyle=P.ballRim; c.fill();
   c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=P.ball; c.fill();
   if (ballIs3D(r)) paintBallSphere(c, x, y, r, roll == null ? rot : roll, rollAx || 0, key, spot, P.ball);
   else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot, P.ball);
@@ -39196,7 +39232,7 @@ if (window.__MAGNETDEBUG) {
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
-    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick,
+    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick, BALL_RIM, ballRimPx, refillStamina,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

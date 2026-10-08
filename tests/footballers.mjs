@@ -50,6 +50,17 @@ const r = await p.evaluate(async ()=>{
   const M=window.__magnet; const o={};
   const dm=document.getElementById('dmCollect'); if(dm) dm.click();
   M.applyBundle('kickabout');
+  // ⚠️ THE RIM IS STOOD DOWN FOR THIS WHOLE SUITE (`FOOTBALLER.rim`), and the reason is
+  // the instrument: every boot probe here isolates the boot as DARK INK in a band, and the
+  // ball's heavy rim the figure wears now is the same ink in the same band — with it on,
+  // the occlusion probe read **1352–1509** boot pixels at every phase (never hidden), the
+  // foot's centroid ran -0.14..0.07r (the rim's own centroid), and `limbsCrossTheRing`'s
+  // 1.15r floor is met by the rim alone at 1.16r, which makes it vacuous. This file is about
+  // the FIGURE — where a limb is — and nothing the stride does reads `rim`, so the geometry
+  // measured is the shipped one. The rim has its own home, `tests/stamtells.mjs`, where it
+  // is measured as a difference against this very frame.
+  o.rimShipsOn = M.FOOTBALLER.rim === true;
+  M.FOOTBALLER.rim = false;
 
   // ⚠️ **THE LIMB SPRITE LOADS ASYNCHRONOUSLY, SO IT IS WAITED FOR BEFORE ANYTHING IS
   // MEASURED.** `spriteImg` answers null until the file is in and the skin falls back to
@@ -1102,6 +1113,8 @@ ok(r.limbsOutreachTheBody,
   `the limbs are shorter than the body they hang off: leg ${r.legLongest}r and arm ${r.armLongest}r at the ends of the stride against a body reaching ${r.shirtReachMax}r — a limb that does not out-reach the torso reads as a stub rather than as a leg`);
 ok(r.limbSpriteLoaded,
   `Kenney's limb plate did not load, so everything measured here is the pack-less FALLBACK rather than the shipped picture`);
+ok(r.rimShipsOn,
+  `FOOTBALLER.rim does not ship on — this suite stands the rim DOWN to measure the figure under it, and that is only honest while the shipped build wears one (tests/stamtells.mjs measures the rim itself)`);
 ok(r.limbsAreTheSprite,
   `the limbs on the pitch are not Kenney's plates: the leg region differs from the pack-less drawing by ${r.legSpriteDiff} pixels and the arm by ${r.armSpriteDiff}, with ${r.limbOutlinePixels} of the plate's own outline on either — measured at the swing peak, where the arms counter-swing the legs and the along axis is what tells the two apart`);
 ok(r.fallbackIsTheDrawing,

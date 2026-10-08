@@ -418,6 +418,11 @@ const r = await p.evaluate(async ()=>{
     const inkDark = (d,i) => d[i]+d[i+1]+d[i+2] < 120 && !near(d,i,BG,40);     // the boot's ink
     const bootAlong = (d) => { let n=0, sx=0; for (let i=0;i<d.length;i+=4){ if (!inkDark(d,i)) continue; const k=(i/4)|0; sx += (k%W)-CX; n++; } return n ? +(sx/n/R).toFixed(3) : null; };
     o.kickFig = {};
+    // ⚠️ The rim is stood down for the BOOT probes (`bootAlong` isolates the boot as dark ink,
+    // and the ball's rim the figure wears is the same ink in the same band — with it on the
+    // kicking boot's centroid read 0.066r, the rim's own). The rim is measured in its own
+    // block below, as a difference against exactly this frame.
+    const rimWas = M.FOOTBALLER.rim; M.FOOTBALLER.rim = false;
     for (const skin of ['footballers','footballersink']){
       const rest = paint(skin, base());
       const kick = paint(skin, base({ _kickAnim:{ t: peakT, nx:1, ny:0, side:1 } }));
@@ -427,6 +432,7 @@ const r = await p.evaluate(async ()=>{
       o.kickFig[skin] = { bootRest: bootAlong(rest), bootKick: bootAlong(kick), reachKick: scan(kick, anyInk).reach, reachAcross: scan(kickAcross, anyInk).reach,
                           diff: diffPx(rest, kick), handsMoved: diffPx(rest, kick) > 0 && hands(rest).along !== hands(kick).along, gone: diffPx(rest, gone) };
     }
+    M.FOOTBALLER.rim = rimWas;
     o.kickFootGoesForward = ['footballers','footballersink'].every(k => { const f = o.kickFig[k]; return f.bootKick != null && f.bootRest != null && f.bootKick > f.bootRest + 0.5; });
     o.kickArmsMove = ['footballers','footballersink'].every(k => o.kickFig[k].handsMoved);
     o.kickUnderCeiling = ['footballers','footballersink'].every(k => o.kickFig[k].reachKick <= M.FOOTBALLER.ceiling && o.kickFig[k].reachAcross <= M.FOOTBALLER.ceiling && o.kickFig[k].reachKick > 1.4);
@@ -434,6 +440,68 @@ const r = await p.evaluate(async ()=>{
     // a replay shows no kick pose (the spread body is whoever is on the pitch now)
     M.replay.active = true; const rep2 = paint('footballers', base({ _kickAnim:{ t: peakT, nx:1, ny:0, side:1 } })); M.replay.active = false;
     o.kickNotInReplay = diffPx(rep2, paint('footballers', base())) === 0;
+  }
+
+  // ---- THE BALL'S RIM, ROUND THE BODY (`FOOTBALLER.rim`, `ballRimPx`, `BALL_RIM`) ----
+  //      Asked for as *"I like how the ball lines are extra heavy stroke wise. Make players
+  //      like that too."* Measured before: the ball's rim drew **1.94px** round a 12.15px ball
+  //      on a 1280×800 desktop (r + max(1.5, 0.16r), outward) and the footballer carried NO
+  //      rim at all — 0 dark pixels outside the shirt on every ray; only the 1px two-tone
+  //      guide ring. The figure wears an ink disc out to r + the ball's own rim now, painted
+  //      under the limbs. Every reading is a DIFFERENCE against the same frame with the rim
+  //      stood down — the figure has limbs, hair and a boot in the same ink.
+  {
+    const withRim = (skin, q, on) => { const was = M.FOOTBALLER.rim; M.FOOTBALLER.rim = on; try { return paint(skin, q); } finally { M.FOOTBALLER.rim = was; } };
+    const isDark = (d,i) => d[i]+d[i+1]+d[i+2] < 150 && !near(d,i,BG,40);
+    // the outermost dark pixel along a ray from the centre, in radii
+    const outerAlong = (d, ang) => { let m=0; for (let k=0;k<140;k++){ const x=Math.round(CX+Math.cos(ang)*k), y=Math.round(CY+Math.sin(ang)*k); if (isDark(d,(y*W+x)*4)) m=k; } return +(m/R).toFixed(3); };
+    const inBand = (d, pick, lo, hi) => { let n=0; for (let i=0;i<d.length;i+=4){ const k=(i/4)|0, rad=Math.hypot((k%W)-CX, ((k/W)|0)-CY); if (rad>=lo*R && rad<=hi*R && pick(d,i)) n++; } return n; };
+    const diffIn = (a,d,hi) => { let n=0; for (let i=0;i<a.length;i+=4){ const k=(i/4)|0, rad=Math.hypot((k%W)-CX, ((k/W)|0)-CY); if (rad < hi*R && Math.abs(a[i]-d[i])+Math.abs(a[i+1]-d[i+1])+Math.abs(a[i+2]-d[i+2])>24) n++; } return n; };
+    // the ball's own rim at the same radius, through the ball's own painter — the reference
+    c.fillStyle='#7f7f7f'; c.fillRect(0,0,W,W); M.paintBall(c, CX, CY, R, 0, 'plain', null, 0, 0);
+    const ballD = c.getImageData(0,0,W,W).data;
+    const want = +((R + M.ballRimPx(R)) / R).toFixed(3);
+    o.rim = { ships: M.FOOTBALLER.rim === true, want, ballOuter: [0, Math.PI/2, Math.PI].map(a => outerAlong(ballD, a)),
+              floorPx: M.ballRimPx(5), fracAt60: +(M.ballRimPx(60)/60).toFixed(3), skins: {} };
+    for (const skin of ['footballers','footballersink']){
+      const stand = withRim(skin, base(), true), standNo = withRim(skin, base(), false);
+      const run = withRim(skin, base({ vx:3, gait: M.gaitPeriod()*0.25 }), true), runNo = withRim(skin, base({ vx:3, gait: M.gaitPeriod()*0.25 }), false);
+      o.rim.skins[skin] = {
+        diff: diffPx(stand, standNo),                                   // the rim is real
+        nose: outerAlong(stand, 0), tail: outerAlong(stand, Math.PI),   // its outer edge at the ball's own radius...
+        noseNo: outerAlong(standNo, 0), tailNo: outerAlong(standNo, Math.PI),   // ...where there was nothing
+        inside: diffIn(stand, standNo, 0.90),                            // nothing inside the body moved
+        skinInBand: inBand(run, isSkin, 1.0, want), skinInBandNo: inBand(runNo, isSkin, 1.0, want),   // the limbs cross it, drawn OVER it
+        reach: scan(run, anyInk).reach, reachNo: scan(runNo, anyInk).reach,   // and the figure's reach is the limbs', not the rim's
+      };
+    }
+    const S = o.rim.skins;
+    o.rimIsReal = o.rim.ships && Object.values(S).every(s => s.diff > 300);
+    // ⚠️ The ray walk reads the outermost FULLY dark pixel, so a 69.6px edge reads 68 on one
+    // ray and 69 on another (1.133 / 1.15) — on the BALL exactly as on the body. The claim is
+    // the two read ALIKE, ray for ray, and both within two pixels of the formula.
+    o.rimIsTheBalls = o.rim.ballOuter.every(v => Math.abs(v - want) <= 2/R) &&
+                      Object.values(S).every(s => s.nose === o.rim.ballOuter[0] && s.tail === o.rim.ballOuter[2] && s.noseNo < 1.0 && s.tailNo < 1.0) &&
+                      o.rim.floorPx === 1.5 && Math.abs(o.rim.fracAt60 - M.BALL_RIM.f) < 0.001;
+    o.rimOutsideOnly = Object.values(S).every(s => s.inside === 0);
+    o.rimUnderTheLimbs = Object.values(S).every(s => s.skinInBand > 40 && s.skinInBand >= s.skinInBandNo * 0.9 && s.reach === s.reachNo && s.reach > want + 0.1 && s.reach <= M.FOOTBALLER.ceiling);
+    // ...and on the PITCH, at the size a body is really drawn: the frame with the rim against
+    // the frame without it, round the body, reaches the same fraction out — the ring the ball
+    // beside it wears, measured in the same picture
+    {
+      M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.adsOn='off'; M.setMatchSeed(3); M.startMatch(); const w=M.world; w.state='play'; w.stateT=2;
+      const me=w.players[0], bot=w.players[1]; bot.x=0; bot.y=-300; bot.vx=bot.vy=0; bot._px=bot.x; bot._py=bot.y;
+      me.x=me._px=0; me.y=me._py=0; me.vx=me.vy=0; w.ball.x=w.ball._px=0; w.ball.y=w.ball._py=-150; w.ball.vx=w.ball.vy=0;
+      const g=document.getElementById('game'), gc=g.getContext('2d'), DPR=g.width/g.clientWidth;
+      const bodyPx = me.r*M.cam.s*DPR, rad = Math.round(bodyPx*1.6);
+      const shot = (on) => { const was=M.FOOTBALLER.rim; M.FOOTBALLER.rim=on; M.juiceReset(); M.computeCam(); M.render(); M.FOOTBALLER.rim=was;
+        const [sx,sy]=M.screenPt(M.wx(0),M.wy(0)); return { d: gc.getImageData(Math.round(sx*DPR)-rad, Math.round(sy*DPR)-rad, rad*2, rad*2).data, c:[sx*DPR-Math.round(sx*DPR)+rad, sy*DPR-Math.round(sy*DPR)+rad] }; };
+      const a=shot(true), z=shot(false); let far=0, n=0;
+      for (let i=0;i<a.d.length;i+=4){ if (Math.abs(a.d[i]-z.d[i])+Math.abs(a.d[i+1]-z.d[i+1])+Math.abs(a.d[i+2]-z.d[i+2])<=24) continue; const k=(i/4)|0; far=Math.max(far, Math.hypot((k%(rad*2))-a.c[0], ((k/(rad*2))|0)-a.c[1])); n++; }
+      o.rim.pitch = { bodyPx: +bodyPx.toFixed(2), changed: n, outer: +(far/bodyPx).toFixed(3), rimPx: +M.ballRimPx(bodyPx).toFixed(2) };
+      // antialiasing adds about a pixel to the outer edge at 20px, so a band rather than a point
+      o.rimOnThePitch = n > 60 && o.rim.pitch.outer >= want - 0.03 && o.rim.pitch.outer <= want + 1.5/bodyPx + 0.03;
+    }
   }
 
   // ---- render only: the world is bit-identical with the tells on and off --------------
@@ -495,6 +563,7 @@ const checks = {
   prints_soilThenWhite: r.soilThenWhite, prints_toeIsTheWideEnd: r.toeIsTheWideEnd, prints_soilNotInk: r.printIsSoilNotInk, prints_lowIsWhite: r.lowPrintIsWhite,
   kick_stamped: r.kickStamped, kick_isBrief: r.kickIsBrief, kick_footGoesForward: r.kickFootGoesForward, kick_armsMove: r.kickArmsMove,
   kick_underCeiling: r.kickUnderCeiling, kick_poseLeaves: r.kickPoseLeaves, kick_notInReplay: r.kickNotInReplay,
+  rim_isReal: r.rimIsReal, rim_isTheBalls: r.rimIsTheBalls, rim_outsideOnly: r.rimOutsideOnly, rim_underTheLimbs: r.rimUnderTheLimbs, rim_onThePitch: r.rimOnThePitch,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,

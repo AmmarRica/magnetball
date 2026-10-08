@@ -63,6 +63,16 @@ const r = await p.evaluate(() => {
   const w = M.world; w.state = 'play'; w.stateT = 2;
   const me = w.players[0];
   me.x = 0; me.y = 0; me.vx = me.vy = 0; me.stam = 1; me.spent = false;
+  // ⚠️ THE BOT AND THE BALL ARE PARKED EVERY STEP, because A GOAL REFILLS EVERY RING
+  // (`refillStamina`). With the human pinned on the spot the bot had the ball to itself,
+  // and over these ten seconds it scored — the ring came back mid-probe and the tired
+  // multiplier read **0.967 against 0.333**, the lockout lifted by a goal the probe never
+  // meant to measure. Re-pinned every step, not once: `integrate`'s clamp drags a body parked
+  // off the pitch back on (the `fourpads` trap), and a kicked ball is zeroed before it travels.
+  const bot = w.players[1];
+  const park = () => { bot.x = 0; bot.y = -300; bot.vx = bot.vy = 0; w.ball.x = 150; w.ball.y = 0; w.ball.vx = w.ball.vy = 0; };
+  const goalsAt = () => w.score[0] + w.score[1];
+  const goalsBefore = goalsAt();
   let emptiedAt = -1;
   const speeds = [];
   M.pads.p1.dx = 1; M.pads.p1.dy = 0; M.pads.p1.kick = true;   // running, KICK held
@@ -70,7 +80,7 @@ const r = await p.evaluate(() => {
     // ⚠️ Held in the MIDDLE of the pitch, velocity untouched. Left to run, the body is
     // against the touchline inside two seconds and `integrate`'s clamp pins it at zero —
     // so the "after" speed measured 0.008 and the check was reading a wall, not a dial.
-    me.x = 0; me.y = 0;
+    me.x = 0; me.y = 0; park();
     M.step(w);
     if (emptiedAt < 0 && me.stam <= 0) emptiedAt = i;
     speeds.push(Math.hypot(me.vx, me.vy));
@@ -106,9 +116,10 @@ const r = await p.evaluate(() => {
   me.stam = 0; me.spent = true;
   M.pads.p1.kick = false; M.pads.p1.dx = 0; M.pads.p1.dy = 0;
   for (let i = 0; i < 1800; i++){
-    M.step(w);
+    park(); M.step(w);
     if (refilledAt < 0 && me.stam >= 1) refilledAt = i;
   }
+  o.goalsDuringDials = goalsAt() - goalsBefore;   // the control: no goal touched either reading
   o.refilledAt = refilledAt;
   o.refilledAtSecs = +(refilledAt/60).toFixed(2);
   o.refillIsTheDial = refilledAt >= 0 && Math.abs(refilledAt/60 - M.sprintRefill()) < 0.3;
@@ -186,6 +197,53 @@ const r = await p.evaluate(() => {
   o.botsSprint = o.normalBots.far > 60 && o.normalBots.lowest < 0.9 && o.normalBots.ring === true;
   o.rookieNever = o.rookieBots.far === 0;
   o.windupNeverSprints = !o.windupSprints;
+  // ---- 3b. A GOAL REFILLS EVERY RING (`refillStamina`) -------------------------
+  // Asked for as *"reset stamina after a goal is scored"*. Every body — both sides and
+  // the bench — comes back to a full ring with the lockout lifted, the instant the goal is
+  // COUNTED, on each of the four goal paths that play on: the ordinary goal, the multiball
+  // pot, the Killer Lobsters goal and a practice goal in Training. Driven through the REAL
+  // `checkGoal` (the ball put over the line and one step taken), never by calling the
+  // helper: the claim is that scoring does it, and a helper nobody calls passes a direct
+  // call. ⚠️ The control is the same drained room with NO goal: sixty steps later the rings
+  // are still most of the way down and still locked out — or "it refills" is equally true
+  // of a ring that refills on its own dial, which it does, in seconds rather than at once.
+  {
+    M.sel.sprint = 'on';
+    const drainAll = (w) => { for (const q of M.allBodies(w)){ q.stam = 0.2; q.spent = true; } };
+    const readAll = (w) => M.allBodies(w).map(q => ({ stam: +q.stam.toFixed(3), spent: q.spent, bench: !w.players.includes(q) }));
+    const fullAll = (rows) => rows.length >= 2 && rows.every(x => x.stam === 1 && x.spent === false) && rows.some(x => x.bench);
+    const trainKey = Object.keys(M.MODES).find(k => M.MODES[k].train);
+    const kqKey    = Object.keys(M.MODES).find(k => M.MODES[k].kq);
+    const paths = { ordinary: { mode:'2v2' }, multiball: { mode:'2v2', multi:true }, lobsters: { mode:kqKey }, training: { mode:trainKey } };
+    o.goalRefill = {};
+    for (const [name, cfg] of Object.entries(paths)){
+      M.sel.mode = cfg.mode; M.setMatchSeed(7); M.startMatch(); const w2 = M.world; w2.state = 'play'; w2.stateT = 2;
+      if (cfg.multi) w2.party = Object.assign({}, w2.party, { multi: true });   // the dispatch in checkGoal reads the world's own party
+      // a benched body too — a reserve BOT, which `stepBench` leaves alone — so "every ring" includes the bench
+      w2.bench = w2.bench || [];   // a fresh world has no bench until somebody steps off
+      w2.bench.push(Object.assign({}, w2.players[w2.players.length-1], { padIndex:-1, ctrl:'bot', _subPath:null, _subTo:null }));
+      for (const q of w2.players){ q.vx = q.vy = 0; }
+      const halfL = w2.field.L/2;
+      const score = () => w2.score[0] + w2.score[1] + (w2.practiceGoals || 0);
+      drainAll(w2);
+      const drained = readAll(w2);
+      w2.ball.x = 0; w2.ball.y = halfL + 1; w2.ball.vx = 0; w2.ball.vy = 2; w2.ball._goalCd = 0;   // over the line, in the mouth
+      const before = score(); M.step(w2);
+      o.goalRefill[name] = { counted: score() - before, drained: drained.every(x => x.stam === 0.2 && x.spent), after: readAll(w2), state: w2.state };
+      o.goalRefill[name].ok = o.goalRefill[name].counted === 1 && o.goalRefill[name].drained && fullAll(o.goalRefill[name].after);
+      w2.bench.pop();
+    }
+    // the control: drained, parked, no goal — sixty steps on the rings are still down and locked
+    M.sel.mode = '2v2'; M.setMatchSeed(7); M.startMatch(); const w3 = M.world; w3.state = 'play'; w3.stateT = 2;
+    for (const q of w3.players){ q.vx = q.vy = 0; }
+    drainAll(w3);
+    const b3 = w3.score[0] + w3.score[1];
+    for (let i = 0; i < 60; i++){ w3.ball.x = 0; w3.ball.y = 0; w3.ball.vx = w3.ball.vy = 0; for (const q of w3.players){ q.x = (q.team ? 1 : -1) * 150; q.y = (q.team ? 1 : -1) * 150; q.vx = q.vy = 0; } M.step(w3); }
+    const rows3 = readAll(w3);
+    o.goalRefillControl = { goals: w3.score[0] + w3.score[1] - b3, after: rows3, ok: rows3.every(x => x.stam < 0.7 && x.spent === true) && (w3.score[0] + w3.score[1] - b3) === 0 };
+    M.sel.mode = '1v1';
+  }
+
   M.sel.diff = 'normal';
   M.sel.sprint = 'off'; M.sel.mode = '1v1';
   return o;
@@ -591,6 +649,16 @@ ok('...and a sprint really is FASTER than not sprinting', r.boostIsReal,
 ok('holding KICK no longer BRAKES you while Sprint is on', r.kickDoesNotBrake,
    `${o0(r.heldSpeed)} holding vs ${o0(r.looseSpeed)} loose — KICK_SLOW drops you to 45% of your accel, so left on alongside a 1.35\u00d7 sprint, holding KICK makes you slower and the two features cancel out`);
 ok('...and it latches until the ring is FULL again', r.spentAfter);
+
+ok('...and no goal touched either dial reading', r.goalsDuringDials === 0,
+   `${r.goalsDuringDials} goal(s) landed while the dials were being read — a goal refills every ring now, so the bot and the ball are parked for the probe, or the tired reading is the lockout a goal lifted (measured 0.967 against 0.333 with the bot left to play)`);
+for (const k of ['ordinary','multiball','lobsters','training']){
+  const g = r.goalRefill[k];
+  ok(`a goal refills every ring: ${k}`, g.ok,
+     `counted ${g.counted}, drained first ${g.drained}, after: ${JSON.stringify(g.after)} (state ${g.state}) — every body on both sides AND the bench has to read a full ring with the lockout lifted on the step the goal is counted, through the real checkGoal`);
+}
+ok('...and with no goal the rings stay down (the control)', r.goalRefillControl.ok,
+   `${JSON.stringify(r.goalRefillControl)} — "it refills" is also true of a ring refilling on its own dial; sixty steps with the ball parked must leave every ring under 0.7 and locked out`);
 
 ok('standing still earns it back on its own dial', r.refillIsTheDial,
    `full again after ${r.refilledAtSecs}s against a dial of ${r.refill}s`);

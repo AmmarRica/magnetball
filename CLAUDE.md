@@ -6568,6 +6568,47 @@ three lines a second time, name it.
   suite measures it as a **difference against the same body drawn rested**: the disc
   already has a guide ring and a rim within a few pixels of that radius, so an absolute
   ink count reads 65 of 120 probe angles with no stamina ring drawn at all.
+- **A GOAL REFILLS EVERY RING** (`refillStamina`, called from `scoreGoal`, `scoreMultiBall`,
+  `kqGoal` and the practice-goal branch of `checkGoal`; `tests/sprint.mjs` 3b). Asked for as
+  *"reset stamina after a goal is scored"*. Every body on both sides AND the bench comes back
+  to a full ring with the lockout lifted on the step the goal is COUNTED — the floaters' rule,
+  one call beside each `w.score[team]++` on a path that plays on. `snailHome` and `kqHiveFull`
+  end the match, so there is nothing left to refill; a hosted-online client simulates nothing
+  (`netStep`), so its rings are the server's. Sim state written from inside `step()`,
+  deterministic by construction — nothing is rolled.
+  ⚠️ **`spent` LIFTS WITH THE RING.** `advanceStamina` clears it at a full ring on its next
+  tick, so leaving it would lock a full ring out for exactly one step — on the frame everybody
+  is looking at. `allBodies`, never `w.players`: a benched player's ring is theirs too.
+  ⚠️ **NOT `resetKickoff` and NOT `playSfx('crowd')`.** The kickoff runs on every restart
+  including the first whistle (where the rings are full anyway) and on a Killer Lobsters
+  re-serve, which is not a goal; the sound funnel is audio and a UI refresh, and the rule this
+  file keeps is that a sim change hangs off the line that counts the thing.
+  ⚠️ **IT REACHES THE BOTS, which is the fair reading** — a bot that sprints on a decision
+  (`sprintsFor`) spends the same ring — **and that RE-DEALS every seeded bot match with a
+  goal in it**, because the bots' sprint decisions after the first goal now run on a full
+  ring. One seeded check went red on the pool for exactly that: `tests/synergy.mjs`' *"a 5v5
+  side forms a triangle at some point"*, two seeds of a 60-second all-bot match. Measured
+  per rule 5 rather than widened: swept over seeds 21..32 under the suite's own settings the
+  old build formed a triangle on **6 of 12** seeds and the new on **4 of 12**, with the
+  live-link share flat (**0.087 against 0.093**) and seed 21 — a 0-0, so no refill ever fired
+  — bit-identical on both. Two seeds of a rare event is a coin; the check pools six seeds now
+  (27..32: 2 of 6 before, 3 of 6 after) with the sweep written beside it. Every other seeded
+  bot suite (`botai`, `botplans`, `botstuck`, `botfoot`, `proladder`, `kqberry`, `gapfield`)
+  stayed green on the same pool.
+  ⚠️ **AND IT BROKE `tests/sprint.mjs`' DIAL PROBES, WHICH WERE MEASURING A GOAL.** The tired
+  multiplier is read with the human pinned on the spot for ten seconds, and the bot had the
+  ball to itself and SCORED — the lockout lifted mid-probe and the tired reading came out
+  **0.967 against 0.333**. The bot and the ball are parked every step there now (the
+  `fourpads` re-pin, or `integrate`'s clamp drags a parked body back on), and the probe
+  asserts **0 goals** landed while the dials were read. A suite that measured a dial for a
+  year was measuring it on a build where a goal cost nothing; the day it did, the fixture said
+  so.
+  ⚠️ **DRIVEN THROUGH THE REAL `checkGoal`** on all four paths — the ball put over the line in
+  the mouth and one step taken — never by calling the helper, and the control is the same
+  drained room with the ball parked: sixty steps later every ring reads **0.4** and locked
+  out, or "it refills" is equally true of a ring refilling on its own dial. Seven sabotages,
+  each caught by its own check (the body a no-op, players only, `spent` kept, and each of the
+  four calls dropped singly, which reddens that path's check alone).
 - **A FOOTBALLER SWINGS A LEG AT THE BALL, FOR A MOMENT** (`KICKANIM`, `advanceKickAnim`,
   `p._kickAnim`, the kick branch of `footballerSkin`'s limb loop, `FOOTBALLER.ceiling`;
   `tests/stamtells.mjs`' kick block). Asked for as *"a small kick animation where leg goes
@@ -6613,6 +6654,50 @@ three lines a second time, name it.
   and with the pose gone the figure is the rested one to the pixel. Six sabotages (no
   stamp, the leg held, the arms held, 1.2s, the reach at the ceiling, the pose in a replay),
   each caught by its own check.
+- **THE FOOTBALLERS WEAR THE BALL'S RIM** (`BALL_RIM`, `ballRimPx`, `FOOTBALLER.rim`, the ink
+  disc at the top of `footballerSkin`'s paint; `tests/stamtells.mjs`' rim block,
+  `tests/footballers.mjs`' `rimShipsOn`). Asked for as *"I like how the ball lines are extra
+  heavy stroke wise. Make players like that too."*
+  ⚠️ **MEASURED FIRST, on a 1280×800 desktop**: the ball's rim drew **1.94px** round a
+  12.15px ball (`paintBall`: r + max(1.5, 0.16r), outward, in `ballRim`), and the footballer
+  carried **no rim at all** — 0 dark pixels outside the shirt on every ray; the only line round
+  a 20.25px body was the 1px two-tone guide ring. The plain disc has always worn a rim of the
+  same shape (`r + max(2, r*0.16)` in `discRim`); the default theme's figure was the one body
+  on the pitch without one.
+  ⚠️ **ONE NUMBER, TWO READERS.** `BALL_RIM` is the ball's expression (`f` 0.16, `min` 1.5)
+  and `ballRimPx(r)` is read by `paintBall` and by the footballers, so a rim that is "like the
+  ball's" is that by construction rather than by two literals agreeing — the duplication rule,
+  applied before the second copy could rot. The plain disc's `max(2, …)` is left alone (rule
+  8: it was not asked about).
+  ⚠️ **AN INK DISC OUT TO `r + ballRimPx(r)`, PAINTED FIRST, UNDER THE LIMBS.** The limbs
+  stick out over it and the shirt, the shorts and the head sit on it, so what is left is a
+  heavy ring OUTSIDE the circle the body collides at — the same shape as the ball's and the
+  plain disc's, and the same relation to the collider (the VideoSoccer rule: the drawing
+  never claims a bigger body). Outside r and never inside it: an inward band would swallow the
+  tenth of a radius of shorts that shows behind the shirt and the face's own crescent, which
+  are the two things the figure is made of. Measured: nothing inside **0.90r** changes, the
+  limbs' skin pixels in the rim's band read **198 / 573** (sprite / inked) with the rim and
+  **198 / 582** without, and the figure's reach is the limbs' (**1.384 / 1.45r**) either way.
+  ⚠️ **THE GUIDE RING STAYS, and its light inner stroke now lands on ink** — a thin pale
+  hairline between the shirt and the rim. Structural (`strokeDiscGuide` runs after every skin,
+  and `discskins` requires it to change pixels on every arc), and left alone deliberately: a
+  skin that painted its own ring in place of it is the one thing a skin may not do.
+  ⚠️ **TWO SUITES ISOLATE THE BOOT AS DARK INK IN A BAND, AND THE RIM IS THE SAME INK IN THE
+  SAME BAND.** On the first run `footballers` read the occlusion probe at **1352–1509** boot
+  pixels at every phase (never hidden), the foot's centroid at **−0.14..0.07r** (the rim's
+  own), and the inked boot at 1003 against 644; `stamtells`' kicking boot read 0.066r. Nothing
+  about the stride reads `rim`, so both suites stand it DOWN for the boot probes
+  (`FOOTBALLER.rim = false`) and `footballers` asserts the shipped value is `true` — the
+  `limbsCrossTheRing` floor of 1.15r would otherwise be met by the rim alone at 1.16r, which
+  is a check made vacuous by the feature it sits beside. The rim is measured in its own block
+  as a DIFFERENCE against exactly that frame.
+  ⚠️ **"LIKE THE BALL'S" IS THE BALL'S OWN PAINTER AT THE SAME RADIUS, IN THE SAME RUN**: the
+  outermost dark pixel along a ray reads **1.133 / 1.15r** on the ball and **1.133 / 1.15r**
+  on the body (a 69.6px edge rasterises to 68 on one ray and 69 on another — identically on
+  both), and on the pitch the rim's outer edge reads **1.205r** of a 20.25px body against a
+  formula of 1.16 plus a pixel of antialiasing. Six sabotages, each caught by its own check:
+  the rim off, halved, painted over the body, painted after the limbs, the ball's own rim
+  drifting from `ballRimPx`, and the floor moved.
 - **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
   SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
   `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,
