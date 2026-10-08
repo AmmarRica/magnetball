@@ -739,6 +739,129 @@ const rp = await p.evaluate(async () => {
 });
 console.log('replay', JSON.stringify(rp));
 
+// ---- THE RIM FLASHES on the stamina events (RIMFLASH) -----------------------------------
+// Asked for as *"have player circle around them that is black stroke flash green if player
+// gets stamina back. Have them flash red if they are out of stamina or if player is trying
+// to sprint while they are out of stamina"*. Measured before: the rim was one colour through
+// a sprint to empty, a locked-out hold and the refill — 0 pixels in the rim band ever changed.
+// Driven through the REAL path: a human holding KICK with Sprint on runs the ring down
+// (`advanceStamina` in `step`, `advanceTire` beside it), and `_rimFlash` is read as what
+// `advanceTire` stamped; the colour is read in PIXELS on the rim band of the flat-canvas
+// figure and of the plain disc on the pitch.
+const rf = await p.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  M.qualityPin(true); M.applyBundle('kickabout');
+  const warmLimb = () => M.klimbSprite('arm', M.TH.teamRed, M.kitPerson({ name:'Mike' })[1], M.TH.discRim || '#151515');
+  for (let i=0;i<80;i++){ if (warmLimb()) break; await new Promise(res=>setTimeout(res,40)); }
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(5); M.startMatch();
+  const w = M.world; w.state='play'; w.stateT=2; const me = w.players[0], bot = w.players[1];
+  const park = () => { bot.x=0; bot.y=-300; bot.vx=bot.vy=0; bot._px=bot.x; bot._py=bot.y; w.ball.x=0; w.ball.y=-150; w.ball.vx=w.ball.vy=0; };
+  const tick = () => { park(); M.step(w); M.advanceTrails(w); M.advanceFeet(w); M.advanceTire(w); };
+  const stampOf = () => me._rimFlash ? { col: me._rimFlash.col, t: +me._rimFlash.t.toFixed(3) } : null;
+  // born quiet: thirty steps of a fresh body, nothing stamped
+  for (let i=0;i<30;i++) tick();
+  o.bornQuiet = me._rimFlash == null && me._spentWas === false;
+  // the ring runs down under a held KICK; the step `spent` sets, a RED pulse is stamped at full
+  let dir = 1, redAt = -1, firstRed = null, stamps = [], lastT = -1;
+  M.pads.p1.kick = true;
+  for (let i=0;i<400;i++){
+    if (Math.hypot(me.x, me.y) > 120 && (me.x*me.vx + me.y*me.vy) > 0) dir = -dir;
+    M.pads.p1.dx = dir; tick();
+    const fl = me._rimFlash;
+    if (fl && fl.t > lastT) stamps.push({ i, col: fl.col, t: +fl.t.toFixed(3) });   // a new pulse: t went UP
+    lastT = fl ? fl.t : -1;
+    if (me.spent && redAt < 0){ redAt = i; firstRed = stampOf(); }
+    if (redAt >= 0 && i >= redAt + 120) break;
+  }
+  o.red = { redAt, firstRed, stamps: stamps.slice(0, 6), n: stamps.length, secs: M.RIMFLASH.secs, retry: M.RIMFLASH.retry, spentCol: M.RING.spent };
+  o.redOnEmpty = redAt > 0 && !!firstRed && firstRed.col === M.RING.spent && firstRed.t === M.RIMFLASH.secs;
+  // ...and held locked out it pulses again every `retry` seconds: 120 steps = 2s = the first plus three
+  const gaps = stamps.slice(1).map((s, k) => s.i - stamps[k].i);
+  o.red.gaps = gaps;
+  o.redWhileHeld = stamps.length >= 4 && gaps.every(g => Math.abs(g - Math.round(M.RIMFLASH.retry * 60)) <= 2) && stamps.every(s => s.col === M.RING.spent);
+  // release KICK: the pulse fades to nothing and no new one comes
+  M.pads.p1.kick = false; const fades = [];
+  for (let i=0;i<60;i++){ tick(); fades.push(me._rimFlash ? +me._rimFlash.t.toFixed(3) : null); }
+  o.fade = { f0: fades[0], f10: fades[10], f29: fades[29], f59: fades[59], spent: me.spent, stam: +me.stam.toFixed(2) };
+  o.fadesOut = (fades[0] == null || fades[0] < M.RIMFLASH.secs) && fades[59] == null && fades.filter(v => v != null).length <= Math.round(M.RIMFLASH.secs*60) + 1 && me.spent;
+  // ...the strength the painter reads follows it
+  me._rimFlash = { col: M.RING.spent, t: M.RIMFLASH.secs, again: 1 }; const s0 = M.rimFlashStrength(me);
+  me._rimFlash.t = M.RIMFLASH.secs/2; const sHalf = M.rimFlashStrength(me);
+  me._rimFlash = null; const sNone = M.rimFlashStrength(me);
+  o.strength = { s0, sHalf, sNone };
+  o.strengthFollows = s0 === 1 && Math.abs(sHalf - 0.5) < 0.01 && sNone === 0;
+  // the refill: run the ring back up (no KICK) until `spent` clears — a GREEN pulse at full
+  let greenAt = -1, firstGreen = null;
+  for (let i=0;i<2000;i++){ M.pads.p1.dx = 0; tick(); if (!me.spent){ greenAt = i; firstGreen = stampOf(); break; } }
+  o.green = { greenAt, firstGreen, good: M.RIMFLASH.good };
+  o.greenOnRefill = greenAt > 0 && !!firstGreen && firstGreen.col === M.RIMFLASH.good && firstGreen.t === M.RIMFLASH.secs;
+  // ...and a goal's refill (`refillStamina`) is the same event, read the same way
+  // (the body is PUT locked out — `_spentWas` with it, or the probe's own set-up reads as the
+  // lockout setting and stamps a red of its own)
+  me.stam = 0.2; me.spent = true; me._spentWas = true; me._rimFlash = null; tick(); const beforeGoal = stampOf();
+  M.refillStamina(w); tick(); const afterGoal = stampOf();
+  o.goal = { beforeGoal, afterGoal };
+  o.greenOnGoal = beforeGoal == null && !!afterGoal && afterGoal.col === M.RIMFLASH.good;
+  // a bot asking to sprint while locked out is "trying to sprint" too
+  bot.stam = 0; bot.spent = true; bot._spentWas = true; bot._rimFlash = null; bot.aiSprinting = true;
+  M.advanceTire(w); o.botRed = !!bot._rimFlash && bot._rimFlash.col === M.RING.spent;
+  bot.aiSprinting = false; bot._rimFlash = null; bot.spent = false; bot.stam = 1; bot._spentWas = false;
+  // ---- in PIXELS: the rim band of the flat-canvas figure turns green / red / back to ink ----
+  const R=60, W=300, CX=150, CY=150;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=W; const c=cv.getContext('2d');
+  const base = (opt) => Object.assign({ team:0, faceX:1, faceY:0, r:R, name:'Mike', cap:'none', vx:0, vy:0, gait:0 }, opt||{});
+  const paint = (skin, q) => { c.fillStyle='#7f7f7f'; c.fillRect(0,0,W,W); M.DISC_SKINS[skin].paint(c,q,CX,CY,R,{players:[q]}); return c.getImageData(0,0,W,W).data; };
+  const rimPx = M.ballRimPx(R);
+  const band = (d, lo, hi) => { let green=0, red=0, ink=0, n=0; for (let y=0;y<W;y++) for (let x=0;x<W;x++){ const rr = Math.hypot(x-CX, y-CY); if (rr < lo || rr > hi) continue; const i=(y*W+x)*4; n++;
+    if (d[i+1] > d[i]+40 && d[i+1] > d[i+2]+40) green++; else if (d[i] > d[i+1]+60 && d[i] > d[i+2]+40) red++; else if (d[i]+d[i+1]+d[i+2] < 150) ink++; } return { n, green, red, ink }; };
+  const diffIn = (a,d,lo,hi) => { let n=0; for (let y=0;y<W;y++) for (let x=0;x<W;x++){ const rr = Math.hypot(x-CX, y-CY); if (rr < lo || rr > hi) continue; const i=(y*W+x)*4; if (Math.abs(a[i]-d[i])+Math.abs(a[i+1]-d[i+1])+Math.abs(a[i+2]-d[i+2])>24) n++; } return n; };
+  o.fig = {};
+  for (const skin of ['footballers','footballersink']){
+    const none = paint(skin, base()), g = paint(skin, base({ _rimFlash:{ col:M.RIMFLASH.good, t:M.RIMFLASH.secs } })),
+          r = paint(skin, base({ _rimFlash:{ col:M.RING.spent, t:M.RIMFLASH.secs } })), half = paint(skin, base({ _rimFlash:{ col:M.RING.spent, t:M.RIMFLASH.secs/2 } })),
+          gone = paint(skin, base({ _rimFlash:{ col:M.RING.spent, t:0 } }));
+    // the band is the rim OUTSIDE the body, clear of the limbs' lane: a thin ring at r+2..r+rimPx-2 along the facing's quarter
+    const lo = R+2, hi = R+rimPx-2;
+    o.fig[skin] = { none: band(none, lo, hi), green: band(g, lo, hi), red: band(r, lo, hi), half: band(half, lo, hi),
+                    // inside 0.88r: the shirt's thinnest ray is 0.906r and the rim shows through between
+                    insideGreen: diffIn(none, g, 0, R*0.88), insideRed: diffIn(none, r, 0, R*0.88), gone: diffIn(none, gone, 0, W),
+                    redness: [none, half, r].map(d => { let t=0, n=0; for (let y=0;y<W;y++) for (let x=0;x<W;x++){ const rr=Math.hypot(x-CX,y-CY); if (rr<lo||rr>hi) continue; const i=(y*W+x)*4; t += d[i]-d[i+1]; n++; } return +(t/n).toFixed(1); }) };
+  }
+  const fig = (k) => o.fig[k];
+  o.rimGoesGreen = ['footballers','footballersink'].every(k => fig(k).green.green > fig(k).none.n*0.5 && fig(k).none.green === 0);
+  o.rimGoesRed   = ['footballers','footballersink'].every(k => fig(k).red.red > fig(k).none.n*0.5 && fig(k).none.red === 0);
+  o.rimInkAtRest = ['footballers','footballersink'].every(k => fig(k).none.ink > fig(k).none.n*0.5 && fig(k).gone === 0);
+  o.halfIsBetween = ['footballers','footballersink'].every(k => { const [a,b,c2] = fig(k).redness; return b > a + 20 && c2 > b + 20; });   // half a pulse is half the red
+  o.bodyUntouched = ['footballers','footballersink'].every(k => fig(k).insideGreen === 0 && fig(k).insideRed === 0);
+  // ---- and on the PITCH, the plain disc's rim too (the one owner), and a replay never wears it ----
+  const g=document.getElementById('game'), gc=g.getContext('2d'), DPR=g.width/g.clientWidth;
+  me.x=me._px=0; me.y=me._py=0; me.vx=0; me.vy=0; park();
+  const box = () => { M.juiceReset(); M.computeCam(); M.render(); const [sx,sy]=M.screenPt(M.wx(0),M.wy(0));
+    const rad=Math.round(me.r*M.cam.s*1.6*DPR); return gc.getImageData(Math.round(sx*DPR)-rad, Math.round(sy*DPR)-rad, rad*2, rad*2).data; };
+  const diffPx = (a,b) => { let n=0; for (let i=0;i<a.length;i+=4){ if (Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]) > 24) n++; } return n; };
+  me._rimFlash = null; const p0 = box(); me._rimFlash = { col:M.RIMFLASH.good, t:M.RIMFLASH.secs }; const p1 = box();
+  M.sel.look.discs = 'none';
+  me._rimFlash = null; const q0 = box(); me._rimFlash = { col:M.RIMFLASH.good, t:M.RIMFLASH.secs }; const q1 = box();
+  M.applyBundle('kickabout');
+  o.pitch = { footballer: diffPx(p0, p1), plain: diffPx(q0, q1) };
+  o.onThePitch = o.pitch.footballer > 10 && o.pitch.plain > 10;
+  // a replay body spreads the LIVE player — the flash must not come with it
+  const frames = M.repBuf.slice(-10);
+  const shot = () => gc.getImageData(0,0,g.width,g.height).data;
+  let repDiff = -1, liveDiff = -1;
+  try { M.replay.active = true;
+    me._rimFlash = null;                                   M.repAnimReset(60); M.drawReplayFrame(M.repTween(frames[0], frames[1], 0, 60)); const a = shot();
+    me._rimFlash = { col:M.RING.spent, t:M.RIMFLASH.secs }; M.repAnimReset(60); M.drawReplayFrame(M.repTween(frames[0], frames[1], 0, 60)); const bb = shot();
+    repDiff = diffPx(a, bb);
+  } finally { M.replay.active = false; }
+  me._rimFlash = null; const l0 = box(); me._rimFlash = { col:M.RING.spent, t:M.RIMFLASH.secs }; const l1 = box(); liveDiff = diffPx(l0, l1);
+  me._rimFlash = null;
+  o.replay = { repDiff, liveDiff };
+  o.notInReplay = repDiff === 0 && liveDiff > 10;
+  return o;
+});
+console.log('rimflash', JSON.stringify(rf));
+
 // ---- the fold: a device still on Sunday League's old dot trail is moved to footsteps, once ----
 // Three devices seeded through an init script (the `themefold` idiom): untouched (moves, SAVED,
 // stamped), one that picked a trail of its own (kept), and one already stamped (kept — one-shot).
@@ -786,6 +909,10 @@ const checks = {
   rep_printsShown: rp.printsShown, rep_printsOnlyWhileSprinting: rp.printsOnlyWhileSprinting, rep_printsTurnWhite: rp.printsTurnWhite,
   rep_liveBodyUntouched: rp.liveBodyUntouched, rep_fileCarriesIt: rp.fileCarriesIt, rep_oldFileStillPlays: rp.oldFileStillPlays,
   rep_newerFileRefused: rp.newerFileRefused, rep_plainDiscUnchanged: rp.plainDiscUnchanged, rep_plainNoPrints: rp.plainNoPrints,
+  flash_bornQuiet: rf.bornQuiet, flash_redOnEmpty: rf.redOnEmpty, flash_redWhileHeld: rf.redWhileHeld, flash_fadesOut: rf.fadesOut, flash_strengthFollows: rf.strengthFollows,
+  flash_greenOnRefill: rf.greenOnRefill, flash_greenOnGoal: rf.greenOnGoal, flash_botRed: rf.botRed,
+  flash_rimGoesGreen: rf.rimGoesGreen, flash_rimGoesRed: rf.rimGoesRed, flash_rimInkAtRest: rf.rimInkAtRest, flash_halfIsBetween: rf.halfIsBetween, flash_bodyUntouched: rf.bodyUntouched,
+  flash_onThePitch: rf.onThePitch, flash_notInReplay: rf.notInReplay,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,

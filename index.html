@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.0325PM';
+const VERSION = '20261008.0455PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.0325PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.0455PM', title: 'The ring says when you can sprint again',
+    changed: [
+      '<b>The rim round your player flashes.</b> Green the moment your stamina is back, red the moment it runs out.',
+      '<b>And red again while you ask for a sprint you do not have.</b> Hold KICK locked out and the rim pulses red until you let go or the tank fills.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.0325PM', title: 'Replays show the sprint',
     changed: [
       '<b>A replay shows the turbo.</b> A sprinting footballer pumps its arms and leads with its head in a replay and in an exported video, exactly as it did on the pitch.',
@@ -10004,6 +10010,24 @@ const RING = { kickMin: 2.2, spent: '#e0563c', drawn: false };
 // body and read as "the same figure, nearly"; 0.20 is 3px and reads as a slump. A drop at
 // r 2.2 for 0.55s was one 3px fleck alive at a time — a tell nobody sees is a dead one —
 // so it is 2.6 for 0.7s every 0.36s, about two alive. Still well short of the kick sparks.
+// THE RIM FLASHES (`RIMFLASH`, `p._rimFlash`, stamped in `advanceTire`, painted by `rimFlashPaint`
+// — the one owner for the footballers' rim and the plain disc's). Asked for as *"have player
+// circle around them that is black stroke flash green if player gets stamina back. Have them
+// flash red if they are out of stamina or if player is trying to sprint while they are out of
+// stamina"*. Three events, all read off `spent` (the lockout `advanceStamina` owns): it CLEARS —
+// the ring is full again, by refill or by a goal — green; it SETS — the ring just emptied —
+// red; and KICK held (a bot: its own sprint decision) while it is set — red, again every
+// `retry` seconds for as long as the button is down, because a flash is a moment and a held
+// button keeps asking. One pulse: the flash colour at full over the rim's ink, fading to
+// nothing over `secs`. ⚠️ RENDER ONLY, the `_tire` idiom — `advanceTire` in the step loop
+// compares `spent` with what it saw last step and writes a field nothing in `step()` reads;
+// nothing is rolled. ⚠️ Born quiet: a body seen for the first time flashes nothing, or every
+// kickoff would be eleven green rings. ⚠️ Not in a replay — `spent` is not recorded and the
+// spread body's own flash is nulled by `drawReplayFrame`, so a replayed body never wears
+// the live player's. ⚠️ `bad` is `RING.spent`'s red read at paint time (the one spelling of
+// "locked out"); `good` is the green the court's GOOD marks use, over a dark rim rather than
+// over grass, which is where that green measured 1.29:1.
+const RIMFLASH = { secs: 0.5, retry: 0.6, good: '#3ec06a' };
 const STAMTELL = { ease: 0.08, snap: 0.01,
                    sag: 0.20, armMul: 0.45, twistMul: 0.5,
                    handRest: 0.80, restEase: 0.14,            // arms in at a standstill — see footballerSkin
@@ -20997,7 +21021,8 @@ function drawReplayFrame(f){
     players: f.p.map((fp,i)=>({ ...(world.players[i] || world.players[0]),
                                 x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0,
                                 vx:fp.vx||0, vy:fp.vy||0,
-                                sprinting: !!fp.s, stam: fp.s === 2 ? 0 : 1, spent: false })),
+                                sprinting: !!fp.s, stam: fp.s === 2 ? 0 : 1, spent: false,
+                                _rimFlash: null })),   // the lockout is not recorded — RIMFLASH
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
   repAnimate(fake);
@@ -33756,6 +33781,19 @@ const DISC_GUIDE = { w: 0.05, a: 0.45, dark: 'rgba(0,0,0,0.55)', light: 'rgba(25
 // a rim that is "like the ball's" is only that while it is the ball's own expression.
 const BALL_RIM = { f: 0.16, min: 1.5 };
 function ballRimPx(r){ return Math.max(BALL_RIM.min, r*BALL_RIM.f); }
+// The rim's flash (see RIMFLASH), painted OVER a rim disc already filled in its ink: the flash
+// colour at the pulse's remaining strength, so the rim reads ink → green/red → ink. One owner
+// for the footballers' rim and the plain disc's. A second fill over the same disc rather than
+// a mixed colour, because `TH.discRim` is not always a hex and `rgba` parses either.
+function rimFlashStrength(p){
+  const fl = p && p._rimFlash;
+  return fl && fl.t > 0 ? Math.min(1, fl.t / RIMFLASH.secs) : 0;
+}
+function rimFlashPaint(c, p, x, y, R){
+  const k = rimFlashStrength(p);
+  if (!k) return;
+  c.beginPath(); c.arc(x, y, R, 0, 2*Math.PI); c.fillStyle = rgba(p._rimFlash.col, k); c.fill();
+}
 // Two-frame leg animation for the creature skins. Frame 0 is also the REST pose, so
 // a standing player is not caught mid-stride — and the threshold is a real speed,
 // not "is gait changing", because a player being nudged by a collision is not walking.
@@ -35540,6 +35578,18 @@ function advanceTire(w){
     ds += (wantDash - ds) * T.dashEase;
     if (Math.abs(wantDash - ds) < T.snap) ds = wantDash;
     p._dash = ds;
+    // THE RIM FLASH (see RIMFLASH): off `spent` flipping since last step, and off KICK held
+    // while it is set. `_spentWas` is this function's own memory of the lockout, born at the
+    // answer so the first sighting of a body stamps nothing.
+    if (sprintsFor(p)){
+      const was = p._spentWas, now = !!p.spent;
+      p._spentWas = now;
+      const fl = p._rimFlash;
+      if (fl){ fl.t -= STEP; fl.again -= STEP; if (fl.t <= 0 && !(now && sprintPressed(p))) p._rimFlash = null; }
+      const stamp = (col) => { p._rimFlash = { col, t: RIMFLASH.secs, again: RIMFLASH.retry }; };
+      if (was != null && was !== now) stamp(now ? RING.spent : RIMFLASH.good);
+      else if (now && sprintPressed(p) && (!p._rimFlash || p._rimFlash.again <= 0)) stamp(RING.spent);
+    } else { p._rimFlash = null; p._spentWas = null; }
     if (t > 0.5 && bodyPainted(w, p)){
       p._sweatT = (p._sweatT || 0) - STEP;
       if (p._sweatT <= 0){
@@ -35819,7 +35869,10 @@ function footballerSkin(name, sprites, inked){
     // collides at — the ring the ball wears, and the plain disc wears. OUTSIDE r and never
     // inside it: an inward band would swallow the tenth of a radius of shorts that shows
     // behind the shirt and the face's crescent, which are the two things the figure is made of.
-    if (F.rim){ c.beginPath(); c.arc(x, y, r + ballRimPx(r), 0, 2*Math.PI); c.fillStyle = ink; c.fill(); }
+    // ...and it FLASHES green or red on the stamina events (RIMFLASH), painted over the ink
+    // before the limbs, so the figure still sits on it.
+    if (F.rim){ c.beginPath(); c.arc(x, y, r + ballRimPx(r), 0, 2*Math.PI); c.fillStyle = ink; c.fill();
+                rimFlashPaint(c, p, x, y, r + ballRimPx(r)); }
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
     //     under the body, and it is the whole of what makes this read from above -------
     for (const sgn of [-1, 1]){
@@ -36415,6 +36468,7 @@ function drawOneDisc(w, p, x, y, r, s, idx){
     // Flat sprite: rim, team-colour ring, custom-colour core.
     ctx.beginPath(); ctx.arc(x, y, r+Math.max(2, r*0.16), 0, 2*Math.PI);
     ctx.fillStyle = TH.discRim; ctx.fill();
+    rimFlashPaint(ctx, p, x, y, r+Math.max(2, r*0.16));   // the stamina flash, see RIMFLASH
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI);
     ctx.fillStyle = teamCol; ctx.fill();
     // Face: player-colour core (thin team rim) + faceplate (flag / animal) or
@@ -39361,7 +39415,7 @@ if (window.__MAGNETDEBUG) {
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
-    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick, BALL_RIM, ballRimPx, refillStamina,
+    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick, BALL_RIM, ballRimPx, refillStamina, RIMFLASH, rimFlashStrength, rimFlashPaint,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

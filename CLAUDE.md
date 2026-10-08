@@ -6812,6 +6812,55 @@ three lines a second time, name it.
   the plain-disc replay's print diff outright: **0**, against the sprint's 613 on Sunday
   League. Fifteen sabotages, each caught by its own check — that one only once the second
   control existed.
+- **THE RIM ROUND THE PLAYER FLASHES GREEN WHEN THE STAMINA IS BACK AND RED WHEN IT RUNS OUT
+  OR IS ASKED FOR EMPTY** (`RIMFLASH`, `p._rimFlash`/`p._spentWas` stamped in `advanceTire`,
+  `rimFlashStrength`, `rimFlashPaint`; the rim fill in `footballerSkin` and the flat disc's
+  in `drawOneDisc`; `tests/stamtells.mjs`' `flash_*` block). Asked for as *"have player
+  circle around them that is black stroke flash green if player gets stamina back. Have them
+  flash red if they are out of stamina or if player is trying to sprint while they are out of
+  stamina"*. The black stroke is the rim the footballers wear (the ball's own, `ballRimPx`)
+  and the plain disc has always worn; it is ONE painter now (`rimFlashPaint`, a second fill
+  over the rim disc at the pulse's strength), so the readout is the same on the default theme
+  and on a plain disc on grass. Every other skin paints its own rim and keeps it (rule 8).
+  ⚠️ **MEASURED BEFORE**: the rim was one colour through a sprint to empty, a locked-out
+  hold and the refill — 0 pixels in the rim band ever changed.
+  ⚠️ **THREE EVENTS, ALL READ OFF `spent`**, the lockout `advanceStamina` owns: it CLEARS
+  (the ring is full again — by refill or by a goal, `refillStamina` being the same flip)
+  → green; it SETS (the ring just emptied) → red; KICK held while it is set (a bot: its own
+  `aiSprinting`, through `sprintPressed`) → red, again every `retry` (0.6s) for as long as
+  the button is down. Measured on the real path: red stamped on step **180** of a held
+  sprint, the step `spent` set; re-pulsed at **36-step** gaps while held (four in two
+  seconds); released, the pulse faded out in under `secs` and nothing came after it; green at
+  the step `spent` cleared (**720**), and green on a goal's refill with nothing stamped by
+  the lockout the probe had set up.
+  ⚠️ **ONE PULSE, FADING** (`secs` 0.5): the flash colour at full over the ink, down to
+  nothing — read as redness on the rim band of the flat-canvas figure **2.6 → 67.2 → 131.8**
+  at none / half / full on the sprite skin, 7.7 → 59.1 → 110.4 inked, so half a pulse is
+  half the red. A flash is a moment and a held button keeps asking, which is why the
+  retry; `retry` is longer than `secs` so the rim goes back to ink between pulses — a
+  held pulse is a lamp, not a flash.
+  ⚠️ **RENDER ONLY, THE `_tire` IDIOM, AND BORN QUIET.** `advanceTire` compares `spent`
+  with its own memory of last step (`_spentWas`, born at the answer) and writes a field
+  nothing in `step()` reads; nothing is rolled. A body seen for the first time stamps
+  nothing, or every kickoff would be eleven green rings. Thirty steps of a fresh body:
+  nothing.
+  ⚠️ **NOT IN A REPLAY.** The lockout is not recorded (the sprint is — two bits — and
+  `spent` is not), and `drawReplayFrame` spreads the LIVE body, flash included, so the
+  fake body's `_rimFlash` is nulled there: a replay frame reads **0** pixels different with
+  the live player mid-flash against **460** on the live pitch. Written down beside the
+  slump as the next thing a replay could carry if asked.
+  ⚠️ **THE BAND IS OUTSIDE THE BODY AND THE BODY IS UNTOUCHED**: inside **0.88r** nothing
+  changes (the shirt's thinnest ray is 0.906r and the rim shows through between, so a probe
+  at 0.92r read 7 pixels of the rim itself and was moved in); the rim band reads **2141 /
+  2168 of 2288** green / red pixels at full on the sprite skin and ink (2140) at rest. On the
+  pitch a pulse moves **435** pixels on the footballer and **528** on the plain disc.
+  ⚠️ **`bad` IS `RING.spent`**, the one spelling of "locked out" in the file; `good` is the
+  court's good green over a dark rim rather than over grass, where that green measured
+  1.29:1.
+  ⚠️ **TWO INSTRUMENT FAULTS, both false reds on a good build**: the goal probe set `spent`
+  by hand without `_spentWas`, so its own set-up read as the lockout setting and stamped a
+  red before the goal; and the inside band at 0.92r, above. Ten sabotages, each caught by
+  its own check.
 - **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
   SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
   `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,
