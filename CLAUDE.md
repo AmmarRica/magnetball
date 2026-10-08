@@ -6568,6 +6568,51 @@ three lines a second time, name it.
   suite measures it as a **difference against the same body drawn rested**: the disc
   already has a guide ring and a rim within a few pixels of that radius, so an absolute
   ink count reads 65 of 120 probe angles with no stamina ring drawn at all.
+- **A FOOTBALLER SWINGS A LEG AT THE BALL, FOR A MOMENT** (`KICKANIM`, `advanceKickAnim`,
+  `p._kickAnim`, the kick branch of `footballerSkin`'s limb loop, `FOOTBALLER.ceiling`;
+  `tests/stamtells.mjs`' kick block). Asked for as *"a small kick animation where leg goes
+  forward and arms and such move where they need to be to show that the player is kicking …
+  show that for a small frame so the player can continue running"*.
+  ⚠️ **STAMPED WHERE A KICK IS COUNTED** — `noteKick`, the floaters' and the rumble's rule,
+  so all three kick paths get it and a fourth cannot miss it — and ABOVE its `p.ms` gate,
+  because a body with no match stats (warm-up, the demo) still visibly kicks. The record is
+  the kick's own unit direction and which foot struck: the one further BACK in the stride
+  (`footSwing`), which is the one about to come forward anyway, so the swing continues the
+  run rather than fighting it.
+  ⚠️ **ALONG THE KICK, NOT THE FACING.** The impulse runs player → ball, which is where the
+  ball went; the facing is where the body is looking. A leg thrown along the facing at a
+  ball struck across the body would kick at nothing. `skinDir` turns the world direction
+  into the canvas's frame, the same call the planted feet go through.
+  ⚠️ **THE REACH IS DERIVED FROM THE CEILING, PER SKIN, never tuned against it**: the boot's
+  centre sits where `hypot(reach, across) + bootR` is 0.03r under `FOOTBALLER.ceiling`
+  (1.60, the figure's standing rule, now a named constant), because the inked boot is half as
+  big again and a reach picked for the sprite skin puts it through. Measured at the peak:
+  **1.554 / 1.556r** sprite (along / across the facing) and **1.562** inked.
+  ⚠️ **AND THE DRAWN LEG IS HELD TO THE LEASH, with the hip sliding along it under the
+  shirt.** The limb plate lays its shorts band 42% of the limb's length INWARD of the joint,
+  hidden under the shirt on a stride-length leg and NOT on a 1.8r kick across the body: the
+  band came out the far side of the figure at **1.914r**, a blue tab outside the ring
+  opposite the kick, on both the running and the standing body. At `FOOTBALLER.reach` the
+  band ends inside the torso wherever the kick points. Found by the far-pixel probe, which
+  named the pixel's colour (the kit's) and position (on the extension of foot → hip beyond
+  the hip) — not by the reach number alone.
+  ⚠️ **A MOMENT, COUNTED IN THE STEP LOOP**: `secs` 0.28, rising to `peakAt` 0.45 of it and
+  easing back onto the planted foot, so the feet keep stepping underneath and the leg lands
+  back where it was. The arms counterbalance in the body's own frame (the opposite arm
+  forward by `armFwd`, the striking side's back by `armBack`), with the hands' across
+  position whatever the stride and the rest fold already have it at.
+  ⚠️ **RENDER ONLY, and written from inside `step()` on purpose.** Nothing in `step()` reads
+  `_kickAnim`; it is written at the kick because that is the one moment that knows the
+  direction. A replay reads none of it (`replay.active || replay.filming`, the `_tire`
+  idiom) — the spread body is whoever is on the pitch now, and the recorded `k` per frame is
+  KICK held, not a strike. Not built, written down.
+  ⚠️ `tests/stamtells.mjs`: a real kick through the real path (the human beside the ball,
+  KICK pressed) stamps on step 0 with the direction at the ball; alive exactly `secs` of
+  steps; at the peak the boot's centroid is more than half a radius further along than at
+  rest on both skins, the hands moved, the reach stays under the ceiling along and across,
+  and with the pose gone the figure is the rested one to the pixel. Six sabotages (no
+  stamp, the leg held, the arms held, 1.2s, the reach at the ceiling, the pose in a replay),
+  each caught by its own check.
 - **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
   SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
   `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,

@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.0910AM';
+const VERSION = '20261008.1030AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.0910AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.1030AM', title: 'Footballers kick',
+    changed: [
+      '<b>A footballer swings a leg at the ball.</b> As the ball leaves, the striking leg goes out along the kick and the arms counterbalance, for about a quarter of a second.',
+      '<b>It never stops the run.</b> The feet keep stepping underneath and the leg lands back where it was.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.0910AM', title: 'Footprints in the soil',
     changed: [
       '<b>A sprinting footballer\'s footprints are dark like soil</b>, whatever colour his side wears — and they turn white once he is nearly out of breath, so a run reads as soil prints going white toward its end.',
@@ -9984,6 +9990,37 @@ const STAMTELL = { ease: 0.08, snap: 0.01,
                    sag: 0.20, armMul: 0.45, twistMul: 0.5,
                    handRest: 0.80, restEase: 0.14,            // arms in at a standstill — see footballerSkin
                    sweatEvery: 0.36, sweatCol: '#bfe6ff', sweatLife: 0.70, sweatR: 2.6 };
+// ============================================================
+//  THE KICK POSE — a footballer's leg swings out as the ball leaves, for a moment
+// ============================================================
+// Asked for as *"a small kick animation where leg goes forward and arms and such move where
+// they need to be to show that the player is kicking … for a small frame so the player can
+// continue running"*. `noteKick` — the ONE place a kick is counted, the rumble and the
+// floaters' rule — stamps `p._kickAnim` with the kick's own direction and which foot struck
+// (the one further BACK in the stride, which is the one about to come forward anyway);
+// `advanceKickAnim` counts it down in the step loop; the footballer painter swings that leg
+// out ALONG THE KICK — not along the facing, which is where the body is looking rather than
+// where the ball went — to a reach derived from the figure's ceiling, and the arms
+// counterbalance (the opposite arm forward, the striking side's back). The swing rises to
+// `peakAt` of `secs` and eases back onto the planted foot, so the run is never interrupted:
+// the feet keep stepping underneath and the leg simply lands back where it was.
+// ⚠️ RENDER ONLY. Nothing in `step()` reads `_kickAnim`; written at the kick because that
+// is the one moment that knows the direction. A replay reads none of it (the spread body is
+// whoever is on the pitch now) — not built, written down.
+// ⚠️ THE REACH IS DERIVED FROM THE CEILING, never tuned against it: the boot's centre sits
+// where `hypot(reach, across) + bootR` is 0.03r under `FOOTBALLER.ceiling`, per skin,
+// because the inked boot is half as big again and a reach picked for the sprite skin puts
+// it through the ceiling. `tests/stamtells.mjs` measures the kicking figure under 1.60r.
+const KICKANIM = { secs: 0.28, peakAt: 0.45, across: 0.3, armFwd: 0.55, armBack: 0.45 };
+function advanceKickAnim(w){
+  if (!w) return;
+  for (const p of allBodies(w)){
+    const k = p._kickAnim;
+    if (!k) continue;
+    k.t -= STEP;
+    if (k.t <= 0) p._kickAnim = null;
+  }
+}
 // The one gate. `discSkin()` is read at call time: `DISC_SKINS` is declared with the
 // renderer far below, and this is only ever called from the step loop and the draw.
 function staminaTellsOn(p){
@@ -20478,6 +20515,7 @@ function loop(t){
     advanceFaceTurn(world); // ...and the figure's turn toward its heading — render only, see FACETURN
     advanceFeet(world);     // ...and the footballers' planted feet — render only, see FOOTBALLER.stride
     advanceTire(world);     // ...and the spent footballer's slump and sweat — render only, see STAMTELL
+    advanceKickAnim(world); // ...and the kick pose's clock — render only, see KICKANIM
     advanceAds(world);      // ...and the hoardings' clock and dim — render-only, step-locked
     if (lock.playing) lockAfterStep(world);   // frame consumed: advance the lockstep clock
     acc -= STEP; steps++;
@@ -26349,6 +26387,13 @@ function easeOutOfBox(p, sign, front){
 // that" chain used to credit goals, assists, and key passes, and tallies shots,
 // clears, the hardest strike (Iron Boot), saves and a bit of ball squash.
 function noteKick(w, p, power, nx, ny){
+  // The kick pose (KICKANIM) — before the stats gate, because a body with no match stats
+  // (warm-up, the demo) still visibly kicks. Render only; see there.
+  {
+    const nn = Math.hypot(nx || 0, ny || 0) || 1;
+    p._kickAnim = { t: KICKANIM.secs, nx: (nx || 0) / nn, ny: (ny || 0) / nn,
+                    side: footSwing(p, 1) <= footSwing(p, -1) ? 1 : -1 };
+  }
   if (!p.ms) return;
   const b = w.ball, ms = p.ms;
   if (b.lastKicker && b.lastKicker !== p){ b.prevKicker = b.lastKicker; b.prevKickT = b.lastKickT; }
@@ -35058,6 +35103,9 @@ const FOOTBALLER = {
   // 9, and at 0.94 it reads 164); and the whole figure may not pass 1.60r, which the hand
   // brings to **1.582**. Longer than this is a different trade, not a tuning.
   swingAt: 0,          // the along position BOTH arcs are centred on: the body's own middle
+  ceiling: 1.60,       // the whole figure may never reach past this, in radii — the rule the
+                       // stride, the reach of the leash and the kick pose are all held under
+                       // (`tests/footballers.mjs` pins it on the stride, `stamtells` on the kick)
   // ⚠️ **BOTH LIMBS WIDENED WITH THE SPRITES** (`legW` 0.26 -> 0.38, `armW` 0.22 -> 0.32).
   // A stroke carries nothing but its colour, so it read the same at any width; the plate
   // carries a rounded cap, an outline and a SIX-COLUMN boot, and at 0.26 the boot came out
@@ -35620,6 +35668,18 @@ function footballerSkin(name, sprites, inked){
     };
     const armSp = sprites ? klimbSprite('arm', col, skin, ink) : null;
     const legSp = sprites ? klimbSprite('leg', col, skin, ink) : null;
+    // THE KICK POSE (see KICKANIM): how far into the swing, which leg, and the kick's own
+    // direction on screen. 0 whenever there is no kick, so every number below is untouched.
+    const ka = (replay.active || replay.filming) ? null : p._kickAnim;
+    let kickSw = 0, kickSide = 1, kd = null;
+    if (ka && ka.t > 0){
+      const K = KICKANIM, u = Math.max(0, Math.min(1, 1 - ka.t / K.secs));
+      const ease = (v) => v*v*(3 - 2*v);
+      kickSw = u < K.peakAt ? ease(u / K.peakAt) : 1 - ease((u - K.peakAt) / (1 - K.peakAt));
+      kickSide = ka.side; kd = skinDir(ka.nx, ka.ny);
+    }
+    // the boot's centre at full swing: under the ceiling by its own radius and a margin
+    const kickReach = Math.sqrt(Math.max(0, Math.pow(F.ceiling - L.bootR - 0.03, 2) - Math.pow(F.foot*KICKANIM.across, 2)));
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
     // --- limbs first, so the shirt sits OVER them: that occlusion is the swing going
@@ -35629,8 +35689,22 @@ function footballerSkin(name, sprites, inked){
       // The foot is on the ground or in the air (see FOOTBALLER.stride) about a hip that
       // moves with the body, so the leg points forward at the plant, shortens as the body
       // passes over the foot, and points back by the lift.
-      const A = pt(F.hip[0], F.hip[1]*sgn);                 // turns with the body (the yaw is in `pt`)
-      const B = footAt(sgn > 0 ? 1 : 0, sgn);                 // ...and the foot does not: it is planted
+      let A = pt(F.hip[0], F.hip[1]*sgn);                   // turns with the body (the yaw is in `pt`)
+      let B = footAt(sgn > 0 ? 1 : 0, sgn);                   // ...and the foot does not: it is planted
+      if (kickSw > 0 && sgn === kickSide){
+        // ...except the striking foot, which swings out along the KICK and back onto its spot
+        const ac = F.foot*KICKANIM.across*sgn;
+        const kx = x + (kd.ux*kickReach - kd.uy*ac)*r, ky = y + (kd.uy*kickReach + kd.ux*ac)*r;
+        B = [B[0] + (kx - B[0])*kickSw, B[1] + (ky - B[1])*kickSw];
+        // ⚠️ THE DRAWN LEG IS HELD TO THE LEASH, with the hip sliding along it under the shirt.
+        // The limb plate lays its shorts band 42% of the limb's length INWARD of the joint
+        // (see `klimbDraw`), which is hidden under the shirt on a stride-length leg and is NOT
+        // on a kick across the body: a 1.8r leg pushed the band out the far side of the body
+        // to **1.91r**, a blue tab outside the ring opposite the kick. At `reach` the band
+        // ends inside the torso wherever the kick points.
+        const dx = B[0] - A[0], dy = B[1] - A[1], dL = Math.hypot(dx, dy), maxL = F.reach*r;
+        if (dL > maxL) A = [B[0] - dx/dL*maxL, B[1] - dy/dL*maxL];
+      }
       if (legSp) klimbDraw(c, legSp, A, B, Math.max(1, r*L.legW), r*L.bootR);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.legW);
@@ -35641,7 +35715,12 @@ function footballerSkin(name, sprites, inked){
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0] - sag*0.5, F.sh[1]*sgn);          // the shoulder leads or trails with the yaw (and drops with the slump)
-      const H = pt(F.swingAt - F.armSwing*armK*sw, handAcross*sgn);   // ...on the cadence, not the ground
+      let handAlong = F.swingAt - F.armSwing*armK*sw;        // ...on the cadence, not the ground
+      if (kickSw > 0){                                        // the kick: opposite arm forward, striking side back
+        const want = sgn === kickSide ? -KICKANIM.armBack : KICKANIM.armFwd;
+        handAlong += (want - handAlong)*kickSw;
+      }
+      const H = pt(handAlong, handAcross*sgn);
       if (armSp) klimbDraw(c, armSp, S, H, Math.max(1, r*L.armW), r*L.armW*0.5);
       else {
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
@@ -39117,7 +39196,7 @@ if (window.__MAGNETDEBUG) {
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
-    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown,
+    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

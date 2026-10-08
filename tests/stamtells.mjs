@@ -391,6 +391,51 @@ const r = await p.evaluate(async ()=>{
     o.replayArmsFollowRunning = o.repArms.moving >= o.repArms.standing + 0.12;
   }
 
+  // ---- THE KICK POSE (KICKANIM): a real kick stamps the body, the leg swings out along ----
+  //      the kick, the arms counterbalance, it is over in a moment, and it never reaches past
+  //      the ceiling. Asked for as "a small kick animation where leg goes forward and arms and
+  //      such move … for a small frame so the player can continue running".
+  {
+    // a real kick through the real path: the human beside the ball, KICK pressed
+    M.setMatchSeed(3); M.startMatch(); const w=M.world; w.state='play'; w.stateT=2;
+    const me=w.players[0], bot=w.players[1]; bot.x=0; bot.y=-300; bot.vx=bot.vy=0;
+    me.x=me._px=0; me.y=me._py=0; me.vx=0; me.vy=0; me.faceX=1; me.faceY=0;
+    w.ball.x=me.r+w.ball.r+2; w.ball.y=0; w.ball.vx=w.ball.vy=0;
+    const before = me._kickAnim || null;
+    M.pads.p1.kick=true; M.pads.p1.dx=0; M.pads.p1.dy=0;
+    let fired=null, steps=0; for (let i=0;i<30;i++){ M.step(w); M.advanceKickAnim(w); if (me._kickAnim && !fired) fired = Object.assign({ step:i }, me._kickAnim); if (me._kickAnim) steps++; }
+    M.pads.p1.kick=false;
+    o.kick = { before, fired, stepsAlive: steps, secs: M.KICKANIM.secs };
+    o.kickStamped = before === null && !!fired && fired.step === 0 && Math.abs(fired.nx - 1) < 0.05 && Math.abs(fired.ny) < 0.05 &&   // along the kick: at the ball, +x
+                    fired.t > M.KICKANIM.secs - 0.02 && fired.t <= M.KICKANIM.secs && (fired.side === 1 || fired.side === -1);   // read after the same step's countdown: one STEP under secs
+    // a MOMENT: over inside half a second, so the run is never interrupted (counted in the step loop)
+    o.kickIsBrief = M.KICKANIM.secs <= 0.5 && steps >= Math.round(M.KICKANIM.secs*60) - 1 && steps <= Math.round(M.KICKANIM.secs*60) + 1 && !me._kickAnim;
+    // the figure at the swing's peak, both skins: the striking BOOT is far out along the kick
+    // (the boot is the one ink at the figure's edge), the arms moved, the reach stays under the
+    // ceiling kicking along the facing AND across it, and with the pose gone the figure is the
+    // rested one exactly
+    const peakT = M.KICKANIM.secs*(1 - M.KICKANIM.peakAt);
+    const inkDark = (d,i) => d[i]+d[i+1]+d[i+2] < 120 && !near(d,i,BG,40);     // the boot's ink
+    const bootAlong = (d) => { let n=0, sx=0; for (let i=0;i<d.length;i+=4){ if (!inkDark(d,i)) continue; const k=(i/4)|0; sx += (k%W)-CX; n++; } return n ? +(sx/n/R).toFixed(3) : null; };
+    o.kickFig = {};
+    for (const skin of ['footballers','footballersink']){
+      const rest = paint(skin, base());
+      const kick = paint(skin, base({ _kickAnim:{ t: peakT, nx:1, ny:0, side:1 } }));
+      const kickAcross = paint(skin, base({ vx:3, gait: M.gaitPeriod()*0.25, _kickAnim:{ t: peakT, nx:0, ny:1, side:-1 } }));
+      const gone = paint(skin, base({ _kickAnim: null }));
+      const hands = (d) => scan(d, isSkin);
+      o.kickFig[skin] = { bootRest: bootAlong(rest), bootKick: bootAlong(kick), reachKick: scan(kick, anyInk).reach, reachAcross: scan(kickAcross, anyInk).reach,
+                          diff: diffPx(rest, kick), handsMoved: diffPx(rest, kick) > 0 && hands(rest).along !== hands(kick).along, gone: diffPx(rest, gone) };
+    }
+    o.kickFootGoesForward = ['footballers','footballersink'].every(k => { const f = o.kickFig[k]; return f.bootKick != null && f.bootRest != null && f.bootKick > f.bootRest + 0.5; });
+    o.kickArmsMove = ['footballers','footballersink'].every(k => o.kickFig[k].handsMoved);
+    o.kickUnderCeiling = ['footballers','footballersink'].every(k => o.kickFig[k].reachKick <= M.FOOTBALLER.ceiling && o.kickFig[k].reachAcross <= M.FOOTBALLER.ceiling && o.kickFig[k].reachKick > 1.4);
+    o.kickPoseLeaves = ['footballers','footballersink'].every(k => o.kickFig[k].gone === 0);
+    // a replay shows no kick pose (the spread body is whoever is on the pitch now)
+    M.replay.active = true; const rep2 = paint('footballers', base({ _kickAnim:{ t: peakT, nx:1, ny:0, side:1 } })); M.replay.active = false;
+    o.kickNotInReplay = diffPx(rep2, paint('footballers', base())) === 0;
+  }
+
   // ---- render only: the world is bit-identical with the tells on and off --------------
   const hashWorld = (w) => { const s = JSON.stringify(w.players.map(q=>[q.x,q.y,q.vx,q.vy,q.stam,q.spent,q.kick,q.faceX,q.faceY])) + JSON.stringify([w.ball.x,w.ball.y,w.ball.vx,w.ball.vy,w.score,w.matchT]); let h=2166136261; for (let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; };
   // ⚠️ The human runs BACK AND FORTH, never into the boards: a body pinned against the
@@ -448,6 +493,8 @@ const checks = {
   trail_recordsTagged: r.recordsTagged, sweats: r.slSweats,
   prints_areTheSteps: r.printsAreTheSteps, prints_areFaint: r.printsAreFaint,
   prints_soilThenWhite: r.soilThenWhite, prints_toeIsTheWideEnd: r.toeIsTheWideEnd, prints_soilNotInk: r.printIsSoilNotInk, prints_lowIsWhite: r.lowPrintIsWhite,
+  kick_stamped: r.kickStamped, kick_isBrief: r.kickIsBrief, kick_footGoesForward: r.kickFootGoesForward, kick_armsMove: r.kickArmsMove,
+  kick_underCeiling: r.kickUnderCeiling, kick_poseLeaves: r.kickPoseLeaves, kick_notInReplay: r.kickNotInReplay,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,
