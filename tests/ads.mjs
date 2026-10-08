@@ -162,16 +162,71 @@ const r = await p.evaluate(async () => {
   park(qx0, qy0);
 
   // ---- 4) the rollover: same picture inside a period, a different one across it ---
-  M.adState.t = 0; M.render(); const t0 = snap();
+  // ⚠️ Probed PAST the slide window (`ADS.slide`): the first half-second of a period is the
+  // old board sliding out, so a probe at t = 0 reads the OLD picture and "holds within the
+  // period" compares a slide with a settled board. `settled` is the earliest honest moment.
+  const settled = M.ADS.slide + 0.1;
+  M.adState.t = settled; M.render(); const t0 = snap();
   M.adState.t = M.adEverySecs() * 0.5; M.render(); const tHalf = snap();
-  M.adState.t = M.adEverySecs() * 1.01; M.render(); const tNext = snap();
+  M.adState.t = M.adEverySecs() + settled; M.render(); const tNext = snap();
   o.holdsWithinPeriod = diffCount(t0.l, tHalf.l) === 0;
   o.rollsAcrossPeriod = diffCount(t0.l, tNext.l) > o.leftBandPx * 0.1;
   // ...and the clock is the setting: a slower rollover has NOT rolled at the old period.
-  M.sel.adEvery = 20; M.adState.t = 0; M.render(); const s0 = snap();
+  M.sel.adEvery = 20; M.adState.t = settled; M.render(); const s0 = snap();
   M.adState.t = 8.5; M.render(); const s8 = snap();
   o.sliderSetsTheClock = diffCount(s0.l, s8.l) === 0 && M.adEverySecs() === 20;
   M.sel.adEvery = 8;
+
+  // ---- 4b) THE SLIDE: the old board leaves toward the START of its words, the next ------
+  //          arrives behind it, clipped to the slot.
+  // Two boards only, in solid contrasting colours (navy and white), so a pixel along a slot
+  // says which board it belongs to; sampled off the board's centreline, clear of the words.
+  // The strip of the OLD board still showing must sit at the reading-start end of the slot
+  // (smaller screen x on a left-to-right board, smaller screen y on a top-to-bottom one) and
+  // shrink with the phase; before the rollover the slot is all old, past the slide all new.
+  {
+    const keepOff = M.sel.adOff;
+    M.sel.adOff = M.AD_BOARDS.map(a => a.key).filter(k => k !== 'northfold' && k !== 'pinecrest');
+    const two = M.adList();
+    const slot = rects.find(rc => rc.along === 'y'), si = rects.indexOf(slot);
+    const every = M.adEverySecs(), base = 3, slide = M.ADS.slide;
+    // which way the words run on SCREEN for this slot: local +x after the read angle and the turn
+    const ang = norm(M.adReadAngle(Math.PI/2) + M.cam.rot);
+    const axis = Math.abs(ang) < 1e-3 ? 'x' : (Math.abs(ang - Math.PI/2) < 1e-3 ? 'y' : null);
+    const N = 20, off = M.ADS.depth * 0.38;                 // across, clear of the centred text
+    const samples = (t) => { M.adState.t = t; M.render(); const out = [];
+      for (let j = 0; j < N; j++){ const f = (j + 0.5) / N - 0.5;
+        const wxp = slot.x + off, wyp = slot.y + f * slot.len;    // a touchline slot runs along world y
+        const [sx, sy] = M.screenPt(M.wx(wxp), M.wy(wyp));
+        const d2 = c2.getImageData(Math.round(sx * DPR), Math.round(sy * DPR), 1, 1).data;
+        out.push({ pos: axis === 'x' ? sx : sy, lum: d2[0] + d2[1] + d2[2] }); }
+      return out.sort((a2, b3) => a2.pos - b3.pos); };
+    const before = samples(base * every - 0.1), after = samples(base * every + slide + 0.1);
+    const lumOld = before.reduce((a2, q) => a2 + q.lum, 0) / N, lumNew = after.reduce((a2, q) => a2 + q.lum, 0) / N;
+    const isOld = (q) => Math.abs(q.lum - lumOld) < Math.abs(q.lum - lumNew);
+    const oldRun = (ss) => { let n2 = 0; while (n2 < ss.length && isOld(ss[n2])) n2++; return { run: n2, prefix: ss.slice(n2).every(q => !isOld(q)), total: ss.filter(isOld).length }; };
+    const early = oldRun(samples(base * every + slide * 0.3)), late = oldRun(samples(base * every + slide * 0.7));
+    o.slide = { axis, lumOld: Math.round(lumOld), lumNew: Math.round(lumNew),
+                before: oldRun(before).total, after: oldRun(after).total, early, late, slot: slot.id, two: two.map(a => a.key) };
+    o.slideHasTwoBoards = two.length === 2 && Math.abs(lumOld - lumNew) > 300 && !!axis;
+    o.slideBookends = o.slide.before === N && o.slide.after === 0;              // all old before, all new after
+    // early: smoothstep(0.3) = 0.216 of the slot gone → ~15.7 of 20 old; late: 0.784 gone → ~4.3
+    o.slideOldLeavesFirst = early.prefix && late.prefix && early.run >= 13 && early.run <= 18 && late.run >= 2 && late.run <= 7 && late.run < early.run;
+    // the leaving board stays INSIDE its slot: the gap between this slot and the next reads
+    // exactly what it reads with every board stood down, mid-slide
+    const gapW = { x: slot.x, y: slot.y - slot.len / 2 - M.ADS.slotGap / 2 };
+    const gapPx = () => { const [sx, sy] = M.screenPt(M.wx(gapW.x), M.wy(gapW.y)); const d2 = c2.getImageData(Math.round(sx * DPR), Math.round(sy * DPR), 1, 1).data; return [d2[0], d2[1], d2[2]]; };
+    M.adState.t = base * every + slide * 0.5; M.render(); const gapMid = gapPx();
+    const gapDown = standDown(gapPx);
+    o.slideGap = { mid: gapMid, down: gapDown };
+    o.slideStaysInSlot = gapMid.join(',') === gapDown.join(',');
+    // ...and both boards' WORDS are painted mid-slide (the thing a cut never shows)
+    const seenMid = new Set(), orig2 = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(t, ...a2){ seenMid.add(String(t)); return orig2.call(this, t, ...a2); };
+    try { M.adState.t = base * every + slide * 0.5; M.render(); } finally { CanvasRenderingContext2D.prototype.fillText = orig2; }
+    o.slideShowsBothWords = two.every(a2 => seenMid.has(a2.text));
+    M.sel.adOff = keepOff; M.adState.t = settled; M.render();
+  }
 
   // ---- 5) the WORDS: read off fillText across one full rotation -----------------
   const seen = new Set();
@@ -424,6 +479,12 @@ ok(r.dimmedBoardFades, `a body standing over a board does not dim it: ${r.dimmed
 ok(r.dimSettles && r.dimEases, `the dim does not ease and settle: one step ${r.dimOneStep}, settled ${r.dimAfterEase}, restored ${r.dimRestored}`);
 ok(r.holdsWithinPeriod, 'the boards changed before the rollover was due');
 ok(r.rollsAcrossPeriod, 'the boards did not roll over after a period — "different things" means the picture has to change');
+// ---- the slide (4b) ---------------------------------------------------------------
+ok(r.slideHasTwoBoards, `the slide probe has no two-board rotation to read: ${JSON.stringify(r.slide)} — every check below would be vacuous`);
+ok(r.slideBookends, `the slot is not all-old before the rollover and all-new after the slide: ${JSON.stringify(r.slide)}`);
+ok(r.slideOldLeavesFirst, `THE OLD BOARD DOES NOT SLIDE OUT TOWARD THE START OF ITS WORDS: ${JSON.stringify(r.slide)} — the strip of it still showing must sit at the reading-start end of the slot and shrink with the phase (about 16 of 20 samples at 0.3 of the slide, about 4 at 0.7)`);
+ok(r.slideStaysInSlot, `THE LEAVING BOARD RUNS OUT OF ITS SLOT: the gap between two slots reads ${JSON.stringify(r.slideGap)} mid-slide against the stood-down frame — the slide is not clipped`);
+ok(r.slideShowsBothWords, `mid-slide only one board's words were painted: ${JSON.stringify(r.slide && r.slide.two)} — a cut, not a slide`);
 ok(r.sliderSetsTheClock, 'the Ads-change-every slider does not set the rollover clock');
 ok(r.namedThreePainted, 'a full rotation never painted all three named boards');
 ok(r.everyBoardPainted, 'a full rotation left a board unpainted');

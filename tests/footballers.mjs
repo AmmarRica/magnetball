@@ -942,7 +942,12 @@ const r = await p.evaluate(async ()=>{
     M.stepFeet(q, 1);
     const touched = Object.keys(q).filter(k => JSON.stringify(q[k]) !== JSON.stringify(was[k]));
     o.feetWrote = touched;
-    o.feetWriteOnlyFeet = touched.length === 1 && touched[0] === '_feet';
+    // ⚠️ `_feet` AND `_prints`: the footprints (`FOOTSTEP`, `TRAIL_LOOKS.steps`) are
+    // recorded here too, on the step a foot lands, and are as render-only as the feet —
+    // nothing in `step()` reads either. Two named keys, never "anything starting with an
+    // underscore": the claim is the exact set of render-only fields this writes.
+    const allowed = ['_feet', '_prints'];
+    o.feetWriteOnlyFeet = touched.length >= 1 && touched.every(k => allowed.includes(k)) && touched.includes('_feet');
   }
   // ⚠️ **THE WHOLE FIGURE STAYS UNDER THE CEILING ON THE LIVE PATH, THROUGH A REVERSAL** —
   // the suite's phase sweep above draws the stateless wave, and a planted foot is the one
@@ -1189,7 +1194,7 @@ ok(r.feetSettleAtRest,
 ok(r.fallbackGroundHalfIsPlanted,
   `the stateless wave is not a planted stride: along + travel reads ${JSON.stringify(r.groundHalf)} over the ground half (a plant holds it at 1 throughout) — a tile and a swatch draw this wave, and a sine here is a tile that is not a picture of the pitch`);
 ok(r.feetWriteOnlyFeet,
-  `stepping the feet wrote ${JSON.stringify(r.feetWrote)} — it may only ever touch _feet, which nothing in step() reads`);
+  `stepping the feet wrote ${JSON.stringify(r.feetWrote)} — it may only ever touch _feet and _prints, which nothing in step() reads`);
 ok(r.liveFigureInBounds,
   `on the live path the figure reads ${r.liveReachMin}..${r.liveReachMax}r through a reversal — the same ceiling (1.60) and floor (1.15) the phase sweep is held to, measured where a planted foot can put a leg the stateless wave never draws`);
 ok(r.replayLeavesLiveFeetAlone,

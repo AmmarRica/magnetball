@@ -61,10 +61,11 @@ const r = await p.evaluate(async ()=>{
   const handed=[]; const reals={};
   for (const key of ['steps','dots']){
     reals[key] = M.TRAIL_LOOKS[key].draw;
-    M.TRAIL_LOOKS[key].draw = function(c,pts,n,col,rr,team){
+    M.TRAIL_LOOKS[key].draw = function(c,pts,n,col,rr,team,prints){
       handed.push({ look:key, col, n, a:+c.globalAlpha.toFixed(2),
-                    sp: Array.from({length:n}, (_,k)=>!!pts[k].sp), s: Array.from({length:n}, (_,k)=>pts[k].s) });
-      return reals[key].call(this,c,pts,n,col,rr,team); };
+                    sp: Array.from({length:n}, (_,k)=>!!pts[k].sp), s: Array.from({length:n}, (_,k)=>pts[k].s),
+                    pn: prints ? prints.n : 0, psp: prints ? Array.from({length:prints.n}, (_,k)=>!!prints.pts[k].sp) : [] });
+      return reals[key].call(this,c,pts,n,col,rr,team,prints); };
   }
   M.sel.mode='1v1'; M.sel.lobby='off'; M.sel.length='5'; M.sel.controllers='off'; M.sel.adsOn='off';
   M.sel.sprint='on';
@@ -86,7 +87,7 @@ const r = await p.evaluate(async ()=>{
         if (d > 120 && !turned && (me.x*me.vx + me.y*me.vy) > 0){ dir = -dir; turned = true; }
         if (d < 60) turned = false;
         M.pads.p1.dx = dir;
-        bot.x=0; bot.y=-300; bot.vx=bot.vy=0; M.step(w); M.advanceTrails(w); M.advanceTire(w); } };
+        bot.x=0; bot.y=-300; bot.vx=bot.vy=0; M.step(w); M.advanceTrails(w); M.advanceFeet(w); M.advanceTire(w); } };   // the feet step from the loop too, and the prints are theirs
     // The bot's own records are emptied before each read, so whatever is handed FIRST is
     // the human's — and with the gate holding the human's back, nothing at all is handed.
     const mine = () => { handed.length=0; if (M.discTrails[1]) M.discTrails[1].length = 0;
@@ -100,6 +101,33 @@ const r = await p.evaluate(async ()=>{
     out.recordKeys = Object.keys(M.discTrails[0][0] || {}).sort().join(',');
     out.recordSides = M.discTrails[0].map(d => d.s);
     out.recordSp = M.discTrails[0].map(d => d.sp);
+    // ...and the FOOTPRINTS the feet left (`p._prints`, recorded in `stepFeet` at each
+    // landing): strictly alternating feet, each facing the way the run went (the toe's
+    // heading against the vector from the print before it), a stride-ish apart, the freshest
+    // at full strength and the rest faded. ⚠️ Measured on the first build, which placed a
+    // print beside the trail's SAMPLES off the stride phase: the sides ran in runs of two
+    // and three and the heading was the sampled path's — reported as facing the wrong way.
+    const pr = me._prints || [];
+    out.prints = { n: pr.length, sides: pr.map(q => q.s),
+      facing: pr.slice(1).map((q, i) => { const o = pr[i], dx = q.x - o.x, dy = q.y - o.y, L = Math.hypot(dx, dy) || 1; return +((dx*q.hx + dy*q.hy)/L).toFixed(2); }),
+      gaps: pr.slice(1).map((q, i) => +Math.hypot(q.x - pr[i].x, q.y - pr[i].y).toFixed(1)),
+      alphas: pr.map(q => +q.a.toFixed(2)), sp: pr.map(q => q.sp) };
+    // how strongly the freshest print is painted, as a blend fraction between the court and
+    // the hot ink at its own centre — the same frame with the prints emptied is the court
+    // ⚠️ Not the FRESHEST print: that one is under the body (a foot lands 0.93r ahead of a
+    // 1r body), so its centre reads the figure. The third from last is clear of it.
+    if (pr.length >= 3){
+      const q = pr[pr.length - 3];
+      const g = document.getElementById('game'), gc = g.getContext('2d'), DPR = g.width / g.clientWidth;
+      const at = () => { M.computeCam(); M.render(); const [sx, sy] = M.screenPt(M.wx(q.x), M.wy(q.y));
+        const d = gc.getImageData(Math.round(sx*DPR), Math.round(sy*DPR), 1, 1).data; return d[0] + d[1] + d[2]; };
+      if (M.discTrails[1]) M.discTrails[1].length = 0;
+      const withPrint = at();
+      const saved = me._prints; me._prints = []; const court = at(); me._prints = saved;
+      const inkHex = M.kickRingInk(), ink = [1,3,5].map(k => parseInt(inkHex.substr(k,2),16)).reduce((a2,b2)=>a2+b2,0);
+      out.printBlend = +((withPrint - court) / (ink - court)).toFixed(3);
+      out.printExpect = +(M.FOOTSTEP.alpha * Math.sqrt(q.a)).toFixed(3);   // what the painter asked for
+    }
     run(200,true); out.spent = mine();  out.spentState  = { stam: +me.stam.toFixed(2), spent: me.spent, sprinting: me.sprinting, records: M.discTrails[0].length };
     out.team = me.team; out.fxSweat = M.fx.filter(q=>q.sweat).length;
     M.pads.p1.dx=0; M.pads.p1.kick=false;
@@ -111,9 +139,13 @@ const r = await p.evaluate(async ()=>{
   o.sl = sl;
   o.slTrailIsSteps  = !!sl.sprint && sl.sprint.look === 'steps';
   o.slRestHidden    = sl.rest === null && sl.restState.records > 3 && !sl.restState.sprinting;   // records exist, none shown
-  o.slSprintShown   = !!sl.sprint && sl.sprintState.sprinting && !sl.sprintState.spent && sl.sprint.n > 0 &&
-                      sl.sprint.sp.every(Boolean) && sl.sprint.col === M.kickRingInk() && sl.sprint.col !== teamCol;
-  o.slSpentHidden   = sl.spent === null && sl.spentState.spent && sl.spentState.records > 3;
+  o.slSprintShown   = !!sl.sprint && sl.sprintState.sprinting && !sl.sprintState.spent && sl.sprint.n > 0 && sl.sprint.pn > 0 &&
+                      sl.sprint.sp.every(Boolean) && sl.sprint.psp.every(Boolean) && sl.sprint.col === M.kickRingInk() && sl.sprint.col !== teamCol;
+  // Spent: no trail record is handed, and the only prints still showing are the SPRINT's own,
+  // fading out (a print lives ~1.2s after its landing and the ring ran out mid-run — those
+  // are legitimately on the pitch). Nothing dropped since the body stopped sprinting shows.
+  o.slSpentHidden   = sl.spentState.spent && sl.spentState.records > 3 &&
+                      (sl.spent === null || (sl.spent.n === 0 && sl.spent.psp.length > 0 && sl.spent.psp.every(Boolean)));
   o.slSweats        = sl.fxSweat > 0;
   // the sampler tags every record with its stride side and the sprint flag, and the sides
   // really alternate over a run (both values present, in runs — not one per record)
@@ -122,6 +154,19 @@ const r = await p.evaluate(async ()=>{
                     sides.includes(1) && sides.includes(-1) && flips >= 2 && flips < sides.length - 1 &&
                     sl.recordSp.some(Boolean);
   o.recordFlips = { flips, n: sides.length };
+  const P = sl.prints, half = M.gaitPeriod() / 2;
+  o.footprints = P; o.printBlend = sl.printBlend; o.printAlpha = M.FOOTSTEP.alpha;
+  o.printsAreTheSteps = P.n >= 4 &&
+    P.sides.every((s2, i) => i === 0 || s2 === -P.sides[i-1]) &&          // left, right, left: the feet themselves
+    P.facing.every(f => f > 0.6) &&                                       // the toe points the way the run went
+    P.gaps.every(g => g > half * 0.7 && g < half * 1.6) &&                // a stride apart, never a cluster or a gap
+    P.alphas.every((a2, i) => i === 0 || a2 > P.alphas[i-1]) && P.alphas[P.alphas.length - 1] > 0.5 &&   // newest strongest, the rest faded
+    P.sp.slice(-4).every(Boolean) && P.sp.filter(Boolean).length >= 4;   // the last four landings were the sprint's
+  // less visible: the constant says so, and the freshest print on the pitch is a tint of the
+  // ink over the court, not the ink
+  o.printExpect = sl.printExpect;
+  o.printsAreFaint = M.FOOTSTEP.alpha <= 0.6 && sl.printBlend != null && sl.printBlend < 0.6 &&
+                     sl.printBlend > sl.printExpect * 0.4 && sl.printBlend < sl.printExpect * 1.4;   // a tint, and the tint the painter asked for
   // ...and the CONTROL: plain discs on grass with the dot trail, same seed, same drive —
   // every state handed, every one in the team colour, exactly as before either batch.
   M.sel.look.palette='grass'; M.sel.look.discs='none'; M.sel.look.trail='dots'; M.applyTheme('grass');
@@ -305,7 +350,7 @@ const r = await p.evaluate(async ()=>{
     for (let i=0;i<600;i++){
       if (Math.hypot(me.x, me.y) > 120 && (me.x*me.vx + me.y*me.vy) > 0) dir = -dir;
       M.pads.p1.dx = dir;
-      M.step(w); M.advanceTrails(w); M.advanceTire(w); if (i%30===0){ M.computeCam(); M.render(); } }
+      M.step(w); M.advanceTrails(w); M.advanceFeet(w); M.advanceTire(w); if (i%30===0){ M.computeCam(); M.render(); } }
     M.pads.p1.dx=0; M.pads.p1.kick=false; return { h: hashWorld(w), tire: me._tire, spent: me.spent, records: M.discTrails[0].length }; };
   const simA = sim('footballers', 'steps'), simB = sim('none', 'dots');
   o.renderOnly = simA.h === simB.h && simA.tire === 1 && simB.tire === 0 && simA.records > 0;   // ...and the tells were really ON in one arm
@@ -350,6 +395,7 @@ const checks = {
   flagOnPair: r.flagOnPair, flagNowhereElse: r.flagNowhereElse, limbSpriteLoaded: r.limbSpriteLoaded,
   trail_isSteps: r.slTrailIsSteps, trail_restHidden: r.slRestHidden, trail_sprintShown: r.slSprintShown, trail_spentHidden: r.slSpentHidden,
   trail_recordsTagged: r.recordsTagged, sweats: r.slSweats,
+  prints_areTheSteps: r.printsAreTheSteps, prints_areFaint: r.printsAreFaint,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,

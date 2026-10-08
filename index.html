@@ -5146,6 +5146,19 @@ const ADS = {
                   // ⚠️ The SIMULTANEITY is left alone deliberately: the ask was the speed,
                   // and staggering the slots so one turns at a time is a different picture
                   // nobody asked for. The number is written down here so it can be.
+  slide: 0.45,    // seconds a rollover takes. ⚠️ THE BOARDS SLIDE RATHER THAN CUT, asked for
+                  // as "when the signs change, have them slide to the left to disappear and
+                  // show the next ad": for the first `slide` of each period the old board
+                  // slides out toward the START of its words and the next slides in behind
+                  // it, clipped to the slot. "Left" is the reading direction's left — every
+                  // board is drawn in a frame `adReadAngle` has turned so its words read
+                  // left-to-right or top-to-bottom, so local -x is leftward on a touchline
+                  // board and UPWARD on one that reads top-to-bottom (the end rows on a turned
+                  // pitch). Sliding across a board's 24-unit depth instead would be a flicker.
+                  // Read off `adState.t` like the rollover itself, so two draws of one step
+                  // agree and nothing in the world can see it. Smoothstepped, so it leaves and
+                  // arrives without a jolt. Measured in `tests/ads.mjs` as the strip of the old
+                  // board still showing: at the START of the slot, shrinking with the phase.
   minPx: 4,       // below this font size the words are a smear — draw the board, skip them
   rim: 'rgba(0,0,0,0.38)',
   dimA: 0.22,     // a board's alpha while a body stands over it — the surround shows through
@@ -5339,7 +5352,8 @@ function adSlots(L){
 }
 // Drawn from `drawPitch`, inside `pitchXform`, after the turf and before the markings.
 // Every slot on both touchlines shows a different board, and the whole row rolls one
-// place every `adEverySecs()` seconds — `adState.t` is the clock, never the sim's.
+// place every `adEverySecs()` seconds — `adState.t` is the clock, never the sim's — with
+// the old board SLIDING out and the next sliding in over `ADS.slide` (see there).
 function drawAds(w){
   const rects = adSlotRects(w);
   if (!rects) return;
@@ -5347,10 +5361,15 @@ function drawAds(w){
   if (!list.length) return;
   const s = cam.s, depthPx = ADS.depth * s;
   if (depthPx < 1.5) return;
-  const base = Math.floor(adState.t / adEverySecs());
+  const every = adEverySecs(), base = Math.floor(adState.t / every), n = list.length;
+  // The slide (see ADS.slide): how far into this period's rollover we are, 0 → 1, eased.
+  const u = adState.t - base * every;
+  const kRaw = ADS.slide > 0 ? Math.min(1, u / ADS.slide) : 1;
+  const k = kRaw * kRaw * (3 - 2 * kRaw);
+  const sliding = k < 1 && n > 1;                 // one board in the rotation has nothing to slide to
   const wasA = ctx.globalAlpha;
-  rects.forEach((rc, k) => {
-    const ad = list[((base + k) % list.length + list.length) % list.length];
+  rects.forEach((rc, i) => {
+    const ad = list[((base + i) % n + n) % n];
     const dim = adState.dim.has(rc.id) ? adState.dim.get(rc.id) : 1;
     ctx.save();
     ctx.translate(wx(rc.x), wy(rc.y));
@@ -5362,7 +5381,18 @@ function drawAds(w){
     // and the end rows the other way about, which is what a hoarding seen from above does.
     ctx.rotate(adReadAngle(rc.along === 'y' ? Math.PI / 2 : 0));
     ctx.globalAlpha = wasA * dim;
-    paintAdBoard(ctx, ad, rc.len * s, depthPx);
+    const len = rc.len * s;
+    if (!sliding) paintAdBoard(ctx, ad, len, depthPx);
+    else {
+      // The board this slot showed last period leaves along local -x (the start of its
+      // words) by `k` of the slot, and this period's arrives from +x behind it. Clipped to
+      // the slot's own rounded rectangle, or the leaving board runs across the gap into
+      // its neighbour — and the neighbour's does the same into the next.
+      const prev = list[((base - 1 + i) % n + n) % n];
+      ctx.beginPath(); roundRectPathOn(ctx, -len/2, -depthPx/2, len, depthPx, Math.min(4, depthPx*0.18)); ctx.clip();
+      ctx.save(); ctx.translate(-k * len, 0); paintAdBoard(ctx, prev, len, depthPx); ctx.restore();
+      ctx.translate((1 - k) * len, 0); paintAdBoard(ctx, ad, len, depthPx);
+    }
     ctx.restore();
   });
   ctx.globalAlpha = wasA;
@@ -6193,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261007.0940AM';
+const VERSION = '20261007.1120AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6209,6 +6239,13 @@ const VERSION = '20261007.0940AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261007.1120AM', title: 'The hoardings slide',
+    changed: [
+      '<b>The pitch-side boards slide when they change</b> instead of cutting: the old sign slides off to the left and the next one slides in behind it.',
+      '<b>Boards that read top to bottom slide upward</b> — the end rows on a turned pitch — so a sign always leaves the way its words begin.',
+      '<b>Footprints follow the feet.</b> A sprinting footballer\'s prints land where each boot does, left and right in turn, pointing the way he ran — fainter and closer together than before.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261007.0940AM', title: 'Footsteps instead of a ring',
     changed: [
       '<b>The ring round your player is gone for now.</b> Holding KICK no longer draws a circle, and the stamina colour went with it — the trail is the readout instead.',
@@ -9228,10 +9265,16 @@ function applySfxSet(k){
 // per player per frame is exactly the steady allocation `advanceTrails` already went
 // out of its way to avoid. Screen space is also what lets the picker tile call the
 // real painter instead of drawing a picture of it.
-// The footprint, in body radii on screen: how far beside the path it sits (`off`), the sole
-// (`len` along by `wid` across), the toe ahead of it, and its alpha against a fresh record.
-// `fallbackEvery` is only for records that carry no stride side — see `steps` below.
-const FOOTSTEP = { off: 0.60, len: 0.38, wid: 0.23, toe: 0.15, alpha: 0.90, fallbackEvery: 3 };
+// The footprint, in body radii on screen: the sole (`len` along by `wid` across), the toe
+// ahead of it, and its alpha against a fresh record. A body that carries planted feet
+// (`p._feet`, the footballers) prints where each foot LANDS — `p._prints`, recorded in
+// `stepFeet`, faded by `fade` a step, at most `max`, pulled `inset` of the way in toward the
+// body's line (see there). `off` and `fallbackEvery` are the stand-in for a body with no
+// feet and for a picker tile: a print beside the trail's own records, alternating sides.
+// ⚠️ `alpha` 0.45, down from 0.90 — asked for as *"less visible"*: a fresh print at 0.9 of
+// the hot ink read as a mark on the pitch rather than a mark left on it.
+const FOOTSTEP = { len: 0.34, wid: 0.21, toe: 0.13, alpha: 0.45, fade: 0.955, max: 10, inset: 0.72,
+                   off: 0.60, fallbackEvery: 3 };
 const TRAIL_LOOKS = {
   // ⚠️ **THE COLOUR IS SET ONCE AND THE FADE RIDES `globalAlpha`.** This built a fresh
   // `rgba()` string and re-assigned `fillStyle` for EVERY dot — 16 discs x 12 dots = 192
@@ -9264,15 +9307,31 @@ const TRAIL_LOOKS = {
   // (this record from the one before it), so a bounce turns the prints with the run.
   // ⚠️ A record with no `s` (a picker tile, a suite's synthetic points) alternates every
   // `fallbackEvery` points instead, so the tile shows the pattern the pitch will.
-  steps: { name:'Footsteps', draw(c, pts, n, col, rr){
+  steps: { name:'Footsteps', draw(c, pts, n, col, rr, team, prints){
     const g0 = c.globalAlpha, F = FOOTSTEP;
     c.save();
     c.fillStyle = rgba(col, 1);
+    const print = (x, y, hx, hy, a) => {
+      c.globalAlpha = g0 * F.alpha * Math.sqrt(a);
+      c.beginPath(); c.ellipse(x, y, F.len*rr, F.wid*rr, Math.atan2(hy, hx), 0, 2*Math.PI); c.fill();
+      const tx = x + hx*(F.len + F.toe*0.7)*rr, ty = y + hy*(F.len + F.toe*0.7)*rr;      // the toe, ahead
+      c.beginPath(); c.arc(tx, ty, F.toe*rr, 0, 2*Math.PI); c.fill();
+    };
+    // ⚠️ THE FEET'S OWN LANDINGS WHEN THE BODY HAS THEM (`prints`, from `p._prints` through
+    // `drawDiscTrails`): the spot each boot was put down and the heading it stepped on, so a
+    // print faces the way the player ran and sits where the boot was. The path below is the
+    // stand-in for a body with no planted feet — and for the picker tile, whose points are
+    // a stretch of travel and nothing else.
+    if (prints && prints.n){
+      for (let k = 0; k < prints.n; k++){ const q = prints.pts[k]; print(q.x, q.y, q.hx, q.hy, q.a); }
+      c.restore();
+      return;
+    }
     for (let k = 0; k < n; k++){
       const d = pts[k], tagged = d.s != null;
-      const print = tagged ? (k > 0 && pts[k-1].s != null && d.s !== pts[k-1].s)
-                           : (k % F.fallbackEvery === 0);
-      if (!print) continue;
+      const isPrint = tagged ? (k > 0 && pts[k-1].s != null && d.s !== pts[k-1].s)
+                             : (k % F.fallbackEvery === 0);
+      if (!isPrint) continue;
       const side = tagged ? d.s : (Math.floor(k / F.fallbackEvery) % 2 ? 1 : -1);
       let hx = 1, hy = 0;
       const q = k > 0 ? pts[k-1] : (n > 1 ? pts[1] : null);
@@ -9280,15 +9339,11 @@ const TRAIL_LOOKS = {
         const dx = k > 0 ? d.x - q.x : q.x - d.x, dy = k > 0 ? d.y - q.y : q.y - d.y;
         const L = Math.hypot(dx, dy); if (L > 1e-6){ hx = dx / L; hy = dy / L; }
       }
-      const x = d.x - hy*side*F.off*rr, y = d.y + hx*side*F.off*rr;   // beside the path, this side
-      // ⚠️ `sqrt(a)`, not `a`: the record's fade (`DOT_FADE`) is tuned for a dot a few
+      // ⚠️ `sqrt(a)`, not `a` (inside `print`): a record's fade is tuned for a dot a few
       // pixels wide in the team colour, and a print a half-stride back is already at 0.6 of
       // it — rendered straight, the second print was a smudge and the third was gone. The
       // age is the sampling's; how a look RENDERS an age is the look's.
-      c.globalAlpha = g0 * F.alpha * Math.sqrt(d.a);
-      c.beginPath(); c.ellipse(x, y, F.len*rr, F.wid*rr, Math.atan2(hy, hx), 0, 2*Math.PI); c.fill();
-      const tx = x + hx*(F.len + F.toe*0.7)*rr, ty = y + hy*(F.len + F.toe*0.7)*rr;      // the toe, ahead
-      c.beginPath(); c.arc(tx, ty, F.toe*rr, 0, 2*Math.PI); c.fill();
+      print(d.x - hy*side*F.off*rr, d.y + hx*side*F.off*rr, hx, hy, d.a);   // beside the path, this side
     }
     c.restore();
   } },
@@ -35175,6 +35230,7 @@ function stepFeet(p, steps){
   }
   if (!f.up) f.up = [false, false];                      // feet from before the lift existed
   const lim = F.reach * r;                               // the leash
+  const landed = [false, false];                         // which feet were put down THIS step — see the prints below
   for (let i = 0; i < 2; i++){
     const sgn = i ? 1 : -1, off = i ? 0 : 0.5;
     if (put){ const s2 = stanceAt(i); f.x[i] = s2[0]; f.y[i] = s2[1]; f.up[i] = false; continue; }
@@ -35203,6 +35259,7 @@ function stepFeet(p, steps){
       f.x[i] += (tx - f.x[i])*k; f.y[i] += (ty - f.y[i])*k;
       f.up[i] = false;
     } else {
+      if (air0) landed[i] = true;                        // the clock's air phase just ended: a landing
       // On the ground. A foot stretched past the leash LIFTS (`up`) and follows its spot at
       // the swing's own pace until the clock's air phase takes it over and lands it — see
       // `FOOTBALLER.reach`. The clock is untouched: it lands at the gait value it always did.
@@ -35228,6 +35285,30 @@ function stepFeet(p, steps){
   for (let i = 0; i < 2; i++){
     const dx = f.x[i] - p.x, dy = f.y[i] - p.y, dd = Math.hypot(dx, dy);
     if (dd > lim){ f.x[i] = p.x + dx/dd*lim; f.y[i] = p.y + dy/dd*lim; }
+  }
+  // THE FOOTPRINTS (`p._prints`, drawn by `TRAIL_LOOKS.steps`): one record per LANDING, at
+  // the spot the foot was put down, headed the way the feet are stepping. Asked for as
+  // *"have them match the steps that the player is taking"* — the first build placed a print
+  // beside the trail's own samples off the stride phase, which put it near where a foot
+  // might be and facing wherever the sampled path happened to run; this is the foot itself.
+  // ⚠️ `inset` pulls the print toward the body's own line by a fraction of its ACROSS offset
+  // (*"a little closer to each other"*): the boots land 0.82r either side, and a pair of
+  // prints that far apart read as a straddle. Along the heading it stays exactly where the
+  // foot landed. Render only, like `_feet` itself; faded here, in the step loop, never in a
+  // draw; `sp` is whether the body was sprinting, which is what the Sunday League pair's
+  // only-while-sprinting rule reads (`trailRecordShown`).
+  if (!p._prints) p._prints = [];
+  const pr = p._prints, S = FOOTSTEP;
+  let keep = 0;
+  for (let k = 0; k < pr.length; k++){ const q = pr[k]; q.a *= Math.pow(S.fade, n); if (q.a > 0.04) pr[keep++] = q; }
+  pr.length = keep;
+  for (let i = 0; i < 2; i++){
+    if (!landed[i]) continue;
+    const dx = f.x[i] - p.x, dy = f.y[i] - p.y;
+    const along = dx*f.hx + dy*f.hy, across = -dx*f.hy + dy*f.hx;   // in the feet's own frame
+    if (pr.length >= S.max) pr.shift();
+    pr.push({ x: p.x + f.hx*along - f.hy*across*S.inset, y: p.y + f.hy*along + f.hx*across*S.inset,
+              hx: f.hx, hy: f.hy, s: i ? 1 : -1, sp: !!p.sprinting, a: 1 });
   }
 }
 // ⚠️ `allBodies`, not `w.players`: a body waiting on the touchline is drawn too, and walks.
@@ -36382,6 +36463,8 @@ function advanceTrails(w){
 }
 
 let trailPts = [];                        // reused scratch — see TRAIL_LOOKS above
+let printPts = [];                        // the footprints', same reason (see `stepFeet`)
+const printsArg = { pts: printPts, n: 0 };  // handed to a look as its seventh argument
 let ballPts  = [];                        // the ball streak's, same reason
 function drawDiscTrails(w){
   // ⚠️ The first thing to go when the machine cannot keep up — see `fullQuality`. Gated
@@ -36408,14 +36491,28 @@ function drawDiscTrails(w){
       const t = trailPts[n++];
       t.x = wx(d.x); t.y = wy(d.y); t.a = d.a; t.s = d.s == null ? null : d.s; t.sp = !!d.sp;
     }
-    if (!n) continue;
+    // ...and the feet's own landings (`p._prints`, see `stepFeet`), under the same gate, for
+    // a look that draws them (Footsteps). Headings are world vectors; the frame is the pitch's.
+    let pn = 0;
+    const pr = p._prints;
+    if (pr && pr.length){
+      while (printPts.length < pr.length) printPts.push({x:0, y:0, hx:1, hy:0, s:1, a:1, sp:false});
+      for (let k = 0; k < pr.length; k++){
+        const d = pr[k];
+        if (!trailRecordShown(p, d)) continue;
+        const t = printPts[pn++];
+        t.x = wx(d.x); t.y = wy(d.y); t.hx = d.hx; t.hy = d.hy; t.s = d.s; t.a = d.a; t.sp = !!d.sp;
+      }
+    }
+    if (!n && !pn) continue;
+    printsArg.pts = printPts; printsArg.n = pn;
     // ⚠️ The team colour — or, on the Sunday League pair only, the HOT ink while sprinting
     // (see STAMTELL). The alpha is handed down through `globalAlpha`, which every look
     // already multiplies rather than overwrites.
     const ink = trailInkFor(p);
     const g0 = ctx.globalAlpha;
     if (ink.a !== 1) ctx.globalAlpha = g0 * ink.a;
-    look.draw(ctx, trailPts, n, ink.col, p.r*s, p.team);
+    look.draw(ctx, trailPts, n, ink.col, p.r*s, p.team, printsArg);
     ctx.globalAlpha = g0;
   }
 }

@@ -1458,6 +1458,34 @@ three lines a second time, name it.
   ⚠️ **THE SIMULTANEITY IS LEFT ALONE DELIBERATELY, and the number is written down so it
   can be revisited.** Staggering the slots so one turns at a time is a different picture
   and nobody asked for it — the ask was the speed. Rule 8.
+  ⚠️ **THE BOARDS SLIDE AT A ROLLOVER NOW** (`ADS.slide`, 0.45s; the `sliding` branch of
+  `drawAds`; `tests/ads.mjs` 4b). Asked for as *"when the signs change, have them slide to
+  the left to disappear and show the next ad"*. For the first `slide` of each period the
+  old board slides out along local **−x** by a smoothstepped share of the slot and the next
+  slides in from +x behind it, both clipped to the slot's rounded rectangle.
+  ⚠️ **"LEFT" IS THE READING DIRECTION'S LEFT.** Every board is painted in a frame
+  `adReadAngle` has turned so its words read left-to-right or top-to-bottom on screen, so
+  local −x is leftward on a touchline board and UPWARD on one that reads top-to-bottom (the
+  end rows on a turned pitch). Sliding across a board's 24-unit depth instead would be a
+  flicker, and sliding screen-left on a vertical board would move it across its width. A
+  sign leaves the way its words begin.
+  ⚠️ **READ OFF `adState.t`, LIKE THE ROLLOVER ITSELF**, so two draws of one step agree and
+  the world cannot see it; the render-only hash is untouched. One board in the rotation has
+  nothing to slide to and cuts as before (`n > 1`). The simultaneity above is unchanged —
+  every slot slides at once, which with a slide reads as the row turning over rather than
+  sixteen cuts.
+  ⚠️ **MEASURED with a two-board rotation in navy and white**, sampled along a touchline
+  slot off the centreline and sorted along the reading axis on screen: all 20 samples old
+  before the rollover, 0 after the slide, and the old board's strip a PREFIX of **16 → 4**
+  samples at 0.3 → 0.7 of the slide. The gap between two slots reads exactly the stood-down
+  frame mid-slide — that is the clip, and without it the leaving board runs across the gap
+  into its neighbour while the neighbour's does the same into the next. Both boards' words
+  are painted mid-slide, which a cut never shows.
+  ⚠️ **THE ROLLOVER PROBES MOVED PAST THE SLIDE WINDOW** (`ADS.slide + 0.1`): at t = 0 a
+  slot shows the OLD board sliding out, so *"holds within the period"* was comparing a slide
+  with a settled board and went red on a build with nothing wrong with it. Four sabotages
+  (the slide cut, the direction reversed, the clip dropped, the next board not painted
+  until it has arrived), each caught by its own check.
   ⚠️ **`defaultSel().adEvery` IS `ADS.every` NOW, and it was a second literal 8.** Two
   copies of one default is the drift this file keeps recording (`hitStopFrames`' hard-coded
   `0` against a shipped 5), and `tests/ads.mjs` pins the two equal. Safe because `ADS` is
@@ -6562,15 +6590,29 @@ three lines a second time, name it.
   as the control in the same run. Flip one value and everything is as it was. ⚠️ `bigcourt`
   was the one the pool found: hidden, its "ring" probe read the body's own edge — **17px
   against a reach of 23** on Classic — and reported *"the kick ring is not the reach"*.
-  ⚠️ **A FOOTPRINT IS A LOOK, AND THE SIDE IS SIM STATE.** `advanceTrails` stamps every
-  record with `s` — which half of the body's own stride it was dropped in, off `p.gait` and
-  `gaitPeriod()/2`, the same offsets `footSwing` gives the two feet — and `sp`, whether the
-  body was sprinting. `TRAIL_LOOKS.steps` draws one print at the FIRST record of each new
-  half-stride, beside the path on that side, headed along the path; the records between are
-  the sampling every look shares. `traillook`'s *"the look does not touch the sampling"*
-  therefore still holds: the sampling grew two FIELDS, not a second schedule, and a per-look
-  gap was considered and refused for exactly that check. `DOT_MAX` went 12 → 20 so a sprint
-  holds five or six prints; the fade still decides how long a record lives.
+  ⚠️ **A FOOTPRINT IS WHERE A FOOT LANDED** (`p._prints`, recorded in `stepFeet` on the
+  step a foot's air phase ends, at the foot's own spot and the feet's own heading, faded by
+  `FOOTSTEP.fade` a step, `max` 10; handed to the look as a seventh argument through
+  `printPts`/`printsArg` in `drawDiscTrails`). **This REVERSES the first build**, which
+  placed a print beside the trail's own SAMPLES off the stride phase (`s` on each record,
+  the first record of each new half-stride) — and was reported straight back: *"facing the
+  wrong direction … have them match the steps that the player is taking … a little closer
+  to each other … less visible"*. Measured on that build: the sides ran in runs (two or three
+  records to a half-stride) and the toe followed the sampled path, not the step. Off the
+  landings the sides alternate **strictly**, every print faces the run (toe heading against
+  the vector from the print before it: **0.82–0.86**), and they sit **31–34** units apart at
+  a sprint. `inset` (0.72) pulls each print that fraction of its ACROSS offset toward the
+  body's line — the boots land 0.82r either side and a pair that far apart read as a
+  straddle — and the along position is exactly the landing's. `alpha` 0.90 → **0.45**.
+  ⚠️ **THE SAMPLED PATH STAYS AS THE STAND-IN** for a body with no planted feet (another
+  skin wearing Footsteps) and for the picker tile, whose points are a stretch of travel and
+  nothing else; `s`/`sp` on the trail records stay for it and for the gate. `traillook`'s
+  *"the look does not touch the sampling"* still holds — the sampling grew two FIELDS, not a
+  second schedule, and a per-look gap was considered and refused for exactly that check.
+  `DOT_MAX` went 12 → 20 with the first build and is left there.
+  ⚠️ **`_prints` IS RENDER-ONLY LIKE `_feet`**, advanced in `stepFeet` (per sim step, from
+  the step loop), never in a draw; the replay's `repAnimate` steps feet per slot and so
+  records prints on its slots too, which nothing draws (a replay shows no trails).
   ⚠️ **`sqrt(a)`, NOT `a`, for the print's alpha.** `DOT_FADE` is tuned for a dot in the team
   colour; rendered straight, the second print back (a=0.36) was a smudge and the third gone.
   How a look RENDERS an age is the look's; the age is the sampling's.
@@ -6607,7 +6649,7 @@ three lines a second time, name it.
   not at the planted foot's own landing spot (`_feet` is render-only and a replay rebuilds
   its bodies); the prints are the hot ink, not a pressed-grass shade; and a sprint onto a
   pitch the sampler has never seen a stride on (a body that teleported) prints from the
-  stride phase it arrived with. Thirteen sabotages, each caught by its own check.
+  stride phase it arrived with. Nineteen sabotages, each caught by its own check — six of them on the landing prints (no landing recorded, the heading reversed, one side only, alpha raised, no fade, prints not gated), the last of which reddens the three gate checks and nothing else, which is what says the gate and the prints are two things.
 - **THE TRAIL AND THE FIGURE SAY "SPRINTING" AND "SPENT", ON THE SUNDAY LEAGUE PAIR ONLY**
   (`STAMTELL`, `staminaTellsOn`, `trailInkFor`, `advanceTire`, `p._tire`, `p._sweatT`,
   `DISC_SKINS.footballers.staminaTells`; `tests/stamtells.mjs`). Asked for after a design
