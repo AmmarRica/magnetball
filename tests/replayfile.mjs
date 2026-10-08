@@ -71,7 +71,9 @@ const made = await p.evaluate(() => {
 });
 
 ok('a file is produced', made.hasDoc);
-ok('it is stamped and versioned', made.format === 'magnetball-replay' && made.v === 1,
+// ⚠️ `v` is 2 since the sprint rides two bits beside the kick flag (see `repEncodeFrames`);
+// a v1 file still opens, which `tests/stamtells.mjs`' `rep_oldFileStillPlays` measures.
+ok('it is stamped and versioned', made.format === 'magnetball-replay' && made.v === 2,
    made.format + ' v' + made.v);
 ok('it names its field and mode', made.field === 'classic' && made.mode === '3v3',
    made.field + ' / ' + made.mode);

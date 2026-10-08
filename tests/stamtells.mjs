@@ -572,10 +572,13 @@ const r = await p.evaluate(async ()=>{
     me.sprinting = false; const downs=[]; for (let i=0;i<60;i++){ M.advanceTire(w); downs.push(dv()); }
     o.dash.ease = { born, u0: ups[0], u5: ups[5], u59: ups[59], between: ups.filter(v => v > 0 && v < 1).length, d0: downs[0], d59: downs[59] };
     o.dashEases = born === 0 && ups[0] > 0 && ups[0] < 0.5 && ups[5] > ups[0] && ups[59] === 1 && o.dash.ease.between >= 5 && downs[0] < 1 && downs[0] > 0 && downs[59] === 0;
-    // a replay shows no dash — the spread body is whoever is on the pitch now
+    // ⚠️ REVERSED: a replay SHOWS the dash now (the sprint is recorded and `repAnimate`
+    // eases `_dash` per slot from it — the `rep_*` block below drives that path). What the
+    // painter does under `replay.active` is read the same field it reads live, so a replayed
+    // sprinter must draw the live sprinter's pixels and not the jogger's.
     const sprinter = base({ vx:3, gait: P*0.25, sprinting:true, _dash:1 }), jogger = base({ vx:3, gait: P*0.25 });
     M.replay.active = true; const rep3 = paint('footballers', sprinter); M.replay.active = false;
-    o.dashNotInReplay = diffPx(rep3, paint('footballers', jogger)) === 0 && diffPx(paint('footballers', sprinter), paint('footballers', jogger)) > 300;
+    o.dashInReplay = diffPx(rep3, paint('footballers', sprinter)) === 0 && diffPx(rep3, paint('footballers', jogger)) > 300;
     // ...and on the PITCH, at the size a body is really drawn, `_dash` 0 against 1 moves pixels
     // on the footballer and none on a plain disc (the `_tire` probe's own instrument)
     {
@@ -611,6 +614,130 @@ const r = await p.evaluate(async ()=>{
   M.applyBundle('kickabout');
   return o;
 });
+
+// ---- THE REPLAY: the steps and the turbo show up in it ---------------------------------
+// Asked for as *"make sure steps and turbo animation difference and effect show up in replays
+// as well"*. Measured on the build before: a recorded frame carried `x, y, k` and nothing
+// else, so over 239 replayed frames of a real sprint the painter was handed `sprinting` false
+// on every one of 956 paints and a dash of 0, no print was drawn (0 pixels against 472 on the
+// live pitch mid-sprint) — and the replay PUSHED ITS OWN LANDINGS INTO THE LIVE BODY'S
+// `_prints` (2 records → 4, by reference). Now: the sprint rides two bits beside the kick
+// flag (`repSprintOf`, `repEncodeFrames`), `repAnimate` eases the dash and keeps the prints
+// per slot, `drawReplayTrails` paints them, and `REPFILE.v` is 2.
+// ⚠️ Prints are measured as a DIFFERENCE against the same frame with `FOOTSTEP.alpha` 0, with
+// the replay's own stride state put back between the two draws — `repAnimate` advances it on
+// every call, and without the restore the first run of this probe measured the feet stepping
+// and reported prints in a replay that drew none.
+const rp = await p.evaluate(async () => {
+  const M = window.__magnet, o = {};
+  M.qualityPin(true); M.applyBundle('kickabout');
+  const warmLimb = () => M.klimbSprite('arm', M.TH.teamRed, M.kitPerson({ name:'Mike' })[1], M.TH.discRim || '#151515');
+  for (let i=0;i<80;i++){ if (warmLimb()) break; await new Promise(res=>setTimeout(res,40)); }
+  M.sel.mode='1v1'; M.sel.lobby='off'; M.setMatchSeed(5); M.startMatch();
+  const w = M.world; w.state='play'; w.stateT=2; const me = w.players[0], bot = w.players[1];
+  // a real run through the real step: 60 steps jogging, 150 sprinting (KICK held), 90 spent
+  const park = () => { bot.x=0; bot.y=-300; bot.vx=bot.vy=0; bot._px=bot.x; bot._py=bot.y; w.ball.x=0; w.ball.y=-150; w.ball.vx=w.ball.vy=0; };
+  let dir = 1, mid = null;
+  const g=document.getElementById('game'), gc=g.getContext('2d');
+  const shot = () => gc.getImageData(0,0,g.width,g.height).data;
+  const diffPx = (a,b) => { let n=0; for (let i=0;i<a.length;i+=4){ if (Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]) > 24) n++; } return n; };
+  const snapAnim = () => JSON.parse(JSON.stringify(M.repAnim)), putAnim = (s) => Object.assign(M.repAnim, s);
+  const printPx = (draw) => { const a0 = M.FOOTSTEP.alpha, s = snapAnim(); draw(); const on = shot(); putAnim(s); M.FOOTSTEP.alpha = 0; draw(); const off = shot(); M.FOOTSTEP.alpha = a0; putAnim(s); return diffPx(on, off); };
+  for (let i=0;i<300;i++){
+    if (Math.hypot(me.x, me.y) > 120 && (me.x*me.vx + me.y*me.vy) > 0) dir = -dir;
+    M.pads.p1.dx = dir; M.pads.p1.kick = i >= 60 && i < 210; park();
+    M.step(w); M.advanceTrails(w); M.advanceFeet(w); M.advanceTire(w);
+    if (i === 160){ M.juiceReset(); M.computeCam(); mid = { sprinting: me.sprinting, dash: +me._dash.toFixed(2), stam: +me.stam.toFixed(2), printPx: printPx(() => M.render()) }; }
+  }
+  M.pads.p1.dx = 0; M.pads.p1.kick = false;
+  o.live = mid;
+  const frames = M.repBuf.slice(-300);
+  const sVals = frames.map(f => f.p[0].s);
+  o.recorded = { keys: Object.keys(frames[0].p[0]), jog: sVals.slice(0,60).filter(v => v).length, sprint: sVals.slice(60,210).filter(v => v === 1 || v === 2).length,
+                 low: sVals.filter(v => v === 2).length, kicksHeld: frames.filter(f => f.p[0].k).length };
+  o.sprintRecorded = o.recorded.keys.includes('s') && o.recorded.jog === 0 && o.recorded.sprint >= 100 && mid.sprinting && mid.printPx > 100;
+  o.lowRecorded = o.recorded.low > 0 && o.recorded.low < o.recorded.sprint && sVals.lastIndexOf(2) > sVals.indexOf(1);
+  // ...played back through drawReplayFrame (what playReplay and the offline export both draw with)
+  const skin = M.DISC_SKINS.footballers, real = skin.paint;
+  const handed = [];
+  // (`printPx` draws every frame TWICE — once with the prints and once without — so the hook
+  // records the first draw only, or every index below is doubled)
+  skin.paint = function(c, q){ if (q.name === me.name && M.FOOTSTEP.alpha > 0) handed.push({ sp: !!q.sprinting, dash: q._dash }); return real.apply(this, arguments); };
+  const liveBefore = JSON.stringify(me._prints), liveFeetBefore = JSON.stringify(me._feet);
+  const px = []; let lowMax = 0, soilMax = 0;
+  try {
+    M.replay.active = true; M.repAnimReset(60);
+    for (let i=0;i<frames.length-1;i++){ const f = M.repTween(frames[i], frames[i+1], 0, 60); px.push(printPx(() => M.drawReplayFrame(f)));
+      // the replay's own prints, read as it goes — they fade, so the end of the replay holds none
+      const pr = M.repAnim.pr[0] || []; lowMax = Math.max(lowMax, pr.filter(q => q.low).length); soilMax = Math.max(soilMax, pr.filter(q => q.sp && !q.low).length); }
+  } finally { M.replay.active = false; skin.paint = real; }
+  const dashes = handed.map(h => h.dash);
+  o.handed = { n: handed.length, dashJogMax: Math.max(...dashes.slice(0,60)), dashSprintMax: Math.max(...dashes.slice(60,210)), dashEnd: dashes[dashes.length-1],
+               between: dashes.filter(v => v > 0.02 && v < 0.98).length, sprintingAt: handed.findIndex(h => h.sp) };
+  o.px = { jogMax: Math.max(...px.slice(0,55)), sprintMax: Math.max(...px.slice(60,210)), laterMax: Math.max(...px.slice(210)) };
+  o.dashShown = o.handed.n >= frames.length - 1 && o.handed.dashJogMax === 0 && o.handed.dashSprintMax === 1 && o.handed.sprintingAt >= 55 && o.handed.sprintingAt <= 62;
+  o.dashEases = o.handed.between >= 10 && o.handed.dashEnd === 0;
+  o.printsShown = o.px.sprintMax > 100;
+  // the jog leaves nothing, the sprint's prints fade after it ends rather than vanishing
+  o.printsOnlyWhileSprinting = o.px.jogMax === 0 && o.px.sprintMax > 100 && o.px.laterMax > 0 && o.px.laterMax < o.px.sprintMax;
+  // a print landed with the ring nearly out is white (`low`) — read off the replay's own slot
+  o.prints = { lowMax, soilMax };
+  o.printsTurnWhite = lowMax > 0 && soilMax > 0;
+  o.liveBodyUntouched = JSON.stringify(me._prints) === liveBefore && JSON.stringify(me._feet) === liveFeetBefore;
+  // the FILE: v2, the flag bits in the third number, and it plays with the dash and the prints
+  M.lastReplay = { players: w.players.length, frames, goalAt: -1, roster: w.players.map(q => ({ team:q.team, name:q.name, color:q.color, cap:q.cap, flag:q.flag||'none', eyes:q.eyes||'googly', r:q.r })) };
+  const doc = M.repFileBuild(), text = JSON.stringify(doc);
+  const play = (d) => {
+    const seen = []; skin.paint = function(c, q){ if (q.name === me.name && M.FOOTSTEP.alpha > 0) seen.push({ sp: !!q.sprinting, dash: q._dash }); return real.apply(this, arguments); };
+    const fr = M.repDecodeFrames(d.frames, d.players.length); let pxMax = 0;
+    try { M.replay.active = true; M.repAnimReset(d.fps);
+      for (let i=0;i<fr.length-1;i++){ const f = M.repTween(fr[i], fr[i+1], 0, d.fps); pxMax = Math.max(pxMax, printPx(() => M.drawReplayFrame(f))); }
+    } finally { M.replay.active = false; skin.paint = real; }
+    return { pxMax, sprintingAny: seen.some(s => s.sp), dashMax: Math.max(...seen.map(s => s.dash == null ? -1 : s.dash)) };
+  };
+  const parsed = M.repFileParse(text);
+  o.file = { v: doc.v, bytes: [...new Set(doc.frames.map(f => f[4]))].sort((a,b)=>a-b), played: play(parsed) };
+  o.fileCarriesIt = doc.v === 2 && o.file.bytes.some(v => v & 2) && o.file.bytes.some(v => v & 4) && o.file.played.sprintingAny && o.file.played.dashMax === 1 && o.file.played.pxMax > 100;
+  // an OLD file (v1, the third number a boolean): still opens, and shows no dash and no prints
+  const old = JSON.parse(text); old.v = 1; old.frames = old.frames.map(f => f.map((v,i) => (i >= 2 && (i-2) % 3 === 2) ? (v & 1) : v));
+  let oldDoc = null, oldErr = ''; try { oldDoc = M.repFileParse(JSON.stringify(old)); } catch(e){ oldErr = e.message; }
+  o.old = { err: oldErr, played: oldDoc ? play(oldDoc) : null };
+  o.oldFileStillPlays = !!oldDoc && !o.old.played.sprintingAny && o.old.played.dashMax === 0 && o.old.played.pxMax === 0;
+  const newer = JSON.parse(text); newer.v = 3; let refused = ''; try { M.repFileParse(JSON.stringify(newer)); } catch(e){ refused = e.message; }
+  o.newerFileRefused = /newer build/.test(refused);
+  // THE CONTROL: a plain disc on grass with the dot trail draws the same replay frame whether
+  // the sprint bits are set or stripped — the recording reaches nothing on any other theme
+  M.sel.look.palette = 'grass'; M.sel.look.discs = 'none'; M.sel.look.trail = 'dots'; M.applyTheme('grass');
+  const stripped = frames.map(f => ({ bx:f.bx, by:f.by, p: f.p.map(q => ({ x:q.x, y:q.y, k:q.k, s:0 })) }));
+  const frameAt = (src, i) => M.repTween(src[i], src[i+1], 0, 60);
+  let plainDiff = 0, plainPrintPx = 0;
+  try { M.replay.active = true;
+    for (const i of [100, 150, 200]){
+      M.repAnimReset(60); M.drawReplayFrame(frameAt(frames, i)); const a = shot();
+      M.repAnimReset(60); M.drawReplayFrame(frameAt(stripped, i)); const bb = shot();
+      plainDiff += diffPx(a, bb);
+    }
+    // ...and a look that does not draw prints draws none in a replay either — the bits-set
+    // against bits-stripped pair above cannot see this (a plain disc's prints are gated by
+    // nothing either way), and a replay handing EVERY look the Footsteps painter passed it
+    M.repAnimReset(60); for (let i = 60; i < 200; i++){ const f = frameAt(frames, i); if (i >= 190) plainPrintPx += printPx(() => M.drawReplayFrame(f)); else M.drawReplayFrame(f); }
+  } finally { M.replay.active = false; }
+  o.plainDiff = plainDiff; o.plainPrintPx = plainPrintPx;
+  // ...and the same pair on Sunday League differs, or the control is vacuous
+  M.applyBundle('kickabout');
+  let slDiff = 0;
+  try { M.replay.active = true;
+    M.repAnimReset(60); M.drawReplayFrame(frameAt(frames, 150)); const a = shot();
+    M.repAnimReset(60); M.drawReplayFrame(frameAt(stripped, 150)); const bb = shot();
+    slDiff = diffPx(a, bb);
+  } finally { M.replay.active = false; }
+  o.slDiff = slDiff;
+  o.plainDiscUnchanged = plainDiff === 0 && slDiff > 100;
+  o.plainNoPrints = plainPrintPx === 0 && o.px.sprintMax > 100;
+  M.applyBundle('kickabout');
+  return o;
+});
+console.log('replay', JSON.stringify(rp));
 
 // ---- the fold: a device still on Sunday League's old dot trail is moved to footsteps, once ----
 // Three devices seeded through an init script (the `themefold` idiom): untouched (moves, SAVED,
@@ -654,7 +781,11 @@ const checks = {
   kick_underCeiling: r.kickUnderCeiling, kick_poseLeaves: r.kickPoseLeaves, kick_notInReplay: r.kickNotInReplay,
   rim_isReal: r.rimIsReal, rim_isTheBalls: r.rimIsTheBalls, rim_outsideOnly: r.rimOutsideOnly, rim_underTheLimbs: r.rimUnderTheLimbs, rim_onThePitch: r.rimOnThePitch,
   dash_armsSwingFurther: r.dashArmsSwingFurther, dash_handIsFaster: r.dashHandIsFaster, dash_headLeads: r.dashHeadLeads,
-  dash_underCeiling: r.dashUnderCeiling, dash_eases: r.dashEases, dash_notInReplay: r.dashNotInReplay, dash_onThePitch: r.dashOnThePitch,
+  dash_underCeiling: r.dashUnderCeiling, dash_eases: r.dashEases, dash_inReplay: r.dashInReplay, dash_onThePitch: r.dashOnThePitch,
+  rep_sprintRecorded: rp.sprintRecorded, rep_lowRecorded: rp.lowRecorded, rep_dashShown: rp.dashShown, rep_dashEases: rp.dashEases,
+  rep_printsShown: rp.printsShown, rep_printsOnlyWhileSprinting: rp.printsOnlyWhileSprinting, rep_printsTurnWhite: rp.printsTurnWhite,
+  rep_liveBodyUntouched: rp.liveBodyUntouched, rep_fileCarriesIt: rp.fileCarriesIt, rep_oldFileStillPlays: rp.oldFileStillPlays,
+  rep_newerFileRefused: rp.newerFileRefused, rep_plainDiscUnchanged: rp.plainDiscUnchanged, rep_plainNoPrints: rp.plainNoPrints,
   prints_alternate: r.printsAlternate, prints_onePerStride: r.onePrintPerStride, prints_untaggedTwoSided: r.untaggedTwoSided,
   control_plainTrailUnchanged: r.grAllShown, control_plainReallySprinted: r.grReallySprinted, control_plainNoSweat: r.grNoSweat,
   figureSlumps: r.figSlumps, figureNoFurther: r.figNoFurther, armsInAtRest: r.armsInAtRest,

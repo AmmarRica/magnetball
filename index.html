@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.0140PM';
+const VERSION = '20261008.0325PM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.0140PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261008.0325PM', title: 'Replays show the sprint',
+    changed: [
+      '<b>A replay shows the turbo.</b> A sprinting footballer pumps its arms and leads with its head in a replay and in an exported video, exactly as it did on the pitch.',
+      '<b>And the footprints.</b> The soil prints a sprint leaves, turning white as the tank runs dry, are in the replay too. Replay files written from now on carry the sprint; older ones still open.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.0140PM', title: 'Sprinters pump their arms',
     changed: [
       '<b>A sprinting footballer pumps its arms.</b> Hold the turbo and the arms swing on a longer arc with the hands tucked in, and settle back as you ease off.',
@@ -19043,20 +19049,26 @@ async function lbSubmit(){
 // `baseFps` is the rate the SOURCE was captured at — 60 for the goal ring, less for the
 // match buffer, which samples as it goes. Without it a match buffer already at 30Hz would
 // be reported as 60 and play back at double speed.
+// ⚠️ THE THIRD NUMBER PER BODY IS A FLAGS BYTE, not a boolean: bit 0 is KICK held (the only
+// bit a file written before `REPFILE.v` 2 carries, so every one of those still decodes
+// exactly as it did) and bits 1-2 are the SPRINT (`s`: 1 sprinting, 2 sprinting with the
+// ring nearly out — see `repSprintOf`), which is what lets a replay show the turbo and the
+// footprints. Packed rather than a fourth column so the row length — and every length check
+// on it — is what it always was.
 function repEncodeFrames(src, cap, baseFps){
   const step = Math.max(1, Math.ceil(src.length / (cap || Infinity))), frames = [];
   for (let i=0; i<src.length; i+=step){
     const f = src[i], row = [Math.round(f.bx), Math.round(f.by)];
-    for (const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), pl.k?1:0);
+    for (const pl of f.p) row.push(Math.round(pl.x), Math.round(pl.y), (pl.k?1:0) | ((pl.s|0) & 3) << 1);
     frames.push(row);
   }
   return { frames, fps: Math.max(1, Math.round((baseFps || 60)/step)) };
 }
-// The inverse: flat rows back into the {bx,by,p:[{x,y,k}]} shape playReplay wants.
+// The inverse: flat rows back into the {bx,by,p:[{x,y,k,s}]} shape playReplay wants.
 function repDecodeFrames(rows, players){
   return rows.map(r => {
     const p = [];
-    for (let i=0; i<players; i++) p.push({ x:r[2+i*3], y:r[3+i*3], k:!!r[4+i*3] });
+    for (let i=0; i<players; i++){ const v = r[4+i*3] | 0; p.push({ x:r[2+i*3], y:r[3+i*3], k:!!(v & 1), s:(v >> 1) & 3 }); }
     return { bx:r[0], by:r[1], p };
   });
 }
@@ -20713,9 +20725,18 @@ function repReset(){
   repMatchBuf = []; repMatchEvery = REPMATCH.every; repMatchTick = 0;
   repMatchGoals = []; repMatchSlots = [];
 }
+// What a frame keeps of a body's STAMINA: 0, 1 sprinting, 2 sprinting with the ring nearly
+// out (`FOOTSTEP.lowAt`, the line a print turns white at). Asked for as *"make sure steps and
+// turbo animation difference and effect show up in replays as well"* — measured on the build
+// before: a frame carried `x, y, k` and nothing else, so over 239 replayed frames of a sprint
+// the painter was handed `sprinting` false on every one of 956 paints, a dash of 0 and no
+// print at all, against 472 print pixels and a dash of 1 on the live pitch mid-sprint. Two
+// bits, because that is the whole of what the replay draws from it (the dash and the prints'
+// colour); the ring, the slump and the sweat are still not recorded — written down.
+function repSprintOf(p){ return p.sprinting ? (p.stam != null && p.stam < FOOTSTEP.lowAt ? 2 : 1) : 0; }
 function repCapture(w){
   if (!w || w.drillMode) return;
-  repBuf.push({ bx:w.ball.x, by:w.ball.y, p: w.players.map(pl => ({ x:pl.x, y:pl.y, k:!!pl.kick })) });
+  repBuf.push({ bx:w.ball.x, by:w.ball.y, p: w.players.map(pl => ({ x:pl.x, y:pl.y, k:!!pl.kick, s:repSprintOf(pl) })) });
   // ⚠️ The goal index has to shift with the buffer, or the marker drifts one frame per
   // capture once the ring starts rolling.
   // ⚠️ `while`, not `if`: turning the dial DOWN mid-match leaves the ring over its new cap
@@ -20742,10 +20763,10 @@ function repMatchCapture(w){
   for (const p of w.players){
     if (repMatchSlots.indexOf(p) >= 0) continue;
     repMatchSlots.push(p);
-    for (const f of repMatchBuf) f.p.push({ x:p.x, y:p.y, k:false });
+    for (const f of repMatchBuf) f.p.push({ x:p.x, y:p.y, k:false, s:0 });
   }
   repMatchBuf.push({ bx:w.ball.x, by:w.ball.y,
-                     p: repMatchSlots.map(p => ({ x:p.x, y:p.y, k:!!p.kick })) });
+                     p: repMatchSlots.map(p => ({ x:p.x, y:p.y, k:!!p.kick, s:repSprintOf(p) })) });
   if (repMatchBuf.length >= REPMATCH.max){
     const half = [];
     for (let i = 0; i < repMatchBuf.length; i += 2) half.push(repMatchBuf[i]);
@@ -20821,7 +20842,10 @@ function repTween(a, b, f, fps){
   const k = Math.max(1, fps || 60) / 60;
   const p = a.p.map((pa, i) => {
     const pb = (b && b.p[i]) || pa;
+    // `s` (the sprint flag, see repSprintOf) is taken from the nearer frame like `k`: a state
+    // a body is in or not, which a blend of two integers would turn into a fraction of nothing.
     return { x: pa.x + (pb.x - pa.x) * t, y: pa.y + (pb.y - pa.y) * t, k: t < 0.5 ? pa.k : pb.k,
+             s: (t < 0.5 ? pa.s : pb.s) | 0,
              vx: (pb.x - pa.x) * k, vy: (pb.y - pa.y) * k };
   });
   return { bx: a.bx + (b ? (b.bx - a.bx) * t : 0),
@@ -20884,8 +20908,19 @@ function repTween(a, b, f, fps){
 // coordinate to an integer, so a chord under a unit is quantisation rather than movement —
 // and the live rule it mirrors (`advanceBallSpin`'s `sp > 0.15` a step) is well under that at
 // any sane frame rate. A resting ball otherwise rolls on rounding noise alone.
-var repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], b: null, fps: 60 };
-function repAnimReset(fps){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], b: null,
+// ⚠️ **AND THE TURBO, AND THE PRINTS IT LEAVES** (`d`, `pr`). Asked for as *"make sure steps
+// and turbo animation difference and effect show up in replays as well"*. The sprint is
+// RECORDED now (`repSprintOf`, two bits beside the kick flag), so a replayed body carries
+// `sprinting` off its frame; the dash is eased here per slot with `advanceTire`'s own rate
+// (`STAMTELL.dashEase`, over the steps a drawn frame covers) and written to `_dash`, which
+// the painter reads in a replay exactly as it does live. The prints come for free from the
+// planted feet `stepFeet` already walks per slot — they only needed somewhere of their own
+// to go: **the spread body carried the LIVE player's `_prints` by REFERENCE, and every
+// replay has been pushing its landings into it** (measured: the live body's list went from
+// 2 records to 4, with contents from the replay's positions, over one replay). Per slot,
+// the `ft` idiom, and drawn by `drawReplayTrails`.
+var repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], d: [], pr: [], b: null, fps: 60 };
+function repAnimReset(fps){ repAnim = { g: [], px: [], py: [], fx: [], fy: [], fa: [], ft: [], d: [], pr: [], b: null,
                                         fps: Math.max(1, fps || 60) }; }
 function repAnimate(w){
   const steps = 60 / Math.max(1, repAnim.fps || 60);   // sim steps this drawn frame covers
@@ -20915,8 +20950,17 @@ function repAnimate(w){
     // walk about under a match that is still being played. Per slot, assigned BEFORE the
     // step and stored after it — see FOOTBALLER.stride.
     p._feet = repAnim.ft[i];
+    p._prints = repAnim.pr[i] || (repAnim.pr[i] = []);
     stepFeet(p, steps);
-    repAnim.ft[i] = p._feet;
+    repAnim.ft[i] = p._feet; repAnim.pr[i] = p._prints;
+    // ...and the dash, from the recorded sprint flag, at the rate `advanceTire` eases it live
+    // — `steps` of that rate in one go, so a 30Hz match file ramps in the same seconds a 60Hz
+    // goal does. Born at the answer, snapped to 0 and 1, the `_rest` idiom.
+    const T = STAMTELL, wantDash = p.sprinting ? 1 : 0;
+    let ds = repAnim.d[i] == null ? wantDash : repAnim.d[i];
+    ds += (wantDash - ds) * (1 - Math.pow(1 - T.dashEase, steps));
+    if (Math.abs(wantDash - ds) < T.snap) ds = wantDash;
+    p._dash = repAnim.d[i] = ds;
   }
   const bl = w.ball;
   if (!bl) return;
@@ -20945,9 +20989,15 @@ function drawReplayFrame(f){
     // ⚠️ `vx`/`vy` come off the FRAME and are not allowed to fall through from the live
     // body — a stale velocity is exactly what froze every leg in the file. `repAnimate`
     // then writes `gait` and the facing. See its header.
+    // ⚠️ So do `sprinting` and `stam` (off the recorded sprint flag, see `repSprintOf`): the
+    // live body's own are whatever it is doing NOW, and a replayed body sprinting because the
+    // person watching it happens to be holding KICK is the stale-velocity defect again. `stam`
+    // is the one number a print's colour reads (`stepFeet`'s `low`), set to the side of
+    // `FOOTSTEP.lowAt` the flag recorded; `spent` false, because a replay cannot know.
     players: f.p.map((fp,i)=>({ ...(world.players[i] || world.players[0]),
                                 x:fp.x, y:fp.y, kick:fp.k, trap:false, chargeT:0,
-                                vx:fp.vx||0, vy:fp.vy||0 })),
+                                vx:fp.vx||0, vy:fp.vy||0,
+                                sprinting: !!fp.s, stam: fp.s === 2 ? 0 : 1, spent: false })),
     ball: { ...world.ball, x:f.bx, y:f.by },
   };
   repAnimate(fake);
@@ -20964,6 +21014,9 @@ function drawReplayFrame(f){
   computeCam();
   const [rgx, rgy] = tiltGround(), [rbx, rby] = tiltLift();
   ctx.save(); pitchXform(rgx, rgy); drawPitch(fake); ctx.restore();
+  // The footprints — marks ON the ground, so on the ground layer under the bodies, which is
+  // where the side view puts every trail live. See drawReplayTrails.
+  ctx.save(); pitchXform(rgx, rgy); drawReplayTrails(fake); ctx.restore();
   if (sideNow) drawBodiesSide(fake, rbx, rby);
   else { ctx.save(); pitchXform(rbx, rby); drawBall(fake); drawDiscs(fake); ctx.restore(); }
   // Big, centred REPLAY label + skip hint so it's clear what's happening.
@@ -21316,7 +21369,12 @@ function playReplay(speed, opts){
 // is ours before we start indexing into arrays.
 // ⚠️ `format` KEEPS THE OLD NAME. It is the magic string every replay already on a disk carries,
 // so renaming it would make every one of them "not a replay" — a key, not a label (rule 9).
-const REPFILE = { ext:'json', format:'magnetball-replay', v:1 };
+// ⚠️ `v` 2: the third number per body became a FLAGS byte (`repEncodeFrames` — bit 0 kick,
+// bits 1-2 the sprint). A v1 file still opens, bit for bit what it was; the bump is for the
+// build BEFORE this one, which read that byte as a boolean and would draw a wind-up ring on
+// every sprinting body in a file this build writes — it refuses with "saved by a newer build"
+// instead, which is the honest answer and the one `repFileParse` already had.
+const REPFILE = { ext:'json', format:'magnetball-replay', v:2 };
 // Everything a player needs to be DRAWN, and nothing else. Deliberately not the whole
 // object: velocities, AI scratch and match stats are all mid-play state that means
 // nothing in a recording, and `ms` alone would double the file.
@@ -35695,11 +35753,13 @@ function footballerSkin(name, sprites, inked){
                 : Math.max(0, Math.min(1, p._rest));
     // ⚠️ THE DASH (`FOOTBALLER.dashArm`/`dashLean`): 0 jogging, 1 at a full sprint, eased in
     // `advanceTire` beside `_rest` and read the same way — a body with no `_dash` (a tile,
-    // a suite's synthetic body) reads its `sprinting` flag outright, and a replay reads 0,
-    // since stamina is not recorded. The arc grows and the hands come IN by exactly what
-    // keeps the hand's reach where it was, so the 1.60r ceiling reads what it read.
-    const dash = (replay.active || replay.filming) ? 0
-               : (p._dash == null ? (p.sprinting ? 1 : 0) : Math.max(0, Math.min(1, p._dash)));
+    // a suite's synthetic body) reads its `sprinting` flag outright. ⚠️ **AND IN A REPLAY
+    // TOO**, unlike the slump above: the sprint IS recorded (`repSprintOf`) and `repAnimate`
+    // eases `_dash` per slot from it, so a replay reads the same field live play does. The
+    // "read as 0 in a replay" this shipped with is withdrawn. The arc grows and the hands
+    // come IN by exactly what keeps the hand's reach where it was, so the 1.60r ceiling reads
+    // what it read.
+    const dash = p._dash == null ? (p.sprinting ? 1 : 0) : Math.max(0, Math.min(1, p._dash));
     const armReach = Math.hypot(F.armSwing, L.hand);
     const dashArc = Math.min(F.armSwing * F.dashArm, armReach * 0.95);
     const dashAcross = Math.sqrt(armReach*armReach - dashArc*dashArc);
@@ -36659,6 +36719,44 @@ let trailPts = [];                        // reused scratch — see TRAIL_LOOKS 
 let printPts = [];                        // the footprints', same reason (see `stepFeet`)
 const printsArg = { pts: printPts, n: 0 };  // handed to a look as its seventh argument
 let ballPts  = [];                        // the ball streak's, same reason
+// The body's footprints into `printsArg`, gated like every other trail record
+// (`trailRecordShown`) and in screen space. One owner for the live pitch and the replay.
+function gatherPrints(p){
+  let pn = 0;
+  const pr = p._prints;
+  if (pr && pr.length){
+    while (printPts.length < pr.length) printPts.push({x:0, y:0, hx:1, hy:0, s:1, a:1, sp:false, low:false});
+    for (let k = 0; k < pr.length; k++){
+      const d = pr[k];
+      if (!trailRecordShown(p, d)) continue;
+      const t = printPts[pn++];
+      t.x = wx(d.x); t.y = wy(d.y); t.hx = d.hx; t.hy = d.hy; t.s = d.s; t.a = d.a; t.sp = !!d.sp; t.low = !!d.low;
+    }
+  }
+  printsArg.pts = printPts; printsArg.n = pn;
+  return pn;
+}
+// What a replay has of a trail: the FOOTPRINTS its own feet left (`repAnimate` steps the
+// planted feet per slot and keeps their prints there), handed to the look exactly as the
+// live pitch hands them. The dot path is not recorded — a replay is positions, and the
+// sampling lives in `advanceTrails` in the step loop — so a look that draws only the path
+// draws nothing here, as it always did; Footsteps draws the landings. Same quality gate as
+// the live trails, and the body has to be painted for its prints to be.
+function drawReplayTrails(w){
+  if (!fullQuality()) return;
+  const s = cam.s, look = trailLook();
+  for (const p of w.players){
+    if (!p._prints || !p._prints.length) continue;
+    if (!bodyPainted(w, p)) continue;
+    const pn = gatherPrints(p);
+    if (!pn) continue;
+    const ink = trailInkFor(p);
+    const g0 = ctx.globalAlpha;
+    if (ink.a !== 1) ctx.globalAlpha = g0 * ink.a;
+    look.draw(ctx, trailPts, 0, ink.col, p.r*s, p.team, printsArg);
+    ctx.globalAlpha = g0;
+  }
+}
 function drawDiscTrails(w){
   // ⚠️ The first thing to go when the machine cannot keep up — see `fullQuality`. Gated
   // HERE rather than at the call site so the replay path and the live pitch agree, and so
@@ -36686,19 +36784,8 @@ function drawDiscTrails(w){
     }
     // ...and the feet's own landings (`p._prints`, see `stepFeet`), under the same gate, for
     // a look that draws them (Footsteps). Headings are world vectors; the frame is the pitch's.
-    let pn = 0;
-    const pr = p._prints;
-    if (pr && pr.length){
-      while (printPts.length < pr.length) printPts.push({x:0, y:0, hx:1, hy:0, s:1, a:1, sp:false, low:false});
-      for (let k = 0; k < pr.length; k++){
-        const d = pr[k];
-        if (!trailRecordShown(p, d)) continue;
-        const t = printPts[pn++];
-        t.x = wx(d.x); t.y = wy(d.y); t.hx = d.hx; t.hy = d.hy; t.s = d.s; t.a = d.a; t.sp = !!d.sp; t.low = !!d.low;
-      }
-    }
+    const pn = gatherPrints(p);
     if (!n && !pn) continue;
-    printsArg.pts = printPts; printsArg.n = pn;
     // ⚠️ The team colour — or, on the Sunday League pair only, the HOT ink while sprinting
     // (see STAMTELL). The alpha is handed down through `globalAlpha`, which every look
     // already multiplies rather than overwrites.
@@ -39104,7 +39191,7 @@ if (window.__MAGNETDEBUG) {
     REPLIB, repLibAdd, repLibAll, repLibGet, repLibDel, repLibClear, repLibTrim, repLibLabel, buildReplayList,
     repIsQuota, repMakeRoom, repSizeText,
     updRec, updSaveRec, updNote, updWaitingDays, updDaysLeft, updOverdue, updEnforce, verNum, updNewer,
-    drawReplayFrame, repTween, repAnimate, repAnimReset, get repAnim(){ return repAnim; },
+    drawReplayFrame, repTween, repAnimate, repAnimReset, get repAnim(){ return repAnim; }, repSprintOf, drawReplayTrails,
     repEncodeFrames, repDecodeFrames, replayPayload,
     replayPayload, lbSubmitReplay, skipReplay, get replay(){ return replay; }, repRecStop, repRecSync, repClock, repFastExport, repFastPick, repFastPossible, webmMux, ebSize,
     openSocial, buildFeed, genGoalClip, clipFromLastReplay, addToFeed, seedFeed, drawClip,

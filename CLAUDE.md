@@ -6728,10 +6728,12 @@ three lines a second time, name it.
   **−0.030 → +0.108r**, `_dash` 0.5 between them, and the head's nose on the facing axis at
   **0.978r** — inside the shirt's 0.98, so the fill rule and the ring rule read what they read.
   ⚠️ **EASED IN THE STEP LOOP, RENDER ONLY, THE `_rest` IDIOM**: born AT the answer, a ramp
-  (0.14, 0.595 at five steps, exactly 1 by sixty, back to exactly 0 once the body stops), and
-  read as 0 in a replay (`replay.active || replay.filming` — stamina is not recorded). A body
+  (0.14, 0.595 at five steps, exactly 1 by sixty, back to exactly 0 once the body stops). A body
   with no `_dash` (a tile, a suite's synthetic body) reads its `sprinting` flag outright. The
   render-only hash is untouched: `advanceTire` writes `_dash` and nothing in `step()` reads it.
+  ⚠️ **"READ AS 0 IN A REPLAY" IS WITHDRAWN** — the entry that said so shipped one batch
+  before the sprint was recorded; see the replay-tells entry below. The painter reads `_dash`
+  under `replay.active` exactly as it does live, and `repAnimate` is what writes it there.
   ⚠️ **TWO INSTRUMENT FAULTS BEFORE THE CHECK WAS RIGHT, both false readings on a good
   build.** A head band of |across| < 0.55r read the ARM ROOTS at the shoulder (1.165r for a
   head whose nose is at 0.74); it is 0.15r now, inside where any limb roots. And the hand
@@ -6742,6 +6744,74 @@ three lines a second time, name it.
   leg OVER it at the other — the pick changed limbs between frames and read a per-frame jump
   of **1.32r** on the inked skin. A yaw is a rotation about the body and changes no radius, so
   the ceiling is read again with it live. Eight sabotages, each caught by its own check.
+- **THE STEPS AND THE TURBO SHOW UP IN REPLAYS** (`repSprintOf`, the `s` field on a recorded
+  body, the flags byte in `repEncodeFrames`/`repDecodeFrames`, `REPFILE.v` 2, `repTween`'s
+  `s`, `drawReplayFrame`'s `sprinting`/`stam`, `repAnim.d`/`repAnim.pr` in `repAnimate`,
+  `gatherPrints`, `drawReplayTrails`; `tests/stamtells.mjs`' `rep_*` block). Asked for as
+  *"make sure steps and turbo animation difference and effect show up in replays as well"*.
+  ⚠️ **MEASURED FIRST, on a real sprint through the real `step`**: a recorded frame carried
+  `x, y, k` and nothing else, so over **239 replayed frames** the painter was handed
+  `sprinting` false on every one of **956 paints**, a dash of **0**, and **0 print pixels**
+  against **472** on the live pitch mid-sprint with a dash of 1. The two entries above that
+  said *"read as 0 in a replay"* and *"nothing draws (a replay shows no trails)"* were
+  describing that build and are withdrawn where they stand.
+  ⚠️ **AND THE REPLAY WAS WRITING INTO THE LIVE BODY.** `drawReplayFrame` spreads the live
+  player over each frame — `_prints` included, by REFERENCE — and `repAnimate` steps the feet
+  per slot, so every landing a replay walked was pushed into the live body's own print list:
+  measured **2 records → 4**, with contents from the replay's positions, over one replay. The
+  `_feet` entry one layer up records exactly this trap for the feet and its fix stopped one
+  object short. Per slot now (`repAnim.pr`, the `ft` idiom), and the live list comes out of a
+  replay byte-identical.
+  ⚠️ **TWO BITS BESIDE THE KICK FLAG, NOT A FOURTH COLUMN.** The third number per body was a
+  boolean and is a flags byte: bit 0 KICK held (the only bit an older file carries), bits 1-2
+  the sprint — 1 sprinting, 2 sprinting with the ring under `FOOTSTEP.lowAt`, the line a
+  print turns white at. The row length, `repFileParse`'s length guard and every older file
+  are therefore untouched (a v1 file decodes bit for bit what it did: measured as no dash, no
+  print, no error on the same frames with the bits stripped). What the two bits are is the
+  whole of what a replay draws from them — the dash, and the colour a print lands in. The
+  ring's level, the slump and the sweat are still not recorded; rule 8.
+  ⚠️ **`REPFILE.v` IS 2, FOR THE BUILD BEFORE THIS ONE.** A v1 file still opens here; the
+  bump is so the previous build — which read that byte as a boolean — refuses a file this one
+  writes with *"saved by a newer build — update the game"* instead of drawing a wind-up ring
+  on every sprinting body in it. The honest answer `repFileParse` already had.
+  `tests/replayfile.mjs` pinned the version as a literal `1` and was the pool's one red —
+  re-pointed at 2, with the v1-still-opens claim measured in `stamtells`.
+  ⚠️ **THE DASH IS EASED IN `repAnimate`, PER SLOT, AT `advanceTire`'S OWN RATE** — `steps`
+  of `STAMTELL.dashEase` in one go (`1 − (1 − e)^steps`), so a 30Hz match file ramps in the
+  same seconds a 60Hz goal does; born at the answer, snapped to 0 and 1, the `_rest` idiom.
+  Measured through `drawReplayFrame`: dash 0 for all 60 jogging frames, 1 by the sprint, 50
+  frames strictly between, and exactly 0 again at the end. `repFastExport`'s sub-frames come
+  for free, because `repAnimReset(base * sub)` already sets `steps` for them.
+  ⚠️ **`sprinting` AND `stam` COME OFF THE FRAME, NEVER OFF THE LIVE BODY** — the
+  stale-velocity defect again: a replayed body sprinting because the person watching it
+  happens to be holding KICK. `stam` is the one number a print's colour reads (`stepFeet`'s
+  `low`), set to the side of `lowAt` the flag recorded; `spent` false, because a replay cannot
+  know. Measured on the replay's own slot: **9 soil prints and 5 white ones** at most, held at
+  once.
+  ⚠️ **THE PRINTS ARE THE ONLY TRAIL A REPLAY HAS, and that is a fact about the sampling.**
+  The dot path is `advanceTrails`' in the step loop and is not recorded, so a look that draws
+  only the path draws nothing in a replay, as it always did; `drawReplayTrails` hands
+  Footsteps the slot's landings through the same `gatherPrints` the live pitch uses, under
+  the same `trailRecordShown` gate — so the jogging stretch of a replay leaves nothing and
+  the sprint's prints fade after it rather than vanishing (**0 / 613 / 562** pixels over the
+  jog, the sprint and the spent stretch). On the GROUND layer, under the bodies, where the
+  side view puts every trail live.
+  ⚠️ **THE CONTROL IS A PLAIN DISC ON GRASS IN THE SAME RUN**: the same three replay frames
+  drawn with the sprint bits set and stripped differ by **0 pixels** there and by **322** on
+  Sunday League, or "the recording reaches nothing else" is equally true of a build that
+  recorded nothing.
+  ⚠️ **TWO INSTRUMENT FAULTS BEFORE THE CHECK WAS RIGHT.** Prints are measured as a
+  difference against the same frame with `FOOTSTEP.alpha` 0 — and `repAnimate` advances the
+  stride on EVERY call, so two draws of one frame differed by the feet stepping and the first
+  probe reported **527** print pixels in a replay that drew none; the replay's stride state is
+  put back between the two draws. And that same double draw doubled every index the paint
+  hook recorded (the sprint "started" at frame 120 of 300), so the hook records the first
+  draw only. ⚠️ **AND THE CONTROL COULD NOT SEE A REPLAY HANDING EVERY LOOK THE FOOTSTEPS
+  PAINTER** — bits set against bits stripped on a plain disc draws the same prints either
+  way, because on a skin without the tells nothing gates them — so a second control reads
+  the plain-disc replay's print diff outright: **0**, against the sprint's 613 on Sunday
+  League. Fifteen sabotages, each caught by its own check — that one only once the second
+  control existed.
 - **THE RING IS HIDDEN FOR NOW; THE SUNDAY LEAGUE TRAIL IS FOOTSTEPS, SHOWN ONLY WHILE
   SPRINTING; AND A STANDING FOOTBALLER TUCKS ITS ARMS IN** (`RING.drawn`, `FOOTSTEP`,
   `TRAIL_LOOKS.steps`, the `s`/`sp` fields on a trail record, `trailRecordShown`,
@@ -6785,8 +6855,10 @@ three lines a second time, name it.
   second schedule, and a per-look gap was considered and refused for exactly that check.
   `DOT_MAX` went 12 → 20 with the first build and is left there.
   ⚠️ **`_prints` IS RENDER-ONLY LIKE `_feet`**, advanced in `stepFeet` (per sim step, from
-  the step loop), never in a draw; the replay's `repAnimate` steps feet per slot and so
-  records prints on its slots too, which nothing draws (a replay shows no trails).
+  the step loop), never in a draw. ⚠️ **"which nothing draws (a replay shows no trails)" IS
+  WITHDRAWN**, and the half of that sentence that was true was hiding a defect: the replay's
+  `repAnimate` stepped feet per slot and recorded their prints — INTO THE LIVE BODY'S LIST,
+  by reference. They are kept per slot and drawn now; see the replay-tells entry below.
   ⚠️ **A PRINT IS SOIL, AND WHITE ONCE THE BODY WAS NEARLY OUT WHEN IT LANDED**
   (`FOOTSTEP.soil` `#3d342b`, `low` white, `lowAt` 0.35 of full; the `low` flag on each
   record). Reported as *"the steps show the same color as team. It should always be dark
@@ -6889,7 +6961,11 @@ three lines a second time, name it.
   one nobody gets; the same call `spawnKickFx` makes.
   ⚠️ **A REPLAY SHOWS NO TIREDNESS.** `drawReplayFrame` spreads the LIVE body over a
   recorded position, so `_tire` there is whoever is on the pitch now; the painter reads 0
-  under `replay.active || replay.filming`. Stamina is not recorded; written down.
+  under `replay.active || replay.filming`. ⚠️ **"Stamina is not recorded" is NARROWED, not
+  withdrawn**: the SPRINT is (two bits a body a frame, `repSprintOf`), which is what the turbo
+  and the prints need; the ring's level, the slump and the sweat still are not. The slump
+  stays out of a replay — rule 8, it was not asked for — and this line is where to start if
+  it ever is. See the replay-tells entry.
   ⚠️ **THREE MEASUREMENT TRAPS, each a false reading first.** Auto-quality drops the dot
   trails under a long synchronous evaluate (`qualityPin`); nothing may be pinned on an axis
   — on a 1280-wide page `auto` turns the pitch, the stick's x is WORLD y, and `me.y = 0`
@@ -9068,8 +9144,9 @@ three lines a second time, name it.
   shot to a recording of positions, and no rule could tell them apart without recording the
   reset itself.
   ⚠️ **AND RE-SIMULATING THE MATCH IS NOT AVAILABLE, which was the suggestion.** A replay
-  records POSITIONS, not inputs — `repMatchCapture` stores `{bx, by, p:[{x,y,k}]}` and nothing
-  else — so there is nothing to feed a sim with. Recording inputs instead is a different file
+  records POSITIONS, not inputs — `repMatchCapture` stores `{bx, by, p:[{x,y,k,s}]}` and
+  nothing else (`s` is the sprint flag, two bits beside the kick, added a batch later) — so
+  there is nothing to feed a sim with. Recording inputs instead is a different file
   format and a different feature (that IS what `LOCK` does across the wire); with positions,
   deriving the roll is the only thing on offer, and what was wrong was the derivation trusting
   a teleport.
