@@ -2382,6 +2382,68 @@ three lines a second time, name it.
   `tests/footballers.mjs` reads it as **0** outside a draw, and the turned page measures the
   head at **(−0.7, −8.5)** against a travel of (0, −13.5). `var`, because the attract demo
   reaches `drawOneDisc` during the bootstrap.
+- **A THIRD SUNDAY LEAGUE, LIT THE WAY THE BALL IS** (`THEMES.kicklit` = **Sunday League
+  3D**, `THEME_BUNDLES.kicklit`, `DISC_SKINS.footballers3d` = `footballerSkin(name, true,
+  false, true)`, `SPHERE_SHADE`, `sphereShade`, `cylinderShade`, `klimbShade`,
+  `KLIMB.profile`; `tests/footballers3d.mjs`). Asked for as *"I like the 2 sunday style.
+  Develop one where you adjust the players to make them look 3D but still from top down. I
+  like how the ball looks and I want players to match."*
+  ⚠️ **"MATCH" IS THE BALL'S OWN EXPRESSION, SO IT WAS EXTRACTED RATHER THAN COPIED.** The
+  ball's whole 3D is one radial `paintBall` has always finished with inline — a white
+  highlight 0.36r up-left fading out by 0.45 of the radius and a dark fall-off to 0.30 black
+  at the edge. That is `SPHERE_SHADE` now, `paintBall` reads it, and the figure gets the
+  same radial filled over every solid it is made of: the head as a ball of its own radius
+  (hair and all), the shirt and the shorts as domes, and each limb as a cylinder — the same
+  stops laid ACROSS the limb, lit edge on the lamp's side. The rim rule's shape again (one
+  number, two readers); the suite pins the helper over a white disc against the ball's own
+  edge to the level, and that the painter builds no gradient of its own.
+  ⚠️ **THE LAMP IS SCREEN UP-LEFT, NEVER THE BODY'S FACING.** The ball is drawn upright
+  whatever the pitch's turn and so is every disc (`uprightAt`), so one lamp falls on
+  everything whichever way a figure faces; the body pass is drawn in a frame rotated to the
+  facing, so the painter turns the lamp back by the facing (`llx`/`lly`) before lighting
+  the shapes. A lamp carried round with the body is a caught sabotage (`lampOnTheBody`).
+  ⚠️ **MEASURED FIRST, and the instrument is a DIFFERENCE because a flat figure is not
+  symmetric.** A region's "light" is its luminance-weighted centroid against its plain
+  centroid along the lamp; on the shipped sprite skin the head read **−3.4px facing east
+  and +2.8 facing west**, the shirt +2.5 and −2.8 — the dark hair behind a pale face, the
+  shirt forward of the shorts — and that reading TURNS with the body where a lamp does not.
+  So every reading is against the flat skin at the same facing and phase in the same run:
+  head **+1.0..+3.0px**, shirt **+1.4..+2.6**, whole figure **+1.4..+2.0** at all four
+  facings, the ball **+1.1** with the same instrument; and the two existing skins still read
+  as flat (east and west cancelling to within 0.6px), which is what says neither was touched.
+  ⚠️ **FOUR LIMB INSTRUMENTS BEFORE ONE WAS RIGHT, each a false reading on a good build.** A
+  pooled outer annulus held nothing but hands at the first stride phase tried (both feet were
+  under the shirt) and stayed green with the leg shade cut; a covariance of (lit − flat)
+  about its own weighted centre is ZERO on a boot, whose lit edge gains 117 levels and far
+  edge loses 6 (a one-sided field has no covariance about its own mean); and a luminance
+  centroid over a quadrant of the annulus moved with whichever of the boot's edges the
+  quadrant held more of, sign-flipping by facing. What reads is the painter's OWN joint-to-tip
+  line, sampled across the limb on the side `cylinderShade` chose and the other: lamp edge
+  minus far edge **21..58 levels** on every limb at every facing against ~0 flat (an arm's
+  plate outline puts one sample at ±22 either way). Nearer the joint than 0.8 of the way out
+  the limb is UNDER the shirt and a sample reads the shirt; wider than 0.22 of the width one
+  sits on the boot's antialiased edge and reads the grey behind it.
+  ⚠️ **THE LIGHT LANDS ON THE SHAPES AND NOT BESIDE THEM, and the limbs took three goes.** A
+  sphere fill is a second `fill()` of the shape's own path, so it cannot reach past it; a
+  limb shade is a stroke a pixel narrower than the limb. Stroked at the plate's full height
+  to its full length it read **439** ink pixels in the limb annulus against the flat skin's
+  **291** — a halo either side of every limb and round every tip, because the forearm fills
+  11 of the plate's 13 rows and the tip is rounded; cut back to one round-capped stroke of
+  the core width it ended at **1.03r, under the rim disc**, with the whole visible stretch of
+  every limb unshaded. `klimbShade` follows the plate's own measured profile
+  (`KLIMB.profile`: 11 rows to 9/11 of the outer span, 8 rows to 10/11) as butt-capped
+  strokes, each a pixel short of its step, and reads **291 against 291**. The figure's
+  farthest ink is the flat skin's to the pixel at every facing, running and standing, so the
+  ceiling, the shirt-inside-the-ring rule and the fill rule read what they read.
+  ⚠️ **NOTHING ELSE MOVES.** The geometry, the four people, the stride, the planted feet,
+  the kick pose, the stamina tells (`staminaTells` is on the shared return), the footprints,
+  the rim and its flash are the shared figure — the two existing Sunday Leagues are the
+  painter with the flag off and are pinned flat. Its own turf (`#1f9a52`, white markings
+  **3.62:1**, over `paintedPitch`'s 2.5) for the reason Inked has one: the Background pane
+  paints a tile per palette from the colours alone. Render only (600-step hash with the skin
+  on and off). Sixteen sabotages, each caught by its own check; a flipped lamp reddens the
+  head, the shirt, the ball and the helper, and deliberately NOT the limbs, which are read on
+  whichever side the painter lit.
 - **TWO LIMB STYLES FOR THE FOOTBALLERS, AND THE SECOND IS THE BUILD BEFORE IT**
   (`footballerSkin(name, sprites)`, `DISC_SKINS.footballersink`, `THEMES.kickink`
   = **Sunday League Inked**, `THEME_BUNDLES.kickink`). Asked for: keep the Kenney limb sprites

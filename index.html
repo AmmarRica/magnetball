@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261008.0455PM';
+const VERSION = '20261009.1140AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261008.0455PM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261009.1140AM', title: 'Sunday League 3D',
+    changed: [
+      '<b>A third Sunday League look, with the players lit like the ball.</b> Under Theme, Sunday League 3D puts the same shine and shadow the ball has on every footballer — a round head, a domed shirt, rounded arms and legs — still seen from straight above.',
+      '<b>Sunday League and Sunday League Inked are exactly as they were.</b> The new one is its own tile, on a slightly deeper green.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261008.0455PM', title: 'The ring says when you can sprint again',
     changed: [
       '<b>The rim round your player flashes.</b> Green the moment your stamina is back, red the moment it runs out.',
@@ -8678,6 +8684,13 @@ const THEMES = {
 THEMES.kickink = { ...THEMES.kickabout, name: 'Sunday League Inked', emoji: '\u270f\ufe0f',
   pitch: { ...THEMES.kickabout.pitch,
            fieldBg:'#2f5a2c', court:'#4f8f4a', stripeA:'#4f8f4a', stripeB:'#559a50' } };
+// ...and the third: the same team, lit the way the ball is (`footballers3d`, SPHERE_SHADE).
+// Its own turf for the reason Inked has one \u2014 a deeper, bluer green than either, so the
+// Background pane's three Sunday League tiles are three tiles. White on `#1f9a52` measures
+// **3.62:1**, over `paintedPitch`'s 2.5 floor.
+THEMES.kicklit = { ...THEMES.kickabout, name: 'Sunday League 3D', emoji: '\ud83d\udd06',
+  pitch: { ...THEMES.kickabout.pitch,
+           fieldBg:'#14502f', court:'#1f9a52', stripeA:'#1f9a52', stripeB:'#22a357' } };
 // ---- Contrast maths (declared above applyTheme, which runs at module init) ----
 // Pick whichever of the two ink colours actually contrasts more with the given
 // background — measured by WCAG ratio, not by a brightness threshold. The old
@@ -9645,7 +9658,9 @@ const THEME_BUNDLES = {
   // is `stripeA`/`stripeB`, which `drawPitch` already paints, and a kickabout is a
   // treatment that works on any rectangle.
   kickink:   { discs:'footballersink', ball:'classic', sfx:'classic', trail:'steps' },
-  synth:     { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
+  // ...and with the figure lit like the ball (SPHERE_SHADE). Same three slots.
+  kicklit:   { discs:'footballers3d',  ball:'classic', sfx:'classic', trail:'steps' },
+  synth:    { field:'synthgrid', discs:'synth',       ball:'stripe',  sfx:'space',   trail:'comet' },
   pnp:       { field:'pixelfade', discs:'pnp',         ball:'amp',     sfx:'classic', trail:'pnp'   },
   // ⚠️ `comet` REUSED rather than a new trail invented: the KO streak this theme wants
   // already exists, and a second one that looked the same would be two places to keep
@@ -33781,6 +33796,49 @@ const DISC_GUIDE = { w: 0.05, a: 0.45, dark: 'rgba(0,0,0,0.55)', light: 'rgba(25
 // a rim that is "like the ball's" is only that while it is the ball's own expression.
 const BALL_RIM = { f: 0.16, min: 1.5 };
 function ballRimPx(r){ return Math.max(BALL_RIM.min, r*BALL_RIM.f); }
+// ⚠️ THE BALL'S LIGHT IS ONE EXPRESSION WITH TWO READERS, the rim's rule again. `paintBall`
+// has always finished with this radial: a white highlight up-left of the centre fading out
+// by `hiAt` of the radius, and a dark fall-off to `lo` black at the edge — which is the whole
+// of what makes a flat white disc read as a sphere. The 3D footballers (`footballers3d`,
+// Sunday League 3D) wear the same light on the head, the shirt, the shorts and, as a
+// cylinder, along each limb; asked for as *"make the players look 3D but still from top
+// down — I like how the ball looks and I want players to match"*, and "match" is only true
+// while it is the ball's own expression. The direction is SCREEN up-left, never the body's:
+// the ball is drawn upright whatever the pitch's turn and so is every disc (`uprightAt`), so
+// one light falls on everything whichever way a figure is facing — a figure lit along its own
+// facing would carry its lamp round with it.
+const SPHERE_SHADE = { off: 0.36, inner: 0.10, outer: 1.05, hi: 0.50, hiAt: 0.45, lo: 0.30,
+                       lx: -Math.SQRT1_2, ly: -Math.SQRT1_2 };
+// The radial for a sphere of radius `r` at (x, y), lit from (lx, ly) — a unit vector on
+// the context's own axes, so a caller inside a rotated frame passes the light turned back.
+function sphereShade(c, x, y, r, lx, ly){
+  const S = SPHERE_SHADE;
+  if (lx == null){ lx = S.lx; ly = S.ly; }
+  const g = c.createRadialGradient(x + lx*r*S.off*Math.SQRT2, y + ly*r*S.off*Math.SQRT2, r*S.inner, x, y, r*S.outer);
+  g.addColorStop(0, `rgba(255,255,255,${S.hi})`); g.addColorStop(S.hiAt, 'rgba(255,255,255,0)');
+  g.addColorStop(1, `rgba(0,0,0,${S.lo})`);
+  return g;
+}
+// The same light laid along a LIMB: constant along A→B, the sphere's stops across it, the
+// lit edge on whichever side faces the lamp. Stroked a pixel narrower than the limb — round
+// caps for a stroke limb, butt for a step of a plate's taper (`klimbShade`) — so it can never
+// reach past the limb it shades (the figure's reach is a rule).
+function cylinderShade(c, A, B, w, lx, ly, cap){
+  const S = SPHERE_SHADE;
+  if (lx == null){ lx = S.lx; ly = S.ly; }
+  const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+  if (!(L > 0) || !(w > 1.5)) return;
+  let nx = -dy / L, ny = dx / L;                       // across the limb...
+  if (nx*lx + ny*ly < 0){ nx = -nx; ny = -ny; }        // ...pointing at the lamp
+  const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2, h = (w - 1) / 2;
+  const g = c.createLinearGradient(mx + nx*h, my + ny*h, mx - nx*h, my - ny*h);
+  g.addColorStop(0, `rgba(255,255,255,${S.hi})`); g.addColorStop(S.hiAt, 'rgba(255,255,255,0)');
+  g.addColorStop(1, `rgba(0,0,0,${S.lo})`);
+  c.save();
+  c.strokeStyle = g; c.lineWidth = w - 1; c.lineCap = cap || 'round';
+  c.beginPath(); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); c.stroke();
+  c.restore();
+}
 // The rim's flash (see RIMFLASH), painted OVER a rim disc already filled in its ink: the flash
 // colour at the pulse's remaining strength, so the rim reads ink → green/red → ink. One owner
 // for the footballers' rim and the plain disc's. A second fill over the same disc rather than
@@ -35671,6 +35729,14 @@ const KLIMB = {
   // Both plates run 8 columns of kit then 11 of skin (and boot), measured off the art. The
   // ratio of the two is what puts the seam on the joint whatever the swing made of the span.
   sleeve: 8 / 11,
+  // ...and outward of the sleeve the limb fills 11 of the plate's 13 rows for 9 of its 11
+  // columns, 8 rows for the tenth, and two rows for the last — measured off the art. A shade
+  // laid along the limb (`cylinderShade`, the 3D skin) follows that profile as butt-capped
+  // strokes and no further: stroked at the plate's full height to its full length it read a
+  // halo either side of every limb and round every tip (439 ink pixels in the limb annulus
+  // against the flat skin's 291); cut back to one round-capped stroke it ended at 1.03r —
+  // under the rim disc, with the whole visible stretch of every limb unshaded.
+  profile: [[9 / 11, 11 / 13], [10 / 11, 8 / 13]],   // [to this fraction of the outer span, this many rows wide]
   // ⚠️ **A `sleeveMax` CAP WAS ADDED HERE AND DELETED — A WITHDRAWN CLAIM.** A square
   // kit-coloured tab appeared out of the far side of a round shirt at a large radius and was
   // blamed on the sleeve running 0.87r inward of a shoulder already 0.58 across. It is not:
@@ -35759,6 +35825,20 @@ function klimbDraw(c, sp, A, B, wpx, over){
   c.drawImage(sp, -inn, -wpx/2, inn + out, wpx);
   c.restore();
 }
+// The shade a plate limb may carry (`KLIMB.profile`): one butt-capped stroke per step of the
+// plate's own taper, each as wide as the plate is there, so the shade sits inside the drawn
+// limb everywhere and still reaches the hand and the boot. Draws through `cylinderShade`.
+function klimbShade(c, A, B, wpx, over){
+  const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+  if (!(L > 0)) return;
+  const out = L + (over || 0), ux = dx / L, uy = dy / L;
+  let from = 0;
+  for (const [to, rows] of KLIMB.profile){
+    const e = to * out - 1;                        // a pixel short of the step, for the edge's own antialiasing
+    cylinderShade(c, [A[0] + ux*from, A[1] + uy*from], [A[0] + ux*e, A[1] + uy*e], wpx * rows, null, null, 'butt');
+    from = e;
+  }
+}
 // ⚠️ **TWO LIMB STYLES, ONE FIGURE, AND THE SECOND ONE IS THE BUILD BEFORE IT.** Asked for:
 // keep the Kenney limb sprites AND bring back the drawn strokes they replaced, both
 // pickable. The drawn path is not a reimplementation — it is the FALLBACK that has always
@@ -35771,7 +35851,17 @@ function klimbDraw(c, sp, A, B, wpx, over){
 // since the limbs were asked to be thicker on the inked one, by the five limb numbers in
 // `FOOTBALLER.inked`, which `inked:true` reads in place of the shared ones. The sprite skin's
 // own pack-less fallback takes the drawn branch WITHOUT them: it stands in for the plates.
-function footballerSkin(name, sprites, inked){
+// ⚠️ **AND A THIRD FLAG, `lit`, PUTS THE BALL'S LIGHT ON THE FIGURE** (`footballers3d`, Sunday
+// League 3D; SPHERE_SHADE). Asked for as *"adjust the players to make them look 3D but still
+// from top down — I like how the ball looks and I want players to match"*. Every shape the
+// figure is made of is a solid seen from above — the head a ball, the shirt and the shorts a
+// dome, a limb a cylinder — so each gets the ball's own radial (`sphereShade`) filled over it,
+// INSIDE its own path and nowhere else, and each limb the same stops across it
+// (`cylinderShade`). Nothing is moved, grown or re-coloured: the geometry, the four people,
+// the stride, the stamina tells and the kick pose are the shared figure, so every reach and
+// ring rule reads what it reads on the flat pair. Measured in `tests/footballers3d.mjs` as
+// the light-weighted centroid of each region against the flat skin's at the same facing.
+function footballerSkin(name, sprites, inked, lit){
  return {
   name,
   paint(c, p, x, y, r, w){
@@ -35819,6 +35909,9 @@ function footballerSkin(name, sprites, inked){
     const twist = running ? F.twist * footSwing(p, 1) * (1 - tire * (1 - T.twistMul)) : 0;
     const ct = Math.cos(twist), st = Math.sin(twist);
     const ux = f0.ux*ct - f0.uy*st, uy = f0.ux*st + f0.uy*ct;
+    // The lamp, in the body's own frame (the shapes below are drawn rotated to the facing):
+    // screen up-left turned back by the facing, so the light stays put while the body turns.
+    const SS = SPHERE_SHADE, llx = SS.lx*ux + SS.ly*uy, lly = SS.ly*ux - SS.lx*uy;
 
     const px = -uy, py = ux;
     const pt = (a, b) => [x + ux*a*r + px*b*r, y + uy*a*r + py*b*r];
@@ -35903,6 +35996,10 @@ function footballerSkin(name, sprites, inked){
         c.beginPath(); c.arc(B[0], B[1], Math.max(1, r*L.bootR), 0, 2*Math.PI);
         c.fillStyle = ink; c.fill();
       }
+      // ...a cylinder under the lamp: along the plate's own profile (`klimbShade`) or the whole
+      // stroke, so the shade lands on the limb and never beside it
+      if (lit){ const wl = Math.max(1, r*L.legW);
+                if (legSp) klimbShade(c, A, B, wl, r*L.bootR); else cylinderShade(c, A, B, wl); }
       // ...and the arm the same way about the shoulder, COUNTER-swung, which is what
       // running does and what stops four limbs reading as a star jump.
       const S = pt(F.sh[0] - sag*0.5, F.sh[1]*sgn);          // the shoulder leads or trails with the yaw (and drops with the slump)
@@ -35917,22 +36014,34 @@ function footballerSkin(name, sprites, inked){
         c.strokeStyle = skin; c.lineWidth = Math.max(1, r*L.armW);
         c.beginPath(); c.moveTo(S[0],S[1]); c.lineTo(H[0],H[1]); c.stroke();
       }
+      if (lit){ const wa = Math.max(1, r*L.armW);                   // ...and so is the arm
+                if (armSp) klimbShade(c, S, H, wa, wa*0.5); else cylinderShade(c, S, H, wa); }
     }
     // --- shorts, shirt, head --------------------------------------------------------
     c.save();
     c.translate(x, y); c.rotate(Math.atan2(uy, ux));
     // (The whole body is already yawed with the stride: `ux`/`uy` carry FOOTBALLER.twist.)
+    // Lit: each solid gets the ball's radial filled over its OWN path, right after its colour
+    // and before the next shape covers it — a second `fill()` of the same path, so the light
+    // can never land outside the shape it lights.
     c.beginPath();
     c.ellipse(F.shortsAt*r, 0, F.shortsA*r, F.shortsB*r, 0, 0, 2*Math.PI);
     c.fillStyle = trim; c.fill();
+    if (lit){ c.fillStyle = sphereShade(c, F.shortsAt*r, 0, F.shortsB*r, llx, lly); c.fill(); }
     c.beginPath();
     c.ellipse(F.torsoAt*r, 0, F.torsoA*r, F.torsoB*r, 0, 0, 2*Math.PI);
     c.fillStyle = col; c.fill();
-    c.beginPath(); c.arc((F.headAt + lean - sag)*r, 0, F.headR*r, 0, 2*Math.PI);
+    if (lit){ c.fillStyle = sphereShade(c, F.torsoAt*r, 0, F.torsoB*r, llx, lly); c.fill(); }
+    const headC = (F.headAt + lean - sag)*r;
+    c.beginPath(); c.arc(headC, 0, F.headR*r, 0, 2*Math.PI);
     c.fillStyle = skin; c.fill();
     c.beginPath();
-    c.arc((F.headAt + lean - sag - F.hairBack)*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
+    c.arc(headC - F.hairBack*r, 0, F.headR*F.hairR*r, 0, 2*Math.PI);
     c.fillStyle = hair; c.fill();
+    if (lit){                                       // the head is a ball of its own radius, hair and all
+      c.beginPath(); c.arc(headC, 0, F.headR*r, 0, 2*Math.PI);
+      c.fillStyle = sphereShade(c, headC, 0, F.headR*r, llx, lly); c.fill();
+    }
     c.restore();
     c.restore();
   },
@@ -35946,6 +36055,8 @@ DISC_SKINS.footballers    = footballerSkin('Footballers', true);
 // stride, same people — the arms and legs are strokes with a boot on the end instead of the
 // pack's plates, half as thick again (`FOOTBALLER.inked`).
 DISC_SKINS.footballersink = footballerSkin('Footballers (drawn)', false, true);
+// ...and the sprite pair under the ball's light — see the `lit` note on the painter.
+DISC_SKINS.footballers3d  = footballerSkin('Footballers (3D)', true, false, true);
 function seaPair(name, t0, t1){
   return {
     name,
@@ -37596,10 +37707,8 @@ function paintBall(c, x, y, r, rot, key, pal, roll, rollAx){
   if (ballIs3D(r)) paintBallSphere(c, x, y, r, roll == null ? rot : roll, rollAx || 0, key, spot, P.ball);
   else if (r >= 5) paintBallLook(c, x, y, r, rot, key, spot, P.ball);
   else { c.beginPath(); c.arc(x, y, r*0.34, 0, 2*Math.PI); c.fillStyle=spot; c.fill(); }
-  const g = c.createRadialGradient(x - r*0.36, y - r*0.36, r*0.10, x, y, r*1.05);
-  g.addColorStop(0, 'rgba(255,255,255,0.50)'); g.addColorStop(0.45, 'rgba(255,255,255,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.30)');
-  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle=g; c.fill();
+  // The light — one expression, shared with the 3D footballers (SPHERE_SHADE).
+  c.beginPath(); c.arc(x, y, r, 0, 2*Math.PI); c.fillStyle = sphereShade(c, x, y, r); c.fill();
 }
 // A pentagon path centred at (cx,cy), circumradius rad, rotated by `rot`.
 function ballPent(c, cx, cy, rad, rot){
@@ -39415,7 +39524,7 @@ if (window.__MAGNETDEBUG) {
     SAVEFILE, buildSaveDoc, parseSaveDoc, applySaveDoc, exportSaveFile, saveFilename, FEEL_SLIDERS, stopSecs, STOP_FRAC,
     feelSliderWrapId, feelSliderGroups,
     NAMEBOOK, nameKey, noteNameResult, nameBookTable, mmrStep, buildNameBook, get nameBook(){ return nameBook; },
-    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick, BALL_RIM, ballRimPx, refillStamina, RIMFLASH, rimFlashStrength, rimFlashPaint,
+    KICKRING, kickRingMul, LABEL_BALL, RING, FOOTSTEP, trailRecordShown, KICKANIM, advanceKickAnim, noteKick, BALL_RIM, ballRimPx, refillStamina, RIMFLASH, rimFlashStrength, rimFlashPaint, SPHERE_SHADE, sphereShade, cylinderShade,
     FLOAT, POPOPT, BALL3DOPT, get floaters(){ return floaters; }, addFloater, advanceFloaters, drawFloaters, clearFloaters,
     ADS, AD_BOARDS, ADSOPT, adsOn, adEverySecs, adCustomText, adList, adSlots, adSlotRects, adsDrawn, adReach, adReadAngle, adState, advanceAds, drawAds, paintAdBoard, buildAdBoards,
     advanceFx, get fx(){ return fx; }, resetFx, get fps(){ return fps; }, trackFps, invertInk,

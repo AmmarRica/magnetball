@@ -49,8 +49,10 @@ const r = await p.evaluate(async ()=>{
   o.bundleTrail = { kickabout: M.bundleSlots('kickabout').trail, kickink: M.bundleSlots('kickink').trail, def: M.defaultSel().look.trail };
   o.stepsIsALook = !!(M.TRAIL_LOOKS.steps && typeof M.TRAIL_LOOKS.steps.draw === 'function' && M.TRAIL_LOOKS.steps.name);
   o.flagOnPair = !!(M.DISC_SKINS.footballers.staminaTells && M.DISC_SKINS.footballersink.staminaTells);
+  // ...and on the third Sunday League (`footballers3d`, the same painter lit like the ball) —
+  // every footballer skin and no other.
   o.flagNowhereElse = Object.keys(M.DISC_SKINS).filter(k => M.DISC_SKINS[k].staminaTells)
-                        .sort().join(',') === 'footballers,footballersink';
+                        .sort().join(',') === 'footballers,footballers3d,footballersink';
 
   // Wait for the limb plates: the figure is measured with the pack PRESENT.
   const warmLimb = () => M.klimbSprite('arm', M.TH.teamRed, M.kitPerson({ name:'Mike' })[1], M.TH.discRim || '#151515');
