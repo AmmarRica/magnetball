@@ -5,7 +5,7 @@ estimates, community asks), see [`../ROADMAP.md`](../ROADMAP.md).
 
 Status legend: `[ ]` open · `[~]` in progress / uncommitted · `[x]` done · `[-]` parked/won't-do
 
-_Current build: **v20260923.1102PM** (shown under the title; bump `VERSION` in `index.html` on every change)._
+_The current build is `VERSION` in `index.html` (shown in About). Bump it, with a `CHANGELOG` entry, for player-facing changes only — not for docs or tests._
 
 - [ ] **Bots strike a rolling ball up to ~35° off their aim.** Measured on the real path
       (`tests/botfoot.mjs`' withdrawn stance probe): an Insane bot left to run in and strike a

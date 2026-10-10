@@ -2,6 +2,76 @@
 
 Guidance for Claude Code (or any contributor) working in this repo.
 
+## START HERE — the first ten minutes of a session
+This file is ~10,000 lines because every entry carries its evidence. **Do not read it top
+to bottom.** Read this section, skim the 15 rules under "How to work here", then *search*
+the Architecture list for the feature you are touching.
+
+**Orientation**
+| What | Where |
+|---|---|
+| The whole game (HTML + CSS + JS, ~39,500 lines, one IIFE) | `index.html` |
+| Map of `index.html` by marker string | search `SECTION INDEX` in `index.html` (~line 3,000) |
+| Why any feature is the way it is | `grep -n "SYMBOL" CLAUDE.md` — every entry names its functions/constants in the first line |
+| What every test suite covers, and known measurement traps | `tests/README.md` |
+| Every input and what it does | `CONTROLS.md` |
+| Open tasks / measured known defects | `docs/TODO.md` (backlog: `ROADMAP.md`) |
+| Names for on-screen things | `docs/TERMINOLOGY.md` |
+| Bot AI design and its audit | `docs/BOT-AI.md`, `docs/BOT-AI-AUDIT.md` |
+| Determinism (same seed → same match) | `docs/DETERMINISM-AUDIT.md` |
+| Online: hosted server / lockstep / API / Azure | `server/docs/MATCH-SERVER.md`, `server/docs/LOCKSTEP.md`, `server/docs/API.md`, `infrastructure/docs/` |
+| Optional art packs and their fallbacks | `assets/README.md` |
+| Dev-only scripts (commercial, goal seeds) | `tools/README.md` |
+
+**Find a feature fast.** `grep -n "function NAME\|const NAME\b" index.html` for code;
+`grep -n "NAME" CLAUDE.md` for the rules around it. Registries worth knowing by name:
+`THEMES`/`THEME_BUNDLES`/`SLOTS` (looks), `DISC_SKINS`, `BALL_LOOKS`, `TRAIL_LOOKS`,
+`DYN_FIELDS` (painters), `FIELDS` (courts), `MODES`, `LENGTHS`, `DIFF`, `BALLS`, `DRILLS`,
+`FEEL_SLIDERS`/`FEEL_PRESETS`, `BOT`/`BOT_PLANS`/`BOT_TYPES`, `SUBTABS` (menu tabs),
+`CHANGELOG`, `VERSION`. `defaultSel()` is the settings schema; `world` is the live match;
+`step(w)` advances one 1/60s step; `render()` draws.
+
+**Poke the live page.** Set `window.__MAGNETDEBUG = true` before load and `window.__magnet`
+exposes ~1,300 live getters and functions (`startMatch`, `world`, `sel`, `step`, every
+registry). A minimal probe is in "Testing" at the bottom of this file. Load with
+`LAUNCH` from `tests/_browser.mjs` — it carries `--allow-file-access-from-files`, without
+which any `getImageData` over a Kenney sprite throws a tainted-canvas error on `file://`.
+
+**Run things** (this container: `node` is `/opt/node22/bin/node`; Playwright is outside the
+repo, so export it once — without it every suite dies with `Cannot find package 'playwright'`):
+```bash
+export PLAYWRIGHT_MODULE=/opt/node22/lib/node_modules/playwright/index.js
+node tests/footballers3d.mjs                 # one suite (~1 min); prints FAILED: [...] and RESULT:
+node tests/run.mjs footballer                # every suite whose name matches
+MB_JOBS=3 node tests/run.mjs                 # the whole pool, 150 suites, ~12 min at 3 jobs
+node tests/_sabotage.mjs SUITE sabs.json     # rule 2: break the fix N ways, see which checks go red
+node tests/_sweep.mjs both                   # drive the page like a player (screen transitions, replays)
+```
+`sabs.json` is `[[name, exactTextInIndexHtml, replacement], …]`; each target must occur
+exactly once or it is reported as `TARGET COUNT n — not applied` rather than a false green.
+
+**The loop for a change**
+1. Measure the broken thing on the CURRENT build and write the number down (rule 1).
+2. Change `index.html` in place, matching the terse surrounding style. New state that must
+   exist at boot is a `var`, or declared above whatever the bootstrap calls (TDZ — rule 14).
+3. Write or extend a suite in `tests/`; measure as a difference against a control in the
+   same run (rule 3); add it to `tests/README.md`.
+4. Sabotage every new check with `tests/_sabotage.mjs` (rule 2).
+5. Run the pool. **A green run is ALL green** — no suite is red on purpose.
+6. Player-facing change → bump `VERSION` (`YYYYMMDD.HHMMAM/PM`) and add a `CHANGELOG` entry
+   (bold lead sentence, no developer jargon — `tests/forceupdate.mjs` checks it). Docs- or
+   test-only changes do not bump.
+7. Write the CLAUDE.md entry: symbols in the first line, the measured numbers, what was tried
+   and reverted, and the sabotage count. Reversing an old entry? Say so in it (rule 12).
+8. Commit, push the working branch, and fast-forward `main` once the pool is green:
+   `git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main`.
+
+**Never**: commit while `index.html.sabbak` exists (a sabotage run died — restore first);
+edit `index.html` or `tests/` while a suite or the pool is running; call `Math.random` from
+inside `step()`; add a dependency or CDN script to the page; name content after a real
+product (flag it — see the trademark rule); put model identifiers or session URLs in
+committed files; commit cloud credentials; re-add `Nipper` to `BOT_NAMES`.
+
 ## What this is
 A **single-file** HTML5 canvas game. **Everything lives in `index.html`** — HTML, CSS, and all game
 JS (wrapped in one `(function(){ "use strict"; … })()` IIFE). There is **no build step, no bundler,
@@ -9845,7 +9915,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 149 suites IN PARALLEL (~420s, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 150 suites IN PARALLEL (~700s at `MB_JOBS=3`, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

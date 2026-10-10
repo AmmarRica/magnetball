@@ -19,30 +19,32 @@ self-contained `index.html`**: no build step, no dependencies, no server. Graphi
 - Left-handed swap, stick sensitivity, and full controller rebinding are in Settings.
 
 ## Features
-- **Play:** 1v1–4v4 vs bots across 7 difficulty tiers, local 2-player, duo, spectate.
-- **30 pitches**, 4 ball presets, pitch surfaces (grass/ice/mud that **wear in** as you play),
+- **Play:** 1v1 up to 11 a side vs bots across 7 difficulty tiers, local 2-player, duo, spectate,
+  drop-in controllers, a warm-up lobby, and online (a hosted match server or direct lockstep).
+- **34 pitches**, 4 ball presets, pitch surfaces (grass/ice/mud that **wear in** as you play),
   net physics, bouncy walls.
 - **Bots that play football** — a four-layer AI (team phase → roles → decision → steering) with
   a goalie, an elastic formation, intercept prediction, lane-checked passing and bank shots off
   the boards. Fully deterministic: same seed, same match.
 - **Modes:** Season/Cup ladder · **Gauntlet** roguelike run (lives + stacking perks) ·
-  **Killer Lobsters** · 24 practice drills with ghost coaching · guided tutorial ·
+  **Killer Lobsters** · tournament brackets · 26 practice drills (incl. mini golf) with ghost coaching · guided tutorial ·
   **party modifiers** (big ball / low-gravity / sudden-death / multi-ball).
-- **Progression:** RP + Wood→Legend ranks, **Elo MMR**, and **210 cosmetics** —
-  85 countryball flags, 48 text plates, 36 caps, 31 eye styles, 10 animals — most gated behind
+- **Progression:** RP + Wood→Legend ranks, **Elo MMR**, and **200+ cosmetics** —
+  85 countryball flags, 49 text plates, 36 caps, 31 eye styles, 10 animals — most gated behind
   a play milestone.
 - **Customize:** live "build your player" (colour + faceplate + eyes + cap) — players wear
-  **shirt numbers** by default — plus 9 drawn ball looks. Everything is drawn, never a sprite.
+  **shirt numbers** by default — plus 15 drawn ball looks and 22 player skins. Drawn on the canvas; the Sunday League themes
+  and Sketchbook use optional Kenney sprites, with a drawn fallback when `assets/` is absent.
 - **Juice:** goal replays (skippable, one-tap clip share), screen shake, slow-mo, squash & stretch,
   confetti, crowd SFX, end-of-match awards.
 - **Social / Watch:** an Instagram-style feed of goal clips (your saved goals + a mock field).
 - **Leaderboard:** reads a live global board from a Google Sheet (no backend); optional score +
   replay submission via a tiny Apps Script (see below).
-- **Themes:** 7 full palettes; every themed ink is contrast-checked to WCAG AA against the
+- **Themes:** 29 palettes, each a bundle of pitch, players, ball, trail and sound (Sunday League is the default); every themed ink is contrast-checked to WCAG AA against the
   surface it lands on; colour-blind team markers on by default; PWA / installable / offline.
 - **Display modes:** auto mobile/desktop, plus **cocktail** (flat screen with players around it —
-  each controller rotates to the side they stand on). Settings can also live on their own
-  `/settings` page, synced live with the game tab.
+  each controller rotates to the side they stand on). the menu can also live on its own
+  `/menu` page (`/settings` redirects there), synced live with the game tab.
 
 ## Run locally
 It's plain static files. Either:
@@ -77,7 +79,10 @@ leaderboard.gs        Google Apps Script for the live leaderboard (paste into th
 LEADERBOARD_SETUP.md  How to wire up the Google Sheet leaderboard
 mock-scores.tsv       Paste-in sample rows for the leaderboard sheet
 ROADMAP.md            Shipped log + backlog
-CLAUDE.md             Notes for working on this codebase with Claude Code
+CLAUDE.md             Notes for working on this codebase — start at its START HERE section
+CONTROLS.md           Every input and what it does
+server/, infrastructure/  The online match server, lockstep relay and Azure setup (not the game)
+tools/                Dev-only scripts (commercial filming, goal seeds)
 ```
 
 ## Tech
@@ -87,7 +92,7 @@ disc/wall/arc collisions; theme engine driving both CSS variables and the canvas
 
 ## Testing
 The game exposes a debug hook when `window.__MAGNETDEBUG = true` (set before load) via
-`window.__magnet`. **42 headless Playwright suites** drive the real page — `node tests/run.mjs`.
+`window.__magnet`. **150 headless Playwright suites** drive the real page — `node tests/run.mjs`.
 See [`tests/README.md`](./tests/README.md) for what each covers, and [`CLAUDE.md`](./CLAUDE.md)
 for how to write one.
 

@@ -1,7 +1,7 @@
 # Magnetball — UI Terminology
 
 A shared vocabulary for describing changes. Point at anything below by name and it's
-unambiguous. Screenshots use the default **Neon** theme; labels are the exact on-screen text.
+unambiguous. Screenshots were taken on the **Neon** theme, which is no longer the default (Sunday League is), and some predate the menu's regrouping into Match / Your Player / Options / Replays — the names still hold; labels are the exact on-screen text.
 
 > **Two contexts:** the **Menu** (everything before/after a match — screens, cards, settings)
 > and the **Match / Pitch** (the live game with the ball and players).

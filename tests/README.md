@@ -17,8 +17,8 @@ node tests/deck.mjs          # a single suite
 ```
 
 The runner is **parallel** — each suite drives its own headless browser and then spends
-most of its life waiting on it, so a serial run leaves the machine idle. 149 suites take
-about **366s** six-up against ~1,000s one at a time. Output is printed in list order however
+most of its life waiting on it, so a serial run leaves the machine idle. 150 suites take
+about **700s** three-up against ~1,000s one at a time. Output is printed in list order however
 the results arrive, so two runs diff cleanly.
 
 ```bash
@@ -56,6 +56,33 @@ to the newest chromium actually present under `PLAYWRIGHT_BROWSERS_PATH`; `CHROM
 still overrides it.
 
 If you have a browser already on disk, point at it instead of downloading one:
+
+⚠️ **SABOTAGE RUNS HAVE A TOOL** (`tests/_sabotage.mjs`, underscore so `run.mjs` skips it).
+Write the sabotages as `[[name, exactTextInIndexHtml, replacement], …]` in a JSON file and
+run `node tests/_sabotage.mjs SUITE sabs.json`: each is applied alone, the suite is run, and
+the line printed names the checks that went red. A target that does not occur exactly once
+is refused (`TARGET COUNT n`) instead of silently no-opping into a false "nothing red", and
+`index.html` is restored from `index.html.sabbak` in a `finally` — if that backup is ever
+left behind, a run died mid-sabotage and nothing may be committed until it is restored.
+
+## Writing a suite — the shape every one here has
+
+```js
+import { chromium, LAUNCH } from './_browser.mjs';     // LAUNCH allows file:// sprite reads
+const b = await chromium.launch(LAUNCH); const p = await b.newPage();
+const errs = []; p.on('pageerror', e => errs.push(String(e)));
+await p.addInitScript(() => { window.__MAGNETDEBUG = true; localStorage.clear(); });
+await p.goto('file://' + process.cwd() + '/index.html');
+const r = await p.evaluate(() => { const M = window.__magnet; /* measure */ return {}; });
+const failed = []; const ok = (name, cond) => { if (!cond) failed.push(name); };
+ok('noErrors', errs.length === 0);
+console.log(JSON.stringify(r, null, 1));
+console.log('FAILED:', JSON.stringify(failed)); console.log('RESULT:', failed.length ? 'FAIL' : 'ALL PASS');
+await b.close(); process.exit(failed.length ? 1 : 0);
+```
+Name every check (the sabotage runner reports by name), print the measured numbers so a
+failure says *how far* off it was, pin anything a pixel probe depends on (palette, ads,
+team flags, auto-quality — see the traps below), and add a row to the table further down.
 
 ## Before you write a suite
 
