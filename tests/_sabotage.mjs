@@ -36,8 +36,11 @@ try {
     let out = '';
     try { out = execFileSync(process.execPath, [suite], { cwd: ROOT, encoding: 'utf8', timeout: 900000, env: process.env }); }
     catch (e){ out = (e.stdout || '') + (e.stderr || ''); }
-    const failed = (out.match(/FAILED: \[([\s\S]*?)\]/) || [])[1];
-    const res = (out.match(/RESULT: (\w+( \w+)?)/) || [])[1] || (/\bOK\b|\bPASS\b/.test(out) ? 'OK?' : 'no RESULT line');
+    // Two output shapes exist in the suites: `FAILED: [...]` and one `  FAIL name — note` line
+    // per check (botfoot, proladder, botdribble...). Either is a named finding.
+    const failLines = (out.match(/^\s+FAIL [^—\n]*/gm) || []).map(x => x.trim().slice(5).trim());
+    const failed = (out.match(/FAILED: \[([\s\S]*?)\]/) || [])[1] || (failLines.length ? failLines.join(' | ') : undefined);
+    const res = (out.match(/RESULT: (\w+( \w+)?)/) || [])[1] || (failLines.length ? 'FAIL' : /\bOK\b|\bPASS\b/.test(out) ? 'OK?' : 'no RESULT line');
     const thrown = !failed && /Error|at .*\.mjs/.test(out) ? ' (THREW — a stack trace is not a named finding)' : '';
     console.log(`${name}: ${res} ${failed ? failed.replace(/\s+/g, ' ').trim() : '(nothing red)'}${thrown}`);
     writeFileSync(F, src);

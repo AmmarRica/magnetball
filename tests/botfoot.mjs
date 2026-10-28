@@ -73,7 +73,9 @@ const r = await p.evaluate(() => {
   // ⚠️ Against the MATE, not the aim point: a through ball is aimed ahead of him on purpose.
   const missOf = (diff) => {
     const misses = [];
-    for (const seed of [11, 22]){
+    // ⚠️ FOUR SEEDS: once the bots could dribble, Insane passes less often (it keeps a ball
+    // it used to give away into traffic) and two seeds held 11 passes against a floor of 15.
+    for (const seed of [11, 22, 33, 44]){
       const w = allBots(diff, seed);
       let lastT = -1, open = null;
       for (let i = 0; i < 3600; i++){
@@ -123,12 +125,19 @@ const r = await p.evaluate(() => {
     me.x = 0; me.y = w.ball.y - att * 30;
     mate.x = 90; mate.y = w.ball.y + att * 170;
     const skill = M.botSkill(w.diff);
+    // ⚠️ With nobody in front of the ball the bot now RUNS IT rather than kicking at all
+    // (the dribble, `tests/botdribble.mjs`), so the pass-against-the-hoof question is asked
+    // with an opponent stood in the run: the dribble is shut, and what is left is the kick.
+    const open = M.botPickAim(w, me, w.ball, mates, skill);
+    opp[1].x = 0; opp[1].y = w.ball.y + att * 45; opp[1].vx = opp[1].vy = 0;
     const deep = M.botPickAim(w, me, w.ball, mates, skill);
+    opp[1].x = -180; opp[1].y = -att * halfL * 0.9;
     // Close: the ball 140 from the goal line, the keeper gone, mouth open.
     opp[0].x = -180; opp[0].y = -att * halfL * 0.9;
     w.ball.y = att * (halfL - 140); me.y = w.ball.y - att * 30; mate.y = w.ball.y - att * 120;
     const close = M.botPickAim(w, me, w.ball, mates, skill);
-    o.reach = { deep: deep.kind, close: close.kind, coastFree: +(M.BOT.passReach).toFixed(2) };
+    o.reach = { open: open.kind, deep: deep.kind, close: close.kind, coastFree: +(M.BOT.passReach).toFixed(2) };
+    o.openIsNotAHoof = open.kind !== 'goal';
     o.deepIsAPass = deep.kind === 'pass';
     o.closeIsAShot = close.kind === 'goal';
   }
@@ -227,7 +236,7 @@ const r = await p.evaluate(() => {
   // pass, by the match record's own rule), rookie against Insane.
   const footOf = (diff) => {
     let kicks = 0, passAim = 0, seq = 0, goals = 0;
-    for (const seed of [11, 22]){
+    for (const seed of [11, 22, 33, 44, 55, 66]){
       const w = allBots(diff, seed);
       let lastK = null, lastT = -1;
       for (let i = 0; i < 3600; i++){
@@ -251,7 +260,12 @@ const r = await p.evaluate(() => {
   // seeded matches), because which candidate wins a given kick moves with every
   // tuning change; what must not move is that the passing tiers pass and the rookie does
   // not. The baseline's 46% at Insane was hoofs filed as passes, which the reach ended.
-  o.insanePasses = o.foot.insane.passAimPct >= 15 && o.foot.normal.passAimPct >= 15;
+  // ⚠️ RE-FLOORED 15 → 10 WITH THE DRIBBLE, and the reason is the point rather than an
+  // excuse: the passes that went are the ones played into traffic (`passMinOpen`), which a
+  // bot now keeps and runs instead. Over these six seeds Insane reads 12% of kicks aimed
+  // at a mate (19% before) while `tests/botdribble.mjs` measures its passes ARRIVING more
+  // often (39% → 53% over twelve seeds). Fewer, better passes; the rookie still never aims.
+  o.insanePasses = o.foot.insane.passAimPct >= 10 && o.foot.normal.passAimPct >= 10;
   // ⚠️ A FINDING, written down rather than asserted round: the chain of two same-side
   // kicks reads rookie 19%, Normal 31%, Insane 24% here — Insane shoots and banks more
   // than Normal from the positions its runs get it into, so it strings fewer together.
@@ -282,6 +296,7 @@ ok('a pass reaches the mate it was meant for', r.passesGoWhereAimed,
    'the reach (`BOT.passReach`/`wReach`) is what holds it under 60, and with `wReach` at 0 it reads ~280');
 
 ok('from deep, a pass beats the hoof at goal', r.deepIsAPass, JSON.stringify(r.reach) + ' — a shot from beyond the coast arrives dead; with `BOT.wReach` at 0 this picks the goal');
+ok('...and with nobody in front of it, the bot does not hoof it either', r.openIsNotAHoof, JSON.stringify(r.reach));
 ok('...and in range, the shot wins', r.closeIsAShot, JSON.stringify(r.reach));
 
 ok('an Insane keeper comes off its line for a ball bearing down', r.keeperComesOut, JSON.stringify(r.keeper));

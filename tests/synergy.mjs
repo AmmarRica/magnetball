@@ -231,8 +231,14 @@ const r = await p.evaluate(() => {
     M.BOT.coopAt = was; M.MODES['4v4'].per = perWas;
     return { share: +(liveSteps/Math.max(1, playSteps)).toFixed(3), triShare: +(tris/Math.max(1, playSteps)).toFixed(3), shots, goals: ww.score.slice(), playSteps };
   };
-  o.botsInsane = [botRun('insane', true, 21), botRun('insane', true, 22)];
-  o.botsNoHook = [botRun('insane', false, 21), botRun('insane', false, 22)];
+  // ⚠️ EIGHT SEEDS, NOT TWO, for the same reason as the triangle below. When the bots learned
+  // to dribble every seeded match was re-dealt and the two-seed reading went 0.216 / 0.025
+  // (Insane / hook inert) → 0.121 / 0.064, a ratio of 1.9 against a bar of 2 — while over
+  // seeds 21..28 the same two builds read 0.281 / 0.029 and **0.202 / 0.055 (3.7×)**, and
+  // Rookie 0.063 → 0.062. The hook works; two one-minute matches could not say so.
+  const SEEDS8 = [21, 22, 23, 24, 25, 26, 27, 28];
+  o.botsInsane = SEEDS8.map(k => botRun('insane', true, k));
+  o.botsNoHook = SEEDS8.map(k => botRun('insane', false, k));
   // ⚠️ SIX SEEDS, NOT TWO. A triangle in a 60-second 5v5 is a rare event — swept over seeds
   // 21..32 under this block's own settings it formed on **6 of 12** seeds on the build before
   // the goal-refill (`refillStamina`) and **4 of 12** after, with the live-link share flat
@@ -241,7 +247,7 @@ const r = await p.evaluate(() => {
   // bit-identical on both builds). Over 27..32 it reads 2 of 6 before and 3 of 6 after; the
   // claim is still "at some point", pooled over the six.
   o.bots5 = [27, 28, 29, 30, 31, 32].map(s => botRun('insane', true, s, '5v5'));
-  o.botsRookie = [botRun('rookie', true, 21), botRun('rookie', true, 22)];
+  o.botsRookie = SEEDS8.map(k => botRun('rookie', true, k));
 
   // ---- 7. deterministic with the links on -------------------------------------------------------------
   const hash = (ww) => { const n = x => (typeof x === 'number' ? x.toFixed(6) : String(x));

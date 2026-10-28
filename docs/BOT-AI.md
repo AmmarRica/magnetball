@@ -92,6 +92,27 @@ Everything is 0..1 so the weights mean what they say. A bank competes with a dir
 rather than being a special case; it just carries `wallPenalty` so it wins only when the
 direct lanes are genuinely shut.
 
+**The dribble is a candidate too** (one-touch only, every tier — `BOT.dribble*`). Not a kick
+at all: a run of `dribbleLen` (70) toward goal or up to 1.1 rad either side of it, scored by
+the same `botScoreAim` with `openness` replaced by a RACE — at three points along the run,
+how much later than this bot the nearest opponent gets there. When it wins, the chaser never
+enters `strike`: once behind the ball (`dribbleAlign`) it runs THROUGH it to a point
+`dribbleLead` (30) beyond, so the body pushes it on, and the aim is re-picked at the decision
+rate like any other — the moment a shot or a pass outscores it, that is lined up instead.
+Three further changes make the kick on offer an honest comparison: a shot from beyond
+`passReach` of the coast loses progress (`shotFarProg`, forgiven at an open net exactly as
+the reach is); a pass whose receiver is losing the race to the ball pays `passShutPen`; and the
+support grid starts `gridBack` behind the carrier and scores a cell down for an OPPONENT near
+it (`wGridFree`) — it only ever counted teammates. Measured, Normal 3v3 over twelve seeds:
+47 → 37 kicks a minute, the median shot struck 374 → 241 units out, passes arriving 33 → 41%
+(Insane 39 → 53%), a mate free to pass to 3 → 7% (Insane 3 → 11%). `tests/botdribble.mjs`.
+
+⚠️ **The ladder is the price list.** Bolder dribbling (a looser race, a longer push) was
+measured costing the Insane-over-Rookie margin as low as −74 in a 3v3; Normal-up only, it
+cost it too, because the rookie went on hoofing and the hoof is efficient in this physics.
+Every tier dribbling at the shipped settings reads +114 (3v3, 150s) and +127 (2v2) with
+nothing inverted. Retune any `dribble*` number against `tests/proladder.mjs` AND a 3v3 ladder.
+
 ### Layer 0 — steering
 
 Everything here returns a stick vector and nothing else. `botArrive` eases off approaching a

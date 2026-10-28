@@ -43,7 +43,7 @@ repo, so export it once — without it every suite dies with `Cannot find packag
 export PLAYWRIGHT_MODULE=/opt/node22/lib/node_modules/playwright/index.js
 node tests/footballers3d.mjs                 # one suite (~1 min); prints FAILED: [...] and RESULT:
 node tests/run.mjs footballer                # every suite whose name matches
-MB_JOBS=3 node tests/run.mjs                 # the whole pool, 150 suites, ~12 min at 3 jobs
+MB_JOBS=3 node tests/run.mjs                 # the whole pool, 152 suites, ~12 min at 3 jobs
 node tests/_sabotage.mjs SUITE sabs.json     # rule 2: break the fix N ways, see which checks go red
 node tests/_sweep.mjs both                   # drive the page like a player (screen transitions, replays)
 ```
@@ -1035,6 +1035,68 @@ three lines a second time, name it.
   by the suite's OWN guard ("if the caption is off in both, the check below passes for the
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
+- **THE BOTS DRIBBLE, KEEP THE BALL AND GET OPEN** (`BOT.dribbleAt`/`dribbleLen`/
+  `dribbleAngs`/`dribbleClear`/`dribbleSpace`/`dribbleBias`/`dribbleAlign`/`dribbleLead`,
+  `botSkill().dribble`, the `dribble` candidate in `botPickAim`, `dribbling` in `runBot`;
+  `BOT.shotFarProg`, `BOT.passMinOpen`/`passShutPen`, `BOT.gridBack`/`gridFreeNear`/
+  `gridFreeSpan`/`wGridFree`; `tests/botdribble.mjs`). Asked for as *"Improve the enemy team
+  and teammate AI so they can position better and make decisions. Also stop them from kicking
+  ball all time. They should try to dribble and position better. Have them play team sport"*.
+  ⚠️ **MEASURED FIRST**, twelve seeded one-minute all-bot 3v3s at the shipped feel: Normal
+  kicked **47** times a minute, **81%** of them the instant the ball arrived; the median shot
+  was struck **374** units from goal on a 760 pitch (a hoof filed as a shot — the shot's
+  progress is pinned at 1 and `reachOpen` forgave most of the reach); a third of passes
+  arrived; and a bot on the ball had a mate free to pass to **3%** of the time — the support
+  grid counted TEAMMATES near a cell and never opponents, and lived in the attacking half only,
+  so a side building from its own half had its support stood out of reach.
+  ⚠️ **AFTER, same seeds**: Normal **37** kicks a minute (Insane 50 → 42), the median shot
+  **241** units out, passes arriving **41%** (Insane 39 → **53%**), a mate free **7%** (Insane
+  **11%**), possessions 1.47 → 1.60 touches. Nothing here rolls a number.
+  ⚠️ **THE DRIBBLE IS A CANDIDATE, NOT A MODE** — scored by the same `botScoreAim` as a shot or
+  a pass, so it wins only when the kick on offer is worse, and re-picked at the decision rate,
+  so a shot or a pass that opens up takes over. While it wins the chaser never enters `strike`;
+  behind the ball it runs THROUGH it to `dribbleLead` beyond and the body carries it on.
+  One-touch only (`w.trapOff`): with trapping on the trap IS the dribble, and the pinned suites
+  are untouched by it.
+  ⚠️ **"SPACE" IS A RACE, NOT A GAP, and the gap version was built first and inverted the
+  ladder.** "Nobody within N of the run" read a defender sixty units off the line as space, and
+  at running pace he is on the ball in twenty steps: the 2v2 ladder went **+205 → −26** with
+  six of seven plans inverted. Sampled at three points of the run, it is how much LATER than us
+  the nearest opponent gets there. Separately, `botScoreAim` was first handed the race margin as
+  its lane radius — negative once the margin was — and the dribble silently scored below zero
+  on every tick; four sweep configs read identical before that was seen.
+  ⚠️ **EVERY TIER DRIBBLES (`dribbleAt` 0), and that is a LADDER finding, not generosity.**
+  Normal-up only, the rookie went on hoofing, and Insane-over-Rookie on a 3v3 (150s matches,
+  seven plans, six seeds, both orientations) read **+63** at the shipped race and **−74** at a
+  bolder one, against **+81** before: the hoof is efficient in this physics, and a ladder of
+  one STYLE against another measures the style. With every tier dribbling it reads **+114**
+  (3v3) and **+127** (2v2, `proladder`'s harness) with nothing inverted. A rookie still never
+  passes.
+  ⚠️ **A SOFT TOUCH** (`dribbleLead` 30): at 60 the ball ran loose ahead of the body and the 3v3
+  ladder read −74 (Normal-up, race −60); 30 read +15 and 15 read −8 on the same arm.
+  `dribbleBias` swept 0.25 / 0.45 / 0.65: 0.45 kept the 3v3 ladder at +114 where 0.65 read +69.
+  ⚠️ **A LONG SHOT LOSES PROGRESS, FORGIVEN AT AN OPEN NET** (`shotFarProg`): applied in full it
+  took a 2v2 — which has no keeper, so the slow ball into the empty net was Insane's best kick —
+  down with it; it is scaled by `1 − reachOpen × apOpen`, the reach penalty's own forgiveness.
+  ⚠️ **A PASS INTO TRAFFIC PAYS** (`passShutPen` 0.5 below `passMinOpen` 0.25 of the race):
+  measured over twelve seeds Insane's passes arrive **53% with it, 28% without**. It cannot be
+  isolated in one picture — with nothing better a marked pass still wins, and with room to run
+  the dribble wins anyway — so `tests/botdribble.mjs` measures it over matches.
+  ⚠️ **TWO SEEDED SUITES HAD TO GROW, AND NEITHER BAR MOVED BUT ONE.** `synergy`'s hook ratio
+  read 1.9 against a bar of 2 on its two seeds; over eight (21..28) the same two builds read
+  **0.281 / 0.029** and **0.202 / 0.055 (3.7×)** — the bots now spend longer in possession, so
+  the defending side is lined up less of the time, and two one-minute matches could not say
+  which. `botfoot`'s tier block went to six seeds, its miss check to four (Insane passes less —
+  fewer, better passes), its "from deep, a pass beats the hoof" probe stands an opponent in the
+  run (with nobody there the bot now runs it — a new claim beside it), and its pass-share floor
+  went **15 → 10%**: the passes that went are the ones played into traffic. ⚠️ **`botfoot` was
+  RED ON THE PREVIOUS BUILD in this container** (its two-seed chain-of-passes ladder, the
+  Chrome-version trap its own README row records) and went unnoticed; six seeds is green on
+  both.
+  ⚠️ **WHAT IT COSTS**: bodies within 90 of the ball rose 1.63 → 1.86 in a 3v3 (dribbling draws
+  defenders), and the 2v2 ladder margin is +127 against +205 before — narrower, every plan still
+  positive. Nine sabotages on `botdribble`, each caught by its own check; one of them (the
+  momentum allowance applied to a dribble) only through the match-level pass check.
 - **THE BOTS USE THE TURBO, PASS INTO SPACE, MAKE RUNS, MARK AND KEEP — EACH ONE A
   FUNCTION OF THE TIER** (`BOT.sprint*`, `passThrough`, `passRace`, `passReach`/`wReach`,
   `passLaneR`, `runTicks`/`runAhead`, `markW`/`markWTop`, `goalieOut`; `botSkill`'s
@@ -9915,7 +9977,7 @@ const ok = await p.evaluate(() => {
 });
 console.log(ok); await b.close();
 ```
-`tests/run.mjs` runs all 150 suites IN PARALLEL (~700s at `MB_JOBS=3`, against ~1,000s serial; `MB_JOBS=1`
+`tests/run.mjs` runs all 152 suites IN PARALLEL (~700s at `MB_JOBS=3`, against ~1,000s serial; `MB_JOBS=1`
 forces serial for reproducing a flake, and the two timing-sensitive suites run alone).
 ⚠️ **NO SUITE IS RED ON PURPOSE ANY MORE — a green run is ALL green.** Two used to be, and
 both measured the SHIPPED default rather than the tuning the AI was built against:

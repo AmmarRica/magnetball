@@ -676,12 +676,17 @@ const rp = await p.evaluate(async () => {
   const dashes = handed.map(h => h.dash);
   o.handed = { n: handed.length, dashJogMax: Math.max(...dashes.slice(0,60)), dashSprintMax: Math.max(...dashes.slice(60,210)), dashEnd: dashes[dashes.length-1],
                between: dashes.filter(v => v > 0.02 && v < 0.98).length, sprintingAt: handed.findIndex(h => h.sp) };
-  o.px = { jogMax: Math.max(...px.slice(0,55)), sprintMax: Math.max(...px.slice(60,210)), laterMax: Math.max(...px.slice(210)) };
+  o.px = { jogMax: Math.max(...px.slice(0,55)), sprintMax: Math.max(...px.slice(60,210)), laterMax: Math.max(...px.slice(210)), end: px[px.length-1] };
   o.dashShown = o.handed.n >= frames.length - 1 && o.handed.dashJogMax === 0 && o.handed.dashSprintMax === 1 && o.handed.sprintingAt >= 55 && o.handed.sprintingAt <= 62;
   o.dashEases = o.handed.between >= 10 && o.handed.dashEnd === 0;
   o.printsShown = o.px.sprintMax > 100;
   // the jog leaves nothing, the sprint's prints fade after it ends rather than vanishing
-  o.printsOnlyWhileSprinting = o.px.jogMax === 0 && o.px.sprintMax > 100 && o.px.laterMax > 0 && o.px.laterMax < o.px.sprintMax;
+  // ⚠️ "Fade rather than vanish" is read as the spent stretch STILL holding prints and the
+  // last frame holding fewer than its peak — never as "fewer than during the sprint": the
+  // prints recorded near empty are WHITE, which differs from the court by more pixels than
+  // soil does, and that comparison read 472 sprinting against 521 after on a perfectly good
+  // build (the version this replaced, red on the commit it shipped in).
+  o.printsOnlyWhileSprinting = o.px.jogMax === 0 && o.px.sprintMax > 100 && o.px.laterMax > 0 && o.px.end < o.px.laterMax;
   // a print landed with the ring nearly out is white (`low`) — read off the replay's own slot
   o.prints = { lowMax, soilMax };
   o.printsTurnWhite = lowMax > 0 && soilMax > 0;

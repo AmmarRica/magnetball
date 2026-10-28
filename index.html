@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261009.1140AM';
+const VERSION = '20261028.0430AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,13 @@ const VERSION = '20261009.1140AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261028.0430AM', title: 'The bots play football',
+    changed: [
+      '<b>Bots dribble now.</b> With room in front of them they run the ball forward at their feet instead of booting it the moment it arrives, and they take a shot from closer in.',
+      '<b>Bots keep the ball rather than giving it away.</b> A pass to a teammate with an opponent on his shoulder is no longer played, so far more of their passes reach a teammate.',
+      '<b>Teammates get open.</b> A bot looking for the ball runs to space away from the defenders, and drops in behind the player on the ball when the team is building from its own half.',
+    ],
+    fixed: 'A handful of smaller fixes.' },
   { v: '20261009.1140AM', title: 'Sunday League 3D',
     changed: [
       '<b>A third Sunday League look, with the players lit like the ball.</b> Under Theme, Sunday League 3D puts the same shine and shadow the ball has on every footballer — a round head, a domed shirt, rounded arms and legs — still seen from straight above.',
@@ -28136,6 +28143,10 @@ const BOT = {
   gridTicks: 2,              // one support player's grid, every other tick
   gridMargin: 0.25,          // a new cell must beat the one we're running to by this
   gridBand: [90, 300],       // ideal distance from the carrier
+  gridBack: 120,             // support cells start this far BEHIND the carrier, not at halfway
+  gridFreeNear: 30,          // an opponent this close to a cell makes it worthless as an option...
+  gridFreeSpan: 100,         // ...and it is fully free this much further out
+  wGridFree: 0.9,            // what being free of a marker is worth, against the lane and the shot
   gridCrowd: 110,            // teammates this close to a cell cost it
 
   // --- Feel. Error is the primary difficulty knob, but it cannot be the ONLY one:
@@ -28219,6 +28230,35 @@ const BOT = {
   markWTop: 0.62,            // ...and at skill 1
   goalieOut: 0.16,           // of the half-length a top-tier keeper comes off the line for a
                              // ball bearing down on the box; a rookie keeper stays put
+
+  // --- Dribbling. One-touch only: a bot with space in front of it runs the ball forward
+  // with its body instead of striking it. It is a CANDIDATE in `botPickAim`, scored on the
+  // same scale as a shot or a pass, so it wins only when the kick on offer is worse.
+  // ⚠️ EVERY TIER, and that is a ladder finding rather than generosity: gated at Normal and
+  // up the rookie went on hoofing, and the 3v3 ladder (Insane over Rookie, pooled, 150s
+  // matches) read +63 at a race of −40 and −74 at −60, against +81 before — the hoof is
+  // efficient in this physics, and a ladder of one style against another measures the style. With every tier dribbling it
+  // reads **+114** (3v3, 150s) and **+127** (2v2, the `proladder` harness), none inverted.
+  dribbleAt: 0,              // the tier scalar from which a bot dribbles
+  dribbleLen: 70,            // how far ahead of the ball a dribble is aimed (a few touches, not a run)
+  dribbleAngs: [0, 0.55, -0.55, 1.1, -1.1],   // off the line to goal, radians
+  dribbleClear: -40,         // the RACE: an opponent who reaches a point of the run this much
+                             // AFTER us (negative = before us) still shuts it...
+  dribbleSpace: 60,          // ...and it is fully open once he is this much further behind
+  dribbleBias: 0.45,         // added to a dribble's score (0.25 / 0.45 / 0.65 swept: 0.45 kept the
+                             // 3v3 ladder at +114 where 0.65 read +69)
+  dribbleAlign: 0.72,        // behind the ball this well (dot of bot→ball with the run) = push it
+  dribbleLead: 30,           // the run goes THROUGH the ball to a point this far beyond it — a soft
+                             // touch. Swept with Normal-up dribbling at a race of −60: lead 60
+                             // read −74 on the 3v3 ladder, 30 read +15, 15 read −8
+  passMinOpen: 0.25,         // a pass whose receiver is not this far ahead of the race...
+  passShutPen: 0.5,          // ...pays this, so keeping the ball beats giving it away. Measured
+                             // over twelve 3v3 seeds: Insane's passes ARRIVE 53% with it, 28% without
+  shotFarProg: 0.6,          // a shot from beyond `passReach` of the coast loses this much of its
+                             // pinned progress by the time it is a whole coast out — forgiven at an
+                             // open mouth exactly like the reach (`reachOpen`): applied in full, a
+                             // 2v2 (no keeper) lost its best kick and the ladder went flat. The
+                             // median Normal shot was struck 374 units out; it is ~240 now
 };
 function botKickMul(w, p){
   const kick = w.kickPower || PLAYER.kick;
@@ -28367,7 +28407,7 @@ function botDrawPlans(w){
 function botTypeM(p, key){
   const t = BOT_TYPES[p && p.aiType] || null;
   const v = t && t[key];
-  return typeof v === 'number' ? v : (key === 'shot' || key === 'pass' ? 0 : 1);
+  return typeof v === 'number' ? v : (key === 'shot' || key === 'pass' || key === 'dribble' ? 0 : 1);
 }
 function botPlanOf(w, team){ return (w.plan && w.plan[team]) || BOT_PLANS.balanced; }
 // Every AI-side difficulty axis derives from one 0..1 scalar, so the ladder can only
@@ -28407,6 +28447,7 @@ function botSkill(diff){
     // Synergy: how readily a defending bot stands level with a mate to form a link.
     // (guarded below the start so a `coopAt` past the top of the ladder means nobody)
     coop:      s >= BOT.coopAt ? clamp((s - BOT.coopAt) / Math.max(1e-9, 1 - BOT.coopAt), 0, 1) : 0,
+    dribble:   s >= BOT.dribbleAt,
   };
 }
 
@@ -28743,7 +28784,9 @@ function botPickAim(w, p, ball, mates, skill){
   // no keeper: the stock plan's Insane-over-Rookie margin sat at −4..+6 with the full
   // penalty, because the slow hoof into the empty net had been Insane's best kick.
   cands.push({ kind:'goal', x:shotX, y:shotY,
-    s: botScoreAim(w, p, ball, shotX, shotY, 1, apOpen,
+    s: botScoreAim(w, p, ball, shotX, shotY,
+                   1 - BOT.shotFarProg * clamp((shotD - coast*BOT.passReach) / (coast*(1 - BOT.passReach)), 0, 1) * (1 - BOT.reachOpen * apOpen),
+                   apOpen,
                    (ap.span < BOT.apertureMin ? 0.6 : 0) + reachPen(shotD) * (1 - BOT.reachOpen * apOpen))
        + botTypeM(p, 'shot') });
 
@@ -28777,7 +28820,42 @@ function botPickAim(w, p, ball, mates, skill){
     // straight to the other side.
     const open = clamp((od - md) / BOT.passRace, 0, 1);
     cands.push({ kind:'pass', x:tx, y:ty, who:q,
-      s: botScoreAim(w, p, ball, tx, ty, null, open, reachPen(Math.hypot(tx-ball.x, ty-ball.y)), BOT.passLaneR) + botTypeM(p, 'pass') });
+      s: botScoreAim(w, p, ball, tx, ty, null, open, reachPen(Math.hypot(tx-ball.x, ty-ball.y)) + (open < BOT.passMinOpen ? BOT.passShutPen : 0), BOT.passLaneR) + botTypeM(p, 'pass') });
+  }
+
+  // --- Run it forward: the DRIBBLE. Not a kick at all — the bot pushes the ball with its
+  // body and keeps it, so it is offered only where there is room to do that: the run toward
+  // goal (and a few angles off it) is scored on how far the nearest opponent is from the
+  // path, with the same lane/progress/openness weights a kick gets. A shot that is on, or a
+  // pass to a mate who is free, still outscores it; a hoof from deep or a pass into traffic
+  // does not. One-touch only (`w.trapOff`): with trapping on the trap IS the dribble.
+  if (skill.dribble && w.trapOff){
+    const hw = w.field.W/2 - ball.r - 24, hl = halfL - ball.r - 24;
+    const base = Math.atan2(goalY - ball.y, -ball.x * 0.5);
+    for (const da of BOT.dribbleAngs){
+      const a = base + da;
+      const tx = clamp(ball.x + Math.cos(a)*BOT.dribbleLen, -hw, hw);
+      const ty = clamp(ball.y + Math.sin(a)*BOT.dribbleLen, -hl, hl);
+      if (Math.hypot(tx-ball.x, ty-ball.y) < BOT.dribbleLen * 0.5) continue;   // the boards are in the way
+      // ⚠️ A RACE, NOT A GAP — the pass's lesson again. "Nobody within N units of the run"
+      // reads a defender sixty units off the line as space, and at running pace he is on
+      // the ball in twenty steps. What decides a dribble is whether the bot reaches each
+      // point of the run before any opponent can: sampled along it, the opponent's distance
+      // to the point against ours (to the ball, then along the run).
+      const toBall = Math.hypot(ball.x - p.x, ball.y - p.y);
+      let lead = 1e9;
+      for (let k = 1; k <= 3; k++){
+        const f = k / 3, sx = ball.x + (tx - ball.x)*f, sy = ball.y + (ty - ball.y)*f;
+        const mine = toBall + BOT.dribbleLen * f;
+        for (const o of w.players) if (o.team !== p.team)
+          lead = Math.min(lead, Math.hypot(o.x - sx, o.y - sy) - o.r - mine);
+      }
+      const space = clamp((lead - BOT.dribbleClear) / BOT.dribbleSpace, 0, 1);
+      if (space <= 0) continue;
+      cands.push({ kind:'dribble', x:tx, y:ty,
+        s: botScoreAim(w, p, ball, tx, ty, null, space, 0) * (0.5 + 0.5*space)
+           + BOT.dribbleBias + botTypeM(p, 'dribble') });
+    }
   }
 
   // --- Banks off the boards, for the goal and for each mate. Same scorer, small
@@ -29008,8 +29086,10 @@ function botUpdateSupportGrid(w, team){
   const attackDir = team===0 ? -1 : 1;
   const halfW = w.field.W/2, halfL = w.field.L/2, gh = w.field.goal/2;
   const goalY = attackDir*halfL;
-  // The attacking half only: a support spot behind your own carrier isn't support.
-  const y0 = 0, y1 = attackDir*halfL*0.92;
+  // From a little behind the carrier to the far end. It was the attacking half only, so a
+  // side building from its own half had its support stood upfield out of reach of any pass
+  // — a carrier in its own half had an open mate 4% of the time (see `gridBack`).
+  const y0 = clamp(carrier.y - attackDir*BOT.gridBack, -halfL*0.85, halfL*0.85), y1 = attackDir*halfL*0.92;
   let bestS = -1e9, best = null, hereS = -1e9;
   // ⚠️ **THE EXPENSIVE HALF OF A CELL IS SKIPPED WHEN IT CANNOT WIN, and the answer is
   // provably unchanged.** This grid was 47% of the whole step at 8v8 — 48 cells, each
@@ -29036,14 +29116,19 @@ function botUpdateSupportGrid(w, team){
       for (const q of squad){ if (q===me) continue;
         const qd = Math.hypot(q.x-cx, q.y-cy);
         if (qd < BOT.gridCrowd) crowd += (BOT.gridCrowd-qd)/BOT.gridCrowd; }
+      // ...and OPPONENTS near a cell cost it too. Only teammates were counted, so the best
+      // spot was routinely one with a marker standing on it — an option nobody can pass to.
+      let od = 1e9;
+      for (const o of w.players) if (o.team !== team) od = Math.min(od, Math.hypot(o.x-cx, o.y-cy));
+      const free = clamp((od - BOT.gridFreeNear) / BOT.gridFreeSpan, 0, 1) * BOT.wGridFree;
       const here = !!(me.aiSpot && Math.abs(me.aiSpot.x-cx) < 1 && Math.abs(me.aiSpot.y-cy) < 1);
-      if (!here && 2 + band*0.8 - crowd*0.9 <= bestS) continue;
+      if (!here && 2 + band*0.8 - crowd*0.9 + free <= bestS) continue;
       // Can the carrier reach me, and could I then shoot?
       const safety = botLaneClear(w, me, carrier.x, carrier.y, cx, cy);
       fromPt.x = cx; fromPt.y = cy;
       const ap = botAperture(w, me, fromPt, goalY, gh);
       const shot = Math.min(1, ap.span / 0.6);
-      const s = safety*1.0 + shot*1.0 + band*0.8 - crowd*0.9;
+      const s = safety*1.0 + shot*1.0 + band*0.8 - crowd*0.9 + free;
       if (s > bestS){ bestS = s; best = {x:cx, y:cy}; }
       // Score the cell we're already running to, so we only move for a real gain.
       if (here) hereS = s;
@@ -29163,7 +29248,7 @@ function runBot(w, p){
     // its own to cancel, so an aim rotated for it is simply rotated wrong. Measured on
     // `botai`'s ladder at the AI's own tuning (trapping on): compensating there read
     // rookie<normal **−6** and normal<hard **0**, against +3 / +9 without.
-    if (skill.comp > 0 && w.trapOff){
+    if (skill.comp > 0 && w.trapOff && pick.kind !== 'dribble'){
       // The strike carries one step of wind-up (`chargeMul`), the same number `botPickAim`
       // sizes the coast from — allow for 5.5 when the kick is 6.3 and the stance is 3° out.
       const pw = (w.kickPower || PLAYER.kick) * (1 + Math.min(1, STEP / chargeSecs()) * CHARGE.bonus) * botKickMul(w, p);
@@ -29248,6 +29333,11 @@ function runBot(w, p){
   const dBall = Math.hypot(pbx,pby)||1; pbx/=dBall; pby/=dBall;
   const align = pbx*aimx + pby*aimy;
 
+  // --- A DRIBBLE never commits to a strike: it is the chaser running THROUGH the ball
+  // with KICK up, so the body pushes it on. Re-decided at the decision rate like any aim,
+  // so the moment a shot or a pass outscores it the bot lines that up instead.
+  const dribbling = iAmChaser && p.aiKind === 'dribble' && !stuck && !p.trap;
+
   // --- State machine. Every change costs a dwell, so nothing can flip on
   // consecutive ticks however close to a threshold it sits.
   p.aiStateT++;
@@ -29268,7 +29358,7 @@ function runBot(w, p){
         (align < BOT.strikeExit || p.aiCommitT <= 0 || (w.trapOff && p.kickUsed))){
       p.aiState = 'approach'; p.aiStateT = 0; p.aiLag = lagTicks;
     }
-  } else if (p.aiStateT >= BOT.dwell && align > BOT.strikeEnter && dBall < reach){
+  } else if (p.aiStateT >= BOT.dwell && align > BOT.strikeEnter && dBall < reach && !dribbling){
     p.aiState = 'strike'; p.aiStateT = 0; p.aiCommitT = BOT.commitTicks;
   }
   if (p.aiLag > 0) p.aiLag--;
@@ -29321,6 +29411,10 @@ function runBot(w, p){
     target = { x: p.x + aimx*80, y: p.y + aimy*80 };
   } else if (p.aiState === 'strike'){
     target = { x: ball.x + aimx*standR, y: ball.y + aimy*standR };
+  } else if (dribbling && align > BOT.dribbleAlign && dBall < standR + BOT.dribbleLead){
+    // Behind the ball and close: run through it. The target sits beyond the ball along the
+    // run, so `botArrive` never eases off and the body carries the ball on.
+    target = { x: ball.x + aimx*BOT.dribbleLead, y: ball.y + aimy*BOT.dribbleLead };
   } else if (iAmChaser){
     const R = p.r + ball.r + BOT.tangentPad;
     // Would the run to the strike spot go through the ball? Then walk around it on

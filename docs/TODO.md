@@ -19,6 +19,12 @@ _The current build is `VERSION` in `index.html` (shown in About). Bump it, with 
       (`toOpp` 42–46% of kicks aimed at a mate, `passLaneR` 34). The lane test is a distance
       off the line; a time-aware one (an opponent a stride off the line is on it before a
       slow ball arrives) is the next thing to try, on the same instrument.
+      ⚠️ **Partly answered (20261028)**: a pass whose receiver loses the race now pays
+      `passShutPen`, and Insane's passes ARRIVE 53% against 28% without it (twelve 3v3 seeds).
+      The lane itself is still a distance test.
+- [ ] **Bots bunch a little more round the ball since they dribble** (bodies within 90 of
+      it: 1.63 → 1.86 on average in a 3v3). Dribbling draws defenders, which is football;
+      the attacking side's own supports holding off is the half worth a look.
 
 ---
 
