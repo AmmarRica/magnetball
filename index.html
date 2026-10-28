@@ -6223,7 +6223,7 @@ function qrCanvas(text, target){
 // bootstrap and the whole page died on "Cannot access 'VERSION' before initialization".
 // That is the SEVENTH temporal-dead-zone bite in this file; a `const` read during startup
 // has to be declared above the thing that reads it.
-const VERSION = '20261028.0430AM';
+const VERSION = '20261028.0830AM';
 
 // ============================================================
 //  CHANGELOG — what changed, for PLAYERS
@@ -6239,6 +6239,12 @@ const VERSION = '20261028.0430AM';
 // that a flex column was centring its overflow, and a changelog that lists internals is a
 // changelog nobody reads twice. Newest first; `v` must match a real `VERSION` stamp.
 const CHANGELOG = [
+  { v: '20261028.0830AM', title: 'The bots keep their shape',
+    changed: [
+      '<b>Bot defenders cover the next player instead of crowding the one with the ball.</b> In bigger matches teammates spread out and stop standing on top of each other.',
+      'Two defenders no longer mark the same opponent. Beginner bots still ball-watch, so the difficulty levels feel more different.',
+    ],
+    fixed: 'Small fixes and polish.' },
   { v: '20261028.0430AM', title: 'The bots play football',
     changed: [
       '<b>Bots dribble now.</b> With room in front of them they run the ball forward at their feet instead of booting it the moment it arrives, and they take a shot from closer in.',
@@ -28228,6 +28234,7 @@ const BOT = {
   runAhead: 110,             // ...to a spot this far goal-side of the receiver (give and go)
   markW: 0.40,               // how tightly a defender shades onto its mark, at skill 0...
   markWTop: 0.62,            // ...and at skill 1
+  coverAt: 0.5,
   goalieOut: 0.16,           // of the half-length a top-tier keeper comes off the line for a
                              // ball bearing down on the box; a rookie keeper stays put
 
@@ -28448,6 +28455,7 @@ function botSkill(diff){
     // (guarded below the start so a `coopAt` past the top of the ladder means nobody)
     coop:      s >= BOT.coopAt ? clamp((s - BOT.coopAt) / Math.max(1e-9, 1 - BOT.coopAt), 0, 1) : 0,
     dribble:   s >= BOT.dribbleAt,
+    cover:     s >= BOT.coverAt,
   };
 }
 
@@ -29460,7 +29468,16 @@ function runBot(w, p){
     if (p.aiRole === 'defender'){
       if (recompute){
         let mark=null, bs=-1e9;
-        for (const o of w.players){ if (o.team===p.team) continue;
+        // the man on the ball is the presser's; a defender takes the next one
+        let onBall = null;
+        if (skill.cover && st.press && st.press !== p){
+          let bd = 1e9, nOpp = 0;
+          for (const o of w.players){ if (o.team===p.team || o.aiRole==='goalie') continue; nOpp++;
+            const d = Math.hypot(o.x-ball.x, o.y-ball.y); if (d < bd){ bd = d; onBall = o; } }
+          if (nOpp < 2) onBall = null;
+        }
+        for (const o of w.players){ if (o.team===p.team || o === onBall) continue;
+          if (skill.cover && mates.some(q => q !== p && q.aiRole === 'defender' && q.aiMark === o)) continue;
           let threat = (o.y*-attackDir)/halfL - Math.hypot(o.x-ball.x,o.y-ball.y)/(halfL*2);
           if (o === p.aiMark) threat += BOT.roleMargin;          // incumbent keeps it
           if (threat > bs){ bs = threat; mark = o; } }

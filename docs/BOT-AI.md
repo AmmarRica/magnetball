@@ -107,6 +107,14 @@ it (`wGridFree`) — it only ever counted teammates. Measured, Normal 3v3 over t
 47 → 37 kicks a minute, the median shot struck 374 → 241 units out, passes arriving 33 → 41%
 (Insane 39 → 53%), a mate free to pass to 3 → 7% (Insane 3 → 11%). `tests/botdribble.mjs`.
 
+**A defender covers the next man, from Normal up** (`skill.cover`, `BOT.coverAt` 0.5). The mark
+pick skips the opponent nearest the ball while our chaser is pressing (that man is the presser's)
+and any opponent another of our defenders already marks. Before it, the defender doubled the
+carrier with its own chaser and two defenders shared one man; team clumping (two outfield bodies
+within 70 units) went 34 → 19% at 4v4 and 94 → 61% at 6v6. Gated by tier because handing it to
+Rookie flattened the 4v4 ladder (+72 → +24; gated +103). A width term in the support grid was
+tried and reverted — wider support cost Insane's passes arriving 54 → ~40%. `tests/botspacing.mjs`.
+
 ⚠️ **The ladder is the price list.** Bolder dribbling (a looser race, a longer push) was
 measured costing the Insane-over-Rookie margin as low as −74 in a 3v3; Normal-up only, it
 cost it too, because the rookie went on hoofing and the hoof is efficient in this physics.

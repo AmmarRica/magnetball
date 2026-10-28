@@ -171,10 +171,15 @@ const r = await p.evaluate(() => {
   {
     M.sel.mode = '4v4';
     const w = allBots('insane', 55);
-    for (let i = 0; i < 150; i++) M.step(w);
     // ⚠️ Not the presser: the one body pressing the carrier does not shade to a mark at all,
     // so on a run where the defender happens to be it the two tiers read identical.
-    const d = w.players.find(q => q.team === 1 && q.aiRole === 'defender' && q.aiMark && w.ai[1].press !== q);
+    // ⚠️ STEPPED UNTIL THERE IS ONE, never a fixed step count: a mark is only re-picked on a
+    // decision tick, so a body that has just become the defender holds none — and when the
+    // defenders learned to cover the next man every seeded match was re-dealt and step 150
+    // landed on exactly that moment, reading `found: false` on a build that marks fine.
+    const pick = () => w.players.find(q => q.team === 1 && q.aiRole === 'defender' && q.aiMark && w.ai[1].press !== q);
+    for (let i = 0; i < 150 || (!pick() && i < 900); i++) M.step(w);
+    const d = pick();
     o.mark = { found: !!d };
     if (d){
       const walk = (diff) => {

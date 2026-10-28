@@ -1035,6 +1035,56 @@ three lines a second time, name it.
   by the suite's OWN guard ("if the caption is off in both, the check below passes for the
   wrong reason"), which is the argument for writing guards like it. **A suite that samples
   pixels has to say which palette it is sampling.**
+- **SPACING: A DEFENDER COVERS THE NEXT MAN, AND TWO DEFENDERS NEVER MARK ONE**
+  (`BOT.coverAt`, `botSkill().cover`, the `onBall` skip and the shared-mark skip in
+  `runBot`'s defender mark pick; `tests/botspacing.mjs`). Asked for as *"I want the game to
+  resemble soccer more so spacing is more important"*, read as the bots' team shape.
+  ⚠️ **MEASURED FIRST, and the default 3v3 was NOT the problem.** All-bot matches at the
+  shipped feel, twelve seeds: a 3v3 side's two outfield bots stand ~250 units apart and
+  within 70 of each other **5%** of the time — already spread. The clumping lives in the
+  bigger games: within 70 a **third** of the time at 4v4 and **94%** at 6v6. Taken apart by
+  role, the biggest source at 4v4 (521 of ~980 clumped samples) was the DEFENDER doubling
+  the ball carrier with its own chaser — its mark pick scores threat partly by nearness to
+  the ball, so the man on the ball always won — and at 6v6 (1,717 samples) BOTH defenders
+  marking the same man, because nothing told the second one the first had him.
+  ⚠️ **THE FIX IS TWO SKIPS IN THE MARK PICK**: the opponent nearest the ball is the
+  presser's (skipped while our chaser is pressing and they have another outfielder), and an
+  opponent another defender of ours already marks is skipped. Measured, Normal 4v4 clump
+  **34% → 19%**, nearest mate 152 → 166, bodies within 120 of the ball 1.44 → 1.28; Insane
+  6v6 **94% → 61%** with two defenders sharing a mark **93% → 0.5%** of the time; Insane
+  4v4 passes arriving 35% → 55%.
+  ⚠️ **A TIER SKILL, NOT A RULE, and the ladder is why** (`coverAt` 0.5: Normal up). Handed
+  to every tier it flattened the 4v4 ladder — Insane over Rookie pooled across seven plans,
+  90s matches, two seed sets: **+72 before, +24 with everybody covering, +103 gated**. It is
+  also true to life: a beginner ball-watches and doubles up, a good defender covers. 2v2 and
+  3v3 have no defender role, so every guarded ladder (`proladder`, `botplans`, `botai`'s) is
+  bit-for-bit untouched.
+  ⚠️ **TRIED AND REVERTED, with the numbers:** (a) **a width term in the support grid**
+  (`gridWide`, score a cell by how far across from the carrier it is): 3v3 width 0.35 →
+  0.42 and the shipped 2v2 ladder +65 → +164 on one seed set — and Insane 3v3 passes
+  ARRIVING **54% → 35–45%** at every weight and span tried (0.2–0.6, relative to the carrier
+  or to the centre line); wider is longer and longer is intercepted, and it inverted the
+  casual 2v2 ladder (5 plans on one seed set) until gated to one-touch. A soccer side that
+  stands wide and loses the ball is not more soccer. (b) **the defender stops marking while
+  we have the ball** (an outlet rather than a marker): 4v4 clump went UP 19 → 22% and the
+  shipped 4v4 ladder collapsed to −9 with five plans inverted and goals doubling — the
+  counter-attack walked through. (c) **the 3v3 support drops goal-side and covers when
+  defending** (no defender to do it): nearest mate 250 → 222, depth 0.22 → 0.18, 3v3 ladder
+  +114 → +64. (d) **zonal marking** (a mark's threat minus its distance across from the
+  defender's slot): 6v6 unchanged at 62–70%, 4v4 worse. (e) **teammate separation radius**
+  78 → 110: 4v4 clump 33 → 26% and the casual 2v2 ladder read +1 with four plans inverted.
+  ⚠️ **IT COSTS SYNERGY TRIANGLES, written down rather than hidden.** Many of the 5v5
+  triangles were the double team — the defender beside the chaser at the ball, both slowed,
+  links formed. Under `tests/synergy.mjs`' own settings, seeds 21..68: **24 of 48 matches
+  formed one before, 4 of 48 after**, live-link share 0.163 → 0.107. That check pools 48
+  seeds now. Spacing and standing together pull opposite ways by design.
+  ⚠️ **8v8 is still crowded** (nearest mate 67 → 73, clumped nearly always): sixteen bodies
+  on Classic is ~24,000 square units each, and the remaining pairs are two defenders each
+  tight on attackers who stand near each other. Not a mark-pick problem; not chased.
+  ⚠️ **Two suites had staging that the re-dealt matches broke**: `botfoot`'s mark-tightness
+  probe grabbed the defender at a fixed step 150, which now landed on a body that had just
+  become defender and held no mark (`found: false`); it steps until one exists.
+  Four sabotages on `botspacing`, each caught by its own check.
 - **THE BOTS DRIBBLE, KEEP THE BALL AND GET OPEN** (`BOT.dribbleAt`/`dribbleLen`/
   `dribbleAngs`/`dribbleClear`/`dribbleSpace`/`dribbleBias`/`dribbleAlign`/`dribbleLead`,
   `botSkill().dribble`, the `dribble` candidate in `botPickAim`, `dribbling` in `runBot`;

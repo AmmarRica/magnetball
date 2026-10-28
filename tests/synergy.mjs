@@ -246,7 +246,14 @@ const r = await p.evaluate(() => {
   // refilling the rings and re-dealt every seeded match with a goal in it (seed 21, a 0-0, is
   // bit-identical on both builds). Over 27..32 it reads 2 of 6 before and 3 of 6 after; the
   // claim is still "at some point", pooled over the six.
-  o.bots5 = [27, 28, 29, 30, 31, 32].map(s => botRun('insane', true, s, '5v5'));
+  // ⚠️ AND FORTY-EIGHT NOW. When the defenders learned to cover the next man instead of
+  // doubling up on the carrier (`skill.cover`), the triangle got rarer for a reason worth
+  // keeping: most of those triangles WERE the double team — the defender stood beside the
+  // chaser at the ball, both slowed, and the links formed. Under this block's settings,
+  // seeds 21..68 read **24 of 48 before and 4 of 48 after** (live-link share 0.163 → 0.107),
+  // and 0 of the six seeds this used to read. Spacing and standing together pull opposite
+  // ways by design; the claim is still "at some point", pooled.
+  o.bots5 = Array.from({ length: 48 }, (_, i) => botRun('insane', true, 21 + i, '5v5'));
   o.botsRookie = SEEDS8.map(k => botRun('rookie', true, k));
 
   // ---- 7. deterministic with the links on -------------------------------------------------------------

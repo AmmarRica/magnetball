@@ -25,6 +25,16 @@ _The current build is `VERSION` in `index.html` (shown in About). Bump it, with 
 - [ ] **Bots bunch a little more round the ball since they dribble** (bodies within 90 of
       it: 1.63 → 1.86 on average in a 3v3). Dribbling draws defenders, which is football;
       the attacking side's own supports holding off is the half worth a look.
+      ⚠️ **Looked at (20261028)**: in 3v3 a side's own outfield pair is within 120 of the
+      ball together about 1.0 bodies on average — the bunching is the two chasers, which is
+      football. Spacing work went to 4v4+ instead (`skill.cover`, `tests/botspacing.mjs`).
+- [ ] **8v8 is still crowded** — nearest teammate ~73 units, two outfield bodies within 70
+      nearly always. The remaining pairs are defenders each tight on attackers standing near
+      each other; zonal marking was tried and did nothing (62–70% at 6v6). A bigger default
+      pitch for big sides, or looser marking at 6+ a side, are the next things to measure.
+- [ ] **Width costs passing** — a width term in the support grid widened 3v3 (0.35 → 0.42 of
+      the pitch) and cut Insane's passes arriving 54 → ~40%. Width that holds completion
+      (a wide man the pass can actually reach) is unsolved.
 
 ---
 
